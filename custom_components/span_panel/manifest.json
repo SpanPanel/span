@@ -1,7 +1,7 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "config_flow": true,
   "documentation": "https://github.com/galak/span-hacs",
   "issue_tracker": "https://github.com/galak/span-hacs/issues",

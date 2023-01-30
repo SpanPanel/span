@@ -2,7 +2,7 @@
 from datetime import timedelta
 import logging
 
-from .span_panel import SpanPanel, SPACES_POWER, SPACES_ENERGY_PRODUCED, SPACES_ENERGY_CONSUMED
+from .span_panel import SpanPanel, CIRCUITS_POWER, CIRCUITS_ENERGY_PRODUCED, CIRCUITS_ENERGY_CONSUMED
 import async_timeout
 
 from homeassistant.components.switch import SwitchEntity
@@ -22,7 +22,7 @@ ICON = "mdi:toggle-switch"
 
 _LOGGER = logging.getLogger(__name__)
 
-class SpanPanelSpacesSwitch(CoordinatorEntity, SwitchEntity):
+class SpanPanelCircuitsSwitch(CoordinatorEntity, SwitchEntity):
     """Represent a switch entity."""
 
     def __init__(
@@ -44,14 +44,14 @@ class SpanPanelSpacesSwitch(CoordinatorEntity, SwitchEntity):
         """Turn the switch on."""
         _LOGGER.debug("TURN SWITCH ON")
         span_panel: SpanPanel = self.coordinator.data
-        await span_panel.spaces.set_relay_closed(self.id)
+        await span_panel.circuits.set_relay_closed(self.id)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs):
         """Turn the switch off."""
         _LOGGER.debug("TURN SWITCH OFF")
         span_panel: SpanPanel = self.coordinator.data
-        await span_panel.spaces.set_relay_open(self.id)
+        await span_panel.circuits.set_relay_open(self.id)
         await self.coordinator.async_request_refresh()
 
     @property
@@ -63,7 +63,7 @@ class SpanPanelSpacesSwitch(CoordinatorEntity, SwitchEntity):
     def name(self):
         """Return the switch name."""
         span_panel: SpanPanel = self.coordinator.data
-        return f"{span_panel.spaces.name(self.id)} Breaker"
+        return f"{span_panel.circuits.name(self.id)} Breaker"
 
     @property
     def is_on(self) -> bool:
@@ -71,7 +71,7 @@ class SpanPanelSpacesSwitch(CoordinatorEntity, SwitchEntity):
 
         span_panel: SpanPanel = self.coordinator.data
 
-        return span_panel.spaces.is_relay_closed(self.id)
+        return span_panel.circuits.is_relay_closed(self.id)
 
 
 async def async_setup_entry(
@@ -88,13 +88,13 @@ async def async_setup_entry(
     span_panel: SpanPanel = coordinator.data
     serial_number: str = config_entry.unique_id
 
-    entities: list[SpanPanelSpacesSwitch] = []
+    entities: list[SpanPanelCircuitsSwitch] = []
 
-    for id in span_panel.spaces.keys():
-       if span_panel.spaces.is_user_controllable(id):
-          name = span_panel.spaces.name(id)
+    for id in span_panel.circuits.keys():
+       if span_panel.circuits.is_user_controllable(id):
+          name = span_panel.circuits.name(id)
           entities.append(
-             SpanPanelSpacesSwitch(coordinator, id, name)
+             SpanPanelCircuitsSwitch(coordinator, id, name)
           )
 
     async_add_entities(entities)

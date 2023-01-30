@@ -2,7 +2,7 @@
 from datetime import timedelta
 import logging
 
-from .span_panel import SpanPanel, SPACES_POWER, SPACES_ENERGY_PRODUCED, SPACES_ENERGY_CONSUMED
+from .span_panel import SpanPanel, CIRCUITS_POWER, CIRCUITS_ENERGY_PRODUCED, CIRCUITS_ENERGY_CONSUMED
 import async_timeout
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
@@ -26,10 +26,11 @@ PRIORITY_TO_HASS = {
     "MUST_HAVE": "Must Have",
     "NICE_TO_HAVE": "Nice to Have",
     "NOT_ESSENTIAL": "Not Essential",
+    "NON_ESSENTIAL": "Non Essential",
 }
 HASS_TO_PRIORITY = {v: k for k, v in PRIORITY_TO_HASS.items()}
 
-class SpanPanelSpacesSelect(CoordinatorEntity, SelectEntity):
+class SpanPanelCircuitsSelect(CoordinatorEntity, SelectEntity):
     """Represent a switch entity."""
 
     _attr_options = list(PRIORITY_TO_HASS.values())
@@ -53,7 +54,7 @@ class SpanPanelSpacesSelect(CoordinatorEntity, SelectEntity):
     def current_option(self) -> str:
         """Return the current value."""
         span_panel: SpanPanel = self.coordinator.data
-        priority = span_panel.spaces.get_priority(self.id)
+        priority = span_panel.circuits.get_priority(self.id)
         return PRIORITY_TO_HASS[priority]
 
     async def async_select_option(self, option: str) -> None:
@@ -61,14 +62,14 @@ class SpanPanelSpacesSelect(CoordinatorEntity, SelectEntity):
         _LOGGER.debug("SELECT - set option [%s] [%s]" % (option, HASS_TO_PRIORITY[option]))
         span_panel: SpanPanel = self.coordinator.data
         priority = HASS_TO_PRIORITY[option]
-        await span_panel.spaces.set_priority(self.id, priority)
+        await span_panel.circuits.set_priority(self.id, priority)
 
 
     @property
     def name(self):
         """Return the switch name."""
         span_panel: SpanPanel = self.coordinator.data
-        return f"{span_panel.spaces.name(self.id)} Circuit Priority"
+        return f"{span_panel.circuits.name(self.id)} Circuit Priority"
 
 
 async def async_setup_entry(
@@ -85,13 +86,13 @@ async def async_setup_entry(
     span_panel: SpanPanel = coordinator.data
     serial_number: str = config_entry.unique_id
 
-    entities: list[SpanPanelSpacesSwitch] = []
+    entities: list[SpanPanelCircuitsSwitch] = []
 
-    for id in span_panel.spaces.keys():
-       if span_panel.spaces.is_user_controllable(id):
-          name = span_panel.spaces.name(id)
+    for id in span_panel.circuits.keys():
+       if span_panel.circuits.is_user_controllable(id):
+          name = span_panel.circuits.name(id)
           entities.append(
-             SpanPanelSpacesSelect(coordinator, id, name)
+             SpanPanelCircuitsSelect(coordinator, id, name)
           )
 
     async_add_entities(entities)

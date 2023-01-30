@@ -35,7 +35,7 @@ class SpanPanelRequiredKeysMixin:
 
 @dataclass
 class SpanPanelBinarySensorEntityDescription(BinarySensorEntityDescription, SpanPanelRequiredKeysMixin):
-    """Describes an SpanPanelSpaces inverter sensor entity."""
+    """Describes an SpanPanelCircuits inverter sensor entity."""
 
 
 BINARY_SENSORS = (
@@ -73,7 +73,7 @@ class SpanPanelBinarySensor(CoordinatorEntity, BinarySensorEntity):
         coordinator: DataUpdateCoordinator,
         description: SpanPanelBinarySensorEntityDescription,
     ) -> None:
-        """Initialize Span Panel Space entity."""
+        """Initialize Span Panel Circuit entity."""
         span_panel: SpanPanel = coordinator.data
 
         self.entity_description = description

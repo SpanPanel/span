@@ -7,13 +7,15 @@ import httpx
 
 STATUS_URL = "http://{}/api/v1/status"
 SPACES_URL = "http://{}/api/v1/spaces"
+CIRCUITS_URL = "http://{}/api/v1/circuits"
 PANEL_URL = "http://{}/api/v1/panel"
 
 _LOGGER = logging.getLogger(__name__)
 
 
-SPAN_SPACES = "spaces"
+SPAN_CIRCUITS = "circuits"
 SPAN_SYSTEM = "system"
+PANEL_POWER = "instantGridPowerW"
 SYSTEM_DOOR_STATE = "doorState"
 SYSTEM_DOOR_STATE_CLOSED = "CLOSED"
 SYSTEM_DOOR_STATE_OPEN = "OPEN"
@@ -33,9 +35,22 @@ class SpanPanel:
         self.host = host.lower()
         self.serial_number = None
         self.status_results = None
-        self.spaces = SpanPanelSpaces(self)
+        self.circuits = SpanPanelCircuits(self)
         self.panel_results = None
         self._async_client = async_client
+
+    async def circuits_url(self):
+        # The API changed in r202223 but appears to simply have renamed
+        # the endpoint, so we pick a different URL based on the version.
+
+        # firmware_version() requires that getStatusData() has been
+        # called at least once
+        if self.status_results is None:
+            await self.getStatusData()
+
+        if self.firmware_version() < "spanos2/r202223/04":
+            return SPACES_URL
+        return CIRCUITS_URL
 
     @property
     def async_client(self):
@@ -92,6 +107,10 @@ class SpanPanel:
         self.panel_results = await self.getData(PANEL_URL)
 
         return
+    
+    def power(self):
+        raw_json = self.panel_results.json()
+        return self.json_data[PANEL_POWER]
 
     async def getStatusData(self):
         self.status_results = await self.getData(STATUS_URL)
@@ -147,7 +166,7 @@ class SpanPanel:
         print("Reading...")
         loop = asyncio.get_event_loop()
         data_results = loop.run_until_complete(
-            asyncio.gather(self.spaces.getData(), self.getStatusData(), self.getPanelData(), return_exceptions=False)
+            asyncio.gather(self.circuits.getData(), self.getStatusData(), self.getPanelData(), return_exceptions=False)
         )
 
         print("SN: %s" % self.serial_number)
@@ -159,33 +178,33 @@ class SpanPanel:
         print("WiFi link: %s" % self.is_wifi_connected())
         print("Cell link: %s" % self.is_cellular_connected())
 
-        for k in self.spaces.keys():
-           print(self.spaces.name(k))
+        for k in self.circuits.keys():
+           print(self.circuits.name(k))
            print("===================")
            print("id: %s" % k)
-           print("power: %sW" % self.spaces.power(k))
-           print("produced: %sWh" % self.spaces.energy_produced(k))
-           print("consumed: %sWh" % self.spaces.energy_consumed(k))
-           print("relay open: %s" % self.spaces.is_relay_open(k))
-           print("relay closed: %s" % self.spaces.is_relay_closed(k))
-           print("prio: %s" % self.spaces.get_priority(k))
-           print("user: %s" % self.spaces.is_user_controllable(k))
-           print(self.spaces.breaker_positions(k))
+           print("power: %sW" % self.circuits.power(k))
+           print("produced: %sWh" % self.circuits.energy_produced(k))
+           print("consumed: %sWh" % self.circuits.energy_consumed(k))
+           print("relay open: %s" % self.circuits.is_relay_open(k))
+           print("relay closed: %s" % self.circuits.is_relay_closed(k))
+           print("prio: %s" % self.circuits.get_priority(k))
+           print("user: %s" % self.circuits.is_user_controllable(k))
+           print(self.circuits.breaker_positions(k))
            print("")
 
 #        data_results = loop.run_until_complete(
-#            asyncio.gather(self.spaces.set_priority('7ef7a4091cdd4910a582b35b40768598', 'NOT_ESSENTIAL'))
+#            asyncio.gather(self.circuits.set_priority('7ef7a4091cdd4910a582b35b40768598', 'NOT_ESSENTIAL'))
 #        )
 
         data_results = loop.run_until_complete(
-            asyncio.gather(self.spaces.set_relay_closed('7ef7a4091cdd4910a582b35b40768598'))
+            asyncio.gather(self.circuits.set_relay_closed('7ef7a4091cdd4910a582b35b40768598'))
         )
 
         while True:
           loop = asyncio.get_event_loop()
           results = loop.run_until_complete(
              asyncio.gather(
-                  self.spaces.getData(),
+                  self.circuits.getData(),
                   self.getPanelData(),
                   self.getStatusData(),
                   return_exceptions=False,
@@ -196,20 +215,20 @@ class SpanPanel:
 
           time.sleep(10)
 
-SPACES_NAME = "name"
-SPACES_RELAY = "relayState"
-SPACES_RELAY_OPEN = "OPEN"
-SPACES_RELAY_CLOSED = "CLOSED"
-SPACES_POWER = "instantPowerW"
-SPACES_ENERGY_PRODUCED = "importEnergyAccumWh"
-SPACES_ENERGY_CONSUMED = "exportEnergyAccumWh"
-SPACES_BREAKER_POSITIONS = "tabs"
-SPACES_PRIORITY = "priority"
-SPACES_IS_USER_CONTROLLABLE = "is_user_controllable"
-SPACES_IS_SHEDDABLE = "is_sheddable"
-SPACES_IS_NEVER_BACKUP = "is_never_backup"
+CIRCUITS_NAME = "name"
+CIRCUITS_RELAY = "relayState"
+CIRCUITS_RELAY_OPEN = "OPEN"
+CIRCUITS_RELAY_CLOSED = "CLOSED"
+CIRCUITS_POWER = "instantPowerW"
+CIRCUITS_ENERGY_PRODUCED = "producedEnergyWh"
+CIRCUITS_ENERGY_CONSUMED = "consumedEnergyWh"
+CIRCUITS_BREAKER_POSITIONS = "tabs"
+CIRCUITS_PRIORITY = "priority"
+CIRCUITS_IS_USER_CONTROLLABLE = "is_user_controllable"
+CIRCUITS_IS_SHEDDABLE = "is_sheddable"
+CIRCUITS_IS_NEVER_BACKUP = "is_never_backup"
 
-class SpanPanelSpaces:
+class SpanPanelCircuits:
     """Instance of a Span panel"""
     def __init__(
         self,
@@ -224,13 +243,13 @@ class SpanPanelSpaces:
         """to fetching inverter data."""
         """Update from PC endpoint."""
 
-        results = await self.panel.getData(SPACES_URL)
+        results = await self.panel.getData(await self.panel.circuits_url())
 
         # Can get:
-        # HTTPStatusError - httpx.HTTPStatusError: Server error '500 Internal Server Error' for url 'http://span.lan/api/v1/spaces'
+        # HTTPStatusError - httpx.HTTPStatusError: Server error '500 Internal Server Error' for url 'http://span.lan/api/v1/circuits'
         results.raise_for_status()
 
-        self.json_data = results.json()[SPAN_SPACES]
+        self.json_data = results.json()[SPAN_CIRCUITS]
 
         return
 
@@ -238,20 +257,20 @@ class SpanPanelSpaces:
         return self.json_data.keys()
 
     def name(self, id):
-        return self.json_data[id][SPACES_NAME]
+        return self.json_data[id][CIRCUITS_NAME]
 
     def power(self, id):
-        return self.json_data[id][SPACES_POWER]
+        return self.json_data[id][CIRCUITS_POWER]
 
     def energy_produced(self, id):
-        return self.json_data[id][SPACES_ENERGY_PRODUCED]
+        return self.json_data[id][CIRCUITS_ENERGY_PRODUCED]
 
     def energy_consumed(self, id):
-        return self.json_data[id][SPACES_ENERGY_CONSUMED]
+        return self.json_data[id][CIRCUITS_ENERGY_CONSUMED]
 
     def is_relay_open(self, id):
-        relayState = self.json_data[id][SPACES_RELAY]
-        if relayState == SPACES_RELAY_CLOSED:
+        relayState = self.json_data[id][CIRCUITS_RELAY]
+        if relayState == CIRCUITS_RELAY_CLOSED:
            return False
         else:
            return True
@@ -262,31 +281,31 @@ class SpanPanelSpaces:
     async def _set_relay(self, id, state):
         # state should be "OPEN" or "CLOSED"
         json = {"relay_state_in":{"relayState":state}}
-        results = await self.panel.setJSONData(SPACES_URL+"/{}", id, json)
+        results = await self.panel.setJSONData(await self.panel.circuits_url()+"/{}", id, json)
 
     async def set_relay_closed(self, id):
-        await self._set_relay(id, SPACES_RELAY_CLOSED)
+        await self._set_relay(id, CIRCUITS_RELAY_CLOSED)
 
     async def set_relay_open(self, id):
-        await self._set_relay(id, SPACES_RELAY_OPEN)
+        await self._set_relay(id, CIRCUITS_RELAY_OPEN)
 
     def breaker_positions(self, id):
-        return self.json_data[id][SPACES_BREAKER_POSITIONS]
+        return self.json_data[id][CIRCUITS_BREAKER_POSITIONS]
 
     def get_priority(self, id):
         # should be 'NOT_ESSENTIAL', 'MUST_HAVE', or 'NICE_TO_HAVE'
-        return self.json_data[id][SPACES_PRIORITY]
+        return self.json_data[id][CIRCUITS_PRIORITY]
 
     async def set_priority(self, id, priority):
         json = {"priority_in":{"priority":priority}}
-        results = await self.panel.setJSONData(SPACES_URL+"/{}", id, json)
+        results = await self.panel.setJSONData(await self.panel.circuits_url()+"/{}", id, json)
 
         # add error checking code on response, we can get:
         # '<Response [400 Bad Request]>' if 'id' has 'is_user_controllable'
         # set to False
 
     def is_user_controllable(self, id):
-        return self.json_data[id][SPACES_IS_USER_CONTROLLABLE]
+        return self.json_data[id][CIRCUITS_IS_USER_CONTROLLABLE]
 
 
 
