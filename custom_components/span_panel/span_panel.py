@@ -224,9 +224,9 @@ CIRCUITS_ENERGY_PRODUCED = "producedEnergyWh"
 CIRCUITS_ENERGY_CONSUMED = "consumedEnergyWh"
 CIRCUITS_BREAKER_POSITIONS = "tabs"
 CIRCUITS_PRIORITY = "priority"
-CIRCUITS_IS_USER_CONTROLLABLE = "is_user_controllable"
-CIRCUITS_IS_SHEDDABLE = "is_sheddable"
-CIRCUITS_IS_NEVER_BACKUP = "is_never_backup"
+CIRCUITS_IS_USER_CONTROLLABLE = "isUserControllable"
+CIRCUITS_IS_SHEDDABLE = "isSheddable"
+CIRCUITS_IS_NEVER_BACKUP = "isNeverBackup"
 
 class SpanPanelCircuits:
     """Instance of a Span panel"""
