@@ -1,0 +1,2 @@
+class SpanPanelReturnedEmptyData(Exception):
+    pass

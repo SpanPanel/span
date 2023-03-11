@@ -20,7 +20,11 @@
                     "host": "Host"
                 },
                 "title": "Connect to the Span Panel"
-            }
+            },
+            "reauth_confirm": {
+                "title": "Manual authorization required.",
+                "description": "Please open and close the Span Panel door {remaining} times."
+              }
         }
     }
 }
