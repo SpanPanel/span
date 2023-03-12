@@ -149,7 +149,6 @@ class SpanPanelApi:
 
         _LOGGER.debug("HTTP POST Attempt: %s", url)
         async with self.async_client as client:
-            headers = {"accessToken": self.option_access_token}
             resp = await client.post(
                 url, json=json, headers=headers, timeout=API_TIMEOUT, **kwargs
             )
