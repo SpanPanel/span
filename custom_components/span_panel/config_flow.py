@@ -46,8 +46,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
-        self.host: str
-        self.serial_number: str
+        self.host: str | None = None
+        self.serial_number: str | None = None
 
     async def async_step_zeroconf(
         self, discovery_info: zeroconf.ZeroconfServiceInfo

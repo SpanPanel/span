@@ -118,11 +118,9 @@ class SpanPanelApi:
         """
         Retry 3 times to fetch the url if there is a transport error.
         """
-
+        headers = {"Accept": "application/json"}
         if self.access_token:
-            headers = {"accessToken": self.access_token}
-        else:
-            headers = {}
+            headers["Authorization"] = f"Bearer {self.access_token}"
 
         for attempt in range(3):
             _LOGGER.debug("HTTP GET Attempt #%s: %s", attempt + 1, url)
@@ -142,10 +140,9 @@ class SpanPanelApi:
         """
         POST to the url
         """
+        headers = {"accept": "application/json"}
         if self.access_token:
-            headers = {"accessToken": self.access_token}
-        else:
-            headers = {}
+            headers["Authorization"] = f"Bearer {self.access_token}"
 
         _LOGGER.debug("HTTP POST Attempt: %s", url)
         async with self.async_client as client:
