@@ -27,11 +27,13 @@ from .const import (
     CIRCUITS_POWER,
     COORDINATOR,
     DOMAIN,
+    STAUS_SOFTWARE_VER,
 )
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
+from .span_panel_status import SpanPanelStatus
 from .util import panel_to_device_info
 
 
@@ -55,6 +57,18 @@ class SpanPanelDataRequiredKeysMixin:
 @dataclass
 class SpanPanelDataSensorEntityDescription(
     SensorEntityDescription, SpanPanelDataRequiredKeysMixin
+):
+    pass
+
+
+@dataclass
+class SpanPanelStatusRequiredKeysMixin:
+    value_fn: Callable[[SpanPanelStatus], str]
+
+
+@dataclass
+class SpanPanelStatusSensorEntityDescription(
+    SensorEntityDescription, SpanPanelStatusRequiredKeysMixin
 ):
     pass
 
@@ -137,13 +151,19 @@ PANEL_SENSORS = (
     ),
 )
 
+STATUS_SENSORS = (
+    SpanPanelStatusSensorEntityDescription(
+        key=STAUS_SOFTWARE_VER,
+        name="Software Version",
+        value_fn=lambda status: status.firmware_version,
+    ),
+)
+
 ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
 
 
 class SpanPanelCircuitSensor(CoordinatorEntity, SensorEntity):
-    """Envoy inverter entity."""
-
     _attr_icon = ICON
 
     def __init__(
@@ -177,8 +197,6 @@ class SpanPanelCircuitSensor(CoordinatorEntity, SensorEntity):
 
 
 class SpanPanelPanel(CoordinatorEntity, SensorEntity):
-    """Envoy inverter entity."""
-
     _attr_icon = ICON
 
     def __init__(
@@ -207,6 +225,35 @@ class SpanPanelPanel(CoordinatorEntity, SensorEntity):
         return cast(float, value)
 
 
+class SpanPanelStatus(CoordinatorEntity, SensorEntity):
+    _attr_icon = ICON
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        description: SensorEntityDescription,
+    ) -> None:
+        """Initialize Span Panel Status entity."""
+        span_panel: SpanPanel = coordinator.data
+
+        self.entity_description = description
+        self._attr_name = f"{description.name}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{description.key}"
+        )
+        self._attr_device_info = panel_to_device_info(span_panel)
+
+        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor."""
+        span_panel: SpanPanel = self.coordinator.data
+        value = self.entity_description.value_fn(span_panel.status)
+        return value
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -225,13 +272,16 @@ async def async_setup_entry(
 
     entities: list[SpanPanelCircuitSensor | SpanPanelPanel] = []
 
+    for description in PANEL_SENSORS:
+        entities.append(SpanPanelPanel(coordinator, description))
+
+    for description in STATUS_SENSORS:
+        entities.append(SpanPanelStatus(coordinator, description))
+
     for description in CIRCUITS_SENSORS:
         for id, circuit_data in span_panel.circuits.items():
             entities.append(
                 SpanPanelCircuitSensor(coordinator, description, id, circuit_data.name)
             )
-
-    for description in PANEL_SENSORS:
-        entities.append(SpanPanelPanel(coordinator, description))
 
     async_add_entities(entities)
