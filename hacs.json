@@ -1,6 +1,5 @@
 {
 	"name": "Span Panel",
 	"homeassistant": "2023.3.0",
-	"iot_class": "Local Push",
 	"render_readme": "true"
 }
