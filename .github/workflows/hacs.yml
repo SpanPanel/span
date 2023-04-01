@@ -1,0 +1,19 @@
+name: HACS Jobs
+on:
+  push:
+  pull_request:
+jobs:
+  validate:
+    name: Hassfest
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "home-assistant/actions/hassfest@master"
+  hacs:
+    name: HACS Action
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: HACS Action
+        uses: "hacs/action@main"
+        with:
+          category: integration
