@@ -1,16 +1,18 @@
 {
-  "domain": "span_panel",
-  "name": "Span Panel",
-  "version": "0.0.5",
-  "config_flow": true,
-  "documentation": "https://github.com/galak/span-hacs",
-  "issue_tracker": "https://github.com/galak/span-hacs/issues",
-  "requirements": [],
-  "zeroconf": [
-    {
-      "type": "_span._tcp.local."
-    }
-  ],
-  "codeowners": ["@galak"],
-  "iot_class": "local_polling"
+	"domain": "span_panel",
+	"name": "Span Panel",
+	"codeowners": [
+		"@gdgib"
+	],
+	"config_flow": true,
+	"documentation": "https://github.com/gdgib/span-hacs",
+	"iot_class": "local_polling",
+	"issue_tracker": "https://github.com/gdgib/span-hacs/issues",
+	"requirements": [],
+	"version": "0.0.5",
+	"zeroconf": [
+		{
+			"type": "_span._tcp.local."
+		}
+	]
 }
