@@ -1,8 +1,7 @@
 import dataclasses
 from typing import Any
 
-CIRCUITS_RELAY_OPEN = "OPEN"
-CIRCUITS_RELAY_CLOSED = "CLOSED"
+from .const import CircuitRelayState
 
 
 @dataclasses.dataclass
@@ -23,7 +22,7 @@ class SpanPanelCircuit:
 
     @property
     def is_relay_closed(self):
-        return self.relay_state == CIRCUITS_RELAY_CLOSED
+        return self.relay_state == CircuitRelayState.CLOSED.name
 
     @staticmethod
     def from_dict(data: dict[str, Any]):

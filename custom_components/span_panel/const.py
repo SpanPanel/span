@@ -1,6 +1,7 @@
 """Constants for the Span Panel integration."""
 
 from datetime import timedelta
+import enum
 
 DOMAIN = "span_panel"
 COORDINATOR = "coordinator"
@@ -14,8 +15,6 @@ URL_REGISTER = "http://{}/api/v1/auth/register"
 
 CIRCUITS_NAME = "name"
 CIRCUITS_RELAY = "relayState"
-CIRCUITS_RELAY_OPEN = "OPEN"
-CIRCUITS_RELAY_CLOSED = "CLOSED"
 CIRCUITS_POWER = "instantPowerW"
 CIRCUITS_ENERGY_PRODUCED = "producedEnergyWh"
 CIRCUITS_ENERGY_CONSUMED = "consumedEnergyWh"
@@ -41,3 +40,16 @@ PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE = "UNKNOWN"
 
 SCAN_INTERVAL = timedelta(seconds=15)
 API_TIMEOUT = 30
+
+
+class CircuitRelayState(enum.Enum):
+    OPEN = "Open"
+    CLOSED = "Closed"
+    UNKNOWN = "Unknown"
+
+
+class CircuitPriority(enum.Enum):
+    MUST_HAVE = "Must Have"
+    NICE_TO_HAVE = "Nice To Have"
+    NON_ESSENTIAL = "Non-Essential"
+    UNKNOWN = "Unknown"

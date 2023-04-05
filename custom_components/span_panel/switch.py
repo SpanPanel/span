@@ -10,7 +10,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .const import COORDINATOR, DOMAIN
+from .const import COORDINATOR, DOMAIN, CircuitRelayState
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelApi
 from .util import panel_to_device_info
@@ -33,21 +33,19 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity, SwitchEntity):
         self._attr_device_info = panel_to_device_info(span_panel)
         super().__init__(coordinator)
 
-    # async def async_turn_on(self, **kwargs):
-    #     """Turn the switch on."""
-    #     _LOGGER.debug("TURN SWITCH ON")
-    #     span_panel: SpanPanel = self.coordinator.data
-    #     # TODO: fix switches
-    #     await span_panel.circuits.set_relay_closed(self.id)
-    #     await self.coordinator.async_request_refresh()
+    async def async_turn_on(self, **kwargs):
+        """Turn the switch on."""
+        span_panel: SpanPanel = self.coordinator.data
+        curr_circuit = span_panel.circuits[self.id]
+        await span_panel.api.set_relay(curr_circuit, CircuitRelayState.CLOSED)
+        await self.coordinator.async_request_refresh()
 
-    # async def async_turn_off(self, **kwargs):
-    #     """Turn the switch off."""
-    #     _LOGGER.debug("TURN SWITCH OFF")
-    #     span_panel: SpanPanel = self.coordinator.data
-    #     # TODO: fix switches
-    #     await span_panel.circuits.set_relay_open(self.id)
-    #     await self.coordinator.async_request_refresh()
+    async def async_turn_off(self, **kwargs):
+        """Turn the switch off."""
+        span_panel: SpanPanel = self.coordinator.data
+        curr_circuit = span_panel.circuits[self.id]
+        await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
+        await self.coordinator.async_request_refresh()
 
     @property
     def icon(self):

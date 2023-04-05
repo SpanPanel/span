@@ -10,6 +10,8 @@ from .const import (
     URL_PANEL,
     URL_REGISTER,
     URL_STATUS,
+    CircuitPriority,
+    CircuitRelayState,
 )
 from .exceptions import SpanPanelReturnedEmptyData
 from .span_panel_circuit import SpanPanelCircuit
@@ -29,10 +31,6 @@ class SpanPanelApi:
         self.host: str = host.lower()
         self.access_token: str = access_token
         self._async_client = async_client
-
-        self.status_data: SpanPanelStatus
-        self.panel_data: SpanPanelData
-        self.circuits_data: dict[str, SpanPanelCircuit]
 
     @property
     def async_client(self):
@@ -55,11 +53,6 @@ class SpanPanelApi:
             },
         )
         return register_results.json()["accessToken"]
-
-    async def update(self) -> None:
-        self.status_data = await self.get_status_data()
-        self.panel_data = await self.get_panel_data()
-        self.circuits_data = await self.get_circuits_data()
 
     async def get_status_data(self) -> SpanPanelStatus:
         response = await self.get_data(URL_STATUS)
@@ -92,6 +85,18 @@ class SpanPanelApi:
 
         return circuits_data
 
+    async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState):
+        await self.post_data(
+            f"{URL_CIRCUITS}/{circuit.circuit_id}",
+            {"relayStateIn": {"relayState": state.name}},
+        )
+
+    async def set_priority(self, circuit: SpanPanelCircuit, priority: CircuitPriority):
+        await self.post_data(
+            f"{URL_CIRCUITS}/{circuit.circuit_id}",
+            {"priorityIn": {"priority": priority.name}},
+        )
+
     async def get_data(self, url) -> httpx.Response:
         """
         Fetch data from the endpoint and if inverters selected default
@@ -108,11 +113,6 @@ class SpanPanelApi:
         formatted_url = url.format(self.host)
         response = await self._async_post(formatted_url, payload)
         return response
-
-    # async def set_json_data(self, url, identity, json):
-    #     formatted_url = url.format(self.host, identity)
-    #     response = await self._async_post(formatted_url, json)
-    #     return response
 
     async def _async_fetch_with_retry(self, url, **kwargs) -> httpx.Response:
         """
