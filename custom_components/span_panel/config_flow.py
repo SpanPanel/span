@@ -139,7 +139,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         remaining_presses = panel_status.remaining_auth_unlock_button_presses
         if remaining_presses != 0:
             return self.async_show_form(
-                step_id="user",
+                step_id="reauth_confirm",
                 description_placeholders={"remaining": remaining_presses},
             )
 
