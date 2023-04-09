@@ -11,6 +11,10 @@
       "confirm_discovery": {
         "title": "[%key:component::span_panel::config::step::user::title%]",
         "description": "Do you want to setup {serial} ({host})?"
+      },
+      "reauth_confirm": {
+        "title": "[%key:component::span_panel::config::step::user::title%]",
+        "description": "Re-authorization required. Please open and close the Span Panel door {remaining} times."
       }
     },
     "error": {

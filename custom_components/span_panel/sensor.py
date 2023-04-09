@@ -3,11 +3,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-import datetime
 import logging
 from typing import cast
-
-from .span_panel import CIRCUITS_POWER, CIRCUITS_ENERGY_PRODUCED, CIRCUITS_ENERGY_CONSUMED
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -16,28 +13,64 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import POWER_WATT, ENERGY_WATT_HOUR
+from homeassistant.const import ENERGY_WATT_HOUR, POWER_WATT
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
 
-from .const import COORDINATOR, DOMAIN
+from .const import (
+    CIRCUITS_ENERGY_CONSUMED,
+    CIRCUITS_ENERGY_PRODUCED,
+    CIRCUITS_POWER,
+    COORDINATOR,
+    DOMAIN,
+    STAUS_SOFTWARE_VER,
+)
+from .span_panel import SpanPanel
+from .span_panel_api import SpanPanelApi
+from .span_panel_circuit import SpanPanelCircuit
+from .span_panel_data import SpanPanelData
+from .span_panel_status import SpanPanelStatus
 from .util import panel_to_device_info
+
 
 @dataclass
 class SpanPanelCircuitsRequiredKeysMixin:
-    """Mixin for required keys."""
-
-    value_fn: Callable[[SpanPanelCiruits], str]
+    value_fn: Callable[[SpanPanelCircuit], str]
 
 
 @dataclass
-class SpanPanelCircuitsSensorEntityDescription(SensorEntityDescription, SpanPanelCircuitsRequiredKeysMixin):
-    """Describes an SpanPanelCircuits inverter sensor entity."""
+class SpanPanelCircuitsSensorEntityDescription(
+    SensorEntityDescription, SpanPanelCircuitsRequiredKeysMixin
+):
+    pass
+
+
+@dataclass
+class SpanPanelDataRequiredKeysMixin:
+    value_fn: Callable[[SpanPanelData], str]
+
+
+@dataclass
+class SpanPanelDataSensorEntityDescription(
+    SensorEntityDescription, SpanPanelDataRequiredKeysMixin
+):
+    pass
+
+
+@dataclass
+class SpanPanelStatusRequiredKeysMixin:
+    value_fn: Callable[[SpanPanelStatus], str]
+
+
+@dataclass
+class SpanPanelStatusSensorEntityDescription(
+    SensorEntityDescription, SpanPanelStatusRequiredKeysMixin
+):
+    pass
 
 
 CIRCUITS_SENSORS = (
@@ -47,7 +80,7 @@ CIRCUITS_SENSORS = (
         native_unit_of_measurement=POWER_WATT,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda circuits, id: abs(cast(float, circuits.power(id))),
+        value_fn=lambda circuit: abs(cast(float, circuit.instant_power)),
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_ENERGY_PRODUCED,
@@ -55,7 +88,7 @@ CIRCUITS_SENSORS = (
         native_unit_of_measurement=ENERGY_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuits, id: circuits.energy_produced(id),
+        value_fn=lambda circuit: circuit.produced_energy,
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_ENERGY_CONSUMED,
@@ -63,94 +96,107 @@ CIRCUITS_SENSORS = (
         native_unit_of_measurement=ENERGY_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuits, id: circuits.energy_consumed(id),
+        value_fn=lambda circuit: circuit.consumed_energy,
     ),
 )
 
 PANEL_SENSORS = (
-    SensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="instantGridPowerW",
         name="Current Power",
         native_unit_of_measurement=POWER_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda panel_data: panel_data.instant_grid_power,
     ),
-    SensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
         name="Feed Through Power",
         native_unit_of_measurement=POWER_WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda panel_data: panel_data.feedthrough_power,
     ),
-    SensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergy.producedEnergyWh",
         name="Main Meter Produced Energy",
         native_unit_of_measurement=ENERGY_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.main_meter_energy_produced,
     ),
-    SensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergy.consumedEnergyWh",
         name="Main Meter Consumed Energy",
         native_unit_of_measurement=ENERGY_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.main_meter_energy_consumed,
     ),
-    SensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergy.producedEnergyWh",
         name="Feed Through Produced Energy",
         native_unit_of_measurement=ENERGY_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.feedthrough_energy_produced,
     ),
-    SensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergy.consumedEnergyWh",
         name="Feed Through Consumed Energy",
         native_unit_of_measurement=ENERGY_WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.feedthrough_energy_consumed,
+    ),
+)
+
+STATUS_SENSORS = (
+    SpanPanelStatusSensorEntityDescription(
+        key=STAUS_SOFTWARE_VER,
+        name="Software Version",
+        value_fn=lambda status: status.firmware_version,
     ),
 )
 
 ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
 
-class SpanPanelCircuitSensor(CoordinatorEntity, SensorEntity):
-    """Envoy inverter entity."""
 
+class SpanPanelCircuitSensor(CoordinatorEntity, SensorEntity):
     _attr_icon = ICON
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator,
         description: SpanPanelCircuitsSensorEntityDescription,
-        id: str,
+        circuit_id: str,
         name: str,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
         span_panel: SpanPanel = coordinator.data
 
         self.entity_description = description
-        self.id = id
+        self.id = circuit_id
         self._attr_name = f"{name} {description.name}"
-        self._attr_unique_id = f"span_{span_panel.serial_number}_{id}_{description.key}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
+        )
         self._attr_device_info = panel_to_device_info(span_panel)
 
-        _LOGGER.debug("CREATE SENSOR [%s]" % self._attr_name)
+        _LOGGER.debug("CREATE SENSOR [%s]", self._attr_name)
         super().__init__(coordinator)
 
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
         span_panel: SpanPanel = self.coordinator.data
-        value = self.entity_description.value_fn(span_panel.circuits, self.id)
-        _LOGGER.debug("native_value:[%s] [%s]" % (self._attr_name, value))
+        value = self.entity_description.value_fn(span_panel.circuits[self.id])
+        _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)
         return cast(float, value)
 
 
 class SpanPanelPanel(CoordinatorEntity, SensorEntity):
-    """Envoy inverter entity."""
-
     _attr_icon = ICON
 
     def __init__(
@@ -163,26 +209,49 @@ class SpanPanelPanel(CoordinatorEntity, SensorEntity):
 
         self.entity_description = description
         self._attr_name = f"{description.name}"
-        self._attr_unique_id = f"span_{span_panel.serial_number}_{description.key}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{description.key}"
+        )
         self._attr_device_info = panel_to_device_info(span_panel)
 
-        _LOGGER.debug("CREATE SENSOR SPAN [%s]" % self._attr_name)
+        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
         super().__init__(coordinator)
 
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
-        key = self.entity_description.key.split(".")
         span_panel: SpanPanel = self.coordinator.data
-        panel = span_panel.panel_results.json()
-        # Most sensors are simple value = panel[key], but in order
-        # to support mainMeterEnergy.producedEnergyWh, we split the
-        # key by `.` and loop down through the value
-        value = panel
-        for k in key:
-            value = value[k]
-        _LOGGER.debug("NATIVE VALUE [%s] [%s]" % (key, value))
+        value = self.entity_description.value_fn(span_panel.panel)
         return cast(float, value)
+
+
+class SpanPanelStatus(CoordinatorEntity, SensorEntity):
+    _attr_icon = ICON
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        description: SensorEntityDescription,
+    ) -> None:
+        """Initialize Span Panel Status entity."""
+        span_panel: SpanPanel = coordinator.data
+
+        self.entity_description = description
+        self._attr_name = f"{description.name}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{description.key}"
+        )
+        self._attr_device_info = panel_to_device_info(span_panel)
+
+        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor."""
+        span_panel: SpanPanel = self.coordinator.data
+        value = self.entity_description.value_fn(span_panel.status)
+        return value
 
 
 async def async_setup_entry(
@@ -194,27 +263,25 @@ async def async_setup_entry(
 
     _LOGGER.debug("ASYNC SETUP ENTRY SENSOR")
     data: dict = hass.data[DOMAIN][config_entry.entry_id]
-    _LOGGER.debug("  config_entry: %s" % config_entry)
-    _LOGGER.debug("  config_entry(uid): %s" % config_entry.unique_id)
-    _LOGGER.debug("  data: %s" % data)
+    _LOGGER.debug("  config_entry: %s", config_entry)
+    _LOGGER.debug("  config_entry(uid): %s", config_entry.unique_id)
+    _LOGGER.debug("  data: %s", data)
 
     coordinator: DataUpdateCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
     entities: list[SpanPanelCircuitSensor | SpanPanelPanel] = []
 
-    keys = ["7ef7a4091cdd4910a582b35b40768598"]
+    for description in PANEL_SENSORS:
+        entities.append(SpanPanelPanel(coordinator, description))
+
+    for description in STATUS_SENSORS:
+        entities.append(SpanPanelStatus(coordinator, description))
 
     for description in CIRCUITS_SENSORS:
-        for id in span_panel.circuits.keys():
-           name = span_panel.circuits.name(id)
-           entities.append(
-              SpanPanelCircuitSensor(coordinator, description, id, name)
-           )
-
-    for description in PANEL_SENSORS:
-        entities.append(
-           SpanPanelPanel(coordinator, description)
-        )
+        for id, circuit_data in span_panel.circuits.items():
+            entities.append(
+                SpanPanelCircuitSensor(coordinator, description, id, circuit_data.name)
+            )
 
     async_add_entities(entities)

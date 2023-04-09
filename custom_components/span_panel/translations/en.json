@@ -1,26 +1,30 @@
 {
-	"config": {
-		"abort": {
-			"no_devices_found": "No devices found on the network",
-			"single_instance_allowed": "Already configured. Only a single configuration possible."
-		},
-		"error": {
-			"cannot_connect": "Failed to connect",
-			"invalid_auth": "Invalid authentication",
-			"unknown": "Unexpected error"
-		},
-		"flow_title": "{serial} ({host})",
-		"step": {
-			"confirm_discovery": {
-				"description": "Do you want to setup {serial} ({host})?",
-				"title": "Connect to the Span Panel"
-			},
-			"user": {
-				"data": {
-					"host": "Host"
-				},
-				"title": "Connect to the Span Panel"
-			}
-		}
-	}
+    "config": {
+        "abort": {
+            "no_devices_found": "No devices found on the network",
+            "single_instance_allowed": "Already configured. Only a single configuration possible."
+        },
+        "error": {
+            "cannot_connect": "Failed to connect",
+            "invalid_auth": "Invalid authentication",
+            "unknown": "Unexpected error"
+        },
+        "flow_title": "{serial} ({host})",
+        "step": {
+            "confirm_discovery": {
+                "description": "Do you want to setup {serial} ({host})?",
+                "title": "Connect to the Span Panel"
+            },
+            "user": {
+                "data": {
+                    "host": "Host"
+                },
+                "title": "Connect to the Span Panel"
+            },
+            "reauth_confirm": {
+                "title": "Manual authorization required.",
+                "description": "Please open and close the Span Panel door {remaining} times."
+              }
+        }
+    }
 }
