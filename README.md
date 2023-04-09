@@ -13,7 +13,7 @@ The author(s) will try to keep this integration working, but cannot provide tech
 2. Go to HACS `Integrations >` section
 3. In the uppper right click `...`
 4. Select `Custom Repositories`
-5. Set `Repository` to "gdgib/span-hacs" and `Category` to "Integration, then click `Add`
+5. Set `Repository` to "gdgib/span" and `Category` to "Integration, then click `Add`
 6. Add the "Span Panel" integration
 7. Restart Home Assistant
 7. In the Home Assistant UI go to `Settings`
@@ -39,5 +39,5 @@ This integration is published under the MIT license.
 
 # Contributing & Issues
 
-If you have a problem, feel free to [open an issue](https://github.com/gdgib/span-hacs/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
-For those capable, please consider opening even a low quality [pull request](https://github.com/gdgib/span-hacs/pulls) when possible, as we're generally very happy to have a starting point when making a change.
+If you have a problem, feel free to [open an issue](https://github.com/gdgib/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
+For those capable, please consider opening even a low quality [pull request](https://github.com/gdgib/span/pulls) when possible, as we're generally very happy to have a starting point when making a change.
