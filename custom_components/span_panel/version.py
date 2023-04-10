@@ -1,3 +1,3 @@
-"""Version for span-hacs."""
+"""Version for span."""
 
 __version__ = "0.0.7"
