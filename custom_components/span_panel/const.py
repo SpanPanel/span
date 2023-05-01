@@ -1,11 +1,13 @@
 """Constants for the Span Panel integration."""
 
-from datetime import timedelta
 import enum
+from datetime import timedelta
 
 DOMAIN = "span_panel"
 COORDINATOR = "coordinator"
 NAME = "name"
+
+CONF_SERIAL_NUMBER = "serial_number"
 
 URL_STATUS = "http://{}/api/v1/status"
 URL_SPACES = "http://{}/api/v1/spaces"
