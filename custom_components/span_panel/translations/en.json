@@ -9,10 +9,10 @@
             "invalid_auth": "Invalid authentication",
             "unknown": "Unexpected error"
         },
-        "flow_title": "{serial} ({host})",
+        "flow_title": "Span Panel ({host})",
         "step": {
             "confirm_discovery": {
-                "description": "Do you want to setup {serial} ({host})?",
+                "description": "Do you want to setup Span Panel at {host}?",
                 "title": "Connect to the Span Panel"
             },
             "user": {
@@ -21,7 +21,7 @@
                 },
                 "title": "Connect to the Span Panel"
             },
-            "reauth_confirm": {
+            "reauth_guidance": {
                 "title": "Manual authorization required.",
                 "description": "Please open and close the Span Panel door {remaining} times."
               }

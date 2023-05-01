@@ -1,6 +1,6 @@
 {
   "config": {
-    "flow_title": "{serial} ({host})",
+    "flow_title": "Span Panel ({host})",
     "step": {
       "user": {
         "title": "Connect to the Span Panel",
@@ -10,9 +10,9 @@
       },
       "confirm_discovery": {
         "title": "[%key:component::span_panel::config::step::user::title%]",
-        "description": "Do you want to setup {serial} ({host})?"
+        "description": "Do you want to setup Span Panel at {host}?"
       },
-      "reauth_confirm": {
+      "reauth_guidance": {
         "title": "[%key:component::span_panel::config::step::user::title%]",
         "description": "Re-authorization required. Please open and close the Span Panel door {remaining} times."
       }
