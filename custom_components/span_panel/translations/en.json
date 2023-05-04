@@ -2,17 +2,18 @@
     "config": {
         "abort": {
             "no_devices_found": "No devices found on the network",
-            "single_instance_allowed": "Already configured. Only a single configuration possible."
+            "already_configured": "Span Panel already configured. Only a single configuration is possible.",
+            "reauth_successful": "Authentication successful."
         },
         "error": {
-            "cannot_connect": "Failed to connect",
+            "cannot_connect": "Failed to connect to Span Panel",
             "invalid_auth": "Invalid authentication",
             "unknown": "Unexpected error"
         },
-        "flow_title": "{serial} ({host})",
+        "flow_title": "Span Panel ({host})",
         "step": {
             "confirm_discovery": {
-                "description": "Do you want to setup {serial} ({host})?",
+                "description": "Do you want to setup Span Panel at {host}?",
                 "title": "Connect to the Span Panel"
             },
             "user": {
@@ -21,10 +22,24 @@
                 },
                 "title": "Connect to the Span Panel"
             },
-            "reauth_confirm": {
-                "title": "Manual authorization required.",
+            "auth_menu": {
+                "title": "Choose Authentication Options",
+                "menu_options": {
+                    "auth_proximity": "Authenticate through your physical Span Panel",
+                    "auth_token": "Authenticate using an access token"
+                }
+            },
+            "auth_proximity": {
+                "title": "Proximity Authentication",
                 "description": "Please open and close the Span Panel door {remaining} times."
-              }
+            },
+            "auth_token": {
+                "title": "Manual Token Authentication",
+                "description": "Please enter your access token:",
+                "data": {
+                    "access_token": "Access Token"
+                }
+            }
         }
     }
 }

@@ -1,30 +1,45 @@
 {
   "config": {
-    "flow_title": "{serial} ({host})",
-    "step": {
-      "user": {
-        "title": "Connect to the Span Panel",
-        "data": {
-          "host": "[%key:common::config_flow::data::host%]"
-        }
+      "abort": {
+          "no_devices_found": "No devices found on the network",
+          "already_configured": "Span Panel already configured. Only a single configuration is possible.",
+          "reauth_successful": "Authentication successful."
       },
-      "confirm_discovery": {
-        "title": "[%key:component::span_panel::config::step::user::title%]",
-        "description": "Do you want to setup {serial} ({host})?"
+      "error": {
+          "cannot_connect": "Failed to connect to Span Panel",
+          "invalid_auth": "Invalid authentication",
+          "unknown": "Unexpected error"
       },
-      "reauth_confirm": {
-        "title": "[%key:component::span_panel::config::step::user::title%]",
-        "description": "Re-authorization required. Please open and close the Span Panel door {remaining} times."
+      "flow_title": "Span Panel ({host})",
+      "step": {
+          "confirm_discovery": {
+              "description": "Do you want to setup Span Panel at {host}?",
+              "title": "Connect to the Span Panel"
+          },
+          "user": {
+              "data": {
+                  "host": "Host"
+              },
+              "title": "Connect to the Span Panel"
+          },
+          "auth_menu": {
+              "title": "Choose Authentication Options",
+              "menu_options": {
+                  "auth_proximity": "Authenticate through your physical Span Panel",
+                  "auth_token": "Authenticate using an access token"
+              }
+          },
+          "auth_proximity": {
+              "title": "Proximity Authentication",
+              "description": "Please open and close the Span Panel door {remaining} times."
+          },
+          "auth_token": {
+              "title": "Manual Token Authentication",
+              "description": "Please enter your access token:",
+              "data": {
+                  "access_token": "Access Token"
+              }
+          }
       }
-    },
-    "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "unknown": "[%key:common::config_flow::error::unknown%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]"
-    },
-    "abort": {
-      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]",
-      "no_devices_found": "[%key:common::config_flow::abort::no_devices_found%]"
-    }
   }
 }
