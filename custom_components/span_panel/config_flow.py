@@ -8,13 +8,13 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
-from .const import DOMAIN
+from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -276,3 +276,37 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.hass.config_entries.async_update_entry(entry, data=entry_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
         return self.async_abort(reason="reauth_successful")
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        curr_scan_interval = self.config_entry.options.get(
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_SCAN_INTERVAL, default=curr_scan_interval
+                    ): vol.All(int, vol.Range(min=5)),
+                }
+            ),
+        )
