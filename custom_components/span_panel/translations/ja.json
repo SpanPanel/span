@@ -1,0 +1,54 @@
+{
+    "config": {
+        "abort": {
+            "no_devices_found": "ネットワーク上にデバイスが見つかりません",
+            "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
+            "reauth_successful": "認証できました"
+        },
+        "error": {
+            "cannot_connect": "スパンパネルへの接続に失敗しました",
+            "invalid_auth": "認証が無効です",
+            "unknown": "予期しないエラー"
+        },
+        "flow_title": "スパンパネル ({host})",
+        "step": {
+            "confirm_discovery": {
+                "description": "{host}でスパンパネルをセットアップしますか?",
+                "title": "スパンパネルに接続"
+            },
+            "user": {
+                "data": {
+                    "host": "ホスト"
+                },
+                "title": "スパンパネルに接続"
+            },
+            "auth_menu": {
+                "title": "認証オプションを選んでください",
+                "menu_options": {
+                    "auth_proximity": "スパンパネル実物を通じて認証する",
+                    "auth_token": "アクセストークンを使用して認証する"
+                }
+            },
+            "auth_proximity": {
+                "title": "近接認証",
+                "description": "スパンパネルのドアを {remaining} 回開閉してください。"
+            },
+            "auth_token": {
+                "title": "手動にトークン認証",
+                "description": "アクセストークンを入力してください:",
+                "data": {
+                    "access_token": "アクセストークン"
+                }
+            }
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "scan_interval": "スキャンインターバル(秒)"
+                }
+            }
+        }
+    }
+}
