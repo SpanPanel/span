@@ -14,7 +14,7 @@ class SpanPanelStatus:
     serial_number: str
     model: str
     door_state: str
-    remaining_auth_unlock_button_presses: int
+    proximity_proven: bool
     uptime: int
     is_ethernet_connected: bool
     is_wifi_connected: bool
@@ -34,9 +34,7 @@ class SpanPanelStatus:
             serial_number=data["system"]["serial"],
             model=data["system"]["model"],
             door_state=data["system"]["doorState"],
-            remaining_auth_unlock_button_presses=data["system"][
-                "remainingAuthUnlockButtonPresses"
-            ],
+            proximity_proven=data["system"]["proximityProven"],
             uptime=data["system"]["uptime"],
             is_ethernet_connected=data["network"]["eth0Link"],
             is_wifi_connected=data["network"]["wlanLink"],

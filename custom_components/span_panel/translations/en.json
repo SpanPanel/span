@@ -31,7 +31,7 @@
             },
             "auth_proximity": {
                 "title": "Proximity Authentication",
-                "description": "Please open and close the Span Panel door {remaining} times."
+                "description": "Please open and close the Span Panel door 3 times."
             },
             "auth_token": {
                 "title": "Manual Token Authentication",

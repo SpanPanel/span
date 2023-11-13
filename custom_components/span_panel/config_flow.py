@@ -191,11 +191,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         panel_status = await span_api.get_status_data()
 
         # Reprompt until we are able to do proximity auth
-        remaining_presses = panel_status.remaining_auth_unlock_button_presses
-        if remaining_presses != 0:
+        proximity_verified = panel_status.proximity_proven
+        if proximity_verified is False:
             return self.async_show_form(
-                step_id="auth_proximity",
-                description_placeholders={"remaining": remaining_presses},
+                step_id="auth_proximity"
             )
 
         # Ensure token is valid
