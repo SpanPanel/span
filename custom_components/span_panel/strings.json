@@ -22,7 +22,7 @@
                 },
                 "title": "Connect to the Span Panel"
             },
-            "auth_menu": {
+            "choose_auth_type": {
                 "title": "Choose Authentication Options",
                 "menu_options": {
                     "auth_proximity": "Authenticate through your physical Span Panel",
