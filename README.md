@@ -10,16 +10,17 @@ The author(s) will try to keep this integration working, but cannot provide tech
 # Installation
 
 1. Install [HACS](https://hacs.xyz/)
-2. Go to HACS `Integrations >` section
-3. In the uppper right click `...`
-4. Select `Custom Repositories`
-5. Set `Repository` to "gdgib/span" and `Category` to "Integration, then click `Add`
-6. Add the "Span Panel" integration
+2. Go to HACS `Integrations` section
+3. In the lower right click "Explore & Download Repositories"
+4. Search for `Span`
+5. Select the "Span Panel" result
+6. Select "Download"
 7. Restart Home Assistant
 7. In the Home Assistant UI go to `Settings`
 8. Click `Devices & Services`
 10. Click `+ Add Integration`
 11. Search for "Span"
+12. Enter the IP of your Span Panel to begin setup
 
 # Devices & Entities
 
