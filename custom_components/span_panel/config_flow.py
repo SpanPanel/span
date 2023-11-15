@@ -190,12 +190,22 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         span_api = create_api_controller(self.hass, self.host)
         panel_status = await span_api.get_status_data()
 
-        # Reprompt until we are able to do proximity auth
-        proximity_verified = panel_status.proximity_proven
-        if proximity_verified is False:
-            return self.async_show_form(
-                step_id="auth_proximity"
-            )
+        #Check if running firmware newer or older than r202342
+        if panel_status.proximity_proven is not None:
+
+             # Reprompt until we are able to do proximity auth for new firmware
+            proximity_verified = panel_status.proximity_proven
+            if proximity_verified is False:
+                return self.async_show_form(
+                    step_id="auth_proximity"
+                )
+        else:
+            # Reprompt until we are able to do proximity auth for old firmware
+            remaining_presses = panel_status.remaining_auth_unlock_button_presses
+            if remaining_presses != 0:
+                return self.async_show_form(
+                    step_id="auth_proximity",
+                )
 
         # Ensure token is valid
         self.access_token = await span_api.get_access_token()
