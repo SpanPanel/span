@@ -27,6 +27,7 @@ class SpanPanelStatus:
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> "SpanPanelStatus":
+
         if "proximityProven" in data["system"]:
             sps = SpanPanelStatus(
                 firmware_version=data["software"]["firmwareVersion"],
