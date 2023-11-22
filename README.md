@@ -38,6 +38,8 @@ This method, at this time, will require some base knowledge of making direct cal
 1. Make a POST to {Span_Panel_IP}`/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.
 
     * Use a unique value for UNIQUEID. Six random alphanumeric characters would be a reasonable choice. If the name conflicts with one that's already been created, then the request will fail.
+  
+    Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local Span Integration"}'`
 
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
 
