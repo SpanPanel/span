@@ -20,20 +20,18 @@ The author(s) will try to keep this integration working, but cannot provide tech
 8. Click `Devices & Services`
 10. Click `+ Add Integration`
 11. Search for "Span"
-12. Enter the IP of your Span Panel to begin setup
+12. Enter the IP of your Span Panel to begin setup, or select the automatically discovered panel if it shows up.
 
-The setup flow has two methods available, either the "proximity" method where one presses the door button 3 times to "unlock" the panel's API, or a new method leveraging an authorization token.
+The span api requires an auth token. If you already have one from some previous setup, you can reuse it. If you don't already have a token (most people), you just need to prove that you are physically near the panel, and then the integration can get its own token.
 
-### Method 1:
-Simply open the door to your Span Panel and press the door sensor button 3 times in succession. The lights ringing the frame of your panel should blink momentarily, and the Panel will now be "unlocked" for 15 minutes (It may in fact be significantly longer, but 15 is the documented period.)
+### Proof of Proximity:
+Simply open the door to your Span Panel and press the door sensor button 3 times in succession. The lights ringing the frame of your panel should blink momentarily, and the Panel will now be "unlocked" for 15 minutes (It may in fact be significantly longer, but 15 is the documented period.) While the panel is unlocked, it will allow the integration to create a new auth token. 
 
-You can now simply proceed with the "Manual" flow in the UI menu.
+### Authentication details:
 
-_Please note that this method is scheduled by Span to be deprecated at an unknown point in the future in favor of Method 2_
+These details were provided by a SPAN engineer, and have been implemented in the integration. They are documented here in the hope someone may find them useful.
 
-### Method 2:
-
-This method, at this time, will require some base knowledge of making direct calls to an API endpoint with JSON data via a CLI or custom tool. There is a long-term goal to eventually move this logic into the configuration UI behind the scenes, to avoid the need to do this manually yourself.
+To get an auth token:
 
 1. Make a POST to {Span_Panel_IP}`/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.
 
@@ -49,7 +47,7 @@ This method, at this time, will require some base knowledge of making direct cal
 
 _(If you have multiple Span Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
-You can now proceed with the "Auth Token" flow in the UI menu.
+If you have this auth token, you can entere it in the "Existing Auth Token" flow in the UI menu.
 
 # Devices & Entities
 
