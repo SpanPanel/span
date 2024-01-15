@@ -64,6 +64,15 @@ This devices will have entities for:
 * Network Connectivity (Wi-Fi, Wired, & Cellular)
 * Door State
 
+## Entity Precision
+
+The power sensors provided by this add-on report with the exact precision from the SPAN panel, which may be more decimal places than you will want for practical purposes.
+By default the sensors will display with precision 2 (e.g. `0.00`).
+
+You can change the display precision for any entity in HomeAssistant via `Settings` -> `Devices & Services` -> `Entities` tab.
+find the entity you would like to change in the list and click on it, then click on the gear wheel in the top right.
+Select the precision you prefer from the "Display Precision" menu and then press `UPDATE`.
+
 # License
 
 This integration is published under the MIT license.
