@@ -42,7 +42,7 @@ class SpanPanelData:
                 solar_inverter_energy_consumed=0.0
             )
         else:
-            if inverter.inverter_leg1 in range(1, INVERTER_MAXLEG+1):
+            if 1 <= inverter.inverter_leg1 <= INVERTER_MAXLEG:
                 leg1_power = data["branches"][inverter.inverter_leg1-1]["instantPowerW"]
                 leg1_energy_produced = data["branches"][inverter.inverter_leg1-1]["importedActiveEnergyWh"]
                 leg1_energy_consumed = data["branches"][inverter.inverter_leg1-1]["exportedActiveEnergyWh"]
@@ -50,7 +50,7 @@ class SpanPanelData:
                 leg1_power = 0
                 leg1_energy_produced = 0
                 leg1_energy_consumed = 0
-            if inverter.inverter_leg2 in range(1, INVERTER_MAXLEG+1):
+            if 1 <= inverter.inverter_leg2 <= INVERTER_MAXLEG:
                 leg2_power = data["branches"][inverter.inverter_leg2-1]["instantPowerW"]
                 leg2_energy_produced = data["branches"][inverter.inverter_leg2-1]["importedActiveEnergyWh"]
                 leg2_energy_consumed = data["branches"][inverter.inverter_leg2-1]["exportedActiveEnergyWh"]
