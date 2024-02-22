@@ -43,21 +43,19 @@ class SpanPanelData:
             )
         else:
             if 1 <= inverter.inverter_leg1 <= INVERTER_MAXLEG:
-                leg1_power = data["branches"][inverter.inverter_leg1-1]["instantPowerW"]
-                leg1_energy_produced = data["branches"][inverter.inverter_leg1-1]["importedActiveEnergyWh"]
-                leg1_energy_consumed = data["branches"][inverter.inverter_leg1-1]["exportedActiveEnergyWh"]
+                leg1_branch = data["branches"][inverter.inverter_leg1-1]
+                leg1_power = leg1_branch["instantPowerW"]
+                leg1_energy_produced = leg1_branch["importedActiveEnergyWh"]
+                leg1_energy_consumed = leg1_branch["exportedActiveEnergyWh"]
             else:
-                leg1_power = 0
-                leg1_energy_produced = 0
-                leg1_energy_consumed = 0
+                leg1_power = leg1_energy_produced = leg1_energy_consumed = 0
             if 1 <= inverter.inverter_leg2 <= INVERTER_MAXLEG:
-                leg2_power = data["branches"][inverter.inverter_leg2-1]["instantPowerW"]
-                leg2_energy_produced = data["branches"][inverter.inverter_leg2-1]["importedActiveEnergyWh"]
-                leg2_energy_consumed = data["branches"][inverter.inverter_leg2-1]["exportedActiveEnergyWh"]
+                leg2_branch = data["branches"][inverter.inverter_leg2-1]
+                leg2_power = leg2_branch["instantPowerW"]
+                leg2_energy_produced = leg2_branch["importedActiveEnergyWh"]
+                leg2_energy_consumed = leg2_branch["exportedActiveEnergyWh"]
             else:
-                leg2_power = 0
-                leg2_energy_produced = 0
-                leg2_energy_consumed = 0
+                leg2_power = leg2_energy_produced = leg2_energy_consumed = 0
 
             spd = SpanPanelData(
                 main_relay_state=data["mainRelayState"],
