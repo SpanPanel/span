@@ -4,6 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 INVERTER_ENABLE = "enable_solar_circuit"
 INVERTER_LEG1 = "leg1"
 INVERTER_LEG2 = "leg2"
+INVERTER_MAXLEG = 32
 
 class Inverter:
     """Class representing the options for the solar inverter."""
