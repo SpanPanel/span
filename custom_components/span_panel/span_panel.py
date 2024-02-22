@@ -7,6 +7,7 @@ import uuid
 import httpx
 
 from .exceptions import SpanPanelReturnedEmptyData
+from .inverter import Inverter
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
@@ -35,8 +36,8 @@ SYSTEM_WIFI_LINK = "wlanLink"
 class SpanPanel:
     """Instance of a Span panel"""
 
-    def __init__(self, host: str, access_token: str, async_client=None) -> None:
-        self.api = SpanPanelApi(host, access_token, async_client)
+    def __init__(self, host: str, access_token: str, inverter: Inverter, async_client=None) -> None:
+        self.api = SpanPanelApi(host, access_token, inverter, async_client)
         self.updated_at: int = 0
         self.status: SpanPanelStatus
         self.panel: SpanPanelData

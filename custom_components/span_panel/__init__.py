@@ -20,6 +20,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import COORDINATOR, DOMAIN, NAME, DEFAULT_SCAN_INTERVAL
+from .inverter import Inverter
 from .span_panel import SpanPanel
 
 PLATFORMS: list[Platform] = [
@@ -41,10 +42,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY %s", host)
 
+    inverter_options: Inverter = Inverter(entry)
+
     span_panel = SpanPanel(
         host=config[CONF_HOST],
         access_token=config[CONF_ACCESS_TOKEN],
-        async_client=get_async_client(hass),
+        inverter=inverter_options,
+        async_client=get_async_client(hass)
     )
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY panel %s", span_panel)

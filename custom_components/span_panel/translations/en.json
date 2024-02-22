@@ -46,7 +46,10 @@
         "step": {
             "init": {
                 "data": {
-                    "scan_interval": "Scan interval in seconds"
+                    "scan_interval": "Scan interval in seconds",
+                    "enable_solar_circuit": "Enable Solar Inverter Sensors",
+                    "leg1": "Inverter Leg 1",
+                    "leg2": "Inverter Leg 2"
                 }
             }
         }

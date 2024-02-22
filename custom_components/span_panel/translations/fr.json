@@ -46,7 +46,10 @@
         "step": {
             "init": {
                 "data": {
-                    "scan_interval": "Intervalle d'analyse en secondes"
+                    "scan_interval": "Intervalle d'analyse en secondes",
+                    "enable_solar_circuit": "Activer les capteurs de l'onduleur solaire",
+                    "leg1": "Jambe 1 de l'onduleur",
+                    "leg2": "Jambe 2 de l'onduleur"
                 }
             }
         }

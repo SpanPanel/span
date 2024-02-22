@@ -46,7 +46,10 @@
         "step": {
             "init": {
                 "data": {
-                    "scan_interval": "Intervalo de escaneo en segundos"
+                    "scan_interval": "Intervalo de escaneo en segundos",
+                    "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
+                    "leg1": "Pata 1 del Inversor",
+                    "leg2": "Pata 2 del Inversor"
                 }
             }
         }
