@@ -50,18 +50,23 @@ To get an auth token:
 
 _(If you have multiple Span Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
-If you have this auth token, you can entere it in the "Existing Auth Token" flow in the UI menu.
+If you have this auth token, you can enter it in the "Existing Auth Token" flow in the configuration menu.
+
+# Post-Install
+
+* Integration Scan Frequency (poll time in seconds), default is 15 seconds
+* Enable/Map Solar Inverter Sensors to circuits (a combination of one or two legs, poistion 1-32 or 0 indicating none)
 
 # Devices & Entities
 
-This integration will a device for your span panel.
-This devices will have entities for:
+This integration will provide a device for your span panel. This device will have entities for:
 
 * Circuits
-  * On/Off Switch
-  * Priority Selector
-  * Power Usage
-* Network Connectivity (Wi-Fi, Wired, & Cellular)
+  * On/Off Switch (user managed circuits)
+  * Priority Selector (user managed circuits)
+  * Power Usage / Generation (Watts)
+  * Energy Usage / Generation (wH)
+* Network Connectivity Status (Wi-Fi, Wired, & Cellular)
 * Door State
 
 ## Entity Precision
