@@ -54,8 +54,10 @@ If you have this auth token, you can enter it in the "Existing Auth Token" flow 
 
 # Post-Install
 
+Optional configuration
+
 * Integration Scan Frequency (poll time in seconds), default is 15 seconds
-* Enable/Map Solar Inverter Sensors to circuits (a combination of one or two legs, poistion 1-32 or 0 indicating none)
+* Enable/Map Solar Inverter Sensors for circuit(s) (a combination of one or two leg poistions 1-32 or 0 indicating none).  Look in your Span app for "solar" if any and identify the individual circuit(s).  The leg values are combined into a single set of "inverter" sensors, e.g., two 120v legs of a 240v circuit in the US position 30/32.  In Europe this configuration could be a single 230v leg where one leg is set to 0.  
 
 # Devices & Entities
 
