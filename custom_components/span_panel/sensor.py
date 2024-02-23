@@ -13,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ENERGY_WATT_HOUR, POWER_WATT
+from homeassistant.const import UnitOfPower, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -78,7 +78,7 @@ CIRCUITS_SENSORS = (
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_POWER,
         name="Power",
-        native_unit_of_measurement=POWER_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.POWER,
@@ -87,7 +87,7 @@ CIRCUITS_SENSORS = (
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_ENERGY_PRODUCED,
         name="Produced Energy",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -96,7 +96,7 @@ CIRCUITS_SENSORS = (
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_ENERGY_CONSUMED,
         name="Consumed Energy",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -108,7 +108,7 @@ PANEL_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="instantGridPowerW",
         name="Current Power",
-        native_unit_of_measurement=POWER_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
@@ -117,7 +117,7 @@ PANEL_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
         name="Feed Through Power",
-        native_unit_of_measurement=POWER_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
@@ -126,7 +126,7 @@ PANEL_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergy.producedEnergyWh",
         name="Main Meter Produced Energy",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -135,7 +135,7 @@ PANEL_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergy.consumedEnergyWh",
         name="Main Meter Consumed Energy",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -144,7 +144,7 @@ PANEL_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergy.producedEnergyWh",
         name="Feed Through Produced Energy",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -153,7 +153,7 @@ PANEL_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergy.consumedEnergyWh",
         name="Feed Through Consumed Energy",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
@@ -165,7 +165,7 @@ INVERTER_SENSORS = (
         SpanPanelDataSensorEntityDescription(
         key="solar_inverter_instant_power",
         name="Solar Inverter Instant Power",
-        native_unit_of_measurement=POWER_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         suggested_display_precision=2,
         state_class=SensorStateClass.MEASUREMENT,
@@ -174,7 +174,7 @@ INVERTER_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="solar_inverter_energy_produced",
         name="Solar Inverter Energy Produced",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         suggested_display_precision=2,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -183,7 +183,7 @@ INVERTER_SENSORS = (
     SpanPanelDataSensorEntityDescription(
         key="solar_inverter_energy_consumed",
         name="Solar Inverter Energy Consumed",
-        native_unit_of_measurement=ENERGY_WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         suggested_display_precision=2,
         state_class=SensorStateClass.TOTAL_INCREASING,
