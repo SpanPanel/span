@@ -104,7 +104,14 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 This integration is published under the MIT license.
 
-# Contributing & Issues
+# Attribution
 
+This repository is a fork in a long line of span forks that may or may not be stable (from newer to older):
+  gdgib/span
+  thetoothpick/span-hacs
+  wez/span-hacs
+  galak/span-hacs  
+
+# Issues & Contribution
 If you have a problem, feel free to [open an issue](https://github.com/cayossarian/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
 For those capable, please consider opening even a low quality [pull request](https://github.com/cayossarian/span/pulls) when possible, as we're generally very happy to have a starting point when making a change.
