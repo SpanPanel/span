@@ -15,6 +15,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
+from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -298,6 +299,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
+        self.options = dict(config_entry.options)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -309,13 +311,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
         )
 
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_SCAN_INTERVAL, default=curr_scan_interval):
+                        vol.All(int, vol.Range(min=5)),  # Specify the max value
+                vol.Optional(INVERTER_ENABLE, default=self.options.get(
+                    "enable_solar_circuit", False)): bool,
+                vol.Optional(INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)):
+                    vol.All(vol.Coerce(int), vol.Range(min=0)),  # Specify the max value
+                vol.Optional(INVERTER_LEG2, default=self.options.get(INVERTER_LEG2, 0)):
+                    vol.All(vol.Coerce(int), vol.Range(min=0)),  # Specify the max value
+            }
+        )
+
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_SCAN_INTERVAL, default=curr_scan_interval
-                    ): vol.All(int, vol.Range(min=5)),
-                }
-            ),
+            data_schema=schema,
         )

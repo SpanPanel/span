@@ -14,6 +14,7 @@ from .const import (
     CircuitRelayState,
 )
 from .exceptions import SpanPanelReturnedEmptyData
+from .options import Options
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_status import SpanPanelStatus
@@ -26,10 +27,12 @@ class SpanPanelApi:
         self,
         host: str,
         access_token: str | None = None,
+        options: Options | None = None,
         async_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.host: str = host.lower()
         self.access_token: str = access_token
+        self.options: Options = options
         self._async_client = async_client
 
     @property
@@ -61,7 +64,7 @@ class SpanPanelApi:
 
     async def get_panel_data(self) -> SpanPanelData:
         response = await self.get_data(URL_PANEL)
-        panel_data = SpanPanelData.from_dict(response.json())
+        panel_data = SpanPanelData.from_dict(response.json(), self.options)
 
         # Span Panel API might return empty result.
         # We use relay state == UNKNOWN as an indication of that scenario.

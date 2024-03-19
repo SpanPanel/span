@@ -50,18 +50,45 @@ To get an auth token:
 
 _(If you have multiple Span Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
-If you have this auth token, you can entere it in the "Existing Auth Token" flow in the UI menu.
+If you have this auth token, you can enter it in the "Existing Auth Token" flow in the configuration menu.
+
+# Post-Install
+
+Optional configuration
+
+* Integration Scan Frequency (poll time in seconds), default is 15 seconds
+* Enable/Map Solar Inverter Sensors for circuit(s) (a combination of one or two leg poistions 1-32 or 0 indicating none).  Look in your Span app for "solar" if any and identify the individual circuit(s).  The leg values are combined into a single set of "inverter" sensors, e.g., two 120v legs of a 240v circuit in the US position 30/32.  In Europe this configuration could be a single 230v leg where one leg is set to 0.  
+
+If the inverter sensors are enabled three sensors are created:
+
+sensor.solar_inverter_instant_power (watts)
+sensor.solar_inverter_energy_produce (Wh)
+sensor.solar_inverter_energy_consumed (Wh)
+
+Disabling the inverter sensor removes these specific sensors. No reboot required to add/remove inverter sensors.
+
+Adding your own platform integration sensor like so converts to kWh:
+
+```yaml
+sensor
+    - platform: integration
+      source: sensor.solar_inverter_instant_power
+      name: Solar Inverter Produced kWh
+      unique_id: sensor.solar_inverter_produced_kwh
+     unit_prefix: k
+     round: 2
+```
 
 # Devices & Entities
 
-This integration will a device for your span panel.
-This devices will have entities for:
+This integration will provide a device for your span panel. This device will have entities for:
 
 * Circuits
-  * On/Off Switch
-  * Priority Selector
-  * Power Usage
-* Network Connectivity (Wi-Fi, Wired, & Cellular)
+  * On/Off Switch (user managed circuits)
+  * Priority Selector (user managed circuits)
+  * Power Usage / Generation (Watts)
+  * Energy Usage / Generation (wH)
+* Network Connectivity Status (Wi-Fi, Wired, & Cellular)
 * Door State
 
 ## Entity Precision

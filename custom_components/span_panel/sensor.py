@@ -29,6 +29,7 @@ from .const import (
     DOMAIN,
     STAUS_SOFTWARE_VER,
 )
+from .options import INVERTER_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
@@ -160,6 +161,36 @@ PANEL_SENSORS = (
     ),
 )
 
+INVERTER_SENSORS = (
+        SpanPanelDataSensorEntityDescription(
+        key="solar_inverter_instant_power",
+        name="Solar Inverter Instant Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda panel_data: panel_data.solar_inverter_instant_power,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="solar_inverter_energy_produced",
+        name="Solar Inverter Energy Produced",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda panel_data: panel_data.solar_inverter_energy_produced,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="solar_inverter_energy_consumed",
+        name="Solar Inverter Energy Consumed",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        suggested_display_precision=2,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda panel_data: panel_data.solar_inverter_energy_consumed,
+    ),
+)
+
 STATUS_SENSORS = (
     SpanPanelStatusSensorEntityDescription(
         key=STAUS_SOFTWARE_VER,
@@ -283,6 +314,9 @@ async def async_setup_entry(
 
     for description in PANEL_SENSORS:
         entities.append(SpanPanelPanel(coordinator, description))
+    if config_entry.options.get(INVERTER_ENABLE, False):
+        for description in INVERTER_SENSORS:
+            entities.append(SpanPanelPanel(coordinator, description))
 
     for description in STATUS_SENSORS:
         entities.append(SpanPanelStatus(coordinator, description))
