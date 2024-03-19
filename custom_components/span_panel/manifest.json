@@ -2,14 +2,14 @@
 	"domain": "span_panel",
 	"name": "Span Panel",
 	"codeowners": [
-		"@gdgib"
+		"@cayossarian"
 	],
 	"config_flow": true,
-	"documentation": "https://github.com/gdgib/span",
+	"documentation": "https://github.com/cayossarian/span",
 	"iot_class": "local_polling",
-	"issue_tracker": "https://github.com/gdgib/span/issues",
+	"issue_tracker": "https://github.com/cayossarian/span/issues",
 	"requirements": [],
-	"version": "0.0.9",
+	"version": "0.0.10",
 	"zeroconf": [
 		{
 			"type": "_span._tcp.local."

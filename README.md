@@ -106,5 +106,5 @@ This integration is published under the MIT license.
 
 # Contributing & Issues
 
-If you have a problem, feel free to [open an issue](https://github.com/gdgib/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
-For those capable, please consider opening even a low quality [pull request](https://github.com/gdgib/span/pulls) when possible, as we're generally very happy to have a starting point when making a change.
+If you have a problem, feel free to [open an issue](https://github.com/cayossarian/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
+For those capable, please consider opening even a low quality [pull request](https://github.com/cayossarian/span/pulls) when possible, as we're generally very happy to have a starting point when making a change.
