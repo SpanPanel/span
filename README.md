@@ -19,7 +19,7 @@ The author(s) will try to keep this integration working, but cannot provide tech
 9. Click `+ Add Integration`
 10. Search for "Span"
 11. Enter the IP of your Span Panel to begin setup, or select the automatically discovered panel if it shows up.
-12. Create an authentication token (see below) or the door proximity authenticaion.  Token may be more durable to network changes.
+12. Create an authentication token (see below) or the door proximity authenticaion.  Obtaining a token may be more durable to network changes, e.g., if you change client host name or IP.
 13. See post intstall steps for solar or scan frequency configuration.
 
 ## Auth Token
