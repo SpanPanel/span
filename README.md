@@ -12,10 +12,10 @@ The author(s) will try to keep this integration working, but cannot provide tech
 1. Install [HACS](https://hacs.xyz/)
 2. Go to HACS, select `Integrations`
 3. If your using the default HACS repository (which may not be the latest repository) you can select it in the lower right repositories.  If your using a newer repository that is not the HACS default, in the upper right of HACS/Integrations click on the three dots and add a custom repository with the https URL of this repository.
-4. Select the repository you added in the list of integrations in HACS and select "Download".  You can follow the URL to ensure you have the repository you wajt.
-5. Restart Home Assistant
-6. In the Home Assistant UI go to `Settings`
-7. Click `Devices & Services' and you should see this integration
+5. Select the repository you added in the list of integrations in HACS and select "Download".  You can follow the URL to ensure you have the repository you want.
+6. Restart Home Assistant
+7. In the Home Assistant UI go to `Settings`
+8. Click `Devices & Services' and you should see this integration
 9. Click `+ Add Integration`
 10. Search for "Span"
 11. Enter the IP of your Span Panel to begin setup, or select the automatically discovered panel if it shows up.
@@ -41,7 +41,7 @@ They are documented here in the hope someone may find them useful.
 
 To get an auth token:
 
-1. Using a tool like the VS code extension 'Thunder Client' Make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.  
+1. Using a tool like the VS code extension 'Thunder Client' or curl make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.  
     * Use a unique value for UNIQUEID. Six random alphanumeric characters would be a reasonable choice. If the name conflicts with one that's already been created, then the request will fail.
     * Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local Span Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
