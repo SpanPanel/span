@@ -12,14 +12,14 @@ The author(s) will try to keep this integration working, but cannot provide tech
 1. Install [HACS](https://hacs.xyz/)
 2. Go to HACS, select `Integrations`
 3. If your using the default HACS repository (which may not be the latest repository) you can select it in the lower right repositories.  If your using a newer repository that is not the HACS default, in the upper right of HACS/Integrations click on the three dots and add a custom repository with the https URL of this repository.
-4. Select the repository you added in the list of integrations in HACS and select "Download".  You can follow the URL to ensure you have the repository you wajt.
-5. Restart Home Assistant
-6. In the Home Assistant UI go to `Settings`
-7. Click `Devices & Services' and you should see this integration
+5. Select the repository you added in the list of integrations in HACS and select "Download".  You can follow the URL to ensure you have the repository you want.
+6. Restart Home Assistant
+7. In the Home Assistant UI go to `Settings`
+8. Click `Devices & Services' and you should see this integration
 9. Click `+ Add Integration`
 10. Search for "Span"
 11. Enter the IP of your Span Panel to begin setup, or select the automatically discovered panel if it shows up.
-12. Create an authentication token (see below) or the door proximity authenticaion.  Token may be more durable to network changes.
+12. Create an authentication token (see below) or the door proximity authenticaion.  Obtaining a token may be more durable to network changes, e.g., if you change client host name or IP.
 13. See post intstall steps for solar or scan frequency configuration.
 
 ## Auth Token
@@ -41,7 +41,7 @@ They are documented here in the hope someone may find them useful.
 
 To get an auth token:
 
-1. Using a tool like the VS code extension 'Thunder Client' Make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.  
+1. Using a tool like the VS code extension 'Thunder Client' or curl make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.  
     * Use a unique value for UNIQUEID. Six random alphanumeric characters would be a reasonable choice. If the name conflicts with one that's already been created, then the request will fail.
     * Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local Span Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
@@ -57,15 +57,19 @@ If you have this auth token, you can enter it in the "Existing Auth Token" flow 
 Optional configuration
 
 * Integration Scan Frequency (poll time in seconds), default is 15 seconds
-* Enable/Map Solar Inverter Sensors for circuit(s) (a combination of one or two leg poistions 1-32 or 0 indicating none).  Look in your Span app for "solar" if any and identify the individual circuit(s).  The leg values are combined into a single set of "inverter" sensors, e.g., two 120v legs of a 240v circuit in the US position 30/32.  In Europe this configuration could be a single 230v leg where one leg is set to 0.  
+* Enable/Map Solar Inverter Sensors to circuit(s) (a combination of one or two leg poistions 1-32 or 0 indicating none).  Look in your Span app for "solar" if any and identify the individual circuit(s).  The leg values are combined into a single set of "inverter" sensors, e.g., two 120v legs of a 240v circuit in the US position 30/32.  In Europe this configuration could be a single 230v leg where one leg is set to 0.  
 
 If the inverter sensors are enabled three sensors are created:
 
-sensor.solar_inverter_instant_power (watts)
-sensor.solar_inverter_energy_produce (Wh)
-sensor.solar_inverter_energy_consumed (Wh)
+```yaml
+sensor.solar_inverter_instant_power # (watts)
+sensor.solar_inverter_energy_produce # (Wh)
+sensor.solar_inverter_energy_consumed # (Wh)
+```
 
-Disabling the inverter sensor removes these specific sensors. No reboot required to add/remove inverter sensors.
+Disabling the inverter in the configuration removes these specific sensors. No reboot is required to add/remove these inverter sensors.  
+
+Although the solar inverter configuration is primarily aimed at installations that don't have a way to monitor their solar directly from their inverter one could use this configuration to monitor any circuit(s) not provided directly by the underlying SPAN API for whatever reason.  The two circuits are always added together to indicate their combined power if both circuits are enabled.
 
 Adding your own platform integration sensor like so converts to kWh:
 
