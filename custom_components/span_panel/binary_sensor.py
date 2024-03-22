@@ -43,7 +43,7 @@ BINARY_SENSORS = (
     SpanPanelBinarySensorEntityDescription(
         key="doorState",
         name="Door State",
-        device_class=BinarySensorDeviceClass.DOOR,
+        device_class=BinarySensorDeviceClass.TAMPER,
         value_fn=lambda status_data: not status_data.is_door_closed,
     ),
     SpanPanelBinarySensorEntityDescription(
