@@ -55,8 +55,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 await span_panel.update()
             except httpx.HTTPStatusError as err:
-                raise ConfigEntryAuthFailed from err
+                if err.response.status_code == 401:
+                    raise ConfigEntryAuthFailed from err
+                else:
+                    _LOGGER.error("An httpx.StatusError occurred while updating Span data: %s", str(err))
+                    raise UpdateFailed(f"Error communicating with API: {err}") from err
             except httpx.HTTPError as err:
+                _LOGGER.error("An httpx.HTTPError occurred while updating Span data: %s", str(err))
+                raise UpdateFailed(f"Error communicating with API: {err}") from err
+            except httpx.TransportError as err:
+                _LOGGER.error("An httpx.Transport error occurred while updating Span data: %s", str(err))
                 raise UpdateFailed(f"Error communicating with API: {err}") from err
 
             return span_panel

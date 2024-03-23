@@ -1,3 +1,6 @@
 .*sw*
 *.pyc
 /.project
+.DS_Store
+.vscode/settings.json
+.vscode/extensions.json
