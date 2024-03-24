@@ -28,7 +28,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ACCESS_TOKEN): str,
+        vol.Optional(CONF_ACCESS_TOKEN): str,
     }
 )
 
