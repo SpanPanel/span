@@ -55,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 await span_panel.update()
             except httpx.HTTPStatusError as err:
-                if err.response.status_code == 401:
+                if err.response.status_code == HTTPStatus.UNAUTHORIZED:
                     raise ConfigEntryAuthFailed from err
                 else:
                     _LOGGER.error("An httpx.StatusError occurred while updating Span data: %s", str(err))
