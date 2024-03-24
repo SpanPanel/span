@@ -242,7 +242,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             return await self.async_step_resolve_entity(user_input)
 
-        return await self.async_step_choose_auth_type() 
+        return await self.async_step_choose_auth_type(user_input) 
 
 
     async def async_step_resolve_entity(
