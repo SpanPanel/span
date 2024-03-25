@@ -3,4 +3,6 @@
 /.project
 .DS_Store
 .vscode/
-
+.direnv/
+env/
+.envrc 
