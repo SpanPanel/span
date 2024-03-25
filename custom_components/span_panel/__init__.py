@@ -1,7 +1,6 @@
 """The Span Panel integration."""
 from __future__ import annotations
 from datetime import timedelta
-from http import HTTPStatus
 
 import logging
 
@@ -58,7 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 await span_panel.update()
             except httpx.HTTPStatusError as err:
-                if err.response.status_code == HTTPStatus.UNAUTHORIZED:
+                if err.response.status_code == httpx.codes.UNAUTHORIZED:
                     raise ConfigEntryAuthFailed from err
                 else:
                     _LOGGER.error("An httpx.StatusError occurred while updating Span data: %s", str(err))
