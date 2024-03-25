@@ -35,7 +35,7 @@
             },
             "auth_token": {
                 "title": "Manual Token Authentication",
-                "description": "Please enter your access token:",
+                "description": "Please enter your access token (empty to start over):",
                 "data": {
                     "access_token": "Access Token"
                 }
