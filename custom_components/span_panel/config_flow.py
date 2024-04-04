@@ -163,12 +163,18 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        return await self.async_step_choose_auth_type()
+        # Pass the (empty) dictionary to signal the call came from this step, not abort
+        return await self.async_step_choose_auth_type(user_input)
 
     async def async_step_choose_auth_type(
         self,
+        user_input=None 
     ) -> FlowResult:
         self.ensure_flow_is_set_up()
+        
+        # None means this method was called by HA core as an abort
+        if user_input is None:
+            return await self.async_step_confirm_discovery()
 
         return self.async_show_menu(
             step_id="choose_auth_type",
