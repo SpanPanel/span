@@ -27,7 +27,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ACCESS_TOKEN): str,
+        vol.Optional(CONF_ACCESS_TOKEN): str,
     }
 )
 
@@ -235,11 +235,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         # Ensure token is valid
-        self.access_token = user_input[CONF_ACCESS_TOKEN]
-        if not await validate_host(self.hass, self.host, self.access_token):
-            return self.async_abort(reason="invalid_access_token")
+        if CONF_ACCESS_TOKEN in user_input and user_input[CONF_ACCESS_TOKEN]:
+            self.access_token = user_input[CONF_ACCESS_TOKEN]
+            if not await validate_host(self.hass, self.host, self.access_token):
+                return self.async_abort(reason="invalid_access_token")
 
-        return await self.async_step_resolve_entity(user_input)
+            return await self.async_step_resolve_entity(user_input)
+
+        return await self.async_step_choose_auth_type(user_input) 
+
 
     async def async_step_resolve_entity(
         self,

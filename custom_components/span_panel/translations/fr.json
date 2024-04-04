@@ -35,7 +35,7 @@
             },
             "auth_token": {
                 "title": "Authentification manuelle du jeton",
-                "description": "Veuillez saisir votre jeton d'accès :",
+                "description": "Vieuillez entrer votre jeton d'accès (laissez vide pour recommencer):",
                 "data": {
                     "access_token": "Jeton d'accès"
                 }
