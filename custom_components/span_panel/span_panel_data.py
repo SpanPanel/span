@@ -45,8 +45,8 @@ class SpanPanelData:
             for leg in [options.inverter_leg1, options.inverter_leg2]:
                 if 1 <= leg <= INVERTER_MAXLEG:
                     branch = data["branches"][leg - 1]
-                    common_data["solar_inverter_instant_power"] = float(common_data["solar_inverter_instant_power"]) + float(branch["instantPowerW"])
-                    common_data["solar_inverter_energy_produced"] = float(common_data["solar_inverter_energy_produced"]) + float(branch["importedActiveEnergyWh"])
-                    common_data["solar_inverter_energy_consumed"] = float(common_data["solar_inverter_energy_consumed"]) + float(branch["exportedActiveEnergyWh"])
+                    common_data["solar_inverter_instant_power"] += float(branch["instantPowerW"])
+                    common_data["solar_inverter_energy_produced"] += float(branch["importedActiveEnergyWh"])
+                    common_data["solar_inverter_energy_consumed"] += float(branch["exportedActiveEnergyWh"])
 
         return SpanPanelData(**common_data)
