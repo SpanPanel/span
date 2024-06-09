@@ -92,8 +92,13 @@ This integration will provide a device for your span panel. This device will hav
   * Priority Selector (user managed circuits)
   * Power Usage / Generation (Watts)
   * Energy Usage / Generation (wH)
+  * Panel and Grid Status
+     * Main Relay State (e.g., CLOSED)
+     * Current Run Config (e.g., PANEL_ON_GRID)
+     * DSM State (e.g., DSM_GRID_UP)
+     * DSM Grid State (e.g., DSM_ON_GRID)
 * Network Connectivity Status (Wi-Fi, Wired, & Cellular)
-* Door State
+* Door State (device class is tamper)
 
 ## Entity Precision
 
