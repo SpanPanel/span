@@ -87,18 +87,19 @@ sensor
 
 This integration will provide a device for your span panel. This device will have entities for:
 
-* Circuits
+* User Managed Circuits
   * On/Off Switch (user managed circuits)
   * Priority Selector (user managed circuits)
+* Power Sensors
   * Power Usage / Generation (Watts)
   * Energy Usage / Generation (wH)
-  * Panel and Grid Status
-     * Main Relay State (e.g., CLOSED)
-     * Current Run Config (e.g., PANEL_ON_GRID)
-     * DSM State (e.g., DSM_GRID_UP)
-     * DSM Grid State (e.g., DSM_ON_GRID)
-* Network Connectivity Status (Wi-Fi, Wired, & Cellular)
-* Door State (device class is tamper)
+* Panel and Grid Status
+   * Main Relay State (e.g., CLOSED)
+   * Current Run Config (e.g., PANEL_ON_GRID)
+   * DSM State (e.g., DSM_GRID_UP)
+   * DSM Grid State (e.g., DSM_ON_GRID)
+   * Network Connectivity Status (Wi-Fi, Wired, & Cellular)
+   * Door State (device class is tamper)
 
 ## Entity Precision
 
