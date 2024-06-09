@@ -26,7 +26,11 @@ from .const import (
     CIRCUITS_ENERGY_PRODUCED,
     CIRCUITS_POWER,
     COORDINATOR,
+    CURRENT_RUN_CONFIG,
     DOMAIN,
+    DSM_GRID_STATE,
+    DSM_STATE,
+    MAIN_RELAY_STATE,
     STAUS_SOFTWARE_VER,
 )
 from .options import INVERTER_ENABLE
@@ -191,6 +195,29 @@ INVERTER_SENSORS = (
     ),
 )
 
+PANEL_DATA_STATUS_SENSORS = (
+    SpanPanelDataSensorEntityDescription(
+        key=CURRENT_RUN_CONFIG,
+        name="Current Run Config",
+        value_fn=lambda panel_data: panel_data.current_run_config,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key=DSM_GRID_STATE,
+        name="DSM Grid State",
+        value_fn=lambda panel_data: panel_data.dsm_grid_state,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key=DSM_STATE,
+        name="DSM State",
+        value_fn=lambda panel_data: panel_data.dsm_state,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key=MAIN_RELAY_STATE,
+        name="Main Relay State",
+        value_fn=lambda panel_data: panel_data.main_relay_state,
+    ),
+)
+
 STATUS_SENSORS = (
     SpanPanelStatusSensorEntityDescription(
         key=STAUS_SOFTWARE_VER,
@@ -264,6 +291,32 @@ class SpanPanelPanel(CoordinatorEntity, SensorEntity):
         value = self.entity_description.value_fn(span_panel.panel)
         return cast(float, value)
 
+class SpanPanelPanelStatus(CoordinatorEntity, SensorEntity):
+    _attr_icon = ICON
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        description: SensorEntityDescription,
+    ) -> None:
+        """Initialize Span Panel Extra entity."""
+        span_panel: SpanPanel = coordinator.data
+
+        self.entity_description = description
+        self._attr_name = f"{description.name}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{description.key}"
+        )
+        self._attr_device_info = panel_to_device_info(span_panel)
+
+        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor."""
+        span_panel: SpanPanel = self.coordinator.data
+        return self.entity_description.value_fn(span_panel.panel)
 
 class SpanPanelStatus(CoordinatorEntity, SensorEntity):
     _attr_icon = ICON
@@ -310,10 +363,12 @@ async def async_setup_entry(
     coordinator: DataUpdateCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
-    entities: list[SpanPanelCircuitSensor | SpanPanelPanel] = []
+    entities: list[SpanPanelCircuitSensor | SpanPanelPanel | SpanPanelExtra | SpanPanelStatus] = []
 
     for description in PANEL_SENSORS:
         entities.append(SpanPanelPanel(coordinator, description))
+    for description in PANEL_DATA_STATUS_SENSORS:
+        entities.append(SpanPanelPanelStatus(coordinator, description))
     if config_entry.options.get(INVERTER_ENABLE, False):
         for description in INVERTER_SENSORS:
             entities.append(SpanPanelPanel(coordinator, description))

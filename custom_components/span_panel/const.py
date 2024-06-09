@@ -37,6 +37,10 @@ SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
 
 STAUS_SOFTWARE_VER = "softwareVer"
+DSM_GRID_STATE = "dsmGridState"
+DSM_STATE = "dsmState"
+CURRENT_RUN_CONFIG = "currentRunConfig"
+MAIN_RELAY_STATE = "mainRelayState"
 
 PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE = "UNKNOWN"
 
