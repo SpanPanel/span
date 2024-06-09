@@ -44,7 +44,7 @@ BINARY_SENSORS = (
         key="doorState",
         name="Door State",
         device_class=BinarySensorDeviceClass.TAMPER,
-        value_fn=lambda status_data: not status_data.is_door_closed,
+        value_fn=lambda status_data: status_data.is_door_closed,
     ),
     SpanPanelBinarySensorEntityDescription(
         key="eth0Link",
