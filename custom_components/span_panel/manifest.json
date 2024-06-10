@@ -2,14 +2,15 @@
 	"domain": "span_panel",
 	"name": "Span Panel",
 	"codeowners": [
-		"@cayossarian"
+		"@SpanPanel",
+		"@cayossarian",
 	],
 	"config_flow": true,
-	"documentation": "https://github.com/cayossarian/span",
+	"documentation": "https://github.com/SpanPanel/span",
 	"iot_class": "local_polling",
-	"issue_tracker": "https://github.com/cayossarian/span/issues",
+	"issue_tracker": "https://github.com/SpanPanel/span/issues",
 	"requirements": [],
-	"version": "0.0.10",
+	"version": "0.0.11",
 	"zeroconf": [
 		{
 			"type": "_span._tcp.local."
