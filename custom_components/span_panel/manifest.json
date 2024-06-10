@@ -3,7 +3,8 @@
 	"name": "Span Panel",
 	"codeowners": [
 		"@SpanPanel",
-		"@cayossarian"
+		"@cayossarian",
+		"@etmelvin"
 	],
 	"config_flow": true,
 	"documentation": "https://github.com/SpanPanel/span",
