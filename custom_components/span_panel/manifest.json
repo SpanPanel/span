@@ -4,7 +4,8 @@
 	"codeowners": [
 		"@SpanPanel",
 		"@cayossarian",
-		"@etmelvin"
+		"@etmelvin",
+		"@sargonas"
 	],
 	"config_flow": true,
 	"documentation": "https://github.com/SpanPanel/span",
