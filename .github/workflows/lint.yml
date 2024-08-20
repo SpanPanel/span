@@ -17,7 +17,7 @@ name: Linting
 on:
   push:
   pull_request:
-    branches: [master]
+    branches: [main]
 
 permissions: {}
 
