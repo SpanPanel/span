@@ -83,6 +83,12 @@ sensor
      round: 2
 ```
 
+# Known Issue
+"Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning bad data.  These sensors are related to the feed through lugs which may be used for a downstream panel.
+If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
+* sensor.feed_through_consumed_energy
+* sensor.feed_through_produced_energy
+
 # Devices & Entities
 
 This integration will provide a device for your span panel. This device will have entities for:
