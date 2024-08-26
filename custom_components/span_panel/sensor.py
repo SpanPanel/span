@@ -13,7 +13,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfPower
+from homeassistant.const import UnitOfEnergy, UnitOfPower, PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -41,7 +41,7 @@ from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_status import SpanPanelStatus
-from .span_panel_storage import SpanPanelStorage
+from .span_panel_storage_battery import SpanPanelStorageBattery
 from .util import panel_to_device_info
 
 
@@ -80,6 +80,18 @@ class SpanPanelStatusSensorEntityDescription(
 ):
     pass
 
+@dataclass
+class SpanPanelStorageBatteryRequiredKeysMixin:
+    value_fn: Callable[[SpanPanelStorageBattery], str]
+
+
+@dataclass
+class SpanPanelStorageBatterySensorEntityDescription(
+    SensorEntityDescription, SpanPanelStorageBatteryRequiredKeysMixin
+):
+    pass
+
+
 
 CIRCUITS_SENSORS = (
     SpanPanelCircuitsSensorEntityDescription(
@@ -109,6 +121,7 @@ CIRCUITS_SENSORS = (
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda circuit: circuit.consumed_energy,
     ),
+    
 )
 
 PANEL_SENSORS = (
@@ -229,9 +242,19 @@ STATUS_SENSORS = (
     ),
 )
 
+STORAGE_BATTERY_SENSORS = (
+    SpanPanelStorageBatterySensorEntityDescription(
+        key=STORAGE_BATTERY_PERCENTAGE,
+        name="Battery Percentage",
+        native_unit_of_measurement=PERCENTAGE,
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda storage_battery: storage_battery,
+    ),    
+)
+
 ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
-
 
 class SpanPanelCircuitSensor(CoordinatorEntity, SensorEntity):
     _attr_icon = ICON
@@ -350,6 +373,35 @@ class SpanPanelStatus(CoordinatorEntity, SensorEntity):
         return value
 
 
+class SpanPanelStorageBatteryStatus(CoordinatorEntity, SensorEntity):
+    _attr_icon = "mdi:battery"
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        description: SpanPanelStorageBatterySensorEntityDescription,
+    ) -> None:
+        """Initialize Span Panel Storage Battery entity."""
+        span_panel: SpanPanel = coordinator.data
+
+        self.entity_description = description
+        self._attr_name = f"{description.name}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{description.key}"
+        )
+        self._attr_device_info = panel_to_device_info(span_panel)
+
+        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor."""
+        span_panel: SpanPanel = self.coordinator.data
+        value = self.entity_description.value_fn(span_panel.storage_battery)
+        return value
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -366,7 +418,7 @@ async def async_setup_entry(
     coordinator: DataUpdateCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
-    entities: list[SpanPanelCircuitSensor | SpanPanelPanel | SpanPanelExtra | SpanPanelStatus] = []
+    entities: list[SpanPanelCircuitSensor | SpanPanelPanel | SpanPanelExtra | SpanPanelStatus | SpanPanelStorageBatteryStatus] = []
 
     for description in PANEL_SENSORS:
         entities.append(SpanPanelPanel(coordinator, description))
@@ -384,5 +436,7 @@ async def async_setup_entry(
             entities.append(
                 SpanPanelCircuitSensor(coordinator, description, id, circuit_data.name)
             )
-
+    for description in STORAGE_BATTERY_SENSORS:
+        entities.append(SpanPanelStorageBatteryStatus(coordinator, description))
+    
     async_add_entities(entities)

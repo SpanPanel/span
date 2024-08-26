@@ -10,6 +10,7 @@ from .const import (
     URL_PANEL,
     URL_REGISTER,
     URL_STATUS,
+    URL_STORAGE_BATTERY,
     CircuitPriority,
     CircuitRelayState,
 )
@@ -18,6 +19,7 @@ from .options import Options
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_status import SpanPanelStatus
+from .span_panel_storage_battery import SpanPanelStorageBattery
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +90,19 @@ class SpanPanelApi:
 
         return circuits_data
 
+    async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
+        response = await self.get_data(URL_STORAGE_BATTERY)
+        storage_battery_data = response.json()["soe"]["percentage"]
+
+        # Span Panel API might return empty result.
+        # We use relay state == UNKNOWN as an indication of that scenario.
+        if not storage_battery_data:
+            raise SpanPanelReturnedEmptyData()
+
+        return storage_battery_data
+
+
+    
     async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState):
         await self.post_data(
             f"{URL_CIRCUITS}/{circuit.circuit_id}",
