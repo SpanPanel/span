@@ -12,15 +12,16 @@ from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_status import SpanPanelStatus
+from .span_panel_storage_battery import SpanPanelStorageBattery
 
 STATUS_URL = "http://{}/api/v1/status"
 SPACES_URL = "http://{}/api/v1/spaces"
 CIRCUITS_URL = "http://{}/api/v1/circuits"
 PANEL_URL = "http://{}/api/v1/panel"
 REGISTER_URL = "http://{}/api/v1/auth/register"
+STORAGE_BATTERY_URL = "http://{}/api/v1/storage/soe"
 
 _LOGGER = logging.getLogger(__name__)
-
 
 SPAN_CIRCUITS = "circuits"
 SPAN_SYSTEM = "system"
@@ -32,7 +33,6 @@ SYSTEM_ETHERNET_LINK = "eth0Link"
 SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
 
-
 class SpanPanel:
     """Instance of a Span panel"""
 
@@ -42,6 +42,7 @@ class SpanPanel:
         self.status: SpanPanelStatus
         self.panel: SpanPanelData
         self.circuits: dict[str, SpanPanelCircuit]
+        self.storage_battery: SpanPanelStorageBattery
 
     @property
     def host(self) -> str:
@@ -60,5 +61,11 @@ class SpanPanel:
 
         try:
             self.circuits = await self.api.get_circuits_data()
+        except SpanPanelReturnedEmptyData:
+            _LOGGER.warn("Span Panel API returned empty result. Ignoring...")
+
+        try:
+            self.storage_battery = await self.api.get_storage_battery_data()
+    
         except SpanPanelReturnedEmptyData:
             _LOGGER.warn("Span Panel API returned empty result. Ignoring...")

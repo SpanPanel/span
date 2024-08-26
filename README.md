@@ -106,11 +106,14 @@ This integration will provide a device for your span panel. This device will hav
    * DSM Grid State (e.g., DSM_ON_GRID)
    * Network Connectivity Status (Wi-Fi, Wired, & Cellular)
    * Door State (device class is tamper)
-
+* Solar Battery
+   * Battery percentage
+ 
+     
 ## Entity Precision
 
 The power sensors provided by this add-on report with the exact precision from the SPAN panel, which may be more decimal places than you will want for practical purposes.
-By default the sensors will display with precision 2 (e.g. `0.00`).
+By default the sensors will display with precision 2 (e.g. `0.00`) with the exception of battery percentage. Battery percentage will have precision of 0 (e.g. `39`) for 39%.
 
 You can change the display precision for any entity in HomeAssistant via `Settings` -> `Devices & Services` -> `Entities` tab.
 find the entity you would like to change in the list and click on it, then click on the gear wheel in the top right.
@@ -120,14 +123,18 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 This integration is published under the MIT license.
 
-# Attribution
+# Attribution and Contributions
 
 This repository is a fork in a long line of span forks that may or may not be stable (from newer to older):
-  gdgib/span
-  thetoothpick/span-hacs
-  wez/span-hacs
-  galak/span-hacs  
+   * cayossarian/span (current)
+   * gdgib/span
+   * thetoothpick/span-hacs
+   * wez/span-hacs
+   * galak/span-hacs
 
-# Issues & Contribution
+Additional contributions:
+   * pavandave/Span
+
+# Issues
 If you have a problem, feel free to [open an issue](https://github.com/cayossarian/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
 For those capable, please consider opening even a low quality [pull request](https://github.com/cayossarian/span/pulls) when possible, as we're generally very happy to have a starting point when making a change.
