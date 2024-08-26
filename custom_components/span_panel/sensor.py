@@ -32,13 +32,16 @@ from .const import (
     DSM_STATE,
     MAIN_RELAY_STATE,
     STAUS_SOFTWARE_VER,
+    STORAGE_BATTERY_PERCENTAGE,
 )
+
 from .options import INVERTER_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_status import SpanPanelStatus
+from .span_panel_storage import SpanPanelStorage
 from .util import panel_to_device_info
 
 
