@@ -374,6 +374,7 @@ class SpanPanelStatus(CoordinatorEntity, SensorEntity):
 
 
 class SpanPanelStorageBatteryStatus(CoordinatorEntity, SensorEntity):
+    """Battery Status"""
     _attr_icon = "mdi:battery"
 
     def __init__(
