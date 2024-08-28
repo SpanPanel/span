@@ -21,6 +21,7 @@ from .span_panel_data import SpanPanelData
 from .span_panel_status import SpanPanelStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 
+
 _LOGGER = logging.getLogger(__name__)
 
 

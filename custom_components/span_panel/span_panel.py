@@ -33,6 +33,7 @@ SYSTEM_ETHERNET_LINK = "eth0Link"
 SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
 
+
 class SpanPanel:
     """Instance of a Span panel"""
 
@@ -68,4 +69,4 @@ class SpanPanel:
             self.storage_battery = await self.api.get_storage_battery_data()
     
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warn("Span Panel API returned empty result. Ignoring...")
+            _LOGGER.warn("Span Panel API returned empty result for battery storage. Ignoring...")
