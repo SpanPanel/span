@@ -35,7 +35,7 @@ from .const import (
     STORAGE_BATTERY_PERCENTAGE,
 )
 
-from .options import INVERTER_ENABLE
+from .options import INVERTER_ENABLE, BATTERY_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
@@ -245,10 +245,11 @@ STATUS_SENSORS = (
 STORAGE_BATTERY_SENSORS = (
     SpanPanelStorageBatterySensorEntityDescription(
         key=STORAGE_BATTERY_PERCENTAGE,
-        name="Battery Percentage",
+        name="SPAN Storage Battery Percentage",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=BATTERY_ENABLE,
         value_fn=lambda storage_battery: storage_battery,
     ),    
 )
@@ -437,7 +438,8 @@ async def async_setup_entry(
             entities.append(
                 SpanPanelCircuitSensor(coordinator, description, id, circuit_data.name)
             )
-    for description in STORAGE_BATTERY_SENSORS:
-        entities.append(SpanPanelStorageBatteryStatus(coordinator, description))
+    if config_entry.options.get(BATTERY_ENABLE, False):
+        for description in STORAGE_BATTERY_SENSORS:
+            entities.append(SpanPanelStorageBatteryStatus(coordinator, description))
     
     async_add_entities(entities)

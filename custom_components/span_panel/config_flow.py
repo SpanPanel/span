@@ -15,7 +15,7 @@ from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
-from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2, BATTERY_ENABLE
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -326,6 +326,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_SCAN_INTERVAL, default=curr_scan_interval):
                         vol.All(int, vol.Range(min=5)),  # Specify the max value
+                vol.Optional(BATTERY_ENABLE, default=self.options.get(
+                    "enable_battery_percentage", False)): bool,
                 vol.Optional(INVERTER_ENABLE, default=self.options.get(
                     "enable_solar_circuit", False)): bool,
                 vol.Optional(INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)):
