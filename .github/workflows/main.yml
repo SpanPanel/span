@@ -1,10 +1,13 @@
-name: HACS Action
+name: HACS Jobs
 
 on:
-  push:
   pull_request:
-  schedule:
-    - cron: "0 0 * * *"
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,6 +15,13 @@ permissions:
   statuses: write
 
 jobs:
+  validate:
+    name: Hassfest
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "home-assistant/actions/hassfest@master"
+
   hacs:
     name: HACS Action
     runs-on: "ubuntu-latest"
@@ -20,4 +30,3 @@ jobs:
         uses: "hacs/action@main"
         with:
           category: integration
-
