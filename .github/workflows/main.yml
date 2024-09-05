@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: "0 0 * * *"
 
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
 jobs:
   hacs:
     name: HACS Action
@@ -15,3 +20,4 @@ jobs:
         uses: "hacs/action@main"
         with:
           category: integration
+
