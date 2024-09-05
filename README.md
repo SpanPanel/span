@@ -1,5 +1,3 @@
-# SPAN integration for HomeAssistant/HACS
-
 [Home Assistant](https://www.home-assistant.io/) Integration for [Span smart panel](https://www.span.io/panel).
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
@@ -45,8 +43,8 @@ To get an auth token:
     * Use a unique value for UNIQUEID. Six random alphanumeric characters would be a reasonable choice. If the name conflicts with one that's already been created, then the request will fail.
     * Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local Span Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
-3. Store the value from the `"accessToken"` property of the response. (It will be a long string, such as `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"` for example). This is the token which should be included with all future requests.
-4. This token can be used in the intial configuration.   Send all future requests with the HTTP header `"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"` (Remember, this is just a dummy example token!)
+3. Store the value from the `"accessToken"` property of the response. (It will be a long string of random charactersu). The token can be used with all future SPAN integration configurations.
+4. This token can be used in the intial configuration.   If you were calling the SPAN API directly all requests would load the HTTP header `"Authorization: Bearer <your token here>"`
 
 _(If you have multiple Span Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
