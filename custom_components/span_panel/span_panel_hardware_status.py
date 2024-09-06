@@ -1,4 +1,4 @@
-"""Span Panel Status"""
+"""Span Panel Hardware Status"""
 
 import dataclasses
 from typing import Any, Union
@@ -8,7 +8,7 @@ SYSTEM_DOOR_STATE_OPEN = "OPEN"
 
 
 @dataclasses.dataclass
-class SpanPanelStatus:
+class SpanPanelHardwareStatus:
     firmware_version: str
     update_status: str
     env: str
@@ -28,7 +28,7 @@ class SpanPanelStatus:
         return self.door_state == SYSTEM_DOOR_STATE_CLOSED
 
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> "SpanPanelStatus":
+    def from_dict(data: dict[str, Any]) -> "SpanPanelHardwareStatus":
         common_data = {
             "firmware_version": data["software"]["firmwareVersion"],
             "update_status": data["software"]["updateStatus"],
@@ -50,4 +50,4 @@ class SpanPanelStatus:
                 "remainingAuthUnlockButtonPresses"
             ]
 
-        return SpanPanelStatus(**common_data)
+        return SpanPanelHardwareStatus(**common_data)

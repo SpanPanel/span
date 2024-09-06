@@ -20,8 +20,9 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import COORDINATOR, DOMAIN
+
 from .span_panel import SpanPanel
-from .span_panel_status import SpanPanelStatus
+from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .util import panel_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class SpanPanelRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelStatus], str]
+    value_fn: Callable[[SpanPanelHardwareStatus], str]
 
 
 @dataclass

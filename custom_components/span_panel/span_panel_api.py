@@ -21,7 +21,7 @@ from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
-from .span_panel_status import SpanPanelStatus
+from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 
 
@@ -63,9 +63,9 @@ class SpanPanelApi:
         )
         return register_results.json()["accessToken"]
 
-    async def get_status_data(self) -> SpanPanelStatus:
+    async def get_status_data(self) -> SpanPanelHardwareStatus:
         response = await self.get_data(URL_STATUS)
-        status_data = SpanPanelStatus.from_dict(response.json())
+        status_data = SpanPanelHardwareStatus.from_dict(response.json())
         return status_data
 
     async def get_panel_data(self) -> SpanPanelData:

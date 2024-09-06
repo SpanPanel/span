@@ -7,7 +7,7 @@ from .options import Options
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
-from .span_panel_status import SpanPanelStatus
+from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 
 STATUS_URL = "http://{}/api/v1/status"
@@ -38,7 +38,7 @@ class SpanPanel:
     ) -> None:
         self.api = SpanPanelApi(host, access_token, options, async_client)
         self.updated_at: int = 0
-        self.status: SpanPanelStatus
+        self.status: SpanPanelHardwareStatus
         self.panel: SpanPanelData
         self.circuits: dict[str, SpanPanelCircuit]
         self.storage_battery: SpanPanelStorageBattery
