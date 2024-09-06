@@ -7,6 +7,6 @@
     "custom_components/span_panel/translations/en.json",
     ".direnv/**",
     "env/**",
-    "**/*.site-packages/**"
+    "**/site-packages/**"
   ]
 }
