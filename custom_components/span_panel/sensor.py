@@ -257,151 +257,84 @@ STORAGE_BATTERY_SENSORS = (
 ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
 
-class SpanPanelCircuitSensor(CoordinatorEntity, SensorEntity):
+class SpanSensorBase(CoordinatorEntity, SensorEntity):
     _attr_icon = ICON
 
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        description: SensorEntityDescription,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize Span Panel Sensor base entity."""
+        self.entity_description = description
+        self._attr_name = f"{description.name}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_{description.key}"
+        )
+        self._attr_device_info = panel_to_device_info(span_panel)
+
+        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+        super().__init__(coordinator)
+
+    @property
+    def native_value(self) -> float | str | None:
+        """Return the state of the sensor."""
+        span_panel: SpanPanel = self.coordinator.data
+        value = self.entity_description.value_fn(self.get_data_source(span_panel))
+        _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)
+        return value
+
+    def get_data_source(self, span_panel: SpanPanel):
+        """Get the data source for the sensor."""
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+class SpanPanelCircuitSensor(SpanSensorBase):
     def __init__(
         self,
         coordinator: DataUpdateCoordinator,
         description: SpanPanelCircuitsSensorEntityDescription,
         circuit_id: str,
         name: str,
+        span_panel: SpanPanel,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
-        span_panel: SpanPanel = coordinator.data
-
-        self.entity_description = description
+        super().__init__(coordinator, description, span_panel)
         self.id = circuit_id
         self._attr_name = f"{name} {description.name}"
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
         )
-        self._attr_device_info = panel_to_device_info(span_panel)
 
-        _LOGGER.debug("CREATE SENSOR [%s]", self._attr_name)
-        super().__init__(coordinator)
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the state of the sensor."""
-        span_panel: SpanPanel = self.coordinator.data
-        value = self.entity_description.value_fn(span_panel.circuits[self.id])
-        _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)
-        return cast(float, value)
+    def get_data_source(self, span_panel: SpanPanel):
+        return span_panel.circuits[self.id]
 
 
-class SpanPanelPanel(CoordinatorEntity, SensorEntity):
-    _attr_icon = ICON
-
-    def __init__(
-        self,
-        coordinator: DataUpdateCoordinator,
-        description: SensorEntityDescription,
-    ) -> None:
-        """Initialize Span Panel Circuit entity."""
-        span_panel: SpanPanel = coordinator.data
-
-        self.entity_description = description
-        self._attr_name = f"{description.name}"
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{description.key}"
-        )
-        self._attr_device_info = panel_to_device_info(span_panel)
-
-        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
-        super().__init__(coordinator)
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the state of the sensor."""
-        span_panel: SpanPanel = self.coordinator.data
-        value = self.entity_description.value_fn(span_panel.panel)
-        return cast(float, value)
-
-class SpanPanelPanelStatus(CoordinatorEntity, SensorEntity):
-    _attr_icon = ICON
-
-    def __init__(
-        self,
-        coordinator: DataUpdateCoordinator,
-        description: SensorEntityDescription,
-    ) -> None:
-        """Initialize Span Panel Extra entity."""
-        span_panel: SpanPanel = coordinator.data
-
-        self.entity_description = description
-        self._attr_name = f"{description.name}"
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{description.key}"
-        )
-        self._attr_device_info = panel_to_device_info(span_panel)
-
-        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
-        super().__init__(coordinator)
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the state of the sensor."""
-        span_panel: SpanPanel = self.coordinator.data
-        return self.entity_description.value_fn(span_panel.panel)
-
-class SpanPanelStatus(CoordinatorEntity, SensorEntity):
-    _attr_icon = ICON
-
-    def __init__(
-        self,
-        coordinator: DataUpdateCoordinator,
-        description: SensorEntityDescription,
-    ) -> None:
-        """Initialize Span Panel Status entity."""
-        span_panel: SpanPanel = coordinator.data
-
-        self.entity_description = description
-        self._attr_name = f"{description.name}"
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{description.key}"
-        )
-        self._attr_device_info = panel_to_device_info(span_panel)
-
-        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
-        super().__init__(coordinator)
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the state of the sensor."""
-        span_panel: SpanPanel = self.coordinator.data
-        value = self.entity_description.value_fn(span_panel.status)
-        return value
+class SpanPanelPanel(SpanSensorBase):
+    """Initialize SpanPanelPanel"""
+    def get_data_source(self, span_panel: SpanPanel):
+        return span_panel.panel
 
 
-class SpanPanelStorageBatteryStatus(CoordinatorEntity, SensorEntity):
-    """Battery Status"""
+class SpanPanelPanelStatus(SpanSensorBase):
+    """Initialize SpanPanelPanelStatus"""
+    def get_data_source(self, span_panel: SpanPanel):
+        return span_panel.panel
+
+
+class SpanPanelStatus(SpanSensorBase):
+    """Initialize SpanPanelStatus"""
+    def get_data_source(self, span_panel: SpanPanel):
+        return span_panel.status
+
+
+class SpanPanelStorageBatteryStatus(SpanSensorBase):
+    """Initialize SpanPanelStorageBatteryStatus"""
     _attr_icon = "mdi:battery"
 
-    def __init__(
-        self,
-        coordinator: DataUpdateCoordinator,
-        description: SpanPanelStorageBatterySensorEntityDescription,
-    ) -> None:
-        """Initialize Span Panel Storage Battery entity."""
-        span_panel: SpanPanel = coordinator.data
-
-        self.entity_description = description
-        self._attr_name = f"{description.name}"
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{description.key}"
-        )
-        self._attr_device_info = panel_to_device_info(span_panel)
-
-        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
-        super().__init__(coordinator)
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the state of the sensor."""
-        span_panel: SpanPanel = self.coordinator.data
-        value = self.entity_description.value_fn(span_panel.storage_battery)
-        return value
+    def get_data_source(self, span_panel: SpanPanel):
+        return span_panel.storage_battery
 
 
 async def async_setup_entry(
@@ -409,37 +342,34 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up envoy sensor platform."""
-
-    _LOGGER.debug("ASYNC SETUP ENTRY SENSOR")
     data: dict = hass.data[DOMAIN][config_entry.entry_id]
-    _LOGGER.debug("  config_entry: %s", config_entry)
-    _LOGGER.debug("  config_entry(uid): %s", config_entry.unique_id)
-    _LOGGER.debug("  data: %s", data)
-
     coordinator: DataUpdateCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
-    entities: list[SpanPanelCircuitSensor | SpanPanelPanel | SpanPanelExtra | SpanPanelStatus | SpanPanelStorageBatteryStatus] = []
+    entities: list[SpanSensorBase] = []
 
     for description in PANEL_SENSORS:
-        entities.append(SpanPanelPanel(coordinator, description))
+        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
     for description in PANEL_DATA_STATUS_SENSORS:
-        entities.append(SpanPanelPanelStatus(coordinator, description))
+        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
     if config_entry.options.get(INVERTER_ENABLE, False):
         for description in INVERTER_SENSORS:
-            entities.append(SpanPanelPanel(coordinator, description))
+            entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
 
     for description in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description))
+        entities.append(SpanPanelStatus(coordinator, description, span_panel))
 
     for description in CIRCUITS_SENSORS:
         for id, circuit_data in span_panel.circuits.items():
             entities.append(
-                SpanPanelCircuitSensor(coordinator, description, id, circuit_data.name)
+                SpanPanelCircuitSensor(
+                    coordinator, description, id, circuit_data.name, span_panel
+                )
             )
     if config_entry.options.get(BATTERY_ENABLE, False):
         for description in STORAGE_BATTERY_SENSORS:
-            entities.append(SpanPanelStorageBatteryStatus(coordinator, description))
+            entities.append(SpanPanelStorageBatteryStatus(coordinator, description, span_panel))
     
     async_add_entities(entities)
