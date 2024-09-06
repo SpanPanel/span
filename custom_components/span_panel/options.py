@@ -14,4 +14,4 @@ class Options:
         self.enable_solar_sensors: bool = entry.options.get(INVERTER_ENABLE, False)
         self.inverter_leg1: int = entry.options.get(INVERTER_LEG1, 0)
         self.inverter_leg2: int = entry.options.get(INVERTER_LEG2, 0)
-        self.enable_battery_percentage: bool = entry.options.ge(BATTERY_ENABLE, False)
+        self.enable_battery_percentage: bool = entry.options.get(BATTERY_ENABLE, False)
