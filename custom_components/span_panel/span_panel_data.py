@@ -2,7 +2,8 @@
 
 import dataclasses
 from typing import Any
-from .options import Options, INVERTER_MAXLEG
+
+from .options import INVERTER_MAXLEG, Options
 
 
 @dataclasses.dataclass
