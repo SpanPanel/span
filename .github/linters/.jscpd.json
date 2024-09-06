@@ -2,11 +2,23 @@
   "path": [
     "custom_components/span_panel"
   ],
+  "format": [
+    "python",
+    "javascript",
+    "json",
+    "markup",
+    "markdown"
+  ],
   "ignore": [
-    "custom_components/span_panel/strings.json",
-    "custom_components/span_panel/translations/en.json",
-    ".direnv/**",
+    "custom_components/span_panel/translations/**",
+    "**/translations/**",
+    ".github/**",
     "env/**",
     "**/site-packages/**"
-  ]
+  ],
+  "reporters": [
+    "console"
+],
+  "output": "./jscpdReport",
+  "gitignore": true
 }
