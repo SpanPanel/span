@@ -1,0 +1,12 @@
+{
+  "path": [
+    "custom_components/span_panel"
+  ],
+  "ignore": [
+    "custom_components/span_panel/strings.json",
+    "custom_components/span_panel/translations/en.json",
+    ".direnv/**",
+    "env/**",
+    "**/*.site-packages/**"
+  ]
+}
