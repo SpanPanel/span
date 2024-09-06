@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-import logging
 from typing import cast
 
 from homeassistant.components.sensor import (
@@ -14,7 +14,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfPower, PERCENTAGE
+from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
@@ -35,13 +35,10 @@ from .const import (
     STAUS_SOFTWARE_VER,
     STORAGE_BATTERY_PERCENTAGE,
 )
-
-from .options import INVERTER_ENABLE, BATTERY_ENABLE
+from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
-from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
-from .span_panel_status import SpanPanelStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 from .util import panel_to_device_info
 
