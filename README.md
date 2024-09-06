@@ -1,15 +1,17 @@
-[Home Assistant](https://www.home-assistant.io/) Integration for [Span smart panel](https://www.span.io/panel).
+# Span Panel Integration for Home Assistant
+[Home Assistant](https://www.home-assistant.io/) Integration for [Span smart Panel](https://www.span.io/panel).
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 
-This integration should not have any negative impact on your Span installation, but as Span has not published a documented API, we cannot guarantee this will work for you, or that will not break as your panel is updated.
-The author(s) will try to keep this integration working, but cannot provide technical support for either Span or your homes electrical system.
+As Span has not published a documented API, we cannot guarantee this integration will work for you, or that the integration will not break as your panel is updated.
 
-# Installation
+The author(s) will try to keep this integration working, but cannot provide technical support for either Span or your homes electrical system.  The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
+
+## Installation
 
 1. Install [HACS](https://hacs.xyz/)
 2. Go to HACS, select `Integrations`
-3. If your using the default HACS repository (which may not be the latest repository) you can select it in the lower right repositories.  If your using a newer repository that is not the HACS default, in the upper right of HACS/Integrations click on the three dots and add a custom repository with the https URL of this repository.
+3. This repository is not currently the default in HACs so you need to use it as a custom repository (We need two HACs developers to [approve](https://github.com/hacs/default/pull/2560) it).  In the upper right of HACS/Integrations click on the three dots and add a custom repository with the HTTPS URL of this repository.
 5. Select the repository you added in the list of integrations in HACS and select "Download".  You can follow the URL to ensure you have the repository you want.
 6. Restart Home Assistant
 7. In the Home Assistant UI go to `Settings`
@@ -17,22 +19,22 @@ The author(s) will try to keep this integration working, but cannot provide tech
 9. Click `+ Add Integration`
 10. Search for "Span"
 11. Enter the IP of your Span Panel to begin setup, or select the automatically discovered panel if it shows up.
-12. Create an authentication token (see below) or the door proximity authenticaion.  Obtaining a token may be more durable to network changes, e.g., if you change client host name or IP.
-13. See post intstall steps for solar or scan frequency configuration.
+12. Create an authentication token (see below) or the door proximity authenticaion.  Obtaining a token may be more durable to network changes, e.g., if you change client hostname or IP.
+13. See post install steps for solar or scan frequency configuration.
 
-## Auth Token
+### Auth Token
 
-The SPAN api requires an auth token.
+The SPAN API requires an auth token.
 If you already have one from some previous setup, you can reuse it.
 If you don't already have a token (most people), you just need to prove that you are physically near the panel, and then the integration can get its own token.
 
-### Proof of Proximity
+#### Proof of Proximity
 
 Simply open the door to your Span Panel and press the door sensor button at the top 3 times in succession.
 The lights ringing the frame of your panel should blink momentarily, and the Panel will now be "unlocked" for 15 minutes (it may in fact be significantly longer, but 15 is the documented period).
-While the panel is unlocked, it will allow the integration to create a new auth token. 
+While the panel is unlocked, it will allow the integration to create a new auth token.
 
-### Technical Details
+#### Technical Details
 
 These details were provided by a SPAN engineer, and have been implemented in the integration.
 They are documented here in the hope someone may find them useful.
@@ -50,12 +52,17 @@ _(If you have multiple Span Panels, you will need to repeat this process for eac
 
 If you have this auth token, you can enter it in the "Existing Auth Token" flow in the configuration menu.
 
-# Post-Install
+## Post-Install
 
 Optional configuration
 
 * Integration Scan Frequency (poll time in seconds), default is 15 seconds
-* Enable/Map Solar Inverter Sensors to circuit(s) (a combination of one or two leg poistions 1-32 or 0 indicating none).  Look in your Span app for "solar" if any and identify the individual circuit(s).  The leg values are combined into a single set of "inverter" sensors, e.g., two 120v legs of a 240v circuit in the US position 30/32.  In Europe this configuration could be a single 230v leg where one leg is set to 0.  
+* Battery Storage Percentage
+* Enable/Map Solar Inverter Sensors to circuit(s)
+The solar in the USA is normally a combination of one or two leg poistions 1-32 or 0 indicating none.
+Look in your Span app for "solar" if any and identify the individual circuit(s).
+The leg values are combined into a single set of "inverter" sensors, for example in the USA two 120v legs of a 240v circuit positions 30/32.
+In Europe this configuration could be a single 230v leg where one leg is set to 0.  
 
 If the inverter sensors are enabled three sensors are created:
 
@@ -81,13 +88,13 @@ sensor
      round: 2
 ```
 
-# Known Issue
-"Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning bad data.  These sensors are related to the feed through lugs which may be used for a downstream panel.
+## Known Issues
+"Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning data that is not meaningful to your installation. These sensors are related to the feed through lugs which may be used for a downstream panel.
 If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
 * sensor.feed_through_consumed_energy
 * sensor.feed_through_produced_energy
 
-# Devices & Entities
+## Devices & Entities
 
 This integration will provide a device for your span panel. This device will have entities for:
 
@@ -98,41 +105,44 @@ This integration will provide a device for your span panel. This device will hav
   * Power Usage / Generation (Watts)
   * Energy Usage / Generation (wH)
 * Panel and Grid Status
-   * Main Relay State (e.g., CLOSED)
-   * Current Run Config (e.g., PANEL_ON_GRID)
-   * DSM State (e.g., DSM_GRID_UP)
-   * DSM Grid State (e.g., DSM_ON_GRID)
-   * Network Connectivity Status (Wi-Fi, Wired, & Cellular)
-   * Door State (device class is tamper)
-* Solar Battery
-   * Battery percentage
- 
-     
-## Entity Precision
+  * Main Relay State (e.g., CLOSED)
+  * Current Run Config (e.g., PANEL_ON_GRID)
+  * DSM State (e.g., DSM_GRID_UP)
+  * DSM Grid State (e.g., DSM_ON_GRID)
+  * Network Connectivity Status (Wi-Fi, Wired, & Cellular)
+  * Door State (device class is tamper)
+* Storage Battery
+  * Battery percentage (options configuration)
+
+
+### Entity Precision
 
 The power sensors provided by this add-on report with the exact precision from the SPAN panel, which may be more decimal places than you will want for practical purposes.
-By default the sensors will display with precision 2 (e.g. `0.00`) with the exception of battery percentage. Battery percentage will have precision of 0 (e.g. `39`) for 39%.
+By default the sensors will display with precision 2, for example `0.00`, with the exception of battery percentage. Battery percentage will have precision of 0, for example `39`.
 
 You can change the display precision for any entity in HomeAssistant via `Settings` -> `Devices & Services` -> `Entities` tab.
 find the entity you would like to change in the list and click on it, then click on the gear wheel in the top right.
 Select the precision you prefer from the "Display Precision" menu and then press `UPDATE`.
 
-# License
+## License
 
 This integration is published under the MIT license.
 
-# Attribution and Contributions
+## Attribution and Contributions
 
 This repository is a fork in a long line of span forks that may or may not be stable (from newer to older):
-   * cayossarian/span (current)
-   * gdgib/span
-   * thetoothpick/span-hacs
-   * wez/span-hacs
-   * galak/span-hacs
+* SpanPanel/Span (current GitHub organization)
+* cayossarian/span
+* gdgib/span
+* thetoothpick/span-hacs
+* wez/span-hacs
+* galak/span-hacs
 
-Additional contributions:
-   * pavandave/Span
+Additional contributors:
+* pavandave/span
+* sargonas
 
-# Issues
+## Issues
 If you have a problem, feel free to [open an issue](https://github.com/cayossarian/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
-For those capable, please consider opening even a low quality [pull request](https://github.com/cayossarian/span/pulls) when possible, as we're generally very happy to have a starting point when making a change.
+
+For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/Span/pulls).  We're generally very happy to have a starting point when making a change.
