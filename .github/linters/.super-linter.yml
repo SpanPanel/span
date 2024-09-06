@@ -1,4 +1,3 @@
-# .super-linter.yml
 ---
 # Exclude specific directories or files
-FILTER_REGEX_EXCLUDE: "custom_components/span_panel/strings.json|custom_components/span_panel/translations/en.json|.direnv/.*|env/.*|.*site-packages/.*"
+FILTER_REGEX_EXCLUDE: "**/translations/**|.direnv/**|env/**|**/site-packages/**"
