@@ -27,37 +27,25 @@ class SpanPanelStatus:
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> "SpanPanelStatus":
+        common_data = {
+            "firmware_version": data["software"]["firmwareVersion"],
+            "update_status": data["software"]["updateStatus"],
+            "env": data["software"]["env"],
+            "manufacturer": data["system"]["manufacturer"],
+            "serial_number": data["system"]["serial"],
+            "model": data["system"]["model"],
+            "door_state": data["system"]["doorState"],
+            "uptime": data["system"]["uptime"],
+            "is_ethernet_connected": data["network"]["eth0Link"],
+            "is_wifi_connected": data["network"]["wlanLink"],
+            "is_cellular_connected": data["network"]["wwanLink"],
+        }
+
         if "proximityProven" in data["system"]:
-            sps = SpanPanelStatus(
-                firmware_version=data["software"]["firmwareVersion"],
-                update_status=data["software"]["updateStatus"],
-                env=data["software"]["env"],
-                manufacturer=data["system"]["manufacturer"],
-                serial_number=data["system"]["serial"],
-                model=data["system"]["model"],
-                door_state=data["system"]["doorState"],
-                uptime=data["system"]["uptime"],
-                is_ethernet_connected=data["network"]["eth0Link"],
-                is_wifi_connected=data["network"]["wlanLink"],
-                is_cellular_connected=data["network"]["wwanLink"],
-                proximity_proven=data["system"]["proximityProven"],
-            )
-        else:
-            sps = SpanPanelStatus(
-                firmware_version=data["software"]["firmwareVersion"],
-                update_status=data["software"]["updateStatus"],
-                env=data["software"]["env"],
-                manufacturer=data["system"]["manufacturer"],
-                serial_number=data["system"]["serial"],
-                model=data["system"]["model"],
-                door_state=data["system"]["doorState"],
-                uptime=data["system"]["uptime"],
-                is_ethernet_connected=data["network"]["eth0Link"],
-                is_wifi_connected=data["network"]["wlanLink"],
-                is_cellular_connected=data["network"]["wwanLink"],
-                remaining_auth_unlock_button_presses=data["system"][
-                "remainingAuthUnlockButtonPresses"
-                ],
+            common_data["proximity_proven"] = data["system"]["proximityProven"]
+        elif "remainingAuthUnlockButtonPresses" in data["system"]:
+            common_data["remaining_auth_unlock_button_presses"] = (
+                data["system"]["remainingAuthUnlockButtonPresses"]
             )
 
-        return sps
+        return SpanPanelStatus(**common_data)
