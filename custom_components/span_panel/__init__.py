@@ -1,11 +1,11 @@
 """The Span Panel integration."""
+
 from __future__ import annotations
 from datetime import timedelta
 
 import logging
 
-import async_timeout
-import httpx
+from asyncio import timeout
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -16,7 +16,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.httpx_client import get_async_client, httpx
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import COORDINATOR, DOMAIN, NAME, DEFAULT_SCAN_INTERVAL
@@ -53,17 +53,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_update_data():
         """Fetch data from API endpoint."""
-        async with async_timeout.timeout(30):
+        async with timeout(30):
             try:
                 await span_panel.update()
             except httpx.HTTPStatusError as err:
                 if err.response.status_code == httpx.codes.UNAUTHORIZED:
                     raise ConfigEntryAuthFailed from err
                 else:
-                    _LOGGER.error("An httpx.StatusError occurred while updating Span data: %s", str(err))
+                    _LOGGER.error(
+                        "An httpx.StatusError occurred while updating Span data: %s",
+                        str(err),
+                    )
                     raise UpdateFailed(f"Error communicating with API: {err}") from err
             except httpx.HTTPError as err:
-                _LOGGER.error("An httpx.HTTPError occurred while updating Span data: %s", str(err))
+                _LOGGER.error(
+                    "An httpx.HTTPError occurred while updating Span data: %s", str(err)
+                )
                 raise UpdateFailed(f"Error communicating with API: {err}") from err
 
             return span_panel

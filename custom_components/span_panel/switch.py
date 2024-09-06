@@ -1,4 +1,5 @@
 """Control switches."""
+
 import logging
 
 from homeassistant.components.switch import SwitchEntity
@@ -12,7 +13,6 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import COORDINATOR, DOMAIN, CircuitRelayState
 from .span_panel import SpanPanel
-from .span_panel_api import SpanPanelApi
 from .util import panel_to_device_info
 
 ICON = "mdi:toggle-switch"

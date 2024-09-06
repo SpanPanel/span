@@ -1,3 +1,5 @@
+"""Span Panel Status"""
+
 import dataclasses
 from typing import Any, Union
 
@@ -44,8 +46,8 @@ class SpanPanelStatus:
         if "proximityProven" in data["system"]:
             common_data["proximity_proven"] = data["system"]["proximityProven"]
         elif "remainingAuthUnlockButtonPresses" in data["system"]:
-            common_data["remaining_auth_unlock_button_presses"] = (
-                data["system"]["remainingAuthUnlockButtonPresses"]
-            )
+            common_data["remaining_auth_unlock_button_presses"] = data["system"][
+                "remainingAuthUnlockButtonPresses"
+            ]
 
         return SpanPanelStatus(**common_data)

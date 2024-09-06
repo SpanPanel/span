@@ -1,3 +1,5 @@
+"""Span Panel Config Flow"""
+
 from __future__ import annotations
 
 import enum
@@ -8,14 +10,23 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
+from homeassistant.const import (
+    CONF_ACCESS_TOKEN,
+    CONF_HOST,
+    CONF_SCAN_INTERVAL,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
-from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2, BATTERY_ENABLE
+from .options import (
+    INVERTER_ENABLE,
+    INVERTER_LEG1,
+    INVERTER_LEG2,
+    BATTERY_ENABLE,
+)
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -167,12 +178,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Pass the (empty) dictionary to signal the call came from this step, not abort
         return await self.async_step_choose_auth_type(user_input)
 
-    async def async_step_choose_auth_type(
-        self,
-        user_input=None 
-    ) -> FlowResult:
+    async def async_step_choose_auth_type(self, user_input=None) -> FlowResult:
         self.ensure_flow_is_set_up()
-        
+
         # None means this method was called by HA core as an abort
         if user_input is None:
             return await self.async_step_confirm_discovery()
@@ -197,15 +205,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         span_api = create_api_controller(self.hass, self.host)
         panel_status = await span_api.get_status_data()
 
-        #Check if running firmware newer or older than r202342
+        # Check if running firmware newer or older than r202342
         if panel_status.proximity_proven is not None:
 
-             # Reprompt until we are able to do proximity auth for new firmware
+            # Reprompt until we are able to do proximity auth for new firmware
             proximity_verified = panel_status.proximity_proven
             if proximity_verified is False:
-                return self.async_show_form(
-                    step_id="auth_proximity"
-                )
+                return self.async_show_form(step_id="auth_proximity")
         else:
             # Reprompt until we are able to do proximity auth for old firmware
             remaining_presses = panel_status.remaining_auth_unlock_button_presses
@@ -243,8 +249,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             return await self.async_step_resolve_entity(user_input)
 
-        return await self.async_step_choose_auth_type(user_input) 
-
+        return await self.async_step_choose_auth_type(user_input)
 
     async def async_step_resolve_entity(
         self,
@@ -323,17 +328,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         schema = vol.Schema(
             {
+                vol.Optional(CONF_SCAN_INTERVAL, default=curr_scan_interval): vol.All(
+                    int, vol.Range(min=5)
+                ),  # Specify the max value
                 vol.Optional(
-                    CONF_SCAN_INTERVAL, default=curr_scan_interval):
-                        vol.All(int, vol.Range(min=5)),  # Specify the max value
-                vol.Optional(BATTERY_ENABLE, default=self.options.get(
-                    "enable_battery_percentage", False)): bool,
-                vol.Optional(INVERTER_ENABLE, default=self.options.get(
-                    "enable_solar_circuit", False)): bool,
-                vol.Optional(INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)):
-                    vol.All(vol.Coerce(int), vol.Range(min=0)),  # Specify the max value
-                vol.Optional(INVERTER_LEG2, default=self.options.get(INVERTER_LEG2, 0)):
-                    vol.All(vol.Coerce(int), vol.Range(min=0)),  # Specify the max value
+                    BATTERY_ENABLE,
+                    default=self.options.get("enable_battery_percentage", False),
+                ): bool,
+                vol.Optional(
+                    INVERTER_ENABLE,
+                    default=self.options.get("enable_solar_circuit", False),
+                ): bool,
+                vol.Optional(
+                    INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)
+                ): vol.All(
+                    vol.Coerce(int), vol.Range(min=0)
+                ),  # Specify the max value
+                vol.Optional(
+                    INVERTER_LEG2, default=self.options.get(INVERTER_LEG2, 0)
+                ): vol.All(
+                    vol.Coerce(int), vol.Range(min=0)
+                ),  # Specify the max value
             }
         )
 

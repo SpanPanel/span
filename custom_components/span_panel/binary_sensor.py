@@ -1,4 +1,5 @@
-"""Support for Enphase Envoy solar energy monitor."""
+"""Binary Sensors for status entities."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -20,7 +21,6 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import COORDINATOR, DOMAIN
 from .span_panel import SpanPanel
-from .span_panel_api import SpanPanelApi
 from .span_panel_status import SpanPanelStatus
 from .util import panel_to_device_info
 
@@ -36,7 +36,7 @@ class SpanPanelRequiredKeysMixin:
 class SpanPanelBinarySensorEntityDescription(
     BinarySensorEntityDescription, SpanPanelRequiredKeysMixin
 ):
-    """Describes an SpanPanelCircuits inverter sensor entity."""
+    """Describes an SpanPanelCircuits sensor entity."""
 
 
 BINARY_SENSORS = (
@@ -68,7 +68,7 @@ BINARY_SENSORS = (
 
 
 class SpanPanelBinarySensor(CoordinatorEntity, BinarySensorEntity):
-    """Envoy inverter entity."""
+    """Binary Sensor status entity."""
 
     def __init__(
         self,
@@ -101,7 +101,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up envoy sensor platform."""
+    """Set up status sensor platform."""
 
     _LOGGER.debug("ASYNC SETUP ENTRY BINARYSENSOR")
 

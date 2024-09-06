@@ -1,3 +1,5 @@
+"""Span Panel Data"""
+
 import dataclasses
 from typing import Any
 from .options import Options, INVERTER_MAXLEG
@@ -25,12 +27,20 @@ class SpanPanelData:
     def from_dict(data: dict[str, Any], options: Options | None) -> "SpanPanelData":
         common_data: dict[str, Any] = {
             "main_relay_state": str(data["mainRelayState"]),
-            "main_meter_energy_produced": float(data["mainMeterEnergy"]["producedEnergyWh"]),
-            "main_meter_energy_consumed": float(data["mainMeterEnergy"]["consumedEnergyWh"]),
+            "main_meter_energy_produced": float(
+                data["mainMeterEnergy"]["producedEnergyWh"]
+            ),
+            "main_meter_energy_consumed": float(
+                data["mainMeterEnergy"]["consumedEnergyWh"]
+            ),
             "instant_grid_power": float(data["instantGridPowerW"]),
             "feedthrough_power": float(data["feedthroughPowerW"]),
-            "feedthrough_energy_produced": float(data["feedthroughEnergy"]["producedEnergyWh"]),
-            "feedthrough_energy_consumed": float(data["feedthroughEnergy"]["consumedEnergyWh"]),
+            "feedthrough_energy_produced": float(
+                data["feedthroughEnergy"]["producedEnergyWh"]
+            ),
+            "feedthrough_energy_consumed": float(
+                data["feedthroughEnergy"]["consumedEnergyWh"]
+            ),
             "grid_sample_start_ms": int(data["gridSampleStartMs"]),
             "grid_sample_end_ms": int(data["gridSampleEndMs"]),
             "dsm_grid_state": str(data["dsmGridState"]),
@@ -45,8 +55,14 @@ class SpanPanelData:
             for leg in [options.inverter_leg1, options.inverter_leg2]:
                 if 1 <= leg <= INVERTER_MAXLEG:
                     branch = data["branches"][leg - 1]
-                    common_data["solar_inverter_instant_power"] += float(branch["instantPowerW"])
-                    common_data["solar_inverter_energy_produced"] += float(branch["importedActiveEnergyWh"])
-                    common_data["solar_inverter_energy_consumed"] += float(branch["exportedActiveEnergyWh"])
+                    common_data["solar_inverter_instant_power"] += float(
+                        branch["instantPowerW"]
+                    )
+                    common_data["solar_inverter_energy_produced"] += float(
+                        branch["importedActiveEnergyWh"]
+                    )
+                    common_data["solar_inverter_energy_consumed"] += float(
+                        branch["exportedActiveEnergyWh"]
+                    )
 
         return SpanPanelData(**common_data)
