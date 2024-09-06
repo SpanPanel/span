@@ -51,22 +51,23 @@ class SpanPanel:
         try:
             self.status = await self.api.get_status_data()
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warn("Span Panel API returned empty result. Ignoring...")
+            _LOGGER.warning("Span Panel API returned empty result. Ignoring...")
 
         try:
             self.panel = await self.api.get_panel_data()
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warn("Span Panel API returned empty result. Ignoring...")
+            _LOGGER.warning("Span Panel API returned empty result. Ignoring...")
 
         try:
             self.circuits = await self.api.get_circuits_data()
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warn("Span Panel API returned empty result. Ignoring...")
+            _LOGGER.warning("Span Panel API returned empty result. Ignoring...")
 
         try:
             self.storage_battery = await self.api.get_storage_battery_data()
 
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warn(
-                "Span Panel API returned empty result for battery storage. Ignoring..."
+            _LOGGER.warning(
+                "Span Panel API returned empty result for battery storage. "
+                "Ignoring..."
             )

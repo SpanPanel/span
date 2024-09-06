@@ -1,6 +1,7 @@
 """Span Panel API"""
 
 import logging
+from typing import Dict
 import uuid
 
 import httpx
@@ -36,8 +37,8 @@ class SpanPanelApi:
         async_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.host: str = host.lower()
-        self.access_token: str = access_token
-        self.options: Options = options
+        self.access_token: str | None = access_token
+        self.options: Options | None = options
         self._async_client = async_client
 
     @property
@@ -78,19 +79,16 @@ class SpanPanelApi:
 
         return panel_data
 
-    async def get_circuits_data(self) -> SpanPanelCircuit:
+    async def get_circuits_data(self) -> Dict[str, SpanPanelCircuit]:
         response = await self.get_data(URL_CIRCUITS)
-        raw_curcuits_data = response.json()["circuits"]
+        raw_circuits_data = response.json()["circuits"]
 
-        # Span Panel API might return empty result.
-        # We use an empty curcuits dictionary as an indication of that scenario.
-        if not raw_curcuits_data:
+        if not raw_circuits_data:
             raise SpanPanelReturnedEmptyData()
 
-        circuits_data = {}
-        for id, raw_curcuit_data in raw_curcuits_data.items():
-            circuits_data[id] = SpanPanelCircuit.from_dict(raw_curcuit_data)
-
+        circuits_data: Dict[str, SpanPanelCircuit] = {}
+        for circuit_id, raw_circuit_data in raw_circuits_data.items():
+            circuits_data[circuit_id] = SpanPanelCircuit.from_dict(raw_circuit_data)
         return circuits_data
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
