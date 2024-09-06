@@ -7,6 +7,7 @@ INVERTER_LEG2 = "leg2"
 INVERTER_MAXLEG = 32
 BATTERY_ENABLE = "enable_battery_percentage"
 
+
 class Options:
     """Class representing the options like the solar inverter."""
 
