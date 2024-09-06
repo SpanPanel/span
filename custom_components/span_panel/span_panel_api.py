@@ -1,3 +1,5 @@
+"""Span Panel API"""
+
 import logging
 import uuid
 
@@ -102,8 +104,6 @@ class SpanPanelApi:
 
         return storage_battery_data
 
-
-    
     async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState):
         await self.post_data(
             f"{URL_CIRCUITS}/{circuit.circuit_id}",

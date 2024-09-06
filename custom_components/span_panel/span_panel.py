@@ -1,10 +1,6 @@
-"""Module to read production and consumption values from a Span panel on the local network."""
-import asyncio
-import logging
-import time
-import uuid
+"""Module to read production and consumption values from a Span panel."""
 
-import httpx
+import logging
 
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
@@ -37,7 +33,9 @@ SYSTEM_WIFI_LINK = "wlanLink"
 class SpanPanel:
     """Instance of a Span panel"""
 
-    def __init__(self, host: str, access_token: str, options: Options, async_client=None) -> None:
+    def __init__(
+        self, host: str, access_token: str, options: Options, async_client=None
+    ) -> None:
         self.api = SpanPanelApi(host, access_token, options, async_client)
         self.updated_at: int = 0
         self.status: SpanPanelStatus
@@ -67,6 +65,8 @@ class SpanPanel:
 
         try:
             self.storage_battery = await self.api.get_storage_battery_data()
-    
+
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warn("Span Panel API returned empty result for battery storage. Ignoring...")
+            _LOGGER.warn(
+                "Span Panel API returned empty result for battery storage. Ignoring..."
+            )

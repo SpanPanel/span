@@ -1,4 +1,5 @@
 """Support for Span Panel monitor."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -80,6 +81,7 @@ class SpanPanelStatusSensorEntityDescription(
 ):
     pass
 
+
 @dataclass
 class SpanPanelStorageBatteryRequiredKeysMixin:
     value_fn: Callable[[SpanPanelStorageBattery], str]
@@ -90,7 +92,6 @@ class SpanPanelStorageBatterySensorEntityDescription(
     SensorEntityDescription, SpanPanelStorageBatteryRequiredKeysMixin
 ):
     pass
-
 
 
 CIRCUITS_SENSORS = (
@@ -121,7 +122,6 @@ CIRCUITS_SENSORS = (
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda circuit: circuit.consumed_energy,
     ),
-    
 )
 
 PANEL_SENSORS = (
@@ -182,7 +182,7 @@ PANEL_SENSORS = (
 )
 
 INVERTER_SENSORS = (
-        SpanPanelDataSensorEntityDescription(
+    SpanPanelDataSensorEntityDescription(
         key="solar_inverter_instant_power",
         name="Solar Inverter Instant Power",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -251,11 +251,12 @@ STORAGE_BATTERY_SENSORS = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=BATTERY_ENABLE,
         value_fn=lambda storage_battery: storage_battery,
-    ),    
+    ),
 )
 
 ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
+
 
 class SpanSensorBase(CoordinatorEntity, SensorEntity):
     _attr_icon = ICON
@@ -313,24 +314,28 @@ class SpanPanelCircuitSensor(SpanSensorBase):
 
 class SpanPanelPanel(SpanSensorBase):
     """Initialize SpanPanelPanel"""
+
     def get_data_source(self, span_panel: SpanPanel):
         return span_panel.panel
 
 
 class SpanPanelPanelStatus(SpanSensorBase):
     """Initialize SpanPanelPanelStatus"""
+
     def get_data_source(self, span_panel: SpanPanel):
         return span_panel.panel
 
 
 class SpanPanelStatus(SpanSensorBase):
     """Initialize SpanPanelStatus"""
+
     def get_data_source(self, span_panel: SpanPanel):
         return span_panel.status
 
 
 class SpanPanelStorageBatteryStatus(SpanSensorBase):
     """Initialize SpanPanelStorageBatteryStatus"""
+
     _attr_icon = "mdi:battery"
 
     def get_data_source(self, span_panel: SpanPanel):
@@ -370,6 +375,8 @@ async def async_setup_entry(
             )
     if config_entry.options.get(BATTERY_ENABLE, False):
         for description in STORAGE_BATTERY_SENSORS:
-            entities.append(SpanPanelStorageBatteryStatus(coordinator, description, span_panel))
-    
+            entities.append(
+                SpanPanelStorageBatteryStatus(coordinator, description, span_panel)
+            )
+
     async_add_entities(entities)
