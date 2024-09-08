@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cached_property
 import logging
+from typing import cast
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -69,16 +71,17 @@ BINARY_SENSORS = (
 )
 
 
-class SpanPanelBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class SpanPanelBinarySensor(BinarySensorEntity):
     """Binary Sensor status entity."""
 
     def __init__(
         self,
-        coordinator: DataUpdateCoordinator,
+        data_coordinator: DataUpdateCoordinator,
         description: SpanPanelBinarySensorEntityDescription,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
-        span_panel: SpanPanel = coordinator.data
+        self.coordinator = data_coordinator
+        span_panel: SpanPanel = cast(SpanPanel, data_coordinator.data)
 
         self.entity_description = description
         self._attr_name = f"{description.name}"
@@ -87,11 +90,11 @@ class SpanPanelBinarySensor(CoordinatorEntity, BinarySensorEntity):
         )
         self._attr_device_info = panel_to_device_info(span_panel)
 
-        _LOGGER.debug("CREATE BINSENSOR [%s]" % self._attr_name)
-        super().__init__(coordinator)
+        _LOGGER.debug(f"CREATE BINSENSOR [{self._attr_name}]")
+#        super().__init__(coordinator)
 
-    @property
-    def is_on(self):
+    @cached_property
+    def is_on(self) -> bool | None:
         """Return the status of the sensor."""
         _LOGGER.debug("BINSENSOR [%s] IS_ON" % self._attr_name)
         span_panel: SpanPanel = self.coordinator.data
