@@ -52,25 +52,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_update_data():
         """Fetch data from API endpoint."""
-        async with asyncio.timeout(30):
-            try:
-                await span_panel.update()
-            except httpx.HTTPStatusError as err:
-                if err.response.status_code == httpx.codes.UNAUTHORIZED:
-                    raise ConfigEntryAuthFailed from err
-                else:
-                    _LOGGER.error(
-                        "An httpx.StatusError occurred while updating Span data: %s",
-                        str(err),
-                    )
-                    raise UpdateFailed(f"Error communicating with API: {err}") from err
-            except httpx.HTTPError as err:
+        try:
+            await asyncio.wait_for(span_panel.update(), timeout=30)
+        except httpx.HTTPStatusError as err:
+            if err.response.status_code == httpx.codes.UNAUTHORIZED:
+                raise ConfigEntryAuthFailed from err
+            else:
                 _LOGGER.error(
-                    "An httpx.HTTPError occurred while updating Span data: %s", str(err)
+                    "An httpx.StatusError occurred while updating Span data: %s",
+                    str(err),
                 )
                 raise UpdateFailed(f"Error communicating with API: {err}") from err
+        except httpx.HTTPError as err:
+            _LOGGER.error(
+                "An httpx.HTTPError occurred while updating Span data: %s", str(err)
+            )
+            raise UpdateFailed(f"Error communicating with API: {err}") from err
+        except asyncio.TimeoutError as err:
+            _LOGGER.error(
+                "An asyncio.TimeoutError occurred while updating Span data: %s",
+                str(err),
+            )
+            raise UpdateFailed(f"Error communicating with API: {err}") from err
 
-            return span_panel
+        return span_panel
 
     name = "SN-TODO"
 
