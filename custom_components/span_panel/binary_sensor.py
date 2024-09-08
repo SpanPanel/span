@@ -28,12 +28,12 @@ from .util import panel_to_device_info
 _LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelRequiredKeysMixin:
     value_fn: Callable[[SpanPanelHardwareStatus], str]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelBinarySensorEntityDescription(
     BinarySensorEntityDescription, SpanPanelRequiredKeysMixin
 ):

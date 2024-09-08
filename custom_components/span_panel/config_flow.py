@@ -10,16 +10,14 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
-from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
-                                 CONF_SCAN_INTERVAL)
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
-from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
-                      INVERTER_LEG2)
+from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
