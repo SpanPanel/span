@@ -91,12 +91,11 @@ class SpanPanelBinarySensor(BinarySensorEntity):
         self._attr_device_info = panel_to_device_info(span_panel)
 
         _LOGGER.debug(f"CREATE BINSENSOR [{self._attr_name}]")
-#        super().__init__(coordinator)
 
     @cached_property
     def is_on(self) -> bool | None:
         """Return the status of the sensor."""
-        _LOGGER.debug("BINSENSOR [%s] IS_ON" % self._attr_name)
+        _LOGGER.debug("BINSENSOR [%s] IS_ON", self._attr_name)
         span_panel: SpanPanel = self.coordinator.data
         return self.entity_description.value_fn(span_panel.status)
 
