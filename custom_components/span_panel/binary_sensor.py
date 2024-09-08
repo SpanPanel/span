@@ -40,6 +40,7 @@ class SpanPanelBinarySensorEntityDescription(
     """Describes an SpanPanelCircuits sensor entity."""
 
 
+# pylint: disable=unexpected-keyword-arg
 BINARY_SENSORS = (
     SpanPanelBinarySensorEntityDescription(
         key="doorState",
