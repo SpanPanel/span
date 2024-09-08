@@ -92,14 +92,14 @@ class SpanPanelApi:
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
         response = await self.get_data(URL_STORAGE_BATTERY)
-        storage_battery_data = response.json()["soe"]["percentage"]
+        storage_battery_data = response.json()["soe"]
 
         # Span Panel API might return empty result.
         # We use relay state == UNKNOWN as an indication of that scenario.
         if not storage_battery_data:
             raise SpanPanelReturnedEmptyData()
 
-        return storage_battery_data
+        return SpanPanelStorageBattery.from_dic(storage_battery_data)
 
     async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState):
         await self.post_data(
