@@ -46,7 +46,7 @@ from .util import panel_to_device_info
 
 @dataclass
 class SpanPanelCircuitsRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelCircuit], str]
+    value_fn: Callable[[SpanPanelCircuit], float]
 
 
 @dataclass
@@ -58,7 +58,7 @@ class SpanPanelCircuitsSensorEntityDescription(
 
 @dataclass
 class SpanPanelDataRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelData], str]
+    value_fn: Callable[[SpanPanelData], float | str]
 
 
 @dataclass
@@ -82,7 +82,7 @@ class SpanPanelStatusSensorEntityDescription(
 
 @dataclass
 class SpanPanelStorageBatteryRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelStorageBattery], str]
+    value_fn: Callable[[SpanPanelStorageBattery], int]
 
 
 @dataclass
@@ -101,7 +101,7 @@ CIRCUITS_SENSORS = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda circuit: abs(cast(float, circuit.instant_power)),
+        value_fn=lambda circuit: abs(circuit.instant_power),
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_ENERGY_PRODUCED,
@@ -237,7 +237,7 @@ STATUS_SENSORS = (
     SpanPanelStatusSensorEntityDescription(
         key=STAUS_SOFTWARE_VER,
         name="Software Version",
-        value_fn=lambda status: status.firmware_version,
+        value_fn=lambda status: getattr(status, "firmware_version", "unknown_version"),
     ),
 )
 
@@ -248,7 +248,7 @@ STORAGE_BATTERY_SENSORS = (
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=str,
+        value_fn=lambda storage_battery: (storage_battery.storage_battery_percentage),
     ),
 )
 
@@ -338,7 +338,7 @@ class SpanPanelStorageBatteryStatus(SpanSensorBase):
 
     _attr_icon = "mdi:battery"
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
         return span_panel.storage_battery
 
 
