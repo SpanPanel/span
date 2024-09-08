@@ -1,8 +1,8 @@
 """Span Panel API"""
 
 import logging
-from typing import Dict
 import uuid
+from typing import Dict
 
 import httpx
 
@@ -23,7 +23,6 @@ from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
-
 
 _LOGGER = logging.getLogger(__name__)
 

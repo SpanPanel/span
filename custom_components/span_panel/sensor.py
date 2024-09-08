@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from functools import cached_property
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import cast
+from typing import Any, cast
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -255,16 +256,19 @@ ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
 
 
-class SpanSensorBase(CoordinatorEntity, SensorEntity):
+class SpanSensorBase(SensorEntity):
+    """Base class for Span Panel Sensors."""
+
     _attr_icon = ICON
 
     def __init__(
         self,
-        coordinator: DataUpdateCoordinator,
+        data_coordinator: CoordinatorEntity,
         description: SensorEntityDescription,
         span_panel: SpanPanel,
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
+        self.coordinator = data_coordinator
         self.entity_description = description
         self._attr_name = f"{description.name}"
         self._attr_unique_id = (
@@ -273,9 +277,8 @@ class SpanSensorBase(CoordinatorEntity, SensorEntity):
         self._attr_device_info = panel_to_device_info(span_panel)
 
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
-        super().__init__(coordinator)
 
-    @property
+    @cached_property
     def native_value(self) -> float | str | None:
         """Return the state of the sensor."""
         span_panel: SpanPanel = self.coordinator.data
@@ -283,7 +286,7 @@ class SpanSensorBase(CoordinatorEntity, SensorEntity):
         _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)
         return value
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> Any:
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 

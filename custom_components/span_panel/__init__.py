@@ -1,11 +1,10 @@
 """The Span Panel integration."""
 
 from __future__ import annotations
-from datetime import timedelta
 
 import logging
-
-from asyncio import timeout
+import asyncio
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -19,7 +18,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.httpx_client import get_async_client, httpx
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import COORDINATOR, DOMAIN, NAME, DEFAULT_SCAN_INTERVAL
+from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
 from .options import Options
 from .span_panel import SpanPanel
 
@@ -53,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def async_update_data():
         """Fetch data from API endpoint."""
-        async with timeout(30):
+        async with asyncio.timeout(30):
             try:
                 await span_panel.update()
             except httpx.HTTPStatusError as err:
