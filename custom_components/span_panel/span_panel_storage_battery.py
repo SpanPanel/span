@@ -14,5 +14,5 @@ class SpanPanelStorageBattery:
     def from_dic(data: Dict[str, Any]) -> "SpanPanelStorageBattery":
         """read the data from the dictionary"""
         return SpanPanelStorageBattery(
-            storage_battery_percentage=int(data.get("storage_battery_percentage", 0))
+            storage_battery_percentage=data.get("percentage", 0)
         )
