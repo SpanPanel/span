@@ -30,7 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SpanPanelRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelHardwareStatus], str]
+    value_fn: Callable[[SpanPanelHardwareStatus], bool]
 
 
 @dataclass(frozen=True)
