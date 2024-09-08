@@ -17,7 +17,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
     DataUpdateCoordinator,
 )
 
@@ -95,9 +94,13 @@ class SpanPanelBinarySensor(BinarySensorEntity):
     @cached_property
     def is_on(self) -> bool | None:
         """Return the status of the sensor."""
-        _LOGGER.debug("BINSENSOR [%s] IS_ON", self._attr_name)
-        span_panel: SpanPanel = self.coordinator.data
-        return self.entity_description.value_fn(span_panel.status)
+        span_panel: SpanPanel = cast(SpanPanel, self.coordinator.data)
+        description = cast(
+            SpanPanelBinarySensorEntityDescription, self.entity_description
+        )
+        status_is_on = description.value_fn(span_panel.status)
+        _LOGGER.debug("BINSENSOR [%s] is_on:[%s]", self._attr_name, status_is_on)
+        return status_is_on
 
 
 async def async_setup_entry(
