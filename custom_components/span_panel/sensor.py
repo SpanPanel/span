@@ -92,6 +92,7 @@ class SpanPanelStorageBatterySensorEntityDescription(
     pass
 
 
+# pylint: disable=unexpected-keyword-arg
 CIRCUITS_SENSORS = (
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_POWER,
@@ -247,8 +248,7 @@ STORAGE_BATTERY_SENSORS = (
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=BATTERY_ENABLE,
-        value_fn=lambda storage_battery: storage_battery,
+        value_fn=str,
     ),
 )
 
