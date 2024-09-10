@@ -29,6 +29,7 @@ CIRCUITS_IS_SHEDDABLE = "is_sheddable"
 CIRCUITS_IS_NEVER_BACKUP = "is_never_backup"
 
 SPAN_CIRCUITS = "circuits"
+SPAN_SOE = "soe"
 SPAN_SYSTEM = "system"
 PANEL_POWER = "instantGridPowerW"
 SYSTEM_DOOR_STATE = "doorState"
