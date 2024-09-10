@@ -1,6 +1,7 @@
 {
   "path": [
-    "custom_components/span_panel"
+    "custom_components/span_panel",
+    "./*.{html,md}"
   ],
   "format": [
     "python",
@@ -14,11 +15,12 @@
     "**/translations/**",
     ".github/**",
     "env/**",
-    "**/site-packages/**"
+    "**/site-packages/**",
+    "**/.direnv/**"
   ],
   "reporters": [
     "console"
-],
+  ],
   "output": "./jscpdReport",
   "gitignore": true
 }
