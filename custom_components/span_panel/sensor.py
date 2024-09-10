@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from functools import cached_property
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -18,10 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CIRCUITS_ENERGY_CONSUMED,
@@ -36,6 +32,7 @@ from .const import (
     STAUS_SOFTWARE_VER,
     STORAGE_BATTERY_PERCENTAGE,
 )
+from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
@@ -256,19 +253,19 @@ ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
 
 
-class SpanSensorBase(SensorEntity):
+class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity):
     """Base class for Span Panel Sensors."""
 
     _attr_icon = ICON
 
     def __init__(
         self,
-        data_coordinator: CoordinatorEntity,
+        data_coordinator: SpanPanelCoordinator,
         description: SensorEntityDescription,
         span_panel: SpanPanel,
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
-        self.coordinator = data_coordinator
+        super().__init__(data_coordinator, context=description)
         self.entity_description = description
         self._attr_name = f"{description.name}"
         self._attr_unique_id = (
@@ -278,11 +275,15 @@ class SpanSensorBase(SensorEntity):
 
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
 
-    @cached_property
+    @property
     def native_value(self) -> float | str | None:
         """Return the state of the sensor."""
         span_panel: SpanPanel = self.coordinator.data
-        value = self.entity_description.value_fn(self.get_data_source(span_panel))
+        value_function = getattr(self.entity_description, "value_fn", None)
+        if value_function is not None:
+            value = value_function(self.get_data_source(span_panel))
+        else:
+            value = None
         _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)
         return value
 
@@ -292,9 +293,11 @@ class SpanSensorBase(SensorEntity):
 
 
 class SpanPanelCircuitSensor(SpanSensorBase):
+    """Initialize SpanPanelCircuitSensor"""
+
     def __init__(
         self,
-        coordinator: DataUpdateCoordinator,
+        coordinator: SpanPanelCoordinator,
         description: SpanPanelCircuitsSensorEntityDescription,
         circuit_id: str,
         name: str,
@@ -338,7 +341,7 @@ class SpanPanelStorageBatteryStatus(SpanSensorBase):
 
     _attr_icon = "mdi:battery"
 
-    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
+    def get_data_source(self, span_panel: SpanPanel):
         return span_panel.storage_battery
 
 
@@ -347,8 +350,9 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    data: dict = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator: DataUpdateCoordinator = data[COORDINATOR]
+    """Set up sensor platform."""
+    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: SpanPanelCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
     entities: list[SpanSensorBase] = []

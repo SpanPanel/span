@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from typing import Dict
+from typing import Any, Dict
 
 import httpx
 
@@ -30,6 +30,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SpanPanelApi:
+    """Span Panel API"""
+
     def __init__(
         self,
         host: str,
@@ -44,9 +46,13 @@ class SpanPanelApi:
 
     @property
     def async_client(self):
+        """Return the httpx.AsyncClient"""
+
         return self._async_client or httpx.AsyncClient(verify=False)
 
     async def ping(self) -> bool:
+        """Ping the Span Panel API"""
+
         # status endpoint doesn't require auth.
         try:
             await self.get_status_data()
@@ -55,6 +61,7 @@ class SpanPanelApi:
             return False
 
     async def get_access_token(self) -> str:
+        """Get the access token"""
         register_results = await self.post_data(
             URL_REGISTER,
             {
@@ -65,11 +72,13 @@ class SpanPanelApi:
         return register_results.json()["accessToken"]
 
     async def get_status_data(self) -> SpanPanelHardwareStatus:
+        """Get the status data"""
         response = await self.get_data(URL_STATUS)
         status_data = SpanPanelHardwareStatus.from_dict(response.json())
         return status_data
 
     async def get_panel_data(self) -> SpanPanelData:
+        """Get the panel data"""
         response = await self.get_data(URL_PANEL)
         panel_data = SpanPanelData.from_dict(response.json(), self.options)
 
@@ -81,6 +90,7 @@ class SpanPanelApi:
         return panel_data
 
     async def get_circuits_data(self) -> Dict[str, SpanPanelCircuit]:
+        """Get the circuits data"""
         response = await self.get_data(URL_CIRCUITS)
         raw_circuits_data = response.json()[SPAN_CIRCUITS]
 
@@ -93,6 +103,7 @@ class SpanPanelApi:
         return circuits_data
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
+        """Get the storage battery data"""
         response = await self.get_data(URL_STORAGE_BATTERY)
         storage_battery_data = response.json()[SPAN_SOE]
 
@@ -104,12 +115,14 @@ class SpanPanelApi:
         return SpanPanelStorageBattery.from_dic(storage_battery_data)
 
     async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState):
+        """Set the relay state"""
         await self.post_data(
             f"{URL_CIRCUITS}/{circuit.circuit_id}",
             {"relayStateIn": {"relayState": state.name}},
         )
 
     async def set_priority(self, circuit: SpanPanelCircuit, priority: CircuitPriority):
+        """Set the priority"""
         await self.post_data(
             f"{URL_CIRCUITS}/{circuit.circuit_id}",
             {"priorityIn": {"priority": priority.name}},
@@ -128,6 +141,7 @@ class SpanPanelApi:
         return response
 
     async def post_data(self, url: str, payload: dict) -> httpx.Response:
+        """Post data to the endpoint"""
         formatted_url = url.format(self.host)
         response = await self._async_post(formatted_url, payload)
         return response
@@ -153,8 +167,11 @@ class SpanPanelApi:
             except httpx.TransportError:
                 if attempt == 2:
                     raise
+        raise httpx.TransportError("Too many attempts")
 
-    async def _async_post(self, url, json=None, **kwargs) -> httpx.Response:
+    async def _async_post(
+        self, url: str, json: dict[str, Any] | None = None, **kwargs
+    ) -> httpx.Response:
         """
         POST to the url
         """

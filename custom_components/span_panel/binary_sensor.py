@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cached_property
-import logging
-from typing import cast
+from typing import Any, cast
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -16,12 +15,10 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import COORDINATOR, DOMAIN
-
+from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .util import panel_to_device_info
@@ -47,7 +44,7 @@ BINARY_SENSORS = (
         key="doorState",
         name="Door State",
         device_class=BinarySensorDeviceClass.TAMPER,
-        value_fn=lambda status_data: not status_data.is_door_closed,
+        value_fn=lambda status_data: status_data.is_door_closed,
     ),
     SpanPanelBinarySensorEntityDescription(
         key="eth0Link",
@@ -70,17 +67,19 @@ BINARY_SENSORS = (
 )
 
 
-class SpanPanelBinarySensor(BinarySensorEntity):
+class SpanPanelBinarySensor(
+    CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity
+):
     """Binary Sensor status entity."""
 
     def __init__(
         self,
-        data_coordinator: DataUpdateCoordinator,
+        data_coordinator: SpanPanelCoordinator,
         description: SpanPanelBinarySensorEntityDescription,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
-        self.coordinator = data_coordinator
-        span_panel: SpanPanel = cast(SpanPanel, data_coordinator.data)
+        super().__init__(data_coordinator, context=description)
+        span_panel: SpanPanel = data_coordinator.data
 
         self.entity_description = description
         self._attr_name = f"{description.name}"
@@ -91,10 +90,10 @@ class SpanPanelBinarySensor(BinarySensorEntity):
 
         _LOGGER.debug("CREATE BINSENSOR [%s]", self._attr_name)
 
-    @cached_property
+    @property
     def is_on(self) -> bool | None:
         """Return the status of the sensor."""
-        span_panel: SpanPanel = cast(SpanPanel, self.coordinator.data)
+        span_panel: SpanPanel = self.coordinator.data
         description = cast(
             SpanPanelBinarySensorEntityDescription, self.entity_description
         )
@@ -112,8 +111,8 @@ async def async_setup_entry(
 
     _LOGGER.debug("ASYNC SETUP ENTRY BINARYSENSOR")
 
-    data: dict = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator: DataUpdateCoordinator = data[COORDINATOR]
+    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
+    coordinator: SpanPanelCoordinator = data[COORDINATOR]
 
     entities: list[SpanPanelBinarySensor] = []
 
