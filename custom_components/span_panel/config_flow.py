@@ -43,7 +43,7 @@ class TriggerFlowType(enum.Enum):
 def create_api_controller(
     hass: HomeAssistant, host: str, access_token: str | None = None
 ) -> SpanPanelApi:
-    params = {"host": host, "async_client": get_async_client(hass)}
+    params: dict[str, Any] = {"host": host, "async_client": get_async_client(hass)}
     if access_token is not None:
         params["access_token"] = access_token
     return SpanPanelApi(**params)
@@ -56,7 +56,7 @@ async def validate_host(
     return await span_api.ping()
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     """
     Handle a config flow for Span Panel.
     """
@@ -282,14 +282,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Updates an existing entry with new configurations.
         """
         # Update the existing data with reauthed data
-        entry_data[CONF_HOST] = host
-        entry_data[CONF_ACCESS_TOKEN] = access_token
+        # Create a new mutable copy of the entry data (Mapping is immutable)
+        updated_data = dict(entry_data)
+        updated_data[CONF_HOST] = host
+        updated_data[CONF_ACCESS_TOKEN] = access_token
 
         # An existing entry must exist before we can update it
         entry = self.hass.config_entries.async_get_entry(entry_id)
         assert entry
 
-        self.hass.config_entries.async_update_entry(entry, data=entry_data)
+        self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
         return self.async_abort(reason="reauth_successful")
 
@@ -303,6 +305,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle a option flow for Span Panel."""
+
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
         self.options = dict(config_entry.options)
