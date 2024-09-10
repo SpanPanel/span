@@ -9,6 +9,8 @@ import httpx
 from .const import (
     API_TIMEOUT,
     PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
+    SPAN_CIRCUITS,
+    SPAN_SOE,
     URL_CIRCUITS,
     URL_PANEL,
     URL_REGISTER,
@@ -80,7 +82,7 @@ class SpanPanelApi:
 
     async def get_circuits_data(self) -> Dict[str, SpanPanelCircuit]:
         response = await self.get_data(URL_CIRCUITS)
-        raw_circuits_data = response.json()["circuits"]
+        raw_circuits_data = response.json()[SPAN_CIRCUITS]
 
         if not raw_circuits_data:
             raise SpanPanelReturnedEmptyData()
@@ -92,7 +94,7 @@ class SpanPanelApi:
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
         response = await self.get_data(URL_STORAGE_BATTERY)
-        storage_battery_data = response.json()["soe"]
+        storage_battery_data = response.json()[SPAN_SOE]
 
         # Span Panel API might return empty result.
         # We use relay state == UNKNOWN as an indication of that scenario.
