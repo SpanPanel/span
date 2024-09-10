@@ -7,6 +7,8 @@ As Span has not published a documented API, we cannot guarantee this integration
 
 The author(s) will try to keep this integration working, but cannot provide technical support for either Span or your homes electrical system.  The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
+What this integration does do is provide the user a Home Assistant integration that a user would find useful if they wanted so understand their power consumption, energy usage, and control panel circuits.
+
 ## Installation
 
 1. Install [HACS](https://hacs.xyz/)
