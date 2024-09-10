@@ -12,7 +12,7 @@ from homeassistant import config_entries
 from homeassistant.components import zeroconf
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
@@ -72,6 +72,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self._is_flow_setup: bool = False
 
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str):
+        """Set up the flow."""
+
         assert self._is_flow_setup is False
 
         span_api = create_api_controller(self.hass, host)
@@ -86,9 +88,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self._is_flow_setup = True
 
     def ensure_flow_is_set_up(self):
+        """Ensure the flow is set up."""
         assert self._is_flow_setup is True
 
     async def ensure_not_already_configured(self):
+        """Ensure the panel is not already configured."""
         self.ensure_flow_is_set_up()
 
         # Abort if we had already set this panel up
@@ -97,7 +101,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
     async def async_step_zeroconf(
         self, discovery_info: zeroconf.ZeroconfServiceInfo
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Handle a flow initiated by zeroconf discovery.
         """
@@ -118,7 +122,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Handle a flow initiated by the user.
         """
@@ -140,17 +144,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         await self.ensure_not_already_configured()
         return await self.async_step_choose_auth_type()
 
-    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
         """
         Handle a flow initiated by re-auth.
         """
 
         await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST])
-        return await self.async_step_auth_proximity(entry_data)
+        return await self.async_step_auth_proximity(dict(entry_data))
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Prompt user to confirm a discovered Span Panel.
         """
@@ -166,10 +172,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                 },
             )
 
-        # Pass the (empty) dictionary to signal the call came from this step, not abort
+        # Pass (empty) dictionary to signal the call came from this step, not abort
         return await self.async_step_choose_auth_type(user_input)
 
-    async def async_step_choose_auth_type(self, user_input=None) -> FlowResult:
+    async def async_step_choose_auth_type(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the authentication method to use."""
         self.ensure_flow_is_set_up()
 
         # None means this method was called by HA core as an abort
@@ -187,7 +196,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     async def async_step_auth_proximity(
         self,
         entry_data: dict[str, Any] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Step that guide users through the proximity authentication process.
         """
@@ -221,7 +230,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     async def async_step_auth_token(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Step that prompts user for access token.
         """
@@ -245,25 +254,44 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     async def async_step_resolve_entity(
         self,
         entry_data: dict[str, Any] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         self.ensure_flow_is_set_up()
 
         # Continue based on flow trigger type
         match self.trigger_flow_type:
             case TriggerFlowType.CREATE_ENTRY:
+                if self.host is None:
+                    raise ValueError("Host cannot be None when creating a new entry")
+                if self.serial_number is None:
+                    raise ValueError(
+                        "Serial number cannot be None when creating a new entry"
+                    )
+                if self.access_token is None:
+                    raise ValueError(
+                        "Access token cannot be None when creating a new entry"
+                    )
                 return self.create_new_entry(
                     self.host, self.serial_number, self.access_token
                 )
             case TriggerFlowType.UPDATE_ENTRY:
+                if self.host is None:
+                    raise ValueError("Host cannot be None when updating an entry")
+                if self.access_token is None:
+                    raise ValueError(
+                        "Access token cannot be None when updating an entry"
+                    )
                 return self.update_existing_entry(
-                    self.context["entry_id"], self.host, self.access_token, entry_data
+                    self.context["entry_id"],
+                    self.host,
+                    self.access_token,
+                    entry_data or {},
                 )
             case _:
                 raise NotImplementedError()
 
     def create_new_entry(
         self, host: str, serial_number: str, access_token: str
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Creates a new SPAN panel entry.
         """
@@ -277,7 +305,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         host: str,
         access_token: str,
         entry_data: Mapping[str, Any],
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Updates an existing entry with new configurations.
         """
@@ -313,7 +341,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 

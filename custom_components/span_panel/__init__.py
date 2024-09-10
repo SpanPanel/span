@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import asyncio
-from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -14,11 +12,10 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.httpx_client import get_async_client, httpx
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
+from .coordinator import SpanPanelCoordinator
 from .options import Options
 from .span_panel import SpanPanel
 
@@ -38,6 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """
     config = entry.data
     host = config[CONF_HOST]
+    name = "SpanPanel"
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY %s", host)
 
@@ -50,45 +48,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY panel %s", span_panel)
 
-    async def async_update_data():
-        """Fetch data from API endpoint."""
-        try:
-            await asyncio.wait_for(span_panel.update(), timeout=30)
-        except httpx.HTTPStatusError as err:
-            if err.response.status_code == httpx.codes.UNAUTHORIZED:
-                raise ConfigEntryAuthFailed from err
-            else:
-                _LOGGER.error(
-                    "An httpx.StatusError occurred while updating Span data: %s",
-                    str(err),
-                )
-                raise UpdateFailed(f"Error communicating with API: {err}") from err
-        except httpx.HTTPError as err:
-            _LOGGER.error(
-                "An httpx.HTTPError occurred while updating Span data: %s", str(err)
-            )
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
-        except asyncio.TimeoutError as err:
-            _LOGGER.error(
-                "An asyncio.TimeoutError occurred while updating Span data: %s",
-                str(err),
-            )
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
-
-        return span_panel
-
-    name = "SN-TODO"
-
     scan_interval: int = entry.options.get(
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
     )
 
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=f"span panel {name}",
-        update_method=async_update_data,
-        update_interval=timedelta(seconds=scan_interval),
+    coordinator = SpanPanelCoordinator(
+        hass, span_panel, name, update_interval=scan_interval
     )
 
     await coordinator.async_config_entry_first_refresh()
