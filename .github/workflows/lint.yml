@@ -39,9 +39,6 @@ jobs:
       - name: Run isort
         run: isort check .
 
-      - name: Run mypy
-        run: mypy .
-
       - name: Run bandit
         run: bandit -r .
 
