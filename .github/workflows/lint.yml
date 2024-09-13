@@ -1,7 +1,13 @@
----
 name: Lint Code Base
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,23 +25,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.8'
+          python-version: "3.8"
 
       - name: Install dependencies
         run: |
-          pip install black isort
+          python -m pip install --upgrade pip
+          pip install ruff isort mypy bandit
 
-      - name: Run isort
-        run: isort .
-
-      - name: Run Black
-        run: black .
-
-      - name: Run Super-Linter
-        uses: github/super-linter@v7
-        env:
-          DEFAULT_BRANCH: main
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LINTER_RULES_PATH: .github/linters
-          VALIDATE_PYTHON_BLACK: true
-          VALIDATE_PYTHON_ISORT: true
+      - name: Run linters
+        run: |
+          ruff check .
+          isort check .
+          mypy check .
+          bandit check .
+          prettier check .

@@ -1,58 +1,58 @@
 {
-    "config": {
-        "abort": {
-            "no_devices_found": "No se hallaron aparatos en la red",
-            "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
-            "reauth_successful": "Autenticación exitosa."
-        },
-        "error": {
-            "cannot_connect": "No se logró establecer conexión con Span Panel",
-            "invalid_auth": "Autenticación invalida",
-            "unknown": "Error inesperado"
-        },
-        "flow_title": "Span Panel ({host})",
-        "step": {
-            "confirm_discovery": {
-                "description": "¿Deseas configurar Span Panel en {host}?",
-                "title": "Establecer conexión al Span Panel"
-            },
-            "user": {
-                "data": {
-                    "host": "Host"
-                },
-                "title": "Establecer conexión al Span Panel"
-            },
-            "auth_menu": {
-                "title": "Escoga Opciones de Autenticación",
-                "menu_options": {
-                    "auth_proximity": "Autenticar a través de su Span Panel físicamente",
-                    "auth_token": "Autenticar usando un token de acceso"
-                }
-            },
-            "auth_proximity": {
-                "title": "Autenticación de proximidad",
-                "description": "Por favor abra y cierre la puerta de Span Panel {remaining} veces."
-            },
-            "auth_token": {
-                "title": "Autenticación de Token Manualmente",
-                "description": "Por favor, introduce tu token de acceso (deja en blanco para empezar de nuevo):",
-                "data": {
-                    "access_token": "Token de Acceso"
-                }
-            }
-        }
+  "config": {
+    "abort": {
+      "no_devices_found": "No se hallaron aparatos en la red",
+      "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
+      "reauth_successful": "Autenticación exitosa."
     },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "scan_interval": "Intervalo de escaneo en segundos",
-                    "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
-                    "leg1": "Pata solar 1 (0 no se utiliza)",
-                    "leg2": "Pata solar 2 (0 no se utiliza)",
-                    "enable_battery_percentage": "Habilitar el sensor de porcentaje de batería de almacenamiento (debe estar conectado físicamente)"
-                }
-            }
+    "error": {
+      "cannot_connect": "No se logró establecer conexión con Span Panel",
+      "invalid_auth": "Autenticación invalida",
+      "unknown": "Error inesperado"
+    },
+    "flow_title": "Span Panel ({host})",
+    "step": {
+      "confirm_discovery": {
+        "description": "¿Deseas configurar Span Panel en {host}?",
+        "title": "Establecer conexión al Span Panel"
+      },
+      "user": {
+        "data": {
+          "host": "Host"
+        },
+        "title": "Establecer conexión al Span Panel"
+      },
+      "auth_menu": {
+        "title": "Escoga Opciones de Autenticación",
+        "menu_options": {
+          "auth_proximity": "Autenticar a través de su Span Panel físicamente",
+          "auth_token": "Autenticar usando un token de acceso"
         }
+      },
+      "auth_proximity": {
+        "title": "Autenticación de proximidad",
+        "description": "Por favor abra y cierre la puerta de Span Panel {remaining} veces."
+      },
+      "auth_token": {
+        "title": "Autenticación de Token Manualmente",
+        "description": "Por favor, introduce tu token de acceso (deja en blanco para empezar de nuevo):",
+        "data": {
+          "access_token": "Token de Acceso"
+        }
+      }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Intervalo de escaneo en segundos",
+          "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
+          "leg1": "Pata solar 1 (0 no se utiliza)",
+          "leg2": "Pata solar 2 (0 no se utiliza)",
+          "enable_battery_percentage": "Habilitar el sensor de porcentaje de batería de almacenamiento (debe estar conectado físicamente)"
+        }
+      }
+    }
+  }
 }

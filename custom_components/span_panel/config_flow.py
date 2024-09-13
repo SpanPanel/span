@@ -10,14 +10,16 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
-from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
+                                 CONF_SCAN_INTERVAL)
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
-from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
+                      INVERTER_LEG2)
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -202,12 +204,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         """
         self.ensure_flow_is_set_up()
 
-        span_api = create_api_controller(self.hass, self.host)
+        span_api = create_api_controller(self.hass, self.host or "")
         panel_status = await span_api.get_status_data()
 
         # Check if running firmware newer or older than r202342
         if panel_status.proximity_proven is not None:
-
             # Reprompt until we are able to do proximity auth for new firmware
             proximity_verified = panel_status.proximity_proven
             if proximity_verified is False:
@@ -219,6 +220,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                 return self.async_show_form(
                     step_id="auth_proximity",
                 )
+
+        # Ensure host is set
+        if not self.host:
+            return self.async_abort(reason="host_not_set")
 
         # Ensure token is valid
         self.access_token = await span_api.get_access_token()
@@ -244,6 +249,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         # Ensure token is valid
         if CONF_ACCESS_TOKEN in user_input and user_input[CONF_ACCESS_TOKEN]:
             self.access_token = user_input[CONF_ACCESS_TOKEN]
+            if not self.host:
+                return self.async_abort(reason="host_not_set")
+
             if not await validate_host(self.hass, self.host, self.access_token):
                 return self.async_abort(reason="invalid_access_token")
 
@@ -255,6 +263,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self,
         entry_data: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
+        """Resolve the entity."""
         self.ensure_flow_is_set_up()
 
         # Continue based on flow trigger type

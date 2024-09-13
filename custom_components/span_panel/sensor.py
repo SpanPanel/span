@@ -7,31 +7,19 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorEntityDescription,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import (SensorDeviceClass, SensorEntity,
+                                             SensorEntityDescription,
+                                             SensorStateClass)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    CIRCUITS_ENERGY_CONSUMED,
-    CIRCUITS_ENERGY_PRODUCED,
-    CIRCUITS_POWER,
-    COORDINATOR,
-    CURRENT_RUN_CONFIG,
-    DOMAIN,
-    DSM_GRID_STATE,
-    DSM_STATE,
-    MAIN_RELAY_STATE,
-    STAUS_SOFTWARE_VER,
-    STORAGE_BATTERY_PERCENTAGE,
-)
+from .const import (CIRCUITS_ENERGY_CONSUMED, CIRCUITS_ENERGY_PRODUCED,
+                    CIRCUITS_POWER, COORDINATOR, CURRENT_RUN_CONFIG, DOMAIN,
+                    DSM_GRID_STATE, DSM_STATE, MAIN_RELAY_STATE,
+                    STAUS_SOFTWARE_VER, STORAGE_BATTERY_PERCENTAGE)
 from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel

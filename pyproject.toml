@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "span"
+version = "0.1.1"
+description = ""
+authors = ["SpanPanel"]
+license = "MIT"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+[tool.poetry.dev-dependencies]
+ruff = "^0.6.4"
+isort = "^5.13.2"
+mypy = "^1.0.0"
+bandit = "^1.7.4"
+pre-commit = "^3.8.0"
+pydantic = "^2.9.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.jscpd]
+path = ["custom_components/span_panel", "./*.{html,md}"]
+format = ["python", "javascript", "json", "markup", "markdown"]
+ignore = "custom_components/span_panel/translations/**|**/translations/**|.github/**|env/**|**/site-packages/**|**/.direnv/**"
+reporters = ["console"]
+output = "./jscpdReport"
+gitignore = true
