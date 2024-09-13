@@ -22,3 +22,5 @@ repos:
       - id: mypy
         additional_dependencies:
           - types-requests
+        language: python
+        entry: bash -c 'if [ -z "${HA_CORE_PATH}" ]; then echo "HA_CORE_PATH is not set. Please set it to your Home Assistant core directory."; exit 1; else mypy "$@"; fi' --
