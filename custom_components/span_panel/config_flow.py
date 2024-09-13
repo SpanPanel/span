@@ -76,7 +76,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str):
         """Set up the flow."""
 
-        assert self._is_flow_setup is False
+        if self._is_flow_setup is True:
+            raise AssertionError("Flow is already set up")
 
         span_api = create_api_controller(self.hass, host)
         panel_status = await span_api.get_status_data()
@@ -91,7 +92,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
     def ensure_flow_is_set_up(self):
         """Ensure the flow is set up."""
-        assert self._is_flow_setup is True
+        if self._is_flow_setup is False:
+            raise AssertionError("Flow is not set up")
 
     async def ensure_not_already_configured(self):
         """Ensure the panel is not already configured."""
@@ -326,7 +328,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
         # An existing entry must exist before we can update it
         entry = self.hass.config_entries.async_get_entry(entry_id)
-        assert entry
+        if entry is None:
+            raise AssertionError("Entry does not exist")
 
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
