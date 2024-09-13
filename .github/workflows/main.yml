@@ -1,5 +1,5 @@
 ---
-name: HACS Jobs
+name: Main
 
 on:
   pull_request:
