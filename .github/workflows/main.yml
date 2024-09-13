@@ -28,7 +28,3 @@ jobs:
   lint:
     name: Lint Code Base
     uses: ./.github/workflows/lint.yml
-
-  hacs:
-    name: HACS Jobs
-    uses: ./.github/workflows/hacs.yml
