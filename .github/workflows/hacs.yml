@@ -1,7 +1,7 @@
 ---
 name: HACS Jobs
 
-"on":
+on:
   pull_request:
     branches:
       - main

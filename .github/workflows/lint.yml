@@ -27,20 +27,15 @@ jobs:
         with:
           python-version: "3.8"
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff isort mypy bandit
 
-      - name: Run ruff
-        run: ruff check .
-
-      - name: Install isort
-        run: pip install isort
-
-      - name: Run isort
-        run: isort check .
-
-      - name: Install Prettier
-        run: pip install prettier
-
-      - name: Run prettier
-        run: prettier check .
+      - name: Run linters
+        run: |
+          ruff check .
+          isort check .
+          mypy check .
+          bandit check .
+          prettier check .
