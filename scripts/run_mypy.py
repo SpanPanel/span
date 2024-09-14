@@ -11,7 +11,7 @@ def main():
         sys.exit(1)
     else:
         # Run mypy with the provided arguments
-        result = subprocess.check_call(['poetry', 'run', 'mypy'] + sys.argv[1:])
+        result = subprocess.check_call(['poetry', 'run', 'mypy'] + sys.argv[1:]) # nosec B603
         sys.exit(result)
 
 if __name__ == '__main__':
