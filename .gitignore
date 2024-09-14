@@ -3,8 +3,8 @@
 /.project
 .DS_Store
 .vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
+!.vscode/settings.json.example
+!.vscode/tasks.json
 .direnv/
 env/
 .envrc
