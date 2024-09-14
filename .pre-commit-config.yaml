@@ -1,26 +1,27 @@
 repos:
-  - repo: https://github.com/pre-commit/mirrors-isort
-    rev: v5.10.1
+  - repo: local
     hooks:
       - id: isort
+        name: isort
+        entry: poetry run isort
+        language: system
+        types: [python]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.4
-    hooks:
       - id: ruff
+        name: ruff
+        entry: poetry run ruff check
         args:
           - --fix
+        language: system
+        types: [python]
+
+      - id: mypy-with-env-check
+        name: mypy with HA_CORE_PATH check
+        entry: poetry run python scripts/run_mypy.py
+        language: system
+        types: [python]
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.0.3
     hooks:
       - id: prettier
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
-      - id: mypy
-        additional_dependencies:
-          - types-requests
-        language: python
-        entry: bash -c 'if [ -z "${HA_CORE_PATH}" ]; then echo "HA_CORE_PATH is not set. Please set it to your Home Assistant core directory."; exit 1; else mypy "$@"; fi' --

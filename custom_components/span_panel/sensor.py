@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generic, List, TypeVar
 
 from homeassistant.components.sensor import (SensorDeviceClass, SensorEntity,
                                              SensorEntityDescription,
@@ -19,58 +19,59 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (CIRCUITS_ENERGY_CONSUMED, CIRCUITS_ENERGY_PRODUCED,
                     CIRCUITS_POWER, COORDINATOR, CURRENT_RUN_CONFIG, DOMAIN,
                     DSM_GRID_STATE, DSM_STATE, MAIN_RELAY_STATE,
-                    STAUS_SOFTWARE_VER, STORAGE_BATTERY_PERCENTAGE)
+                    STATUS_SOFTWARE_VER, STORAGE_BATTERY_PERCENTAGE)
 from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
+from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 from .util import panel_to_device_info
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelCircuitsRequiredKeysMixin:
     value_fn: Callable[[SpanPanelCircuit], float]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelCircuitsSensorEntityDescription(
     SensorEntityDescription, SpanPanelCircuitsRequiredKeysMixin
 ):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelDataRequiredKeysMixin:
     value_fn: Callable[[SpanPanelData], float | str]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelDataSensorEntityDescription(
     SensorEntityDescription, SpanPanelDataRequiredKeysMixin
 ):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelStatusRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelStatus], str]
+    value_fn: Callable[[SpanPanelHardwareStatus], str]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelStatusSensorEntityDescription(
     SensorEntityDescription, SpanPanelStatusRequiredKeysMixin
 ):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelStorageBatteryRequiredKeysMixin:
     value_fn: Callable[[SpanPanelStorageBattery], int]
 
 
-@dataclass
+@dataclass(frozen=True)
 class SpanPanelStorageBatterySensorEntityDescription(
     SensorEntityDescription, SpanPanelStorageBatteryRequiredKeysMixin
 ):
@@ -220,7 +221,7 @@ PANEL_DATA_STATUS_SENSORS = (
 
 STATUS_SENSORS = (
     SpanPanelStatusSensorEntityDescription(
-        key=STAUS_SOFTWARE_VER,
+        key=STATUS_SOFTWARE_VER,
         name="Software Version",
         value_fn=lambda status: getattr(status, "firmware_version", "unknown_version"),
     ),
@@ -240,16 +241,18 @@ STORAGE_BATTERY_SENSORS = (
 ICON = "mdi:flash"
 _LOGGER = logging.getLogger(__name__)
 
+T = TypeVar('T', bound=SensorEntityDescription)
 
-class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity):
+class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T]):
     """Base class for Span Panel Sensors."""
 
     _attr_icon = ICON
+    entity_description: T
 
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
-        description: SensorEntityDescription,
+        description: T,
         span_panel: SpanPanel,
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
@@ -280,7 +283,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity):
         raise NotImplementedError("Subclasses must implement this method")
 
 
-class SpanPanelCircuitSensor(SpanSensorBase):
+class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescription]):
     """Initialize SpanPanelCircuitSensor"""
 
     def __init__(
@@ -299,37 +302,37 @@ class SpanPanelCircuitSensor(SpanSensorBase):
             f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
         )
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         return span_panel.circuits[self.id]
 
 
-class SpanPanelPanel(SpanSensorBase):
+class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription]):
     """Initialize SpanPanelPanel"""
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         return span_panel.panel
 
 
-class SpanPanelPanelStatus(SpanSensorBase):
+class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription]):
     """Initialize SpanPanelPanelStatus"""
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         return span_panel.panel
 
 
-class SpanPanelStatus(SpanSensorBase):
+class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription]):
     """Initialize SpanPanelStatus"""
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
         return span_panel.status
 
 
-class SpanPanelStorageBatteryStatus(SpanSensorBase):
+class SpanPanelStorageBatteryStatus(SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription]):
     """Initialize SpanPanelStorageBatteryStatus"""
 
     _attr_icon = "mdi:battery"
 
-    def get_data_source(self, span_panel: SpanPanel):
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
         return span_panel.storage_battery
 
 
@@ -343,7 +346,7 @@ async def async_setup_entry(
     coordinator: SpanPanelCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
-    entities: list[SpanSensorBase] = []
+    entities: List[SpanSensorBase[Any]] = []
 
     for description in PANEL_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
@@ -352,23 +355,23 @@ async def async_setup_entry(
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
 
     if config_entry.options.get(INVERTER_ENABLE, False):
-        for description in INVERTER_SENSORS:
-            entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+        for description_i in INVERTER_SENSORS:
+            entities.append(SpanPanelPanelStatus(coordinator, description_i, span_panel))
 
-    for description in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description, span_panel))
+    for description_ss in STATUS_SENSORS:
+        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
 
-    for description in CIRCUITS_SENSORS:
-        for id, circuit_data in span_panel.circuits.items():
+    for description_cs in CIRCUITS_SENSORS:
+        for id_c, circuit_data in span_panel.circuits.items():
             entities.append(
                 SpanPanelCircuitSensor(
-                    coordinator, description, id, circuit_data.name, span_panel
+                    coordinator, description_cs, id_c, circuit_data.name, span_panel
                 )
             )
     if config_entry.options.get(BATTERY_ENABLE, False):
-        for description in STORAGE_BATTERY_SENSORS:
+        for description_sb in STORAGE_BATTERY_SENSORS:
             entities.append(
-                SpanPanelStorageBatteryStatus(coordinator, description, span_panel)
+                SpanPanelStorageBatteryStatus(coordinator, description_sb, span_panel)
             )
 
     async_add_entities(entities)

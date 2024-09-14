@@ -39,7 +39,7 @@ SYSTEM_ETHERNET_LINK = "eth0Link"
 SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
 
-STAUS_SOFTWARE_VER = "softwareVer"
+STATUS_SOFTWARE_VER = "softwareVer"
 DSM_GRID_STATE = "dsmGridState"
 DSM_STATE = "dsmState"
 CURRENT_RUN_CONFIG = "currentRunConfig"
