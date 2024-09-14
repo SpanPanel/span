@@ -2,8 +2,9 @@
 *.pyc
 /.project
 .DS_Store
-.vscode/settings.json
-.vscode/extensions.json
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .direnv/
 env/
-.envrc 
+.envrc
