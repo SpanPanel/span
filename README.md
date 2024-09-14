@@ -150,7 +150,7 @@ Additional contributors:
 
 ## Issues
 
-If you have a problem, feel free to [open an issue](https://github.com/cayossarian/span/issues), but please know issues regarding your network, Span configuration, or home electrical system are outside of our purview.
+If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/Span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
 
 For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/Span/pulls). We're generally very happy to have a starting point when making a change.
 
