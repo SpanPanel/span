@@ -19,6 +19,7 @@ pre-commit = "^3.8.0"
 pydantic = "^2.9.1"
 voluptuous = "^0.15.2"
 voluptuous-stubs = "^0.1.1"
+python-direnv = "^0.2.2"
 
 [build-system]
 requires = ["poetry-core"]

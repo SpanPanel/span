@@ -1,0 +1,15 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/your/path/to/HA/core"
+    ],
+    "python.analysis.extraPaths": [
+        "/your/path/to/HA/core"
+    ],
+    "files.associations": {
+        "*.yaml": "home-assistant"
+    },
+    "git.enabled": true,
+    "git.env": {
+    "HA_CORE_PATH": "/your/path/to/HA/core",
+    "PATH": "/your/path/to/poetry:${env:PATH}"
+}

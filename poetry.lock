@@ -399,6 +399,17 @@ files = [
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "python-direnv"
+version = "0.2.2"
+description = "Loads environment variables from a direnv .envrc file."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "python_direnv-0.2.2-py3-none-any.whl", hash = "sha256:a617d14f093f13dd9a858e88c2914bdb16edee992b5148efd8c23c10ca1b50d9"},
+    {file = "python_direnv-0.2.2.tar.gz", hash = "sha256:0fe2fb834c901d675edcacc688689cfcf55cf06d9cf27dc7d3768a6c38c35f00"},
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 description = "YAML parser and emitter for Python"
@@ -579,4 +590,4 @@ typing-extensions = ">=3.7.4"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "cdf7ad3a10e91d2547dd921ed72833d4163a7b5b7559abb233dce9548bc8ab39"
+content-hash = "2ead8382ff5e9728ad6020835181764f8bb26dafa2acd209cff8378ffcb9035c"
