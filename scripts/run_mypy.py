@@ -11,8 +11,8 @@ def main():
         sys.exit(1)
     else:
         # Run mypy with the provided arguments
-        result = subprocess.run(['poetry', 'run', 'mypy'] + sys.argv[1:])
-        sys.exit(result.returncode)
+        result = subprocess.check_call(['poetry', 'run', 'mypy'] + sys.argv[1:])
+        sys.exit(result)
 
 if __name__ == '__main__':
     main()
