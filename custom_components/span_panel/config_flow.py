@@ -1,3 +1,5 @@
+"""Span Panel Config Flow"""
+
 from __future__ import annotations
 
 import enum
@@ -8,14 +10,16 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
+from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
+                                 CONF_SCAN_INTERVAL)
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
-from .const import DOMAIN, DEFAULT_SCAN_INTERVAL
-from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
+                      INVERTER_LEG2)
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,7 +45,7 @@ class TriggerFlowType(enum.Enum):
 def create_api_controller(
     hass: HomeAssistant, host: str, access_token: str | None = None
 ) -> SpanPanelApi:
-    params = {"host": host, "async_client": get_async_client(hass)}
+    params: dict[str, Any] = {"host": host, "async_client": get_async_client(hass)}
     if access_token is not None:
         params["access_token"] = access_token
     return SpanPanelApi(**params)
@@ -54,7 +58,7 @@ async def validate_host(
     return await span_api.ping()
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     """
     Handle a config flow for Span Panel.
     """
@@ -70,7 +74,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._is_flow_setup: bool = False
 
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str):
-        assert self._is_flow_setup is False
+        """Set up the flow."""
+
+        if self._is_flow_setup is True:
+            raise AssertionError("Flow is already set up")
 
         span_api = create_api_controller(self.hass, host)
         panel_status = await span_api.get_status_data()
@@ -84,9 +91,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._is_flow_setup = True
 
     def ensure_flow_is_set_up(self):
-        assert self._is_flow_setup is True
+        """Ensure the flow is set up."""
+        if self._is_flow_setup is False:
+            raise AssertionError("Flow is not set up")
 
     async def ensure_not_already_configured(self):
+        """Ensure the panel is not already configured."""
         self.ensure_flow_is_set_up()
 
         # Abort if we had already set this panel up
@@ -95,7 +105,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_zeroconf(
         self, discovery_info: zeroconf.ZeroconfServiceInfo
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Handle a flow initiated by zeroconf discovery.
         """
@@ -116,7 +126,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Handle a flow initiated by the user.
         """
@@ -138,17 +148,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.ensure_not_already_configured()
         return await self.async_step_choose_auth_type()
 
-    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> FlowResult:
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
         """
         Handle a flow initiated by re-auth.
         """
 
         await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST])
-        return await self.async_step_auth_proximity(entry_data)
+        return await self.async_step_auth_proximity(dict(entry_data))
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Prompt user to confirm a discovered Span Panel.
         """
@@ -164,15 +176,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        # Pass the (empty) dictionary to signal the call came from this step, not abort
+        # Pass (empty) dictionary to signal the call came from this step, not abort
         return await self.async_step_choose_auth_type(user_input)
 
     async def async_step_choose_auth_type(
-        self,
-        user_input=None 
-    ) -> FlowResult:
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the authentication method to use."""
         self.ensure_flow_is_set_up()
-        
+
         # None means this method was called by HA core as an abort
         if user_input is None:
             return await self.async_step_confirm_discovery()
@@ -188,24 +200,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_auth_proximity(
         self,
         entry_data: dict[str, Any] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Step that guide users through the proximity authentication process.
         """
         self.ensure_flow_is_set_up()
 
-        span_api = create_api_controller(self.hass, self.host)
+        span_api = create_api_controller(self.hass, self.host or "")
         panel_status = await span_api.get_status_data()
 
-        #Check if running firmware newer or older than r202342
+        # Check if running firmware newer or older than r202342
         if panel_status.proximity_proven is not None:
-
-             # Reprompt until we are able to do proximity auth for new firmware
+            # Reprompt until we are able to do proximity auth for new firmware
             proximity_verified = panel_status.proximity_proven
             if proximity_verified is False:
-                return self.async_show_form(
-                    step_id="auth_proximity"
-                )
+                return self.async_show_form(step_id="auth_proximity")
         else:
             # Reprompt until we are able to do proximity auth for old firmware
             remaining_presses = panel_status.remaining_auth_unlock_button_presses
@@ -213,6 +222,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="auth_proximity",
                 )
+
+        # Ensure host is set
+        if not self.host:
+            return self.async_abort(reason="host_not_set")
 
         # Ensure token is valid
         self.access_token = await span_api.get_access_token()
@@ -224,7 +237,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_auth_token(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Step that prompts user for access token.
         """
@@ -238,36 +251,58 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Ensure token is valid
         if CONF_ACCESS_TOKEN in user_input and user_input[CONF_ACCESS_TOKEN]:
             self.access_token = user_input[CONF_ACCESS_TOKEN]
+            if not self.host:
+                return self.async_abort(reason="host_not_set")
+
             if not await validate_host(self.hass, self.host, self.access_token):
                 return self.async_abort(reason="invalid_access_token")
 
             return await self.async_step_resolve_entity(user_input)
 
-        return await self.async_step_choose_auth_type(user_input) 
-
+        return await self.async_step_choose_auth_type(user_input)
 
     async def async_step_resolve_entity(
         self,
         entry_data: dict[str, Any] | None = None,
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
+        """Resolve the entity."""
         self.ensure_flow_is_set_up()
 
         # Continue based on flow trigger type
         match self.trigger_flow_type:
             case TriggerFlowType.CREATE_ENTRY:
+                if self.host is None:
+                    raise ValueError("Host cannot be None when creating a new entry")
+                if self.serial_number is None:
+                    raise ValueError(
+                        "Serial number cannot be None when creating a new entry"
+                    )
+                if self.access_token is None:
+                    raise ValueError(
+                        "Access token cannot be None when creating a new entry"
+                    )
                 return self.create_new_entry(
                     self.host, self.serial_number, self.access_token
                 )
             case TriggerFlowType.UPDATE_ENTRY:
+                if self.host is None:
+                    raise ValueError("Host cannot be None when updating an entry")
+                if self.access_token is None:
+                    raise ValueError(
+                        "Access token cannot be None when updating an entry"
+                    )
                 return self.update_existing_entry(
-                    self.context["entry_id"], self.host, self.access_token, entry_data
+                    self.context["entry_id"],
+                    self.host,
+                    self.access_token,
+                    entry_data or {},
                 )
             case _:
                 raise NotImplementedError()
 
     def create_new_entry(
         self, host: str, serial_number: str, access_token: str
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Creates a new SPAN panel entry.
         """
@@ -281,19 +316,22 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         host: str,
         access_token: str,
         entry_data: Mapping[str, Any],
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """
         Updates an existing entry with new configurations.
         """
         # Update the existing data with reauthed data
-        entry_data[CONF_HOST] = host
-        entry_data[CONF_ACCESS_TOKEN] = access_token
+        # Create a new mutable copy of the entry data (Mapping is immutable)
+        updated_data = dict(entry_data)
+        updated_data[CONF_HOST] = host
+        updated_data[CONF_ACCESS_TOKEN] = access_token
 
         # An existing entry must exist before we can update it
         entry = self.hass.config_entries.async_get_entry(entry_id)
-        assert entry
+        if entry is None:
+            raise AssertionError("Entry does not exist")
 
-        self.hass.config_entries.async_update_entry(entry, data=entry_data)
+        self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
         return self.async_abort(reason="reauth_successful")
 
@@ -307,13 +345,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle a option flow for Span Panel."""
+
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
         self.options = dict(config_entry.options)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
@@ -323,15 +363,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         schema = vol.Schema(
             {
+                vol.Optional(CONF_SCAN_INTERVAL, default=curr_scan_interval): vol.All(
+                    int, vol.Range(min=5)
+                ),  # Specify the max value
                 vol.Optional(
-                    CONF_SCAN_INTERVAL, default=curr_scan_interval):
-                        vol.All(int, vol.Range(min=5)),  # Specify the max value
-                vol.Optional(INVERTER_ENABLE, default=self.options.get(
-                    "enable_solar_circuit", False)): bool,
-                vol.Optional(INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)):
-                    vol.All(vol.Coerce(int), vol.Range(min=0)),  # Specify the max value
-                vol.Optional(INVERTER_LEG2, default=self.options.get(INVERTER_LEG2, 0)):
-                    vol.All(vol.Coerce(int), vol.Range(min=0)),  # Specify the max value
+                    BATTERY_ENABLE,
+                    default=self.options.get("enable_battery_percentage", False),
+                ): bool,
+                vol.Optional(
+                    INVERTER_ENABLE,
+                    default=self.options.get("enable_solar_circuit", False),
+                ): bool,
+                vol.Optional(
+                    INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)
+                ): vol.All(
+                    vol.Coerce(int), vol.Range(min=0)
+                ),  # Specify the max value
+                vol.Optional(
+                    INVERTER_LEG2, default=self.options.get(INVERTER_LEG2, 0)
+                ): vol.All(
+                    vol.Coerce(int), vol.Range(min=0)
+                ),  # Specify the max value
             }
         )
 

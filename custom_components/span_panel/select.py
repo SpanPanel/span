@@ -1,16 +1,16 @@
 # pyright: reportShadowedImports=false
 import logging
+from functools import cached_property
+from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import COORDINATOR, DOMAIN, CircuitPriority
+from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
 
@@ -19,10 +19,10 @@ ICON = "mdi:toggle-switch"
 _LOGGER = logging.getLogger(__name__)
 
 
-class SpanPanelCircuitsSelect(CoordinatorEntity, SelectEntity):
+class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEntity):
     """Represent a switch entity."""
 
-    def __init__(self, coordinator: DataUpdateCoordinator, id: str, name: str) -> None:
+    def __init__(self, coordinator: SpanPanelCoordinator, id: str, name: str) -> None:
         _LOGGER.debug("CREATE SELECT %s", name)
         span_panel: SpanPanel = coordinator.data
 
@@ -33,18 +33,18 @@ class SpanPanelCircuitsSelect(CoordinatorEntity, SelectEntity):
         self._attr_device_info = panel_to_device_info(span_panel)
         super().__init__(coordinator)
 
-    @property
+    @cached_property
     def name(self):
         """Return the switch name."""
         span_panel: SpanPanel = self.coordinator.data
         return f"{span_panel.circuits[self.id].name} Circuit Priority"
 
-    @property
+    @cached_property
     def options(self) -> list[str]:
         return [e.value for e in CircuitPriority if e != CircuitPriority.UNKNOWN]
 
-    @property
-    def current_option(self) -> str:
+    @cached_property
+    def current_option(self) -> str | None:
         span_panel: SpanPanel = self.coordinator.data
         priority = span_panel.circuits[self.id].priority
         return CircuitPriority[priority].value
@@ -65,15 +65,15 @@ async def async_setup_entry(
     """Set up envoy sensor platform."""
 
     _LOGGER.debug("ASYNC SETUP ENTRY SWITCH")
-    data: dict = hass.data[DOMAIN][config_entry.entry_id]
+    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
 
-    coordinator: DataUpdateCoordinator = data[COORDINATOR]
+    coordinator: SpanPanelCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
     entities: list[SpanPanelCircuitsSelect] = []
 
-    for id, circuit_data in span_panel.circuits.items():
+    for circuit_id, circuit_data in span_panel.circuits.items():
         if circuit_data.is_user_controllable:
-            entities.append(SpanPanelCircuitsSelect(coordinator, id, circuit_data.name))
+            entities.append(SpanPanelCircuitsSelect(coordinator, circuit_id, circuit_data.name))
 
     async_add_entities(entities)
