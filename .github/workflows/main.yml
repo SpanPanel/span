@@ -18,13 +18,11 @@ permissions:
   actions: read
 
 jobs:
-  validate:
-    name: Hassfest
-    runs-on: "ubuntu-latest"
-    steps:
-      - uses: "actions/checkout@v4"
-      - uses: "home-assistant/actions/hassfest@master"
-
   lint:
     name: Lint Code Base
     uses: ./.github/workflows/lint.yml
+
+  hacs:
+    name: HACS Action
+    needs: lint
+    uses: ./.github/workflows/hacs.yml
