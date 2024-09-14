@@ -1,12 +1,12 @@
-# Span Panel Integration for Home Assistant
+# SPAN Panel Integration for Home Assistant
 
-[Home Assistant](https://www.home-assistant.io/) Integration for [Span smart Panel](https://www.span.io/panel).
+[Home Assistant](https://www.home-assistant.io/) Integration for [SPAN Panel](https://www.span.io/panel).
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/) [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/) [![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/) [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 
-As Span has not published a documented API, we cannot guarantee this integration will work for you. The integration may break as your panel is updated if Span changes the API in an incompatible way.
+As SPAN has not published a documented API, we cannot guarantee this integration will work for you. The integration may break as your panel is updated if SPAN changes the API in an incompatible way.
 
-The author(s) will try to keep this integration working, but cannot provide technical support for either Span or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
+The author(s) will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
 What this integration does do is provide the user a Home Assistant integration that a user would find useful if they wanted so understand their power consumption, energy usage, and control panel circuits.
 
@@ -21,7 +21,7 @@ What this integration does do is provide the user a Home Assistant integration t
 7. Click `Devices & Services' and you should see this integration.
 8. Click `+ Add Integration`.
 9. Search for "Span".
-10. Enter the IP of your Span Panel to begin setup, or select the automatically discovered panel if it shows up.
+10. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up.
 11. Create an authentication token (see below) or use the door proximity authentication. Obtaining a token may be more durable to network changes, for example,if you change client hostname or IP.
 12. See post install steps for solar or scan frequency configuration.
 
@@ -33,7 +33,7 @@ If you don't already have a token (most people), you just need to prove that you
 
 #### Proof of Proximity
 
-Simply open the door to your Span Panel and press the door sensor button at the top 3 times in succession.
+Simply open the door to your SPAN Panel and press the door sensor button at the top 3 times in succession.
 The lights ringing the frame of your panel should blink momentarily, and the Panel will now be "unlocked" for 15 minutes (it may in fact be significantly longer, but 15 is the documented period).
 While the panel is unlocked, it will allow the integration to create a new auth token.
 
@@ -44,14 +44,14 @@ They are documented here in the hope someone may find them useful.
 
 To get an auth token:
 
-1. Using a tool like the VS code extension 'Thunder Client' or curl make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local Span Integration"}`.
+1. Using a tool like the VS code extension 'Thunder Client' or curl make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local SPAN Integration"}`.
    - Use a unique value for UNIQUEID. Six random alphanumeric characters would be a reasonable choice. If the name conflicts with one that's already been created, then the request will fail.
-   - Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local Span Integration"}'`
+   - Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local SPAN Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
 3. Store the value from the `"accessToken"` property of the response. (It will be a long string of random characters). The token can be used with all future SPAN integration configurations.
 4. This token can be used in the intial configuration. If you were calling the SPAN API directly all requests would load the HTTP header `"Authorization: Bearer <your token here>"`
 
-_(If you have multiple Span Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
+_(If you have multiple SPAN Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
 If you have this auth token, you can enter it in the "Existing Auth Token" flow in the configuration menu.
 
@@ -63,7 +63,7 @@ Optional configuration
 - Battery Storage Percentage.
 - Enable/Map Solar Inverter Sensors to circuit(s).
   The solar in the USA is normally a combination of one or two leg poistions 1-32 or 0 indicating none.
-  Look in your Span app for "solar" if any and identify the individual circuit(s).
+  Look in your SPAN app for "solar" if any and identify the individual circuit(s).
   The leg values are combined into a single set of "inverter" sensors, for example in the USA two 120v legs of a 240v circuit positions 30/32.
   In Europe this configuration could be a single 230v leg where one leg is set to 0.
 
@@ -101,7 +101,7 @@ If you are getting warnings in the log about a feed through sensor that has stat
 
 ## Devices & Entities
 
-This integration will provide a device for your span panel. This device will have entities for:
+This integration will provide a device for your SPAN panel. This device will have entities for:
 
 - User Managed Circuits
   - On/Off Switch (user managed circuits)
@@ -145,7 +145,7 @@ This repository is a fork in a long line of span forks that may or may not be st
 
 Additional contributors:
 
-- pavandave/span
+- pavandave
 - sargonas
 
 ## Issues
@@ -158,7 +158,7 @@ For those motivated, please consider offering suggestions for improvement in the
 
 This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
 
-If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the Span Panel integration in your Home Assistant instance while debugging in the HA core project and using theh span workspace for git and other project operations.
+If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `SpanPanel/Span` workspace for git and other project operations.
 
 For instance you can:
 
@@ -174,7 +174,7 @@ ln -s <span project path>/span/custom_components/span_panel <HA core path>/confi
 4. Run `poetry run pre-commit install` to install pre-commit hooks.
 5. Optionally use `poetry run pre-commit run --all-files` to manually run pre-commit hooks on files locally in your environment as you make changes.
 
-The linters may make changes to files when you try to commit, for example to sort imports. After the pre-commit hook run succeeds, your commit can proceed.
+The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed by the pre-commit hooks will be unstaged. After reviewing these changes, you can re-stage the changes and rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
 
 ### VS Code
 
