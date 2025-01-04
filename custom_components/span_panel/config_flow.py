@@ -63,7 +63,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     Handle a config flow for Span Panel.
     """
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self.trigger_flow_type: TriggerFlowType | None = None
@@ -339,55 +339,62 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> OptionsFlowHandler:
-        """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow by passing entry_id."""
+        return OptionsFlowHandler(entry_id=config_entry.entry_id)
 
+
+OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_SCAN_INTERVAL): vol.All(
+            int, vol.Range(min=5)
+        ),
+        vol.Optional(BATTERY_ENABLE): bool,
+        vol.Optional(INVERTER_ENABLE): bool,
+        vol.Optional(INVERTER_LEG1): vol.All(
+            vol.Coerce(int), vol.Range(min=0)
+        ),
+        vol.Optional(INVERTER_LEG2): vol.All(
+            vol.Coerce(int), vol.Range(min=0)
+        ),
+    }
+)
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle a option flow for Span Panel."""
+    """Handle the options flow for Span Panel without storing config_entry."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-        self.options = dict(config_entry.options)
+    def __init__(self, entry_id: str) -> None:
+        """Initialize with entry_id only."""
+        self._entry_id = entry_id
+
+    @property
+    def entry(self) -> config_entries.ConfigEntry:
+        """Get the config entry using the stored entry_id."""
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        if not entry:
+            raise ValueError("Config entry not found")
+        return entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        curr_scan_interval = self.config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
-        )
-
-        schema = vol.Schema(
-            {
-                vol.Optional(CONF_SCAN_INTERVAL, default=curr_scan_interval): vol.All(
-                    int, vol.Range(min=5)
-                ),  # Specify the max value
-                vol.Optional(
-                    BATTERY_ENABLE,
-                    default=self.options.get("enable_battery_percentage", False),
-                ): bool,
-                vol.Optional(
-                    INVERTER_ENABLE,
-                    default=self.options.get("enable_solar_circuit", False),
-                ): bool,
-                vol.Optional(
-                    INVERTER_LEG1, default=self.options.get(INVERTER_LEG1, 0)
-                ): vol.All(
-                    vol.Coerce(int), vol.Range(min=0)
-                ),  # Specify the max value
-                vol.Optional(
-                    INVERTER_LEG2, default=self.options.get(INVERTER_LEG2, 0)
-                ): vol.All(
-                    vol.Coerce(int), vol.Range(min=0)
-                ),  # Specify the max value
-            }
-        )
+        defaults = {
+            CONF_SCAN_INTERVAL: self.entry.options.get(
+                CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
+            ),
+            BATTERY_ENABLE: self.entry.options.get("enable_battery_percentage", False),
+            INVERTER_ENABLE: self.entry.options.get("enable_solar_circuit", False),
+            INVERTER_LEG1: self.entry.options.get(INVERTER_LEG1, 0),
+            INVERTER_LEG2: self.entry.options.get(INVERTER_LEG2, 0),
+        }
 
         return self.async_show_form(
             step_id="init",
-            data_schema=schema,
+            data_schema=self.add_suggested_values_to_schema(
+                OPTIONS_SCHEMA, defaults
+            ),
         )
