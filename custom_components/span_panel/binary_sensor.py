@@ -90,11 +90,14 @@ class SpanPanelBinarySensor(
     @property
     def is_on(self) -> bool | None:
         """Return the status of the sensor."""
+        # Get atomic snapshot of panel data
         span_panel: SpanPanel = self.coordinator.data
         description = cast(
             SpanPanelBinarySensorEntityDescription, self.entity_description
         )
-        status_is_on = description.value_fn(span_panel.status)
+        # Get atomic snapshot of status data
+        status = span_panel.status
+        status_is_on = description.value_fn(status)
         _LOGGER.debug("BINSENSOR [%s] is_on:[%s]", self._attr_name, status_is_on)
         return status_is_on
 

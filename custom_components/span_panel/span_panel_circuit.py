@@ -1,10 +1,12 @@
-import dataclasses
+from dataclasses import dataclass, field
 from typing import Any
+from dataclasses import dataclass, replace
+from copy import deepcopy
 
 from .const import CircuitRelayState
 
 
-@dataclasses.dataclass
+@dataclass
 class SpanPanelCircuit:
     circuit_id: str
     name: str
@@ -19,6 +21,11 @@ class SpanPanelCircuit:
     is_user_controllable: bool
     is_sheddable: bool
     is_never_backup: bool
+    breaker_positions: list = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+    circuit_config: dict = field(default_factory=dict)
+    state_config: dict = field(default_factory=dict)
+    raw_data: dict = field(default_factory=dict)
 
     @property
     def is_relay_closed(self):
@@ -26,18 +33,27 @@ class SpanPanelCircuit:
 
     @staticmethod
     def from_dict(data: dict[str, Any]):
+        data_copy = deepcopy(data)
         return SpanPanelCircuit(
-            circuit_id=data["id"],
-            name=data["name"],
-            relay_state=data["relayState"],
-            instant_power=data["instantPowerW"],
-            instant_power_update_time=data["instantPowerUpdateTimeS"],
-            produced_energy=data["producedEnergyWh"],
-            consumed_energy=data["consumedEnergyWh"],
-            energy_accum_update_time=data["energyAccumUpdateTimeS"],
-            tabs=data["tabs"],
-            priority=data["priority"],
-            is_user_controllable=data["isUserControllable"],
-            is_sheddable=data["isSheddable"],
-            is_never_backup=data["isNeverBackup"],
+            circuit_id=data_copy["id"],
+            name=data_copy["name"],
+            relay_state=data_copy["relayState"],
+            instant_power=data_copy["instantPowerW"],
+            instant_power_update_time=data_copy["instantPowerUpdateTimeS"],
+            produced_energy=data_copy["producedEnergyWh"],
+            consumed_energy=data_copy["consumedEnergyWh"],
+            energy_accum_update_time=data_copy["energyAccumUpdateTimeS"],
+            tabs=data_copy["tabs"],
+            priority=data_copy["priority"],
+            is_user_controllable=data_copy["isUserControllable"],
+            is_sheddable=data_copy["isSheddable"],
+            is_never_backup=data_copy["isNeverBackup"],
+            circuit_config=data_copy.get("config", {}),
+            state_config=data_copy.get("state", {}),
+            raw_data=data_copy
         )
+
+    def copy(self) -> 'SpanPanelCircuit':
+        """Create a deep copy for atomic operations."""
+        # Circuit contains nested mutable objects, use deepcopy
+        return deepcopy(self)

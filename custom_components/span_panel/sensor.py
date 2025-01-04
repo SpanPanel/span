@@ -269,10 +269,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     @property
     def native_value(self) -> float | str | None:
         """Return the state of the sensor."""
+        # Get atomic snapshot of panel data
         span_panel: SpanPanel = self.coordinator.data
         value_function = getattr(self.entity_description, "value_fn", None)
         if value_function is not None:
-            value = value_function(self.get_data_source(span_panel))
+            # Get atomic snapshot of required data source
+            data_source = self.get_data_source(span_panel)
+            value = value_function(data_source)
         else:
             value = None
         _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)

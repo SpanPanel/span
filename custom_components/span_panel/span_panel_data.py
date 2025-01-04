@@ -1,12 +1,13 @@
 """Span Panel Data"""
 
-import dataclasses
+from copy import deepcopy
+from dataclasses import dataclass, replace, field
 from typing import Any
 
 from .options import INVERTER_MAXLEG, Options
 
 
-@dataclasses.dataclass
+@dataclass
 class SpanPanelData:
     main_relay_state: str
     main_meter_energy_produced: float
@@ -23,9 +24,19 @@ class SpanPanelData:
     solar_inverter_instant_power: float
     solar_inverter_energy_produced: float
     solar_inverter_energy_consumed: float
+    main_meter_energy: dict = field(default_factory=dict)
+    feedthrough_energy: dict = field(default_factory=dict)
+    solar_data: dict = field(default_factory=dict)
+    inverter_data: dict = field(default_factory=dict)
+    relay_states: dict = field(default_factory=dict)
+    solar_inverter_data: dict = field(default_factory=dict)
+    state_data: dict = field(default_factory=dict)
+    raw_data: dict = field(default_factory=dict)
 
-    @staticmethod
-    def from_dict(data: dict[str, Any], options: Options | None) -> "SpanPanelData":
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], options: Options | None = None) -> "SpanPanelData":
+        """Create instance from dict with deep copy of input data"""
+        data = deepcopy(data)
         common_data: dict[str, Any] = {
             "main_relay_state": str(data["mainRelayState"]),
             "main_meter_energy_produced": float(
@@ -50,6 +61,11 @@ class SpanPanelData:
             "solar_inverter_instant_power": 0.0,
             "solar_inverter_energy_produced": 0.0,
             "solar_inverter_energy_consumed": 0.0,
+            "main_meter_energy": data.get("mainMeterEnergy", {}),
+            "feedthrough_energy": data.get("feedthroughEnergy", {}),
+            "solar_inverter_data": data.get("solarInverter", {}),
+            "state_data": data.get("state", {}),
+            "raw_data": data
         }
 
         if options and options.enable_solar_sensors:
@@ -66,4 +82,8 @@ class SpanPanelData:
                         branch["exportedActiveEnergyWh"]
                     )
 
-        return SpanPanelData(**common_data)
+        return cls(**common_data)
+
+    def copy(self) -> 'SpanPanelData':
+        """Create a deep copy for atomic operations."""
+        return deepcopy(self)

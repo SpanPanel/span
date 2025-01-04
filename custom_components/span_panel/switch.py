@@ -44,16 +44,26 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         span_panel: SpanPanel = self.coordinator.data
-        curr_circuit = span_panel.circuits[self.id]
-        await span_panel.api.set_relay(curr_circuit, CircuitRelayState.CLOSED)
-        await self.coordinator.async_request_refresh()
+        circuits = span_panel.circuits  # Get atomic snapshot of circuits
+        if self.id in circuits:
+            # Create a copy of the circuit for the operation
+            curr_circuit = circuits[self.id].copy()
+            # Perform the state change
+            await span_panel.api.set_relay(curr_circuit, CircuitRelayState.CLOSED)
+            # Request refresh to get the new state
+            await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         span_panel: SpanPanel = self.coordinator.data
-        curr_circuit = span_panel.circuits[self.id]
-        await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
-        await self.coordinator.async_request_refresh()
+        circuits = span_panel.circuits  # Get atomic snapshot of circuits
+        if self.id in circuits:
+            # Create a copy of the circuit for the operation
+            curr_circuit = circuits[self.id].copy()
+            # Perform the state change
+            await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
+            # Request refresh to get the new state
+            await self.coordinator.async_request_refresh()
 
     @cached_property
     def icon(self):
@@ -67,10 +77,17 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         return f"{span_panel.circuits[self.id].name} Breaker"
 
     @property
-    def is_on(self) -> bool:
-        """Get switch state."""
+    def is_on(self) -> bool | None:
+        """Return true if the switch is on."""
         span_panel: SpanPanel = self.coordinator.data
-        return span_panel.circuits[self.id].is_relay_closed
+        # Get atomic snapshot of circuits data
+        circuits = span_panel.circuits
+        circuit = circuits.get(self.id)
+        if circuit:
+            # Use copy to ensure atomic state
+            circuit = circuit.copy()
+            return circuit.relay_state == CircuitRelayState.CLOSED.name
+        return None
 
 
 async def async_setup_entry(

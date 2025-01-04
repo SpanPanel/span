@@ -3,6 +3,7 @@
 import logging
 import uuid
 from typing import Any, Dict
+from copy import deepcopy
 
 from homeassistant.helpers.httpx_client import httpx
 
@@ -71,7 +72,9 @@ class SpanPanelApi:
     async def get_panel_data(self) -> SpanPanelData:
         """Get the panel data"""
         response = await self.get_data(URL_PANEL)
-        panel_data = SpanPanelData.from_dict(response.json(), self.options)
+        # Deep copy the raw data before processing in case cached data cleaned up
+        raw_data = deepcopy(response.json())
+        panel_data = SpanPanelData.from_dict(raw_data, self.options)
 
         # Span Panel API might return empty result.
         # We use relay state == UNKNOWN as an indication of that scenario.
@@ -83,7 +86,7 @@ class SpanPanelApi:
     async def get_circuits_data(self) -> Dict[str, SpanPanelCircuit]:
         """Get the circuits data"""
         response = await self.get_data(URL_CIRCUITS)
-        raw_circuits_data = response.json()[SPAN_CIRCUITS]
+        raw_circuits_data = deepcopy(response.json()[SPAN_CIRCUITS])
 
         if not raw_circuits_data:
             raise SpanPanelReturnedEmptyData()

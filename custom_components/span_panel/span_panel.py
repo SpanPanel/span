@@ -1,6 +1,9 @@
 """Module to read production and consumption values from a Span panel."""
 
 import logging
+from typing import Dict
+from homeassistant.helpers.httpx_client import httpx
+from copy import deepcopy
 
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
@@ -31,43 +34,94 @@ SYSTEM_WIFI_LINK = "wlanLink"
 
 
 class SpanPanel:
-    """Instance of a Span panel"""
+    """Class to manage the Span Panel."""
 
     def __init__(
-        self, host: str, access_token: str, options: Options, async_client=None
+        self,
+        host: str,
+        access_token: str | None = None,
+        options: Options | None = None,
+        async_client: httpx.AsyncClient | None = None,
     ) -> None:
+        """Initialize the Span Panel."""
+        self._options = options  # Make it protected
         self.api = SpanPanelApi(host, access_token, options, async_client)
-        self.updated_at: int = 0
-        self.status: SpanPanelHardwareStatus
-        self.panel: SpanPanelData
-        self.circuits: dict[str, SpanPanelCircuit]
-        self.storage_battery: SpanPanelStorageBattery
+        self._status: SpanPanelHardwareStatus | None = None
+        self._panel: SpanPanelData | None = None
+        self._circuits: Dict[str, SpanPanelCircuit] = {}
+        self._storage_battery: SpanPanelStorageBattery | None = None
 
     @property
     def host(self) -> str:
+        """Return the host of the panel."""
         return self.api.host
 
+    @property
+    def options(self) -> Options | None:
+        """Get options data atomically"""
+        return deepcopy(self._options) if self._options else None
+
+    def _update_status(self, new_status: SpanPanelHardwareStatus) -> None:
+        """Atomic update of status data"""
+        self._status = deepcopy(new_status)
+
+    def _update_panel(self, new_panel: SpanPanelData) -> None:
+        """Atomic update of panel data"""
+        self._panel = deepcopy(new_panel)
+
+    def _update_circuits(self, new_circuits: Dict[str, SpanPanelCircuit]) -> None:
+        """Atomic update of circuits data"""
+        self._circuits = deepcopy(new_circuits)
+
+    def _update_storage_battery(self, new_battery: SpanPanelStorageBattery) -> None:
+        """Atomic update of storage battery data"""
+        self._storage_battery = deepcopy(new_battery)
+
     async def update(self) -> None:
+        """Update all panel data atomically"""
         try:
-            self.status = await self.api.get_status_data()
-        except SpanPanelReturnedEmptyData:
-            _LOGGER.warning("Span Panel API returned empty result. Ignoring...")
+            _LOGGER.debug("Starting panel update")
+            # Get new data
+            new_status = await self.api.get_status_data()
+            _LOGGER.debug("Got status data: %s", new_status)
+            new_panel = await self.api.get_panel_data()
+            _LOGGER.debug("Got panel data: %s", new_panel)
+            new_circuits = await self.api.get_circuits_data()
+            _LOGGER.debug("Got circuits data: %s", new_circuits)
+            
+            # Atomic updates
+            self._update_status(new_status)
+            self._update_panel(new_panel)
+            self._update_circuits(new_circuits)
 
-        try:
-            self.panel = await self.api.get_panel_data()
-        except SpanPanelReturnedEmptyData:
-            _LOGGER.warning("Span Panel API returned empty result. Ignoring...")
+            if self._options and self._options.enable_battery_percentage:
+                new_battery = await self.api.get_storage_battery_data()
+                _LOGGER.debug("Got battery data: %s", new_battery)
+                self._update_storage_battery(new_battery)
 
-        try:
-            self.circuits = await self.api.get_circuits_data()
+            _LOGGER.debug("Panel update completed successfully")
         except SpanPanelReturnedEmptyData:
-            _LOGGER.warning("Span Panel API returned empty result. Ignoring...")
+            _LOGGER.warning("Span Panel returned empty data")
+        except Exception as err:
+            _LOGGER.error("Error updating panel: %s", err, exc_info=True)
+            raise
 
-        try:
-            self.storage_battery = await self.api.get_storage_battery_data()
+    @property
+    def status(self) -> SpanPanelHardwareStatus:
+        """Get status data atomically"""
+        return deepcopy(self._status) if self._status else None
 
-        except SpanPanelReturnedEmptyData:
-            _LOGGER.warning(
-                "Span Panel API returned empty result for battery storage. "
-                "Ignoring..."
-            )
+    @property 
+    def panel(self) -> SpanPanelData:
+        """Get panel data atomically"""
+        return deepcopy(self._panel) if self._panel else None
+
+    @property
+    def circuits(self) -> Dict[str, SpanPanelCircuit]:
+        """Get circuits data atomically"""
+        return deepcopy(self._circuits)
+
+    @property
+    def storage_battery(self) -> SpanPanelStorageBattery:
+        """Get storage battery data atomically"""
+        return deepcopy(self._storage_battery) if self._storage_battery else None

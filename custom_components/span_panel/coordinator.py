@@ -38,7 +38,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""
         try:
+            _LOGGER.debug("Starting coordinator update")
             await asyncio.wait_for(self.span_panel.update(), timeout=API_TIMEOUT)
+            _LOGGER.debug("Coordinator update successful - data: %s", self.span_panel)
         except httpx.HTTPStatusError as err:
             if err.response.status_code == httpx.codes.UNAUTHORIZED:
                 raise ConfigEntryAuthFailed from err
