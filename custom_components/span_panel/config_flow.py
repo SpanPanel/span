@@ -234,7 +234,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         else:
             # Reprompt until we are able to do proximity auth for old firmware
             remaining_presses = panel_status.remaining_auth_unlock_button_presses
-            if remaining_presses != 0:
+            if (remaining_presses != 0):
                 return self.async_show_form(
                     step_id="auth_proximity",
                 )
@@ -361,6 +361,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
         return self.async_abort(reason="reauth_successful")
+
+    async def async_migrate_entry(self, entry: config_entries.ConfigEntry) -> bool:
+        """Migrate old entry."""
+        _LOGGER.debug("Migrating from version %s", entry.version)
+
+        if entry.version == 1:
+            new_data = {**entry.data}
+            new_options = {**entry.options}
+
+            entry.version = 2
+            self.hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
+
+        _LOGGER.info("Migration to version %2 successful", entry.version)
+        return True
 
     @staticmethod
     @callback
