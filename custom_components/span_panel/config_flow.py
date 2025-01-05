@@ -14,13 +14,14 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
                                  CONF_SCAN_INTERVAL)
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.httpx_client import get_async_client, httpx
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
                       INVERTER_LEG2)
 from .span_panel_api import SpanPanelApi
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,7 +56,15 @@ async def validate_host(
     hass: HomeAssistant, host: str, access_token: str | None = None
 ) -> bool:
     span_api = create_api_controller(hass, host, access_token)
+    if access_token:
+        return await span_api.ping_with_auth()
     return await span_api.ping()
+
+
+async def validate_auth_token(hass: HomeAssistant, host: str, access_token: str) -> bool:
+    """Perform an authenticated call to confirm validity of provided token."""
+    span_api = create_api_controller(hass, host, access_token)
+    return await span_api.ping_with_auth()
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
@@ -127,25 +136,28 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """
-        Handle a flow initiated by the user.
-        """
-        # Prompt the user for input if haven't done so
+        """Handle a flow initiated by the user."""
         if user_input is None:
             return self.async_show_form(
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
 
-        # Validate host is a valid Span Panel, prompt user again
-        if not await validate_host(self.hass, user_input[CONF_HOST]):
+        # Trim whitespace from host input
+        host = user_input[CONF_HOST].strip()
+        
+        # Validate host before setting up flow
+        if not await validate_host(self.hass, host):
             return self.async_show_form(
                 step_id="user",
                 data_schema=STEP_USER_DATA_SCHEMA,
                 errors={"base": "cannot_connect"},
             )
 
-        await self.setup_flow(TriggerFlowType.CREATE_ENTRY, user_input[CONF_HOST])
-        await self.ensure_not_already_configured()
+        # Only setup flow if validation succeeded
+        if not self._is_flow_setup:
+            await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
+            await self.ensure_not_already_configured()
+            
         return await self.async_step_choose_auth_type()
 
     async def async_step_reauth(
@@ -154,9 +166,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         """
         Handle a flow initiated by re-auth.
         """
-
         await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST])
-        return await self.async_step_auth_proximity(dict(entry_data))
+        return await self.async_step_auth_token(dict(entry_data))
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
@@ -227,9 +238,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         if not self.host:
             return self.async_abort(reason="host_not_set")
 
-        # Ensure token is valid
+        # Ensure token is valid using authenticated validation
         self.access_token = await span_api.get_access_token()
-        if not await validate_host(self.hass, self.host, self.access_token):
+        if not await validate_auth_token(self.hass, self.host, self.access_token):
             return self.async_abort(reason="invalid_access_token")
 
         return await self.async_step_resolve_entity(entry_data)
@@ -248,14 +259,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                 step_id="auth_token", data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA
             )
 
-        # Ensure token is valid
+        # If access token provided, validate it
         if CONF_ACCESS_TOKEN in user_input and user_input[CONF_ACCESS_TOKEN]:
             self.access_token = user_input[CONF_ACCESS_TOKEN]
             if not self.host:
                 return self.async_abort(reason="host_not_set")
 
-            if not await validate_host(self.hass, self.host, self.access_token):
-                return self.async_abort(reason="invalid_access_token")
+            # Validate token before proceeding
+            if not await validate_auth_token(self.hass, self.host, self.access_token):
+                return self.async_show_form(
+                    step_id="auth_token",
+                    data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
+                    errors={"base": "invalid_access_token"},
+                )
 
             return await self.async_step_resolve_entity(user_input)
 

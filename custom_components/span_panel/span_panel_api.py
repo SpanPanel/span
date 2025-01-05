@@ -52,6 +52,19 @@ class SpanPanelApi:
         except httpx.HTTPError:
             return False
 
+    async def ping_with_auth(self) -> bool:
+        """Test connection and authentication."""
+        try:
+            # Use get_panel_data() since it requires authentication
+            await self.get_panel_data()
+            return True
+        except httpx.HTTPStatusError as err:
+            if err.response.status_code == httpx.codes.UNAUTHORIZED:
+                return False
+            raise
+        except Exception:
+            return False
+
     async def get_access_token(self) -> str:
         """Get the access token"""
         register_results = await self.post_data(
