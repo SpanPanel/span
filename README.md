@@ -8,7 +8,7 @@ As SPAN has not published a documented API, we cannot guarantee this integration
 
 The author(s) will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
-What this integration does do is provide the user a Home Assistant integration that a user would find useful if they wanted so understand their power consumption, energy usage, and control panel circuits.
+What this integration does do is provide the user a Home Assistant integration that a user would find useful in order to understand their power consumption, energy usage, and control panel circuits.
 
 ## Installation
 
@@ -92,6 +92,8 @@ sensor
 ```
 
 ## Known Issues
+
+We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so there is nothing we can do to mitigate it other than report that sensor as unavailable in this case. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal door someone would walk through.
 
 "Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning data that is not meaningful to your installation. These sensors are related to the feed through lugs which may be used for a downstream panel.
 If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:

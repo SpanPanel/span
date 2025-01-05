@@ -14,7 +14,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import COORDINATOR, DOMAIN
+from .const import (COORDINATOR, DOMAIN, SYSTEM_DOOR_STATE_CLOSED,
+                    SYSTEM_DOOR_STATE_OPEN)
 from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .span_panel_hardware_status import SpanPanelHardwareStatus
@@ -25,7 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SpanPanelRequiredKeysMixin:
-    value_fn: Callable[[SpanPanelHardwareStatus], bool]
+    value_fn: Callable[[SpanPanelHardwareStatus], bool | None]
 
 
 @dataclass(frozen=True)
@@ -34,14 +35,16 @@ class SpanPanelBinarySensorEntityDescription(
 ):
     """Describes an SpanPanelCircuits sensor entity."""
 
-
+# Door state has benn observed to return UNKNOWN if the door 
+# has not been operated recently so we check for invalid values
 # pylint: disable=unexpected-keyword-arg
 BINARY_SENSORS = (
     SpanPanelBinarySensorEntityDescription(
         key="doorState",
         name="Door State",
         device_class=BinarySensorDeviceClass.TAMPER,
-        value_fn=lambda status_data: not status_data.is_door_closed, #invert logic for tamper
+        value_fn=lambda status_data: None if status_data.door_state not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN] 
+                                    else not status_data.is_door_closed,
     ),
     SpanPanelBinarySensorEntityDescription(
         key="eth0Link",
@@ -100,6 +103,11 @@ class SpanPanelBinarySensor(
         status_is_on = description.value_fn(status)
         _LOGGER.debug("BINSENSOR [%s] is_on:[%s]", self._attr_name, status_is_on)
         return status_is_on
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.is_on is not None
 
 
 async def async_setup_entry(

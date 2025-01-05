@@ -4,9 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-SYSTEM_DOOR_STATE_CLOSED = "CLOSED"
-SYSTEM_DOOR_STATE_OPEN = "OPEN"
-SYSTEM_DOOR_STATE_UNKNOWN = "UNKNOWN"
+from .const import SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN
 
 
 @dataclass
@@ -26,9 +24,13 @@ class SpanPanelHardwareStatus:
     remaining_auth_unlock_button_presses: int = 0
     _system_data: Dict[str, Any] = field(default_factory=dict)
 
+    # Door state has been known to return UNKNOWN if the door has not been operated recently
+    # Sensor is a tamper sensor not a door sensor
     @property
     def is_door_closed(self) -> bool | None:
-        if (self.door_state == SYSTEM_DOOR_STATE_UNKNOWN):
+        if self.door_state is None:
+            return None
+        if self.door_state not in (SYSTEM_DOOR_STATE_OPEN, SYSTEM_DOOR_STATE_CLOSED):
             return None
         return self.door_state == SYSTEM_DOOR_STATE_CLOSED
 
