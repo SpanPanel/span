@@ -14,14 +14,13 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
                                  CONF_SCAN_INTERVAL)
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.httpx_client import get_async_client, httpx
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
 from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
                       INVERTER_LEG2)
 from .span_panel_api import SpanPanelApi
-
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,7 +94,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self.host = host
         self.serial_number = panel_status.serial_number
 
-        self.context.setdefault("title_placeholders", {})[CONF_HOST] = self.host
+        # Keep the existing context values and add the host value
+        self.context = {
+            **self.context,
+            "title_placeholders": {
+                **self.context.get("title_placeholders", {}),
+                CONF_HOST: self.host,
+            },
+        }
 
         self._is_flow_setup = True
 
@@ -142,7 +148,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
 
-        # Trim whitespace from host input
         host = user_input[CONF_HOST].strip()
         
         # Validate host before setting up flow
@@ -255,27 +260,33 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self.ensure_flow_is_set_up()
 
         if user_input is None:
+            # Show the form to prompt for the access token
             return self.async_show_form(
                 step_id="auth_token", data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA
             )
 
-        # If access token provided, validate it
-        if CONF_ACCESS_TOKEN in user_input and user_input[CONF_ACCESS_TOKEN]:
-            self.access_token = user_input[CONF_ACCESS_TOKEN]
+        # Extract access token from user input
+        access_token = user_input.get(CONF_ACCESS_TOKEN)
+        if access_token:
+            self.access_token = access_token
+
+            # Ensure host is set
             if not self.host:
                 return self.async_abort(reason="host_not_set")
 
-            # Validate token before proceeding
-            if not await validate_auth_token(self.hass, self.host, self.access_token):
+            # Validate the provided token
+            if not await validate_auth_token(self.hass, self.host, access_token):
                 return self.async_show_form(
                     step_id="auth_token",
                     data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
                     errors={"base": "invalid_access_token"},
                 )
 
+            # Proceed to the next step upon successful validation
             return await self.async_step_resolve_entity(user_input)
 
-        return await self.async_step_choose_auth_type(user_input)
+        # If no access token was provided, abort or show the form again
+        return self.async_abort(reason="missing_access_token")
 
     async def async_step_resolve_entity(
         self,

@@ -1,8 +1,8 @@
 """Span Panel Hardware Status"""
 
-from typing import Any, Dict
-from dataclasses import dataclass, field
 from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Any, Dict
 
 SYSTEM_DOOR_STATE_CLOSED = "CLOSED"
 SYSTEM_DOOR_STATE_OPEN = "OPEN"

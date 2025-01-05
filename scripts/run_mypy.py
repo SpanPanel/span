@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import os
-import subprocess # nosec B404
+import subprocess  # nosec B404
 import sys
 
 

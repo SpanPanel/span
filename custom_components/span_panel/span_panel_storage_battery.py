@@ -1,8 +1,9 @@
 """span_panel_storage_battery"""
 
-from typing import Any, Dict
-from dataclasses import dataclass, replace, field
 from copy import deepcopy
+from dataclasses import dataclass, field
+from typing import Any, Dict
+
 
 @dataclass
 class SpanPanelStorageBattery:

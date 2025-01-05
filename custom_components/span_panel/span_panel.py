@@ -1,9 +1,10 @@
 """Module to read production and consumption values from a Span panel."""
 
 import logging
-from typing import Dict
-from homeassistant.helpers.httpx_client import httpx
 from copy import deepcopy
+from typing import Dict
+
+from homeassistant.helpers.httpx_client import httpx
 
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
@@ -50,6 +51,24 @@ class SpanPanel:
         self._panel: SpanPanelData | None = None
         self._circuits: Dict[str, SpanPanelCircuit] = {}
         self._storage_battery: SpanPanelStorageBattery | None = None
+
+    def _get_hardware_status(self) -> SpanPanelHardwareStatus:
+        """Get hardware status with type checking."""
+        if self._status is None:
+            raise RuntimeError("Hardware status not available")
+        return deepcopy(self._status)  # Return copy for thread safety
+
+    def _get_data(self) -> SpanPanelData:
+        """Get data with type checking."""
+        if self._panel is None:
+            raise RuntimeError("Panel data not available") 
+        return deepcopy(self._panel)  # Return copy for thread safety
+
+    def _get_storage_battery(self) -> SpanPanelStorageBattery:
+        """Get storage battery with type checking."""
+        if self._storage_battery is None:
+            raise RuntimeError("Storage battery not available")
+        return deepcopy(self._storage_battery)  # Return copy for thread safety
 
     @property
     def host(self) -> str:
@@ -109,12 +128,12 @@ class SpanPanel:
     @property
     def status(self) -> SpanPanelHardwareStatus:
         """Get status data atomically"""
-        return deepcopy(self._status) if self._status else None
+        return self._get_hardware_status()
 
     @property 
     def panel(self) -> SpanPanelData:
         """Get panel data atomically"""
-        return deepcopy(self._panel) if self._panel else None
+        return self._get_data()
 
     @property
     def circuits(self) -> Dict[str, SpanPanelCircuit]:
@@ -124,4 +143,4 @@ class SpanPanel:
     @property
     def storage_battery(self) -> SpanPanelStorageBattery:
         """Get storage battery data atomically"""
-        return deepcopy(self._storage_battery) if self._storage_battery else None
+        return self._get_storage_battery()

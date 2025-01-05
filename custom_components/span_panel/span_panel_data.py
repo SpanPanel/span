@@ -1,7 +1,7 @@
 """Span Panel Data"""
 
 from copy import deepcopy
-from dataclasses import dataclass, replace, field
+from dataclasses import dataclass, field
 from typing import Any
 
 from .options import INVERTER_MAXLEG, Options
