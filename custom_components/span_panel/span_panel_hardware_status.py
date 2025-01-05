@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 SYSTEM_DOOR_STATE_CLOSED = "CLOSED"
 SYSTEM_DOOR_STATE_OPEN = "OPEN"
+SYSTEM_DOOR_STATE_UNKNOWN = "UNKNOWN"
 
 
 @dataclass
@@ -26,7 +27,9 @@ class SpanPanelHardwareStatus:
     _system_data: Dict[str, Any] = field(default_factory=dict)
 
     @property
-    def is_door_closed(self) -> bool:
+    def is_door_closed(self) -> bool | None:
+        if (self.door_state == SYSTEM_DOOR_STATE_UNKNOWN):
+            return None
         return self.door_state == SYSTEM_DOOR_STATE_CLOSED
 
     @property
