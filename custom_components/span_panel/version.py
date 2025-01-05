@@ -1,3 +1,3 @@
 """Version for span."""
 
-__version__ = "1.0.3b4"
+__version__ = "1.0.3"
