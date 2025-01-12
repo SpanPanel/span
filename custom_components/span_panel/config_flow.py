@@ -43,7 +43,7 @@ class TriggerFlowType(enum.Enum):
 
 
 def create_api_controller(
-    hass: HomeAssistant, host: str, access_token: str | None = None
+    hass: HomeAssistant, host: str, access_token: str | None = None # nosec
 ) -> SpanPanelApi:
     params: dict[str, Any] = {"host": host, "async_client": get_async_client(hass)}
     if access_token is not None:
