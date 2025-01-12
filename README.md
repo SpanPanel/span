@@ -93,13 +93,21 @@ sensor
 
 ## Known Issues
 
+### Door Sensor Unavailable
+
 We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so there is nothing we can do to mitigate it other than report that sensor as unavailable in this case. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal door someone would walk through.
+
+### State Class Warnings
 
 "Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning data that is not meaningful to your installation. These sensors are related to the feed through lugs which may be used for a downstream panel.
 If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
 
 - sensor.feed_through_consumed_energy
 - sensor.feed_through_produced_energy
+
+### Entity Names and Device Renaming Errors
+
+Prior to version 1.0.4 entity names were not prefixed with the device name so renaming a device did not allow a user to rename the entities accordingly. Newer versions of the integration will use the device name prefix on a **new** configuration. An existing, pre-1.0.4 integration that is upgraded will not result in device prefixes in entity names to avoid breaking dependent dashboards and automations. If you want device name prefixes, install at least 1.0.4, delete the configuration and reconfigure it.
 
 ## Devices & Entities
 
