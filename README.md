@@ -1,6 +1,6 @@
 # SPAN Panel Integration for Home Assistant
 
-[Home Assistant](https://www.home-assistant.io/) Integration for [SPAN Panel](https://www.span.io/panel).
+[Home Assistant](https://www.home-assistant.io/) Integration for [SPAN Panel](https://www.span.io/panel), a smart electrical panel that provides circuit-level monitoring and control of your home's electrical system.
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/) [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/) [![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/) [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 
@@ -8,64 +8,86 @@ As SPAN has not published a documented API, we cannot guarantee this integration
 
 The author(s) will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
-What this integration does do is provide the user a Home Assistant integration that a user would find useful in order to understand their power consumption, energy usage, and control panel circuits.
+What this integration does do is provide the user Home Assistant sensors and controls that are useful in understanding an installations power consumption, energy usage, and control panel circuits.
+
+## Prerequisites
+
+- [Home Assistant](https://www.home-assistant.io/) installed
+- [HACS](https://hacs.xyz/) installed
+- SPAN Panel installed and connected to your network
+- SPAN Panel's IP address
+
+## Features
+
+### Available Devices & Entities
+
+This integration will provide a device for your SPAN panel. This device will have entities for:
+
+- User Managed Circuits
+  - On/Off Switch (user managed circuits)
+  - Priority Selector (user managed circuits)
+- Power Sensors
+  - Power Usage / Generation (Watts)
+  - Energy Usage / Generation (wH)
+- Panel and Grid Status
+  - Main Relay State (e.g., CLOSED)
+  - Current Run Config (e.g., PANEL_ON_GRID)
+  - DSM State (e.g., DSM_GRID_UP)
+  - DSM Grid State (e.g., DSM_ON_GRID)
+  - Network Connectivity Status (Wi-Fi, Wired, & Cellular)
+  - Door State (device class is tamper)
+- Storage Battery
+  - Battery percentage (options configuration)
 
 ## Installation
 
 1. Install [HACS](https://hacs.xyz/)
 2. Go to HACS, select `Integrations`
-3. This repository is not currently the default in HACs so you need to use it as a custom repository (We need two HACs developers to [approve](https://github.com/hacs/default/pull/2560) it). In the upper right of HACS/Integrations click on the three dots and add a custom repository with the HTTPS URL of this repository.
-4. Select the repository you added in the list of integrations in HACS and select "Download". You can follow the URL to ensure you have the repository you want.
-5. Restart Home Assistant.
-6. In the Home Assistant UI go to `Settings`.
-7. Click `Devices & Services' and you should see this integration.
-8. Click `+ Add Integration`.
-9. Search for "Span".
-10. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up.
-11. Create an authentication token (see below) or use the door proximity authentication. Obtaining a token may be more durable to network changes, for example,if you change client hostname or IP.
-12. See post install steps for solar or scan frequency configuration.
+3. This repository is not currently the default in HACs so you need to use it as a custom repository (We need two HACs developers to [approve](https://github.com/hacs/default/pull/2560) it). Before installing this repository delete configurations for other similar repositories and remove them from HACs (two steps) and restart Home Assistant.
+4. Once you have removed conflicting repositories use the the three dots in the upper right of the HACs screen and add a custom repository with the URL of this repository.
+5. Select the repository you added in the list of integrations in HACS and select "Download". You can follow the URL to ensure you have the repository you want.
+6. Restart Home Assistant.
+7. In the Home Assistant UI go to `Settings`.
+8. Click `Devices & Services` and you should see this integration.
+9. Click `+ Add Integration`.
+10. Search for "Span". This entry should correspond to this repository and offer the current version.
+11. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up or another address if you have multiple panels.
+12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable to network changes, for example,if you change client hostname or IP and don't want to accces the pane for authorization.
+13. See post install steps for solar or scan frequency configuration to optionally add additonal sensors if applicable.
 
-### Authorization (Auth) Token
+## Authorization Methods
 
-The SPAN API requires an auth token.
-If you already have one from some previous setup, you can reuse it.
-If you don't already have a token (most people), you just need to prove that you are physically near the panel, and then the integration can get its own token.
+### Method 1: Door Proximity Authentication
 
-#### Proof of Proximity
+1. Open your SPAN Panel door
+2. Press the door sensor button at the top 3 times in succession
+3. Wait for the frame lights to blink, indicating the panel is "unlocked" for 15 minutes
+4. Complete the integration setup in Home Assistant
 
-Simply open the door to your SPAN Panel and press the door sensor button at the top 3 times in succession.
-The lights ringing the frame of your panel should blink momentarily, and the Panel will now be "unlocked" for 15 minutes (it may in fact be significantly longer, but 15 is the documented period).
-While the panel is unlocked, it will allow the integration to create a new auth token.
+### Method 2: Authentication Token (Optional)
 
-#### Technical Details
+To acquire an authorization token proceed as follows while the panel is in its unlocked period:
 
-These details were provided by a SPAN engineer, and have been implemented in the integration.
-They are documented here in the hope someone may find them useful.
-
-To get an auth token:
-
-1. Using a tool like the VS code extension 'Thunder Client' or curl make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local SPAN Integration"}`.
-   - Use a unique value for UNIQUEID. Six random alphanumeric characters would be a reasonable choice. If the name conflicts with one that's already been created, then the request will fail.
+1. To record the token use a tool like the VS code extension 'Rest Client' or curl to make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local SPAN Integration"}`.
+   - Replace UNIQUEID with your own random unique value. If the name conflicts with one that's already been created, then the request will fail.
    - Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local SPAN Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
-3. Store the value from the `"accessToken"` property of the response. (It will be a long string of random characters). The token can be used with all future SPAN integration configurations.
-4. This token can be used in the intial configuration. If you were calling the SPAN API directly all requests would load the HTTP header `"Authorization: Bearer <your token here>"`
+3. Store the value from the `"accessToken"` property of the response. (It will be a long string of random characters). The token can be used with future SPAN integration configurations of the same panel.
+4. If you are calling the SPAN API directly for testing requests would load the HTTP header `"Authorization: Bearer <your token here>"`
 
 _(If you have multiple SPAN Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
 If you have this auth token, you can enter it in the "Existing Auth Token" flow in the configuration menu.
 
-## Post-Install
+## Configuration Options
 
-Optional configuration
+### Basic Settings
 
-- Integration Scan Frequency (poll time in seconds), default is 15 seconds.
-- Battery Storage Percentage.
-- Enable/Map Solar Inverter Sensors to circuit(s).
-  The solar in the USA is normally a combination of one or two leg poistions 1-32 or 0 indicating none.
-  Look in your SPAN app for "solar" if any and identify the individual circuit(s).
-  The leg values are combined into a single set of "inverter" sensors, for example in the USA two 120v legs of a 240v circuit positions 30/32.
-  In Europe this configuration could be a single 230v leg where one leg is set to 0.
+- Integration scan frequency (default: 15 seconds)
+- Battery storage percentage display
+- Solar inverter mapping
+
+### Solar Configuration
 
 If the inverter sensors are enabled three sensors are created:
 
@@ -91,45 +113,7 @@ sensor
      round: 2
 ```
 
-## Known Issues
-
-### Door Sensor Unavailable
-
-We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so there is nothing we can do to mitigate it other than report that sensor as unavailable in this case. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal door someone would walk through.
-
-### State Class Warnings
-
-"Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning data that is not meaningful to your installation. These sensors are related to the feed through lugs which may be used for a downstream panel.
-If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
-
-- sensor.feed_through_consumed_energy
-- sensor.feed_through_produced_energy
-
-### Entity Names and Device Renaming Errors
-
-Prior to version 1.0.4 entity names were not prefixed with the device name so renaming a device did not allow a user to rename the entities accordingly. Newer versions of the integration will use the device name prefix on a **new** configuration. An existing, pre-1.0.4 integration that is upgraded will not result in device prefixes in entity names to avoid breaking dependent dashboards and automations. If you want device name prefixes, install at least 1.0.4, delete the configuration and reconfigure it.
-
-## Devices & Entities
-
-This integration will provide a device for your SPAN panel. This device will have entities for:
-
-- User Managed Circuits
-  - On/Off Switch (user managed circuits)
-  - Priority Selector (user managed circuits)
-- Power Sensors
-  - Power Usage / Generation (Watts)
-  - Energy Usage / Generation (wH)
-- Panel and Grid Status
-  - Main Relay State (e.g., CLOSED)
-  - Current Run Config (e.g., PANEL_ON_GRID)
-  - DSM State (e.g., DSM_GRID_UP)
-  - DSM Grid State (e.g., DSM_ON_GRID)
-  - Network Connectivity Status (Wi-Fi, Wired, & Cellular)
-  - Door State (device class is tamper)
-- Storage Battery
-  - Battery percentage (options configuration)
-
-### Entity Precision
+### Customizing Entity Precision
 
 The power sensors provided by this add-on report with the exact precision from the SPAN panel, which may be more decimal places than you will want for practical purposes.
 By default the sensors will display with precision 2, for example `0.00`, with the exception of battery percentage. Battery percentage will have precision of 0, for example `39`.
@@ -138,33 +122,28 @@ You can change the display precision for any entity in Home Assistant via `Setti
 find the entity you would like to change in the list and click on it, then click on the gear wheel in the top right.
 Select the precision you prefer from the "Display Precision" menu and then press `UPDATE`.
 
-## License
+## Troubleshooting
 
-This integration is published under the MIT license.
+### Common Issues
 
-## Attribution and Contributions
+1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so there is nothing we can do to mitigate it other than report that sensor as unavailable in this case. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal door someone would walk through.
 
-This repository is a fork in a long line of span forks that may or may not be stable (from newer to older):
+2. State Class Warnings - "Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning data that is not meaningful to your installation. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
 
-- SpanPanel/Span (current GitHub organization)
-- cayossarian/span
-- gdgib/span
-- thetoothpick/span-hacs
-- wez/span-hacs
-- galak/span-hacs
+   ```text
+   sensor.feed_through_consumed_energy
+   sensor.feed_through_produced_energy
+   ```
 
-Additional contributors:
+3. Entity Names and Device Renaming Errors - Prior to version 1.0.4 entity names were not prefixed with the device name so renaming a device did not allow a user to rename the entities accordingly. Newer versions of the integration use the device name prefix on a **new** configuration. An existing, pre-1.0.4 integration that is upgraded will not result in device prefixes in entity names to avoid breaking dependent dashboards and automations. If you want device name prefixes, install at least 1.0.4, delete the configuration and reconfigure it.
 
-- pavandave
-- sargonas
+## Development Notes
 
-## Issues
+### Developer Prerequisites
 
-If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/Span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
-
-For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/Span/pulls). We're generally very happy to have a starting point when making a change.
-
-## Developer Notes
+- Poetry
+- Pre-commit
+- Python 3.12+
 
 This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
 
@@ -184,8 +163,34 @@ ln -s <span project path>/span/custom_components/span_panel <HA core path>/confi
 4. Run `poetry run pre-commit install` to install pre-commit hooks.
 5. Optionally use `poetry run pre-commit run --all-files` to manually run pre-commit hooks on files locally in your environment as you make changes.
 
-The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed by the pre-commit hooks will be unstaged. After reviewing these changes, you can re-stage the changes and rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
+Commits should be run on the command line so the lint jobs can proceed. The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed by the pre-commit hooks will be unstaged. After reviewing these changes, you can re-stage the changes and recommit or rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
 
 ### VS Code
 
 You can set the `HA_CORE_PATH` environment for VS Code allowing you to use vscode git commands within the workspace GUI. See the .vscode/settings.json.example file for settings that configure the Home Assistant core location.
+
+## License
+
+This integration is published under the MIT license.
+
+## Attribution and Contributions
+
+This repository is set up as part of an organization so a single committer is not the weak link. The repostiorry is a fork in a long line of span forks that may or may not be stable (from newer to older):
+
+- SpanPanel/Span (current GitHub organization)
+- cayossarian/span
+- gdgib/span
+- thetoothpick/span-hacs
+- wez/span-hacs
+- galak/span-hacs
+
+Additional contributors:
+
+- pavandave
+- sargonas
+
+## Issues
+
+If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/Span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
+
+For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/Span/pulls). We're generally very happy to have a starting point when making a change.
