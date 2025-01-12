@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import COORDINATOR, DOMAIN, CircuitPriority
+from .const import COORDINATOR, DOMAIN, USE_DEVICE_PREFIX, CircuitPriority
 from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
@@ -37,7 +37,10 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
     def name(self):
         """Return the switch name."""
         span_panel: SpanPanel = self.coordinator.data
-        return f"{span_panel.circuits[self.id].name} Circuit Priority"
+        base_name = f"{span_panel.circuits[self.id].name} Circuit Priority"
+        if self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False):
+            return f"{self._attr_device_info['name']} {base_name}"
+        return base_name
 
     @cached_property
     def options(self) -> list[str]:

@@ -45,7 +45,7 @@ class SpanPanel:
         async_client: httpx.AsyncClient | None = None,
     ) -> None:
         """Initialize the Span Panel."""
-        self._options = options  # Make it protected
+        self._options = options
         self.api = SpanPanelApi(host, access_token, options, async_client)
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None
@@ -56,19 +56,19 @@ class SpanPanel:
         """Get hardware status with type checking."""
         if self._status is None:
             raise RuntimeError("Hardware status not available")
-        return deepcopy(self._status)  # Return copy for thread safety
+        return deepcopy(self._status)
 
     def _get_data(self) -> SpanPanelData:
         """Get data with type checking."""
         if self._panel is None:
             raise RuntimeError("Panel data not available") 
-        return deepcopy(self._panel)  # Return copy for thread safety
+        return deepcopy(self._panel)
 
     def _get_storage_battery(self) -> SpanPanelStorageBattery:
         """Get storage battery with type checking."""
         if self._storage_battery is None:
             raise RuntimeError("Storage battery not available")
-        return deepcopy(self._storage_battery)  # Return copy for thread safety
+        return deepcopy(self._storage_battery)
 
     @property
     def host(self) -> str:

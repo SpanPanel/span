@@ -19,7 +19,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (CIRCUITS_ENERGY_CONSUMED, CIRCUITS_ENERGY_PRODUCED,
                     CIRCUITS_POWER, COORDINATOR, CURRENT_RUN_CONFIG, DOMAIN,
                     DSM_GRID_STATE, DSM_STATE, MAIN_RELAY_STATE,
-                    STATUS_SOFTWARE_VER, STORAGE_BATTERY_PERCENTAGE)
+                    STATUS_SOFTWARE_VER, STORAGE_BATTERY_PERCENTAGE,
+                    USE_DEVICE_PREFIX)
 from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
@@ -258,11 +259,22 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """Initialize Span Panel Sensor base entity."""
         super().__init__(data_coordinator, context=description)
         self.entity_description = description
-        self._attr_name = f"{description.name}"
+        device_info = panel_to_device_info(span_panel)
+        self._attr_device_info = device_info
+        base_name = f"{description.name}"
+        
+        if (data_coordinator.config_entry is not None and 
+            data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False) and 
+            device_info is not None and 
+            isinstance(device_info, dict) and 
+            "name" in device_info):
+            self._attr_name = f"{device_info['name']} {base_name}"
+        else:
+            self._attr_name = base_name
+            
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{description.key}"
         )
-        self._attr_device_info = panel_to_device_info(span_panel)
 
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
 
@@ -298,9 +310,15 @@ class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescrip
         span_panel: SpanPanel,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
-        super().__init__(coordinator, description, span_panel)
+        # Create a new description with modified name including circuit name
+        circuit_description = SpanPanelCircuitsSensorEntityDescription(
+            **{
+                **vars(description),
+                "name": f"{name} {description.name}"
+            }
+        )
+        super().__init__(coordinator, circuit_description, span_panel)
         self.id = circuit_id
-        self._attr_name = f"{name} {description.name}"
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
         )

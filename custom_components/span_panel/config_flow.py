@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
 
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, USE_DEVICE_PREFIX
 from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
                       INVERTER_LEG2)
 from .span_panel_api import SpanPanelApi
@@ -334,7 +334,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         Creates a new SPAN panel entry.
         """
         return self.async_create_entry(
-            title=serial_number, data={CONF_HOST: host, CONF_ACCESS_TOKEN: access_token}
+            title=serial_number, 
+            data={
+                CONF_HOST: host, 
+                CONF_ACCESS_TOKEN: access_token
+            },
+            options={
+                USE_DEVICE_PREFIX: True  # Only set for new installations
+            }
         )
 
     def update_existing_entry(
@@ -407,6 +414,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
+            # Preserve the USE_DEVICE_PREFIX setting from the original entry
+            use_prefix = self.entry.options.get(USE_DEVICE_PREFIX, False)
+            if use_prefix:
+                user_input[USE_DEVICE_PREFIX] = use_prefix
             return self.async_create_entry(title="", data=user_input)
 
         defaults = {

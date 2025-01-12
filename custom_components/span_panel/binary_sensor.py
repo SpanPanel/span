@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (COORDINATOR, DOMAIN, SYSTEM_DOOR_STATE_CLOSED,
-                    SYSTEM_DOOR_STATE_OPEN)
+                    SYSTEM_DOOR_STATE_OPEN, USE_DEVICE_PREFIX)
 from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .span_panel_hardware_status import SpanPanelHardwareStatus
@@ -82,11 +82,22 @@ class SpanPanelBinarySensor(
         span_panel: SpanPanel = data_coordinator.data
 
         self.entity_description = description
-        self._attr_name = f"{description.name}"
+        device_info = panel_to_device_info(span_panel)
+        self._attr_device_info = device_info
+        base_name = f"{description.name}"
+        
+        if (data_coordinator.config_entry is not None and 
+            data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False) and 
+            device_info is not None and 
+            isinstance(device_info, dict) and 
+            "name" in device_info):
+            self._attr_name = f"{device_info['name']} {base_name}"
+        else:
+            self._attr_name = base_name
+            
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{description.key}"
         )
-        self._attr_device_info = panel_to_device_info(span_panel)
 
         _LOGGER.debug("CREATE BINSENSOR [%s]", self._attr_name)
 

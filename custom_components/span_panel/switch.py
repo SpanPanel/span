@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import COORDINATOR, DOMAIN, CircuitRelayState
+from .const import COORDINATOR, DOMAIN, USE_DEVICE_PREFIX, CircuitRelayState
 from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
@@ -74,7 +74,10 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     def name(self):
         """Return the switch name."""
         span_panel: SpanPanel = self.coordinator.data
-        return f"{span_panel.circuits[self.id].name} Breaker"
+        base_name = f"{span_panel.circuits[self.id].name} Breaker"
+        if self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False):
+            return f"{self._attr_device_info['name']} {base_name}"
+        return base_name
 
     @property
     def is_on(self) -> bool | None:
