@@ -40,7 +40,7 @@ class SpanPanel:
     def __init__(
         self,
         host: str,
-        access_token: str | None = None,
+        access_token: str | None = None,    # nosec
         options: Options | None = None,
         async_client: httpx.AsyncClient | None = None,
     ) -> None:

@@ -52,7 +52,7 @@ def create_api_controller(
 
 
 async def validate_host(
-    hass: HomeAssistant, host: str, access_token: str | None = None
+    hass: HomeAssistant, host: str, access_token: str | None = None # nosec
 ) -> bool:
     span_api = create_api_controller(hass, host, access_token)
     if access_token:
