@@ -42,11 +42,11 @@ This integration will provide a device for your SPAN panel. This device will hav
 ## Installation
 
 1. Install [HACS](https://hacs.xyz/)
-2. Go to HACS, select `Integrations`
-3. This repository is not currently the default in HACs so you need to use it as a custom repository (We need two HACs developers to [approve](https://github.com/hacs/default/pull/2560) it). Before installing this repository delete configurations for other similar repositories and remove them from HACs (two steps) and restart Home Assistant.
-4. Once you have removed conflicting repositories use the the three dots in the upper right of the HACs screen and add a custom repository with the URL of this repository.
-5. Select the repository you added in the list of integrations in HACS and select "Download". You can follow the URL to ensure you have the repository you want.
-6. Restart Home Assistant.
+2. Go to HACS in the left side bar of your Home Assistant installation
+3. Search for "Span"
+4. Open the repository
+5. Click on the "Download" button at the lower right
+6. Restart Home Assistant - You will be prompted for this by a HomeAssistant repair
 7. In the Home Assistant UI go to `Settings`.
 8. Click `Devices & Services` and you should see this integration.
 9. Click `+ Add Integration`.
@@ -147,7 +147,7 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
 
-If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `SpanPanel/Span` workspace for git and other project operations.
+If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `haext/Span` workspace for git and other project operations.
 
 For instance you can:
 
@@ -177,9 +177,10 @@ This integration is published under the MIT license.
 
 This repository is set up as part of an organization so a single committer is not the weak link. The repostiorry is a fork in a long line of span forks that may or may not be stable (from newer to older):
 
-- SpanPanel/Span (current GitHub organization)
+- haext/span (current GitHub organization)
+- SpanPanel/Span
 - cayossarian/span
-- gdgib/span
+- gdgib/span (the old home for this repository)
 - thetoothpick/span-hacs
 - wez/span-hacs
 - galak/span-hacs
@@ -191,6 +192,6 @@ Additional contributors:
 
 ## Issues
 
-If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/Span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
+If you have a problem with the integration, feel free to [open an issue](https://github.com/haext/span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
 
-For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/Span/pulls). We're generally very happy to have a starting point when making a change.
+For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/haext/span/pulls). We're generally very happy to have a starting point when making a change.
