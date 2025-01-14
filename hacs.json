@@ -1,5 +1,8 @@
 {
-	"name": "Span Panel",
-	"homeassistant": "2023.3.0",
-	"render_readme": true
+  "name": "Span Panel",
+  "content_in_root": false,
+  "homeassistant": "2023.3.0",
+  "render_readme": true,
+  "zip_release": false,
+  "filename": "custom_components/span_panel"
 }

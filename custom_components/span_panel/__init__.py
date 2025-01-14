@@ -1,25 +1,18 @@
 """The Span Panel integration."""
+
 from __future__ import annotations
-from datetime import timedelta
 
 import logging
 
-import async_timeout
-import httpx
-
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_ACCESS_TOKEN,
-    CONF_HOST,
-    CONF_SCAN_INTERVAL,
-    Platform,
-)
+from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
+                                 CONF_SCAN_INTERVAL, Platform)
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import COORDINATOR, DOMAIN, NAME, DEFAULT_SCAN_INTERVAL
+from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
+from .coordinator import SpanPanelCoordinator
+from .options import Options
 from .span_panel import SpanPanel
 
 PLATFORMS: list[Platform] = [
@@ -38,46 +31,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """
     config = entry.data
     host = config[CONF_HOST]
+    name = "SpanPanel"
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY %s", host)
 
     span_panel = SpanPanel(
         host=config[CONF_HOST],
         access_token=config[CONF_ACCESS_TOKEN],
+        options=Options(entry),
         async_client=get_async_client(hass),
     )
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY panel %s", span_panel)
 
-    async def async_update_data():
-        """Fetch data from API endpoint."""
-        async with async_timeout.timeout(30):
-            try:
-                await span_panel.update()
-            except httpx.HTTPStatusError as err:
-                if err.response.status_code == httpx.codes.UNAUTHORIZED:
-                    raise ConfigEntryAuthFailed from err
-                else:
-                    _LOGGER.error("An httpx.StatusError occurred while updating Span data: %s", str(err))
-                    raise UpdateFailed(f"Error communicating with API: {err}") from err
-            except httpx.HTTPError as err:
-                _LOGGER.error("An httpx.HTTPError occurred while updating Span data: %s", str(err))
-                raise UpdateFailed(f"Error communicating with API: {err}") from err
-
-            return span_panel
-
-    name = "SN-TODO"
-
     scan_interval: int = entry.options.get(
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
     )
 
-    coordinator = DataUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=f"span panel {name}",
-        update_method=async_update_data,
-        update_interval=timedelta(seconds=scan_interval),
+    coordinator = SpanPanelCoordinator(
+        hass, span_panel, name, update_interval=scan_interval
     )
 
     await coordinator.async_config_entry_first_refresh()

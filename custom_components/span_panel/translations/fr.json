@@ -1,54 +1,58 @@
 {
-    "config": {
-        "abort": {
-            "no_devices_found": "Aucun appareil trouvé sur le réseau",
-            "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
-            "reauth_successful": "Authentification réussie."
-        },
-        "error": {
-            "cannot_connect": "Échec de la connexion au Span Panel",
-            "invalid_auth": "Authentification invalide",
-            "unknown": "Erreur inattendue"
-        },
-        "flow_title": "Span Panel ({host})",
-        "step": {
-            "confirm_discovery": {
-                "description": "Voulez-vous configurer Span Panel sur {host} ?",
-                "title": "Connectez-vous au Span Panel"
-            },
-            "user": {
-                "data": {
-                    "host": "Host"
-                },
-                "title": "Connectez-vous au Span Panel"
-            },
-            "auth_menu": {
-                "title": "Choisir les options d'authentification",
-                "menu_options": {
-                    "auth_proximity": "Authentifiez-vous via votre Span Panel physique",
-                    "auth_token": "Authentifier à l'aide d'un jeton d'accès"
-                }
-            },
-            "auth_proximity": {
-                "title": "Authentification de proximité",
-                "description": "Veuillez ouvrir et fermer la porte du Span Panel les fois {remaining}."
-            },
-            "auth_token": {
-                "title": "Authentification manuelle du jeton",
-                "description": "Vieuillez entrer votre jeton d'accès (laissez vide pour recommencer):",
-                "data": {
-                    "access_token": "Jeton d'accès"
-                }
-            }
-        }
+  "config": {
+    "abort": {
+      "no_devices_found": "Aucun appareil trouvé sur le réseau",
+      "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
+      "reauth_successful": "Authentification réussie."
     },
-    "options": {
-        "step": {
-            "init": {
-                "data": {
-                    "scan_interval": "Intervalle d'analyse en secondes"
-                }
-            }
+    "error": {
+      "cannot_connect": "Échec de la connexion au Span Panel",
+      "invalid_auth": "Authentification invalide",
+      "unknown": "Erreur inattendue"
+    },
+    "flow_title": "Span Panel ({host})",
+    "step": {
+      "confirm_discovery": {
+        "description": "Voulez-vous configurer Span Panel sur {host} ?",
+        "title": "Connectez-vous au Span Panel"
+      },
+      "user": {
+        "data": {
+          "host": "Host"
+        },
+        "title": "Connectez-vous au Span Panel"
+      },
+      "auth_menu": {
+        "title": "Choisir les options d'authentification",
+        "menu_options": {
+          "auth_proximity": "Authentifiez-vous via votre Span Panel physique",
+          "auth_token": "Authentifier à l'aide d'un jeton d'accès"
         }
+      },
+      "auth_proximity": {
+        "title": "Authentification de proximité",
+        "description": "Veuillez ouvrir et fermer la porte du Span Panel les fois {remaining}."
+      },
+      "auth_token": {
+        "title": "Authentification manuelle du jeton",
+        "description": "Vieuillez entrer votre jeton d'accès (laissez vide pour recommencer):",
+        "data": {
+          "access_token": "Jeton d'accès"
+        }
+      }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Intervalle d'analyse en secondes",
+          "enable_solar_circuit": "Activer les capteurs de l'onduleur solaire",
+          "leg1": "Jambe solaire 1 (0 n'est pas utilisé)",
+          "leg2": "Jambe solaire 2 (0 n'est pas utilisé)",
+          "enable_battery_percentage": "Activer le capteur de pourcentage de batterie de stockage (doit être physiquement connecté)"
+        }
+      }
+    }
+  }
 }

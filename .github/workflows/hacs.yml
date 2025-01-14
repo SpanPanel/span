@@ -1,19 +1,29 @@
+---
 name: HACS Jobs
+
 on:
+  workflow_dispatch:
+  workflow_call: {}
   pull_request:
     branches:
-    - main
+      - main
   push:
     branches:
-    - main
-  workflow_dispatch:
+      - main
+
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
 jobs:
   validate:
     name: Hassfest
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: actions/checkout@v4
       - uses: "home-assistant/actions/hassfest@master"
+
   hacs:
     name: HACS Action
     runs-on: "ubuntu-latest"

@@ -2,7 +2,9 @@
 *.pyc
 /.project
 .DS_Store
-.vscode/
+.vscode/*
+!.vscode/settings.json.example
+!.vscode/tasks.json
 .direnv/
 env/
-.envrc 
+.envrc
