@@ -10,6 +10,13 @@ The author(s) will try to keep this integration working, but cannot provide tech
 
 What this integration does do is provide the user Home Assistant sensors and controls that are useful in understanding an installations power consumption, energy usage, and control panel circuits.
 
+## Notice on Forks
+
+The https://github.com/haext/span fork is the one listed in the HACS store, as it was moved from https://github.com/gdgib/span.
+You might also be aware of the https://github.com/SpanPanel/Span fork where a community has done all the significant work on this integration since mid-2024, and they deserve both credit and ownership.
+We are discussing how to make that happen in https://github.com/haext/span/issues/55 to ensure users receive updates, that the HACS store listing is correct, and that the newer maintainers have appropriate control.
+The maintainers of https://github.com/SpanPanel/Span have done excellent work, and if you are already using their fork please feel free to continue to do so for now as it is likely to be more up to date at the moment.
+
 ## Prerequisites
 
 - [Home Assistant](https://www.home-assistant.io/) installed
