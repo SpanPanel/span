@@ -1,13 +1,13 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
-  "codeowners": ["@SpanPanel", "@cayossarian"],
+  "codeowners": ["@haext", "@gdgib", "@cayossarian"],
   "config_flow": true,
-  "documentation": "https://github.com/SpanPanel/span",
+  "documentation": "https://github.com/haext/span",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/SpanPanel/span/issues",
+  "issue_tracker": "https://github.com/haext/span/issues",
   "requirements": [],
-  "version": "1.0.4",
+  "version": "1.0.5",
   "zeroconf": [
     {
       "type": "_span._tcp.local."
