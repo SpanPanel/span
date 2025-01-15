@@ -12,10 +12,8 @@ What this integration does do is provide the user Home Assistant sensors and con
 
 ## Notice on Forks
 
-The https://github.com/haext/span fork is the one listed in the HACS store, as it was moved from https://github.com/gdgib/span.
-You might also be aware of the https://github.com/SpanPanel/Span fork where a community has done all the significant work on this integration since mid-2024, and they deserve both credit and ownership.
-We are discussing how to make that happen in https://github.com/haext/span/issues/55 to ensure users receive updates, that the HACS store listing is correct, and that the newer maintainers have appropriate control.
-The maintainers of https://github.com/SpanPanel/Span have done excellent work, and if you are already using their fork please feel free to continue to do so for now as it is likely to be more up to date at the moment.
+The https://github.com/SpanPanel/span fork is the one listed in the HACS store, as it was moved from https://github.com/gdgib/span.
+If you were using https://github.com/SpanPanel/Span before 2025-01-14 that repository has been moved to https://github.com/SpanPanel/SpanCustom, and will be deprecated shortly as we consolidate here.
 
 ## Prerequisites
 
@@ -184,10 +182,11 @@ This integration is published under the MIT license.
 
 This repository is set up as part of an organization so a single committer is not the weak link. The repostiorry is a fork in a long line of span forks that may or may not be stable (from newer to older):
 
-- haext/span (current GitHub organization)
-- SpanPanel/Span
+- SpanPanel/span (current GitHub organization, current repository, currently listed in HACS)
+- SpanPanel/Span (was moved to https://github.com/SpanPanel/SpanCustom)
 - cayossarian/span
-- gdgib/span (the old home for this repository)
+- haext/span
+- gdgib/span
 - thetoothpick/span-hacs
 - wez/span-hacs
 - galak/span-hacs
