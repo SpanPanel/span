@@ -2,7 +2,7 @@
 name = "span"
 version = "1.0.5"
 description = "Span Panel Custom Integration for Home Assistant"
-authors = ["haext"]
+authors = ["SpanPanel"]
 license = "MIT"
 readme = "README.md"
 package-mode = false

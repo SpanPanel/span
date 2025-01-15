@@ -10,6 +10,11 @@ The author(s) will try to keep this integration working, but cannot provide tech
 
 What this integration does do is provide the user Home Assistant sensors and controls that are useful in understanding an installations power consumption, energy usage, and control panel circuits.
 
+## Notice on Forks
+
+The https://github.com/SpanPanel/span fork is the one listed in the HACS store, as it was moved from https://github.com/gdgib/span.
+If you were using https://github.com/SpanPanel/Span before 2025-01-14 that repository has been moved to https://github.com/SpanPanel/SpanCustom, and will be deprecated shortly as we consolidate here.
+
 ## Prerequisites
 
 - [Home Assistant](https://www.home-assistant.io/) installed
@@ -147,7 +152,7 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
 
-If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `haext/Span` workspace for git and other project operations.
+If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `SpanPanel/Span` workspace for git and other project operations.
 
 For instance you can:
 
@@ -177,10 +182,11 @@ This integration is published under the MIT license.
 
 This repository is set up as part of an organization so a single committer is not the weak link. The repostiorry is a fork in a long line of span forks that may or may not be stable (from newer to older):
 
-- haext/span (current GitHub organization)
-- SpanPanel/Span
+- SpanPanel/span (current GitHub organization, current repository, currently listed in HACS)
+- SpanPanel/Span (was moved to https://github.com/SpanPanel/SpanCustom)
 - cayossarian/span
-- gdgib/span (the old home for this repository)
+- haext/span
+- gdgib/span
 - thetoothpick/span-hacs
 - wez/span-hacs
 - galak/span-hacs
@@ -192,6 +198,6 @@ Additional contributors:
 
 ## Issues
 
-If you have a problem with the integration, feel free to [open an issue](https://github.com/haext/span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
+If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
 
-For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/haext/span/pulls). We're generally very happy to have a starting point when making a change.
+For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/span/pulls). We're generally very happy to have a starting point when making a change.
