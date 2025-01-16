@@ -1,6 +1,5 @@
 """span_panel_storage_battery"""
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
@@ -18,17 +17,4 @@ class SpanPanelStorageBattery:
         """read the data from the dictionary"""
         return SpanPanelStorageBattery(
             storage_battery_percentage=data.get("percentage", 0)
-        )
-
-    def copy(self) -> 'SpanPanelStorageBattery':
-        """Create a deep copy of storage battery data"""
-        return deepcopy(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> 'SpanPanelStorageBattery':
-        """Create instance from dict with deep copy of input data"""
-        data = deepcopy(data)
-        return cls(
-            storage_battery_percentage=data.get("batteryPercentage", 0),
-            raw_data=data
         )

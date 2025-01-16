@@ -4,7 +4,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-from .const import SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN
+from .const import (SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN,
+                    SYSTEM_DOOR_STATE_UNKNOWN)
 
 
 @dataclass
@@ -28,7 +29,7 @@ class SpanPanelHardwareStatus:
     # Sensor is a tamper sensor not a door sensor
     @property
     def is_door_closed(self) -> bool | None:
-        if self.door_state is None:
+        if self.door_state in (None, SYSTEM_DOOR_STATE_UNKNOWN):
             return None
         if self.door_state not in (SYSTEM_DOOR_STATE_OPEN, SYSTEM_DOOR_STATE_CLOSED):
             return None

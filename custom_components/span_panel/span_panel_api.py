@@ -18,7 +18,7 @@ from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class SpanPanelApi:
@@ -27,17 +27,17 @@ class SpanPanelApi:
     def __init__(
         self,
         host: str,
-        access_token: str | None = None,    # nosec
+        access_token: str | None = None,  # nosec
         options: Options | None = None,
         async_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.host: str = host.lower()
         self.access_token: str | None = access_token
         self.options: Options | None = options
-        self._async_client = async_client
+        self._async_client: Any | None = async_client
 
     @property
-    def async_client(self):
+    def async_client(self) -> Any | Any:
         """Return the httpx.AsyncClient"""
 
         return self._async_client or httpx.AsyncClient(verify=True)
@@ -74,20 +74,25 @@ class SpanPanelApi:
                 "description": "Home Assistant Local Span Integration",
             },
         )
-        return register_results.json()["accessToken"]
+        response_data: Dict[str, str] = register_results.json()
+        if "accessToken" not in response_data:
+            raise SpanPanelReturnedEmptyData("No access token in response")
+        return response_data["accessToken"]
 
     async def get_status_data(self) -> SpanPanelHardwareStatus:
         """Get the status data"""
-        response = await self.get_data(URL_STATUS)
-        status_data = SpanPanelHardwareStatus.from_dict(response.json())
+        response: httpx.Response = await self.get_data(URL_STATUS)
+        status_data: SpanPanelHardwareStatus = SpanPanelHardwareStatus.from_dict(
+            response.json()
+        )
         return status_data
 
     async def get_panel_data(self) -> SpanPanelData:
         """Get the panel data"""
-        response = await self.get_data(URL_PANEL)
+        response: httpx.Response = await self.get_data(URL_PANEL)
         # Deep copy the raw data before processing in case cached data cleaned up
-        raw_data = deepcopy(response.json())
-        panel_data = SpanPanelData.from_dict(raw_data, self.options)
+        raw_data: Any = deepcopy(response.json())
+        panel_data: SpanPanelData = SpanPanelData.from_dict(raw_data, self.options)
 
         # Span Panel API might return empty result.
         # We use relay state == UNKNOWN as an indication of that scenario.
@@ -98,8 +103,8 @@ class SpanPanelApi:
 
     async def get_circuits_data(self) -> Dict[str, SpanPanelCircuit]:
         """Get the circuits data"""
-        response = await self.get_data(URL_CIRCUITS)
-        raw_circuits_data = deepcopy(response.json()[SPAN_CIRCUITS])
+        response: httpx.Response = await self.get_data(URL_CIRCUITS)
+        raw_circuits_data: Any = deepcopy(response.json()[SPAN_CIRCUITS])
 
         if not raw_circuits_data:
             raise SpanPanelReturnedEmptyData()
@@ -111,8 +116,8 @@ class SpanPanelApi:
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
         """Get the storage battery data"""
-        response = await self.get_data(URL_STORAGE_BATTERY)
-        storage_battery_data = response.json()[SPAN_SOE]
+        response: httpx.Response = await self.get_data(URL_STORAGE_BATTERY)
+        storage_battery_data: Any = response.json()[SPAN_SOE]
 
         # Span Panel API might return empty result.
         # We use relay state == UNKNOWN as an indication of that scenario.
@@ -121,43 +126,47 @@ class SpanPanelApi:
 
         return SpanPanelStorageBattery.from_dic(storage_battery_data)
 
-    async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState):
+    async def set_relay(
+        self, circuit: SpanPanelCircuit, state: CircuitRelayState
+    ) -> None:
         """Set the relay state"""
         await self.post_data(
             f"{URL_CIRCUITS}/{circuit.circuit_id}",
             {"relayStateIn": {"relayState": state.name}},
         )
 
-    async def set_priority(self, circuit: SpanPanelCircuit, priority: CircuitPriority):
+    async def set_priority(
+        self, circuit: SpanPanelCircuit, priority: CircuitPriority
+    ) -> None:
         """Set the priority"""
         await self.post_data(
             f"{URL_CIRCUITS}/{circuit.circuit_id}",
             {"priorityIn": {"priority": priority.name}},
         )
 
-    async def get_data(self, url) -> httpx.Response:
+    async def get_data(self, url: str) -> httpx.Response:
         """
         Fetch data from the endpoint and if inverters selected default
         to fetching inverter data.
         Update from PC endpoint.
         """
-        formatted_url = url.format(self.host)
-        response = await self._async_fetch_with_retry(
+        formatted_url: str = url.format(self.host)
+        response: httpx.Response = await self._async_fetch_with_retry(
             formatted_url, follow_redirects=False
         )
         return response
 
     async def post_data(self, url: str, payload: dict) -> httpx.Response:
         """Post data to the endpoint"""
-        formatted_url = url.format(self.host)
-        response = await self._async_post(formatted_url, payload)
+        formatted_url: str = url.format(self.host)
+        response: httpx.Response = await self._async_post(formatted_url, payload)
         return response
 
-    async def _async_fetch_with_retry(self, url, **kwargs) -> httpx.Response:
+    async def _async_fetch_with_retry(self, url: str, **kwargs: Any) -> httpx.Response:
         """
         Retry 3 times to fetch the url if there is a transport error.
         """
-        headers = {"Accept": "application/json"}
+        headers: Dict[str, str] = {"Accept": "application/json"}
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
 
@@ -165,7 +174,7 @@ class SpanPanelApi:
             _LOGGER.debug("HTTP GET Attempt #%s: %s", attempt + 1, url)
             try:
                 async with self.async_client as client:
-                    resp = await client.get(
+                    resp: httpx.Response = await client.get(
                         url, timeout=API_TIMEOUT, headers=headers, **kwargs
                     )
                     resp.raise_for_status()
@@ -177,18 +186,18 @@ class SpanPanelApi:
         raise httpx.TransportError("Too many attempts")
 
     async def _async_post(
-        self, url: str, json: dict[str, Any] | None = None, **kwargs
+        self, url: str, json: dict[str, Any] | None = None, **kwargs: Any
     ) -> httpx.Response:
         """
         POST to the url
         """
-        headers = {"accept": "application/json"}
+        headers: Dict[str, str] = {"accept": "application/json"}
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
 
         _LOGGER.debug("HTTP POST Attempt: %s", url)
         async with self.async_client as client:
-            resp = await client.post(
+            resp: httpx.Response = await client.post(
                 url, json=json, headers=headers, timeout=API_TIMEOUT, **kwargs
             )
             resp.raise_for_status()

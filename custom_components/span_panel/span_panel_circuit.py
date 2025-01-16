@@ -27,12 +27,12 @@ class SpanPanelCircuit:
     raw_data: dict = field(default_factory=dict)
 
     @property
-    def is_relay_closed(self):
+    def is_relay_closed(self) -> bool:
         return self.relay_state == CircuitRelayState.CLOSED.name
 
     @staticmethod
-    def from_dict(data: dict[str, Any]):
-        data_copy = deepcopy(data)
+    def from_dict(data: dict[str, Any]) -> "SpanPanelCircuit":
+        data_copy: dict[str, Any] = deepcopy(data)
         return SpanPanelCircuit(
             circuit_id=data_copy["id"],
             name=data_copy["name"],
