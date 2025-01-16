@@ -21,7 +21,7 @@ PANEL_URL = "http://{}/api/v1/panel"
 REGISTER_URL = "http://{}/api/v1/auth/register"
 STORAGE_BATTERY_URL = "http://{}/api/v1/storage/soe"
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER: logging.Logger = logging.getLogger(__name__)
 
 SPAN_CIRCUITS = "circuits"
 SPAN_SYSTEM = "system"

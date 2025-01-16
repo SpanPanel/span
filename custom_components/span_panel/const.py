@@ -2,8 +2,9 @@
 
 import enum
 from datetime import timedelta
+from typing import Final
 
-DOMAIN = "span_panel"
+DOMAIN: Final = "span_panel"
 COORDINATOR = "coordinator"
 NAME = "name"
 
@@ -34,6 +35,7 @@ SPAN_SYSTEM = "system"
 PANEL_POWER = "instantGridPowerW"
 SYSTEM_DOOR_STATE = "doorState"
 SYSTEM_DOOR_STATE_CLOSED = "CLOSED"
+SYSTEM_DOOR_STATE_UNKNOWN = "UNKNOWN"
 SYSTEM_DOOR_STATE_OPEN = "OPEN"
 SYSTEM_ETHERNET_LINK = "eth0Link"
 SYSTEM_CELLULAR_LINK = "wwanLink"

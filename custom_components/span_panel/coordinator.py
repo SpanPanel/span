@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
 from .const import API_TIMEOUT
 from .span_panel import SpanPanel
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
@@ -25,7 +25,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         span_panel: SpanPanel,
         name: str,
         update_interval: int,
-    ):
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -33,7 +33,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             update_interval=timedelta(seconds=update_interval),
             always_update=True,
         )
-        self.span_panel = span_panel
+        self.span_panel: SpanPanel = span_panel
 
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""

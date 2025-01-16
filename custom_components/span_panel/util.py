@@ -4,7 +4,7 @@ from .const import DOMAIN
 from .span_panel import SpanPanel
 
 
-def panel_to_device_info(panel: SpanPanel):
+def panel_to_device_info(panel: SpanPanel) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, panel.status.serial_number)},
         manufacturer="Span",

@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (SensorDeviceClass, SensorEntity,
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -80,7 +81,11 @@ class SpanPanelStorageBatterySensorEntityDescription(
 
 
 # pylint: disable=unexpected-keyword-arg
-CIRCUITS_SENSORS = (
+CIRCUITS_SENSORS: tuple[
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+] = (
     SpanPanelCircuitsSensorEntityDescription(
         key=CIRCUITS_POWER,
         name="Power",
@@ -110,7 +115,14 @@ CIRCUITS_SENSORS = (
     ),
 )
 
-PANEL_SENSORS = (
+PANEL_SENSORS: tuple[
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+] = (
     SpanPanelDataSensorEntityDescription(
         key="instantGridPowerW",
         name="Current Power",
@@ -167,7 +179,11 @@ PANEL_SENSORS = (
     ),
 )
 
-INVERTER_SENSORS = (
+INVERTER_SENSORS: tuple[
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+] = (
     SpanPanelDataSensorEntityDescription(
         key="solar_inverter_instant_power",
         name="Solar Inverter Instant Power",
@@ -197,7 +213,12 @@ INVERTER_SENSORS = (
     ),
 )
 
-PANEL_DATA_STATUS_SENSORS = (
+PANEL_DATA_STATUS_SENSORS: tuple[
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+] = (
     SpanPanelDataSensorEntityDescription(
         key=CURRENT_RUN_CONFIG,
         name="Current Run Config",
@@ -220,7 +241,7 @@ PANEL_DATA_STATUS_SENSORS = (
     ),
 )
 
-STATUS_SENSORS = (
+STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription] = (
     SpanPanelStatusSensorEntityDescription(
         key=STATUS_SOFTWARE_VER,
         name="Software Version",
@@ -228,7 +249,7 @@ STATUS_SENSORS = (
     ),
 )
 
-STORAGE_BATTERY_SENSORS = (
+STORAGE_BATTERY_SENSORS: tuple[SpanPanelStorageBatterySensorEntityDescription] = (
     SpanPanelStorageBatterySensorEntityDescription(
         key=STORAGE_BATTERY_PERCENTAGE,
         name="SPAN Storage Battery Percentage",
@@ -240,9 +261,10 @@ STORAGE_BATTERY_SENSORS = (
 )
 
 ICON = "mdi:flash"
-_LOGGER = logging.getLogger(__name__)
+_LOGGER: logging.Logger = logging.getLogger(__name__)
 
-T = TypeVar('T', bound=SensorEntityDescription)
+T = TypeVar("T", bound=SensorEntityDescription)
+
 
 class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T]):
     """Base class for Span Panel Sensors."""
@@ -259,19 +281,21 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """Initialize Span Panel Sensor base entity."""
         super().__init__(data_coordinator, context=description)
         self.entity_description = description
-        device_info = panel_to_device_info(span_panel)
+        device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
-        base_name = f"{description.name}"
-        
-        if (data_coordinator.config_entry is not None and 
-            data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False) and 
-            device_info is not None and 
-            isinstance(device_info, dict) and 
-            "name" in device_info):
+        base_name: str = f"{description.name}"
+
+        if (
+            data_coordinator.config_entry is not None
+            and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
+            and device_info is not None
+            and isinstance(device_info, dict)
+            and "name" in device_info
+        ):
             self._attr_name = f"{device_info['name']} {base_name}"
         else:
             self._attr_name = base_name
-            
+
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{description.key}"
         )
@@ -283,15 +307,18 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """Return the state of the sensor."""
         # Get atomic snapshot of panel data
         span_panel: SpanPanel = self.coordinator.data
-        value_function = getattr(self.entity_description, "value_fn", None)
-        if value_function is not None:
-            # Get atomic snapshot of required data source
-            data_source = self.get_data_source(span_panel)
-            value = value_function(data_source)
-        else:
-            value = None
-        _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, value)
-        return value
+        value_function: Callable[[Any], float | int | str | None] | None = getattr(
+            self.entity_description, "value_fn", None
+        )
+        if value_function is None:
+            return None
+
+        data_source: Any = self.get_data_source(span_panel)
+        raw_value: float | int | str | None = value_function(data_source)
+        _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
+
+        if isinstance(raw_value, (float, int, str)) or raw_value is None:
+            return raw_value
 
     def get_data_source(self, span_panel: SpanPanel) -> Any:
         """Get the data source for the sensor."""
@@ -312,13 +339,10 @@ class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescrip
         """Initialize Span Panel Circuit entity."""
         # Create a new description with modified name including circuit name
         circuit_description = SpanPanelCircuitsSensorEntityDescription(
-            **{
-                **vars(description),
-                "name": f"{name} {description.name}"
-            }
+            **{**vars(description), "name": f"{name} {description.name}"}
         )
         super().__init__(coordinator, circuit_description, span_panel)
-        self.id = circuit_id
+        self.id: str = circuit_id
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
         )
@@ -348,10 +372,12 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription]):
         return span_panel.status
 
 
-class SpanPanelStorageBatteryStatus(SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription]):
+class SpanPanelStorageBatteryStatus(
+    SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription]
+):
     """Initialize SpanPanelStorageBatteryStatus"""
 
-    _attr_icon = "mdi:battery"
+    _attr_icon: str = "mdi:battery"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
         return span_panel.storage_battery
@@ -377,7 +403,9 @@ async def async_setup_entry(
 
     if config_entry.options.get(INVERTER_ENABLE, False):
         for description_i in INVERTER_SENSORS:
-            entities.append(SpanPanelPanelStatus(coordinator, description_i, span_panel))
+            entities.append(
+                SpanPanelPanelStatus(coordinator, description_i, span_panel)
+            )
 
     for description_ss in STATUS_SENSORS:
         entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))

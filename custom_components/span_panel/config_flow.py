@@ -5,17 +5,20 @@ from __future__ import annotations
 import enum
 import logging
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Dict
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
                                  CONF_SCAN_INTERVAL)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
+
+from custom_components.span_panel.span_panel_hardware_status import \
+    SpanPanelHardwareStatus
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, USE_DEVICE_PREFIX
 from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
@@ -43,7 +46,9 @@ class TriggerFlowType(enum.Enum):
 
 
 def create_api_controller(
-    hass: HomeAssistant, host: str, access_token: str | None = None # nosec
+    hass: HomeAssistant,
+    host: str,
+    access_token: str | None = None,  # nosec
 ) -> SpanPanelApi:
     params: dict[str, Any] = {"host": host, "async_client": get_async_client(hass)}
     if access_token is not None:
@@ -52,21 +57,25 @@ def create_api_controller(
 
 
 async def validate_host(
-    hass: HomeAssistant, host: str, access_token: str | None = None # nosec
+    hass: HomeAssistant,
+    host: str,
+    access_token: str | None = None,  # nosec
 ) -> bool:
-    span_api = create_api_controller(hass, host, access_token)
+    span_api: SpanPanelApi = create_api_controller(hass, host, access_token)
     if access_token:
         return await span_api.ping_with_auth()
     return await span_api.ping()
 
 
-async def validate_auth_token(hass: HomeAssistant, host: str, access_token: str) -> bool:
+async def validate_auth_token(
+    hass: HomeAssistant, host: str, access_token: str
+) -> bool:
     """Perform an authenticated call to confirm validity of provided token."""
-    span_api = create_api_controller(hass, host, access_token)
+    span_api: SpanPanelApi = create_api_controller(hass, host, access_token)
     return await span_api.ping_with_auth()
 
 
-class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
+class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """
     Handle a config flow for Span Panel.
     """
@@ -78,17 +87,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         self.host: str | None = None
         self.serial_number: str | None = None
         self.access_token: str | None = None
-
         self._is_flow_setup: bool = False
+        self.context: Dict[str, Any] = {}
 
-    async def setup_flow(self, trigger_type: TriggerFlowType, host: str):
+    async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
         """Set up the flow."""
 
         if self._is_flow_setup is True:
             raise AssertionError("Flow is already set up")
 
-        span_api = create_api_controller(self.hass, host)
-        panel_status = await span_api.get_status_data()
+        span_api: SpanPanelApi = create_api_controller(self.hass, host)
+        panel_status: SpanPanelHardwareStatus = await span_api.get_status_data()
 
         self.trigger_flow_type = trigger_type
         self.host = host
@@ -105,12 +114,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
         self._is_flow_setup = True
 
-    def ensure_flow_is_set_up(self):
+    def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
         if self._is_flow_setup is False:
             raise AssertionError("Flow is not set up")
 
-    async def ensure_not_already_configured(self):
+    async def ensure_not_already_configured(self) -> None:
         """Ensure the panel is not already configured."""
         self.ensure_flow_is_set_up()
 
@@ -148,8 +157,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
 
-        host = user_input[CONF_HOST].strip()
-        
+        host: str = user_input[CONF_HOST].strip()
+
         # Validate host before setting up flow
         if not await validate_host(self.hass, host):
             return self.async_show_form(
@@ -162,7 +171,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         if not self._is_flow_setup:
             await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
             await self.ensure_not_already_configured()
-            
+
         return await self.async_step_choose_auth_type()
 
     async def async_step_reauth(
@@ -185,10 +194,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         # Prompt the user for confirmation
         if user_input is None:
             self._set_confirm_only()
+            host = self.host if self.host is not None else ""
             return self.async_show_form(
                 step_id="confirm_discovery",
                 description_placeholders={
-                    "host": self.host,
+                    "host": host,
                 },
             )
 
@@ -222,19 +232,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         """
         self.ensure_flow_is_set_up()
 
-        span_api = create_api_controller(self.hass, self.host or "")
-        panel_status = await span_api.get_status_data()
+        span_api: SpanPanelApi = create_api_controller(self.hass, self.host or "")
+        panel_status: SpanPanelHardwareStatus = await span_api.get_status_data()
 
         # Check if running firmware newer or older than r202342
         if panel_status.proximity_proven is not None:
             # Reprompt until we are able to do proximity auth for new firmware
-            proximity_verified = panel_status.proximity_proven
+            proximity_verified: bool = panel_status.proximity_proven
             if proximity_verified is False:
                 return self.async_show_form(step_id="auth_proximity")
         else:
             # Reprompt until we are able to do proximity auth for old firmware
-            remaining_presses = panel_status.remaining_auth_unlock_button_presses
-            if (remaining_presses != 0):
+            remaining_presses: int = panel_status.remaining_auth_unlock_button_presses
+            if remaining_presses != 0:
                 return self.async_show_form(
                     step_id="auth_proximity",
                 )
@@ -266,7 +276,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
             )
 
         # Extract access token from user input
-        access_token = user_input.get(CONF_ACCESS_TOKEN)
+        access_token: str | None = user_input.get(CONF_ACCESS_TOKEN)
         if access_token:
             self.access_token = access_token
 
@@ -318,6 +328,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     raise ValueError(
                         "Access token cannot be None when updating an entry"
                     )
+                if "entry_id" not in self.context:
+                    raise ValueError("Entry ID is missing from context")
                 return self.update_existing_entry(
                     self.context["entry_id"],
                     self.host,
@@ -334,14 +346,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         Creates a new SPAN panel entry.
         """
         return self.async_create_entry(
-            title=serial_number, 
-            data={
-                CONF_HOST: host, 
-                CONF_ACCESS_TOKEN: access_token
-            },
+            title=serial_number,
+            data={CONF_HOST: host, CONF_ACCESS_TOKEN: access_token},
             options={
                 USE_DEVICE_PREFIX: True  # Only set for new installations
-            }
+            },
         )
 
     def update_existing_entry(
@@ -361,7 +370,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         updated_data[CONF_ACCESS_TOKEN] = access_token
 
         # An existing entry must exist before we can update it
-        entry = self.hass.config_entries.async_get_entry(entry_id)
+        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(
+            entry_id
+        )
         if entry is None:
             raise AssertionError("Entry does not exist")
 
@@ -378,33 +389,30 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         return OptionsFlowHandler(entry_id=config_entry.entry_id)
 
 
-OPTIONS_SCHEMA = vol.Schema(
+OPTIONS_SCHEMA: Any = vol.Schema(
     {
-        vol.Optional(CONF_SCAN_INTERVAL): vol.All(
-            int, vol.Range(min=5)
-        ),
+        vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
         vol.Optional(BATTERY_ENABLE): bool,
         vol.Optional(INVERTER_ENABLE): bool,
-        vol.Optional(INVERTER_LEG1): vol.All(
-            vol.Coerce(int), vol.Range(min=0)
-        ),
-        vol.Optional(INVERTER_LEG2): vol.All(
-            vol.Coerce(int), vol.Range(min=0)
-        ),
+        vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
     }
 )
+
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel without storing config_entry."""
 
     def __init__(self, entry_id: str) -> None:
         """Initialize with entry_id only."""
-        self._entry_id = entry_id
+        self._entry_id: str = entry_id
 
     @property
     def entry(self) -> config_entries.ConfigEntry:
         """Get the config entry using the stored entry_id."""
-        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(
+            self._entry_id
+        )
         if not entry:
             raise ValueError("Config entry not found")
         return entry
@@ -415,12 +423,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the options."""
         if user_input is not None:
             # Preserve the USE_DEVICE_PREFIX setting from the original entry
-            use_prefix = self.entry.options.get(USE_DEVICE_PREFIX, False)
+            use_prefix: Any | bool = self.entry.options.get(USE_DEVICE_PREFIX, False)
             if use_prefix:
                 user_input[USE_DEVICE_PREFIX] = use_prefix
             return self.async_create_entry(title="", data=user_input)
 
-        defaults = {
+        defaults: dict[str, Any] = {
             CONF_SCAN_INTERVAL: self.entry.options.get(
                 CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
             ),
@@ -432,7 +440,5 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=self.add_suggested_values_to_schema(
-                OPTIONS_SCHEMA, defaults
-            ),
+            data_schema=self.add_suggested_values_to_schema(OPTIONS_SCHEMA, defaults),
         )

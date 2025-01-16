@@ -6,6 +6,7 @@ from typing import Any
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -26,7 +27,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         _LOGGER.debug("CREATE SELECT %s", name)
         span_panel: SpanPanel = coordinator.data
 
-        self.id = id
+        self.id: str = id
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_select_{self.id}"
         )
@@ -34,12 +35,17 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         super().__init__(coordinator)
 
     @cached_property
-    def name(self):
+    def name(self) -> str:
         """Return the switch name."""
         span_panel: SpanPanel = self.coordinator.data
-        base_name = f"{span_panel.circuits[self.id].name} Circuit Priority"
-        if self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False):
-            return f"{self._attr_device_info['name']} {base_name}"
+        base_name: str = f"{span_panel.circuits[self.id].name} Circuit Priority"
+        if (
+            self.coordinator.config_entry is not None
+            and self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
+        ):
+            device_info: DeviceInfo | None = self._attr_device_info
+            if device_info is not None and "name" in device_info:
+                return f"{device_info['name']} {base_name}"
         return base_name
 
     @cached_property
@@ -77,6 +83,8 @@ async def async_setup_entry(
 
     for circuit_id, circuit_data in span_panel.circuits.items():
         if circuit_data.is_user_controllable:
-            entities.append(SpanPanelCircuitsSelect(coordinator, circuit_id, circuit_data.name))
+            entities.append(
+                SpanPanelCircuitsSelect(coordinator, circuit_id, circuit_data.name)
+            )
 
     async_add_entities(entities)
