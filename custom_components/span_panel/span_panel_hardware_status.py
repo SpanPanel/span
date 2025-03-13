@@ -1,11 +1,13 @@
 """Span Panel Hardware Status"""
 
+import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-from .const import (SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN,
-                    SYSTEM_DOOR_STATE_UNKNOWN)
+from .const import SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,11 +31,18 @@ class SpanPanelHardwareStatus:
     # Sensor is a tamper sensor not a door sensor
     @property
     def is_door_closed(self) -> bool | None:
-        if self.door_state in (None, SYSTEM_DOOR_STATE_UNKNOWN):
+        """Return whether the door is closed, or None if state is unknown."""
+        _LOGGER.debug("Door state raw value: %s", self.door_state)
+        if self.door_state is None:
+            _LOGGER.debug("Door state is None")
             return None
         if self.door_state not in (SYSTEM_DOOR_STATE_OPEN, SYSTEM_DOOR_STATE_CLOSED):
+            _LOGGER.debug("Door state is not OPEN or CLOSED: %s", self.door_state)
             return None
-        return self.door_state == SYSTEM_DOOR_STATE_CLOSED
+        result = self.door_state == SYSTEM_DOOR_STATE_CLOSED
+        _LOGGER.debug("is_door_closed returning: %s", result)
+        return result
+
 
     @property
     def system_data(self) -> Dict[str, Any]:

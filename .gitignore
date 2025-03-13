@@ -5,6 +5,8 @@
 .vscode/*
 !.vscode/settings.json.example
 !.vscode/tasks.json
+.git/*
+!.git/hooks/
 .direnv/
 env/
 .envrc

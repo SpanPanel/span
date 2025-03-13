@@ -7,8 +7,7 @@ from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.httpx_client import httpx
-from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
-                                                      UpdateFailed)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import API_TIMEOUT
 from .span_panel import SpanPanel
@@ -40,7 +39,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         try:
             _LOGGER.debug("Starting coordinator update")
             await asyncio.wait_for(self.span_panel.update(), timeout=API_TIMEOUT)
-            _LOGGER.debug("Coordinator update successful - data: %s", self.span_panel)
+            # Return a reference to the panel without copying
+            return self.span_panel
         except httpx.HTTPStatusError as err:
             if err.response.status_code == httpx.codes.UNAUTHORIZED:
                 raise ConfigEntryAuthFailed from err
@@ -61,5 +61,3 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                 str(err),
             )
             raise UpdateFailed(f"Error communicating with API: {err}") from err
-
-        return self.span_panel

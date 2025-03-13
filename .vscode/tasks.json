@@ -4,7 +4,7 @@
     {
       "label": "Run All Pre-commit Checks",
       "type": "shell",
-      "command": "pre-commit run --all-files",
+      "command": "poetry run pre-commit run --all-files",
       "group": {
         "kind": "test",
         "isDefault": true
@@ -19,7 +19,7 @@
     {
       "label": "Run Ruff Check",
       "type": "shell",
-      "command": "pre-commit run ruff --all-files",
+      "command": "poetry run pre-commit run ruff --all-files",
       "group": "test",
       "presentation": {
         "reveal": "always",
@@ -31,8 +31,19 @@
     {
       "label": "Run Pre-commit on Staged Files",
       "type": "shell",
-      "command": "pre-commit run",
+      "command": "poetry run pre-commit run",
       "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new",
+        "clear": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Git Commit with Poetry",
+      "type": "shell",
+      "command": "cd ${workspaceFolder} && poetry run git commit",
       "presentation": {
         "reveal": "always",
         "panel": "new",

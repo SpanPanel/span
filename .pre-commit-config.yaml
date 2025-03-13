@@ -4,6 +4,9 @@ repos:
       - id: isort
         name: isort
         entry: poetry run isort
+        args:
+          - --profile=black
+          - --filter-files
         language: system
         types: [python]
 
