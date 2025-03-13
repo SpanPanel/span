@@ -1,7 +1,6 @@
 """Module to read production and consumption values from a Span panel."""
 
 import logging
-from copy import deepcopy
 from typing import Dict
 
 from homeassistant.helpers.httpx_client import httpx
@@ -56,19 +55,19 @@ class SpanPanel:
         """Get hardware status with type checking."""
         if self._status is None:
             raise RuntimeError("Hardware status not available")
-        return deepcopy(self._status)
+        return self._status
 
     def _get_data(self) -> SpanPanelData:
         """Get data with type checking."""
         if self._panel is None:
             raise RuntimeError("Panel data not available") 
-        return deepcopy(self._panel)
+        return self._panel
 
     def _get_storage_battery(self) -> SpanPanelStorageBattery:
         """Get storage battery with type checking."""
         if self._storage_battery is None:
             raise RuntimeError("Storage battery not available")
-        return deepcopy(self._storage_battery)
+        return self._storage_battery
 
     @property
     def host(self) -> str:
@@ -78,23 +77,23 @@ class SpanPanel:
     @property
     def options(self) -> Options | None:
         """Get options data atomically"""
-        return deepcopy(self._options) if self._options else None
+        return self._options
 
     def _update_status(self, new_status: SpanPanelHardwareStatus) -> None:
         """Atomic update of status data"""
-        self._status = deepcopy(new_status)
+        self._status = new_status
 
     def _update_panel(self, new_panel: SpanPanelData) -> None:
         """Atomic update of panel data"""
-        self._panel = deepcopy(new_panel)
+        self._panel = new_panel
 
     def _update_circuits(self, new_circuits: Dict[str, SpanPanelCircuit]) -> None:
         """Atomic update of circuits data"""
-        self._circuits = deepcopy(new_circuits)
+        self._circuits = new_circuits
 
     def _update_storage_battery(self, new_battery: SpanPanelStorageBattery) -> None:
         """Atomic update of storage battery data"""
-        self._storage_battery = deepcopy(new_battery)
+        self._storage_battery = new_battery
 
     async def update(self) -> None:
         """Update all panel data atomically"""
@@ -138,7 +137,7 @@ class SpanPanel:
     @property
     def circuits(self) -> Dict[str, SpanPanelCircuit]:
         """Get circuits data atomically"""
-        return deepcopy(self._circuits)
+        return self._circuits
 
     @property
     def storage_battery(self) -> SpanPanelStorageBattery:

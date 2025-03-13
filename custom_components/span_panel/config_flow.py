@@ -5,24 +5,27 @@ from __future__ import annotations
 import enum
 import logging
 from collections.abc import Mapping
-from typing import Any, Dict
+from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.components import zeroconf
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
-from homeassistant.const import (CONF_ACCESS_TOKEN, CONF_HOST,
-                                 CONF_SCAN_INTERVAL)
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlowContext,
+    ConfigFlowResult,
+)
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 
-from custom_components.span_panel.span_panel_hardware_status import \
-    SpanPanelHardwareStatus
+from custom_components.span_panel.span_panel_hardware_status import (
+    SpanPanelHardwareStatus,
+)
 
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, USE_DEVICE_PREFIX
-from .options import (BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1,
-                      INVERTER_LEG2)
+from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
 
 
 class TriggerFlowType(enum.Enum):
+    """Types of configuration flow triggers."""
     CREATE_ENTRY = enum.auto()
     UPDATE_ENTRY = enum.auto()
 
@@ -50,6 +54,7 @@ def create_api_controller(
     host: str,
     access_token: str | None = None,  # nosec
 ) -> SpanPanelApi:
+    """Create a Span Panel API controller."""
     params: dict[str, Any] = {"host": host, "async_client": get_async_client(hass)}
     if access_token is not None:
         params["access_token"] = access_token
@@ -61,6 +66,7 @@ async def validate_host(
     host: str,
     access_token: str | None = None,  # nosec
 ) -> bool:
+    """Validate the host connection."""
     span_api: SpanPanelApi = create_api_controller(hass, host, access_token)
     if access_token:
         return await span_api.ping_with_auth()
@@ -76,19 +82,23 @@ async def validate_auth_token(
 
 
 class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
-    """
-    Handle a config flow for Span Panel.
-    """
+    """Handle a config flow for Span Panel."""
 
     VERSION = 1
 
+    @classmethod
+    def is_matching(cls, other_flow: "SpanPanelConfigFlow") -> bool:
+        """Return True if other_flow is a matching Span Panel."""
+        return bool(other_flow and other_flow.context.get("source") == "zeroconf")
+
     def __init__(self) -> None:
+        """Initialize the config flow."""
         self.trigger_flow_type: TriggerFlowType | None = None
         self.host: str | None = None
         self.serial_number: str | None = None
         self.access_token: str | None = None
         self._is_flow_setup: bool = False
-        self.context: Dict[str, Any] = {}
+        self.context: ConfigFlowContext = {}
 
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
         """Set up the flow."""
@@ -128,7 +138,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ig
         self._abort_if_unique_id_configured(updates={CONF_HOST: self.host})
 
     async def async_step_zeroconf(
-        self, discovery_info: zeroconf.ZeroconfServiceInfo
+        self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
         """
         Handle a flow initiated by zeroconf discovery.

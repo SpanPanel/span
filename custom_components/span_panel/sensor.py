@@ -5,11 +5,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Generic, List, TypeVar
 
-from homeassistant.components.sensor import (SensorDeviceClass, SensorEntity,
-                                             SensorEntityDescription,
-                                             SensorStateClass)
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
@@ -17,11 +22,20 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (CIRCUITS_ENERGY_CONSUMED, CIRCUITS_ENERGY_PRODUCED,
-                    CIRCUITS_POWER, COORDINATOR, CURRENT_RUN_CONFIG, DOMAIN,
-                    DSM_GRID_STATE, DSM_STATE, MAIN_RELAY_STATE,
-                    STATUS_SOFTWARE_VER, STORAGE_BATTERY_PERCENTAGE,
-                    USE_DEVICE_PREFIX)
+from .const import (
+    CIRCUITS_ENERGY_CONSUMED,
+    CIRCUITS_ENERGY_PRODUCED,
+    CIRCUITS_POWER,
+    COORDINATOR,
+    CURRENT_RUN_CONFIG,
+    DOMAIN,
+    DSM_GRID_STATE,
+    DSM_STATE,
+    MAIN_RELAY_STATE,
+    STATUS_SOFTWARE_VER,
+    STORAGE_BATTERY_PERCENTAGE,
+    USE_DEVICE_PREFIX,
+)
 from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
@@ -34,6 +48,7 @@ from .util import panel_to_device_info
 
 @dataclass(frozen=True)
 class SpanPanelCircuitsRequiredKeysMixin:
+    """Required keys mixin for Span Panel circuit sensors."""
     value_fn: Callable[[SpanPanelCircuit], float]
 
 
@@ -41,11 +56,12 @@ class SpanPanelCircuitsRequiredKeysMixin:
 class SpanPanelCircuitsSensorEntityDescription(
     SensorEntityDescription, SpanPanelCircuitsRequiredKeysMixin
 ):
-    pass
+    """Describes a Span Panel circuit sensor entity."""
 
 
 @dataclass(frozen=True)
 class SpanPanelDataRequiredKeysMixin:
+    """Required keys mixin for Span Panel data sensors."""
     value_fn: Callable[[SpanPanelData], float | str]
 
 
@@ -53,11 +69,12 @@ class SpanPanelDataRequiredKeysMixin:
 class SpanPanelDataSensorEntityDescription(
     SensorEntityDescription, SpanPanelDataRequiredKeysMixin
 ):
-    pass
+    """Describes a Span Panel data sensor entity."""
 
 
 @dataclass(frozen=True)
 class SpanPanelStatusRequiredKeysMixin:
+    """Required keys mixin for Span Panel status sensors."""
     value_fn: Callable[[SpanPanelHardwareStatus], str]
 
 
@@ -65,11 +82,12 @@ class SpanPanelStatusRequiredKeysMixin:
 class SpanPanelStatusSensorEntityDescription(
     SensorEntityDescription, SpanPanelStatusRequiredKeysMixin
 ):
-    pass
+    """Describes a Span Panel status sensor entity."""
 
 
 @dataclass(frozen=True)
 class SpanPanelStorageBatteryRequiredKeysMixin:
+    """Required keys mixin for Span Panel storage battery sensors."""
     value_fn: Callable[[SpanPanelStorageBattery], int]
 
 
@@ -77,7 +95,7 @@ class SpanPanelStorageBatteryRequiredKeysMixin:
 class SpanPanelStorageBatterySensorEntityDescription(
     SensorEntityDescription, SpanPanelStorageBatteryRequiredKeysMixin
 ):
-    pass
+    """Describes a Span Panel storage battery sensor entity."""
 
 
 # pylint: disable=unexpected-keyword-arg
@@ -269,8 +287,11 @@ T = TypeVar("T", bound=SensorEntityDescription)
 class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T]):
     """Base class for Span Panel Sensors."""
 
-    _attr_icon = ICON
-    entity_description: T
+    _description: T
+    _attr_name: str | None = None
+    _attr_unique_id: str | None = None
+    _attr_native_value: str | int | float | date | datetime | Decimal | None = None
+    _attr_icon: str | None = "mdi:flash"
 
     def __init__(
         self,
@@ -280,10 +301,10 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
         super().__init__(data_coordinator, context=description)
-        self.entity_description = description
+        self._description = description
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
-        base_name: str = f"{description.name}"
+        base_name: str | None = getattr(description, "name", None)
 
         if (
             data_coordinator.config_entry is not None
@@ -291,34 +312,64 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             and device_info is not None
             and isinstance(device_info, dict)
             and "name" in device_info
+            and base_name is not None
         ):
             self._attr_name = f"{device_info['name']} {base_name}"
         else:
             self._attr_name = base_name
 
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{description.key}"
-        )
+        if span_panel.status.serial_number is not None and description.key is not None:
+            self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
+        else:
+            self._attr_unique_id = None
 
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
 
     @property
-    def native_value(self) -> float | str | None:
-        """Return the state of the sensor."""
-        # Get atomic snapshot of panel data
-        span_panel: SpanPanel = self.coordinator.data
+    def entity_description(self) -> T:
+        """Return the entity description."""
+        return self._description
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        is_available = self.coordinator.last_update_success
+        if is_available:
+            self._update_native_value()
+        return is_available
+
+    # Avoid overriding the native_value property since multiple inheritance and inconsistant
+    # HA base class defintions of native_value can cause mypy/pylint warnings.
+    # Instead update the native_value in the available property which is called by the
+    # the coordinator before accessing the native_value property.
+    def _update_native_value(self) -> None:
+        """Update the native value of the sensor."""
+        if not self.coordinator.last_update_success:
+            self._attr_native_value = None
+            return
+            
         value_function: Callable[[Any], float | int | str | None] | None = getattr(
             self.entity_description, "value_fn", None
         )
         if value_function is None:
-            return None
+            self._attr_native_value = None
+            return
 
-        data_source: Any = self.get_data_source(span_panel)
-        raw_value: float | int | str | None = value_function(data_source)
-        _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
+        try:
+            data_source: Any = self.get_data_source(self.coordinator.data)
+            raw_value: float | int | str | None = value_function(data_source)
+            _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
 
-        if isinstance(raw_value, (float, int, str)) or raw_value is None:
-            return raw_value
+            if raw_value is None:
+                self._attr_native_value = None
+            elif isinstance(raw_value, (float, int)):
+                self._attr_native_value = float(raw_value)
+            elif isinstance(raw_value, str):
+                self._attr_native_value = raw_value
+            else:
+                self._attr_native_value = str(raw_value)
+        except (AttributeError, KeyError, IndexError):
+            self._attr_native_value = None
 
     def get_data_source(self, span_panel: SpanPanel) -> Any:
         """Get the data source for the sensor."""
@@ -326,7 +377,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
 
 class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescription]):
-    """Initialize SpanPanelCircuitSensor"""
+    """Span Panel circuit sensor entity."""
 
     def __init__(
         self,
@@ -352,21 +403,21 @@ class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescrip
 
 
 class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription]):
-    """Initialize SpanPanelPanel"""
+    """Span Panel data sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         return span_panel.panel
 
 
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription]):
-    """Initialize SpanPanelPanelStatus"""
+    """Span Panel status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         return span_panel.panel
 
 
 class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription]):
-    """Initialize SpanPanelStatus"""
+    """Span Panel hardware status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
         return span_panel.status
@@ -375,9 +426,9 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription]):
 class SpanPanelStorageBatteryStatus(
     SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription]
 ):
-    """Initialize SpanPanelStorageBatteryStatus"""
+    """Span Panel storage battery sensor entity."""
 
-    _attr_icon: str = "mdi:battery"
+    _attr_icon: str | None = "mdi:battery"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
         return span_panel.storage_battery

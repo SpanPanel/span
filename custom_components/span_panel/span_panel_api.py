@@ -7,10 +7,19 @@ from typing import Any, Dict
 
 from homeassistant.helpers.httpx_client import httpx
 
-from .const import (API_TIMEOUT, PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
-                    SPAN_CIRCUITS, SPAN_SOE, URL_CIRCUITS, URL_PANEL,
-                    URL_REGISTER, URL_STATUS, URL_STORAGE_BATTERY,
-                    CircuitPriority, CircuitRelayState)
+from .const import (
+    API_TIMEOUT,
+    PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
+    SPAN_CIRCUITS,
+    SPAN_SOE,
+    URL_CIRCUITS,
+    URL_PANEL,
+    URL_REGISTER,
+    URL_STATUS,
+    URL_STORAGE_BATTERY,
+    CircuitPriority,
+    CircuitRelayState,
+)
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
 from .span_panel_circuit import SpanPanelCircuit
