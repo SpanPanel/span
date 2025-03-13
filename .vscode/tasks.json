@@ -2,6 +2,19 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Setup Git Hooks",
+      "type": "shell",
+      "command": "${workspaceFolder}/setup-hooks.sh",
+      "presentation": {
+        "reveal": "silent",
+        "clear": true
+      },
+      "problemMatcher": [],
+      "runOptions": {
+        "runOn": "folderOpen"
+      }
+    },
+    {
       "label": "Run All Pre-commit Checks",
       "type": "shell",
       "command": "poetry run pre-commit run --all-files",
