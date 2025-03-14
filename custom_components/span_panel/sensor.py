@@ -333,15 +333,15 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
-        is_available = self.coordinator.last_update_success
-        if is_available:
-            self._update_native_value()
-        return is_available
+        return self.coordinator.last_update_success
 
-    # Avoid overriding the native_value property since multiple inheritance and inconsistant
-    # HA base class defintions of native_value can cause mypy/pylint warnings.
-    # Instead update the native_value in the available property which is called by the
-    # the coordinator before accessing the native_value property.
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._update_native_value()
+        super()._handle_coordinator_update()
+
+    # Handle native_value updates directly in _handle_coordinator_update
+    # to avoid mypy/pylint warnings from overriding native_value property
     def _update_native_value(self) -> None:
         """Update the native value of the sensor."""
         if not self.coordinator.last_update_success:
