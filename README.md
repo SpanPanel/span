@@ -166,9 +166,9 @@ ln -s <span project path>/span/custom_components/span_panel <HA core path>/confi
 2. Set the `HA_CORE_PATH` environment variable to the location of your Home Assistant core directory.
 3. In the project root run `poetry install --with dev` to install dependencies.
 4. Run `poetry run pre-commit install` to install pre-commit hooks.
-5. Optionally use `poetry run pre-commit run --all-files` to manually run pre-commit hooks on files locally in your environment as you make changes.
+5. Optionally use `Tasks: Run Task` from the command pallete to run `Run all Pre-commit checks` or `poetry run pre-commit run --all-files` from the terminal to manually run pre-commit hooks on files locally in your environment as you make changes.
 
-Commits should be run on the command line so the lint jobs can proceed. The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed by the pre-commit hooks will be unstaged. After reviewing these changes, you can re-stage the changes and recommit or rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
+The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed or fail tests will be unstaged. After reviewing these changes or making corrections, you can re-stage the changes and recommit or rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
 
 ### VS Code
 
