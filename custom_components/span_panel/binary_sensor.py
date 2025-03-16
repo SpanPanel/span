@@ -107,11 +107,9 @@ class SpanPanelBinarySensor(
         super().__init__(data_coordinator, context=description)
         span_panel: SpanPanel = data_coordinator.data
 
-        self._attr_entity_description = description
-        # HA (2025.3.3) has a base class inconsistency where sensors produce
-        # warnings if we explicitly set the device class but binary sensors
-        # require setting the device class attribute for specific state
-        # conversions from boolean (for example cleared, connected, etc.)
+        # See developer_attrtribute_readme.md for why we use
+        # entity_description instead of _attr_entity_description
+        self.entity_description = description
         self._attr_device_class = description.device_class
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
@@ -136,8 +134,11 @@ class SpanPanelBinarySensor(
         """Handle updated data from the coordinator."""
         # Get the raw status value from the device
         status_data = self.coordinator.data.status
-        # Use the value_fn to get the binary state
-        status_value = self._attr_entity_description.value_fn(status_data)
+        # Use the value_fn to get the binary state - need to cast to our custom type
+        # since the base BinarySensorEntityDescription doesn't have value_fn
+        description = self.entity_description
+        assert isinstance(description, SpanPanelBinarySensorEntityDescription)
+        status_value = description.value_fn(status_data)
 
         self._attr_is_on = status_value
 
