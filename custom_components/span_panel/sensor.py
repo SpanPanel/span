@@ -297,11 +297,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
         super().__init__(data_coordinator, context=description)
-        self._attr_entity_description = description
-        # HA (2025.3.3) has a base class inconsistency where sensors produce
-        # warnings if we explicitly set the device class but binary sensors
-        # require setting the device class attribute for specific state
-        # from boolean
+        # See developer_attrtribute_readme.md for why we use
+        # entity_description instead of _attr_entity_descriptio
+        self.entity_description = description
+
+        if hasattr(description, "device_class"):
+            self._attr_device_class = description.device_class
+
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
         base_name: str | None = getattr(description, "name", None)
@@ -336,7 +338,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             return
 
         value_function: Callable[[Any], float | int | str | None] | None = getattr(
-            self._attr_entity_description, "value_fn", None
+            self.entity_description, "value_fn", None
         )
         if value_function is None:
             self._attr_native_value = None
@@ -375,13 +377,35 @@ class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescrip
         """Initialize Span Panel Circuit entity."""
         # Create a new description with modified name including circuit name
         circuit_description = SpanPanelCircuitsSensorEntityDescription(
-            **{**vars(description), "name": f"{name} {description.name}"}
+            key=description.key,
+            name=f"{name} {description.name}",
+            device_class=description.device_class,
+            entity_category=description.entity_category,
+            entity_registry_enabled_default=description.entity_registry_enabled_default,
+            entity_registry_visible_default=description.entity_registry_visible_default,
+            force_update=description.force_update,
+            icon=description.icon,
+            has_entity_name=description.has_entity_name,
+            translation_key=description.translation_key,
+            translation_placeholders=description.translation_placeholders,
+            unit_of_measurement=description.unit_of_measurement,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            suggested_unit_of_measurement=description.suggested_unit_of_measurement,
+            value_fn=description.value_fn,
         )
         super().__init__(coordinator, circuit_description, span_panel)
         self.id: str = circuit_id
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
         )
+
+        # Ensure the native_unit_of_measurement is set correctly from the description
+        if description.native_unit_of_measurement:
+            self._attr_native_unit_of_measurement = (
+                description.native_unit_of_measurement
+            )
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         return span_panel.circuits[self.id]
