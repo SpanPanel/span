@@ -142,6 +142,10 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 3. Entity Names and Device Renaming Errors - Prior to version 1.0.4 entity names were not prefixed with the device name so renaming a device did not allow a user to rename the entities accordingly. Newer versions of the integration use the device name prefix on a **new** configuration. An existing, pre-1.0.4 integration that is upgraded will not result in device prefixes in entity names to avoid breaking dependent dashboards and automations. If you want device name prefixes, install at least 1.0.4, delete the configuration and reconfigure it.
 
+4. Circuit Priority - The SPAN API does not currently allow the user to set the circuit priority.  We leave this drop down active because SPAN's browser also shows the drop down.  The priority of circuits is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router related circuits and "PowerUP" options which allow shedding of circuits.
+
+   Always On circuits are clearly "must-have" and are not user controlled (meaining you can't turn them off and no switch is provided for these circuits in the integration).  If you remove a circuit from the always-on list and reload the integration you should see a switch where non was visible before for that circuit.  The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule vague at best and may indicate a defect in the firmware.
+
 ## Development Notes
 
 ### Developer Prerequisites
