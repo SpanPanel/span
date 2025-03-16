@@ -1,14 +1,7 @@
 name: Lint Code Base
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
-  workflow_call: {}
+  workflow_call:
 
 permissions:
   contents: read
@@ -26,28 +19,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install ruff isort mypy bandit
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "v20"
-
       - name: Install Prettier
         run: npm install -g prettier
-
       - name: Run ruff
         run: ruff check .
-
       - name: Run isort
         run: isort check .
-
       - name: Run bandit
         run: bandit -r .
-
       - name: Run prettier with autofix
         run: prettier --write "**/*.{js,jsx,ts,tsx,json,css,scss,md}"
