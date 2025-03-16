@@ -111,6 +111,11 @@ class SpanPanelBinarySensor(
         # entity_description instead of _attr_entity_description
         self.entity_description = description
         self._attr_device_class = description.device_class
+
+        # Store direct reference to the value_fn so we don't need to access through
+        # entity_description later, avoiding type issues
+        self._value_fn = description.value_fn
+
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
         base_name: str = f"{description.name}"
@@ -134,14 +139,11 @@ class SpanPanelBinarySensor(
         """Handle updated data from the coordinator."""
         # Get the raw status value from the device
         status_data = self.coordinator.data.status
-        # Use the value_fn to get the binary state - need to cast to our custom type
-        # since the base BinarySensorEntityDescription doesn't have value_fn
-        description = self.entity_description
-        assert isinstance(description, SpanPanelBinarySensorEntityDescription)
-        status_value = description.value_fn(status_data)
+
+        # Get binary state using the directly stored value_fn reference
+        status_value = self._value_fn(status_data)
 
         self._attr_is_on = status_value
-
         self._attr_available = status_value is not None
 
         _LOGGER.debug(
@@ -151,7 +153,6 @@ class SpanPanelBinarySensor(
             self._attr_available,
         )
 
-        # Call parent method to notify HA of the update
         super()._handle_coordinator_update()
 
 
