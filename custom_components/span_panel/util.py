@@ -1,3 +1,5 @@
+"""Utility functions for the Span integration."""
+
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN

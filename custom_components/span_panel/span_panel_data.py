@@ -9,6 +9,8 @@ from .options import INVERTER_MAXLEG, Options
 
 @dataclass
 class SpanPanelData:
+    """Class representing the data from the Span Panel."""
+
     main_relay_state: str
     main_meter_energy_produced: float
     main_meter_energy_consumed: float
@@ -34,7 +36,9 @@ class SpanPanelData:
     raw_data: dict = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any], options: Options | None = None) -> "SpanPanelData":
+    def from_dict(
+        cls, data: dict[str, Any], options: Options | None = None
+    ) -> "SpanPanelData":
         """Create instance from dict with deep copy of input data"""
         data = deepcopy(data)
         common_data: dict[str, Any] = {
@@ -65,7 +69,7 @@ class SpanPanelData:
             "feedthrough_energy": data.get("feedthroughEnergy", {}),
             "solar_inverter_data": data.get("solarInverter", {}),
             "state_data": data.get("state", {}),
-            "raw_data": data
+            "raw_data": data,
         }
 
         if options and options.enable_solar_sensors:
@@ -84,6 +88,6 @@ class SpanPanelData:
 
         return cls(**common_data)
 
-    def copy(self) -> 'SpanPanelData':
+    def copy(self) -> "SpanPanelData":
         """Create a deep copy for atomic operations."""
         return deepcopy(self)

@@ -15,52 +15,81 @@
       }
     },
     {
-      "label": "Run All Pre-commit Checks",
+      "label": "Run all pre-commit hooks",
       "type": "shell",
-      "command": "poetry run pre-commit run --all-files",
+      "command": "${workspaceFolder}/scripts/run-in-env.sh pre-commit run --all-files",
       "group": {
         "kind": "test",
         "isDefault": true
       },
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
+        "panel": "new"
       },
       "problemMatcher": []
     },
     {
-      "label": "Run Ruff Check",
+      "label": "Run mypy",
       "type": "shell",
-      "command": "poetry run pre-commit run ruff --all-files",
+      "command": "${workspaceFolder}/scripts/run-in-env.sh mypy",
       "group": "test",
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
+        "panel": "new"
       },
-      "problemMatcher": []
+      "problemMatcher": {
+        "owner": "mypy",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+):(\\d+): (error|warning|note): (.+)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
     },
     {
-      "label": "Run Pre-commit on Staged Files",
+      "label": "Run pylint",
       "type": "shell",
-      "command": "poetry run pre-commit run",
+      "command": "${workspaceFolder}/scripts/run-in-env.sh pylint span",
       "group": "test",
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
+        "panel": "new"
+      },
+      "problemMatcher": {
+        "owner": "pylint",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+):(\\d+):(\\d+): (\\w+): (.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    },
+    {
+      "label": "Run ruff format",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/run-in-env.sh ruff format .",
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
       },
       "problemMatcher": []
     },
     {
-      "label": "Git Commit with Poetry",
+      "label": "Run ruff check",
       "type": "shell",
-      "command": "cd ${workspaceFolder} && poetry run git commit",
+      "command": "${workspaceFolder}/scripts/run-in-env.sh ruff check --fix .",
+      "group": "test",
       "presentation": {
         "reveal": "always",
-        "panel": "new",
-        "clear": true
+        "panel": "new"
       },
       "problemMatcher": []
     }

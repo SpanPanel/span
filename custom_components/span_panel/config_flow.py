@@ -45,6 +45,7 @@ STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
 
 class TriggerFlowType(enum.Enum):
     """Types of configuration flow triggers."""
+
     CREATE_ENTRY = enum.auto()
     UPDATE_ENTRY = enum.auto()
 
@@ -81,13 +82,12 @@ async def validate_auth_token(
     return await span_api.ping_with_auth()
 
 
-class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
+class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Span Panel."""
 
     VERSION = 1
 
-    @classmethod
-    def is_matching(cls, other_flow: "SpanPanelConfigFlow") -> bool:
+    def is_matching(self, other_flow: "SpanPanelConfigFlow") -> bool:
         """Return True if other_flow is a matching Span Panel."""
         return bool(other_flow and other_flow.context.get("source") == "zeroconf")
 

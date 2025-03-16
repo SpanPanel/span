@@ -12,6 +12,8 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class SpanPanelHardwareStatus:
+    """Class representing the hardware status of the Span Panel."""
+
     firmware_version: str
     update_status: str
     env: str
@@ -27,8 +29,8 @@ class SpanPanelHardwareStatus:
     remaining_auth_unlock_button_presses: int = 0
     _system_data: Dict[str, Any] = field(default_factory=dict)
 
-    # Door state has been known to return UNKNOWN if the door has not been operated recently
-    # Sensor is a tamper sensor not a door sensor
+    # Door state has been known to return UNKNOWN if the door has not been
+    # operated recently Sensor is a tamper sensor not a door sensor
     @property
     def is_door_closed(self) -> bool | None:
         """Return whether the door is closed, or None if state is unknown."""
@@ -43,13 +45,13 @@ class SpanPanelHardwareStatus:
         _LOGGER.debug("is_door_closed returning: %s", result)
         return result
 
-
     @property
     def system_data(self) -> Dict[str, Any]:
+        """Return the system data."""
         return deepcopy(self._system_data)
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'SpanPanelHardwareStatus':
+    def from_dict(cls, data: dict) -> "SpanPanelHardwareStatus":
         """Create a new instance with deep copied data."""
         data_copy = deepcopy(data)
         system_data = data_copy.get("system", {})
@@ -81,9 +83,9 @@ class SpanPanelHardwareStatus:
             is_cellular_connected=data_copy["network"]["wwanLink"],
             proximity_proven=proximity_proven,
             remaining_auth_unlock_button_presses=remaining_auth_unlock_button_presses,
-            _system_data=system_data
+            _system_data=system_data,
         )
 
-    def copy(self) -> 'SpanPanelHardwareStatus':
+    def copy(self) -> "SpanPanelHardwareStatus":
         """Create a deep copy of hardware status"""
         return deepcopy(self)

@@ -57,8 +57,8 @@ This integration will provide a device for your SPAN panel. This device will hav
 9. Click `+ Add Integration`.
 10. Search for "Span". This entry should correspond to this repository and offer the current version.
 11. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up or another address if you have multiple panels.
-12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable to network changes, for example,if you change client hostname or IP and don't want to accces the pane for authorization.
-13. See post install steps for solar or scan frequency configuration to optionally add additonal sensors if applicable.
+12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable to network changes, for example, if you change client hostname or IP and don't want to access the panel for authorization.
+13. See post install steps for solar or scan frequency configuration to optionally add additional sensors if applicable.
 
 ## Authorization Methods
 
@@ -77,7 +77,7 @@ To acquire an authorization token proceed as follows while the panel is in its u
    - Replace UNIQUEID with your own random unique value. If the name conflicts with one that's already been created, then the request will fail.
    - Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local SPAN Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
-3. Store the value from the `"accessToken"` property of the response. (It will be a long string of random characters). The token can be used with future SPAN integration configurations of the same panel.
+3. Store the value from the `"accessToken"` property of the response. (It will be a long random string of characters). The token can be used with future SPAN integration configurations of the same panel.
 4. If you are calling the SPAN API directly for testing requests would load the HTTP header `"Authorization: Bearer <your token here>"`
 
 _(If you have multiple SPAN Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
@@ -152,7 +152,7 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
 
-If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangment will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `SpanPanel/Span` workspace for git and other project operations.
+If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangement will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `SpanPanel/Span` workspace for git and other project operations.
 
 For instance you can:
 
@@ -166,7 +166,7 @@ ln -s <span project path>/span/custom_components/span_panel <HA core path>/confi
 2. Set the `HA_CORE_PATH` environment variable to the location of your Home Assistant core directory.
 3. In the project root run `poetry install --with dev` to install dependencies.
 4. Run `poetry run pre-commit install` to install pre-commit hooks.
-5. Optionally use `Tasks: Run Task` from the command pallete to run `Run all Pre-commit checks` or `poetry run pre-commit run --all-files` from the terminal to manually run pre-commit hooks on files locally in your environment as you make changes.
+5. Optionally use `Tasks: Run Task` from the command palette to run `Run all Pre-commit checks` or `poetry run pre-commit run --all-files` from the terminal to manually run pre-commit hooks on files locally in your environment as you make changes.
 
 The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed or fail tests will be unstaged. After reviewing these changes or making corrections, you can re-stage the changes and recommit or rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
 

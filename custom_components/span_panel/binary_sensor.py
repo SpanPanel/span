@@ -33,13 +33,13 @@ from .util import panel_to_device_info
 # pylint: disable=invalid-overridden-method
 
 
-
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class SpanPanelRequiredKeysMixin:
     """Required keys mixin for Span Panel binary sensors."""
+
     value_fn: Callable[[SpanPanelHardwareStatus], bool | None]
 
 
@@ -91,13 +91,12 @@ BINARY_SENSORS: tuple[
 T = TypeVar("T", bound=SpanPanelBinarySensorEntityDescription)
 
 
-# pylint: disable=invalid-overridden-method
 class SpanPanelBinarySensor(
     CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity, Generic[T]
 ):
     """Binary Sensor status entity."""
 
-    _entity_description: T
+    _attr_icon = "mdi:flash"
 
     def __init__(
         self,
@@ -108,7 +107,12 @@ class SpanPanelBinarySensor(
         super().__init__(data_coordinator, context=description)
         span_panel: SpanPanel = data_coordinator.data
 
-        self._entity_description = description
+        self._attr_entity_description = description
+        # HA (2025.3.3) has a base class inconsistency where sensors produce
+        # warnings if we explicitly set the device class but binary sensors
+        # require setting the device class attribute for specific state
+        # conversions from boolean (for example cleared, connected, etc.)
+        self._attr_device_class = description.device_class
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
         base_name: str = f"{description.name}"
@@ -116,8 +120,6 @@ class SpanPanelBinarySensor(
         if (
             data_coordinator.config_entry is not None
             and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and device_info is not None
-            and isinstance(device_info, dict)
             and "name" in device_info
         ):
             self._attr_name = f"{device_info['name']} {base_name}"
@@ -130,28 +132,26 @@ class SpanPanelBinarySensor(
 
         _LOGGER.debug("CREATE BINSENSOR [%s]", self._attr_name)
 
-    @property
-    def entity_description(self) -> T:
-        """Return the entity description."""
-        return self._entity_description
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        # Get the raw status value from the device
+        status_data = self.coordinator.data.status
+        # Use the value_fn to get the binary state
+        status_value = self._attr_entity_description.value_fn(status_data)
 
-    @property
-    def is_on(self) -> bool | None:
-        """Return the status of the sensor."""
-        span_panel: SpanPanel = self.coordinator.data
-        description = self._entity_description
-        status: SpanPanelHardwareStatus = span_panel.status
-        status_is_on: bool | None = description.value_fn(status)
-        _LOGGER.debug("BINSENSOR [%s] is_on:[%s]", self._attr_name, status_is_on)
-        return status_is_on
+        self._attr_is_on = status_value
 
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        span_panel: SpanPanel = self.coordinator.data
-        description = self._entity_description
-        status: SpanPanelHardwareStatus = span_panel.status
-        return description.value_fn(status) is not None
+        self._attr_available = status_value is not None
+
+        _LOGGER.debug(
+            "BINSENSOR [%s] updated: is_on=%s, available=%s",
+            self._attr_name,
+            self._attr_is_on,
+            self._attr_available,
+        )
+
+        # Call parent method to notify HA of the update
+        super()._handle_coordinator_update()
 
 
 async def async_setup_entry(
@@ -166,7 +166,7 @@ async def async_setup_entry(
     data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
     coordinator: SpanPanelCoordinator = data[COORDINATOR]
 
-    entities: list[SpanPanelBinarySensor] = []
+    entities: list[SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]] = []
 
     for description in BINARY_SENSORS:
         entities.append(SpanPanelBinarySensor(coordinator, description))
