@@ -408,6 +408,17 @@ pyyaml = ">=5.1"
 virtualenv = ">=20.10.0"
 
 [[package]]
+name = "prettier"
+version = "0.0.7"
+description = "Properly pprint of nested objects"
+optional = false
+python-versions = "*"
+files = [
+    {file = "prettier-0.0.7-py3-none-any.whl", hash = "sha256:20e76791de41cafe481328dd49552303f29ca192151cee1b120c26f66cae9bfc"},
+    {file = "prettier-0.0.7.tar.gz", hash = "sha256:6c34b8cd09fd9c8956c05d6395ea3f575e0122dce494ba57685c07065abed427"},
+]
+
+[[package]]
 name = "pydantic"
 version = "2.10.6"
 description = "Data validation using Python type hints"
@@ -811,4 +822,4 @@ typing-extensions = ">=3.7.4"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.13.0"
-content-hash = "fe8b8dd6219ec4f6b18bab7006cd8d3506c5b349e93c32e6d1873fd54ab4bc8d"
+content-hash = "bc0c83da9f3c561a2978b148abe666df85680ee7c7b3adf1cf719bfcfb1d3c1a"
