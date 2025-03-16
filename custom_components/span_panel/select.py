@@ -4,11 +4,14 @@
 import logging
 from typing import Any, Callable, Final
 
+import httpx
+
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.exceptions import ServiceNotFound
 
 from .const import COORDINATOR, DOMAIN, CircuitPriority
 from .coordinator import SpanPanelCoordinator
@@ -16,7 +19,7 @@ from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .util import panel_to_device_info
 
-ICON = "mdi:toggle-switch"
+ICON = "mdi:chevron-down"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -102,8 +105,29 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         priority = CircuitPriority(option)
         curr_circuit = self._get_circuit()
 
-        await span_panel.api.set_priority(curr_circuit, priority)
-        await self.coordinator.async_request_refresh()
+        try:
+            await span_panel.api.set_priority(curr_circuit, priority)
+            await self.coordinator.async_request_refresh()
+        except ServiceNotFound as snf:
+            _LOGGER.error("Service not found when setting priority: %s", snf)
+            self.hass.components.persistent_notification.create(
+                message="The requested service is not available in the SPAN API.",
+                title="Service Not Found",
+                notification_id=f"span_panel_service_not_found_{self.id}",
+            )
+        except httpx.HTTPStatusError:
+            error_msg = (
+                f"SPAN API returned an HTTP Status Error attempting "
+                f"to change the circuit priority for {self._attr_name}. "
+                f"This typically indicates panel firmware doesn't support "
+                f"this operation."
+            )
+            _LOGGER.error("SPAN API may not support setting priority")
+            self.hass.components.persistent_notification.create(
+                message=error_msg,
+                title="SPAN API Error",
+                notification_id=f"span_panel_api_error_{self.id}",
+            )
 
     def select_option(self, option: str) -> None:
         """Select an option synchronously."""
