@@ -7,6 +7,26 @@
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
 cd "$PROJECT_ROOT" || exit 1
 
+# Load environment variables from .env if it exists
+if [ -f ".env" ]; then
+  # shellcheck disable=SC1091
+  source .env
+fi
+
+# Add HA_CORE_PATH to PYTHONPATH if defined and exists
+if [ -n "$HA_CORE_PATH" ]; then
+  if [ -d "$HA_CORE_PATH" ]; then
+    export PYTHONPATH="${HA_CORE_PATH}:${PYTHONPATH:-}"
+    echo "Added Home Assistant core path to PYTHONPATH: $HA_CORE_PATH"
+  else
+    echo "Warning: HA_CORE_PATH is set but directory does not exist: $HA_CORE_PATH"
+    echo "Home Assistant imports may fail. Please check your .env file."
+  fi
+elif [ -f "custom_components" ]; then
+  echo "Warning: HA_CORE_PATH is not set. Home Assistant imports may fail."
+  echo "Consider setting HA_CORE_PATH in your .env file."
+fi
+
 # Try to detect and activate the virtual environment
 VENV_PATHS=(
   ".venv"
