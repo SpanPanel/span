@@ -49,5 +49,5 @@ jobs:
       - name: Run bandit
         run: bandit -r .
 
-      - name: Run prettier
-        run: prettier --check "**/*.{js,jsx,ts,tsx,json,css,scss,md}"
+      - name: Run prettier with autofix
+        run: prettier --write "**/*.{js,jsx,ts,tsx,json,css,scss,md}"
