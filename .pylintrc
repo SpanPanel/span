@@ -1,0 +1,112 @@
+[MASTER]
+ignore=tests
+ignore-patterns=test_.*
+extension-pkg-whitelist=ciso8601
+
+# Use a conservative default here; 2 should speed up most setups and not hurt
+# any too bad
+jobs=2
+
+# List of plugins (as comma separated values of python modules names) to load,
+# usually to register additional checkers.
+load-plugins=
+
+# Allow loading of arbitrary C extensions. Extensions are imported into the
+# active Python interpreter and may run arbitrary code.
+unsafe-load-any-extension=no
+
+[MESSAGES CONTROL]
+# Reasons disabled:
+# format - handled by black
+# locally-disabled - it spams too much
+# duplicate-code - unavoidable
+# cyclic-import - doesn't test if both import on load
+# unused-argument - generic callbacks and setup methods create a lot of warnings
+# global-statement - used for the on-demand requirement installation
+# redefined-variable-type - this is Python, we're duck typing!
+# too-many-* - are not enforced for the sake of readability
+# too-few-* - same as too-many-*
+# abstract-method - with intro of async there are always methods missing
+# inconsistent-return-statements - doesn't handle raise
+# unnecessary-pass - readability for functions which only contain pass
+# import-outside-toplevel - TODO
+# too-many-ancestors - it's too strict.
+# wrong-import-order - isort guards this
+disable=
+  duplicate-code,
+  locally-disabled,
+  suppressed-message,
+  too-many-ancestors,
+  too-many-arguments,
+  too-many-instance-attributes,
+  too-many-lines,
+  too-many-locals,
+  too-many-public-methods,
+  too-many-statements,
+  wrong-import-order,
+  too-many-positional-arguments
+
+[REPORTS]
+# Set the output format. Available formats are text, parseable, colorized, msvs
+output-format=parseable
+
+# Tells whether to display a full report or only the messages
+reports=no
+
+[VARIABLES]
+# Tells whether we should check for unused import in __init__ files.
+init-import=no
+
+# A regular expression matching the name of dummy variables (i.e. expectedly
+# not used).
+dummy-variables-rgx=_+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+?$)|dummy|^ignored_|^unused_
+
+[SIMILARITIES]
+# Minimum lines number of a similarity.
+min-similarity-lines=4
+
+# Ignore comments when computing similarities.
+ignore-comments=yes
+
+# Ignore docstrings when computing similarities.
+ignore-docstrings=yes
+
+# Ignore imports when computing similarities.
+ignore-imports=no
+
+[TYPECHECK]
+# List of decorators that produce context managers, such as
+# contextlib.contextmanager. Add to this list to register other decorators that
+# produce valid context managers.
+contextmanager-decorators=contextlib.contextmanager
+
+# Tells whether missing members accessed in mixin class should be ignored. A
+# mixin class is detected if its name ends with "mixin" (case insensitive).
+ignore-mixin-members=yes
+
+# List of module names for which member attributes should not be checked
+# (useful for modules/projects where namespaces are manipulated during runtime
+# and thus existing member attributes cannot be deduced by static analysis. It
+# supports qualified module names, as well as Unix pattern matching.
+ignored-modules=homeassistant.components,custom_components
+
+[BASIC]
+# Good variable names which should always be accepted, separated by a comma
+good-names=id,i,j,k,ex,Run,_,fp,T
+
+# Include a hint for the correct naming format with invalid-name
+include-naming-hint=no
+
+# Regular expression matching correct function names
+function-rgx=[a-z_][a-z0-9_]{2,30}$
+
+[EXCEPTIONS]
+overgeneral-exceptions=builtins.Exception,homeassistant.exceptions.HomeAssistantError
+
+[FORMAT]
+# Maximum number of characters on a single line.
+max-line-length=88
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=5

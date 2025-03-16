@@ -1,13 +1,11 @@
 """Control switches."""
 
 import logging
-from functools import cached_property
 from typing import Any, Dict, Literal
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -26,15 +24,57 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEntity):
     """Represent a switch entity."""
 
-    def __init__(self, coordinator: SpanPanelCoordinator, id: str, name: str) -> None:
+    def __init__(
+        self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str
+    ) -> None:
         """Initialize the values."""
-        _LOGGER.debug("CREATE SWITCH %s" % name)
+        _LOGGER.debug("CREATE SWITCH %s", name)
         span_panel: SpanPanel = coordinator.data
 
-        self.id: str = id
-        self._attr_unique_id = f"span_{span_panel.status.serial_number}_relay_{id}"
+        self.circuit_id: str = circuit_id
+        self._attr_icon = "mdi:toggle-switch"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_relay_{circuit_id}"
+        )
         self._attr_device_info = panel_to_device_info(span_panel)
+
+        # Set the name using _attr_name instead of property override
+        base_name = f"{span_panel.circuits[self.circuit_id].name} Breaker"
+        config_entry: ConfigEntry[Any] | None = coordinator.config_entry
+
+        if (
+            config_entry
+            and config_entry.options.get(USE_DEVICE_PREFIX, False)
+            and self._attr_device_info
+            and "name" in self._attr_device_info
+        ):
+            device_name = self._attr_device_info["name"]
+            self._attr_name = f"{device_name} {base_name}"
+        else:
+            self._attr_name = base_name
+
         super().__init__(coordinator)
+
+        # Initialize is_on state
+        self._update_is_on()
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._update_is_on()
+        super()._handle_coordinator_update()
+
+    def _update_is_on(self) -> None:
+        """Update the is_on state based on the circuit state."""
+        span_panel: SpanPanel = self.coordinator.data
+        # Get atomic snapshot of circuits data
+        circuits: Dict[str, SpanPanelCircuit] = span_panel.circuits
+        circuit: SpanPanelCircuit | None = circuits.get(self.circuit_id)
+        if circuit:
+            # Use copy to ensure atomic state
+            circuit = circuit.copy()
+            self._attr_is_on = circuit.relay_state == CircuitRelayState.CLOSED.name
+        else:
+            self._attr_is_on = None
 
     def turn_on(self, **kwargs: Any) -> None:
         """Synchronously turn the switch on."""
@@ -47,10 +87,12 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         span_panel: SpanPanel = self.coordinator.data
-        circuits: Dict[str, SpanPanelCircuit] = span_panel.circuits  # Get atomic snapshot of circuits
-        if self.id in circuits:
+        circuits: Dict[str, SpanPanelCircuit] = (
+            span_panel.circuits
+        )  # Get atomic snapshot of circuits
+        if self.circuit_id in circuits:
             # Create a copy of the circuit for the operation
-            curr_circuit: SpanPanelCircuit = circuits[self.id].copy()
+            curr_circuit: SpanPanelCircuit = circuits[self.circuit_id].copy()
             # Perform the state change
             await span_panel.api.set_relay(curr_circuit, CircuitRelayState.CLOSED)
             # Request refresh to get the new state
@@ -59,49 +101,16 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         span_panel: SpanPanel = self.coordinator.data
-        circuits: Dict[str, SpanPanelCircuit] = span_panel.circuits  # Get atomic snapshot of circuits
-        if self.id in circuits:
+        circuits: Dict[str, SpanPanelCircuit] = (
+            span_panel.circuits
+        )  # Get atomic snapshot of circuits
+        if self.circuit_id in circuits:
             # Create a copy of the circuit for the operation
-            curr_circuit: SpanPanelCircuit = circuits[self.id].copy()
+            curr_circuit: SpanPanelCircuit = circuits[self.circuit_id].copy()
             # Perform the state change
             await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
             # Request refresh to get the new state
             await self.coordinator.async_request_refresh()
-
-    @cached_property
-    def icon(self) -> Literal["mdi:toggle-switch"]:
-        """Icon to use in the frontend."""
-        return ICON
-
-    @cached_property
-    def name(self) -> str:
-        """Return the switch name."""
-        span_panel: SpanPanel = self.coordinator.data
-        base_name = f"{span_panel.circuits[self.id].name} Breaker"
-        config_entry: ConfigEntry[Any] | None = self.coordinator.config_entry
-        device_info: DeviceInfo | None = self._attr_device_info
-        if (
-            config_entry
-            and config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and device_info
-        ):
-            device_name: str | None = device_info.get("name", "")
-            if device_name:
-                return f"{device_name} {base_name}"
-        return base_name
-
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if the switch is on."""
-        span_panel: SpanPanel = self.coordinator.data
-        # Get atomic snapshot of circuits data
-        circuits: Dict[str, SpanPanelCircuit] = span_panel.circuits
-        circuit: SpanPanelCircuit | None = circuits.get(self.id)
-        if circuit:
-            # Use copy to ensure atomic state
-            circuit = circuit.copy()
-            return circuit.relay_state == CircuitRelayState.CLOSED.name
-        return None
 
 
 async def async_setup_entry(

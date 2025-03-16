@@ -1,3 +1,5 @@
+"""Data models for Span Panel circuit information."""
+
 from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,6 +9,8 @@ from .const import CircuitRelayState
 
 @dataclass
 class SpanPanelCircuit:
+    """Class representing a Span Panel circuit."""
+
     circuit_id: str
     name: str
     relay_state: str
@@ -28,10 +32,19 @@ class SpanPanelCircuit:
 
     @property
     def is_relay_closed(self) -> bool:
+        """Return True if the relay is in closed state."""
         return self.relay_state == CircuitRelayState.CLOSED.name
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> "SpanPanelCircuit":
+        """Create a SpanPanelCircuit instance from a dictionary.
+
+        Args:
+            data: Dictionary containing circuit data from the Span Panel API.
+
+        Returns:
+            A new SpanPanelCircuit instance.
+        """
         data_copy: dict[str, Any] = deepcopy(data)
         return SpanPanelCircuit(
             circuit_id=data_copy["id"],
@@ -49,10 +62,10 @@ class SpanPanelCircuit:
             is_never_backup=data_copy["isNeverBackup"],
             circuit_config=data_copy.get("config", {}),
             state_config=data_copy.get("state", {}),
-            raw_data=data_copy
+            raw_data=data_copy,
         )
 
-    def copy(self) -> 'SpanPanelCircuit':
+    def copy(self) -> "SpanPanelCircuit":
         """Create a deep copy for atomic operations."""
         # Circuit contains nested mutable objects, use deepcopy
         return deepcopy(self)

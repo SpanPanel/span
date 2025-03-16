@@ -39,7 +39,7 @@ class SpanPanel:
     def __init__(
         self,
         host: str,
-        access_token: str | None = None,    # nosec
+        access_token: str | None = None,  # nosec
         options: Options | None = None,
         async_client: httpx.AsyncClient | None = None,
     ) -> None:
@@ -60,7 +60,7 @@ class SpanPanel:
     def _get_data(self) -> SpanPanelData:
         """Get data with type checking."""
         if self._panel is None:
-            raise RuntimeError("Panel data not available") 
+            raise RuntimeError("Panel data not available")
         return self._panel
 
     def _get_storage_battery(self) -> SpanPanelStorageBattery:
@@ -106,7 +106,7 @@ class SpanPanel:
             _LOGGER.debug("Got panel data: %s", new_panel)
             new_circuits = await self.api.get_circuits_data()
             _LOGGER.debug("Got circuits data: %s", new_circuits)
-            
+
             # Atomic updates
             self._update_status(new_status)
             self._update_panel(new_panel)
@@ -129,7 +129,7 @@ class SpanPanel:
         """Get status data atomically"""
         return self._get_hardware_status()
 
-    @property 
+    @property
     def panel(self) -> SpanPanelData:
         """Get panel data atomically"""
         return self._get_data()

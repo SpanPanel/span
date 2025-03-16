@@ -55,12 +55,16 @@ API_TIMEOUT = 30
 
 
 class CircuitRelayState(enum.Enum):
+    """Enumeration representing the possible relay states for a circuit."""
+
     OPEN = "Open"
     CLOSED = "Closed"
     UNKNOWN = "Unknown"
 
 
 class CircuitPriority(enum.Enum):
+    """Enumeration representing the possible circuit priority levels."""
+
     MUST_HAVE = "Must Have"
     NICE_TO_HAVE = "Nice To Have"
     NON_ESSENTIAL = "Non-Essential"

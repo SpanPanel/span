@@ -15,7 +15,8 @@ httpx = "^0.28.1"
 [tool.poetry.dev-dependencies]
 ruff = "^0.6.4"
 isort = "^5.13.2"
-mypy = ">=1.4.0"
+mypy = ">=1.8.0"
+pylint = "^3.0.3"
 bandit = "^1.7.4"
 pre-commit = ">=4.1.0,<5.0.0"
 pydantic = "^2.9.1"
@@ -57,6 +58,8 @@ disallow_incomplete_defs = true
 disallow_subclassing_any = true
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
+warn_return_any = true
+strict_optional = true
 
 # Package handling
 explicit_package_bases = true
@@ -93,3 +96,7 @@ init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components", "span"]
+force-sort-within-sections = true
+combine-as-imports = true

@@ -71,7 +71,7 @@ class SpanPanelApi:
             if err.response.status_code == httpx.codes.UNAUTHORIZED:
                 return False
             raise
-        except Exception:
+        except (httpx.TransportError, SpanPanelReturnedEmptyData):
             return False
 
     async def get_access_token(self) -> str:

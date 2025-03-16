@@ -1,0 +1,3 @@
+[codespell]
+ignore-words-list = hass,astroid
+skip = poetry.lock

@@ -44,12 +44,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         except httpx.HTTPStatusError as err:
             if err.response.status_code == httpx.codes.UNAUTHORIZED:
                 raise ConfigEntryAuthFailed from err
-            else:
-                _LOGGER.error(
-                    "httpx.StatusError occurred while updating Span data: %s",
-                    str(err),
-                )
-                raise UpdateFailed(f"Error communicating with API: {err}") from err
+            _LOGGER.error(
+                "httpx.StatusError occurred while updating Span data: %s",
+                str(err),
+            )
+            raise UpdateFailed(f"Error communicating with API: {err}") from err
         except httpx.HTTPError as err:
             _LOGGER.error(
                 "An httpx.HTTPError occurred while updating Span data: %s", str(err)
