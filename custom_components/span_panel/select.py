@@ -110,23 +110,23 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
             await span_panel.api.set_priority(curr_circuit, priority)
             await self.coordinator.async_request_refresh()
         except ServiceNotFound as snf:
-            _LOGGER.error("Service not found when setting priority: %s", snf)
+            _LOGGER.warning("Service not found when setting priority: %s", snf)
             self.hass.components.persistent_notification.create(
                 message="The requested service is not available in the SPAN API.",
                 title="Service Not Found",
                 notification_id=f"span_panel_service_not_found_{self.id}",
             )
         except httpx.HTTPStatusError:
-            error_msg = (
+            warning_msg = (
                 f"SPAN API returned an HTTP Status Error attempting "
                 f"to change the circuit priority for {self._attr_name}. "
                 f"This typically indicates panel firmware doesn't support "
                 f"this operation."
             )
-            _LOGGER.error("SPAN API may not support setting priority")
+            _LOGGER.warning("SPAN API may not support setting priority")
             async_create(
                 self.hass,
-                message=error_msg,
+                message=warning_msg,
                 title="SPAN API Error",
                 notification_id=f"span_panel_api_error_{self.id}",
             )
