@@ -6,23 +6,27 @@ Home Assistant uses two different patterns for entity attributes that can be con
 
 ## Two Attribute Patterns
 
-Home Assistant employs two different approaches for entity attributes:
-
 ### 1. Protected Attributes (`_attr_*`)
 
-For most entity attributes (state, name, icon, etc.), Home Assistant uses protected attributes with an `_attr_` prefix:
+For most entity attributes (state, name, icon, etc.), Home Assistant uses protected attributes with an `_attr_` prefix. These are managed by the `CachedProperties` metaclass which provides automatic caching and invalidation:
 
 ```python
-# Setting the attribute
-self._attr_name = "My Entity"
-self._attr_icon = "mdi:lightbulb"
-self._attr_device_class = SensorDeviceClass.TEMPERATURE
+class MyEntity(Entity):
+    """My entity implementation."""
 
-# These are accessed through properties
-entity.name       # Accesses self._attr_name
-entity.icon       # Accesses self._attr_icon
-entity.device_class  # Accesses self._attr_device_class
+    # Protected attributes with _attr_ prefix
+    _attr_name: str | None = None
+    _attr_icon: str | None = None
+    _attr_device_class: str | None = None
+    _attr_extra_state_attributes: dict[str, Any] = {}
 ```
+
+The `CachedProperties` metaclass:
+
+- Automatically creates property getters/setters for `_attr_*` attributes
+- Manages caching of property values
+- Invalidates cache when attributes are modified
+- Handles type annotations correctly
 
 ### 2. Direct Public Attributes
 
@@ -230,19 +234,41 @@ The inconsistency between `entity_description` and other `_attr_*` attributes ma
 
 ## Best Practices
 
-1. **Always use `self.entity_description = description`** (never `self._attr_entity_description`)
-2. **Use `self._attr_*` for all other entity attributes**
-3. **When extending `Entity` classes, check the parent class implementation** to understand the attribute pattern
-4. **Include proper type annotations** to help catch issues earlier
-5. **Store direct references to custom description attributes** in your entity's `__init__` method
-6. **Test property access** especially for device_class and other properties that might come from entity_description
+1. **Use `self._attr_*` for entity attributes** - This automatically gets you:
+
+   - Protected attribute storage
+   - Cached property getters/setters (via the `CachedProperties` metaclass)
+   - Proper type annotation handling
+   - Automatic cache invalidation
+
+2. **Use `self.entity_description`** (never `self._attr_entity_description`) for entity descriptions
+
+3. **When extending `Entity` classes:**
+
+   - Check the parent class implementation to understand the attribute pattern
+   - Use the same pattern as the parent class for consistency
+   - Include proper type annotations to help catch issues earlier
+
+4. **For custom entity descriptions:**
+
+   - Store direct references to custom description attributes in your entity's `__init__` method
+   - Use proper type annotations to avoid type checker issues
+   - Test property access, especially for device_class and other properties that might come from entity_description
+
+5. **For custom properties** (when you need something beyond the standard `_attr_*` pattern):
+   ```python
+   @cached_property
+   def custom_property(self) -> str:
+       """Return a computed property value."""
+       return self._compute_value()
+   ```
 
 ## Summary
 
 Home Assistant's dual attribute pattern can be confusing, but following these guidelines will help avoid subtle bugs:
 
-- `self._attr_*` for most attributes
-- `self.entity_description` (no underscore prefix) for the entity description
+- Use `self._attr_*` for most attributes (this automatically includes caching)
+- Use `self.entity_description` (no underscore prefix) for the entity description
 - Store direct references to custom description attributes to avoid type issues
 
 This inconsistency in the framework's design is unfortunately something developers need to be aware of when building integrations.
