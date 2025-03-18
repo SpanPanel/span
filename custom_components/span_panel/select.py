@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.exceptions import ServiceNotFound
+from homeassistant.components.persistent_notification import async_create
 
 from .const import COORDINATOR, DOMAIN, CircuitPriority
 from .coordinator import SpanPanelCoordinator
@@ -123,7 +124,8 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                 f"this operation."
             )
             _LOGGER.error("SPAN API may not support setting priority")
-            self.hass.components.persistent_notification.create(
+            async_create(
+                self.hass,
                 message=error_msg,
                 title="SPAN API Error",
                 notification_id=f"span_panel_api_error_{self.id}",
