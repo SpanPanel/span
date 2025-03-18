@@ -6,14 +6,15 @@
 
 As SPAN has not published a documented API, we cannot guarantee this integration will work for you. The integration may break as your panel is updated if SPAN changes the API in an incompatible way.
 
-The author(s) will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
+We will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
-What this integration does do is provide the user Home Assistant sensors and controls that are useful in understanding an installations power consumption, energy usage, and control panel circuits.
+What this integration does do is provide the user sensors and controls that are useful in understanding an installations power consumption, energy usage, and the ability to control user-manageable panel circuits.
 
 ## Notice on Forks
 
-The https://github.com/SpanPanel/span fork is the one listed in the HACS store, as it was moved from https://github.com/gdgib/span.
-If you were using https://github.com/SpanPanel/Span before 2025-01-14 that repository has been moved to https://github.com/SpanPanel/SpanCustom, and will be deprecated shortly as we consolidate here.
+This https://github.com/SpanPanel/span repository is the default listed in the HACS store.
+
+If you were using the custom HACs repository https://github.com/SpanPanel/Span (note the upper case Span) before 2025-01-14 that repository has been moved to https://github.com/SpanPanel/SpanCustom, and will not be updated. See the notes there to migrate to this repository without affecting your sensor names. As of 1.06 the default sensor names are prefixed with the device name so the entities can be renamed enmasse but retaining the old names is possible as noted in the custom repository notes.
 
 ## Prerequisites
 
@@ -124,16 +125,16 @@ The power sensors provided by this add-on report with the exact precision from t
 By default the sensors will display with precision 2, for example `0.00`, with the exception of battery percentage. Battery percentage will have precision of 0, for example `39`.
 
 You can change the display precision for any entity in Home Assistant via `Settings` -> `Devices & Services` -> `Entities` tab.
-find the entity you would like to change in the list and click on it, then click on the gear wheel in the top right.
+Find the entity you would like to change in the list and click on it, then click on the gear wheel in the top right.
 Select the precision you prefer from the "Display Precision" menu and then press `UPDATE`.
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so there is nothing we can do to mitigate it other than report that sensor as unavailable in this case. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal door someone would walk through.
+1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so we report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal entry door.
 
-2. State Class Warnings - "Feed Through" sensors may produce erroneous data if your panel is configured in certain ways that interact with solar or if the SPAN panel itself is returning data that is not meaningful to your installation. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
+2. State Class Warnings - "Feed Through" sensors may produce erroneous data in the sense the logs may complain the sensor data is not constantly increasing when the sensor statistics type is set to total/increasing. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
 
    ```text
    sensor.feed_through_consumed_energy
@@ -142,9 +143,7 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 3. Entity Names and Device Renaming Errors - Prior to version 1.0.4 entity names were not prefixed with the device name so renaming a device did not allow a user to rename the entities accordingly. Newer versions of the integration use the device name prefix on a **new** configuration. An existing, pre-1.0.4 integration that is upgraded will not result in device prefixes in entity names to avoid breaking dependent dashboards and automations. If you want device name prefixes, install at least 1.0.4, delete the configuration and reconfigure it.
 
-4. Circuit Priority - The SPAN API does not currently allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The priority of circuits is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router related circuits and "PowerUP" options which allow shedding of circuits.
-
-   Always On circuits are clearly "must-have" and are not user controlled (meaining you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch where non was visible before for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule vague at best and may indicate a defect in the firmware.
+4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router or other must have circuits. Always On circuits are set to "must-have" and are subsequently not user controlled (meaining you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule is inconsistent with respect to all circuit order which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully know the details.
 
 ## Development Notes
 
