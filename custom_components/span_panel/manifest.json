@@ -1,7 +1,7 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
-  "codeowners": ["@SpanPanel", "@cayossarian", "@gdgib"],
+  "codeowners": ["@SpanPanel"],
   "config_flow": true,
   "documentation": "https://github.com/SpanPanel/span",
   "iot_class": "local_polling",
