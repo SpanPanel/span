@@ -1,0 +1,58 @@
+{
+  "config": {
+    "abort": {
+      "no_devices_found": "Não foram encontrados dispositivos na rede",
+      "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
+      "reauth_successful": "Autenticação bem-sucedida."
+    },
+    "error": {
+      "cannot_connect": "Falha ao ligar ao Painel Span",
+      "invalid_auth": "Autenticação inválida",
+      "unknown": "Erro inesperado"
+    },
+    "flow_title": "Painel Span ({host})",
+    "step": {
+      "confirm_discovery": {
+        "description": "Deseja configurar o Painel Span em {host}?",
+        "title": "Ligar ao Painel Span"
+      },
+      "user": {
+        "data": {
+          "host": "Anfitrião"
+        },
+        "title": "Ligar ao Painel Span"
+      },
+      "choose_auth_type": {
+        "title": "Escolher Opções de Autenticação",
+        "menu_options": {
+          "auth_proximity": "Autenticar através do seu Painel Span físico",
+          "auth_token": "Autenticar usando um token de acesso"
+        }
+      },
+      "auth_proximity": {
+        "title": "Autenticação por Proximidade",
+        "description": "Por favor, abra e feche a porta do Painel Span 3 vezes."
+      },
+      "auth_token": {
+        "title": "Autenticação Manual por Token",
+        "description": "Por favor, introduza o seu token de acesso (Vazio para recomeçar)",
+        "data": {
+          "access_token": "Token de Acesso"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Intervalo de verificação em segundos",
+          "enable_solar_circuit": "Ativar Sensores do Inversor Solar",
+          "leg1": "Fase Solar 1 (0 não utilizado)",
+          "leg2": "Fase Solar 2 (0 não utilizado)",
+          "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria de Armazenamento (Deve estar fisicamente ligado)"
+        }
+      }
+    }
+  }
+}
