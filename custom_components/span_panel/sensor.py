@@ -337,7 +337,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._attr_native_value = None
             return
 
-        value_function: Callable[[Any], float | int | str | None] | None = getattr(
+        value_function: Callable[[T], float | int | str | None] | None = getattr(
             self.entity_description, "value_fn", None
         )
         if value_function is None:
@@ -345,7 +345,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             return
 
         try:
-            data_source: Any = self.get_data_source(self.coordinator.data)
+            data_source: T = self.get_data_source(self.coordinator.data)
             raw_value: float | int | str | None = value_function(data_source)
             _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
 
