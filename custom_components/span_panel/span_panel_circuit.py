@@ -24,11 +24,11 @@ class SpanPanelCircuit:
     is_user_controllable: bool
     is_sheddable: bool
     is_never_backup: bool
-    breaker_positions: list = field(default_factory=list)
-    metadata: dict = field(default_factory=dict)
-    circuit_config: dict = field(default_factory=dict)
-    state_config: dict = field(default_factory=dict)
-    raw_data: dict = field(default_factory=dict)
+    breaker_positions: list[int] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    circuit_config: dict[str, Any] = field(default_factory=dict)
+    state_config: dict[str, Any] = field(default_factory=dict)
+    raw_data: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_relay_closed(self) -> bool:

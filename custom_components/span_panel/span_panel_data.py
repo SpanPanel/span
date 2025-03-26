@@ -26,14 +26,14 @@ class SpanPanelData:
     solar_inverter_instant_power: float
     solar_inverter_energy_produced: float
     solar_inverter_energy_consumed: float
-    main_meter_energy: dict = field(default_factory=dict)
-    feedthrough_energy: dict = field(default_factory=dict)
-    solar_data: dict = field(default_factory=dict)
-    inverter_data: dict = field(default_factory=dict)
-    relay_states: dict = field(default_factory=dict)
-    solar_inverter_data: dict = field(default_factory=dict)
-    state_data: dict = field(default_factory=dict)
-    raw_data: dict = field(default_factory=dict)
+    main_meter_energy: dict[str, Any] = field(default_factory=dict)
+    feedthrough_energy: dict[str, Any] = field(default_factory=dict)
+    solar_data: dict[str, Any] = field(default_factory=dict)
+    inverter_data: dict[str, Any] = field(default_factory=dict)
+    relay_states: dict[str, Any] = field(default_factory=dict)
+    solar_inverter_data: dict[str, Any] = field(default_factory=dict)
+    state_data: dict[str, Any] = field(default_factory=dict)
+    raw_data: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(
