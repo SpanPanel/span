@@ -20,7 +20,7 @@ class SpanPanelHardwareStatus:
     manufacturer: str
     serial_number: str
     model: str
-    door_state: str
+    door_state: str | None
     uptime: int
     is_ethernet_connected: bool
     is_wifi_connected: bool
@@ -51,7 +51,7 @@ class SpanPanelHardwareStatus:
         return deepcopy(self._system_data)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SpanPanelHardwareStatus":
+    def from_dict(cls, data: dict[str, Any]) -> "SpanPanelHardwareStatus":
         """Create a new instance with deep copied data."""
         data_copy = deepcopy(data)
         system_data = data_copy.get("system", {})

@@ -165,7 +165,7 @@ class SpanPanelApi:
         )
         return response
 
-    async def post_data(self, url: str, payload: dict) -> httpx.Response:
+    async def post_data(self, url: str, payload: dict[str, Any]) -> httpx.Response:
         """Post data to the endpoint"""
         formatted_url: str = url.format(self.host)
         response: httpx.Response = await self._async_post(formatted_url, payload)

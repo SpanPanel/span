@@ -10,7 +10,7 @@ class SpanPanelStorageBattery:
 
     storage_battery_percentage: int
     # Any nested mutable structures should use field with default_factory
-    raw_data: dict = field(default_factory=dict)
+    raw_data: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def from_dic(data: Dict[str, Any]) -> "SpanPanelStorageBattery":
