@@ -284,9 +284,12 @@ ICON = "mdi:flash"
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=SensorEntityDescription)
+D = TypeVar("D")  # For the type returned by get_data_source
 
 
-class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T]):
+class SpanSensorBase(
+    CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D]
+):
     """Base class for Span Panel Sensors."""
 
     def __init__(
@@ -337,7 +340,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._attr_native_value = None
             return
 
-        value_function: Callable[[T], float | int | str | None] | None = getattr(
+        value_function: Callable[[D], float | int | str | None] | None = getattr(
             self.entity_description, "value_fn", None
         )
         if value_function is None:
@@ -345,7 +348,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             return
 
         try:
-            data_source: T = self.get_data_source(self.coordinator.data)
+            data_source: D = self.get_data_source(self.coordinator.data)
             raw_value: float | int | str | None = value_function(data_source)
             _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
 
@@ -358,12 +361,14 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         except (AttributeError, KeyError, IndexError):
             self._attr_native_value = None
 
-    def get_data_source(self, span_panel: SpanPanel) -> Any:
+    def get_data_source(self, span_panel: SpanPanel) -> D:
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 
 
-class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescription]):
+class SpanPanelCircuitSensor(
+    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
     """Span Panel circuit sensor entity."""
 
     def __init__(
@@ -411,21 +416,27 @@ class SpanPanelCircuitSensor(SpanSensorBase[SpanPanelCircuitsSensorEntityDescrip
         return span_panel.circuits[self.id]
 
 
-class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription]):
+class SpanPanelPanel(
+    SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
+):
     """Span Panel data sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         return span_panel.panel
 
 
-class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription]):
+class SpanPanelPanelStatus(
+    SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
+):
     """Span Panel status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         return span_panel.panel
 
 
-class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription]):
+class SpanPanelStatus(
+    SpanSensorBase[SpanPanelStatusSensorEntityDescription, SpanPanelHardwareStatus]
+):
     """Span Panel hardware status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
@@ -433,7 +444,9 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription]):
 
 
 class SpanPanelStorageBatteryStatus(
-    SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription]
+    SpanSensorBase[
+        SpanPanelStorageBatterySensorEntityDescription, SpanPanelStorageBattery
+    ]
 ):
     """Span Panel storage battery sensor entity."""
 
@@ -453,7 +466,7 @@ async def async_setup_entry(
     coordinator: SpanPanelCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
-    entities: List[SpanSensorBase[Any]] = []
+    entities: List[SpanSensorBase[Any, Any]] = []
 
     for description in PANEL_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
