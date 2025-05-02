@@ -4,6 +4,7 @@ import logging
 import uuid
 from copy import deepcopy
 from typing import Any, Dict
+import asyncio
 
 from homeassistant.helpers.httpx_client import httpx
 
@@ -173,12 +174,16 @@ class SpanPanelApi:
 
     async def _async_fetch_with_retry(self, url: str, **kwargs: Any) -> httpx.Response:
         """
-        Retry 3 times to fetch the url if there is a transport error.
+        Retry 3 times if there is a transport error or certain HTTP errors.
         """
         headers: Dict[str, str] = {"Accept": "application/json"}
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
 
+        # HTTP status codes that are worth retrying (typically transient issues)
+        retry_status_codes = {502, 503, 504, 429}
+
+        last_exception: Exception | None = None
         for attempt in range(3):
             _LOGGER.debug("HTTP GET Attempt #%s: %s", attempt + 1, url)
             try:
@@ -186,12 +191,55 @@ class SpanPanelApi:
                     resp: httpx.Response = await client.get(
                         url, timeout=API_TIMEOUT, headers=headers, **kwargs
                     )
+
+                    # Only retry specific HTTP status codes that are typically transient
+                    if resp.status_code in retry_status_codes and attempt < 2:
+                        _LOGGER.debug(
+                            "Received status %s for %s, retrying (attempt %s of 3)",
+                            resp.status_code,
+                            url,
+                            attempt + 1,
+                        )
+                        # Add exponential backoff delay between retries (0.5s, then 1s)
+                        await asyncio.sleep(0.5 * (2**attempt))
+                        continue
+
+                    # For all other status codes, raise immediately
                     resp.raise_for_status()
                     _LOGGER.debug("Fetched from %s: %s: %s", url, resp, resp.text)
                     return resp
-            except httpx.TransportError:
-                if attempt == 2:
-                    raise
+
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in retry_status_codes and attempt < 2:
+                    _LOGGER.debug(
+                        "HTTP error %s for %s, retrying (attempt %s of 3)",
+                        exc.response.status_code,
+                        url,
+                        attempt + 1,
+                    )
+                    # Add exponential backoff delay between retries
+                    await asyncio.sleep(0.5 * (2**attempt))
+                    last_exception = exc
+                    continue
+                raise
+
+            except httpx.TransportError as exc:
+                if attempt < 2:
+                    _LOGGER.debug(
+                        "Transport error for %s, retrying (attempt %s of 3): %s",
+                        url,
+                        attempt + 1,
+                        str(exc),
+                    )
+                    # Add exponential backoff delay between retries
+                    await asyncio.sleep(0.5 * (2**attempt))
+                    last_exception = exc
+                    continue
+                raise
+
+        # If we get here, we've exhausted all retries
+        if last_exception:
+            raise last_exception
         raise httpx.TransportError("Too many attempts")
 
     async def _async_post(
