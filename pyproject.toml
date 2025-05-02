@@ -13,17 +13,17 @@ httpx = "^0.28.1"
 
 
 [tool.poetry.dev-dependencies]
-ruff = "^0.6.4"
-isort = "^5.13.2"
+ruff = "^0.11.8"
+isort = "^6.0.1"
 mypy = ">=1.8.0"
-pylint = "^3.0.3"
+pylint = "^3.3.6"
 bandit = "^1.7.4"
-pre-commit = ">=4.1.0,<5.0.0"
-pydantic = "^2.9.1"
+pre-commit = ">=4.2.0,<5.0.0"
+pydantic = "^2.11.4"
 voluptuous = ">=0.15.2"
 voluptuous-stubs = "^0.1.1"
 python-direnv = "^0.2.2"
-httpx = ">=0.26.0"
+httpx = ">=0.28.0"
 prettier = "^0.0.7"
 
 [tool.poetry.group.dev.dependencies]
