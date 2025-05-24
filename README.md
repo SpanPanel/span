@@ -2,13 +2,23 @@
 
 [Home Assistant](https://www.home-assistant.io/) Integration for [SPAN Panel](https://www.span.io/panel), a smart electrical panel that provides circuit-level monitoring and control of your home's electrical system.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/) [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/) [![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/) [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![Python](https://img.shields.io/badge/python-3.13.2-blue.svg)](https://www.python.org/downloads/release/python-3132/) [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/) [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 
 As SPAN has not published a documented API, we cannot guarantee this integration will work for you. The integration may break as your panel is updated if SPAN changes the API in an incompatible way.
 
 We will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
 What this integration does do is provide the user sensors and controls that are useful in understanding an installations power consumption, energy usage, and the ability to control user-manageable panel circuits.
+
+## What's New
+
+### Version 1.0.9+ - SPAN Panel Circuit Name Synchronization
+
+**Circuit Name Sync with SPAN**: All versions of the integration now support automatic friendly name updates when circuits are renamed in the SPAN panel. Names sync on the next poll interval. However, if you customize an entity's friendly name in Home Assistant, your customization will be preserved and won't be overwritten during sync. To re-enable sync for a customized entity, clear the custom name in Home Assistant.
+
+**New installations** use circuit numbers for stable entity IDs (e.g., `sensor.span_panel_circuit_1_power`) while preserving user-friendly names from SPAN. This prevents entity IDs from becoming misleading when circuits are renamed in the SPAN panel (and thus the integration) - now the entity ID remains generic while the friendly name reflects the current purpose.
+
+**Existing installations** maintain their current entity ID patterns during upgrades. If you want generic circuit number-based entity IDs, you'll need to reinstall the integration from scratch or manually rename your entities. **_Note: You will lose your historical data if you choose to rename or reinstall._**
 
 ## Notice on Forks
 
@@ -141,9 +151,7 @@ Select the precision you prefer from the "Display Precision" menu and then press
    sensor.feed_through_produced_energy
    ```
 
-3. Entity Names and Device Renaming Errors - Prior to version 1.0.4 entity names were not prefixed with the device name so renaming a device did not allow a user to rename the entities accordingly. Newer versions of the integration use the device name prefix on a **new** configuration. An existing, pre-1.0.4 integration that is upgraded will not result in device prefixes in entity names to avoid breaking dependent dashboards and automations. If you want device name prefixes, install at least 1.0.4, delete the configuration and reconfigure it.
-
-4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router or other must have circuits. Always On circuits are set to "must-have" and are subsequently not user controlled (meaining you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule is inconsistent with respect to all circuit order which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully know the details.
+3. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router or other must have circuits. Always On circuits are set to "must-have" and are subsequently not user controlled (meaining you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule is inconsistent with respect to all circuit order which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully know the details.
 
 ## Development Notes
 
@@ -151,25 +159,16 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 - Poetry
 - Pre-commit
-- Python 3.12+
+- Python 3.13.2+
 
 This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
-
-If you are running Home Assistant (HA) core development locally in another location you can link this project's directory to your HA core directory. This arrangement will allow you to use the SPAN Panel integration in your Home Assistant instance while debugging in the HA core project and using the `SpanPanel/Span` workspace for git and other project operations.
-
-For instance you can:
-
-```bash
-ln -s <span project path>/span/custom_components/span_panel <HA core path>/config/custom_components/span_panel
-```
 
 ### Developer Setup
 
 1. Install [poetry](https://python-poetry.org/).
-2. Set the `HA_CORE_PATH` environment variable to the location of your Home Assistant core directory.
-3. In the project root run `poetry install --with dev` to install dependencies.
-4. Run `poetry run pre-commit install` to install pre-commit hooks.
-5. Optionally use `Tasks: Run Task` from the command palette to run `Run all Pre-commit checks` or `poetry run pre-commit run --all-files` from the terminal to manually run pre-commit hooks on files locally in your environment as you make changes.
+2. In the project root run `poetry install --with dev` to install dependencies.
+3. Run `poetry run pre-commit install` to install pre-commit hooks.
+4. Optionally use `Tasks: Run Task` from the command palette to run `Run all Pre-commit checks` or `poetry run pre-commit run --all-files` from the terminal to manually run pre-commit hooks on files locally in your environment as you make changes.
 
 The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed or fail tests will be unstaged. After reviewing these changes or making corrections, you can re-stage the changes and recommit or rerun the checks. After the pre-commit hook run succeeds, your commit can proceed.
 

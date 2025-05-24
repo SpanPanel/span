@@ -1,6 +1,7 @@
 [tool.poetry]
 name = "span"
-version = "1.0.6"
+# integration version is managed in the manifest.json for HA
+# version = "0.0.0"
 description = "Span Panel Custom Integration for Home Assistant"
 authors = ["SpanPanel"]
 license = "MIT"
@@ -8,26 +9,23 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.13.0"
+python = ">=3.13.2,<3.14"
 httpx = "^0.28.1"
 
-
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
+homeassistant-stubs = "*"
+types-requests = "*"
 ruff = "^0.11.8"
-isort = "^6.0.1"
 mypy = ">=1.8.0"
-pylint = "^3.3.6"
+pyright = "^1.1.390"
 bandit = "^1.7.4"
-pre-commit = ">=4.2.0,<5.0.0"
-pydantic = "^2.11.4"
+pre-commit = "^4.2.0"
+pydantic = ">=2.0.0,<3.0.0"
 voluptuous = ">=0.15.2"
 voluptuous-stubs = "^0.1.1"
 python-direnv = "^0.2.2"
-httpx = ">=0.28.0"
 prettier = "^0.0.7"
-
-[tool.poetry.group.dev.dependencies]
-pre-commit = "^4.1.0"
+black = "^24.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -42,7 +40,6 @@ output = "./jscpdReport"
 gitignore = true
 
 [tool.mypy]
-python_version = "3.13"
 platform = "linux"
 show_error_codes = true
 follow_imports = "normal"
@@ -62,11 +59,13 @@ disallow_untyped_decorators = true
 warn_return_any = true
 strict_optional = true
 
-# Package handling
-explicit_package_bases = true
-namespace_packages = true
-packages = ["custom_components.span_panel"]
+# Package handling for HA custom integration
 mypy_path = "."
+namespace_packages = false
+explicit_package_bases = false
+
+# Module search paths - set this explicitly to prevent duplicate module resolution
+files = ["custom_components/span_panel"]
 
 # Exclude patterns
 exclude = [
@@ -96,6 +95,62 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
+
+[tool.pyright]
+include = ["custom_components/span_panel"]
+exclude = [
+    "venv",
+    ".venv",
+    "scripts"
+]
+pythonPlatform = "Linux"
+typeCheckingMode = "basic"
+useLibraryCodeForTypes = true
+autoSearchPaths = true
+reportMissingImports = "warning"
+reportMissingTypeStubs = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long, handled by black formatter
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+    "W191",  # indentation contains tabs
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | scripts
+)/
+'''
 
 [tool.ruff.lint.isort]
 known-first-party = ["custom_components", "span"]

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+import logging
 from typing import Any, Generic, TypeVar
 
 from homeassistant.components.binary_sensor import (
@@ -63,10 +63,12 @@ BINARY_SENSORS: tuple[
         key="doorState",
         name="Door State",
         device_class=BinarySensorDeviceClass.TAMPER,
-        value_fn=lambda status_data: None
-        if status_data.door_state
-        not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
-        else not status_data.is_door_closed,
+        value_fn=lambda status_data: (
+            None
+            if status_data.door_state
+            not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
+            else not status_data.is_door_closed
+        ),
     ),
     SpanPanelBinarySensorEntityDescription(
         key="eth0Link",
@@ -96,7 +98,7 @@ class SpanPanelBinarySensor(
 ):
     """Binary Sensor status entity."""
 
-    _attr_icon = "mdi:flash"
+    _attr_icon: str | None = "mdi:flash"
 
     def __init__(
         self,
@@ -118,7 +120,7 @@ class SpanPanelBinarySensor(
 
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info
-        base_name: str = f"{description.name}"
+        base_name: str | None = f"{description.name}"
 
         if (
             data_coordinator.config_entry is not None

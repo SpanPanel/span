@@ -1,18 +1,11 @@
 {
-    "python.autoComplete.extraPaths": [
-        "${env:HA_CORE_PATH}"
-    ],
-    "python.analysis.extraPaths": [
-        "${env:HA_CORE_PATH}"
-    ],
     "files.associations": {
         "*.yaml": "home-assistant"
     },
     "git.enabled": true,
     "git.autofetch": true,
-    "git.confirmSync": true,
     "git.enableSmartCommit": true,
-    "git.postCommitCommand": "sync",
+    "git.postCommitCommand": "push",
     "git.showActionButton": {
         "commit": true,
         "publish": true,
@@ -23,20 +16,21 @@
     "git.fetchOnPull": true,
     "git.pruneOnFetch": true,
     "git.supportCancellation": true,
-    "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.diagnosticMode": "workspace",
-    "python.analysis.inlayHints.functionReturnTypes": true,
-    "python.analysis.inlayHints.variableTypes": true,
-    "editor.autoClosingBrackets": "never",
-    "editor.acceptSuggestionOnEnter": "off",
-    },
     "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
     "python.terminal.activateEnvironment": true,
-    "terminal.integrated.defaultProfile.osx": "zsh",
-    "terminal.integrated.profiles.osx": {
-        "zsh": {
-            "path": "/bin/zsh",
-            "args": ["-l"]
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/venv/lib/python*/site-packages",
+        "${workspaceFolder}"
+    ],
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.envFile": "${workspaceFolder}/.env",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit",
+            "source.fixAll": "explicit"
         }
     }
 }

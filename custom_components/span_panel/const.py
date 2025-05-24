@@ -1,7 +1,7 @@
 """Constants for the Span Panel integration."""
 
-import enum
 from datetime import timedelta
+import enum
 from typing import Final
 
 DOMAIN: Final = "span_panel"
@@ -49,6 +49,7 @@ MAIN_RELAY_STATE = "mainRelayState"
 
 PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE = "UNKNOWN"
 USE_DEVICE_PREFIX = "use_device_prefix"
+USE_CIRCUIT_NUMBERS = "use_circuit_numbers"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
 API_TIMEOUT = 30

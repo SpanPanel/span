@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Generic, List, TypeVar
+import logging
+from typing import Any, Generic, TypeVar
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -32,9 +32,9 @@ from .const import (
     MAIN_RELAY_STATE,
     STATUS_SOFTWARE_VER,
     STORAGE_BATTERY_PERCENTAGE,
-    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
+from .helpers import construct_entity_id, get_user_friendly_suffix
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
@@ -311,15 +311,7 @@ class SpanSensorBase(
         self._attr_device_info = device_info
         base_name: str | None = getattr(description, "name", None)
 
-        if (
-            data_coordinator.config_entry is not None
-            and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and "name" in device_info
-            and base_name is not None
-        ):
-            self._attr_name = f"{device_info['name']} {base_name}"
-        else:
-            self._attr_name = base_name
+        self._attr_name = base_name
 
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = (
@@ -354,7 +346,7 @@ class SpanSensorBase(
 
             if raw_value is None:
                 self._attr_native_value = None
-            elif isinstance(raw_value, (float, int)):
+            elif isinstance(raw_value, float | int):
                 self._attr_native_value = float(raw_value)
             else:
                 self._attr_native_value = str(raw_value)
@@ -380,10 +372,25 @@ class SpanPanelCircuitSensor(
         span_panel: SpanPanel,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
-        # Create a new description with modified name including circuit name
+        # Get the circuit from the span_panel to access its properties
+        circuit = span_panel.circuits.get(circuit_id)
+        if not circuit:
+            raise ValueError(f"Circuit {circuit_id} not found")
+
+        # Get the circuit number (tab position)
+        circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
+
+        entity_suffix = get_user_friendly_suffix(description.key)
+        self.entity_id = construct_entity_id(  # type: ignore[assignment]
+            coordinator, span_panel, "sensor", name, circuit_number, entity_suffix
+        )
+
+        friendly_name = f"{name} {description.name}"
+
+        # Create a new description with the friendly name
         circuit_description = SpanPanelCircuitsSensorEntityDescription(
             key=description.key,
-            name=f"{name} {description.name}",
+            name=friendly_name,
             device_class=description.device_class,
             entity_category=description.entity_category,
             entity_registry_enabled_default=description.entity_registry_enabled_default,
@@ -400,6 +407,7 @@ class SpanPanelCircuitSensor(
             suggested_unit_of_measurement=description.suggested_unit_of_measurement,
             value_fn=description.value_fn,
         )
+
         super().__init__(coordinator, circuit_description, span_panel)
         self.id: str = circuit_id
         self._attr_unique_id = (
@@ -411,6 +419,33 @@ class SpanPanelCircuitSensor(
             self._attr_native_unit_of_measurement = (
                 description.native_unit_of_measurement
             )
+
+        # Store initial circuit name for change detection in auto-sync names
+        self._previous_circuit_name = name
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        # Check for circuit name changes
+        span_panel: SpanPanel = self.coordinator.data
+        circuit = span_panel.circuits.get(self.id)
+        if circuit:
+            current_circuit_name = circuit.name
+
+            # Only request reload if the circuit name has actually changed
+            if current_circuit_name != self._previous_circuit_name:
+                _LOGGER.info(
+                    "Auto-sync detected circuit name change from '%s' to '%s', requesting integration reload",
+                    self._previous_circuit_name,
+                    current_circuit_name,
+                )
+
+                # Update stored previous name for next comparison
+                self._previous_circuit_name = current_circuit_name
+
+                # Request integration reload for next update cycle
+                self.coordinator.request_reload()
+
+        super()._handle_coordinator_update()
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         return span_panel.circuits[self.id]
@@ -466,7 +501,7 @@ async def async_setup_entry(
     coordinator: SpanPanelCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
-    entities: List[SpanSensorBase[Any, Any]] = []
+    entities: list[SpanSensorBase[Any, Any]] = []
 
     for description in PANEL_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
@@ -474,6 +509,7 @@ async def async_setup_entry(
     for description in PANEL_DATA_STATUS_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
 
+    # Config entry should never be None here, but we check for safety
     if config_entry.options.get(INVERTER_ENABLE, False):
         for description_i in INVERTER_SENSORS:
             entities.append(
@@ -490,7 +526,7 @@ async def async_setup_entry(
                     coordinator, description_cs, id_c, circuit_data.name, span_panel
                 )
             )
-    if config_entry.options.get(BATTERY_ENABLE, False):
+    if config_entry is not None and config_entry.options.get(BATTERY_ENABLE, False):
         for description_sb in STORAGE_BATTERY_SENSORS:
             entities.append(
                 SpanPanelStorageBatteryStatus(coordinator, description_sb, span_panel)

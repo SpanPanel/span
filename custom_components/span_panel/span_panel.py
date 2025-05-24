@@ -1,9 +1,8 @@
 """Module to read production and consumption values from a Span panel."""
 
 import logging
-from typing import Dict
 
-from homeassistant.helpers.httpx_client import httpx
+import httpx
 
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
@@ -48,7 +47,7 @@ class SpanPanel:
         self.api = SpanPanelApi(host, access_token, options, async_client)
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None
-        self._circuits: Dict[str, SpanPanelCircuit] = {}
+        self._circuits: dict[str, SpanPanelCircuit] = {}
         self._storage_battery: SpanPanelStorageBattery | None = None
 
     def _get_hardware_status(self) -> SpanPanelHardwareStatus:
@@ -87,7 +86,7 @@ class SpanPanel:
         """Atomic update of panel data"""
         self._panel = new_panel
 
-    def _update_circuits(self, new_circuits: Dict[str, SpanPanelCircuit]) -> None:
+    def _update_circuits(self, new_circuits: dict[str, SpanPanelCircuit]) -> None:
         """Atomic update of circuits data"""
         self._circuits = new_circuits
 
@@ -135,7 +134,7 @@ class SpanPanel:
         return self._get_data()
 
     @property
-    def circuits(self) -> Dict[str, SpanPanelCircuit]:
+    def circuits(self) -> dict[str, SpanPanelCircuit]:
         """Get circuits data atomically"""
         return self._circuits
 
