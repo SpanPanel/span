@@ -50,31 +50,9 @@
       }
     },
     {
-      "label": "Run pylint",
+      "label": "Run black format",
       "type": "shell",
-      "command": "${workspaceFolder}/scripts/run-in-env.sh pylint span",
-      "group": "test",
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      },
-      "problemMatcher": {
-        "owner": "pylint",
-        "fileLocation": ["relative", "${workspaceFolder}"],
-        "pattern": {
-          "regexp": "^(.+):(\\d+):(\\d+): (\\w+): (.+)$",
-          "file": 1,
-          "line": 2,
-          "column": 3,
-          "severity": 4,
-          "message": 5
-        }
-      }
-    },
-    {
-      "label": "Run ruff format",
-      "type": "shell",
-      "command": "${workspaceFolder}/scripts/run-in-env.sh ruff format .",
+      "command": "${workspaceFolder}/scripts/run-in-env.sh black --line-length 88 .",
       "group": "test",
       "presentation": {
         "reveal": "always",

@@ -1,7 +1,7 @@
 """Control switches."""
 
 import logging
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -11,8 +11,13 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
-from .const import COORDINATOR, DOMAIN, USE_DEVICE_PREFIX, CircuitRelayState
+from .const import (
+    COORDINATOR,
+    DOMAIN,
+    CircuitRelayState,
+)
 from .coordinator import SpanPanelCoordinator
+from .helpers import construct_entity_id
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
 
@@ -31,6 +36,13 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         _LOGGER.debug("CREATE SWITCH %s", name)
         span_panel: SpanPanel = coordinator.data
 
+        circuit = span_panel.circuits.get(circuit_id)
+        if not circuit:
+            raise ValueError(f"Circuit {circuit_id} not found")
+
+        # Get the actual circuit number (tab position)
+        circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
+
         self.circuit_id: str = circuit_id
         self._attr_icon = "mdi:toggle-switch"
         self._attr_unique_id = (
@@ -38,28 +50,44 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         )
         self._attr_device_info = panel_to_device_info(span_panel)
 
-        # Set the name using _attr_name instead of property override
-        base_name = f"{span_panel.circuits[self.circuit_id].name} Breaker"
-        config_entry: ConfigEntry[Any] | None = coordinator.config_entry
+        self.entity_id = construct_entity_id(  # type: ignore[assignment]
+            coordinator, span_panel, "switch", name, circuit_number, "breaker"
+        )
 
-        if (
-            config_entry
-            and config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and self._attr_device_info
-            and "name" in self._attr_device_info
-        ):
-            device_name = self._attr_device_info["name"]
-            self._attr_name = f"{device_name} {base_name}"
-        else:
-            self._attr_name = base_name
+        friendly_name = f"{name} Breaker"
+
+        self._attr_name = friendly_name
 
         super().__init__(coordinator)
 
-        # Initialize is_on state
         self._update_is_on()
+
+        # Store initial circuit name for change detection in auto-sync
+        self._previous_circuit_name = name
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        # Check for circuit name changes
+        span_panel: SpanPanel = self.coordinator.data
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit:
+            current_circuit_name = circuit.name
+
+            # Only request reload if the circuit name has actually changed
+            if current_circuit_name != self._previous_circuit_name:
+                _LOGGER.info(
+                    "Auto-sync detected circuit name change from '%s' to '%s' for "
+                    "switch, requesting integration reload",
+                    self._previous_circuit_name,
+                    current_circuit_name,
+                )
+
+                # Update stored previous name for next comparison
+                self._previous_circuit_name = current_circuit_name
+
+                # Request integration reload for next update cycle
+                self.coordinator.request_reload()
+
         self._update_is_on()
         super()._handle_coordinator_update()
 
@@ -67,7 +95,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         """Update the is_on state based on the circuit state."""
         span_panel: SpanPanel = self.coordinator.data
         # Get atomic snapshot of circuits data
-        circuits: Dict[str, SpanPanelCircuit] = span_panel.circuits
+        circuits: dict[str, SpanPanelCircuit] = span_panel.circuits
         circuit: SpanPanelCircuit | None = circuits.get(self.circuit_id)
         if circuit:
             # Use copy to ensure atomic state
@@ -87,7 +115,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         span_panel: SpanPanel = self.coordinator.data
-        circuits: Dict[str, SpanPanelCircuit] = (
+        circuits: dict[str, SpanPanelCircuit] = (
             span_panel.circuits
         )  # Get atomic snapshot of circuits
         if self.circuit_id in circuits:
@@ -101,7 +129,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         span_panel: SpanPanel = self.coordinator.data
-        circuits: Dict[str, SpanPanelCircuit] = (
+        circuits: dict[str, SpanPanelCircuit] = (
             span_panel.circuits
         )  # Get atomic snapshot of circuits
         if self.circuit_id in circuits:
@@ -109,7 +137,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             curr_circuit: SpanPanelCircuit = circuits[self.circuit_id].copy()
             # Perform the state change
             await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
-            # Request refresh to get the new state
+
             await self.coordinator.async_request_refresh()
 
 
@@ -119,7 +147,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """
-    Set up envoy sensor platform.
+    Set up sensor platform.
     """
 
     _LOGGER.debug("ASYNC SETUP ENTRY SWITCH")

@@ -1,7 +1,7 @@
 """span_panel_storage_battery"""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass
@@ -13,7 +13,7 @@ class SpanPanelStorageBattery:
     raw_data: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
-    def from_dic(data: Dict[str, Any]) -> "SpanPanelStorageBattery":
+    def from_dic(data: dict[str, Any]) -> "SpanPanelStorageBattery":
         """read the data from the dictionary"""
         return SpanPanelStorageBattery(
             storage_battery_percentage=data.get("percentage", 0)

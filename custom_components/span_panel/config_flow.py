@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import enum
 import logging
-from collections.abc import Mapping
 from typing import Any
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -19,12 +18,18 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
+import voluptuous as vol
 
 from custom_components.span_panel.span_panel_hardware_status import (
     SpanPanelHardwareStatus,
 )
 
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, USE_DEVICE_PREFIX
+from .const import (
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    USE_CIRCUIT_NUMBERS,
+    USE_DEVICE_PREFIX,
+)
 from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
@@ -87,7 +92,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    def is_matching(self, other_flow: "SpanPanelConfigFlow") -> bool:
+    def is_matching(self, other_flow: SpanPanelConfigFlow) -> bool:
         """Return True if other_flow is a matching Span Panel."""
         return bool(other_flow and other_flow.context.get("source") == "zeroconf")
 
@@ -359,7 +364,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             title=serial_number,
             data={CONF_HOST: host, CONF_ACCESS_TOKEN: access_token},
             options={
-                USE_DEVICE_PREFIX: True  # Only set for new installations
+                USE_DEVICE_PREFIX: True,  # Only set for new installations
+                USE_CIRCUIT_NUMBERS: True,  # New installations get stable IDs
             },
         )
 
@@ -436,6 +442,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             use_prefix: Any | bool = self.entry.options.get(USE_DEVICE_PREFIX, False)
             if use_prefix:
                 user_input[USE_DEVICE_PREFIX] = use_prefix
+
+            # Preserve the USE_CIRCUIT_NUMBERS setting from the original entry
+            use_circuit_numbers: Any | bool = self.entry.options.get(
+                USE_CIRCUIT_NUMBERS, False
+            )
+            if use_circuit_numbers:
+                user_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
+
             return self.async_create_entry(title="", data=user_input)
 
         defaults: dict[str, Any] = {

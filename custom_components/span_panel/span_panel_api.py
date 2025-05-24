@@ -1,12 +1,12 @@
 """Span Panel API"""
 
-import logging
-import uuid
-from copy import deepcopy
-from typing import Any, Dict
 import asyncio
+from copy import deepcopy
+import logging
+from typing import Any
+import uuid
 
-from homeassistant.helpers.httpx_client import httpx
+import httpx
 
 from .const import (
     API_TIMEOUT,
@@ -84,7 +84,7 @@ class SpanPanelApi:
                 "description": "Home Assistant Local Span Integration",
             },
         )
-        response_data: Dict[str, str] = register_results.json()
+        response_data: dict[str, str] = register_results.json()
         if "accessToken" not in response_data:
             raise SpanPanelReturnedEmptyData("No access token in response")
         return response_data["accessToken"]
@@ -111,7 +111,7 @@ class SpanPanelApi:
 
         return panel_data
 
-    async def get_circuits_data(self) -> Dict[str, SpanPanelCircuit]:
+    async def get_circuits_data(self) -> dict[str, SpanPanelCircuit]:
         """Get the circuits data"""
         response: httpx.Response = await self.get_data(URL_CIRCUITS)
         raw_circuits_data: Any = deepcopy(response.json()[SPAN_CIRCUITS])
@@ -119,7 +119,7 @@ class SpanPanelApi:
         if not raw_circuits_data:
             raise SpanPanelReturnedEmptyData()
 
-        circuits_data: Dict[str, SpanPanelCircuit] = {}
+        circuits_data: dict[str, SpanPanelCircuit] = {}
         for circuit_id, raw_circuit_data in raw_circuits_data.items():
             circuits_data[circuit_id] = SpanPanelCircuit.from_dict(raw_circuit_data)
         return circuits_data
@@ -176,7 +176,7 @@ class SpanPanelApi:
         """
         Retry 3 times if there is a transport error or certain HTTP errors.
         """
-        headers: Dict[str, str] = {"Accept": "application/json"}
+        headers: dict[str, str] = {"Accept": "application/json"}
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
 
@@ -248,7 +248,7 @@ class SpanPanelApi:
         """
         POST to the url
         """
-        headers: Dict[str, str] = {"accept": "application/json"}
+        headers: dict[str, str] = {"accept": "application/json"}
         if self.access_token:
             headers["Authorization"] = f"Bearer {self.access_token}"
 
