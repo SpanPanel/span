@@ -1,9 +1,9 @@
 """Span Panel Hardware Status"""
 
-import logging
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict
+import logging
+from typing import Any
 
 from .const import SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN
 
@@ -27,7 +27,7 @@ class SpanPanelHardwareStatus:
     is_cellular_connected: bool
     proximity_proven: bool | None = None
     remaining_auth_unlock_button_presses: int = 0
-    _system_data: Dict[str, Any] = field(default_factory=dict)
+    _system_data: dict[str, Any] = field(default_factory=dict)
 
     # Door state has been known to return UNKNOWN if the door has not been
     # operated recently Sensor is a tamper sensor not a door sensor
@@ -46,7 +46,7 @@ class SpanPanelHardwareStatus:
         return result
 
     @property
-    def system_data(self) -> Dict[str, Any]:
+    def system_data(self) -> dict[str, Any]:
         """Return the system data."""
         return deepcopy(self._system_data)
 

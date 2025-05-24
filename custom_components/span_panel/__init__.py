@@ -14,7 +14,12 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
 
-from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
+from .const import (
+    COORDINATOR,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    NAME,
+)
 from .coordinator import SpanPanelCoordinator
 from .options import Options
 from .span_panel import SpanPanel
@@ -48,12 +53,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.debug("ASYNC_SETUP_ENTRY panel %s", span_panel)
 
-    scan_interval: int = entry.options.get(
-        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
-    )
+    # Get scan interval from options with a default
+    scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds)
 
     coordinator = SpanPanelCoordinator(
-        hass, span_panel, name, update_interval=scan_interval
+        hass, span_panel, name, update_interval=scan_interval, config_entry=entry
     )
 
     await coordinator.async_config_entry_first_refresh()

@@ -1,7 +1,8 @@
 """Option configurations."""
 
-from homeassistant.config_entries import ConfigEntry
 from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
 
 INVERTER_ENABLE = "enable_solar_circuit"
 INVERTER_LEG1 = "leg1"

@@ -10,9 +10,16 @@ cd "$SCRIPT_DIR/.." || exit
 source "$SCRIPT_DIR/run-in-env.sh"
 
 # Run mypy with explicit module paths and settings for Home Assistant
-python -m mypy \
-  --namespace-packages \
-  --explicit-package-bases \
-  --follow-imports=silent \
-  --ignore-missing-imports \
-  custom_components
+if [ $# -eq 0 ]; then
+  # If no files were passed, check the entire directory
+  cd custom_components && python -m mypy \
+    --follow-imports=silent \
+    --ignore-missing-imports \
+    span_panel
+else
+  # If files were passed, check those specific files
+  cd custom_components && python -m mypy \
+    --follow-imports=silent \
+    --ignore-missing-imports \
+    $(echo "$@" | sed 's|custom_components/||g')
+fi
