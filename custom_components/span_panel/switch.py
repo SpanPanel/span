@@ -11,11 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
-from .const import (
-    COORDINATOR,
-    DOMAIN,
-    CircuitRelayState,
-)
+from .const import COORDINATOR, DOMAIN, CircuitRelayState
 from .coordinator import SpanPanelCoordinator
 from .helpers import construct_entity_id
 from .span_panel import SpanPanel
@@ -105,11 +101,12 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             self._attr_is_on = None
 
     def turn_on(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch on."""
+        """Turn the switch on."""
+
         self.hass.create_task(self.async_turn_on(**kwargs))
 
     def turn_off(self, **kwargs: Any) -> None:
-        """Synchronously turn the switch off."""
+        """Turn the switch off."""
         self.hass.create_task(self.async_turn_off(**kwargs))
 
     async def async_turn_on(self, **kwargs: Any) -> None:
@@ -146,9 +143,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """
-    Set up sensor platform.
-    """
+    """Set up sensor platform."""
 
     _LOGGER.debug("ASYNC SETUP ENTRY SWITCH")
     data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]

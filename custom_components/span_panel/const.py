@@ -51,6 +51,9 @@ PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE = "UNKNOWN"
 USE_DEVICE_PREFIX = "use_device_prefix"
 USE_CIRCUIT_NUMBERS = "use_circuit_numbers"
 
+# Entity naming pattern options
+ENTITY_NAMING_PATTERN = "entity_naming_pattern"
+
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
 API_TIMEOUT = 30
 
@@ -70,3 +73,13 @@ class CircuitPriority(enum.Enum):
     NICE_TO_HAVE = "Nice To Have"
     NON_ESSENTIAL = "Non-Essential"
     UNKNOWN = "Unknown"
+
+
+class EntityNamingPattern(enum.Enum):
+    """Entity naming pattern options for user selection."""
+
+    FRIENDLY_NAMES = "friendly_names"  # Device + Friendly Name (e.g., span_panel_kitchen_outlets_power)
+    CIRCUIT_NUMBERS = (
+        "circuit_numbers"  # Device + Circuit Numbers (e.g., span_panel_circuit_1_power)
+    )
+    LEGACY_NAMES = "legacy_names"  # No Device Prefix (e.g., kitchen_outlets_power) - Read-only for pre-1.0.4

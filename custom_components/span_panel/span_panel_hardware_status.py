@@ -1,4 +1,4 @@
-"""Span Panel Hardware Status"""
+"""Span Panel Hardware Status."""
 
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -87,5 +87,5 @@ class SpanPanelHardwareStatus:
         )
 
     def copy(self) -> "SpanPanelHardwareStatus":
-        """Create a deep copy of hardware status"""
+        """Create a deep copy of hardware status."""
         return deepcopy(self)

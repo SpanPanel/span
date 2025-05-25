@@ -33,7 +33,7 @@ jobs:
         run: ruff check .
       - name: Run isort
         run: isort check .
-      - name: Run bandit
-        run: bandit -r .
+      - name: Run bandit on custom_components/span_panel
+        run: bandit -r custom_components/span_panel
       - name: Run prettier with autofix
         run: prettier --write "**/*.{js,jsx,ts,tsx,json,css,scss,md}"

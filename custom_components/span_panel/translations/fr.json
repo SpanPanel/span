@@ -22,7 +22,7 @@
         },
         "title": "Connectez-vous au Span Panel"
       },
-      "auth_menu": {
+      "choose_auth_type": {
         "title": "Choisir les options d'authentification",
         "menu_options": {
           "auth_proximity": "Authentifiez-vous via votre Span Panel physique",
@@ -45,12 +45,27 @@
   "options": {
     "step": {
       "init": {
+        "title": "Menu des Options",
+        "menu_options": {
+          "general_options": "Options Générales",
+          "entity_naming": "Modèle de Nommage des Entités"
+        }
+      },
+      "general_options": {
+        "title": "Options Générales",
         "data": {
           "scan_interval": "Intervalle d'analyse en secondes",
+          "enable_battery_percentage": "Activer le Capteur de Pourcentage de Batterie",
           "enable_solar_circuit": "Activer les capteurs de l'onduleur solaire",
           "leg1": "Jambe solaire 1 (0 n'est pas utilisé)",
-          "leg2": "Jambe solaire 2 (0 n'est pas utilisé)",
-          "enable_battery_percentage": "Activer le capteur de pourcentage de batterie de stockage (doit être physiquement connecté)"
+          "leg2": "Jambe solaire 2 (0 n'est pas utilisé)"
+        }
+      },
+      "entity_naming": {
+        "title": "Modèle de Nommage des Entités",
+        "description": "Choisissez comment les entités de circuit sont nommées. **Changer ceci renommera vos entités existantes.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Important**: \n• L'historique des entités sera préservé pendant le renommage\n• Considérez sauvegarder votre configuration avant de procéder\n• Les automatisations et scripts peuvent nécessiter des mises à jour manuelles pour utiliser les nouveaux IDs d'entité",
+        "data": {
+          "entity_naming_pattern": "Modèle de Nommage des Entités"
         }
       }
     }

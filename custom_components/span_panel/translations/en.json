@@ -45,12 +45,27 @@
   "options": {
     "step": {
       "init": {
+        "title": "Options Menu",
+        "menu_options": {
+          "general_options": "General Options",
+          "entity_naming": "Entity Naming Pattern"
+        }
+      },
+      "general_options": {
+        "title": "General Options",
         "data": {
           "scan_interval": "Scan interval in seconds",
+          "enable_battery_percentage": "Enable Battery Percentage Sensor",
           "enable_solar_circuit": "Enable Solar Inverter Sensors",
           "leg1": "Solar Leg 1 (0 is not used)",
-          "leg2": "Solar Leg 2 (0 is not used)",
-          "enable_battery_percentage": "Enable Storage Battery Percentage Sensor (Must be physically connected)"
+          "leg2": "Solar Leg 2 (0 is not used)"
+        }
+      },
+      "entity_naming": {
+        "title": "Entity Naming Pattern",
+        "description": "Choose how circuit entities are named. **Changing this will rename your existing entities.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Important**: \n• Entity history will be preserved during renaming\n• Consider backing up your configuration before proceeding\n• Automations and scripts may need manual updates to use new entity IDs",
+        "data": {
+          "entity_naming_pattern": "Entity Naming Pattern"
         }
       }
     }

@@ -45,12 +45,27 @@
   "options": {
     "step": {
       "init": {
+        "title": "Menu de Opções",
+        "menu_options": {
+          "general_options": "Opções Gerais",
+          "entity_naming": "Padrão de Nomenclatura de Entidades"
+        }
+      },
+      "general_options": {
+        "title": "Opções Gerais",
         "data": {
           "scan_interval": "Intervalo de verificação em segundos",
+          "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria",
           "enable_solar_circuit": "Ativar Sensores do Inversor Solar",
           "leg1": "Fase Solar 1 (0 não utilizado)",
-          "leg2": "Fase Solar 2 (0 não utilizado)",
-          "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria de Armazenamento (Deve estar fisicamente ligado)"
+          "leg2": "Fase Solar 2 (0 não utilizado)"
+        }
+      },
+      "entity_naming": {
+        "title": "Padrão de Nomenclatura de Entidades",
+        "description": "Escolha como as entidades de circuito são nomeadas. **Alterar isto irá renomear as suas entidades existentes.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Importante**: \n• O histórico das entidades será preservado durante a renomeação\n• Considere fazer backup da sua configuração antes de prosseguir\n• Automações e scripts podem precisar de atualizações manuais para usar os novos IDs de entidade",
+        "data": {
+          "entity_naming_pattern": "Padrão de Nomenclatura de Entidades"
         }
       }
     }

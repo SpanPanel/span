@@ -12,13 +12,16 @@ What this integration does do is provide the user sensors and controls that are 
 
 ## What's New
 
-### Version 1.0.9+ - SPAN Panel Circuit Name Synchronization
+### Version 1.1.0+ - Configurable Entity Naming Patterns
 
 **Circuit Name Sync with SPAN**: All versions of the integration now support automatic friendly name updates when circuits are renamed in the SPAN panel. Names sync on the next poll interval. However, if you customize an entity's friendly name in Home Assistant, your customization will be preserved and won't be overwritten during sync. To re-enable sync for a customized entity, clear the custom name in Home Assistant.
 
-**New installations** use circuit numbers for stable entity IDs (e.g., `sensor.span_panel_circuit_1_power`) while preserving user-friendly names from SPAN. This prevents entity IDs from becoming misleading when circuits are renamed in the SPAN panel (and thus the integration) - now the entity ID remains generic while the friendly name reflects the current purpose.
+**Flexible Entity Naming**: The integration now provides configurable entity naming patterns that can be changed at any time through the configuration options:
 
-**Existing installations** maintain their current entity ID patterns during upgrades. If you want generic circuit number-based entity IDs, you'll need to reinstall the integration from scratch or manually rename your entities. **_Note: You will lose your historical data if you choose to reinstall._** Renaming an entity should retain your history through the normal HA processes.
+- **Friendly Names Pattern**: Entity IDs use descriptive circuit names (e.g., `sensor.span_panel_kitchen_outlets_power`)
+- **Circuit Numbers Pattern**: Entity IDs use stable circuit numbers (e.g., `sensor.span_panel_circuit_15_power`)
+
+**Migration Support**: Installations can migrate between entity naming patterns without losing entity history. Pre-1.0.4 installations can only migrate forward to on the other patterns that have device name prefixed to entities.
 
 ## Prerequisites
 
@@ -97,15 +100,63 @@ If you have this auth token, you can enter it in the "Existing Auth Token" flow 
 - Battery storage percentage display
 - Solar inverter mapping
 
+### Entity Naming Pattern Options
+
+The integration provides flexible entity naming patterns to suit different preferences and use cases. You can configure these options through the integration's configuration menu:
+
+#### Available Naming Patterns
+
+1. **Friendly Names** (Recommended for new installations)
+
+   - Entity IDs use descriptive circuit names from your SPAN panel
+   - Example: `sensor.span_panel_kitchen_outlets_power`
+   - Automatically updates when you rename circuits in the SPAN panel
+   - More intuitive for automations and scripts
+
+2. **Circuit Numbers** (Stable entity IDs)
+   - Entity IDs use generic circuit numbers
+   - Example: `sensor.span_panel_circuit_15_power`
+   - Entity IDs remain stable even when circuits are renamed
+   - Friendly names still sync from SPAN panel for display
+
+#### Changing Naming Patterns
+
+You can switch between naming patterns at any time through:
+
+1. Go to **Settings** → **Devices & Services**
+2. Find your SPAN Panel integration
+3. Click **Configure**
+4. Select **Entity Naming Pattern**
+5. Choose your preferred pattern and confirm
+
+**Important Notes:**
+
+- Changing patterns will rename existing entities in your Home Assistant registry
+- Entity history is preserved during renaming
+- Automations and scripts may need manual updates to use new entity IDs
+- Consider backing up your configuration before making changes
+
 ### Solar Configuration
 
-If the inverter sensors are enabled three sensors are created:
+If the inverter sensors are enabled, three sensors are created. The entity naming pattern depends on your configured naming pattern:
+
+**Circuit Numbers Pattern**:
 
 ```yaml
-sensor.span_panel_solar_inverter_instant_power # (watts)
-sensor.span_panel_solar_inverter_energy_produce # (Wh)
+sensor.span_panel_circuit_30_32_instant_power    # (watts) - dual circuit
+sensor.span_panel_circuit_30_32_energy_produced  # (Wh) - dual circuit
+sensor.span_panel_circuit_30_32_energy_consumed  # (Wh) - dual circuit
+```
+
+**Friendly Names Pattern**:
+
+```yaml
+sensor.span_panel_solar_inverter_instant_power   # (watts)
+sensor.span_panel_solar_inverter_energy_produced # (Wh)
 sensor.span_panel_solar_inverter_energy_consumed # (Wh)
 ```
+
+**Note**: For circuit numbers pattern, the numbers in the entity IDs (e.g., `30_32`) correspond to your configured inverter leg circuits. For single-circuit configurations, only one number appears (e.g., `circuit_30_instant_power`).
 
 Disabling the inverter in the configuration removes these specific sensors. No reboot is required to add/remove these inverter sensors.
 
@@ -116,7 +167,7 @@ Adding your own platform integration sensor like so converts to kWh:
 ```yaml
 sensor
     - platform: integration
-      source: sensor.solar_inverter_instant_power
+      source: sensor.span_panel_solar_inverter_instant_power  # Use appropriate entity ID for your installation
       name: Solar Inverter Produced kWh
       unique_id: sensor.solar_inverter_produced_kwh
      unit_prefix: k
@@ -145,7 +196,11 @@ Select the precision you prefer from the "Display Precision" menu and then press
    sensor.span_panel_feed_through_produced_energy
    ```
 
-3. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router or other must have circuits. Always On circuits are set to "must-have" and are subsequently not user controlled (meaning you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule is inconsistent with respect to all circuit order which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully know the details.
+   **Note**: The exact entity names depend on your configured naming pattern. For circuit numbers pattern, feed through sensors use generic naming (e.g., `sensor.span_panel_circuit_X_consumed_energy` where X is the circuit number). For friendly names pattern, they use descriptive names based on the circuit purpose.
+
+3. No Switch - If a circuit is set in the SPAN App as on of the "Always on Circuits" then that circuit will not have a switch because the API does not allow the user to control it.
+
+4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router or other must have circuits. Always On circuits are set to "must-have" and are subsequently not user controlled (meaning you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule is inconsistent with respect to all circuit order which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully know the details.
 
 ## Development Notes
 

@@ -22,7 +22,7 @@
         },
         "title": "スパンパネルに接続"
       },
-      "auth_menu": {
+      "choose_auth_type": {
         "title": "認証オプションを選んでください",
         "menu_options": {
           "auth_proximity": "スパンパネル実物を通じて認証する",
@@ -45,12 +45,27 @@
   "options": {
     "step": {
       "init": {
+        "title": "オプションメニュー",
+        "menu_options": {
+          "general_options": "一般オプション",
+          "entity_naming": "エンティティ命名パターン"
+        }
+      },
+      "general_options": {
+        "title": "一般オプション",
         "data": {
           "scan_interval": "スキャンインターバル(秒)",
+          "enable_battery_percentage": "バッテリーパーセントセンサーを有効にする",
           "enable_solar_circuit": "ソーラーインバーターセンサーを有効にする",
           "leg1": "ソーラーレッグ1（0は使用されません）",
-          "leg2": "ソーラーレッグ2（0は使用されません）",
-          "enable_battery_percentage": "蓄電池パーセントセンサーを有効にする (物理的に接続されている必要があります)"
+          "leg2": "ソーラーレッグ2（0は使用されません）"
+        }
+      },
+      "entity_naming": {
+        "title": "エンティティ命名パターン",
+        "description": "回路エンティティの命名方法を選択してください。**これを変更すると既存のエンティティが名前変更されます。**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **重要**: \n• エンティティ履歴は名前変更中に保持されます\n• 続行する前に設定のバックアップを検討してください\n• 自動化とスクリプトは新しいエンティティIDを使用するために手動更新が必要な場合があります",
+        "data": {
+          "entity_naming_pattern": "エンティティ命名パターン"
         }
       }
     }
