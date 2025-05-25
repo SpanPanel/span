@@ -44,6 +44,7 @@ class SpanPanelCircuit:
 
         Returns:
             A new SpanPanelCircuit instance.
+
         """
         data_copy: dict[str, Any] = deepcopy(data)
         return SpanPanelCircuit(

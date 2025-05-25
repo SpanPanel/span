@@ -1,0 +1,10 @@
+[bandit]
+# Exclude test directories and files
+exclude_dirs = tests
+exclude = test_*.py,debug_*.py
+
+# Skip specific checks that are acceptable in test files
+skips = B101,B108
+
+# B101: assert_used - Assert statements are normal and expected in tests
+# B108: hardcoded_tmp_directory - Test fixtures often use hardcoded paths

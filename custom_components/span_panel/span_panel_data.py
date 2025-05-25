@@ -1,4 +1,4 @@
-"""Span Panel Data"""
+"""Span Panel Data."""
 
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -39,7 +39,7 @@ class SpanPanelData:
     def from_dict(
         cls, data: dict[str, Any], options: Options | None = None
     ) -> "SpanPanelData":
-        """Create instance from dict with deep copy of input data"""
+        """Create instance from dict with deep copy of input data."""
         data = deepcopy(data)
         common_data: dict[str, Any] = {
             "main_relay_state": str(data["mainRelayState"]),

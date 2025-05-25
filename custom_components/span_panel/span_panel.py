@@ -75,27 +75,27 @@ class SpanPanel:
 
     @property
     def options(self) -> Options | None:
-        """Get options data atomically"""
+        """Get options data atomically."""
         return self._options
 
     def _update_status(self, new_status: SpanPanelHardwareStatus) -> None:
-        """Atomic update of status data"""
+        """Atomic update of status data."""
         self._status = new_status
 
     def _update_panel(self, new_panel: SpanPanelData) -> None:
-        """Atomic update of panel data"""
+        """Atomic update of panel data."""
         self._panel = new_panel
 
     def _update_circuits(self, new_circuits: dict[str, SpanPanelCircuit]) -> None:
-        """Atomic update of circuits data"""
+        """Atomic update of circuits data."""
         self._circuits = new_circuits
 
     def _update_storage_battery(self, new_battery: SpanPanelStorageBattery) -> None:
-        """Atomic update of storage battery data"""
+        """Atomic update of storage battery data."""
         self._storage_battery = new_battery
 
     async def update(self) -> None:
-        """Update all panel data atomically"""
+        """Update all panel data atomically."""
         try:
             _LOGGER.debug("Starting panel update")
             # Get new data
@@ -125,20 +125,20 @@ class SpanPanel:
 
     @property
     def status(self) -> SpanPanelHardwareStatus:
-        """Get status data atomically"""
+        """Get status data atomically."""
         return self._get_hardware_status()
 
     @property
     def panel(self) -> SpanPanelData:
-        """Get panel data atomically"""
+        """Get panel data atomically."""
         return self._get_data()
 
     @property
     def circuits(self) -> dict[str, SpanPanelCircuit]:
-        """Get circuits data atomically"""
+        """Get circuits data atomically."""
         return self._circuits
 
     @property
     def storage_battery(self) -> SpanPanelStorageBattery:
-        """Get storage battery data atomically"""
+        """Get storage battery data atomically."""
         return self._get_storage_battery()

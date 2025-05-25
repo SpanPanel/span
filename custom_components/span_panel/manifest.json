@@ -7,7 +7,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/SpanPanel/span/issues",
   "requirements": [],
-  "version": "1.0.9",
+  "version": "1.0.10",
   "zeroconf": [
     {
       "type": "_span._tcp.local."

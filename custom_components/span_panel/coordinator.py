@@ -31,6 +31,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         update_interval: int,
         config_entry: ConfigEntry,
     ) -> None:
+        """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,

@@ -14,13 +14,9 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
 
-from .const import (
-    COORDINATOR,
-    DEFAULT_SCAN_INTERVAL,
-    DOMAIN,
-    NAME,
-)
+from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
 from .coordinator import SpanPanelCoordinator
+from .entity_summary import log_entity_summary
 from .options import Options
 from .span_panel import SpanPanel
 
@@ -35,9 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """
-    Set up Span Panel from a config entry.
-    """
+    """Set up Span Panel from a config entry."""
     config = entry.data
     host = config[CONF_HOST]
     name = "SpanPanel"
@@ -72,13 +66,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # Debug logging of entity summary
+    log_entity_summary(coordinator, entry)
+
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """
-    Unload a config entry.
-    """
+    """Unload a config entry."""
     _LOGGER.debug("ASYNC_UNLOAD")
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
@@ -87,7 +82,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """
-    Update listener.
-    """
+    """Update listener."""
     await hass.config_entries.async_reload(entry.entry_id)

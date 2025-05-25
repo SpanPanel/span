@@ -32,9 +32,15 @@ from .const import (
     MAIN_RELAY_STATE,
     STATUS_SOFTWARE_VER,
     STORAGE_BATTERY_PERCENTAGE,
+    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
-from .helpers import construct_entity_id, get_user_friendly_suffix
+from .helpers import (
+    construct_entity_id,
+    construct_synthetic_entity_id,
+    construct_synthetic_friendly_name,
+    get_user_friendly_suffix,
+)
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
@@ -42,6 +48,55 @@ from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 from .util import panel_to_device_info
+
+
+@dataclass(frozen=True)
+class SyntheticSensorConfig:
+    """Configuration for a synthetic sensor entity."""
+
+    friendly_name: str
+    circuit_numbers: list[int]
+    key_prefix: str  # e.g., "solar_inverter", "battery_bank", etc.
+    value_fn_map: dict[str, Callable[[SpanPanelData], float | str]]
+
+
+def create_synthetic_sensor_descriptions(
+    config: SyntheticSensorConfig,
+) -> list[SpanPanelDataSensorEntityDescription]:
+    """Create synthetic sensor descriptions from a configuration."""
+    descriptions = []
+
+    for template in SYNTHETIC_SENSOR_TEMPLATES:
+        # Create a unique key for this synthetic sensor
+        synthetic_key = f"{config.key_prefix}_{template.key}"
+
+        # Get the appropriate value function from the configuration
+        value_fn = config.value_fn_map.get(template.key, lambda panel_data: 0.0)
+
+        # Create the configured description
+        synthetic_description = SpanPanelDataSensorEntityDescription(
+            key=synthetic_key,
+            name=template.name,
+            device_class=template.device_class,
+            entity_category=template.entity_category,
+            entity_registry_enabled_default=template.entity_registry_enabled_default,
+            entity_registry_visible_default=template.entity_registry_visible_default,
+            force_update=template.force_update,
+            icon=template.icon,
+            has_entity_name=template.has_entity_name,
+            translation_key=template.translation_key,
+            translation_placeholders=template.translation_placeholders,
+            unit_of_measurement=template.unit_of_measurement,
+            native_unit_of_measurement=template.native_unit_of_measurement,
+            state_class=template.state_class,
+            suggested_display_precision=template.suggested_display_precision,
+            suggested_unit_of_measurement=template.suggested_unit_of_measurement,
+            value_fn=value_fn,
+        )
+
+        descriptions.append(synthetic_description)
+
+    return descriptions
 
 
 @dataclass(frozen=True)
@@ -199,37 +254,38 @@ PANEL_SENSORS: tuple[
     ),
 )
 
-INVERTER_SENSORS: tuple[
+# Generic synthetic sensor templates that can be applied to any multi-circuit entity
+SYNTHETIC_SENSOR_TEMPLATES: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
 ] = (
     SpanPanelDataSensorEntityDescription(
-        key="solar_inverter_instant_power",
-        name="Solar Inverter Instant Power",
+        key="instant_power",
+        name="Instant Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         suggested_display_precision=2,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda panel_data: panel_data.solar_inverter_instant_power,
+        value_fn=lambda panel_data: 0.0,  # Placeholder - will be replaced
     ),
     SpanPanelDataSensorEntityDescription(
-        key="solar_inverter_energy_produced",
-        name="Solar Inverter Energy Produced",
+        key="energy_produced",
+        name="Energy Produced",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         suggested_display_precision=2,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda panel_data: panel_data.solar_inverter_energy_produced,
+        value_fn=lambda panel_data: 0.0,  # Placeholder - will be replaced
     ),
     SpanPanelDataSensorEntityDescription(
-        key="solar_inverter_energy_consumed",
-        name="Solar Inverter Energy Consumed",
+        key="energy_consumed",
+        name="Energy Consumed",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         suggested_display_precision=2,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda panel_data: panel_data.solar_inverter_energy_consumed,
+        value_fn=lambda panel_data: 0.0,  # Placeholder - will be replaced
     ),
 )
 
@@ -311,7 +367,14 @@ class SpanSensorBase(
         self._attr_device_info = device_info
         base_name: str | None = getattr(description, "name", None)
 
-        self._attr_name = base_name
+        if (
+            data_coordinator.config_entry is not None
+            and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
+            and "name" in device_info
+        ):
+            self._attr_name = f"{device_info['name']} {base_name}"
+        else:
+            self._attr_name = base_name
 
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = (
@@ -448,6 +511,7 @@ class SpanPanelCircuitSensor(
         super()._handle_coordinator_update()
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the circuit sensor."""
         return span_panel.circuits[self.id]
 
 
@@ -457,6 +521,7 @@ class SpanPanelPanel(
     """Span Panel data sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
+        """Get the data source for the panel sensor."""
         return span_panel.panel
 
 
@@ -466,6 +531,7 @@ class SpanPanelPanelStatus(
     """Span Panel status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
+        """Get the data source for the panel status sensor."""
         return span_panel.panel
 
 
@@ -475,6 +541,7 @@ class SpanPanelStatus(
     """Span Panel hardware status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
+        """Get the data source for the panel status sensor."""
         return span_panel.status
 
 
@@ -488,7 +555,100 @@ class SpanPanelStorageBatteryStatus(
     _attr_icon: str | None = "mdi:battery"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
+        """Get the data source for the storage battery status sensor."""
         return span_panel.storage_battery
+
+
+class SpanPanelSyntheticSensor(
+    SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
+):
+    """Generic span panel synthetic sensor entity for multi-circuit entities."""
+
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        description: SpanPanelDataSensorEntityDescription,
+        span_panel: SpanPanel,
+        circuit_numbers: list[int],
+        friendly_name: str | None = None,
+        key_prefix: str | None = None,
+    ) -> None:
+        """Initialize Span Panel Synthetic Sensor entity."""
+        # Extract template key from synthetic key for entity ID construction
+        # Synthetic keys follow pattern: "{prefix}_{template_key}"
+        # We need the template key for proper entity ID suffix generation
+        if key_prefix and description.key.startswith(f"{key_prefix}_"):
+            # Remove the known prefix to get the template key
+            template_key = description.key[len(key_prefix) + 1 :]
+        elif "_" in description.key:
+            # Fallback: extract everything after the first underscore
+            template_key = description.key.split("_", 1)[1]
+        else:
+            # Fallback for unexpected format
+            template_key = description.key
+
+        # Use the helper function to construct appropriate entity ID
+        entity_suffix = get_user_friendly_suffix(template_key)
+        self.entity_id = construct_synthetic_entity_id(  # type: ignore[assignment]
+            coordinator,
+            span_panel,
+            "sensor",
+            circuit_numbers,
+            entity_suffix,
+            friendly_name,
+        )
+
+        # Create display name using friendly name if provided
+        description_name = getattr(description, "name", "Unknown") or "Unknown"
+        if friendly_name:
+            display_name = f"{friendly_name} {description_name}"
+        else:
+            # No friendly name provided - use circuit-based fallback
+            display_name = construct_synthetic_friendly_name(
+                circuit_numbers=circuit_numbers,
+                suffix_description=description_name,
+                user_friendly_name=None,
+            )
+
+        # Create a new description with the friendly name
+        synthetic_description = SpanPanelDataSensorEntityDescription(
+            key=description.key,
+            name=display_name,
+            device_class=description.device_class,
+            entity_category=description.entity_category,
+            entity_registry_enabled_default=description.entity_registry_enabled_default,
+            entity_registry_visible_default=description.entity_registry_visible_default,
+            force_update=description.force_update,
+            icon=description.icon,
+            has_entity_name=description.has_entity_name,
+            translation_key=description.translation_key,
+            translation_placeholders=description.translation_placeholders,
+            unit_of_measurement=description.unit_of_measurement,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            suggested_unit_of_measurement=description.suggested_unit_of_measurement,
+            value_fn=description.value_fn,
+        )
+
+        super().__init__(coordinator, synthetic_description, span_panel)
+
+        # For synthetic sensors, we want complete control over the friendly name
+        self._attr_name = display_name
+
+        # Create unique ID based on circuit numbers
+        circuit_spec = "_".join(str(num) for num in circuit_numbers)
+        self._attr_unique_id = f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}_{description.key}"
+
+        # Ensure the native_unit_of_measurement is set correctly from the description
+        if description.native_unit_of_measurement:
+            self._attr_native_unit_of_measurement = (
+                description.native_unit_of_measurement
+            )
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
+        """Get the data source for the synthetic sensor."""
+        return span_panel.panel
 
 
 async def async_setup_entry(
@@ -510,15 +670,59 @@ async def async_setup_entry(
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
 
     # Config entry should never be None here, but we check for safety
-    if config_entry.options.get(INVERTER_ENABLE, False):
-        for description_i in INVERTER_SENSORS:
-            entities.append(
-                SpanPanelPanelStatus(coordinator, description_i, span_panel)
+    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
+    solar_descriptions = []  # Initialize for logging
+    _LOGGER.info(
+        "Solar sensor setup - enabled: %s, options: %s",
+        solar_enabled,
+        config_entry.options,
+    )
+
+    if solar_enabled:
+        # Get inverter leg configuration from options
+        from .options import INVERTER_LEG1, INVERTER_LEG2
+
+        inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
+        inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
+
+        # Create solar inverter synthetic sensor configuration
+        solar_config = SyntheticSensorConfig(
+            friendly_name="Solar Inverter",
+            circuit_numbers=[inverter_leg1, inverter_leg2],
+            key_prefix="solar_inverter",
+            value_fn_map={
+                "instant_power": lambda panel_data: panel_data.solar_inverter_instant_power,
+                "energy_produced": lambda panel_data: panel_data.solar_inverter_energy_produced,
+                "energy_consumed": lambda panel_data: panel_data.solar_inverter_energy_consumed,
+            },
+        )
+
+        # Create the synthetic sensor descriptions
+        solar_descriptions = create_synthetic_sensor_descriptions(solar_config)
+
+        # Create entities from the synthetic descriptions
+        _LOGGER.info("Creating %d solar sensor entities", len(solar_descriptions))
+        for description_i in solar_descriptions:
+            solar_sensor = SpanPanelSyntheticSensor(
+                coordinator,
+                description_i,
+                span_panel,
+                solar_config.circuit_numbers,
+                solar_config.friendly_name,
+                solar_config.key_prefix,
             )
+            _LOGGER.info(
+                "Created solar sensor: %s (unique_id: %s)",
+                solar_sensor.entity_id,
+                solar_sensor.unique_id,
+            )
+            entities.append(solar_sensor)
 
     for description_ss in STATUS_SENSORS:
         entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
 
+    # Create circuit sensors (excluding synthetics)
+    circuit_sensor_count = 0
     for description_cs in CIRCUITS_SENSORS:
         for id_c, circuit_data in span_panel.circuits.items():
             entities.append(
@@ -526,6 +730,14 @@ async def async_setup_entry(
                     coordinator, description_cs, id_c, circuit_data.name, span_panel
                 )
             )
+            circuit_sensor_count += 1
+
+    _LOGGER.info(
+        "Created %d circuit sensors for %d circuits (%d sensors per circuit)",
+        circuit_sensor_count,
+        len(span_panel.circuits),
+        len(CIRCUITS_SENSORS),
+    )
     if config_entry is not None and config_entry.options.get(BATTERY_ENABLE, False):
         for description_sb in STORAGE_BATTERY_SENSORS:
             entities.append(

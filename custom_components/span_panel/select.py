@@ -13,11 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import httpx
 
-from .const import (
-    COORDINATOR,
-    DOMAIN,
-    CircuitPriority,
-)
+from .const import COORDINATOR, DOMAIN, CircuitPriority
 from .coordinator import SpanPanelCoordinator
 from .helpers import construct_entity_id, get_user_friendly_suffix
 from .span_panel import SpanPanel
@@ -46,6 +42,7 @@ class SpanPanelSelectEntityDescriptionWrapper:
         current_option_fn: Callable[[SpanPanelCircuit], str | None] = lambda _: None,
         select_option_fn: Callable[[SpanPanelCircuit, str], None] | None = None,
     ) -> None:
+        """Initialize the select entity description wrapper."""
         self.entity_description = SelectEntityDescription(key=key, name=name, icon=icon)
         self.options_fn = options_fn
         self.current_option_fn = current_option_fn
@@ -122,7 +119,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         """Get the circuit for this entity."""
         circuit = self.coordinator.data.circuits[self.id]
         if not isinstance(circuit, SpanPanelCircuit):
-            raise ValueError(f"Expected SpanPanelCircuit, got {type(circuit)}")
+            raise TypeError(f"Expected SpanPanelCircuit, got {type(circuit)}")
         return circuit
 
     async def async_select_option(self, option: str) -> None:

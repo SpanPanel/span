@@ -1,4 +1,4 @@
-"""Span Panel Config Flow"""
+"""Span Panel Config Flow."""
 
 from __future__ import annotations
 
@@ -27,9 +27,12 @@ from custom_components.span_panel.span_panel_hardware_status import (
 from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
+    EntityNamingPattern,
 )
+from .entity_migration import EntityMigrationManager
 from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
@@ -145,9 +148,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_zeroconf(
         self, discovery_info: ZeroconfServiceInfo
     ) -> ConfigFlowResult:
-        """
-        Handle a flow initiated by zeroconf discovery.
-        """
+        """Handle a flow initiated by zeroconf discovery."""
         # Do not probe device if the host is already configured
         self._async_abort_entries_match({CONF_HOST: discovery_info.host})
 
@@ -192,18 +193,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth(
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
-        """
-        Handle a flow initiated by re-auth.
-        """
+        """Handle a flow initiated by re-auth."""
         await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST])
         return await self.async_step_auth_token(dict(entry_data))
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """
-        Prompt user to confirm a discovered Span Panel.
-        """
+        """Prompt user to confirm a discovered Span Panel."""
         self.ensure_flow_is_set_up()
 
         # Prompt the user for confirmation
@@ -242,9 +239,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         entry_data: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
-        """
-        Step that guide users through the proximity authentication process.
-        """
+        """Step that guide users through the proximity authentication process."""
         self.ensure_flow_is_set_up()
 
         span_api: SpanPanelApi = create_api_controller(self.hass, self.host or "")
@@ -279,9 +274,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
-        """
-        Step that prompts user for access token.
-        """
+        """Step that prompts user for access token."""
         self.ensure_flow_is_set_up()
 
         if user_input is None:
@@ -357,15 +350,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def create_new_entry(
         self, host: str, serial_number: str, access_token: str
     ) -> ConfigFlowResult:
-        """
-        Creates a new SPAN panel entry.
-        """
+        """Create a new SPAN panel entry."""
         return self.async_create_entry(
             title=serial_number,
             data={CONF_HOST: host, CONF_ACCESS_TOKEN: access_token},
             options={
-                USE_DEVICE_PREFIX: True,  # Only set for new installations
-                USE_CIRCUIT_NUMBERS: True,  # New installations get stable IDs
+                USE_DEVICE_PREFIX: True,
+                USE_CIRCUIT_NUMBERS: True,
             },
         )
 
@@ -376,9 +367,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         access_token: str,
         entry_data: Mapping[str, Any],
     ) -> ConfigFlowResult:
-        """
-        Updates an existing entry with new configurations.
-        """
+        """Update an existing entry with new configurations."""
         # Update the existing data with reauthed data
         # Create a new mutable copy of the entry data (Mapping is immutable)
         updated_data = dict(entry_data)
@@ -412,6 +401,9 @@ OPTIONS_SCHEMA: Any = vol.Schema(
         vol.Optional(INVERTER_ENABLE): bool,
         vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
+        vol.Optional(ENTITY_NAMING_PATTERN): vol.In(
+            [e.value for e in EntityNamingPattern]
+        ),
     }
 )
 
@@ -436,22 +428,39 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the options."""
-        if user_input is not None:
-            # Preserve the USE_DEVICE_PREFIX setting from the original entry
-            use_prefix: Any | bool = self.entry.options.get(USE_DEVICE_PREFIX, False)
-            if use_prefix:
-                user_input[USE_DEVICE_PREFIX] = use_prefix
+        """Show the main options menu."""
+        if user_input is None:
+            return self.async_show_menu(
+                step_id="init",
+                menu_options={
+                    "general_options": "General Options",
+                    "entity_naming": "Entity Naming Pattern",
+                },
+            )
 
-            # Preserve the USE_CIRCUIT_NUMBERS setting from the original entry
+            # This shouldn't be reached since we're showing a menu
+        return self.async_abort(reason="unknown")
+
+    async def async_step_general_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the general options (excluding entity naming)."""
+        if user_input is not None:
+            # Preserve existing naming flags (don't change them in general options)
+            use_prefix: Any | bool = self.entry.options.get(USE_DEVICE_PREFIX, False)
+            user_input[USE_DEVICE_PREFIX] = use_prefix
+
             use_circuit_numbers: Any | bool = self.entry.options.get(
                 USE_CIRCUIT_NUMBERS, False
             )
-            if use_circuit_numbers:
-                user_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
+            user_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
+
+            # Remove any entity naming pattern from input (shouldn't be there anyway)
+            user_input.pop(ENTITY_NAMING_PATTERN, None)
 
             return self.async_create_entry(title="", data=user_input)
 
+        # Show general options form (without entity naming)
         defaults: dict[str, Any] = {
             CONF_SCAN_INTERVAL: self.entry.options.get(
                 CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
@@ -463,6 +472,207 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         }
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=self.add_suggested_values_to_schema(OPTIONS_SCHEMA, defaults),
+            step_id="general_options",
+            data_schema=self.add_suggested_values_to_schema(
+                self._get_general_options_schema(), defaults
+            ),
         )
+
+    async def async_step_entity_naming(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage entity naming pattern options."""
+        if user_input is not None:
+            # Check if entity naming pattern changed
+            current_pattern = self._get_current_naming_pattern()
+            new_pattern = user_input.get(ENTITY_NAMING_PATTERN, current_pattern)
+
+            # For legacy installations, treat the selection as a change even
+            # if it matches the default since we default to Friendly Names
+            # for display but the actual pattern is Legacy
+            pattern_changed = False
+            if current_pattern == EntityNamingPattern.LEGACY_NAMES.value:
+                # Pre-1.0.4 installation - any selection is a migration
+                # But only if they actually selected something (not just submitted
+                # with defaults)
+                if ENTITY_NAMING_PATTERN in user_input:
+                    pattern_changed = True
+            else:
+                # Modern installation - only migrate if pattern actually changed
+                pattern_changed = new_pattern != current_pattern
+
+            if pattern_changed:
+                # Entity naming pattern changed - update the configuration flags
+                naming_options = {}
+                if new_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value:
+                    naming_options[USE_CIRCUIT_NUMBERS] = True
+                    naming_options[USE_DEVICE_PREFIX] = True
+                elif new_pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
+                    naming_options[USE_CIRCUIT_NUMBERS] = False
+                    naming_options[USE_DEVICE_PREFIX] = True
+
+                _LOGGER.info(
+                    "Pattern change: %s -> %s, setting flags: USE_CIRCUIT_NUMBERS=%s, USE_DEVICE_PREFIX=%s",
+                    current_pattern,
+                    new_pattern,
+                    naming_options.get(USE_CIRCUIT_NUMBERS),
+                    naming_options.get(USE_DEVICE_PREFIX),
+                )
+
+                # Migrate entity IDs in the entity registry
+                await self._migrate_entity_ids(current_pattern, new_pattern)
+
+                # Update only the naming-related options, preserve ALL other options
+                current_options = dict(self.entry.options)
+
+                # Only update the specific naming flags, preserve everything else
+                current_options[USE_CIRCUIT_NUMBERS] = naming_options[
+                    USE_CIRCUIT_NUMBERS
+                ]
+                current_options[USE_DEVICE_PREFIX] = naming_options[USE_DEVICE_PREFIX]
+
+                # Debug: Log what options we're preserving
+                preserved_options = {
+                    k: v
+                    for k, v in current_options.items()
+                    if k not in [USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX]
+                }
+                _LOGGER.info("Preserving existing options: %s", preserved_options)
+                _LOGGER.info(
+                    "Solar sensor enabled: %s",
+                    current_options.get(INVERTER_ENABLE, False),
+                )
+                _LOGGER.info(
+                    "Inverter leg 1: %s", current_options.get(INVERTER_LEG1, 0)
+                )
+                _LOGGER.info(
+                    "Inverter leg 2: %s", current_options.get(INVERTER_LEG2, 0)
+                )
+                _LOGGER.info("All options after update: %s", current_options)
+
+                # Schedule reload after the options flow completes
+                async def reload_after_options_complete() -> None:
+                    # Wait for the options flow to complete first
+                    await self.hass.async_block_till_done()
+                    _LOGGER.info(
+                        "Reloading integration after entity naming pattern change"
+                    )
+                    await self.hass.config_entries.async_reload(self._entry_id)
+
+                self.hass.async_create_task(reload_after_options_complete())
+
+                # Return success with the updated options - this will update the config entry
+                _LOGGER.info("Returning updated options to complete the flow")
+                return self.async_create_entry(title="", data=current_options)
+            else:
+                # No pattern change - just return success
+                return self.async_create_entry(title="", data={})
+
+        # Show entity naming form
+        current_pattern = self._get_current_naming_pattern()
+
+        # For legacy installations, default to Friendly Names but allow user to choose
+        # For modern installations, show the current pattern
+        if current_pattern == EntityNamingPattern.LEGACY_NAMES.value:
+            display_pattern = EntityNamingPattern.FRIENDLY_NAMES.value
+        else:
+            display_pattern = current_pattern
+
+        defaults: dict[str, Any] = {
+            ENTITY_NAMING_PATTERN: display_pattern,
+        }
+
+        # Provide placeholders for the translation system
+        description_placeholders = {
+            "friendly_example": "**Friendly Names Example**: span_panel_kitchen_outlets_power",
+            "circuit_example": "**Circuit Numbers Example**: span_panel_circuit_15_power",
+        }
+
+        # Debug logging to help diagnose the translation issue
+        _LOGGER.info("Entity naming step - current pattern: %s", current_pattern)
+        _LOGGER.info(
+            "Entity naming step - description placeholders: %s",
+            description_placeholders,
+        )
+
+        return self.async_show_form(
+            step_id="entity_naming",
+            data_schema=self.add_suggested_values_to_schema(
+                self._get_entity_naming_schema(), defaults
+            ),
+            description_placeholders=description_placeholders,
+        )
+
+    def _get_general_options_schema(self) -> vol.Schema:
+        """Get the general options schema (excluding entity naming)."""
+        return vol.Schema(
+            {
+                vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
+                vol.Optional(BATTERY_ENABLE): bool,
+                vol.Optional(INVERTER_ENABLE): bool,
+                vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
+            }
+        )
+
+    def _get_entity_naming_schema(self) -> vol.Schema:
+        """Get the entity naming options schema."""
+        # Pre-1.0.4 installations can only migrate to the two modern patterns
+        # Modern installations can switch between the two modern patterns
+
+        # Create friendly descriptions with examples
+        pattern_options = {
+            EntityNamingPattern.FRIENDLY_NAMES.value: "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
+            EntityNamingPattern.CIRCUIT_NUMBERS.value: "Circuit Numbers (e.g., span_panel_circuit_15_power)",
+        }
+
+        return vol.Schema(
+            {
+                vol.Optional(ENTITY_NAMING_PATTERN): vol.In(pattern_options),
+            }
+        )
+
+    def _get_current_naming_pattern(self) -> str:
+        """Determine the current entity naming pattern from configuration flags."""
+        use_circuit_numbers = self.entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        use_device_prefix = self.entry.options.get(USE_DEVICE_PREFIX, False)
+
+        if use_circuit_numbers:
+            return EntityNamingPattern.CIRCUIT_NUMBERS.value
+        elif use_device_prefix:
+            return EntityNamingPattern.FRIENDLY_NAMES.value
+        else:
+            # Pre-1.0.4 installation - no device prefix
+            return EntityNamingPattern.LEGACY_NAMES.value
+
+    async def _migrate_entity_ids(self, old_pattern: str, new_pattern: str) -> None:
+        """Migrate entity IDs when naming pattern changes."""
+        _LOGGER.info(
+            "Starting entity ID migration from %s to %s", old_pattern, new_pattern
+        )
+
+        # Create migration manager
+        migration_manager = EntityMigrationManager(self.hass, self._entry_id)
+
+        # Convert string patterns to enum values
+        from_pattern = EntityNamingPattern(old_pattern)
+        to_pattern = EntityNamingPattern(new_pattern)
+
+        # Perform the migration
+        success = await migration_manager.migrate_entities(from_pattern, to_pattern)
+
+        if success:
+            _LOGGER.info("Entity migration completed successfully")
+        else:
+            _LOGGER.error("Entity migration failed")
+
+    def _generate_new_entity_id(
+        self, old_entity_id: str, old_pattern: str, new_pattern: str
+    ) -> str | None:
+        """Generate new entity ID based on the new naming pattern."""
+        # This method is deprecated in favor of EntityMigrationManager
+        # Keeping it for backward compatibility but it will be removed
+        _LOGGER.warning(
+            "Using deprecated _generate_new_entity_id method for %s", old_entity_id
+        )
+        return None
