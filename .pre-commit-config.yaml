@@ -34,6 +34,13 @@ repos:
     hooks:
       - id: yamllint
 
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: [--config, pyproject.toml]
+        files: ^custom_components/span_panel/.+\.py$
+
   - repo: local
     hooks:
       - id: mypy
