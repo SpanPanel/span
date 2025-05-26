@@ -66,94 +66,59 @@ USE_DEVICE_PREFIX = "use_device_prefix"        # Device prefix in entity IDs (le
 - **Availability**: Always enabled - built into all circuit entities (switch, select, sensor)
 - **Operation**: Integration reloads when name changes detected, preserving entity IDs while updating display names
 
-## Phase 2: Migration Feature (To Implement)
+### Pre-1.0.4 Installations
 
-### Purpose
+- `USE_DEVICE_PREFIX = False`, `USE_CIRCUIT_NUMBERS = False`
+- Entity IDs: `sensor.air_conditioner_power`
+- **No changes during upgrade**
 
-Provide existing installations an **optional** migration path to stable circuit-based entity IDs while preserving all historical data and user customizations.
+### Post-1.0.4 Installations
 
-### New Configuration Flag
+- `USE_DEVICE_PREFIX = True`, `USE_CIRCUIT_NUMBERS = False`
+- Entity IDs: `sensor.span_panel_air_conditioner_power`
+- **No changes during upgrade**
 
-```python
-MIGRATE_TO_CIRCUIT_IDS = "migrate_to_circuit_ids"  # Triggers migration process
-```
+### New Installations (v1.0.9+) - Summary
 
-### Migration Requirements
+- `USE_DEVICE_PREFIX = True`, `USE_CIRCUIT_NUMBERS = True`
+- Entity IDs: `sensor.span_panel_circuit_1_power` (stable)
+- Friendly Names: "Air Conditioner Power" (dynamic with auto-sync)
 
-1. **Completely optional** - no automatic migration, user-initiated only
-2. **Data preservation** - all statistics history and friendly name customizations maintained
-3. **One-way operation** - clear communication about irreversibility (backup-only recovery)
-4. **Leverages Home Assistant's entity registry** - uses proven migration infrastructure
-
-### Migration Behavior
-
-- **Availability**: Only appears for legacy installations (`USE_CIRCUIT_NUMBERS = False`)
-- **Preview**: Shows current vs. proposed entity ID changes before execution
-- **Execution**: Updates entity registry, preserves statistics and customizations
-- **Result**: Changes `USE_CIRCUIT_NUMBERS` to `True`, enabling Phase 1 stable ID behavior
-
-### Post-Migration State
+## Phase 2: Migration Feature (Completed)
 
 After successful migration, installation behaves identically to new installations:
 
-- Stable circuit-based entity IDs
+- Provide endity ID migration in config options
+- Stable circuit-based entity IDs as default
 - Full auto-sync capability available
 - All Phase 1 principles and behaviors apply
-
-### Migration Implementation Details
-
-**Technical Approach:**
-
-- Uses Home Assistant's entity registry migration system
-- Preserves all historical statistics data automatically
-- Maintains current friendly names as user overrides when appropriate
-- One-way operation with clear backup recovery path
-
-**User Experience:**
-
-1. Migration option appears in integration configuration
-2. Preview shows entity ID changes before execution
-3. User confirms understanding of irreversible nature
-4. Migration executes with full data preservation
-5. All statistics history preserved, friendly names maintained
-
-**Error Handling:**
-
-- Dry-run validation before actual migration
-- Clear error messages for any conflicts
-- Recommendation to create backup before migration
 
 ## Phase 3: Circuit Grouping & Synthetic Entities
 
 ### Purpose
 
-Provide advanced circuit management capabilities allowing users to create logical groupings and custom computed entities that extend beyond basic circuit monitoring.
+Provide advanced circuit management capabilities allowing users to extend circuit entities with additional attributes like circuit breaker amperage and create logical groupings and custom computed entities that extend beyond basic circuit monitoring.
 
 ### Core Features
 
 #### Circuit Grouping (Synthetic Circuits)
 
-- **Multi-circuit entities**: Combine multiple physical circuits into logical synthetic entities
-- **Voltage aggregation**: Proper electrical calculations (e.g., 120V + 120V = 240V for split-phase loads)
-- **Power summation**: Aggregate power consumption/production across circuit groups
+- **Multi-circuit aggregation**: Combine multiple logical circuits for sub-panel monitoring or related load tracking
+- **Split-phase already handled**: 240V appliances appear as single circuits with multiple `tabs` - no manual grouping needed
+- **Power summation**: Aggregate power consumption/production across logically related circuit groups
 - **Child circuit hiding**: Individual circuits become hidden when part of synthetic groups
 - **Metadata tracking**: Full attribution of which circuits compose synthetic entities
 
 #### Custom Entity Definitions
 
-- **User-defined calculations**: Create custom sensors with formulas (e.g., amperage = power/voltage)
 - **Full sensor configuration**: All Home Assistant sensor attributes (units, device class, state class)
-- **Statistics integration**: Custom entities fully integrate with Home Assistant statistics
-- **Flexible targeting**: Apply to individual circuits or synthetic circuit groups
+- **Custom Attributes on Circuit Entities**: Addition of attributes like circuit amperage, upper threshold for amperage as compared against the observed amperage (new feature), arbitrary attributes the user determines
+- **Flexible targeting**: Apply to individual circuits or synthetic circuit groups with features like notification of excessive power consumption for a group
 
 ### Example Use Cases
 
-#### US Residential Scenarios (Split-Phase 120V/240V)
+#### US Residential Scenarios
 
-- **240V Appliances**: Group circuits 30+32 for electric dryer monitoring
-  - Combined voltage: 120V + 120V = 240V (split-phase)
-  - Combined power: Individual power watts summed
-  - Single entity replacing two separate circuit entities
 - **Sub-panel Monitoring**: Group circuits 10-15 for garage sub-panel total
   - Aggregate power consumption across all garage circuits
   - Custom amperage calculation: total_power / 240V
@@ -161,8 +126,7 @@ Provide advanced circuit management capabilities allowing users to create logica
 - **HVAC Systems**: Group multiple circuits for complete system monitoring
   - Main unit + outdoor condenser + auxiliary heat
   - Total system power consumption and efficiency metrics
-- **Electric Vehicle Charging**: Group circuits for Level 2 EV charger
-  - 240V split-phase monitoring (circuits on opposite legs)
+- **Electric Vehicle Charging**:
   - Power tracking for charging sessions
   - Cost calculations based on time-of-use rates
 
@@ -183,7 +147,6 @@ Provide advanced circuit management capabilities allowing users to create logica
   - Load balancing verification across phases
 - **EV Charging (European)**: Three-phase 400V charging stations
   - 11kW or 22kW three-phase charging monitoring
-  - Power distribution across L1/L2/L3 phases
   - Charging efficiency and session cost tracking
 
 #### Universal Scenarios (Any Voltage System)
@@ -202,22 +165,23 @@ Provide advanced circuit management capabilities allowing users to create logica
 #### Circuit Group Data Structure
 
 ```python
+# Simplified circuit group structure
 CircuitGroup = {
-    "group_id": "unique_group_identifier",
-    "name": "User Friendly Group Name",
-    "circuit_ids": ["circuit_30", "circuit_32"],
-    "group_type": "voltage_additive",  # or "parallel", "custom"
-    "voltage_calculation": "sum",      # sum, max, average, custom_formula
+    "group_id": "workshop_subpanel_group",
+    "name": "Workshop Sub-Panel Total",
+    "circuit_ids": ["circuit_15", "circuit_16", "circuit_17", "circuit_18"],
+    "group_type": "power_additive",    # Sum power across independent 120V circuits
     "power_calculation": "sum",        # sum, max, average, custom_formula
+    "voltage_calculation": "same",     # All circuits are 120V - no voltage combining
     "custom_formulas": {
-        "voltage": "circuit_30.voltage + circuit_32.voltage",
-        "amperage": "total_power / combined_voltage"
+        "amperage": "total_power / 120",  # Simple amperage calculation for 120V circuits
+        "peak_demand": "max(circuit_power_values)"
     },
     "hide_child_circuits": true,
     "metadata": {
-        "created_date": "2024-01-01",
-        "electrical_type": "split_phase_240v",
-        "notes": "Electric dryer monitoring"
+        "created_date": "2025-01-01",
+        "electrical_type": "120v_subpanel",
+        "notes": "Workshop sub-panel aggregate monitoring"
     }
 }
 ```
@@ -248,45 +212,41 @@ CustomSensorEntityDescription = {
 }
 
 # Circuit group structure with entity relationship tracking
+# This example shows grouping for sub-panel or multi-appliance scenarios
 CircuitGroup = {
-    "group_id": "dryer_group_240v",
-    "name": "Electric Dryer 240V",
-    "circuit_ids": ["circuit_30", "circuit_32"],
-    "group_type": "voltage_additive",
+    "group_id": "garage_subpanel_group",
+    "name": "Garage Sub-Panel Total",
+    "circuit_ids": ["circuit_10", "circuit_11", "circuit_12", "circuit_13"],
+    "group_type": "power_additive",     # Sum power across multiple independent circuits
     "hide_child_circuits": True,
 
     # Entity relationship tracking
     "child_entities": [                # Entities that get hidden/grouped
-        "sensor.span_panel_circuit_30_power",
-        "sensor.span_panel_circuit_30_energy_consumed",
-        "sensor.span_panel_circuit_32_power",
-        "sensor.span_panel_circuit_32_energy_consumed",
-        "switch.span_panel_circuit_30",
-        "switch.span_panel_circuit_32",
-        "select.span_panel_circuit_30_priority",
-        "select.span_panel_circuit_32_priority"
+        "sensor.span_panel_circuit_10_power",
+        "sensor.span_panel_circuit_10_energy_consumed",
+        "sensor.span_panel_circuit_11_power",
+        "sensor.span_panel_circuit_11_energy_consumed",
+        "sensor.span_panel_circuit_12_power",
+        "sensor.span_panel_circuit_12_energy_consumed",
+        "sensor.span_panel_circuit_13_power",
+        "sensor.span_panel_circuit_13_energy_consumed"
     ],
     "synthetic_entities": [            # New entities created for this group
-        "sensor.dryer_group_240v_power",       # Auto-generated group entity
-        "sensor.dryer_group_240v_voltage",     # Auto-generated group entity
-        "sensor.dryer_amperage"                # Custom user-defined entity
+        "sensor.garage_subpanel_total_power",      # Auto-generated group entity
+        "sensor.garage_subpanel_total_energy",     # Auto-generated group entity
+        "sensor.garage_amperage"                   # Custom user-defined entity
     ]
 }
 ```
 
 #### Electrical Calculation Engine
 
-- **Voltage Combinations**:
-  - Split-phase (leg-to-leg): 120V + 120V = 240V for split-phase loads
-  - Single-leg: Multiple 120V circuits remain 120V (no voltage combination)
-  - Custom formulas: User-defined calculations for complex scenarios
 - **Power Aggregation**:
-  - Summation: Most common for grouped circuits
+  - Summation: Most common for grouped circuits (sub-panels, multi-appliance monitoring)
   - Maximum: Peak load tracking across group
   - Average: Baseline consumption patterns
 - **Advanced Metrics**:
-  - Amperage: power / voltage with proper electrical math
-  - Power factor: For AC loads (future enhancement)
+  - Amperage: power / voltage with proper electrical math (single circuits or groups)
   - Efficiency ratios: Input vs output for solar/battery systems
 
 #### Entity Creation & Management Workflow
@@ -301,24 +261,22 @@ CircuitGroup = {
 **Custom Entity Integration**:
 
 - User-defined entities extend `SpanPanelCircuitsSensorEntityDescription`
-- Custom `value_fn` uses formula evaluation engine
 - Full Home Assistant entity lifecycle (creation, updates, removal)
 - Statistics integration maintains historical data
 
 **Parent-Child Entity Relationships**:
 
 ```python
-# When circuits 30+32 are grouped into "dryer_group_240v":
+# When circuits 30+32 are grouped
 hidden_entities = [
     "sensor.span_panel_circuit_30_power",      # Hidden from UI
     "sensor.span_panel_circuit_32_power",      # Hidden from UI
-    "switch.span_panel_circuit_30",            # Hidden from UI
-    "switch.span_panel_circuit_32"             # Hidden from UI
+    "switch.span_panel_circuit_30",            # Combined into a single switch
+    "switch.span_panel_circuit_32"             # Combined into a single switch
 ]
 
 created_entities = [
     "sensor.span_panel_dryer_group_power",     # Auto: sum of child power
-    "sensor.span_panel_dryer_group_voltage",   # Auto: calculated voltage
     "sensor.dryer_amperage"                    # Custom: power/voltage formula
 ]
 ```
@@ -331,9 +289,7 @@ created_entities = [
 
 ### Integration with Existing Features
 
-- **Builds on solar infrastructure**: Extends existing inverter leg configuration concept
 - **Respects naming principles**: All synthetic entities follow established naming patterns
-- **Auto-sync compatible**: Circuit name changes propagate to synthetic entities
 - **Migration aware**: Existing configurations preserved during Phase 3 rollout
 
 ### User Workflow & Interface Design
@@ -351,11 +307,10 @@ created_entities = [
 
    - Electrical type selection
    - Naming and entity ID generation preview
-   - Voltage/power calculation method selection
+   - Power calculation method selection
 
 3. **Validation & Preview**
 
-   - Electrical safety validation (prevent dangerous configurations)
    - Entity conflict detection and resolution
    - Preview of resulting entities and their attributes
    - Warning about hidden child circuits
@@ -396,7 +351,6 @@ created_entities = [
 - **Version compatibility**: Forward/backward compatibility for configuration formats
 - **Automatic upgrades**: Seamless migration of existing solar leg configurations
 - **Conflict resolution**: Smart handling of overlapping configurations
-- **Rollback capability**: Deletion of a synthetic circuit enables the underlying child entities
 
 #### Multi-Panel Support
 
@@ -406,7 +360,6 @@ created_entities = [
 
 ### Implementation Benefits
 
-- **Electrical accuracy**: Proper multi-phase and split-phase calculations
 - **Reduced complexity**: Logical entity grouping reduces dashboard clutter
 - **Extensible framework**: Foundation for future electrical monitoring enhancements
 - **User control**: Optional feature that doesn't impact existing installations
@@ -415,22 +368,15 @@ created_entities = [
 
 #### Phase 3a: Foundation (Core Infrastructure)
 
-- **Circuit group data models**: Define storage structures and validation
+- **Extra Attributes on entities**: User adds extra attributes (for amerperage threshold monitoring, use a calculation from existing data, i.e., amperage = power/volts)
+- **Circuit group data models**: Define storage structures and validation for sub-panel/multi-appliance grouping
 - **Configuration management**: Integration options UI and storage
-- **Basic grouping engine**: Simple circuit combination logic
-- **Entity hiding mechanism**: Suppress child circuits when grouped
-
-#### Phase 3b: Advanced Calculations (Electrical Intelligence)
-
-- **Electrical calculation engine**: Voltage, power, and current math
-- **Custom formula parser**: Safe expression evaluation with validation
-- **Template system**: Pre-built configurations for common scenarios
-- **Real-time validation**: Electrical safety and logic checking
+- **Basic grouping engine**: Simple circuit aggregation logic (240V appliances already handled by API)
+- **Entity hiding mechanism**: Optionally allow the user to suppress child circuits when grouped into a synthetic value
 
 #### Phase 3c: User Interface (Configuration Experience)
 
 - **Visual circuit selection**: Interactive panel layout interface
-- **Formula builder**: User-friendly equation creation tools
 - **Preview system**: Real-time calculation and entity preview
 - **Configuration management**: Import/export, templates, and backups
 
@@ -446,70 +392,11 @@ created_entities = [
 #### Core Components
 
 - **CircuitGroupManager**: Central orchestration of all grouping operations
-- **ElectricalCalculator**: Safe and accurate electrical mathematics
 - **EntitySynthesizer**: Dynamic entity creation and management
 - **ConfigurationValidator**: Electrical safety and logic validation
 - **TemplateLibrary**: Pre-built common configurations
 
-#### Integration Points
+#### Validation
 
-- **Existing sensor creation**: Seamless integration with current entity creation flow
-- **Configuration flow**: Extended options interface for group management
-- **Coordinator updates**: Real-time data flow to synthetic entities
-- **Entity registry**: Proper Home Assistant entity lifecycle management
-
-#### Safety & Validation
-
-- **Electrical safety checks**: Prevent dangerous configuration combinations
-- **Formula validation**: Secure expression parsing with electrical constants
 - **Conflict detection**: Prevent overlapping circuit assignments
-- **Rollback capability**: Safe configuration changes with undo functionality
-
-## Installation Types Summary
-
-### Pre-1.0.4 Installations
-
-- `USE_DEVICE_PREFIX = False`, `USE_CIRCUIT_NUMBERS = False`
-- Entity IDs: `sensor.air_conditioner_power`
-- **No changes during upgrade**
-
-### Post-1.0.4 Installations
-
-- `USE_DEVICE_PREFIX = True`, `USE_CIRCUIT_NUMBERS = False`
-- Entity IDs: `sensor.span_panel_air_conditioner_power`
-- **No changes during upgrade**
-
-### New Installations (v1.0.9+)
-
-- `USE_DEVICE_PREFIX = True`, `USE_CIRCUIT_NUMBERS = True`
-- Entity IDs: `sensor.span_panel_circuit_1_power` (stable)
-- Friendly Names: "Air Conditioner Power" (dynamic with auto-sync)
-
-## Benefits Summary
-
-### Phase 1 (Implemented)
-
-- **New users**: Stable entity IDs from day one
-- **Existing users**: Zero disruption, exact same behavior
-- **Auto-sync built-in**: Automatic friendly name synchronization for all installations
-
-### Phase 2 (To Implement)
-
-- **Migration path**: Existing users can upgrade to stable IDs
-- **Data preservation**: Full history and customizations maintained (dashboard updates are out of scope until we provide our own cards)
-- **Future-proof**: All installations benefit from stable entity IDs and built-in auto-sync
-
-### Phase 3 (Future)
-
-- **Advanced circuit management**: Group circuits into logical synthetic entities
-- **Custom entity creation**: User-defined calculations and metrics
-- **Electrical accuracy**: Proper voltage and power calculations for multi-circuit loads
-- **Enhanced monitoring**: Comprehensive electrical system visibility
-
-## Success Criteria
-
-- Phase 1: ✅ New installations immune to circuit renaming, existing installations unchanged
-- Phase 2: Existing installations can optionally migrate to stable IDs with full data preservation
-- Phase 3: Advanced circuit grouping and custom entity capabilities for comprehensive electrical monitoring
-
-This framework ensures that all users can eventually benefit from stable entity IDs while respecting their choice of when (or if) to migrate, with complete preservation of their historical data and customizations. Phase 3 extends this foundation with advanced circuit management capabilities that build naturally on the existing architecture.
+- **Rollback capability**: undo functionality
