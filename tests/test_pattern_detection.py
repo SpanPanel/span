@@ -89,7 +89,7 @@ def test_pattern_detection():
     else:
         print("❌ Some tests failed! Check the logic.")
 
-    return all_passed
+    assert all_passed, "Some pattern detection tests failed"
 
 
 if __name__ == "__main__":
