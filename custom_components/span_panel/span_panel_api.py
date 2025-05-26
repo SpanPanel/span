@@ -51,7 +51,7 @@ class SpanPanelApi:
     def async_client(self) -> Any | Any:
         """Return the httpx.AsyncClient."""
 
-        return self._async_client or httpx.AsyncClient(verify=True)
+        return self._async_client or httpx.AsyncClient(verify=True, timeout=API_TIMEOUT)
 
     async def ping(self) -> bool:
         """Ping the Span Panel API."""
