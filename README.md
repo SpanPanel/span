@@ -2,13 +2,13 @@
 
 [Home Assistant](https://www.home-assistant.io/) Integration for [SPAN Panel](https://www.span.io/panel), a smart electrical panel that provides circuit-level monitoring and control of your home's electrical system.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![Python](https://img.shields.io/badge/python-3.13.2-blue.svg)](https://www.python.org/downloads/release/python-3132/) [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/) [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs) [![Python](https://img.shields.io/badge/python-3.13.2-blue.svg)](https://www.python.org/downloads/release/python-3132/) [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff) [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/) [![Pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/) [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 
 As SPAN has not published a documented API, we cannot guarantee this integration will work for you. The integration may break as your panel is updated if SPAN changes the API in an incompatible way.
 
-We will try to keep this integration working, but cannot provide technical support for either SPAN or your homes electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
+We will try to keep this integration working, but cannot provide technical support for either SPAN or your home's electrical system. The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
-What this integration does do is provide the user sensors and controls that are useful in understanding an installations power consumption, energy usage, and the ability to control user-manageable panel circuits.
+What this integration does is provide the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and the ability to control user-manageable panel circuits.
 
 ## What's New
 
@@ -18,10 +18,12 @@ What this integration does do is provide the user sensors and controls that are 
 
 **Flexible Entity Naming**: The integration now provides configurable entity naming patterns that can be changed at any time through the configuration options:
 
-- **Friendly Names Pattern**: Entity IDs use descriptive circuit names (e.g., `sensor.span_panel_kitchen_outlets_power`)
-- **Circuit Numbers Pattern**: Entity IDs use stable circuit numbers (e.g., `sensor.span_panel_circuit_15_power`)
+- **Friendly Names Pattern**: Entity IDs use descriptive circuit names for the entity ID (e.g., `sensor.span_panel_kitchen_outlets_power`) - ideal for installations where your circuits are less likely to change from their original purpose
+- **Circuit Numbers Pattern**: Entity IDs use stable circuit numbers (e.g., `sensor.span_panel_circuit_15_power`) - the default for new installations as a generic entity ID is less likely to lose its meaning when repurposing circuits.
 
-**Migration Support**: Installations can migrate between entity naming patterns without losing entity history. Pre-1.0.4 installations can only migrate forward to on the other patterns that have device name prefixed to entities.
+In either pattern, the friendly name provides the circuit meaning for easy identification.
+
+**Migration Support**: Installations can migrate between entity naming patterns without losing entity history. Pre-1.0.4 installations can only migrate forward to other patterns that have device name prefixes added to entities.
 
 ## Prerequisites
 
@@ -41,7 +43,7 @@ This integration will provide a device for your SPAN panel. This device will hav
   - Priority Selector (user managed circuits)
 - Power Sensors
   - Power Usage / Generation (Watts)
-  - Energy Usage / Generation (wH)
+  - Energy Usage / Generation (Wh)
 - Panel and Grid Status
   - Main Relay State (e.g., CLOSED)
   - Current Run Config (e.g., PANEL_ON_GRID)
@@ -59,13 +61,13 @@ This integration will provide a device for your SPAN panel. This device will hav
 3. Search for "Span"
 4. Open the repository
 5. Click on the "Download" button at the lower right
-6. Restart Home Assistant - You will be prompted for this by a HomeAssistant repair
+6. Restart Home Assistant - You will be prompted for this by a Home Assistant repair notification
 7. In the Home Assistant UI go to `Settings`.
 8. Click `Devices & Services` and you should see this integration.
 9. Click `+ Add Integration`.
 10. Search for "Span". This entry should correspond to this repository and offer the current version.
 11. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up or another address if you have multiple panels.
-12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable to network changes, for example, if you change client hostname or IP and don't want to access the panel for authorization.
+12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable against network changes, for example, if you change client hostname or IP and don't want to access the panel for authorization.
 13. See post install steps for solar or scan frequency configuration to optionally add additional sensors if applicable.
 
 ## Authorization Methods
@@ -79,14 +81,14 @@ This integration will provide a device for your SPAN panel. This device will hav
 
 ### Method 2: Authentication Token (Optional)
 
-To acquire an authorization token proceed as follows while the panel is in its unlocked period:
+To acquire an authorization token, proceed as follows while the panel is in its unlocked period:
 
 1. To record the token use a tool like the VS code extension 'Rest Client' or curl to make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local SPAN Integration"}`.
    - Replace UNIQUEID with your own random unique value. If the name conflicts with one that's already been created, then the request will fail.
    - Example via CLI: `curl -X POST https://192.168.1.2/api/v1/auth/register -H 'Content-Type: application/json' -d '{"name": "home-assistant-123456", "description": "Home Assistant Local SPAN Integration"}'`
 2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and close the door of the panel 3 times, once every two seconds, and then retry the query.
-3. Store the value from the `"accessToken"` property of the response. (It will be a long random string of characters). The token can be used with future SPAN integration configurations of the same panel.
-4. If you are calling the SPAN API directly for testing requests would load the HTTP header `"Authorization: Bearer <your token here>"`
+3. Store the value from the `"accessToken"` property of the response (it will be a long random string of characters). The token can be used with future SPAN integration configurations of the same panel.
+4. If you are calling the SPAN API directly for testing, requests would load the HTTP header `"Authorization: Bearer <your token here>"`
 
 _(If you have multiple SPAN Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.)_
 
@@ -160,7 +162,7 @@ sensor.span_panel_solar_inverter_energy_consumed # (Wh)
 
 Disabling the inverter in the configuration removes these specific sensors. No reboot is required to add/remove these inverter sensors.
 
-Although the solar inverter configuration is primarily aimed at installations that don't have a way to monitor their solar directly from their inverter one could use this configuration to monitor any circuit(s) not provided directly by the underlying SPAN API for whatever reason. The two circuits are always added together to indicate their combined power if both circuits are enabled.
+Although the solar inverter configuration is primarily aimed at installations that don't have a way to monitor their solar directly from their inverter, one could use this configuration to monitor any circuit(s) not provided directly by the underlying SPAN API for whatever reason. The two circuits are always added together to indicate their combined power if both circuits are enabled.
 
 Adding your own platform integration sensor like so converts to kWh:
 
@@ -187,9 +189,9 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
 ### Common Issues
 
-1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API so we report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal entry door.
+1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in the SPAN API, so we report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal entry door.
 
-2. State Class Warnings - "Feed Through" sensors may produce erroneous data in the sense the logs may complain the sensor data is not constantly increasing when the sensor statistics type is set to total/increasing. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
+2. State Class Warnings - "Feed Through" sensors may produce erroneous data in the sense that logs may complain the sensor data is not constantly increasing when the sensor statistics type is set to total/increasing. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing, you can opt to disable these sensors in the Home Assistant settings/devices/entities section:
 
    ```text
    sensor.span_panel_feed_through_consumed_energy
@@ -198,9 +200,9 @@ Select the precision you prefer from the "Display Precision" menu and then press
 
    **Note**: The exact entity names depend on your configured naming pattern. For circuit numbers pattern, feed through sensors use generic naming (e.g., `sensor.span_panel_circuit_X_consumed_energy` where X is the circuit number). For friendly names pattern, they use descriptive names based on the circuit purpose.
 
-3. No Switch - If a circuit is set in the SPAN App as on of the "Always on Circuits" then that circuit will not have a switch because the API does not allow the user to control it.
+3. No Switch - If a circuit is set in the SPAN App as one of the "Always on Circuits", then that circuit will not have a switch because the API does not allow the user to control it.
 
-4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this drop down active because SPAN's browser also shows the drop down. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define router or other must have circuits. Always On circuits are set to "must-have" and are subsequently not user controlled (meaning you can't turn them off and no switch is provided for these circuits in the integration). If you remove a circuit from the always-on list and reload the integration you should see a switch for that circuit. The PowerUp circuits are less clear but what we know is that those at the top of the PowerUp list tend to be "Non-Essential" but this rule is inconsistent with respect to all circuit order which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully know the details.
+4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this dropdown active because SPAN's browser also shows the dropdown. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define critical or other must-have circuits. The PowerUp circuits are less clear, but what we know is that those at the top of the PowerUp list tend to be "Non-Essential", but this rule is inconsistent with respect to all circuit order, which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully understand.
 
 ## Development Notes
 
@@ -210,7 +212,7 @@ Select the precision you prefer from the "Display Precision" menu and then press
 - Pre-commit
 - Python 3.13.2+
 
-This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking is accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
+This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking are accomplished using [pre-commit](https://pre-commit.com/) which is installed by poetry.
 
 ### Developer Setup
 
@@ -223,7 +225,7 @@ The linters may make changes to files when you try to commit, for example to sor
 
 ### VS Code
 
-You can set the `HA_CORE_PATH` environment for VS Code allowing you to use vscode git commands within the workspace GUI. See the .vscode/settings.json.example file for settings that configure the Home Assistant core location.
+You can set the `HA_CORE_PATH` environment variable for VS Code, allowing you to use VS Code git commands within the workspace GUI. See the .vscode/settings.json.example file for settings that configure the Home Assistant core location.
 
 ## License
 
@@ -231,7 +233,7 @@ This integration is published under the MIT license.
 
 ## Attribution and Contributions
 
-This repository is set up as part of an organization so a single committer is not the weak link. The repository is a fork in a long line of span forks that may or may not be stable (from newer to older):
+This repository is set up as part of an organization so a single committer is not the weak link. The repository is a fork in a long line of SPAN forks that may or may not be stable (from newer to older):
 
 - SpanPanel/span (current GitHub organization, current repository, currently listed in HACS)
 - SpanPanel/Span (was moved to https://github.com/SpanPanel/SpanCustom)
@@ -249,6 +251,6 @@ Additional contributors:
 
 ## Issues
 
-If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/span/issues), but please know issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
+If you have a problem with the integration, feel free to [open an issue](https://github.com/SpanPanel/span/issues), but please know that issues regarding your network, SPAN configuration, or home electrical system are outside of our purview.
 
 For those motivated, please consider offering suggestions for improvement in the discussions or opening a [pull request](https://github.com/SpanPanel/span/pulls). We're generally very happy to have a starting point when making a change.
