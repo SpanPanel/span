@@ -49,6 +49,7 @@ repos:
         language: script
         require_serial: true
         types_or: [python, pyi]
+        # Only type check the main integration code, not tests
         files: ^custom_components/span_panel/.+\.(py|pyi)$
         pass_filenames: true
 

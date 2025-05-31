@@ -1,6 +1,8 @@
 """Test entity naming options in config flow."""
 
-from typing import Any
+# type: ignore
+
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -64,9 +66,13 @@ class TestEntityNamingOptions:
         # Test initial menu
         result = await flow.async_step_init()
 
-        assert result["type"] == FlowResultType.MENU
-        assert "entity_naming" in result["menu_options"]
-        assert result["menu_options"]["entity_naming"] == "Entity Naming Pattern"
+        assert result.get("type") == FlowResultType.MENU
+        menu_options = result.get("menu_options")
+        assert menu_options is not None
+        assert "entity_naming" in menu_options
+        # Cast to handle Container[str] type
+        menu_dict = cast(dict, menu_options)
+        assert menu_dict["entity_naming"] == "Entity Naming Pattern"
 
     async def test_entity_naming_form_display(self, mock_hass, mock_config_entry):
         """Test that the entity naming form displays with correct options."""
@@ -78,19 +84,21 @@ class TestEntityNamingOptions:
         # Test entity naming form
         result = await flow.async_step_entity_naming()
 
-        assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "entity_naming"
-        assert "friendly_example" in result["description_placeholders"]
-        assert "circuit_example" in result["description_placeholders"]
+        assert result.get("type") == FlowResultType.FORM
+        assert result.get("step_id") == "entity_naming"
+
+        description_placeholders = result.get("description_placeholders")
+        assert description_placeholders is not None
+        assert "friendly_example" in description_placeholders
+        assert "circuit_example" in description_placeholders
 
         # Verify examples are provided
         assert (
             "span_panel_kitchen_outlets_power"
-            in result["description_placeholders"]["friendly_example"]
+            in description_placeholders["friendly_example"]
         )
         assert (
-            "span_panel_circuit_15_power"
-            in result["description_placeholders"]["circuit_example"]
+            "span_panel_circuit_15_power" in description_placeholders["circuit_example"]
         )
 
     async def test_current_pattern_detection_circuit_numbers(
@@ -155,7 +163,9 @@ class TestEntityNamingOptions:
         result = await flow.async_step_entity_naming()
 
         # Should show friendly names as default even though current is legacy
-        schema_defaults = result["data_schema"].schema
+        data_schema = result.get("data_schema")
+        assert data_schema is not None
+        schema_defaults = data_schema.schema
         entity_naming_field = None
         for field in schema_defaults:
             if field.schema == ENTITY_NAMING_PATTERN:
@@ -166,12 +176,14 @@ class TestEntityNamingOptions:
         # The default should be friendly names for legacy installations
         # The default should be friendly names for legacy installations
         # For legacy installations, the form should display correctly
-        assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "entity_naming"
+        assert result.get("type") == FlowResultType.FORM
+        assert result.get("step_id") == "entity_naming"
 
         # Verify that the description placeholders are provided for examples
-        assert "friendly_example" in result["description_placeholders"]
-        assert "circuit_example" in result["description_placeholders"]
+        description_placeholders = result.get("description_placeholders")
+        assert description_placeholders is not None
+        assert "friendly_example" in description_placeholders
+        assert "circuit_example" in description_placeholders
 
     @patch("custom_components.span_panel.config_flow.EntityMigrationManager")
     async def test_pattern_change_triggers_migration(
@@ -210,14 +222,15 @@ class TestEntityNamingOptions:
         mock_hass.async_create_task.assert_called_once()
 
         # Verify result
-        assert result["type"] == FlowResultType.CREATE_ENTRY
-        assert result["data"][USE_CIRCUIT_NUMBERS] is False
-        assert result["data"][USE_DEVICE_PREFIX] is True
+        assert result.get("type") == FlowResultType.CREATE_ENTRY
+        result_data = result.get("data", {})
+        assert result_data.get(USE_CIRCUIT_NUMBERS) is False
+        assert result_data.get(USE_DEVICE_PREFIX) is True
 
         # Verify solar options are preserved
-        assert result["data"]["enable_solar_circuit"] is True
-        assert result["data"]["leg1"] == 30
-        assert result["data"]["leg2"] == 32
+        assert result_data.get("enable_solar_circuit") is True
+        assert result_data.get("leg1") == 30
+        assert result_data.get("leg2") == 32
 
     async def test_no_change_no_migration(self, mock_hass, mock_config_entry):
         """Test that no migration occurs when pattern doesn't change."""
@@ -245,8 +258,8 @@ class TestEntityNamingOptions:
             mock_hass.async_create_task.assert_not_called()
 
             # Verify result
-            assert result["type"] == FlowResultType.CREATE_ENTRY
-            assert result["data"] == {}  # Empty data means no changes
+            assert result.get("type") == FlowResultType.CREATE_ENTRY
+            assert result.get("data") == {}  # Empty data means no changes
 
     @patch("custom_components.span_panel.config_flow.EntityMigrationManager")
     async def test_legacy_migration_to_friendly_names(
@@ -280,8 +293,10 @@ class TestEntityNamingOptions:
         )
 
         # Verify result sets correct flags
-        assert result["data"][USE_CIRCUIT_NUMBERS] is False
-        assert result["data"][USE_DEVICE_PREFIX] is True
+        assert "data" in result
+        result_data = result["data"]
+        assert result_data[USE_CIRCUIT_NUMBERS] is False
+        assert result_data[USE_DEVICE_PREFIX] is True
 
     @patch("custom_components.span_panel.config_flow.EntityMigrationManager")
     async def test_legacy_migration_to_circuit_numbers(
@@ -314,8 +329,10 @@ class TestEntityNamingOptions:
         )
 
         # Verify result sets correct flags
-        assert result["data"][USE_CIRCUIT_NUMBERS] is True
-        assert result["data"][USE_DEVICE_PREFIX] is True
+        assert "data" in result
+        result_data = result["data"]
+        assert result_data[USE_CIRCUIT_NUMBERS] is True
+        assert result_data[USE_DEVICE_PREFIX] is True
 
     async def test_entity_naming_schema_options(self, mock_hass, mock_config_entry):
         """Test that entity naming schema only includes the two modern options."""
@@ -353,8 +370,9 @@ class TestEntityNamingOptions:
         assert "Circuit Numbers" in circuit_option
         assert "circuit_15" in circuit_option
 
+    @patch("custom_components.span_panel.config_flow.EntityMigrationManager")
     async def test_options_preservation_during_migration(
-        self, mock_hass, mock_config_entry
+        self, mock_migration_manager, mock_hass, mock_config_entry
     ):
         """Test that all non-naming options are preserved during migration."""
         mock_config_entry.options = {
@@ -385,16 +403,18 @@ class TestEntityNamingOptions:
             result = await flow.async_step_entity_naming(user_input)
 
             # Verify all non-naming options are preserved
-            assert result["data"]["enable_solar_circuit"] is True
-            assert result["data"]["enable_battery_percentage"] is True
-            assert result["data"]["leg1"] == 30
-            assert result["data"]["leg2"] == 32
-            assert result["data"]["scan_interval"] == 10
-            assert result["data"]["custom_option"] == "test_value"
+            assert "data" in result
+            result_data = result["data"]
+            assert result_data["enable_solar_circuit"] is True
+            assert result_data["enable_battery_percentage"] is True
+            assert result_data["leg1"] == 30
+            assert result_data["leg2"] == 32
+            assert result_data["scan_interval"] == 10
+            assert result_data["custom_option"] == "test_value"
 
             # Verify naming options are updated
-            assert result["data"][USE_CIRCUIT_NUMBERS] is False
-            assert result["data"][USE_DEVICE_PREFIX] is True
+            assert result_data[USE_CIRCUIT_NUMBERS] is False
+            assert result_data[USE_DEVICE_PREFIX] is True
 
     async def test_backup_warning_in_description(self, mock_hass, mock_config_entry):
         """Test that backup warning is included in the description."""
@@ -408,8 +428,10 @@ class TestEntityNamingOptions:
         # Check that description placeholders contain backup warning information
         # The actual warning text is in the translation files, but we can verify
         # the placeholders are provided correctly
-        assert "friendly_example" in result["description_placeholders"]
-        assert "circuit_example" in result["description_placeholders"]
+        description_placeholders = result.get("description_placeholders")
+        assert description_placeholders is not None
+        assert "friendly_example" in description_placeholders
+        assert "circuit_example" in description_placeholders
 
         # The warning about backup and history preservation should be in the translation
         # files, which we've updated to include the backup warning
