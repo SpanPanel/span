@@ -10,3 +10,4 @@
 env/
 .envrc
 .env
+.deps-installed

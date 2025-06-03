@@ -1,23 +1,23 @@
-"""Span Panel API."""
+"""Span Panel API - Updated to use span-panel-api package."""
 
-import asyncio
 from copy import deepcopy
 import logging
 from typing import Any
 import uuid
 
-import httpx
+from span_panel_api import SpanPanelClient
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelRetriableError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+)
 
 from .const import (
     API_TIMEOUT,
     PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
-    SPAN_CIRCUITS,
-    SPAN_SOE,
-    URL_CIRCUITS,
-    URL_PANEL,
-    URL_REGISTER,
-    URL_STATUS,
-    URL_STORAGE_BATTERY,
     CircuitPriority,
     CircuitRelayState,
 )
@@ -32,225 +32,394 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class SpanPanelApi:
-    """Span Panel API."""
+    """Span Panel API - Now using span-panel-api package."""
 
     def __init__(
         self,
         host: str,
         access_token: str | None = None,  # nosec
         options: Options | None = None,
-        async_client: httpx.AsyncClient | None = None,
+        use_ssl: bool = False,
     ) -> None:
         """Initialize the Span Panel API."""
         self.host: str = host.lower()
         self.access_token: str | None = access_token
         self.options: Options | None = options
-        self._async_client: Any | None = async_client
+        self.use_ssl: bool = use_ssl
+        self._authenticated = False
 
-    @property
-    def async_client(self) -> Any | Any:
-        """Return the httpx.AsyncClient."""
+        # Let the library use default ports instead of hardcoding
+        self._client: SpanPanelClient | None = SpanPanelClient(
+            host=self.host, timeout=API_TIMEOUT, use_ssl=use_ssl
+        )
+        if self.access_token:
+            self._client.set_access_token(self.access_token)
+            self._authenticated = True
 
-        return self._async_client or httpx.AsyncClient(verify=True, timeout=API_TIMEOUT)
+    def _ensure_client_open(self) -> None:
+        # Check if client was explicitly closed
+        if self._client is None:
+            _LOGGER.debug(
+                "[SpanPanelApi] Client was closed, cannot recreate after explicit close for host=%s",
+                self.host,
+            )
+            raise SpanPanelAPIError("API client has been closed")
+
+        client_obj = getattr(self._client, "_client", None)
+        if client_obj is not None and getattr(client_obj, "is_closed", False):
+            _LOGGER.warning(
+                "[SpanPanelApi] Underlying httpx client is closed, recreating SpanPanelClient for host=%s (SSL=%s)",
+                self.host,
+                self.use_ssl,
+            )
+            # Let the library use default ports instead of hardcoding
+            self._client = SpanPanelClient(
+                host=self.host, timeout=API_TIMEOUT, use_ssl=self.use_ssl
+            )
+            if self.access_token:
+                self._client.set_access_token(self.access_token)
+
+    def _debug_check_client(self, method_name: str) -> None:
+        # Check if the client is in a closed or invalid state
+        if self._client is None:
+            _LOGGER.error(
+                "[SpanPanelApi] Client is None in %s! This indicates a bug in the lifecycle management.",
+                method_name,
+            )
+            return
+
+        in_context = getattr(self._client, "_in_context", None)
+        client_obj = getattr(self._client, "_client", None)
+        is_closed = False
+        if client_obj is not None:
+            # httpx.AsyncClient has a .is_closed property
+            is_closed = getattr(client_obj, "is_closed", False)
+        _LOGGER.debug(
+            "[SpanPanelApi] %s: _client=%s, _in_context=%s, client_obj=%s, is_closed=%s",
+            method_name,
+            type(self._client).__name__,
+            in_context,
+            type(client_obj).__name__ if client_obj else None,
+            is_closed,
+        )
+        if is_closed:
+            _LOGGER.error(
+                "[SpanPanelApi] Attempting to use a closed client in %s! This will cause runtime errors.",
+                method_name,
+            )
+
+    async def setup(self) -> None:
+        """Initialize the API client (Long-Lived Pattern setup)."""
+        _LOGGER.debug("[SpanPanelApi] Setting up API client for host=%s", self.host)
+        try:
+            # If we have a token, verify it works
+            if self.access_token:
+                _LOGGER.debug("[SpanPanelApi] Testing existing access token")
+                await self.get_panel_data()  # Test authenticated endpoint
+                self._authenticated = True
+                _LOGGER.debug("[SpanPanelApi] Existing access token is valid")
+            else:
+                _LOGGER.debug("[SpanPanelApi] No access token provided during setup")
+        except SpanPanelAuthError:
+            _LOGGER.warning(
+                "[SpanPanelApi] Access token invalid, will re-authenticate on first use"
+            )
+            self._authenticated = False
+        except Exception as e:
+            _LOGGER.error("[SpanPanelApi] Setup failed: %s", e)
+            await self.close()  # Clean up on setup failure
+            raise
+
+    async def _ensure_authenticated(self) -> None:
+        """Ensure we have valid authentication, re-authenticate if needed."""
+        if not self._authenticated:
+            _LOGGER.debug("[SpanPanelApi] Re-authentication needed")
+            if self._client is None:
+                raise SpanPanelAPIError("API client has been closed")
+            try:
+                # Generate a unique client name for re-authentication
+                client_name = f"home-assistant-{uuid.uuid4()}"
+                auth_response = await self._client.authenticate(
+                    client_name, "Home Assistant Local Span Integration"
+                )
+                self.access_token = auth_response.access_token
+                self._authenticated = True
+                _LOGGER.debug("[SpanPanelApi] Re-authentication successful")
+            except Exception as e:
+                _LOGGER.error("[SpanPanelApi] Re-authentication failed: %s", e)
+                raise SpanPanelAuthError(f"Re-authentication failed: {e}") from e
 
     async def ping(self) -> bool:
         """Ping the Span Panel API."""
-
+        self._ensure_client_open()
+        if self._client is None:
+            return False
         # status endpoint doesn't require auth.
         try:
             await self.get_status_data()
             return True
-        except httpx.HTTPError:
+        except (SpanPanelConnectionError, SpanPanelTimeoutError, SpanPanelAPIError):
             return False
 
     async def ping_with_auth(self) -> bool:
         """Test connection and authentication."""
+        self._ensure_client_open()
+        if self._client is None:
+            return False
         try:
             # Use get_panel_data() since it requires authentication
             await self.get_panel_data()
             return True
-        except httpx.HTTPStatusError as err:
-            if err.response.status_code == httpx.codes.UNAUTHORIZED:
-                return False
-            raise
-        except (httpx.TransportError, SpanPanelReturnedEmptyData):
+        except SpanPanelAuthError:
+            return False
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelReturnedEmptyData,
+        ):
             return False
 
     async def get_access_token(self) -> str:
         """Get the access token."""
-        register_results = await self.post_data(
-            URL_REGISTER,
-            {
-                "name": f"home-assistant-{uuid.uuid4()}",
-                "description": "Home Assistant Local Span Integration",
-            },
-        )
-        response_data: dict[str, str] = register_results.json()
-        if "accessToken" not in response_data:
-            raise SpanPanelReturnedEmptyData("No access token in response")
-        return response_data["accessToken"]
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        try:
+            # Generate a unique client name
+            client_name = f"home-assistant-{uuid.uuid4()}"
+            auth_response = await self._client.authenticate(
+                client_name, "Home Assistant Local Span Integration"
+            )
+
+            # Store the token
+            self.access_token = auth_response.access_token
+            return str(auth_response.access_token)
+
+        except (SpanPanelConnectionError, SpanPanelAPIError) as e:
+            raise SpanPanelReturnedEmptyData(f"Failed to get access token: {e}") from e
 
     async def get_status_data(self) -> SpanPanelHardwareStatus:
         """Get the status data."""
-        response: httpx.Response = await self.get_data(URL_STATUS)
-        status_data: SpanPanelHardwareStatus = SpanPanelHardwareStatus.from_dict(
-            response.json()
-        )
-        return status_data
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("get_status_data")
+        try:
+            status_response = await self._client.get_status()
+
+            # Convert the attrs model to dict and then to our data class
+            status_dict = status_response.to_dict()  # type: ignore[attr-defined]
+            status_data = SpanPanelHardwareStatus.from_dict(status_dict)
+            return status_data
+
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning("Retriable error getting status data (will retry): %s", e)
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error("Server error getting status data (will not retry): %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to get status data: %s", e)
+            raise
 
     async def get_panel_data(self) -> SpanPanelData:
         """Get the panel data."""
-        response: httpx.Response = await self.get_data(URL_PANEL)
-        # Deep copy the raw data before processing in case cached data cleaned up
-        raw_data: Any = deepcopy(response.json())
-        panel_data: SpanPanelData = SpanPanelData.from_dict(raw_data, self.options)
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("get_panel_data")
+        try:
+            await self._ensure_authenticated()
+            panel_response = await self._client.get_panel_state()
 
-        # Span Panel API might return empty result.
-        # We use relay state == UNKNOWN as an indication of that scenario.
-        if panel_data.main_relay_state == PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE:
-            raise SpanPanelReturnedEmptyData()
+            # Convert the attrs model to dict and deep copy before processing
+            raw_data: Any = deepcopy(panel_response.to_dict())  # type: ignore[attr-defined]
+            panel_data: SpanPanelData = SpanPanelData.from_dict(raw_data, self.options)
 
-        return panel_data
+            # Span Panel API might return empty result.
+            # We use relay state == UNKNOWN as an indication of that scenario.
+            if panel_data.main_relay_state == PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE:
+                raise SpanPanelReturnedEmptyData()
+
+            return panel_data
+
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning("Retriable error getting panel data (will retry): %s", e)
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error("Server error getting panel data (will not retry): %s", e)
+            raise
+        except SpanPanelAuthError as e:
+            # Reset auth flag and let coordinator handle retry
+            self._authenticated = False
+            _LOGGER.error("Authentication failed for panel data: %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to get panel data: %s", e)
+            raise
 
     async def get_circuits_data(self) -> dict[str, SpanPanelCircuit]:
         """Get the circuits data."""
-        response: httpx.Response = await self.get_data(URL_CIRCUITS)
-        raw_circuits_data: Any = deepcopy(response.json()[SPAN_CIRCUITS])
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("get_circuits_data")
+        try:
+            await self._ensure_authenticated()
+            circuits_response = await self._client.get_circuits()
 
-        if not raw_circuits_data:
-            raise SpanPanelReturnedEmptyData()
+            # Extract circuits from the response
+            raw_circuits_data = circuits_response.circuits.additional_properties  # type: ignore[attr-defined]
 
-        circuits_data: dict[str, SpanPanelCircuit] = {}
-        for circuit_id, raw_circuit_data in raw_circuits_data.items():
-            circuits_data[circuit_id] = SpanPanelCircuit.from_dict(raw_circuit_data)
-        return circuits_data
+            if not raw_circuits_data:
+                raise SpanPanelReturnedEmptyData()
+
+            circuits_data: dict[str, SpanPanelCircuit] = {}
+            for circuit_id, raw_circuit_data in raw_circuits_data.items():
+                # Convert attrs model to dict
+                circuit_dict = raw_circuit_data.to_dict()  # type: ignore[attr-defined]
+                circuits_data[circuit_id] = SpanPanelCircuit.from_dict(circuit_dict)
+            return circuits_data
+
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning("Retriable error getting circuits data (will retry): %s", e)
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error("Server error getting circuits data (will not retry): %s", e)
+            raise
+        except SpanPanelAuthError as e:
+            # Reset auth flag and let coordinator handle retry
+            self._authenticated = False
+            _LOGGER.error("Authentication failed for circuits data: %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to get circuits data: %s", e)
+            raise
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
         """Get the storage battery data."""
-        response: httpx.Response = await self.get_data(URL_STORAGE_BATTERY)
-        storage_battery_data: Any = response.json()[SPAN_SOE]
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("get_storage_battery_data")
+        try:
+            await self._ensure_authenticated()
+            storage_response = await self._client.get_storage_soe()
 
-        # Span Panel API might return empty result.
-        # We use relay state == UNKNOWN as an indication of that scenario.
-        if not storage_battery_data:
-            raise SpanPanelReturnedEmptyData()
+            # Extract SOE data from the response
+            storage_battery_data = storage_response.soe.to_dict()  # type: ignore[attr-defined]
 
-        return SpanPanelStorageBattery.from_dic(storage_battery_data)
+            # Span Panel API might return empty result.
+            if not storage_battery_data:
+                raise SpanPanelReturnedEmptyData()
+
+            return SpanPanelStorageBattery.from_dict(storage_battery_data)
+
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning(
+                "Retriable error getting storage battery data (will retry): %s", e
+            )
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error(
+                "Server error getting storage battery data (will not retry): %s", e
+            )
+            raise
+        except SpanPanelAuthError as e:
+            # Reset auth flag and let coordinator handle retry
+            self._authenticated = False
+            _LOGGER.error("Authentication failed for storage battery data: %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to get storage battery data: %s", e)
+            raise
 
     async def set_relay(
         self, circuit: SpanPanelCircuit, state: CircuitRelayState
     ) -> None:
         """Set the relay state."""
-        await self.post_data(
-            f"{URL_CIRCUITS}/{circuit.circuit_id}",
-            {"relayStateIn": {"relayState": state.name}},
-        )
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("set_relay")
+        try:
+            await self._ensure_authenticated()
+            await self._client.set_circuit_relay(circuit.circuit_id, state.name)
+
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning("Retriable error setting relay state (will retry): %s", e)
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error("Server error setting relay state (will not retry): %s", e)
+            raise
+        except SpanPanelAuthError as e:
+            # Reset auth flag and let coordinator handle retry
+            self._authenticated = False
+            _LOGGER.error("Authentication failed for set relay: %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to set relay state: %s", e)
+            raise
 
     async def set_priority(
         self, circuit: SpanPanelCircuit, priority: CircuitPriority
     ) -> None:
         """Set the priority."""
-        await self.post_data(
-            f"{URL_CIRCUITS}/{circuit.circuit_id}",
-            {"priorityIn": {"priority": priority.name}},
-        )
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("set_priority")
+        try:
+            await self._ensure_authenticated()
+            await self._client.set_circuit_priority(circuit.circuit_id, priority.name)
 
-    async def get_data(self, url: str) -> httpx.Response:
-        """Fetch data from the endpoint."""
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning("Retriable error setting priority (will retry): %s", e)
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error("Server error setting priority (will not retry): %s", e)
+            raise
+        except SpanPanelAuthError as e:
+            # Reset auth flag and let coordinator handle retry
+            self._authenticated = False
+            _LOGGER.error("Authentication failed for set priority: %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to set priority: %s", e)
+            raise
 
-        formatted_url: str = url.format(self.host)
-        response: httpx.Response = await self._async_fetch_with_retry(
-            formatted_url, follow_redirects=False
-        )
-        return response
-
-    async def post_data(self, url: str, payload: dict[str, Any]) -> httpx.Response:
-        """Post data to the endpoint."""
-        formatted_url: str = url.format(self.host)
-        response: httpx.Response = await self._async_post(formatted_url, payload)
-        return response
-
-    async def _async_fetch_with_retry(self, url: str, **kwargs: Any) -> httpx.Response:
-        """Retry 3 times if there is a transport error or certain HTTP errors."""
-        headers: dict[str, str] = {"Accept": "application/json"}
-        if self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
-
-        # HTTP status codes that are worth retrying (typically transient issues)
-        retry_status_codes = {502, 503, 504, 429}
-
-        last_exception: Exception | None = None
-        for attempt in range(3):
-            _LOGGER.debug("HTTP GET Attempt #%s: %s", attempt + 1, url)
+    async def close(self) -> None:
+        """Close the API client and clean up resources."""
+        _LOGGER.debug("[SpanPanelApi] Closing API client for host=%s", self.host)
+        if self._client is not None:
             try:
-                async with self.async_client as client:
-                    resp: httpx.Response = await client.get(
-                        url, timeout=API_TIMEOUT, headers=headers, **kwargs
-                    )
-
-                    # Only retry specific HTTP status codes that are typically transient
-                    if resp.status_code in retry_status_codes and attempt < 2:
-                        _LOGGER.debug(
-                            "Received status %s for %s, retrying (attempt %s of 3)",
-                            resp.status_code,
-                            url,
-                            attempt + 1,
-                        )
-                        # Add exponential backoff delay between retries (0.5s, then 1s)
-                        await asyncio.sleep(0.5 * (2**attempt))
-                        continue
-
-                    # For all other status codes, raise immediately
-                    resp.raise_for_status()
-                    _LOGGER.debug("Fetched from %s: %s: %s", url, resp, resp.text)
-                    return resp
-
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code in retry_status_codes and attempt < 2:
-                    _LOGGER.debug(
-                        "HTTP error %s for %s, retrying (attempt %s of 3)",
-                        exc.response.status_code,
-                        url,
-                        attempt + 1,
-                    )
-                    # Add exponential backoff delay between retries
-                    await asyncio.sleep(0.5 * (2**attempt))
-                    last_exception = exc
-                    continue
-                raise
-
-            except httpx.TransportError as exc:
-                if attempt < 2:
-                    _LOGGER.debug(
-                        "Transport error for %s, retrying (attempt %s of 3): %s",
-                        url,
-                        attempt + 1,
-                        str(exc),
-                    )
-                    # Add exponential backoff delay between retries
-                    await asyncio.sleep(0.5 * (2**attempt))
-                    last_exception = exc
-                    continue
-                raise
-
-        # If we get here, we've exhausted all retries
-        if last_exception:
-            raise last_exception
-        raise httpx.TransportError("Too many attempts")
-
-    async def _async_post(
-        self, url: str, json: dict[str, Any] | None = None, **kwargs: Any
-    ) -> httpx.Response:
-        """POST to the url."""
-        headers: dict[str, str] = {"accept": "application/json"}
-        if self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
-
-        _LOGGER.debug("HTTP POST Attempt: %s", url)
-        async with self.async_client as client:
-            resp: httpx.Response = await client.post(
-                url, json=json, headers=headers, timeout=API_TIMEOUT, **kwargs
-            )
-            resp.raise_for_status()
-            _LOGGER.debug("HTTP POST %s: %s: %s", url, resp, resp.text)
-            return resp
+                await self._client.close()
+            except Exception as e:
+                _LOGGER.warning("Error closing API client: %s", e)
+            finally:
+                # Reset client reference to prevent further use
+                self._client = None

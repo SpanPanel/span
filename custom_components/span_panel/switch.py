@@ -120,7 +120,11 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             curr_circuit: SpanPanelCircuit = circuits[self.circuit_id].copy()
             # Perform the state change
             await span_panel.api.set_relay(curr_circuit, CircuitRelayState.CLOSED)
-            # Request refresh to get the new state
+            # Optimistically update local state to prevent UI bouncing
+            self._attr_is_on = True
+            if self.hass is not None:
+                self.async_write_ha_state()
+            # Request refresh to get the actual new state from panel
             await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -134,7 +138,12 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             curr_circuit: SpanPanelCircuit = circuits[self.circuit_id].copy()
             # Perform the state change
             await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
-
+            # Optimistically update local state to prevent UI bouncing
+            self._attr_is_on = False
+            # Only write state if hass is available (not in test environment)
+            if self.hass is not None:
+                self.async_write_ha_state()
+            # Request refresh to get the actual new state from panel
             await self.coordinator.async_request_refresh()
 
 
