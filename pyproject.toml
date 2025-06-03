@@ -26,6 +26,9 @@ voluptuous-stubs = "^0.1.1"
 python-direnv = "^0.2.2"
 prettier = "^0.0.7"
 black = "^24.0.0"
+pytest = "^8.3.5"
+pytest-homeassistant-custom-component = "^0.13.0"
+homeassistant = "*"
 
 [build-system]
 requires = ["poetry-core"]

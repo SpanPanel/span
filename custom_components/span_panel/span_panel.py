@@ -2,8 +2,6 @@
 
 import logging
 
-import httpx
-
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
 from .span_panel_api import SpanPanelApi
@@ -40,11 +38,11 @@ class SpanPanel:
         host: str,
         access_token: str | None = None,  # nosec
         options: Options | None = None,
-        async_client: httpx.AsyncClient | None = None,
+        use_ssl: bool = False,
     ) -> None:
         """Initialize the Span Panel."""
         self._options = options
-        self.api = SpanPanelApi(host, access_token, options, async_client)
+        self.api = SpanPanelApi(host, access_token, options, use_ssl)
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None
         self._circuits: dict[str, SpanPanelCircuit] = {}
@@ -142,3 +140,7 @@ class SpanPanel:
     def storage_battery(self) -> SpanPanelStorageBattery:
         """Get storage battery data atomically."""
         return self._get_storage_battery()
+
+    async def close(self) -> None:
+        """Close the API client and clean up resources."""
+        await self.api.close()

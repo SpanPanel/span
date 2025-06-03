@@ -15,7 +15,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 import voluptuous as vol
@@ -31,6 +30,7 @@ from .const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
+    CONF_USE_SSL,
 )
 from .entity_migration import EntityMigrationManager
 from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
@@ -41,6 +41,7 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
+        vol.Optional(CONF_USE_SSL, default=False): bool,
     }
 )
 
@@ -64,7 +65,7 @@ def create_api_controller(
     access_token: str | None = None,  # nosec
 ) -> SpanPanelApi:
     """Create a Span Panel API controller."""
-    params: dict[str, Any] = {"host": host, "async_client": get_async_client(hass)}
+    params: dict[str, Any] = {"host": host}
     if access_token is not None:
         params["access_token"] = access_token
     return SpanPanelApi(**params)
@@ -74,20 +75,55 @@ async def validate_host(
     hass: HomeAssistant,
     host: str,
     access_token: str | None = None,  # nosec
+    use_ssl: bool = False,
 ) -> bool:
     """Validate the host connection."""
-    span_api: SpanPanelApi = create_api_controller(hass, host, access_token)
-    if access_token:
-        return await span_api.ping_with_auth()
-    return await span_api.ping()
+    from span_panel_api import SpanPanelClient
+
+    # Use context manager for short-lived validation (recommended pattern)
+    # Let the library use default ports instead of hardcoding
+    async with SpanPanelClient(host=host, timeout=30.0, use_ssl=use_ssl) as client:
+        if access_token:
+            client.set_access_token(access_token)
+            try:
+                # Test authenticated endpoint
+                await client.get_panel_state()
+                return True
+            except Exception:
+                return False
+        else:
+            try:
+                # Test unauthenticated endpoint
+                await client.get_status()
+                return True
+            except Exception:
+                return False
 
 
 async def validate_auth_token(
-    hass: HomeAssistant, host: str, access_token: str
+    hass: HomeAssistant, host: str, access_token: str, use_ssl: bool = False
 ) -> bool:
     """Perform an authenticated call to confirm validity of provided token."""
-    span_api: SpanPanelApi = create_api_controller(hass, host, access_token)
-    return await span_api.ping_with_auth()
+    from span_panel_api import SpanPanelClient
+    from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+
+    # Use context manager for short-lived validation (recommended pattern)
+    # Let the library use default ports instead of hardcoding
+    async with SpanPanelClient(host=host, timeout=30.0, use_ssl=use_ssl) as client:
+        client.set_access_token(access_token)
+        try:
+            # Test authenticated endpoint
+            await client.get_panel_state()
+            return True
+        except SpanPanelAuthError as e:
+            _LOGGER.warning("Auth token validation failed - invalid token: %s", e)
+            return False
+        except SpanPanelConnectionError as e:
+            _LOGGER.warning("Auth token validation failed - connection error: %s", e)
+            return False
+        except Exception as e:
+            _LOGGER.warning("Auth token validation failed - unexpected error: %s", e)
+            return False
 
 
 class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -105,17 +141,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.host: str | None = None
         self.serial_number: str | None = None
         self.access_token: str | None = None
+        self.use_ssl: bool = False
         self._is_flow_setup: bool = False
         self.context: ConfigFlowContext = {}
 
-    async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
+    async def setup_flow(
+        self, trigger_type: TriggerFlowType, host: str, use_ssl: bool = False
+    ) -> None:
         """Set up the flow."""
 
         if self._is_flow_setup is True:
             raise AssertionError("Flow is already set up")
 
-        span_api: SpanPanelApi = create_api_controller(self.hass, host)
-        panel_status: SpanPanelHardwareStatus = await span_api.get_status_data()
+        # Use context manager for short-lived setup validation
+        from span_panel_api import SpanPanelClient
+
+        # Let the library use default ports instead of hardcoding
+        async with SpanPanelClient(host=host, timeout=30.0, use_ssl=use_ssl) as client:
+            status_response = await client.get_status()
+            # Convert to our data class format
+            status_dict = status_response.to_dict()  # type: ignore[attr-defined]
+            panel_status = SpanPanelHardwareStatus.from_dict(status_dict)
 
         self.trigger_flow_type = trigger_type
         self.host = host
@@ -156,11 +202,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not is_ipv4_address(discovery_info.host):
             return self.async_abort(reason="not_ipv4_address")
 
-        # Validate that this is a valid Span Panel
-        if not await validate_host(self.hass, discovery_info.host):
+        # Validate that this is a valid Span Panel (assume HTTP for discovery)
+        if not await validate_host(self.hass, discovery_info.host, use_ssl=False):
             return self.async_abort(reason="not_span_panel")
 
-        await self.setup_flow(TriggerFlowType.CREATE_ENTRY, discovery_info.host)
+            # Discovered devices default to HTTP/no SSL
+        self.use_ssl = False
+        await self.setup_flow(TriggerFlowType.CREATE_ENTRY, discovery_info.host, False)
         await self.ensure_not_already_configured()
         return await self.async_step_confirm_discovery()
 
@@ -174,18 +222,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         host: str = user_input[CONF_HOST].strip()
+        use_ssl: bool = user_input.get(CONF_USE_SSL, False)
 
         # Validate host before setting up flow
-        if not await validate_host(self.hass, host):
+        if not await validate_host(self.hass, host, use_ssl=use_ssl):
             return self.async_show_form(
                 step_id="user",
                 data_schema=STEP_USER_DATA_SCHEMA,
                 errors={"base": "cannot_connect"},
             )
 
+        # Store SSL setting for later use
+        self.use_ssl = use_ssl
+
         # Only setup flow if validation succeeded
         if not self._is_flow_setup:
-            await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
+            await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host, use_ssl)
             await self.ensure_not_already_configured()
 
         return await self.async_step_choose_auth_type()
@@ -194,7 +246,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, entry_data: Mapping[str, Any]
     ) -> ConfigFlowResult:
         """Handle a flow initiated by re-auth."""
-        await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST])
+        use_ssl = entry_data.get(CONF_USE_SSL, False)
+        self.use_ssl = use_ssl
+        await self.setup_flow(
+            TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST], use_ssl
+        )
         return await self.async_step_auth_token(dict(entry_data))
 
     async def async_step_confirm_discovery(
@@ -242,30 +298,52 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Step that guide users through the proximity authentication process."""
         self.ensure_flow_is_set_up()
 
-        span_api: SpanPanelApi = create_api_controller(self.hass, self.host or "")
-        panel_status: SpanPanelHardwareStatus = await span_api.get_status_data()
+        # Use context manager for short-lived proximity auth operations
+        from span_panel_api import SpanPanelClient
 
-        # Check if running firmware newer or older than r202342
-        if panel_status.proximity_proven is not None:
-            # Reprompt until we are able to do proximity auth for new firmware
-            proximity_verified: bool = panel_status.proximity_proven
-            if proximity_verified is False:
-                return self.async_show_form(step_id="auth_proximity")
-        else:
-            # Reprompt until we are able to do proximity auth for old firmware
-            remaining_presses: int = panel_status.remaining_auth_unlock_button_presses
-            if remaining_presses != 0:
-                return self.async_show_form(
-                    step_id="auth_proximity",
+        # Let the library use default ports instead of hardcoding
+        async with SpanPanelClient(
+            host=self.host or "", timeout=30.0, use_ssl=self.use_ssl
+        ) as client:
+            # Get status to check proximity state
+            status_response = await client.get_status()
+            status_dict = status_response.to_dict()  # type: ignore[attr-defined]
+            panel_status = SpanPanelHardwareStatus.from_dict(status_dict)
+
+            # Check if running firmware newer or older than r202342
+            if panel_status.proximity_proven is not None:
+                # Reprompt until we are able to do proximity auth for new firmware
+                proximity_verified: bool = panel_status.proximity_proven
+                if proximity_verified is False:
+                    return self.async_show_form(step_id="auth_proximity")
+            else:
+                # Reprompt until we are able to do proximity auth for old firmware
+                remaining_presses: int = (
+                    panel_status.remaining_auth_unlock_button_presses
                 )
+                if remaining_presses != 0:
+                    return self.async_show_form(
+                        step_id="auth_proximity",
+                    )
 
-        # Ensure host is set
-        if not self.host:
-            return self.async_abort(reason="host_not_set")
+            # Ensure host is set
+            if not self.host:
+                return self.async_abort(reason="host_not_set")
 
-        # Ensure token is valid using authenticated validation
-        self.access_token = await span_api.get_access_token()
-        if not await validate_auth_token(self.hass, self.host, self.access_token):
+            # Get access token using proximity authentication
+            import uuid
+
+            client_name = f"home-assistant-{uuid.uuid4()}"
+            auth_response = await client.authenticate(
+                client_name, "Home Assistant Local Span Integration"
+            )
+            self.access_token = auth_response.access_token
+        # Type checking: ensure access_token is not None before calling validate_auth_token
+        if self.access_token is None:
+            return self.async_abort(reason="invalid_access_token")
+        if not await validate_auth_token(
+            self.hass, self.host, self.access_token, self.use_ssl
+        ):
             return self.async_abort(reason="invalid_access_token")
 
         return await self.async_step_resolve_entity(entry_data)
@@ -285,15 +363,19 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Extract access token from user input
         access_token: str | None = user_input.get(CONF_ACCESS_TOKEN)
-        if access_token:
-            self.access_token = access_token
+
+        # Check if token was provided and is not empty
+        if access_token and access_token.strip():
+            self.access_token = access_token.strip()
 
             # Ensure host is set
             if not self.host:
                 return self.async_abort(reason="host_not_set")
 
             # Validate the provided token
-            if not await validate_auth_token(self.hass, self.host, access_token):
+            if not await validate_auth_token(
+                self.hass, self.host, self.access_token, self.use_ssl
+            ):
                 return self.async_show_form(
                     step_id="auth_token",
                     data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
@@ -303,8 +385,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Proceed to the next step upon successful validation
             return await self.async_step_resolve_entity(user_input)
 
-        # If no access token was provided, abort or show the form again
-        return self.async_abort(reason="missing_access_token")
+        # If no access token was provided or it's empty, show form with error
+        return self.async_show_form(
+            step_id="auth_token",
+            data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
+            errors={"base": "missing_access_token"},
+        )
 
     async def async_step_resolve_entity(
         self,
@@ -353,7 +439,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Create a new SPAN panel entry."""
         return self.async_create_entry(
             title=serial_number,
-            data={CONF_HOST: host, CONF_ACCESS_TOKEN: access_token},
+            data={
+                CONF_HOST: host,
+                CONF_ACCESS_TOKEN: access_token,
+                CONF_USE_SSL: self.use_ssl,
+            },
             options={
                 USE_DEVICE_PREFIX: True,
                 USE_CIRCUIT_NUMBERS: True,
@@ -373,6 +463,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         updated_data = dict(entry_data)
         updated_data[CONF_HOST] = host
         updated_data[CONF_ACCESS_TOKEN] = access_token
+        updated_data[CONF_USE_SSL] = self.use_ssl
 
         # An existing entry must exist before we can update it
         entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(
@@ -390,8 +481,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
-        """Create the options flow by passing entry_id."""
-        return OptionsFlowHandler(entry_id=config_entry.entry_id)
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
 
 
 OPTIONS_SCHEMA: Any = vol.Schema(
@@ -409,21 +500,11 @@ OPTIONS_SCHEMA: Any = vol.Schema(
 
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle the options flow for Span Panel without storing config_entry."""
+    """Handle the options flow for Span Panel."""
 
-    def __init__(self, entry_id: str) -> None:
-        """Initialize with entry_id only."""
-        self._entry_id: str = entry_id
-
-    @property
-    def entry(self) -> config_entries.ConfigEntry:
-        """Get the config entry using the stored entry_id."""
-        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(
-            self._entry_id
-        )
-        if not entry:
-            raise ValueError("Config entry not found")
-        return entry
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -447,10 +528,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the general options (excluding entity naming)."""
         if user_input is not None:
             # Preserve existing naming flags (don't change them in general options)
-            use_prefix: Any | bool = self.entry.options.get(USE_DEVICE_PREFIX, False)
+            use_prefix: Any | bool = self.config_entry.options.get(
+                USE_DEVICE_PREFIX, False
+            )
             user_input[USE_DEVICE_PREFIX] = use_prefix
 
-            use_circuit_numbers: Any | bool = self.entry.options.get(
+            use_circuit_numbers: Any | bool = self.config_entry.options.get(
                 USE_CIRCUIT_NUMBERS, False
             )
             user_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
@@ -462,13 +545,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         # Show general options form (without entity naming)
         defaults: dict[str, Any] = {
-            CONF_SCAN_INTERVAL: self.entry.options.get(
+            CONF_SCAN_INTERVAL: self.config_entry.options.get(
                 CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
             ),
-            BATTERY_ENABLE: self.entry.options.get("enable_battery_percentage", False),
-            INVERTER_ENABLE: self.entry.options.get("enable_solar_circuit", False),
-            INVERTER_LEG1: self.entry.options.get(INVERTER_LEG1, 0),
-            INVERTER_LEG2: self.entry.options.get(INVERTER_LEG2, 0),
+            BATTERY_ENABLE: self.config_entry.options.get(
+                "enable_battery_percentage", False
+            ),
+            INVERTER_ENABLE: self.config_entry.options.get(
+                "enable_solar_circuit", False
+            ),
+            INVERTER_LEG1: self.config_entry.options.get(INVERTER_LEG1, 0),
+            INVERTER_LEG2: self.config_entry.options.get(INVERTER_LEG2, 0),
         }
 
         return self.async_show_form(
@@ -523,7 +610,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 await self._migrate_entity_ids(current_pattern, new_pattern)
 
                 # Update only the naming-related options, preserve ALL other options
-                current_options = dict(self.entry.options)
+                current_options = dict(self.config_entry.options)
 
                 # Only update the specific naming flags, preserve everything else
                 current_options[USE_CIRCUIT_NUMBERS] = naming_options[
@@ -557,7 +644,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     _LOGGER.info(
                         "Reloading integration after entity naming pattern change"
                     )
-                    await self.hass.config_entries.async_reload(self._entry_id)
+                    await self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
 
                 self.hass.async_create_task(reload_after_options_complete())
 
@@ -634,8 +723,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def _get_current_naming_pattern(self) -> str:
         """Determine the current entity naming pattern from configuration flags."""
-        use_circuit_numbers = self.entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        use_device_prefix = self.entry.options.get(USE_DEVICE_PREFIX, False)
+        use_circuit_numbers = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        use_device_prefix = self.config_entry.options.get(USE_DEVICE_PREFIX, False)
 
         if use_circuit_numbers:
             return EntityNamingPattern.CIRCUIT_NUMBERS.value
@@ -652,7 +741,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         )
 
         # Create migration manager
-        migration_manager = EntityMigrationManager(self.hass, self._entry_id)
+        migration_manager = EntityMigrationManager(
+            self.hass, self.config_entry.entry_id
+        )
 
         # Convert string patterns to enum values
         from_pattern = EntityNamingPattern(old_pattern)

@@ -9,6 +9,7 @@ COORDINATOR = "coordinator"
 NAME = "name"
 
 CONF_SERIAL_NUMBER = "serial_number"
+CONF_USE_SSL = "use_ssl"
 
 URL_STATUS = "http://{}/api/v1/status"
 URL_SPACES = "http://{}/api/v1/spaces"

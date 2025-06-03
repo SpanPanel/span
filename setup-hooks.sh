@@ -1,13 +1,19 @@
 #!/bin/bash
 
-# Check if pre-commit is installed
-if ! command -v pre-commit &> /dev/null; then
-    echo "Error: pre-commit is not installed."
-    echo "Please install pre-commit using: pip install pre-commit"
-    exit 1
+# Ensure dependencies are installed first
+if [[ ! -f ".deps-installed" ]] || [[ "pyproject.toml" -nt ".deps-installed" ]]; then
+    echo "Installing/updating dependencies..."
+
+    poetry install --with dev
+
+    if [[ $? -ne 0 ]]; then
+        echo "Failed to install dependencies. Please check the output above."
+        exit 1
+    fi
+    touch .deps-installed
 fi
 
-# Install the pre-commit hooks
-pre-commit install
+# Install pre-commit hooks
+poetry run pre-commit install
 
 echo "Git hooks installed successfully!"

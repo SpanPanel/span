@@ -13,7 +13,7 @@ class SpanPanelStorageBattery:
     raw_data: dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
-    def from_dic(data: dict[str, Any]) -> "SpanPanelStorageBattery":
+    def from_dict(data: dict[str, Any]) -> "SpanPanelStorageBattery":
         """Read the data from the dictionary."""
         return SpanPanelStorageBattery(
             storage_battery_percentage=data.get("percentage", 0)
