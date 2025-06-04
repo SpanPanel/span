@@ -29,6 +29,7 @@ black = "^24.0.0"
 pytest = "^8.3.5"
 pytest-homeassistant-custom-component = "^0.13.0"
 homeassistant = "*"
+isort = "^6.0.1"
 
 [build-system]
 requires = ["poetry-core"]

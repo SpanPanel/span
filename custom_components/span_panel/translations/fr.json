@@ -58,7 +58,10 @@
           "enable_battery_percentage": "Activer le Capteur de Pourcentage de Batterie",
           "enable_solar_circuit": "Activer les capteurs de l'onduleur solaire",
           "leg1": "Jambe solaire 1 (0 n'est pas utilisé)",
-          "leg2": "Jambe solaire 2 (0 n'est pas utilisé)"
+          "leg2": "Jambe solaire 2 (0 n'est pas utilisé)",
+          "api_retries": "Tentatives API (0-10)",
+          "api_retry_timeout": "Délai de tentative API (secondes)",
+          "api_retry_backoff_multiplier": "Multiplicateur de délai de tentative API"
         }
       },
       "entity_naming": {

@@ -58,7 +58,10 @@
           "enable_battery_percentage": "Habilitar Sensor de Porcentaje de Batería",
           "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
           "leg1": "Pata solar 1 (0 no se utiliza)",
-          "leg2": "Pata solar 2 (0 no se utiliza)"
+          "leg2": "Pata solar 2 (0 no se utiliza)",
+          "api_retries": "Reintentos de API (0-10)",
+          "api_retry_timeout": "Tiempo de espera de reintento de API (segundos)",
+          "api_retry_backoff_multiplier": "Multiplicador de retraso de reintento de API"
         }
       },
       "entity_naming": {
