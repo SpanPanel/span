@@ -19,6 +19,12 @@ from custom_components.span_panel.helpers import construct_synthetic_entity_id
 
 
 @pytest.fixture(autouse=True)
+def mock_frame_helper():
+    with patch("homeassistant.helpers.frame.report_usage"):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def expected_lingering_timers():
     """Fix expected lingering timers for tests."""
     return True
@@ -65,16 +71,18 @@ async def test_circuit_numbers_pattern_detection():
     )
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
-    flow = OptionsFlowHandler("test_entry_id")
-    flow.hass = mock_hass
+    with patch.object(OptionsFlowHandler, "__init__", return_value=None):
+        flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
+        flow._config_entry = mock_config_entry
+        flow.hass = mock_hass
 
-    result = await flow.async_step_entity_naming()
+        result = await flow.async_step_entity_naming()
 
-    # Should detect circuit numbers pattern
-    assert result.get("type") == "form"
-    # Verify that the flow's _get_current_naming_pattern method detects the correct pattern
-    current_pattern = flow._get_current_naming_pattern()
-    assert current_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
+        # Should detect circuit numbers pattern
+        assert result.get("type") == "form"
+        # Verify that the flow's _get_current_naming_pattern method detects the correct pattern
+        current_pattern = flow._get_current_naming_pattern()
+        assert current_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
 
 @pytest.mark.asyncio
@@ -90,16 +98,18 @@ async def test_friendly_names_pattern_detection():
     )
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
-    flow = OptionsFlowHandler("test_entry_id")
-    flow.hass = mock_hass
+    with patch.object(OptionsFlowHandler, "__init__", return_value=None):
+        flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
+        flow._config_entry = mock_config_entry
+        flow.hass = mock_hass
 
-    result = await flow.async_step_entity_naming()
+        result = await flow.async_step_entity_naming()
 
-    # Should detect friendly names pattern
-    assert result.get("type") == "form"
-    # Verify that the flow's _get_current_naming_pattern method detects the correct pattern
-    current_pattern = flow._get_current_naming_pattern()
-    assert current_pattern == EntityNamingPattern.FRIENDLY_NAMES.value
+        # Should detect friendly names pattern
+        assert result.get("type") == "form"
+        # Verify that the flow's _get_current_naming_pattern method detects the correct pattern
+        current_pattern = flow._get_current_naming_pattern()
+        assert current_pattern == EntityNamingPattern.FRIENDLY_NAMES.value
 
 
 @pytest.mark.asyncio
@@ -115,16 +125,18 @@ async def test_legacy_names_pattern_detection():
     )
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
-    flow = OptionsFlowHandler("test_entry_id")
-    flow.hass = mock_hass
+    with patch.object(OptionsFlowHandler, "__init__", return_value=None):
+        flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
+        flow._config_entry = mock_config_entry
+        flow.hass = mock_hass
 
-    result = await flow.async_step_entity_naming()
+        result = await flow.async_step_entity_naming()
 
-    # Should detect legacy pattern
-    assert result.get("type") == "form"
-    # Verify that the flow's _get_current_naming_pattern method detects the correct pattern
-    current_pattern = flow._get_current_naming_pattern()
-    assert current_pattern == EntityNamingPattern.LEGACY_NAMES.value
+        # Should detect legacy pattern
+        assert result.get("type") == "form"
+        # Verify that the flow's _get_current_naming_pattern method detects the correct pattern
+        current_pattern = flow._get_current_naming_pattern()
+        assert current_pattern == EntityNamingPattern.LEGACY_NAMES.value
 
 
 @pytest.mark.asyncio
@@ -287,14 +299,18 @@ async def test_pattern_change_requires_migration():
     )
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
-    with patch(
-        "custom_components.span_panel.config_flow.EntityMigrationManager"
-    ) as mock_migration:
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.EntityMigrationManager"
+        ) as mock_migration,
+        patch.object(OptionsFlowHandler, "__init__", return_value=None),
+    ):
         mock_manager_instance = AsyncMock()
         mock_manager_instance.migrate_entities = AsyncMock(return_value=True)
         mock_migration.return_value = mock_manager_instance
 
-        flow = OptionsFlowHandler("test_entry_id")
+        flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
+        flow._config_entry = mock_config_entry
         flow.hass = mock_hass
 
         # Change from circuit numbers to friendly names
@@ -320,10 +336,14 @@ async def test_no_migration_when_pattern_unchanged():
     )
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
-    with patch(
-        "custom_components.span_panel.config_flow.EntityMigrationManager"
-    ) as mock_migration:
-        flow = OptionsFlowHandler("test_entry_id")
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.EntityMigrationManager"
+        ) as mock_migration,
+        patch.object(OptionsFlowHandler, "__init__", return_value=None),
+    ):
+        flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
+        flow._config_entry = mock_config_entry
         flow.hass = mock_hass
 
         # Keep same pattern (circuit numbers)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 import enum
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
@@ -31,12 +31,25 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
     CONF_USE_SSL,
+    CONFIG_TIMEOUT,
+    CONFIG_API_RETRIES,
+    CONFIG_API_RETRY_TIMEOUT,
+    CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
+    CONF_API_RETRIES,
+    CONF_API_RETRY_TIMEOUT,
+    CONF_API_RETRY_BACKOFF_MULTIPLIER,
+    DEFAULT_API_RETRIES,
+    DEFAULT_API_RETRY_TIMEOUT,
+    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
 )
 from .entity_migration import EntityMigrationManager
 from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from span_panel_api import SpanPanelClient
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -57,6 +70,20 @@ class TriggerFlowType(enum.Enum):
 
     CREATE_ENTRY = enum.auto()
     UPDATE_ENTRY = enum.auto()
+
+
+def create_config_client(host: str, use_ssl: bool = False) -> SpanPanelClient:
+    """Create a SpanPanelClient with config settings for quick feedback."""
+    from span_panel_api import SpanPanelClient
+
+    return SpanPanelClient(
+        host=host,
+        timeout=CONFIG_TIMEOUT,
+        use_ssl=use_ssl,
+        retries=CONFIG_API_RETRIES,
+        retry_timeout=CONFIG_API_RETRY_TIMEOUT,
+        retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
+    )
 
 
 def create_api_controller(
@@ -81,8 +108,15 @@ async def validate_host(
     from span_panel_api import SpanPanelClient
 
     # Use context manager for short-lived validation (recommended pattern)
-    # Let the library use default ports instead of hardcoding
-    async with SpanPanelClient(host=host, timeout=30.0, use_ssl=use_ssl) as client:
+    # Use config settings for quick feedback - no retries and shorter timeout
+    async with SpanPanelClient(
+        host=host,
+        timeout=CONFIG_TIMEOUT,
+        use_ssl=use_ssl,
+        retries=CONFIG_API_RETRIES,
+        retry_timeout=CONFIG_API_RETRY_TIMEOUT,
+        retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
+    ) as client:
         if access_token:
             client.set_access_token(access_token)
             try:
@@ -108,8 +142,15 @@ async def validate_auth_token(
     from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 
     # Use context manager for short-lived validation (recommended pattern)
-    # Let the library use default ports instead of hardcoding
-    async with SpanPanelClient(host=host, timeout=30.0, use_ssl=use_ssl) as client:
+    # Use config settings for quick feedback - no retries and shorter timeout
+    async with SpanPanelClient(
+        host=host,
+        timeout=CONFIG_TIMEOUT,
+        use_ssl=use_ssl,
+        retries=CONFIG_API_RETRIES,
+        retry_timeout=CONFIG_API_RETRY_TIMEOUT,
+        retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
+    ) as client:
         client.set_access_token(access_token)
         try:
             # Test authenticated endpoint
@@ -156,8 +197,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Use context manager for short-lived setup validation
         from span_panel_api import SpanPanelClient
 
-        # Let the library use default ports instead of hardcoding
-        async with SpanPanelClient(host=host, timeout=30.0, use_ssl=use_ssl) as client:
+        # Use config settings for quick feedback - no retries and shorter timeout
+        async with SpanPanelClient(
+            host=host,
+            timeout=CONFIG_TIMEOUT,
+            use_ssl=use_ssl,
+            retries=CONFIG_API_RETRIES,
+            retry_timeout=CONFIG_API_RETRY_TIMEOUT,
+            retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
+        ) as client:
             status_response = await client.get_status()
             # Convert to our data class format
             status_dict = status_response.to_dict()  # type: ignore[attr-defined]
@@ -301,9 +349,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Use context manager for short-lived proximity auth operations
         from span_panel_api import SpanPanelClient
 
-        # Let the library use default ports instead of hardcoding
+        # Use config settings for quick feedback - no retries and shorter timeout
         async with SpanPanelClient(
-            host=self.host or "", timeout=30.0, use_ssl=self.use_ssl
+            host=self.host or "",
+            timeout=CONFIG_TIMEOUT,
+            use_ssl=self.use_ssl,
+            retries=CONFIG_API_RETRIES,
+            retry_timeout=CONFIG_API_RETRY_TIMEOUT,
+            retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
         ) as client:
             # Get status to check proximity state
             status_response = await client.get_status()
@@ -495,6 +548,13 @@ OPTIONS_SCHEMA: Any = vol.Schema(
         vol.Optional(ENTITY_NAMING_PATTERN): vol.In(
             [e.value for e in EntityNamingPattern]
         ),
+        vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
+        vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
+            vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+        ),
+        vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
+            vol.Coerce(float), vol.Range(min=1.0, max=5.0)
+        ),
     }
 )
 
@@ -556,6 +616,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ),
             INVERTER_LEG1: self.config_entry.options.get(INVERTER_LEG1, 0),
             INVERTER_LEG2: self.config_entry.options.get(INVERTER_LEG2, 0),
+            CONF_API_RETRIES: self.config_entry.options.get(
+                CONF_API_RETRIES, DEFAULT_API_RETRIES
+            ),
+            CONF_API_RETRY_TIMEOUT: self.config_entry.options.get(
+                CONF_API_RETRY_TIMEOUT, DEFAULT_API_RETRY_TIMEOUT
+            ),
+            CONF_API_RETRY_BACKOFF_MULTIPLIER: self.config_entry.options.get(
+                CONF_API_RETRY_BACKOFF_MULTIPLIER, DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
+            ),
         }
 
         return self.async_show_form(
@@ -701,6 +770,13 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(INVERTER_ENABLE): bool,
                 vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
                 vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
+                vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
+                    vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+                ),
+                vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
+                    vol.Coerce(float), vol.Range(min=1.0, max=5.0)
+                ),
             }
         )
 

@@ -20,6 +20,9 @@ from .const import (
     PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
     CircuitPriority,
     CircuitRelayState,
+    DEFAULT_API_RETRIES,
+    DEFAULT_API_RETRY_TIMEOUT,
+    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
 )
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
@@ -48,9 +51,24 @@ class SpanPanelApi:
         self.use_ssl: bool = use_ssl
         self._authenticated = False
 
+        # Get retry configuration from options or use defaults
+        if options:
+            retries = options.api_retries
+            retry_timeout = options.api_retry_timeout
+            retry_backoff_multiplier = options.api_retry_backoff_multiplier
+        else:
+            retries = DEFAULT_API_RETRIES
+            retry_timeout = DEFAULT_API_RETRY_TIMEOUT
+            retry_backoff_multiplier = DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
+
         # Let the library use default ports instead of hardcoding
         self._client: SpanPanelClient | None = SpanPanelClient(
-            host=self.host, timeout=API_TIMEOUT, use_ssl=use_ssl
+            host=self.host,
+            timeout=API_TIMEOUT,
+            use_ssl=use_ssl,
+            retries=retries,
+            retry_timeout=retry_timeout,
+            retry_backoff_multiplier=retry_backoff_multiplier,
         )
         if self.access_token:
             self._client.set_access_token(self.access_token)
@@ -72,9 +90,25 @@ class SpanPanelApi:
                 self.host,
                 self.use_ssl,
             )
+
+            # Get retry configuration from options or use defaults
+            if self.options:
+                retries = self.options.api_retries
+                retry_timeout = self.options.api_retry_timeout
+                retry_backoff_multiplier = self.options.api_retry_backoff_multiplier
+            else:
+                retries = DEFAULT_API_RETRIES
+                retry_timeout = DEFAULT_API_RETRY_TIMEOUT
+                retry_backoff_multiplier = DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
+
             # Let the library use default ports instead of hardcoding
             self._client = SpanPanelClient(
-                host=self.host, timeout=API_TIMEOUT, use_ssl=self.use_ssl
+                host=self.host,
+                timeout=API_TIMEOUT,
+                use_ssl=self.use_ssl,
+                retries=retries,
+                retry_timeout=retry_timeout,
+                retry_backoff_multiplier=retry_backoff_multiplier,
             )
             if self.access_token:
                 self._client.set_access_token(self.access_token)

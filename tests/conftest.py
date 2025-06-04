@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # This import is required for patching even though it's not directly referenced
-import custom_components.span_panel  # noqa: F401 # pylint: disable=unused-import # type: ignore[unused-import
+import custom_components.span_panel  # noqa: F401 #noqa: F821 # pylint: disable=unused-import # type: ignore[unused-import
 
 
 @pytest.fixture(autouse=True)

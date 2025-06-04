@@ -58,7 +58,10 @@
           "enable_battery_percentage": "Enable Battery Percentage Sensor",
           "enable_solar_circuit": "Enable Solar Inverter Sensors",
           "leg1": "Solar Leg 1 (0 is not used)",
-          "leg2": "Solar Leg 2 (0 is not used)"
+          "leg2": "Solar Leg 2 (0 is not used)",
+          "api_retries": "API Retries (0-10)",
+          "api_retry_timeout": "API Retry Timeout (seconds)",
+          "api_retry_backoff_multiplier": "API Retry Backoff Multiplier"
         }
       },
       "entity_naming": {
