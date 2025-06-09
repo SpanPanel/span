@@ -11,6 +11,7 @@ package-mode = false
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
 httpx = "^0.28.1"
+simpleeval = "^0.9.13" # Added simpleeval
 
 [tool.poetry.group.dev.dependencies]
 homeassistant-stubs = "*"
