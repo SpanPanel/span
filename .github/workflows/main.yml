@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
