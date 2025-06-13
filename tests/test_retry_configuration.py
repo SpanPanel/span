@@ -25,7 +25,9 @@ class TestRetryConfiguration:
 
     def test_create_config_client_uses_config_settings(self):
         """Test that create_config_client uses the correct config settings."""
-        with patch("span_panel_api.SpanPanelClient") as mock_client:
+        with patch(
+            "custom_components.span_panel.config_flow.SpanPanelClient"
+        ) as mock_client:
             create_config_client("192.168.1.100", use_ssl=False)
 
             # Verify the client was created with config settings (no retries, short timeout)
