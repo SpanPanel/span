@@ -23,7 +23,7 @@ jobs:
           # Replace path dependency with PyPI version for CI
           sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = "^1.0.0"/' pyproject.toml
           # Regenerate lock file with the modified dependencies
-          poetry lock --no-update
+          poetry lock
           poetry install --with dev
 
       - name: Lint with flake8
