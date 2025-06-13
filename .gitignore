@@ -12,3 +12,9 @@ env/
 .envrc
 .env
 .deps-installed
+
+# Coverage files
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/

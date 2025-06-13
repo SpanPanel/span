@@ -161,6 +161,7 @@ class SpanPanelApi:
             self._authenticated = False
         except Exception as e:
             _LOGGER.error("[SpanPanelApi] Setup failed: %s", e)
+            self._authenticated = False
             await self.close()  # Clean up on setup failure
             raise
 

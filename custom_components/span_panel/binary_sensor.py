@@ -127,9 +127,9 @@ class SpanPanelBinarySensor(
             and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
             and "name" in device_info
         ):
-            self._attr_name = f"{device_info['name']} {base_name}"
+            self._attr_name = f"{device_info['name']} {base_name or ''}"
         else:
-            self._attr_name = base_name
+            self._attr_name = base_name or ""
 
         self._attr_unique_id = (
             f"span_{span_panel.status.serial_number}_{description.key}"

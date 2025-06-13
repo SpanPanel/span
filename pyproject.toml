@@ -12,12 +12,15 @@ package-mode = false
 python = ">=3.13.2,<3.14"
 httpx = "^0.28.1"
 simpleeval = "^0.9.13" # Added simpleeval
+span-panel-api = {path = "../span-panel-api", develop = true}
+homeassistant = "^2025.6.0"
+pytest-homeassistant-custom-component = "^0.13.251"
 
 [tool.poetry.group.dev.dependencies]
 homeassistant-stubs = "*"
 types-requests = "*"
 ruff = "^0.11.8"
-mypy = ">=1.8.0"
+mypy = ">=1.16.0"
 pyright = "^1.1.390"
 bandit = "^1.7.4"
 pre-commit = "^4.2.0"
@@ -198,3 +201,7 @@ exclude = '''
 known-first-party = ["custom_components", "span"]
 force-sort-within-sections = true
 combine-as-imports = true
+
+[tool.coverage.run]
+source = ["custom_components/span_panel"]
+omit = ["tests/*"]
