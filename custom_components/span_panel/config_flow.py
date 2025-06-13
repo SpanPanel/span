@@ -6,6 +6,8 @@ from collections.abc import Mapping
 import enum
 import logging
 from typing import Any, TYPE_CHECKING
+import uuid
+
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
@@ -18,6 +20,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 import voluptuous as vol
+
+from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+from span_panel_api import SpanPanelClient
 
 from custom_components.span_panel.span_panel_hardware_status import (
     SpanPanelHardwareStatus,
@@ -74,7 +79,6 @@ class TriggerFlowType(enum.Enum):
 
 def create_config_client(host: str, use_ssl: bool = False) -> SpanPanelClient:
     """Create a SpanPanelClient with config settings for quick feedback."""
-    from span_panel_api import SpanPanelClient
 
     return SpanPanelClient(
         host=host,
@@ -105,7 +109,6 @@ async def validate_host(
     use_ssl: bool = False,
 ) -> bool:
     """Validate the host connection."""
-    from span_panel_api import SpanPanelClient
 
     # Use context manager for short-lived validation (recommended pattern)
     # Use config settings for quick feedback - no retries and shorter timeout
@@ -138,8 +141,6 @@ async def validate_auth_token(
     hass: HomeAssistant, host: str, access_token: str, use_ssl: bool = False
 ) -> bool:
     """Perform an authenticated call to confirm validity of provided token."""
-    from span_panel_api import SpanPanelClient
-    from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 
     # Use context manager for short-lived validation (recommended pattern)
     # Use config settings for quick feedback - no retries and shorter timeout
@@ -194,9 +195,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if self._is_flow_setup is True:
             raise AssertionError("Flow is already set up")
-
-        # Use context manager for short-lived setup validation
-        from span_panel_api import SpanPanelClient
 
         # Use config settings for quick feedback - no retries and shorter timeout
         async with SpanPanelClient(
@@ -347,9 +345,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Step that guide users through the proximity authentication process."""
         self.ensure_flow_is_set_up()
 
-        # Use context manager for short-lived proximity auth operations
-        from span_panel_api import SpanPanelClient
-
         # Use config settings for quick feedback - no retries and shorter timeout
         async with SpanPanelClient(
             host=self.host or "",
@@ -383,9 +378,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # Ensure host is set
             if not self.host:
                 return self.async_abort(reason="host_not_set")
-
-            # Get access token using proximity authentication
-            import uuid
 
             client_name = f"home-assistant-{uuid.uuid4()}"
             auth_response = await client.authenticate(
