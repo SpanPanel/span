@@ -26,8 +26,8 @@ jobs:
           poetry lock
           poetry install --with dev
 
-      - name: Lint with flake8
-        run: poetry run flake8 custom_components/span_panel
+      - name: Lint with ruff
+        run: poetry run ruff check custom_components/span_panel
 
       - name: Type check with mypy
         run: poetry run mypy custom_components/span_panel

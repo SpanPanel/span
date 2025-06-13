@@ -17,6 +17,5 @@ jobs:
     secrets: inherit
 
   hacs:
-    needs: ci
     uses: ./.github/workflows/hacs.yml
 
