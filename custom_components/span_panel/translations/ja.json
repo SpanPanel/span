@@ -58,7 +58,10 @@
           "enable_battery_percentage": "バッテリーパーセントセンサーを有効にする",
           "enable_solar_circuit": "ソーラーインバーターセンサーを有効にする",
           "leg1": "ソーラーレッグ1（0は使用されません）",
-          "leg2": "ソーラーレッグ2（0は使用されません）"
+          "leg2": "ソーラーレッグ2（0は使用されません）",
+          "api_retries": "APIリトライ回数 (0-10)",
+          "api_retry_timeout": "APIリトライタイムアウト (秒)",
+          "api_retry_backoff_multiplier": "APIリトライバックオフ倍率"
         }
       },
       "entity_naming": {

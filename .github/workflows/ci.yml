@@ -1,0 +1,44 @@
+name: CI
+
+on:
+    workflow_call:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+
+      - name: Install dependencies
+        run: poetry install --with dev
+
+      - name: Lint with flake8
+        run: poetry run flake8 custom_components/span_panel
+
+      - name: Type check with mypy
+        run: poetry run mypy custom_components/span_panel
+
+      - name: Format check with black
+        run: poetry run black --check custom_components/span_panel
+
+      - name: Run tests with coverage
+        run: poetry run pytest tests/ --cov=custom_components/span_panel --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: SpanPanel/span
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false

@@ -3,6 +3,7 @@
 /.project
 .DS_Store
 .vscode/*
+.cursor/*
 !.vscode/settings.json.example
 !.vscode/tasks.json
 .git/
@@ -10,3 +11,10 @@
 env/
 .envrc
 .env
+.deps-installed
+
+# Coverage files
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/

@@ -58,7 +58,10 @@
           "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria",
           "enable_solar_circuit": "Ativar Sensores do Inversor Solar",
           "leg1": "Fase Solar 1 (0 não utilizado)",
-          "leg2": "Fase Solar 2 (0 não utilizado)"
+          "leg2": "Fase Solar 2 (0 não utilizado)",
+          "api_retries": "Tentativas de API (0-10)",
+          "api_retry_timeout": "Tempo limite de tentativa de API (segundos)",
+          "api_retry_backoff_multiplier": "Multiplicador de atraso de tentativa de API"
         }
       },
       "entity_naming": {
