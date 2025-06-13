@@ -1,0 +1,45 @@
+engines:
+  pep8:
+    enabled: true
+    config:
+      max-line-length: 999  # Disable line length restrictions - we use our own standards
+      ignore:
+        - E501  # line too long
+        - W503  # line break before binary operator (conflicts with Black)
+        - W504  # line break after binary operator (conflicts with Black)
+  pylint:
+    enabled: true
+    config:
+      max-line-length: 999
+      disable:
+        - attribute-defined-outside-init  # Common HA pattern for lazy initialization
+        - too-many-instance-attributes    # HA entities often have many attributes
+        - too-many-arguments             # HA constructors often need many params
+        - too-few-public-methods         # HA entities/helpers are often simple
+        - missing-docstring              # Not enforcing docstrings everywhere
+        - invalid-name                   # HA uses different naming conventions
+        - broad-except                   # Sometimes needed for robustness
+        - unused-argument                # HA callbacks often have unused params
+        - no-self-use                    # HA methods often don't use self but need to be methods
+
+# Disable overly strict engines that don't understand HA patterns
+  radon:
+    enabled: false  # Complexity metrics not useful for HA components
+  bandit:
+    enabled: false  # Security scanner too strict for HA development patterns
+
+# Exclude certain files/directories from analysis
+exclude_patterns:
+  - "tests/**/*"           # Don't analyze test files
+  - "scripts/**/*"         # Don't analyze utility scripts
+  - "**/__pycache__/**/*"  # Python cache files
+  - "**/.venv/**/*"        # Virtual environment
+  - "**/venv/**/*"         # Virtual environment
+  - "**/.mypy_cache/**/*"  # MyPy cache
+  - "**/.pytest_cache/**/*" # Pytest cache
+  - "**/.ruff_cache/**/*"  # Ruff cache
+  - "**/htmlcov/**/*"      # Coverage HTML reports
+  - "**/dist/**/*"         # Distribution files
+  - "**/*.pyc"            # Compiled Python files
+  - "**/.git/**/*"        # Git files
+  - "**/node_modules/**/*" # Node modules if any 

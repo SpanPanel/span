@@ -372,9 +372,9 @@ class SpanSensorBase(
             and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
             and "name" in device_info
         ):
-            self._attr_name = f"{device_info['name']} {base_name}"
+            self._attr_name = f"{device_info['name']} {base_name or ''}"
         else:
-            self._attr_name = base_name
+            self._attr_name = base_name or ""
 
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = (
@@ -404,7 +404,42 @@ class SpanSensorBase(
 
         try:
             data_source: D = self.get_data_source(self.coordinator.data)
+
+            # Debug logging specifically for circuit power sensors
+            if hasattr(self, "id") and hasattr(data_source, "instant_power"):
+                circuit_id = getattr(self, "id", "unknown")
+                instant_power = getattr(data_source, "instant_power", None)
+                description_key = getattr(self.entity_description, "key", "unknown")
+                _LOGGER.debug(
+                    "CIRCUIT_POWER_DEBUG: Circuit %s, sensor %s, instant_power=%s, data_source type=%s",
+                    circuit_id,
+                    description_key,
+                    instant_power,
+                    type(data_source).__name__,
+                )
+
+                # Extra debug for circuit 15 (the problematic one)
+                if circuit_id == "15":
+                    _LOGGER.debug(
+                        "CIRCUIT_15_POWER_DEBUG: Circuit 15 detailed - instant_power=%s, produced_energy=%s, consumed_energy=%s",
+                        instant_power,
+                        getattr(data_source, "produced_energy", None),
+                        getattr(data_source, "consumed_energy", None),
+                    )
+
             raw_value: float | int | str | None = value_function(data_source)
+
+            # Debug the function result
+            if hasattr(self, "id") and hasattr(data_source, "instant_power"):
+                circuit_id = getattr(self, "id", "unknown")
+                description_key = getattr(self.entity_description, "key", "unknown")
+                _LOGGER.debug(
+                    "CIRCUIT_POWER_RESULT: Circuit %s, sensor %s, raw_value after value_function=%s",
+                    circuit_id,
+                    description_key,
+                    raw_value,
+                )
+
             _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
 
             if raw_value is None:
@@ -412,8 +447,14 @@ class SpanSensorBase(
             elif isinstance(raw_value, float | int):
                 self._attr_native_value = float(raw_value)
             else:
-                self._attr_native_value = str(raw_value)
-        except (AttributeError, KeyError, IndexError):
+                # For string values, keep as string - this is valid for Home Assistant sensors
+                self._attr_native_value = str(raw_value)  # type: ignore[assignment]
+        except (AttributeError, KeyError, IndexError) as e:
+            _LOGGER.debug(
+                "CIRCUIT_POWER_ERROR: Error in _update_native_value for %s: %s",
+                self._attr_name,
+                e,
+            )
             self._attr_native_value = None
 
     def get_data_source(self, span_panel: SpanPanel) -> D:
@@ -552,7 +593,15 @@ class SpanPanelStorageBatteryStatus(
 ):
     """Span Panel storage battery sensor entity."""
 
-    _attr_icon: str | None = "mdi:battery"
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelStorageBatterySensorEntityDescription,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize the storage battery sensor."""
+        super().__init__(data_coordinator, description, span_panel)
+        self._attr_icon = "mdi:battery"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
         """Get the data source for the storage battery status sensor."""
@@ -601,7 +650,7 @@ class SpanPanelSyntheticSensor(
         # Create display name using friendly name if provided
         description_name = getattr(description, "name", "Unknown") or "Unknown"
         if friendly_name:
-            display_name = f"{friendly_name} {description_name}"
+            display_name: str = f"{friendly_name} {description_name}"
         else:
             # No friendly name provided - use circuit-based fallback
             display_name = construct_synthetic_friendly_name(

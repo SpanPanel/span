@@ -9,6 +9,7 @@ COORDINATOR = "coordinator"
 NAME = "name"
 
 CONF_SERIAL_NUMBER = "serial_number"
+CONF_USE_SSL = "use_ssl"
 
 URL_STATUS = "http://{}/api/v1/status"
 URL_SPACES = "http://{}/api/v1/spaces"
@@ -55,7 +56,24 @@ USE_CIRCUIT_NUMBERS = "use_circuit_numbers"
 ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
-API_TIMEOUT = 30
+# API timeout and retry configuration
+API_TIMEOUT = 30  # Default timeout for normal operations
+CONFIG_TIMEOUT = 15  # Shorter timeout for config operations to give quick feedback
+
+# Retry configuration constants
+CONF_API_RETRIES = "api_retries"
+CONF_API_RETRY_TIMEOUT = "api_retry_timeout"
+CONF_API_RETRY_BACKOFF_MULTIPLIER = "api_retry_backoff_multiplier"
+
+# Default retry settings for normal operations
+DEFAULT_API_RETRIES = 3
+DEFAULT_API_RETRY_TIMEOUT = 0.5
+DEFAULT_API_RETRY_BACKOFF_MULTIPLIER = 2.0
+
+# Config operation settings (no retries for quick feedback)
+CONFIG_API_RETRIES = 0
+CONFIG_API_RETRY_TIMEOUT = 0.5
+CONFIG_API_RETRY_BACKOFF_MULTIPLIER = 2.0
 
 
 class CircuitRelayState(enum.Enum):

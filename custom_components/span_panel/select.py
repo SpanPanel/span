@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-import httpx
+from span_panel_api.exceptions import SpanPanelServerError
 
 from .const import COORDINATOR, DOMAIN, CircuitPriority
 from .coordinator import SpanPanelCoordinator
@@ -140,9 +140,9 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                 title="Service Not Found",
                 notification_id=f"span_panel_service_not_found_{self.id}",
             )
-        except httpx.HTTPStatusError:
+        except SpanPanelServerError:
             warning_msg = (
-                f"SPAN API returned an HTTP Status Error attempting "
+                f"SPAN API returned a server error attempting "
                 f"to change the circuit priority for {self._attr_name}. "
                 f"This typically indicates panel firmware doesn't support "
                 f"this operation."

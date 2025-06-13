@@ -529,6 +529,7 @@ class EntityMigrationManager:
         # Synthetic entities have these patterns:
         # 1. Multi-circuit patterns: circuit_30_32_suffix (circuit numbers mode)
         # 2. Named patterns: solar_inverter_suffix (friendly names mode)
+        # 3. Single-circuit solar inverter patterns: circuit_30_suffix when 30 is a solar leg
 
         import re
 
@@ -539,6 +540,21 @@ class EntityMigrationManager:
                 object_id,
             )
             return True
+
+        # Check for single-circuit solar inverter entities: circuit_30_suffix
+        single_circuit_match = re.search(r"circuit_(\d+)_", object_id)
+        if single_circuit_match:
+            circuit_num = int(single_circuit_match.group(1))
+            leg1, leg2 = self._get_solar_inverter_circuits()
+
+            # Check if this circuit is one of the configured solar inverter legs
+            if circuit_num == leg1 or circuit_num == leg2:
+                _LOGGER.debug(
+                    "Detected single-circuit solar inverter entity: %s (circuit %d matches solar leg)",
+                    object_id,
+                    circuit_num,
+                )
+                return True
 
         # Pattern for named synthetic entities: solar_inverter_, battery_bank_, etc.
         synthetic_name_patterns = [
@@ -598,36 +614,64 @@ class EntityMigrationManager:
 
         if from_numbers and not to_numbers:
             # Transform from circuit numbers to friendly names
-            # Example: circuit_30_32_energy_consumed -> solar_inverter_energy_consumed
+            # Example: span_panel_circuit_30_32_energy_consumed -> span_panel_solar_inverter_energy_consumed
+
+            # Check if the object_id has a device prefix
+            has_prefix = object_id.startswith("span_panel_")
+            prefix = "span_panel_" if has_prefix else ""
 
             # Pattern for multi-circuit synthetic entities
-            pattern = r"circuit_(\d+)_(\d+)_(.+)$"
-            match = re.search(pattern, object_id)
+            multi_pattern = r"circuit_(\d+)_(\d+)_(.+)$"
+            multi_match = re.search(multi_pattern, object_id)
 
-            if match:
-                circuit1 = int(match.group(1))
-                circuit2 = int(match.group(2))
-                suffix = match.group(3)
+            if multi_match:
+                circuit1 = int(multi_match.group(1))
+                circuit2 = int(multi_match.group(2))
+                suffix = multi_match.group(3)
 
                 # Check if this matches the solar inverter configuration
                 if self._is_solar_inverter_circuits(circuit1, circuit2):
                     _LOGGER.debug(
-                        "Transforming solar inverter entity: %s -> solar_inverter_%s",
+                        "Transforming solar inverter entity: %s -> %ssolar_inverter_%s",
                         object_id,
+                        prefix,
                         suffix,
                     )
-                    return f"solar_inverter_{suffix}"
+                    return f"{prefix}solar_inverter_{suffix}"
                 else:
                     # Unknown multi-circuit entity - use generic naming
                     _LOGGER.debug(
                         "Unknown multi-circuit entity, using generic naming: %s",
                         object_id,
                     )
-                    return f"circuit_group_{circuit1}_{circuit2}_{suffix}"
+                    return f"{prefix}circuit_group_{circuit1}_{circuit2}_{suffix}"
+
+            # Check for single-circuit solar inverter patterns: circuit_30_suffix
+            single_circuit_pattern = r"circuit_(\d+)_(.+)$"
+            single_match = re.search(single_circuit_pattern, object_id)
+
+            if single_match:
+                circuit_num = int(single_match.group(1))
+                suffix = single_match.group(2)
+
+                # Check if this circuit is one of the configured solar inverter legs
+                leg1, leg2 = self._get_solar_inverter_circuits()
+                if circuit_num == leg1 or circuit_num == leg2:
+                    _LOGGER.debug(
+                        "Transforming single-circuit solar inverter entity: %s -> %ssolar_inverter_%s",
+                        object_id,
+                        prefix,
+                        suffix,
+                    )
+                    return f"{prefix}solar_inverter_{suffix}"
 
         elif not from_numbers and to_numbers:
             # Transform from friendly names to circuit numbers
-            # Example: solar_inverter_energy_consumed -> circuit_30_32_energy_consumed
+            # Example: span_panel_solar_inverter_energy_consumed -> span_panel_circuit_30_32_energy_consumed
+
+            # Check if the object_id has a device prefix
+            has_prefix = object_id.startswith("span_panel_")
+            prefix = "span_panel_" if has_prefix else ""
 
             # Check for solar inverter pattern
             solar_pattern = r"solar_inverter_(.+)$"
@@ -639,21 +683,23 @@ class EntityMigrationManager:
                 circuit1, circuit2 = self._get_solar_inverter_circuits()
                 if circuit1 and circuit2:
                     _LOGGER.debug(
-                        "Transforming solar inverter entity: %s -> circuit_%d_%d_%s",
+                        "Transforming solar inverter entity: %s -> %scircuit_%d_%d_%s",
                         object_id,
+                        prefix,
                         circuit1,
                         circuit2,
                         suffix,
                     )
-                    return f"circuit_{circuit1}_{circuit2}_{suffix}"
+                    return f"{prefix}circuit_{circuit1}_{circuit2}_{suffix}"
                 elif circuit1:
                     _LOGGER.debug(
-                        "Transforming single-leg solar inverter entity: %s -> circuit_%d_%s",
+                        "Transforming single-leg solar inverter entity: %s -> %scircuit_%d_%s",
                         object_id,
+                        prefix,
                         circuit1,
                         suffix,
                     )
-                    return f"circuit_{circuit1}_{suffix}"
+                    return f"{prefix}circuit_{circuit1}_{suffix}"
 
             # For other synthetic entities, let the integration recreate them
             _LOGGER.debug(

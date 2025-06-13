@@ -12,7 +12,14 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-import httpx
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelRetriableError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+)
 
 from .const import API_TIMEOUT
 from .span_panel import SpanPanel
@@ -56,40 +63,64 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         if self._needs_reload:
             self._needs_reload = False
             _LOGGER.info("Auto-sync triggering integration reload")
-            try:
-                if self.config_entry is None:
+
+            # Schedule reload outside of the coordinator's update cycle to avoid conflicts
+            async def schedule_reload() -> None:
+                """Schedule the reload after the current update cycle completes."""
+                try:
+                    # Wait for current operations to complete
+                    await self.hass.async_block_till_done()
+
+                    if self.config_entry is None:
+                        _LOGGER.error(
+                            "Cannot reload: config_entry is None - integration incorrectly initialized"
+                        )
+                        return
+
+                    _LOGGER.info("Auto-sync performing scheduled integration reload")
+                    await self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
+                    _LOGGER.info("Auto-sync integration reload completed")
+
+                except (ConfigEntryNotReady, HomeAssistantError) as e:
+                    _LOGGER.error("Auto-sync failed to reload integration: %s", e)
+                except Exception as e:
                     _LOGGER.error(
-                        "Cannot reload: config_entry is None - integration incorrectly initialized"
+                        "Unexpected error during auto-sync reload: %s", e, exc_info=True
                     )
-                    raise ConfigEntryNotReady(
-                        "Config entry is None - integration incorrectly initialized"
-                    )
-                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                # After successful reload, this coordinator instance is destroyed
-                # so we never reach this point - no need to return anything
-                return (
-                    self.span_panel_api
-                )  # Return current data in case reload is delayed
-            except (ConfigEntryNotReady, HomeAssistantError) as e:
-                _LOGGER.error("auto-sync failed to reload integration: %s", e)
-                # Continue with normal update if reload fails
+
+            # Schedule the reload to run outside the current update cycle
+            self.hass.async_create_task(schedule_reload())
+
+            # Return current data and continue with normal operation until reload completes
+            return self.span_panel_api
 
         try:
             _LOGGER.debug("Starting coordinator update")
             await asyncio.wait_for(self.span_panel_api.update(), timeout=API_TIMEOUT)
             return self.span_panel_api
-        except httpx.HTTPStatusError as err:
-            if err.response.status_code == httpx.codes.UNAUTHORIZED:
-                raise ConfigEntryAuthFailed from err
+        except SpanPanelAuthError as err:
             _LOGGER.error(
-                "httpx.StatusError occurred while updating Span data: %s",
-                str(err),
+                "Authentication failed while updating Span data: %s", str(err)
+            )
+            raise ConfigEntryAuthFailed from err
+        except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:
+            _LOGGER.error(
+                "Connection/timeout error while updating Span data: %s", str(err)
             )
             raise UpdateFailed(f"Error communicating with API: {err}") from err
-        except httpx.HTTPError as err:
-            _LOGGER.error(
-                "An httpx.HTTPError occurred while updating Span data: %s", str(err)
+        except SpanPanelRetriableError as err:
+            _LOGGER.warning(
+                "Retriable error occurred while updating Span data (will retry): %s",
+                str(err),
             )
+            raise UpdateFailed(f"Temporary SPAN Panel error: {err}") from err
+        except SpanPanelServerError as err:
+            _LOGGER.error("SPAN Panel server error (will not retry): %s", str(err))
+            raise UpdateFailed(f"SPAN Panel server error: {err}") from err
+        except SpanPanelAPIError as err:
+            _LOGGER.error("API error while updating Span data: %s", str(err))
             raise UpdateFailed(f"Error communicating with API: {err}") from err
         except TimeoutError as err:
             _LOGGER.error(
