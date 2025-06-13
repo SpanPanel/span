@@ -6,12 +6,16 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
   hacs:
-    needs: ci
     uses: ./.github/workflows/hacs.yml
 
