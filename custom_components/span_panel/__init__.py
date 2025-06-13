@@ -19,6 +19,9 @@ from .entity_summary import log_entity_summary
 from .options import Options
 from .span_panel import SpanPanel
 
+# Import config flow to ensure it's registered
+from . import config_flow  # noqa: F401
+
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.SELECT,
@@ -153,7 +156,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         _LOGGER.error("Failed to unload some platforms")
 
-    return unload_ok
+    return bool(unload_ok)
 
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

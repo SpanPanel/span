@@ -167,10 +167,11 @@ async def validate_auth_token(
             return False
 
 
-class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
     VERSION = 1
+    domain = DOMAIN
 
     def is_matching(self, other_flow: SpanPanelConfigFlow) -> bool:
         """Return True if other_flow is a matching Span Panel."""
@@ -843,3 +844,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             "Using deprecated _generate_new_entity_id method for %s", old_entity_id
         )
         return None
+
+
+# Register the config flow handler
+config_entries.HANDLERS.register(DOMAIN)(SpanPanelConfigFlow)

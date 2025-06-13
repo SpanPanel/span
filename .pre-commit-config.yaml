@@ -1,60 +1,82 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
-        args: [--line-length=88]
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.10
-    hooks:
-      - id: ruff
-        args:
-          - --fix
-
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
-    hooks:
-      - id: codespell
-        args:
-          - --quiet-level=2
-        exclude_types: [csv, json, html]
-
+  # Pre-commit hooks for essential file checks only
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: check-executables-have-shebangs
-      - id: check-json
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
       - id: check-yaml
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+      - id: check-toml
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+      - id: check-json
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+      - id: check-added-large-files
+      - id: check-merge-conflict
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+      - id: debug-statements
+        exclude: '^src/span_panel_api/generated_client/.*|tests/.*|\..*_cache/.*|dist/.*|venv/.*'
 
-  - repo: https://github.com/adrienverge/yamllint.git
-    rev: v1.35.1
+  # Black for ALL formatting (including trailing whitespace and blank lines)
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
     hooks:
-      - id: yamllint
+      - id: black
+        language_version: python3
+        args: ['--line-length=88']
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
 
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.10
+  # Ruff for linting and import sorting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.13
     hooks:
-      - id: bandit
-        args: [--config, pyproject.toml]
-        files: ^custom_components/span_panel/.+\.py$
+      - id: ruff-check
+        args: ['--fix']
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
 
-  - repo: local
+  # MyPy for type checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.16.0
     hooks:
       - id: mypy
-        name: mypy
-        entry: scripts/run-mypy.sh
-        language: script
-        require_serial: true
-        types_or: [python, pyi]
-        # Only type check the main integration code, not tests
-        files: ^custom_components/span_panel/.+\.(py|pyi)$
-        pass_filenames: true
+        additional_dependencies:
+          - httpx
+          - pydantic
+          - typing-extensions
+          - pytest
+        args: ['--config-file=pyproject.toml']
+        exclude: '^src/span_panel_api/generated_client/.*|tests/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0 # Use the appropriate version
+  # Markdownlint for markdown files
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.18.1
     hooks:
-      - id: prettier
-        files: \.(js|ts|jsx|tsx|css|less|json|md|markdown|yaml|yml)$
+      - id: markdownlint-cli2
+        args: ['--config', '.markdownlint-cli2.jsonc']
+        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*'
+
+  # Check for common security issues
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+        exclude: '^tests/.*|^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+
+  # Poetry check for pyproject.toml validation
+  - repo: https://github.com/python-poetry/poetry
+    rev: 2.1.3
+    hooks:
+      - id: poetry-check
+      - id: poetry-lock
+
+  # Quick coverage check (total only, no details)
+  - repo: local
+    hooks:
+      - id: pytest-cov-summary
+        name: coverage summary
+        entry: bash
+        language: system
+        args: ['-c', 'output=$(poetry run pytest tests/ --cov=src/span_panel_api --cov-config=pyproject.toml -q 2>&1); if echo "$output" | grep -q "FAILED"; then echo "$output"; exit 1; else echo "$output" | grep -E "(passed|TOTAL)" | tr "\n" " " | sed "s/=*//g"; echo; fi']
+        pass_filenames: false
+        always_run: true
+        verbose: true

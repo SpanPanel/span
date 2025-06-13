@@ -1,27 +1,17 @@
 name: Main
 
 on:
-  pull_request:
-    branches:
-      - main
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  packages: read
-  statuses: write
-  checks: write
-  actions: read
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  lint:
-    name: Lint Code Base
-    uses: ./.github/workflows/lint.yml
+  ci:
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
 
   hacs:
-    name: HACS Action
-    needs: lint
+    needs: ci
     uses: ./.github/workflows/hacs.yml
+
