@@ -7,7 +7,7 @@ electrical panel that provides circuit-level monitoring and control of your home
 [![GitHub Release](https://img.shields.io/github/release/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/commits)
 [![License](https://img.shields.io/github/license/SpanPanel/span.svg?style=flat-square)](LICENSE)
-[![Coverage](https://codecov.io/gh/SpanPanel/span/branch/main/graph/badge.svg)](https://codecov.io/gh/SpanPanel/span)
+[![Coverage](https://codecov.io/gh/SpanPanel/span/graph/badge.svg)](https://codecov.io/gh/SpanPanel/span)
 
 [![Python](https://img.shields.io/badge/python-3.13.2-blue.svg)](https://www.python.org/downloads/release/python-3132/)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
