@@ -107,9 +107,7 @@ async def test_config_entry_migration_from_legacy(
 
 
 @pytest.mark.asyncio
-async def test_invalid_configuration_options(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_invalid_configuration_options(hass: Any, enable_custom_integrations: Any):
     """Test handling of invalid configuration options."""
 
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()

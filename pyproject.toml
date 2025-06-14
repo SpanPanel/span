@@ -34,6 +34,7 @@ pytest = "^8.3.5"
 pytest-homeassistant-custom-component = "^0.13.0"
 homeassistant = "*"
 isort = "^6.0.1"
+radon = "^6.0.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -119,7 +120,7 @@ reportMissingImports = "warning"
 reportMissingTypeStubs = false
 
 [tool.ruff]
-line-length = 88
+line-length = 92
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -165,7 +166,7 @@ ignore = [
 
 # Bandit configuration
 [tool.bandit]
-exclude_dirs = ["tests"]
+exclude_dirs = ["tests", "scripts"]
 skips = ["B101", "B108"]  # Skip assert_used and hardcoded_tmp_directory for test files
 
 [tool.ruff.lint.flake8-pytest-style]
@@ -177,9 +178,19 @@ keep-runtime-typing = true
 [tool.ruff.lint.mccabe]
 max-complexity = 25
 
+[tool.ruff.format]
+# Ruff is the primary formatter
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
 [tool.black]
-line-length = 88
+# Black ONLY handles trailing whitespace and empty line whitespace cleanup
+line-length = 999  # Effectively disable line length restrictions
 target-version = ['py313']
+skip-string-normalization = true
+skip-magic-trailing-comma = true
 exclude = '''
 /(
   # directories

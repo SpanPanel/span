@@ -25,6 +25,11 @@ jobs:
           # Regenerate lock file with the modified dependencies
           poetry lock
           poetry install --with dev
+          # Install bandit with TOML support
+          poetry run pip install 'bandit[toml]'
+
+      - name: Format check with ruff
+        run: poetry run ruff format --check custom_components/span_panel
 
       - name: Lint with ruff
         run: poetry run ruff check custom_components/span_panel
@@ -32,8 +37,14 @@ jobs:
       - name: Type check with mypy
         run: poetry run mypy custom_components/span_panel
 
-      - name: Format check with black
-        run: poetry run black --check custom_components/span_panel
+      - name: Security check with bandit
+        run: poetry run bandit -c pyproject.toml -r custom_components/span_panel
+
+      - name: Check poetry configuration
+        run: poetry check
+
+      - name: Run pre-commit hooks (for extra validation)
+        run: poetry run pre-commit run --all-files --show-diff-on-failure
 
       - name: Run tests with coverage
         run: poetry run pytest tests/ --cov=custom_components/span_panel --cov-report=xml --cov-report=term-missing
@@ -41,7 +52,6 @@ jobs:
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
           slug: SpanPanel/span
           files: ./coverage.xml
           flags: unittests

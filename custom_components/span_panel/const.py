@@ -96,7 +96,9 @@ class CircuitPriority(enum.Enum):
 class EntityNamingPattern(enum.Enum):
     """Entity naming pattern options for user selection."""
 
-    FRIENDLY_NAMES = "friendly_names"  # Device + Friendly Name (e.g., span_panel_kitchen_outlets_power)
+    FRIENDLY_NAMES = (
+        "friendly_names"  # Device + Friendly Name (e.g., span_panel_kitchen_outlets_power)
+    )
     CIRCUIT_NUMBERS = (
         "circuit_numbers"  # Device + Circuit Numbers (e.g., span_panel_circuit_1_power)
     )

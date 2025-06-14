@@ -343,9 +343,7 @@ T = TypeVar("T", bound=SensorEntityDescription)
 D = TypeVar("D")  # For the type returned by get_data_source
 
 
-class SpanSensorBase(
-    CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D]
-):
+class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D]):
     """Base class for Span Panel Sensors."""
 
     def __init__(
@@ -520,9 +518,7 @@ class SpanPanelCircuitSensor(
 
         # Ensure the native_unit_of_measurement is set correctly from the description
         if description.native_unit_of_measurement:
-            self._attr_native_unit_of_measurement = (
-                description.native_unit_of_measurement
-            )
+            self._attr_native_unit_of_measurement = description.native_unit_of_measurement
 
         # Store initial circuit name for change detection in auto-sync names
         self._previous_circuit_name = name
@@ -556,9 +552,7 @@ class SpanPanelCircuitSensor(
         return span_panel.circuits[self.id]
 
 
-class SpanPanelPanel(
-    SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
-):
+class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
     """Span Panel data sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
@@ -587,9 +581,7 @@ class SpanPanelStatus(
 
 
 class SpanPanelStorageBatteryStatus(
-    SpanSensorBase[
-        SpanPanelStorageBatterySensorEntityDescription, SpanPanelStorageBattery
-    ]
+    SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription, SpanPanelStorageBattery]
 ):
     """Span Panel storage battery sensor entity."""
 
@@ -691,9 +683,7 @@ class SpanPanelSyntheticSensor(
 
         # Ensure the native_unit_of_measurement is set correctly from the description
         if description.native_unit_of_measurement:
-            self._attr_native_unit_of_measurement = (
-                description.native_unit_of_measurement
-            )
+            self._attr_native_unit_of_measurement = description.native_unit_of_measurement
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         """Get the data source for the synthetic sensor."""

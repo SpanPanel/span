@@ -15,7 +15,6 @@ from homeassistant.core import HomeAssistant
 
 from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME, CONF_USE_SSL
 from .coordinator import SpanPanelCoordinator
-from .entity_summary import log_entity_summary
 from .options import Options
 from .span_panel import SpanPanel
 
@@ -74,9 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug("Successfully set up and tested SPAN Panel API client")
 
         # Get scan interval from options with a default
-        scan_interval = entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
-        )
+        scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds)
         _LOGGER.debug("Using scan interval: %s seconds", scan_interval)
 
         coordinator = SpanPanelCoordinator(
@@ -105,7 +102,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Debug logging of entity summary
         _LOGGER.debug("Logging entity summary")
-        log_entity_summary(coordinator, entry)
 
         _LOGGER.info("Successfully set up SPAN Panel integration")
         return True
@@ -139,9 +135,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     _LOGGER.debug("Successfully closed SpanPanel API client")
             except TypeError as e:
                 # Handle non-awaitable objects gracefully (e.g., in tests)
-                _LOGGER.debug(
-                    "API close method is not awaitable, skipping cleanup: %s", e
-                )
+                _LOGGER.debug("API close method is not awaitable, skipping cleanup: %s", e)
             except Exception as e:
                 _LOGGER.error("Error during API cleanup: %s", e)
     else:

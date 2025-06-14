@@ -229,9 +229,9 @@ async def test_non_controllable_circuit_no_switch(
             "1", "Main Panel Feed", "switch", "breaker", use_device_prefix=True
         )
         switch_state = hass.states.get(switch_entity_id)
-        assert (
-            switch_state is None
-        ), f"Switch {switch_entity_id} should not exist for non-controllable circuit"
+        assert switch_state is None, (
+            f"Switch {switch_entity_id} should not exist for non-controllable circuit"
+        )
 
 
 @pytest.mark.asyncio
@@ -266,9 +266,7 @@ async def test_panel_level_sensors(hass: Any, enable_custom_integrations: Any):
         await trigger_coordinator_update(coordinator)
 
         # Check grid power sensor (entity name is "Current Power")
-        grid_power_entity_id = get_panel_entity_id(
-            "current_power", use_device_prefix=True
-        )
+        grid_power_entity_id = get_panel_entity_id("current_power", use_device_prefix=True)
         assert_entity_state(hass, grid_power_entity_id, "1850.5")
 
         # Check DSM state sensor
@@ -277,9 +275,7 @@ async def test_panel_level_sensors(hass: Any, enable_custom_integrations: Any):
 
 
 @pytest.mark.asyncio
-async def test_producing_circuit_power_values(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_producing_circuit_power_values(hass: Any, enable_custom_integrations: Any):
     """Test that producing circuits (like solar) show correct power values."""
 
     # Create solar circuit with negative power (producing)

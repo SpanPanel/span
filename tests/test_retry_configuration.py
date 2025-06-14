@@ -62,9 +62,7 @@ class TestRetryConfiguration:
         # Verify default values are used
         assert options.api_retries == DEFAULT_API_RETRIES
         assert options.api_retry_timeout == DEFAULT_API_RETRY_TIMEOUT
-        assert (
-            options.api_retry_backoff_multiplier == DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
-        )
+        assert options.api_retry_backoff_multiplier == DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
 
     def test_options_with_custom_retry_settings(self):
         """Test that Options class respects custom retry settings."""

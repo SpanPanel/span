@@ -326,12 +326,8 @@ class SpanPanelApiResponseFactory:
                 branch_index = circuit_id - 1  # Convert to 0-based index
                 branches[branch_index] = {
                     "instantPowerW": circuit.get(CIRCUITS_POWER, 0.0),
-                    "importedActiveEnergyWh": circuit.get(
-                        CIRCUITS_ENERGY_PRODUCED, 0.0
-                    ),
-                    "exportedActiveEnergyWh": circuit.get(
-                        CIRCUITS_ENERGY_CONSUMED, 0.0
-                    ),
+                    "importedActiveEnergyWh": circuit.get(CIRCUITS_ENERGY_PRODUCED, 0.0),
+                    "exportedActiveEnergyWh": circuit.get(CIRCUITS_ENERGY_CONSUMED, 0.0),
                 }
 
         # Add branches to panel data
