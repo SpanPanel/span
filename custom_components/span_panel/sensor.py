@@ -121,9 +121,7 @@ class SpanPanelDataRequiredKeysMixin:
 
 
 @dataclass(frozen=True)
-class SpanPanelDataSensorEntityDescription(
-    SensorEntityDescription, SpanPanelDataRequiredKeysMixin
-):
+class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDataRequiredKeysMixin):
     """Describes a Span Panel data sensor entity."""
 
 
@@ -375,9 +373,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._attr_name = base_name or ""
 
         if span_panel.status.serial_number and description.key:
-            self._attr_unique_id = (
-                f"span_{span_panel.status.serial_number}_{description.key}"
-            )
+            self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
 
         self._attr_icon = "mdi:flash"
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
@@ -560,9 +556,7 @@ class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPa
         return span_panel.panel
 
 
-class SpanPanelPanelStatus(
-    SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
-):
+class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
     """Span Panel status sensor entity."""
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
@@ -600,9 +594,7 @@ class SpanPanelStorageBatteryStatus(
         return span_panel.storage_battery
 
 
-class SpanPanelSyntheticSensor(
-    SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
-):
+class SpanPanelSyntheticSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
     """Generic span panel synthetic sensor entity for multi-circuit entities."""
 
     def __init__(
@@ -679,7 +671,9 @@ class SpanPanelSyntheticSensor(
 
         # Create unique ID based on circuit numbers
         circuit_spec = "_".join(str(num) for num in circuit_numbers)
-        self._attr_unique_id = f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}_{description.key}"
+        self._attr_unique_id = (
+            f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}_{description.key}"
+        )
 
         # Ensure the native_unit_of_measurement is set correctly from the description
         if description.native_unit_of_measurement:
@@ -779,8 +773,6 @@ async def async_setup_entry(
     )
     if config_entry is not None and config_entry.options.get(BATTERY_ENABLE, False):
         for description_sb in STORAGE_BATTERY_SENSORS:
-            entities.append(
-                SpanPanelStorageBatteryStatus(coordinator, description_sb, span_panel)
-            )
+            entities.append(SpanPanelStorageBatteryStatus(coordinator, description_sb, span_panel))
 
     async_add_entities(entities)

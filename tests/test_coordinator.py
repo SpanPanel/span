@@ -252,9 +252,7 @@ async def test_reload_task_config_entry_not_ready():
     """Test the reload task when config entry is not ready."""
     hass = MagicMock()
     hass.async_block_till_done = AsyncMock()
-    hass.config_entries.async_reload = AsyncMock(
-        side_effect=ConfigEntryNotReady("Not ready")
-    )
+    hass.config_entries.async_reload = AsyncMock(side_effect=ConfigEntryNotReady("Not ready"))
 
     span_panel = MagicMock()
     config_entry = MagicMock()

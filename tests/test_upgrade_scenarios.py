@@ -80,9 +80,7 @@ class TestUpgradeScenarios:
                 current_pattern = flow._get_current_naming_pattern()
                 assert current_pattern == EntityNamingPattern.LEGACY_NAMES.value
 
-    def test_post_104_friendly_names_preserved_on_upgrade(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_post_104_friendly_names_preserved_on_upgrade(self, mock_hass, mock_config_entry):
         """Test that post-1.0.4 friendly names installations are preserved during upgrades."""
         # Post-1.0.4 with friendly names: device prefix enabled, circuit numbers disabled
         mock_config_entry.options = {
@@ -104,9 +102,7 @@ class TestUpgradeScenarios:
                 current_pattern = flow._get_current_naming_pattern()
                 assert current_pattern == EntityNamingPattern.FRIENDLY_NAMES.value
 
-    def test_modern_circuit_numbers_preserved_on_upgrade(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_modern_circuit_numbers_preserved_on_upgrade(self, mock_hass, mock_config_entry):
         """Test that modern circuit numbers installations are preserved during upgrades."""
         # Modern installation: both device prefix and circuit numbers enabled
         mock_config_entry.options = {
@@ -198,9 +194,7 @@ class TestUpgradeScenarios:
 class TestEntityIdConstructionUpgradeScenarios:
     """Test entity ID construction preserves existing patterns during upgrades."""
 
-    def test_legacy_entity_id_construction_preserved(
-        self, mock_coordinator, mock_span_panel
-    ):
+    def test_legacy_entity_id_construction_preserved(self, mock_coordinator, mock_span_panel):
         """Test that legacy entity ID construction is preserved."""
         # Legacy installation
         mock_config_entry = MagicMock()
@@ -211,9 +205,7 @@ class TestEntityIdConstructionUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_entity_id(
@@ -241,9 +233,7 @@ class TestEntityIdConstructionUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_entity_id(
@@ -271,9 +261,7 @@ class TestEntityIdConstructionUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_entity_id(
@@ -288,9 +276,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             # Modern format: device prefix + circuit number
             assert entity_id == "sensor.span_panel_circuit_15_power"
 
-    def test_missing_options_use_new_installation_defaults(
-        self, mock_coordinator, mock_span_panel
-    ):
+    def test_missing_options_use_new_installation_defaults(self, mock_coordinator, mock_span_panel):
         """Test that new installations with explicit options use modern defaults."""
         # New installation: explicit modern defaults (as set by create_new_entry)
         mock_config_entry = MagicMock()
@@ -301,9 +287,7 @@ class TestEntityIdConstructionUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_entity_id(
@@ -335,9 +319,7 @@ class TestSyntheticEntityUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_synthetic_entity_id(
@@ -365,9 +347,7 @@ class TestSyntheticEntityUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_synthetic_entity_id(
@@ -395,9 +375,7 @@ class TestSyntheticEntityUpgradeScenarios:
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
-        with patch(
-            "custom_components.span_panel.helpers.panel_to_device_info"
-        ) as mock_device_info:
+        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
             entity_id = construct_synthetic_entity_id(
@@ -416,9 +394,7 @@ class TestSyntheticEntityUpgradeScenarios:
 class TestGeneralOptionsPreservesNamingFlags:
     """Test that general options flow preserves naming flags."""
 
-    async def test_general_options_preserves_legacy_flags(
-        self, mock_hass, mock_config_entry
-    ):
+    async def test_general_options_preserves_legacy_flags(self, mock_hass, mock_config_entry):
         """Test that general options flow preserves legacy naming flags."""
         # Legacy installation flags
         mock_config_entry.options = {
@@ -457,9 +433,7 @@ class TestGeneralOptionsPreservesNamingFlags:
                 assert result_data.get(USE_DEVICE_PREFIX) is False  # Preserved
                 assert result_data.get(USE_CIRCUIT_NUMBERS) is False  # Preserved
 
-    async def test_general_options_preserves_modern_flags(
-        self, mock_hass, mock_config_entry
-    ):
+    async def test_general_options_preserves_modern_flags(self, mock_hass, mock_config_entry):
         """Test that general options flow preserves modern naming flags."""
         # Modern installation flags
         mock_config_entry.options = {

@@ -116,9 +116,7 @@ def test_status_factory_integration_with_hardware_status():
 def test_door_state_tamper_sensor_logic():
     """Test that door state works correctly as a tamper sensor."""
     # Test door CLOSED (tamper sensor should be OFF/clear)
-    status_closed = SpanPanelStatusFactory.create_status(
-        door_state=SYSTEM_DOOR_STATE_CLOSED
-    )
+    status_closed = SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_CLOSED)
     hardware_status_closed = SpanPanelHardwareStatus.from_dict(status_closed)
 
     assert hardware_status_closed.door_state == SYSTEM_DOOR_STATE_CLOSED
@@ -164,9 +162,7 @@ def test_door_state_binary_sensor_availability():
     # Test the actual value_fn logic used by the binary sensor
 
     # Test with door closed - should return False (tamper clear)
-    status_closed = SpanPanelStatusFactory.create_status(
-        door_state=SYSTEM_DOOR_STATE_CLOSED
-    )
+    status_closed = SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_CLOSED)
     hardware_closed = SpanPanelHardwareStatus.from_dict(status_closed)
     sensor_value_closed = door_sensor.value_fn(hardware_closed)
     assert sensor_value_closed is False  # Tamper clear

@@ -98,9 +98,7 @@ async def test_coordinator_update_cycle(hass: Any, enable_custom_integrations: A
 
 
 @pytest.mark.asyncio
-async def test_circuit_sensor_creation_and_values(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_circuit_sensor_creation_and_values(hass: Any, enable_custom_integrations: Any):
     """Test that circuit sensors are created with correct values."""
 
     # Create test circuit with known values
@@ -148,9 +146,7 @@ async def test_circuit_sensor_creation_and_values(
 
 
 @pytest.mark.asyncio
-async def test_circuit_switch_creation_and_control(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_circuit_switch_creation_and_control(hass: Any, enable_custom_integrations: Any):
     """Test that circuit switches are created and can be controlled."""
 
     # Create controllable circuit
@@ -196,9 +192,7 @@ async def test_circuit_switch_creation_and_control(
 
 
 @pytest.mark.asyncio
-async def test_non_controllable_circuit_no_switch(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_non_controllable_circuit_no_switch(hass: Any, enable_custom_integrations: Any):
     """Test that non-controllable circuits don't create switch entities."""
 
     # Create non-controllable circuit

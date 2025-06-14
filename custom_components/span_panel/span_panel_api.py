@@ -363,14 +363,10 @@ class SpanPanelApi:
             return SpanPanelStorageBattery.from_dict(storage_battery_data)
 
         except SpanPanelRetriableError as e:
-            _LOGGER.warning(
-                "Retriable error getting storage battery data (will retry): %s", e
-            )
+            _LOGGER.warning("Retriable error getting storage battery data (will retry): %s", e)
             raise
         except SpanPanelServerError as e:
-            _LOGGER.error(
-                "Server error getting storage battery data (will not retry): %s", e
-            )
+            _LOGGER.error("Server error getting storage battery data (will not retry): %s", e)
             raise
         except SpanPanelAuthError as e:
             # Reset auth flag and let coordinator handle retry
@@ -414,9 +410,7 @@ class SpanPanelApi:
             _LOGGER.error("Failed to set relay state: %s", e)
             raise
 
-    async def set_priority(
-        self, circuit: SpanPanelCircuit, priority: CircuitPriority
-    ) -> None:
+    async def set_priority(self, circuit: SpanPanelCircuit, priority: CircuitPriority) -> None:
         """Set the priority."""
         self._ensure_client_open()
         if self._client is None:

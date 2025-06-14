@@ -84,9 +84,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                 except (ConfigEntryNotReady, HomeAssistantError) as e:
                     _LOGGER.error("Auto-sync failed to reload integration: %s", e)
                 except Exception as e:
-                    _LOGGER.error(
-                        "Unexpected error during auto-sync reload: %s", e, exc_info=True
-                    )
+                    _LOGGER.error("Unexpected error during auto-sync reload: %s", e, exc_info=True)
 
             # Schedule the reload to run outside the current update cycle
             self.hass.async_create_task(schedule_reload())

@@ -25,9 +25,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEntity):
     """Represent a switch entity."""
 
-    def __init__(
-        self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str
-    ) -> None:
+    def __init__(self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str) -> None:
         """Initialize the values."""
         _LOGGER.debug("CREATE SWITCH %s", name)
         span_panel: SpanPanel = coordinator.data
@@ -162,8 +160,6 @@ async def async_setup_entry(
 
     for circuit_id, circuit_data in span_panel.circuits.items():
         if circuit_data.is_user_controllable:
-            entities.append(
-                SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name)
-            )
+            entities.append(SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name))
 
     async_add_entities(entities)

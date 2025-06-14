@@ -26,9 +26,7 @@ def expected_lingering_timers():
 
 
 @pytest.mark.asyncio
-async def test_legacy_naming_scheme_compatibility(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_legacy_naming_scheme_compatibility(hass: Any, enable_custom_integrations: Any):
     """Test backward compatibility with legacy naming scheme (pre-1.0.4)."""
 
     circuit_data = SpanPanelCircuitFactory.create_circuit(
@@ -70,9 +68,7 @@ async def test_legacy_naming_scheme_compatibility(
 
 
 @pytest.mark.asyncio
-async def test_config_entry_migration_from_legacy(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_config_entry_migration_from_legacy(hass: Any, enable_custom_integrations: Any):
     """Test migration of config entry from legacy format to new format."""
 
     circuit_data = SpanPanelCircuitFactory.create_circuit(

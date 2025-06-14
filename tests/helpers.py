@@ -79,9 +79,7 @@ def patch_span_panel_dependencies(
     mock_api.get_status_data = AsyncMock(return_value=mock_api_responses["status"])
     mock_api.get_panel_data = AsyncMock(return_value=mock_api_responses["panel"])
     mock_api.get_circuits_data = AsyncMock(return_value=mock_api_responses["circuits"])
-    mock_api.get_storage_battery_data = AsyncMock(
-        return_value=mock_api_responses["battery"]
-    )
+    mock_api.get_storage_battery_data = AsyncMock(return_value=mock_api_responses["battery"])
     mock_api.set_relay = AsyncMock()
 
     # Create mock objects that properly expose the data as attributes
