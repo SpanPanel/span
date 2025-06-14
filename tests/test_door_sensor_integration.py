@@ -27,9 +27,7 @@ async def test_door_state_tamper_sensor_closed(hass: Any, enable_custom_integrat
     """Test that door state tamper sensor reports clear when door is closed."""
     # Create mock responses with door closed
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
-        status_data=SpanPanelStatusFactory.create_status(
-            door_state=SYSTEM_DOOR_STATE_CLOSED
-        )
+        status_data=SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_CLOSED)
     )
 
     entry, _ = setup_span_panel_entry(hass, mock_responses)

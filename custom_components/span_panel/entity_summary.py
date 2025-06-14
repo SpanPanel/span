@@ -20,9 +20,7 @@ from .sensor import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def log_entity_summary(
-    coordinator: SpanPanelCoordinator, config_entry: ConfigEntry
-) -> None:
+def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEntry) -> None:
     """Log a comprehensive summary of entities that will be created.
 
     Uses debug level for detailed info, info level for basic summary.
@@ -68,11 +66,7 @@ def log_entity_summary(
     battery_sensors = len(STORAGE_BATTERY_SENSORS) if battery_enabled else 0
 
     total_sensors = (
-        circuit_sensors
-        + synthetic_sensors
-        + panel_sensor_count
-        + status_sensors
-        + battery_sensors
+        circuit_sensors + synthetic_sensors + panel_sensor_count + status_sensors + battery_sensors
     )
     total_switches = controllable_circuits  # Only controllable circuits get switches
     total_selects = controllable_circuits  # Only controllable circuits get selects

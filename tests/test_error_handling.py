@@ -24,9 +24,7 @@ def expected_lingering_timers():
 
 
 @pytest.mark.asyncio
-async def test_api_connection_timeout_during_setup(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_api_connection_timeout_during_setup(hass: Any, enable_custom_integrations: Any):
     """Test that setup fails gracefully when API connection times out."""
     entry, _ = setup_span_panel_entry(hass)
 
@@ -43,9 +41,7 @@ async def test_api_connection_timeout_during_setup(
 
 
 @pytest.mark.asyncio
-async def test_api_connection_refused_during_setup(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_api_connection_refused_during_setup(hass: Any, enable_custom_integrations: Any):
     """Test that setup fails gracefully when API connection is refused."""
     entry, _ = setup_span_panel_entry(hass)
 

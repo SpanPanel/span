@@ -83,9 +83,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
 
         self.entity_description = description.entity_description
-        self.description_wrapper = (
-            description  # Keep reference to wrapper for custom functions
-        )
+        self.description_wrapper = description  # Keep reference to wrapper for custom functions
         self.id = circuit_id
 
         self._attr_unique_id = f"span_{span_panel.status.serial_number}_select_{self.id}"
@@ -104,9 +102,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)
 
-        _LOGGER.debug(
-            "CREATE SELECT %s with options: %s", self._attr_name, self._attr_options
-        )
+        _LOGGER.debug("CREATE SELECT %s with options: %s", self._attr_name, self._attr_options)
 
         # Store initial circuit name for change detection in auto-sync of names
         self._previous_circuit_name = name

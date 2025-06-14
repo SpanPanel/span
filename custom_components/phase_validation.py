@@ -97,9 +97,7 @@ def get_tab_phase(tab_number: int, valid_tabs: list[int] | None = None) -> str:
     return "L1" if position_in_side % 2 == 0 else "L2"
 
 
-def are_tabs_opposite_phase(
-    tab1: int, tab2: int, valid_tabs: list[int] | None = None
-) -> bool:
+def are_tabs_opposite_phase(tab1: int, tab2: int, valid_tabs: list[int] | None = None) -> bool:
     """Check if two tabs are on opposite phases (suitable for 240V).
 
     Args:
@@ -154,17 +152,13 @@ def validate_solar_tabs(
                 f"For proper 240V measurement, tabs must be on opposite phases."
             )
 
-        return True, (
-            f"✓ Valid 240V configuration: tab {tab1} ({phase1}) + tab {tab2} ({phase2})"
-        )
+        return True, (f"✓ Valid 240V configuration: tab {tab1} ({phase1}) + tab {tab2} ({phase2})")
 
     except ValueError as e:
         return False, f"Invalid tab configuration: {e}"
 
 
-def get_phase_distribution(
-    tabs: list[int], valid_tabs: list[int] | None = None
-) -> dict:
+def get_phase_distribution(tabs: list[int], valid_tabs: list[int] | None = None) -> dict:
     """Analyze phase distribution across a list of tabs.
 
     Args:

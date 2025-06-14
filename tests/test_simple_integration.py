@@ -28,9 +28,7 @@ async def test_config_flow_exists(hass: HomeAssistant):
 
     # Try to create a flow to test if the handler is registered
     try:
-        handler = await flow_manager.async_create_flow(
-            "span_panel", context={"source": "user"}
-        )
+        handler = await flow_manager.async_create_flow("span_panel", context={"source": "user"})
         assert handler is not None
         print(f"Config flow created successfully: {handler}")
         # Don't try to abort - just let it clean up naturally
