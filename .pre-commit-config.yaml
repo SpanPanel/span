@@ -42,6 +42,7 @@ repos:
           - pydantic
           - typing-extensions
           - pytest
+          - homeassistant-stubs
         args: ['--config-file=pyproject.toml']
         exclude: '^tests/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
 
