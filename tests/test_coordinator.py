@@ -156,9 +156,7 @@ async def test_async_update_data_connection_error():
     """Test handling of SpanPanelConnectionError."""
     hass = MagicMock()
     span_panel = MagicMock()
-    span_panel.update = AsyncMock(
-        side_effect=SpanPanelConnectionError("Connection failed")
-    )
+    span_panel.update = AsyncMock(side_effect=SpanPanelConnectionError("Connection failed"))
     config_entry = MagicMock()
     coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
 
@@ -287,9 +285,7 @@ async def test_reload_task_home_assistant_error():
     """Test the reload task when HomeAssistant error occurs."""
     hass = MagicMock()
     hass.async_block_till_done = AsyncMock()
-    hass.config_entries.async_reload = AsyncMock(
-        side_effect=HomeAssistantError("HA error")
-    )
+    hass.config_entries.async_reload = AsyncMock(side_effect=HomeAssistantError("HA error"))
 
     span_panel = MagicMock()
     config_entry = MagicMock()
@@ -320,9 +316,7 @@ async def test_reload_task_unexpected_error():
     """Test the reload task when unexpected error occurs."""
     hass = MagicMock()
     hass.async_block_till_done = AsyncMock()
-    hass.config_entries.async_reload = AsyncMock(
-        side_effect=Exception("Unexpected error")
-    )
+    hass.config_entries.async_reload = AsyncMock(side_effect=Exception("Unexpected error"))
 
     span_panel = MagicMock()
     config_entry = MagicMock()

@@ -127,8 +127,7 @@ class TestEntityNamingOptions:
                 in description_placeholders["friendly_example"]
             )
             assert (
-                "span_panel_circuit_15_power"
-                in description_placeholders["circuit_example"]
+                "span_panel_circuit_15_power" in description_placeholders["circuit_example"]
             )
 
     async def test_current_pattern_detection_circuit_numbers(
@@ -256,9 +255,7 @@ class TestEntityNamingOptions:
             flow.hass = mock_hass
 
             # Change from circuit numbers to friendly names
-            user_input = {
-                ENTITY_NAMING_PATTERN: EntityNamingPattern.FRIENDLY_NAMES.value
-            }
+            user_input = {ENTITY_NAMING_PATTERN: EntityNamingPattern.FRIENDLY_NAMES.value}
 
             result = await flow.async_step_entity_naming(user_input)
 
@@ -298,9 +295,7 @@ class TestEntityNamingOptions:
             flow.hass = mock_hass
 
             # Submit same pattern (circuit numbers)
-            user_input = {
-                ENTITY_NAMING_PATTERN: EntityNamingPattern.CIRCUIT_NUMBERS.value
-            }
+            user_input = {ENTITY_NAMING_PATTERN: EntityNamingPattern.CIRCUIT_NUMBERS.value}
 
             with patch(
                 "custom_components.span_panel.config_flow.EntityMigrationManager"
@@ -340,9 +335,7 @@ class TestEntityNamingOptions:
             flow.hass = mock_hass
 
             # Migrate to friendly names
-            user_input = {
-                ENTITY_NAMING_PATTERN: EntityNamingPattern.FRIENDLY_NAMES.value
-            }
+            user_input = {ENTITY_NAMING_PATTERN: EntityNamingPattern.FRIENDLY_NAMES.value}
 
             result = await flow.async_step_entity_naming(user_input)
 
@@ -382,9 +375,7 @@ class TestEntityNamingOptions:
             flow.hass = mock_hass
 
             # Migrate to circuit numbers
-            user_input = {
-                ENTITY_NAMING_PATTERN: EntityNamingPattern.CIRCUIT_NUMBERS.value
-            }
+            user_input = {ENTITY_NAMING_PATTERN: EntityNamingPattern.CIRCUIT_NUMBERS.value}
 
             result = await flow.async_step_entity_naming(user_input)
 
@@ -432,12 +423,8 @@ class TestEntityNamingOptions:
             assert EntityNamingPattern.LEGACY_NAMES.value not in available_options
 
             # Verify friendly descriptions are included
-            friendly_option = available_options[
-                EntityNamingPattern.FRIENDLY_NAMES.value
-            ]
-            circuit_option = available_options[
-                EntityNamingPattern.CIRCUIT_NUMBERS.value
-            ]
+            friendly_option = available_options[EntityNamingPattern.FRIENDLY_NAMES.value]
+            circuit_option = available_options[EntityNamingPattern.CIRCUIT_NUMBERS.value]
 
             assert "Friendly Names" in friendly_option
             assert "kitchen_outlets" in friendly_option
@@ -467,9 +454,7 @@ class TestEntityNamingOptions:
             flow.hass = mock_hass
 
             # Change pattern
-            user_input = {
-                ENTITY_NAMING_PATTERN: EntityNamingPattern.FRIENDLY_NAMES.value
-            }
+            user_input = {ENTITY_NAMING_PATTERN: EntityNamingPattern.FRIENDLY_NAMES.value}
 
             with patch(
                 "custom_components.span_panel.config_flow.EntityMigrationManager"

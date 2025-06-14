@@ -45,9 +45,7 @@ class DummySpanPanelCircuit:
 def test_select_init_missing_circuit():
     coordinator = DummyCoordinator()
     with pytest.raises(ValueError):
-        SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "name"
-        )
+        SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "name")
 
 
 @pytest.mark.asyncio
@@ -110,9 +108,7 @@ async def test_async_select_option_server_error(monkeypatch):
     )
     coordinator.data.circuits = {"id": circuit}
     span_panel = coordinator.data
-    span_panel.api.set_priority = AsyncMock(
-        side_effect=SpanPanelServerError("test error")
-    )
+    span_panel.api.set_priority = AsyncMock(side_effect=SpanPanelServerError("test error"))
     select = SpanPanelCircuitsSelect(
         coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name"
     )

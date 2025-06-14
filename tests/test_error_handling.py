@@ -62,9 +62,7 @@ async def test_api_connection_refused_during_setup(
 
 
 @pytest.mark.asyncio
-async def test_coordinator_update_api_failure(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_coordinator_update_api_failure(hass: Any, enable_custom_integrations: Any):
     """Test coordinator behavior when API calls fail during updates."""
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
     entry, _ = setup_span_panel_entry(hass, mock_responses)
@@ -88,9 +86,7 @@ async def test_coordinator_update_api_failure(
 
 
 @pytest.mark.asyncio
-async def test_invalid_authentication_handling(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_invalid_authentication_handling(hass: Any, enable_custom_integrations: Any):
     """Test handling of authentication failures."""
     entry, _ = setup_span_panel_entry(hass)
 
@@ -106,9 +102,7 @@ async def test_invalid_authentication_handling(
 
 
 @pytest.mark.asyncio
-async def test_network_disconnection_recovery(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_network_disconnection_recovery(hass: Any, enable_custom_integrations: Any):
     """Test recovery behavior after network disconnection."""
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
     entry, _ = setup_span_panel_entry(hass, mock_responses)

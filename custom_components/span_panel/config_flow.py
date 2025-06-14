@@ -264,9 +264,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Handle a flow initiated by the user."""
         if user_input is None:
-            return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
-            )
+            return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
         host: str = user_input[CONF_HOST].strip()
         use_ssl: bool = user_input.get(CONF_USE_SSL, False)
@@ -289,15 +287,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         return await self.async_step_choose_auth_type()
 
-    async def async_step_reauth(
-        self, entry_data: Mapping[str, Any]
-    ) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle a flow initiated by re-auth."""
         use_ssl = entry_data.get(CONF_USE_SSL, False)
         self.use_ssl = use_ssl
-        await self.setup_flow(
-            TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST], use_ssl
-        )
+        await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST], use_ssl)
         return await self.async_step_auth_token(dict(entry_data))
 
     async def async_step_confirm_discovery(
@@ -367,9 +361,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                     return self.async_show_form(step_id="auth_proximity")
             else:
                 # Reprompt until we are able to do proximity auth for old firmware
-                remaining_presses: int = (
-                    panel_status.remaining_auth_unlock_button_presses
-                )
+                remaining_presses: int = panel_status.remaining_auth_unlock_button_presses
                 if remaining_presses != 0:
                     return self.async_show_form(
                         step_id="auth_proximity",
@@ -465,9 +457,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 if self.host is None:
                     raise ValueError("Host cannot be None when updating an entry")
                 if self.access_token is None:
-                    raise ValueError(
-                        "Access token cannot be None when updating an entry"
-                    )
+                    raise ValueError("Access token cannot be None when updating an entry")
                 if "entry_id" not in self.context:
                     raise ValueError("Entry ID is missing from context")
                 return self.update_existing_entry(
@@ -512,9 +502,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         updated_data[CONF_USE_SSL] = self.use_ssl
 
         # An existing entry must exist before we can update it
-        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(
-            entry_id
-        )
+        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None:
             raise AssertionError("Entry does not exist")
 
@@ -538,9 +526,7 @@ OPTIONS_SCHEMA: Any = vol.Schema(
         vol.Optional(INVERTER_ENABLE): bool,
         vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
-        vol.Optional(ENTITY_NAMING_PATTERN): vol.In(
-            [e.value for e in EntityNamingPattern]
-        ),
+        vol.Optional(ENTITY_NAMING_PATTERN): vol.In([e.value for e in EntityNamingPattern]),
         vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
         vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
@@ -577,9 +563,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Manage the general options (excluding entity naming)."""
         if user_input is not None:
             # Preserve existing naming flags (don't change them in general options)
-            use_prefix: Any | bool = self.config_entry.options.get(
-                USE_DEVICE_PREFIX, False
-            )
+            use_prefix: Any | bool = self.config_entry.options.get(USE_DEVICE_PREFIX, False)
             user_input[USE_DEVICE_PREFIX] = use_prefix
 
             use_circuit_numbers: Any | bool = self.config_entry.options.get(
@@ -600,9 +584,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             BATTERY_ENABLE: self.config_entry.options.get(
                 "enable_battery_percentage", False
             ),
-            INVERTER_ENABLE: self.config_entry.options.get(
-                "enable_solar_circuit", False
-            ),
+            INVERTER_ENABLE: self.config_entry.options.get("enable_solar_circuit", False),
             INVERTER_LEG1: self.config_entry.options.get(INVERTER_LEG1, 0),
             INVERTER_LEG2: self.config_entry.options.get(INVERTER_LEG2, 0),
             CONF_API_RETRIES: self.config_entry.options.get(
@@ -671,9 +653,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 current_options = dict(self.config_entry.options)
 
                 # Only update the specific naming flags, preserve everything else
-                current_options[USE_CIRCUIT_NUMBERS] = naming_options[
-                    USE_CIRCUIT_NUMBERS
-                ]
+                current_options[USE_CIRCUIT_NUMBERS] = naming_options[USE_CIRCUIT_NUMBERS]
                 current_options[USE_DEVICE_PREFIX] = naming_options[USE_DEVICE_PREFIX]
 
                 # Debug: Log what options we're preserving
@@ -687,24 +667,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "Solar sensor enabled: %s",
                     current_options.get(INVERTER_ENABLE, False),
                 )
-                _LOGGER.info(
-                    "Inverter leg 1: %s", current_options.get(INVERTER_LEG1, 0)
-                )
-                _LOGGER.info(
-                    "Inverter leg 2: %s", current_options.get(INVERTER_LEG2, 0)
-                )
+                _LOGGER.info("Inverter leg 1: %s", current_options.get(INVERTER_LEG1, 0))
+                _LOGGER.info("Inverter leg 2: %s", current_options.get(INVERTER_LEG2, 0))
                 _LOGGER.info("All options after update: %s", current_options)
 
                 # Schedule reload after the options flow completes
                 async def reload_after_options_complete() -> None:
                     # Wait for the options flow to complete first
                     await self.hass.async_block_till_done()
-                    _LOGGER.info(
-                        "Reloading integration after entity naming pattern change"
-                    )
-                    await self.hass.config_entries.async_reload(
-                        self.config_entry.entry_id
-                    )
+                    _LOGGER.info("Reloading integration after entity naming pattern change")
+                    await self.hass.config_entries.async_reload(self.config_entry.entry_id)
 
                 self.hass.async_create_task(reload_after_options_complete())
 
@@ -801,14 +773,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def _migrate_entity_ids(self, old_pattern: str, new_pattern: str) -> None:
         """Migrate entity IDs when naming pattern changes."""
-        _LOGGER.info(
-            "Starting entity ID migration from %s to %s", old_pattern, new_pattern
-        )
+        _LOGGER.info("Starting entity ID migration from %s to %s", old_pattern, new_pattern)
 
         # Create migration manager
-        migration_manager = EntityMigrationManager(
-            self.hass, self.config_entry.entry_id
-        )
+        migration_manager = EntityMigrationManager(self.hass, self.config_entry.entry_id)
 
         # Convert string patterns to enum values
         from_pattern = EntityNamingPattern(old_pattern)

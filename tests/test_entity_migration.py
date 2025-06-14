@@ -132,7 +132,6 @@ def test_is_circuit_level_entity_synthetic():
 
 
 def test_get_pattern_flags():
-
     mgr = EntityMigrationManager(hass=MagicMock(), config_entry_id="id")
 
     # Test friendly names pattern
@@ -152,7 +151,6 @@ def test_get_pattern_flags():
 
 
 def test_generate_new_entity_id_no_change():
-
     mgr = EntityMigrationManager(hass=MagicMock(), config_entry_id="id")
 
     mock_entity = MagicMock()
@@ -168,7 +166,6 @@ def test_generate_new_entity_id_no_change():
 
 
 def test_generate_new_entity_id_with_change():
-
     mgr = EntityMigrationManager(hass=MagicMock(), config_entry_id="id")
     mgr._circuit_data = {"1": ("Kitchen Lights", 1)}
 
@@ -189,7 +186,6 @@ def test_generate_new_entity_id_with_change():
 
 
 def test_build_entity_mapping_with_changes():
-
     mgr = EntityMigrationManager(hass=MagicMock(), config_entry_id="id")
 
     # Create mock entities
@@ -286,7 +282,6 @@ async def test_update_entity_id_failure():
 
 @pytest.mark.asyncio
 async def test_migrate_entities_success():
-
     hass = MagicMock()
     mgr = EntityMigrationManager(hass, "config_id")
 
@@ -302,7 +297,6 @@ async def test_migrate_entities_success():
 
 @pytest.mark.asyncio
 async def test_migrate_entities_with_entities():
-
     hass = MagicMock()
     mgr = EntityMigrationManager(hass, "config_id")
 
@@ -330,7 +324,6 @@ async def test_migrate_entities_with_entities():
 
 @pytest.mark.asyncio
 async def test_migrate_entities_exception():
-
     hass = MagicMock()
     mgr = EntityMigrationManager(hass, "config_id")
 
@@ -409,9 +402,7 @@ async def test_transform_entity_id_exception_handling():
     with patch.object(
         mgr, "_is_synthetic_entity_id", side_effect=Exception("Synthetic check error")
     ):
-        result = mgr._transform_entity_id(
-            "sensor.test_entity", True, False, False, True
-        )
+        result = mgr._transform_entity_id("sensor.test_entity", True, False, False, True)
         assert result is None
 
 
@@ -470,9 +461,7 @@ async def test_friendly_names_to_circuit_numbers():
     }
 
     # Test successful transformation with prefix
-    result = mgr._friendly_names_to_circuit_numbers(
-        "span_panel_kitchen_outlets_breaker"
-    )
+    result = mgr._friendly_names_to_circuit_numbers("span_panel_kitchen_outlets_breaker")
     assert result == "span_panel_circuit_15_breaker"
 
     # Test successful transformation without prefix
@@ -480,15 +469,11 @@ async def test_friendly_names_to_circuit_numbers():
     assert result == "circuit_20_power"
 
     # Test with no matching circuit
-    result = mgr._friendly_names_to_circuit_numbers(
-        "span_panel_unknown_circuit_breaker"
-    )
+    result = mgr._friendly_names_to_circuit_numbers("span_panel_unknown_circuit_breaker")
     assert result == "span_panel_unknown_circuit_breaker"  # Should return original
 
     # Test with no suffix match
-    result = mgr._friendly_names_to_circuit_numbers(
-        "span_panel_kitchen_outlets_unknown"
-    )
+    result = mgr._friendly_names_to_circuit_numbers("span_panel_kitchen_outlets_unknown")
     assert result == "span_panel_kitchen_outlets_unknown"  # Should return original
 
 

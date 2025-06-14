@@ -78,9 +78,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                         return
 
                     _LOGGER.info("Auto-sync performing scheduled integration reload")
-                    await self.hass.config_entries.async_reload(
-                        self.config_entry.entry_id
-                    )
+                    await self.hass.config_entries.async_reload(self.config_entry.entry_id)
                     _LOGGER.info("Auto-sync integration reload completed")
 
                 except (ConfigEntryNotReady, HomeAssistantError) as e:
@@ -101,14 +99,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             await asyncio.wait_for(self.span_panel_api.update(), timeout=API_TIMEOUT)
             return self.span_panel_api
         except SpanPanelAuthError as err:
-            _LOGGER.error(
-                "Authentication failed while updating Span data: %s", str(err)
-            )
+            _LOGGER.error("Authentication failed while updating Span data: %s", str(err))
             raise ConfigEntryAuthFailed from err
         except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:
-            _LOGGER.error(
-                "Connection/timeout error while updating Span data: %s", str(err)
-            )
+            _LOGGER.error("Connection/timeout error while updating Span data: %s", str(err))
             raise UpdateFailed(f"Error communicating with API: {err}") from err
         except SpanPanelRetriableError as err:
             _LOGGER.warning(
