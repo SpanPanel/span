@@ -102,4 +102,6 @@ class EntityNamingPattern(enum.Enum):
     CIRCUIT_NUMBERS = (
         "circuit_numbers"  # Device + Circuit Numbers (e.g., span_panel_circuit_1_power)
     )
-    LEGACY_NAMES = "legacy_names"  # No Device Prefix (e.g., kitchen_outlets_power) - Read-only for pre-1.0.4
+    LEGACY_NAMES = (
+        "legacy_names"  # No Device Prefix (e.g., kitchen_outlets_power) - Read-only for pre-1.0.4
+    )

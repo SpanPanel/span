@@ -212,9 +212,7 @@ class TestSpanPanelUpdate:
         assert panel._storage_battery is mock_battery
 
     @pytest.mark.asyncio
-    async def test_update_with_battery_disabled(
-        self, mock_status, mock_panel_data, mock_circuits
-    ):
+    async def test_update_with_battery_disabled(self, mock_status, mock_panel_data, mock_circuits):
         """Test update when battery is disabled in options."""
         options = MagicMock(spec=Options)
         options.enable_battery_percentage = False
@@ -246,9 +244,7 @@ class TestSpanPanelUpdate:
         panel = SpanPanel("192.168.1.100")
 
         # Mock API methods - one raises empty data exception
-        panel.api.get_status_data = AsyncMock(
-            side_effect=SpanPanelReturnedEmptyData("Empty data")
-        )
+        panel.api.get_status_data = AsyncMock(side_effect=SpanPanelReturnedEmptyData("Empty data"))
         panel.api.get_panel_data = AsyncMock(return_value=mock_panel_data)
         panel.api.get_circuits_data = AsyncMock(return_value=mock_circuits)
 

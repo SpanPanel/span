@@ -63,9 +63,7 @@ class TestHelperFunctions:
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
         span_panel = MagicMock()
 
-        result = construct_entity_id(
-            coordinator, span_panel, "sensor", "Kitchen", 1, "power"
-        )
+        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
         assert result is None
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
@@ -80,9 +78,7 @@ class TestHelperFunctions:
         }
         span_panel = MagicMock()
 
-        result = construct_entity_id(
-            coordinator, span_panel, "sensor", "Kitchen", 1, "power"
-        )
+        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
         assert result is None
 
     def test_construct_synthetic_entity_id_config_entry_none(self):
@@ -92,9 +88,7 @@ class TestHelperFunctions:
         span_panel = MagicMock()
 
         with pytest.raises(RuntimeError, match="Config entry missing from coordinator"):
-            construct_synthetic_entity_id(
-                coordinator, span_panel, "sensor", [30, 32], "power"
-            )
+            construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
     def test_construct_synthetic_entity_id_empty_options(self, mock_device_info):
@@ -112,9 +106,7 @@ class TestHelperFunctions:
         assert result == "sensor.solar_production_power"
 
         # Test without friendly name (fallback)
-        result = construct_synthetic_entity_id(
-            coordinator, span_panel, "sensor", [30, 32], "power"
-        )
+        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
         assert result == "sensor.circuit_group_30_32_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
@@ -126,9 +118,7 @@ class TestHelperFunctions:
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
         span_panel = MagicMock()
 
-        result = construct_synthetic_entity_id(
-            coordinator, span_panel, "sensor", [30, 32], "power"
-        )
+        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
         assert result is None
 
     def test_construct_solar_inverter_entity_id_single_leg(self):
@@ -184,9 +174,7 @@ class TestHelperFunctions:
 
     def test_construct_synthetic_friendly_name_with_user_name(self):
         """Test construct_synthetic_friendly_name with user-provided name."""
-        result = construct_synthetic_friendly_name(
-            [30, 32], "Instant Power", "Solar Production"
-        )
+        result = construct_synthetic_friendly_name([30, 32], "Instant Power", "Solar Production")
         assert result == "Solar Production Instant Power"
 
     def test_construct_synthetic_friendly_name_multiple_circuits(self):

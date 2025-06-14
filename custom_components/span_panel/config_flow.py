@@ -238,9 +238,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         await self.async_set_unique_id(self.serial_number)
         self._abort_if_unique_id_configured(updates={CONF_HOST: self.host})
 
-    async def async_step_zeroconf(
-        self, discovery_info: ZeroconfServiceInfo
-    ) -> ConfigFlowResult:
+    async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """Handle a flow initiated by zeroconf discovery."""
         # Do not probe device if the host is already configured
         self._async_abort_entries_match({CONF_HOST: discovery_info.host})
@@ -259,9 +257,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         await self.ensure_not_already_configured()
         return await self.async_step_confirm_discovery()
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle a flow initiated by the user."""
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
@@ -379,9 +375,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Type checking: ensure access_token is not None before calling validate_auth_token
         if self.access_token is None:
             return self.async_abort(reason="invalid_access_token")
-        if not await validate_auth_token(
-            self.hass, self.host, self.access_token, self.use_ssl
-        ):
+        if not await validate_auth_token(self.hass, self.host, self.access_token, self.use_ssl):
             return self.async_abort(reason="invalid_access_token")
 
         return await self.async_step_resolve_entity(entry_data)
@@ -411,9 +405,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 return self.async_abort(reason="host_not_set")
 
             # Validate the provided token
-            if not await validate_auth_token(
-                self.hass, self.host, self.access_token, self.use_ssl
-            ):
+            if not await validate_auth_token(self.hass, self.host, self.access_token, self.use_ssl):
                 return self.async_show_form(
                     step_id="auth_token",
                     data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
@@ -443,16 +435,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 if self.host is None:
                     raise ValueError("Host cannot be None when creating a new entry")
                 if self.serial_number is None:
-                    raise ValueError(
-                        "Serial number cannot be None when creating a new entry"
-                    )
+                    raise ValueError("Serial number cannot be None when creating a new entry")
                 if self.access_token is None:
-                    raise ValueError(
-                        "Access token cannot be None when creating a new entry"
-                    )
-                return self.create_new_entry(
-                    self.host, self.serial_number, self.access_token
-                )
+                    raise ValueError("Access token cannot be None when creating a new entry")
+                return self.create_new_entry(self.host, self.serial_number, self.access_token)
             case TriggerFlowType.UPDATE_ENTRY:
                 if self.host is None:
                     raise ValueError("Host cannot be None when updating an entry")
@@ -541,9 +527,7 @@ OPTIONS_SCHEMA: Any = vol.Schema(
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the main options menu."""
         if user_input is None:
             return self.async_show_menu(
@@ -581,15 +565,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             CONF_SCAN_INTERVAL: self.config_entry.options.get(
                 CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
             ),
-            BATTERY_ENABLE: self.config_entry.options.get(
-                "enable_battery_percentage", False
-            ),
+            BATTERY_ENABLE: self.config_entry.options.get("enable_battery_percentage", False),
             INVERTER_ENABLE: self.config_entry.options.get("enable_solar_circuit", False),
             INVERTER_LEG1: self.config_entry.options.get(INVERTER_LEG1, 0),
             INVERTER_LEG2: self.config_entry.options.get(INVERTER_LEG2, 0),
-            CONF_API_RETRIES: self.config_entry.options.get(
-                CONF_API_RETRIES, DEFAULT_API_RETRIES
-            ),
+            CONF_API_RETRIES: self.config_entry.options.get(CONF_API_RETRIES, DEFAULT_API_RETRIES),
             CONF_API_RETRY_TIMEOUT: self.config_entry.options.get(
                 CONF_API_RETRY_TIMEOUT, DEFAULT_API_RETRY_TIMEOUT
             ),
@@ -796,9 +776,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Generate new entity ID based on the new naming pattern."""
         # This method is deprecated in favor of EntityMigrationManager
         # Keeping it for backward compatibility but it will be removed
-        _LOGGER.warning(
-            "Using deprecated _generate_new_entity_id method for %s", old_entity_id
-        )
+        _LOGGER.warning("Using deprecated _generate_new_entity_id method for %s", old_entity_id)
         return None
 
 
