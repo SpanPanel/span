@@ -46,9 +46,7 @@ def create_mock_span_panel(circuits: dict[str, Any]):
 
 
 @pytest.mark.asyncio
-async def test_switch_creation_for_controllable_circuit(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom_integrations: Any):
     """Test that switches are created only for user-controllable circuits."""
 
     # Create controllable circuit
@@ -163,9 +161,7 @@ async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: 
 
 
 @pytest.mark.asyncio
-async def test_switch_state_reflects_relay_state(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_switch_state_reflects_relay_state(hass: Any, enable_custom_integrations: Any):
     """Test that switch state correctly reflects circuit relay state."""
 
     # Test CLOSED relay -> switch ON
@@ -222,9 +218,7 @@ async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrati
 
 
 @pytest.mark.asyncio
-async def test_switch_coordinator_update_handling(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_switch_coordinator_update_handling(hass: Any, enable_custom_integrations: Any):
     """Test switch updates correctly when coordinator data changes."""
 
     circuit = create_mock_circuit(

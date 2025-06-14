@@ -78,9 +78,7 @@ class EntityMigrationManager:
                         entity.unique_id,
                     )
                 else:
-                    _LOGGER.debug(
-                        "  - %s (unique_id: %s)", entity.entity_id, entity.unique_id
-                    )
+                    _LOGGER.debug("  - %s (unique_id: %s)", entity.entity_id, entity.unique_id)
 
             _LOGGER.info(
                 "Found %d synthetic entities out of %d total entities",
@@ -161,9 +159,7 @@ class EntityMigrationManager:
                     circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
                     self._circuit_data[circuit_id] = (circuit.name, circuit_number)
 
-                _LOGGER.debug(
-                    "Loaded circuit data for %d circuits", len(self._circuit_data)
-                )
+                _LOGGER.debug("Loaded circuit data for %d circuits", len(self._circuit_data))
             else:
                 _LOGGER.warning("Could not load circuit data - coordinator not available")
 
@@ -406,9 +402,7 @@ class EntityMigrationManager:
 
             # Handle circuit naming transformations
             if from_numbers != to_numbers:
-                object_id = self._transform_circuit_naming(
-                    object_id, from_numbers, to_numbers
-                )
+                object_id = self._transform_circuit_naming(object_id, from_numbers, to_numbers)
 
             return f"{domain}.{object_id}"
 
@@ -463,9 +457,7 @@ class EntityMigrationManager:
             for _, (circuit_name, circuit_num) in self._circuit_data.items():
                 if circuit_num == circuit_number:
                     # Sanitize the circuit name for entity ID
-                    sanitized_name = (
-                        circuit_name.lower().replace(" ", "_").replace("-", "_")
-                    )
+                    sanitized_name = circuit_name.lower().replace(" ", "_").replace("-", "_")
                     # Replace the circuit number part with the friendly name
                     return object_id.replace(
                         f"circuit_{circuit_number}_{suffix}",
@@ -502,9 +494,7 @@ class EntityMigrationManager:
 
                 # Find matching circuit by name
                 for _, (circuit_name, circuit_num) in self._circuit_data.items():
-                    sanitized_name = (
-                        circuit_name.lower().replace(" ", "_").replace("-", "_")
-                    )
+                    sanitized_name = circuit_name.lower().replace(" ", "_").replace("-", "_")
                     if circuit_part == sanitized_name:
                         # Replace with circuit number format
                         new_circuit_part = f"circuit_{circuit_num}"
@@ -714,8 +704,7 @@ class EntityMigrationManager:
 
             # Check if circuits match (order doesn't matter)
             return bool(
-                (circuit1 == leg1 and circuit2 == leg2)
-                or (circuit1 == leg2 and circuit2 == leg1)
+                (circuit1 == leg1 and circuit2 == leg2) or (circuit1 == leg2 and circuit2 == leg1)
             )
 
         except Exception as e:

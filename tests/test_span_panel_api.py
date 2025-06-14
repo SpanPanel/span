@@ -29,9 +29,7 @@ async def test_ping_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_ping_failure(monkeypatch):
     api = SpanPanelApi("host")
-    monkeypatch.setattr(
-        api, "get_status_data", AsyncMock(side_effect=SpanPanelAPIError("fail"))
-    )
+    monkeypatch.setattr(api, "get_status_data", AsyncMock(side_effect=SpanPanelAPIError("fail")))
     assert await api.ping() is False
 
 
@@ -284,9 +282,7 @@ async def test_ensure_client_open_with_closed_client():
     api._client = mock_client
 
     # Mock SpanPanelClient constructor
-    with patch(
-        "custom_components.span_panel.span_panel_api.SpanPanelClient"
-    ) as mock_span_client:
+    with patch("custom_components.span_panel.span_panel_api.SpanPanelClient") as mock_span_client:
         mock_new_client = MagicMock()
         mock_span_client.return_value = mock_new_client
 
@@ -319,9 +315,7 @@ async def test_ensure_client_open_with_options():
     api._client = mock_client
 
     # Mock SpanPanelClient constructor
-    with patch(
-        "custom_components.span_panel.span_panel_api.SpanPanelClient"
-    ) as mock_span_client:
+    with patch("custom_components.span_panel.span_panel_api.SpanPanelClient") as mock_span_client:
         mock_new_client = MagicMock()
         mock_span_client.return_value = mock_new_client
 
@@ -349,9 +343,7 @@ async def test_ensure_client_open_with_access_token():
     api._client = mock_client
 
     # Mock SpanPanelClient constructor
-    with patch(
-        "custom_components.span_panel.span_panel_api.SpanPanelClient"
-    ) as mock_span_client:
+    with patch("custom_components.span_panel.span_panel_api.SpanPanelClient") as mock_span_client:
         mock_new_client = MagicMock()
         mock_span_client.return_value = mock_new_client
 
@@ -476,9 +468,7 @@ async def test_get_panel_data_with_empty_data():
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
 
-    with patch(
-        "custom_components.span_panel.span_panel_api.SpanPanelData"
-    ) as mock_data_class:
+    with patch("custom_components.span_panel.span_panel_api.SpanPanelData") as mock_data_class:
         mock_data = MagicMock()
         mock_data.main_relay_state = PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE
         mock_data_class.from_dict.return_value = mock_data
@@ -631,9 +621,7 @@ async def test_set_relay_server_error():
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.set_circuit_relay = AsyncMock(
-        side_effect=SpanPanelServerError("Server error")
-    )
+    mock_client.set_circuit_relay = AsyncMock(side_effect=SpanPanelServerError("Server error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -738,9 +726,7 @@ async def test_set_priority_server_error():
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.set_circuit_priority = AsyncMock(
-        side_effect=SpanPanelServerError("Server error")
-    )
+    mock_client.set_circuit_priority = AsyncMock(side_effect=SpanPanelServerError("Server error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -774,9 +760,7 @@ async def test_set_priority_auth_reset_on_auth_error():
     api = SpanPanelApi("host")
     api._authenticated = True  # Start as authenticated
     mock_client = MagicMock()
-    mock_client.set_circuit_priority = AsyncMock(
-        side_effect=SpanPanelAuthError("Auth failed")
-    )
+    mock_client.set_circuit_priority = AsyncMock(side_effect=SpanPanelAuthError("Auth failed"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -846,9 +830,7 @@ async def test_get_storage_battery_data_retriable_error():
     """Test get_storage_battery_data handles retriable errors correctly."""
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.get_storage_soe = AsyncMock(
-        side_effect=SpanPanelRetriableError("Retriable error")
-    )
+    mock_client.get_storage_soe = AsyncMock(side_effect=SpanPanelRetriableError("Retriable error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -862,9 +844,7 @@ async def test_get_storage_battery_data_server_error():
     """Test get_storage_battery_data handles server errors correctly."""
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.get_storage_soe = AsyncMock(
-        side_effect=SpanPanelServerError("Server error")
-    )
+    mock_client.get_storage_soe = AsyncMock(side_effect=SpanPanelServerError("Server error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -878,9 +858,7 @@ async def test_get_circuits_data_retriable_error():
     """Test get_circuits_data handles retriable errors correctly."""
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.get_circuits = AsyncMock(
-        side_effect=SpanPanelRetriableError("Retriable error")
-    )
+    mock_client.get_circuits = AsyncMock(side_effect=SpanPanelRetriableError("Retriable error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -908,9 +886,7 @@ async def test_get_panel_data_retriable_error():
     """Test get_panel_data handles retriable errors correctly."""
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.get_panel_state = AsyncMock(
-        side_effect=SpanPanelRetriableError("Retriable error")
-    )
+    mock_client.get_panel_state = AsyncMock(side_effect=SpanPanelRetriableError("Retriable error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()
@@ -924,9 +900,7 @@ async def test_get_panel_data_server_error():
     """Test get_panel_data handles server errors correctly."""
     api = SpanPanelApi("host")
     mock_client = MagicMock()
-    mock_client.get_panel_state = AsyncMock(
-        side_effect=SpanPanelServerError("Server error")
-    )
+    mock_client.get_panel_state = AsyncMock(side_effect=SpanPanelServerError("Server error"))
     api._client = mock_client
     api._ensure_client_open = MagicMock()
     api._ensure_authenticated = AsyncMock()

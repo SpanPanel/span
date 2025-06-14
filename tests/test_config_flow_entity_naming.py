@@ -123,16 +123,11 @@ class TestEntityNamingOptions:
 
             # Verify examples are provided
             assert (
-                "span_panel_kitchen_outlets_power"
-                in description_placeholders["friendly_example"]
+                "span_panel_kitchen_outlets_power" in description_placeholders["friendly_example"]
             )
-            assert (
-                "span_panel_circuit_15_power" in description_placeholders["circuit_example"]
-            )
+            assert "span_panel_circuit_15_power" in description_placeholders["circuit_example"]
 
-    async def test_current_pattern_detection_circuit_numbers(
-        self, mock_hass, mock_config_entry
-    ):
+    async def test_current_pattern_detection_circuit_numbers(self, mock_hass, mock_config_entry):
         """Test detection of current circuit numbers pattern."""
         mock_config_entry.options = {
             USE_CIRCUIT_NUMBERS: True,
@@ -150,9 +145,7 @@ class TestEntityNamingOptions:
             current_pattern = flow._get_current_naming_pattern()
             assert current_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
-    async def test_current_pattern_detection_friendly_names(
-        self, mock_hass, mock_config_entry
-    ):
+    async def test_current_pattern_detection_friendly_names(self, mock_hass, mock_config_entry):
         """Test detection of current friendly names pattern."""
         mock_config_entry.options = {
             USE_CIRCUIT_NUMBERS: False,
@@ -260,9 +253,7 @@ class TestEntityNamingOptions:
             result = await flow.async_step_entity_naming(user_input)
 
             # Verify migration was called
-            mock_migration_manager.assert_called_once_with(
-                mock_hass, mock_config_entry.entry_id
-            )
+            mock_migration_manager.assert_called_once_with(mock_hass, mock_config_entry.entry_id)
             mock_manager_instance.migrate_entities.assert_called_once_with(
                 EntityNamingPattern.CIRCUIT_NUMBERS, EntityNamingPattern.FRIENDLY_NAMES
             )
@@ -340,9 +331,7 @@ class TestEntityNamingOptions:
             result = await flow.async_step_entity_naming(user_input)
 
             # Verify migration was called
-            mock_migration_manager.assert_called_once_with(
-                mock_hass, mock_config_entry.entry_id
-            )
+            mock_migration_manager.assert_called_once_with(mock_hass, mock_config_entry.entry_id)
             mock_manager_instance.migrate_entities.assert_called_once_with(
                 EntityNamingPattern.LEGACY_NAMES, EntityNamingPattern.FRIENDLY_NAMES
             )
@@ -380,9 +369,7 @@ class TestEntityNamingOptions:
             result = await flow.async_step_entity_naming(user_input)
 
             # Verify migration was called
-            mock_migration_manager.assert_called_once_with(
-                mock_hass, mock_config_entry.entry_id
-            )
+            mock_migration_manager.assert_called_once_with(mock_hass, mock_config_entry.entry_id)
             mock_manager_instance.migrate_entities.assert_called_once_with(
                 EntityNamingPattern.LEGACY_NAMES, EntityNamingPattern.CIRCUIT_NUMBERS
             )

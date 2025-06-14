@@ -65,8 +65,7 @@ BINARY_SENSORS: tuple[
         device_class=BinarySensorDeviceClass.TAMPER,
         value_fn=lambda status_data: (
             None
-            if status_data.door_state
-            not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
+            if status_data.door_state not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
             else not status_data.is_door_closed
         ),
     ),

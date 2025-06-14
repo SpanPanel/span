@@ -300,9 +300,7 @@ async def test_pattern_change_requires_migration():
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
     with (
-        patch(
-            "custom_components.span_panel.config_flow.EntityMigrationManager"
-        ) as mock_migration,
+        patch("custom_components.span_panel.config_flow.EntityMigrationManager") as mock_migration,
         patch.object(OptionsFlowHandler, "__init__", return_value=None),
     ):
         mock_manager_instance = AsyncMock()
@@ -337,9 +335,7 @@ async def test_no_migration_when_pattern_unchanged():
     mock_hass.config_entries.async_get_entry.return_value = mock_config_entry
 
     with (
-        patch(
-            "custom_components.span_panel.config_flow.EntityMigrationManager"
-        ) as mock_migration,
+        patch("custom_components.span_panel.config_flow.EntityMigrationManager") as mock_migration,
         patch.object(OptionsFlowHandler, "__init__", return_value=None),
     ):
         flow = OptionsFlowHandler.__new__(OptionsFlowHandler)

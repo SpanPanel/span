@@ -44,9 +44,7 @@ def construct_entity_id(
     """
     config_entry = coordinator.config_entry
     if config_entry is None:
-        raise RuntimeError(
-            "Config entry missing from coordinator - integration improperly set up"
-        )
+        raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
 
     # For existing installations with empty options, default to False for backward compatibility
     # For new installations, these will be explicitly set to True in create_new_entry()
@@ -130,9 +128,7 @@ def construct_synthetic_entity_id(
     """
     config_entry = coordinator.config_entry
     if config_entry is None:
-        raise RuntimeError(
-            "Config entry missing from coordinator - integration improperly set up"
-        )
+        raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
 
     # For existing installations with empty options, default to False for backward compatibility
     # For new installations, these will be explicitly set to True in create_new_entry()

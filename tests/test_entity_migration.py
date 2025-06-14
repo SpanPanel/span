@@ -173,9 +173,7 @@ def test_generate_new_entity_id_with_change():
     mock_entity.entity_id = "sensor.span_panel_circuit_1_power"
 
     # Mock the transform method to return a new ID
-    mgr._transform_entity_id = MagicMock(
-        return_value="sensor.span_panel_kitchen_lights_power"
-    )
+    mgr._transform_entity_id = MagicMock(return_value="sensor.span_panel_kitchen_lights_power")
 
     result = mgr._generate_new_entity_id(
         mock_entity,
@@ -272,9 +270,7 @@ async def test_update_entity_id_failure():
     mgr = EntityMigrationManager(hass, "config_id")
 
     # Mock failed entity update
-    mgr._entity_registry.async_update_entity = MagicMock(
-        side_effect=Exception("Update failed")
-    )
+    mgr._entity_registry.async_update_entity = MagicMock(side_effect=Exception("Update failed"))
 
     result = await mgr._update_entity_id("old.entity_id", "new.entity_id")
     assert result is False
@@ -309,9 +305,7 @@ async def test_migrate_entities_with_entities():
     mgr._load_circuit_data = AsyncMock()
     mgr._get_integration_entities = MagicMock(return_value=[mock_entity])
     mgr._build_entity_mapping = MagicMock(
-        return_value={
-            "sensor.span_panel_circuit_1_power": "sensor.span_panel_kitchen_lights_power"
-        }
+        return_value={"sensor.span_panel_circuit_1_power": "sensor.span_panel_kitchen_lights_power"}
     )
     mgr._update_entity_id = AsyncMock(return_value=True)
 
@@ -381,9 +375,7 @@ async def test_generate_new_entity_id_exception_handling():
     entity.entity_id = "invalid_format"
 
     # Mock _transform_entity_id to raise exception
-    with patch.object(
-        mgr, "_transform_entity_id", side_effect=Exception("Transform error")
-    ):
+    with patch.object(mgr, "_transform_entity_id", side_effect=Exception("Transform error")):
         result = mgr._generate_new_entity_id(
             entity,
             EntityNamingPattern.FRIENDLY_NAMES,
@@ -588,9 +580,7 @@ async def test_transform_synthetic_circuit_naming_numbers_to_friendly():
 
     # Test single-circuit solar inverter
     with patch.object(mgr, "_get_solar_inverter_circuits", return_value=(30, 32)):
-        result = mgr._transform_synthetic_circuit_naming(
-            "span_panel_circuit_30_power", True, False
-        )
+        result = mgr._transform_synthetic_circuit_naming("span_panel_circuit_30_power", True, False)
         assert result == "span_panel_solar_inverter_power"
 
 
@@ -838,9 +828,7 @@ async def test_migrate_entities_synthetic_mappings_logging():
     entity_registry = MagicMock()
 
     # Create entity that will generate synthetic mapping
-    entity = create_mock_entity(
-        "sensor.span_panel_circuit_30_32_energy", "circuit_30_32_energy"
-    )
+    entity = create_mock_entity("sensor.span_panel_circuit_30_32_energy", "circuit_30_32_energy")
     entity_registry.entities.values.return_value = [entity]
     entity_registry.async_get.return_value = None
     entity_registry.async_update_entity.return_value = None
@@ -850,9 +838,7 @@ async def test_migrate_entities_synthetic_mappings_logging():
 
     # Mock to return synthetic mapping
     mgr._is_circuit_level_entity = MagicMock(return_value=True)
-    mgr._generate_new_entity_id = MagicMock(
-        return_value="sensor.span_panel_circuit_15_20_energy"
-    )
+    mgr._generate_new_entity_id = MagicMock(return_value="sensor.span_panel_circuit_15_20_energy")
 
     result = await mgr.migrate_entities(
         EntityNamingPattern.FRIENDLY_NAMES, EntityNamingPattern.CIRCUIT_NUMBERS
