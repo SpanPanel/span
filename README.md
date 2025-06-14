@@ -27,6 +27,22 @@ installation's power consumption, energy usage, and the ability to control user-
 
 ## What's New
 
+### Version 1.2.0 - OpenAPI Specification Integration
+
+**OpenAPI Support**: The integration now uses the official OpenAPI specification provided by the SPAN panel.
+This change provides a reliable foundation for future interface changes.
+
+**Configurable Timeouts and Retries**: The integration provides connection options for different network environments:
+
+- **Timeout Settings**: Customize connection and request timeouts to accommodate slower networks or distant panels.
+The initial setup still uses a 15 second timeout.
+- **Retry Configuration**: Configure automatic retry attempts for transient network issues or panel connectivity problems
+
+**SSL/TLS Support**: Added SSL support for remote panel access scenarios:
+
+- **Local Access**: Standard HTTP connection for panels on your local network (SSL not supported by SPAN)
+- **Remote Access**: HTTPS support for accessing panels through secure proxies
+
 ### Version 1.1.0+ - Configurable Entity Naming Patterns
 
 **Circuit Name Sync with SPAN**: All versions of the integration now support automatic friendly name updates when circuits are
