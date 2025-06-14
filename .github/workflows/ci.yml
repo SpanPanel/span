@@ -57,3 +57,4 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
+          # Note: Token not required for public repos with tokenless upload
