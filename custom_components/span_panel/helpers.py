@@ -110,7 +110,7 @@ def construct_synthetic_entity_id(
     suffix: str,
     friendly_name: str | None = None,
 ) -> str | None:
-    """Construct synthetic entity ID for multi-circuit entities based on integration configuration flags.
+    """Construct synthetic entity ID for multi-circuit entities based on integration config flags.
 
     This function handles entity naming for synthetic sensors that combine multiple circuits,
     such as solar inverters or custom circuit groups (Phase 3). The naming pattern is determined
