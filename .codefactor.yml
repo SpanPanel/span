@@ -1,26 +1,53 @@
-# CodeFactor configuration - Coverage reporting only, no style/lint critiques
-# Disable all style and lint engines - we use our own standards and tools
+# CodeFactor configuration - Focus on custom_components only
+# We use our own pre-commit hooks for comprehensive code quality
 
+# Enable CodeFactor with limited scope
+enabled: true
+
+# Only enable essential engines for custom_components
 engines:
-  # Completely disable all style/lint engines
   pep8:
-    enabled: false
+    enabled: true
+    # Disable line length checking - handled by ruff in CI/pre-commit
+    ignore:
+      - E501  # line too long
   pylint:
-    enabled: false
+    enabled: false  # We use ruff instead
   pyflakes:
-    enabled: false
+    enabled: false  # We use ruff instead
   mccabe:
-    enabled: false
+    enabled: false  # We use radon in pre-commit instead
   radon:
-    enabled: false
+    enabled: false  # We use radon in pre-commit instead
   bandit:
-    enabled: false
+    enabled: false  # We use bandit in pre-commit instead
   duplication:
-    enabled: false
+    enabled: true   # Keep duplication detection
+  complexity:
+    enabled: false  # We use radon in pre-commit instead
 
-# Only allow coverage reporting (if CodeFactor supports it)
-# All other analysis is disabled
-
-# Exclude all files from analysis since we don't want style critiques
+# Explicitly exclude everything except custom_components
 exclude_patterns:
-  - "**/*"  # Exclude everything - we only want coverage if available 
+  - "tests/**/*"
+  - "scripts/**/*"
+  - "docs/**/*"
+  - "examples/**/*"
+  - "htmlcov/**/*"
+  - "**/*.md"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "**/*.json"
+  - "**/*.toml"
+  - "**/*.txt"
+  - "**/*.sh"
+  - "**/__pycache__/**"
+  - "**/.pytest_cache/**"
+  - "**/.mypy_cache/**"
+  - "**/.ruff_cache/**"
+  - "**/.git/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/node_modules/**"
+  - "poetry.lock"
+  - ".pre-commit-config.yaml"
+  - ".gitignore"

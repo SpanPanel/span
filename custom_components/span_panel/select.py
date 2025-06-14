@@ -53,9 +53,7 @@ CIRCUIT_PRIORITY_DESCRIPTION: Final = SpanPanelSelectEntityDescriptionWrapper(
     key="circuit_priority",
     name="Circuit Priority",
     icon=ICON,
-    options_fn=lambda _: [
-        e.value for e in CircuitPriority if e != CircuitPriority.UNKNOWN
-    ],
+    options_fn=lambda _: [e.value for e in CircuitPriority if e != CircuitPriority.UNKNOWN],
     current_option_fn=lambda circuit: CircuitPriority[circuit.priority].value,
 )
 
@@ -90,9 +88,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         )
         self.id = circuit_id
 
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_select_{self.id}"
-        )
+        self._attr_unique_id = f"span_{span_panel.status.serial_number}_select_{self.id}"
         self._attr_device_info = panel_to_device_info(span_panel)
 
         entity_suffix = get_user_friendly_suffix(description.entity_description.key)

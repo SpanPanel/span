@@ -41,9 +41,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
 
         self.circuit_id: str = circuit_id
         self._attr_icon = "mdi:toggle-switch"
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_relay_{circuit_id}"
-        )
+        self._attr_unique_id = f"span_{span_panel.status.serial_number}_relay_{circuit_id}"
         self._attr_device_info = panel_to_device_info(span_panel)
 
         self.entity_id = construct_entity_id(  # type: ignore[assignment]

@@ -23,9 +23,7 @@ def expected_lingering_timers():
 
 
 @pytest.mark.asyncio
-async def test_door_state_tamper_sensor_closed(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_door_state_tamper_sensor_closed(hass: Any, enable_custom_integrations: Any):
     """Test that door state tamper sensor reports clear when door is closed."""
     # Create mock responses with door closed
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
@@ -56,15 +54,11 @@ async def test_door_state_tamper_sensor_closed(
 
 
 @pytest.mark.asyncio
-async def test_door_state_tamper_sensor_open(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_door_state_tamper_sensor_open(hass: Any, enable_custom_integrations: Any):
     """Test that door state tamper sensor reports tampered when door is open."""
     # Create mock responses with door open
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
-        status_data=SpanPanelStatusFactory.create_status(
-            door_state=SYSTEM_DOOR_STATE_OPEN
-        )
+        status_data=SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_OPEN)
     )
 
     entry, _ = setup_span_panel_entry(hass, mock_responses)
@@ -89,9 +83,7 @@ async def test_door_state_tamper_sensor_open(
 
 
 @pytest.mark.asyncio
-async def test_door_state_tamper_sensor_unknown(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_door_state_tamper_sensor_unknown(hass: Any, enable_custom_integrations: Any):
     """Test that door state tamper sensor remains unknown when door state is unknown."""
     # Create mock responses with unknown door state
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(

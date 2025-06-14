@@ -385,9 +385,7 @@ class SpanPanelApi:
             _LOGGER.error("Failed to get storage battery data: %s", e)
             raise
 
-    async def set_relay(
-        self, circuit: SpanPanelCircuit, state: CircuitRelayState
-    ) -> None:
+    async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState) -> None:
         """Set the relay state."""
         self._ensure_client_open()
         if self._client is None:

@@ -38,12 +38,12 @@ class SimpleMockPanel:
         self.main_meter_energy_consumed = panel_data.get("mainMeterEnergyWh", {}).get(
             "consumedEnergyWh", 0.0
         )
-        self.feedthrough_energy_produced = panel_data.get(
-            "feedthroughEnergyWh", {}
-        ).get("producedEnergyWh", 0.0)
-        self.feedthrough_energy_consumed = panel_data.get(
-            "feedthroughEnergyWh", {}
-        ).get("consumedEnergyWh", 0.0)
+        self.feedthrough_energy_produced = panel_data.get("feedthroughEnergyWh", {}).get(
+            "producedEnergyWh", 0.0
+        )
+        self.feedthrough_energy_consumed = panel_data.get("feedthroughEnergyWh", {}).get(
+            "consumedEnergyWh", 0.0
+        )
 
         # Also set the original keys for direct access if needed
         for key, value in panel_data.items():
@@ -56,9 +56,7 @@ class MockSpanPanelStorageBattery:
 
     def __init__(self, battery_data: dict[str, Any]):
         """Initialize the mock storage battery."""
-        self.storage_battery_percentage = battery_data.get(
-            STORAGE_BATTERY_PERCENTAGE, 85
-        )
+        self.storage_battery_percentage = battery_data.get(STORAGE_BATTERY_PERCENTAGE, 85)
 
         # Also set any other battery attributes from the data
         for key, value in battery_data.items():
@@ -74,9 +72,7 @@ def patch_span_panel_dependencies(
     """Patches common dependencies for setting up the Span Panel integration in tests."""
 
     if mock_api_responses is None:
-        mock_api_responses = (
-            SpanPanelApiResponseFactory.create_complete_panel_response()
-        )
+        mock_api_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
 
     # Create mock API instance
     mock_api = AsyncMock()
@@ -102,9 +98,7 @@ def patch_span_panel_dependencies(
         mock_entry.options = options
         panel_options = Options(mock_entry)
 
-    mock_panel_data = SpanPanelData.from_dict(
-        mock_api_responses["panel"], panel_options
-    )
+    mock_panel_data = SpanPanelData.from_dict(mock_api_responses["panel"], panel_options)
 
     mock_circuits = {}
     for circuit_id, circuit_data in mock_api_responses["circuits"].items():
@@ -159,11 +153,12 @@ def patch_span_panel_dependencies(
             "homeassistant.helpers.httpx_client.get_async_client",
             return_value=AsyncMock(),
         ),
-        patch("custom_components.span_panel.log_entity_summary", return_value=None),
-        # Disable select platform to avoid type checking issues in tests
         patch(
-            "custom_components.span_panel.select.async_setup_entry", return_value=True
+            "custom_components.span_panel.entity_summary.log_entity_summary",
+            return_value=None,
         ),
+        # Disable select platform to avoid type checking issues in tests
+        patch("custom_components.span_panel.select.async_setup_entry", return_value=True),
     ]
 
     try:
@@ -197,15 +192,13 @@ def make_span_panel_entry(
     )
 
 
-def assert_entity_state(
-    hass: HomeAssistant, entity_id: str, expected_state: Any
-) -> None:
+def assert_entity_state(hass: HomeAssistant, entity_id: str, expected_state: Any) -> None:
     """Assert the state of an entity."""
     state = hass.states.get(entity_id)
     assert state is not None, f"Entity {entity_id} not found in hass.states"
-    assert state.state == str(
-        expected_state
-    ), f"Expected {entity_id} to be '{expected_state}', got '{state.state}'"
+    assert state.state == str(expected_state), (
+        f"Expected {entity_id} to be '{expected_state}', got '{state.state}'"
+    )
 
 
 def assert_entity_attribute(
@@ -215,9 +208,9 @@ def assert_entity_attribute(
     state = hass.states.get(entity_id)
     assert state is not None, f"Entity {entity_id} not found in hass.states"
     actual_value = state.attributes.get(attribute)
-    assert (
-        actual_value == expected_value
-    ), f"Expected {entity_id}.{attribute} to be '{expected_value}', got '{actual_value}'"
+    assert actual_value == expected_value, (
+        f"Expected {entity_id}.{attribute} to be '{expected_value}', got '{actual_value}'"
+    )
 
 
 async def advance_time(hass: HomeAssistant, seconds: int) -> None:

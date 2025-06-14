@@ -249,9 +249,9 @@ async def test_friendly_name_sanitization():
 
     for input_name, expected_suffix in test_cases:
         result = sanitize_name_for_entity_id(input_name)
-        assert (
-            result == expected_suffix
-        ), f"Failed for '{input_name}': expected '{expected_suffix}', got '{result}'"
+        assert result == expected_suffix, (
+            f"Failed for '{input_name}': expected '{expected_suffix}', got '{result}'"
+        )
 
 
 @pytest.mark.asyncio

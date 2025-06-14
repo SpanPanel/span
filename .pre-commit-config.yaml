@@ -4,33 +4,33 @@ repos:
     rev: v5.0.0
     hooks:
       - id: check-yaml
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
       - id: check-toml
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
       - id: check-json
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
       - id: check-added-large-files
       - id: check-merge-conflict
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
       - id: debug-statements
-        exclude: '^src/span_panel_api/generated_client/.*|tests/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|\..*_cache/.*|dist/.*|venv/.*'
+      - id: trailing-whitespace
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
+      - id: end-of-file-fixer
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
 
-  # Black for ALL formatting (including trailing whitespace and blank lines)
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-      - id: black
-        language_version: python3
-        args: ['--line-length=88']
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
-
-  # Ruff for linting and import sorting
+  # Ruff for linting, import sorting, and primary formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.13
     hooks:
+      - id: ruff-format
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
       - id: ruff-check
         args: ['--fix']
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*'
 
   # MyPy for type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -43,7 +43,7 @@ repos:
           - typing-extensions
           - pytest
         args: ['--config-file=pyproject.toml']
-        exclude: '^src/span_panel_api/generated_client/.*|tests/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
 
   # Markdownlint for markdown files
   - repo: https://github.com/DavidAnson/markdownlint-cli2
@@ -51,7 +51,7 @@ repos:
     hooks:
       - id: markdownlint-cli2
         args: ['--config', '.markdownlint-cli2.jsonc']
-        exclude: '^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*'
 
   # Check for common security issues
   - repo: https://github.com/PyCQA/bandit
@@ -60,7 +60,7 @@ repos:
       - id: bandit
         args: ['-c', 'pyproject.toml']
         additional_dependencies: ['bandit[toml]']
-        exclude: '^tests/.*|^src/span_panel_api/generated_client/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|^scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
 
   # Poetry check for pyproject.toml validation
   - repo: https://github.com/python-poetry/poetry
@@ -69,14 +69,32 @@ repos:
       - id: poetry-check
       - id: poetry-lock
 
-  # Quick coverage check (total only, no details)
+  # Radon for code metrics and maintainability (local)
+  - repo: local
+    hooks:
+      - id: radon-complexity
+        name: radon complexity check
+        entry: radon
+        language: system
+        args: ['cc', '--min=B', '--show-complexity', 'custom_components/span_panel/']
+        pass_filenames: false
+        files: \.py$
+      - id: radon-maintainability
+        name: radon maintainability index
+        entry: radon
+        language: system
+        args: ['mi', '--min=B', '--show', 'custom_components/span_panel/']
+        pass_filenames: false
+        files: \.py$
+
+  # Coverage check with pytest output and coverage report
   - repo: local
     hooks:
       - id: pytest-cov-summary
         name: coverage summary
         entry: bash
         language: system
-        args: ['-c', 'output=$(poetry run pytest tests/ --cov=src/span_panel_api --cov-config=pyproject.toml -q 2>&1); if echo "$output" | grep -q "FAILED"; then echo "$output"; exit 1; else echo "$output" | grep -E "(passed|TOTAL)" | tr "\n" " " | sed "s/=*//g"; echo; fi']
+        args: ['-c', 'echo "Running tests with coverage..."; poetry run pytest tests/ --cov=custom_components/span_panel --cov-config=pyproject.toml --cov-report=term-missing:skip-covered -v; exit_code=$?; echo; if [ $exit_code -eq 0 ]; then echo "✅ Tests passed with coverage report above"; else echo "❌ Tests failed"; fi; exit $exit_code']
         pass_filenames: false
         always_run: true
         verbose: true

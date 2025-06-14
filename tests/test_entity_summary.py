@@ -1,5 +1,6 @@
-from custom_components.span_panel.entity_summary import log_entity_summary
 import logging
+
+from custom_components.span_panel.entity_summary import log_entity_summary
 
 
 class DummyCircuit:

@@ -15,6 +15,4 @@ class SpanPanelStorageBattery:
     @staticmethod
     def from_dict(data: dict[str, Any]) -> "SpanPanelStorageBattery":
         """Read the data from the dictionary."""
-        return SpanPanelStorageBattery(
-            storage_battery_percentage=data.get("percentage", 0)
-        )
+        return SpanPanelStorageBattery(storage_battery_percentage=data.get("percentage", 0))
