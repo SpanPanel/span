@@ -20,9 +20,7 @@ class EntityMigrationManager:
         self._hass = hass
         self._config_entry_id = config_entry_id
         self._entity_registry = er.async_get(hass)
-        self._circuit_data: dict[str, tuple[str, int]] = (
-            {}
-        )  # circuit_id -> (name, number)
+        self._circuit_data: dict[str, tuple[str, int]] = {}  # circuit_id -> (name, number)
 
     async def migrate_entities(
         self,
@@ -167,9 +165,7 @@ class EntityMigrationManager:
                     "Loaded circuit data for %d circuits", len(self._circuit_data)
                 )
             else:
-                _LOGGER.warning(
-                    "Could not load circuit data - coordinator not available"
-                )
+                _LOGGER.warning("Could not load circuit data - coordinator not available")
 
         except Exception as e:
             _LOGGER.warning("Failed to load circuit data: %s", e)
@@ -309,9 +305,7 @@ class EntityMigrationManager:
         entity_mapping: dict[str, str] = {}
 
         for entity in entities:
-            new_entity_id = self._generate_new_entity_id(
-                entity, from_pattern, to_pattern
-            )
+            new_entity_id = self._generate_new_entity_id(entity, from_pattern, to_pattern)
 
             if new_entity_id and new_entity_id != entity.entity_id:
                 entity_mapping[entity.entity_id] = new_entity_id
@@ -450,9 +444,7 @@ class EntityMigrationManager:
                 return object_id
 
         except Exception as e:
-            _LOGGER.warning(
-                "Failed to transform circuit naming for %s: %s", object_id, e
-            )
+            _LOGGER.warning("Failed to transform circuit naming for %s: %s", object_id, e)
             return object_id
 
     def _circuit_numbers_to_friendly_names(self, object_id: str) -> str:
@@ -601,9 +593,7 @@ class EntityMigrationManager:
             return f"{domain}.{object_id}"
 
         except Exception as e:
-            _LOGGER.warning(
-                "Failed to transform synthetic entity ID %s: %s", entity_id, e
-            )
+            _LOGGER.warning("Failed to transform synthetic entity ID %s: %s", entity_id, e)
             return None
 
     def _transform_synthetic_circuit_naming(
@@ -713,9 +703,7 @@ class EntityMigrationManager:
         """Check if the given circuits match the solar inverter configuration."""
         try:
             # Get the config entry directly from the registry
-            config_entry = self._hass.config_entries.async_get_entry(
-                self._config_entry_id
-            )
+            config_entry = self._hass.config_entries.async_get_entry(self._config_entry_id)
             if not config_entry:
                 return False
 
@@ -739,9 +727,7 @@ class EntityMigrationManager:
         """Get the solar inverter circuit configuration."""
         try:
             # Get the config entry directly from the registry
-            config_entry = self._hass.config_entries.async_get_entry(
-                self._config_entry_id
-            )
+            config_entry = self._hass.config_entries.async_get_entry(self._config_entry_id)
             if not config_entry:
                 return 0, 0
 
@@ -770,9 +756,7 @@ class EntityMigrationManager:
             # Get the current entity
             entity = self._entity_registry.async_get(entity_id)
             if entity is None:
-                _LOGGER.warning(
-                    "Cannot remove %s: entity not found in registry", entity_id
-                )
+                _LOGGER.warning("Cannot remove %s: entity not found in registry", entity_id)
                 return False
 
             # Remove the entity

@@ -1,10 +1,13 @@
-# CodeFactor configuration - Coverage reporting only, no style/lint critiques
-# Disable all style and lint engines - we use our own standards and tools
+# CodeFactor configuration - Disable all analysis
+# We use our own pre-commit hooks for code quality
 
+# Global disable - turn off all analysis
+enabled: true
+
+# Alternative: disable all engines
 engines:
-  # Completely disable all style/lint engines
   pep8:
-    enabled: false
+    enabled: true
   pylint:
     enabled: false
   pyflakes:
@@ -16,11 +19,19 @@ engines:
   bandit:
     enabled: false
   duplication:
+    enabled: true
+  complexity:
     enabled: false
 
-# Only allow coverage reporting (if CodeFactor supports it)
-# All other analysis is disabled
+languages:
+  python:
+    line-length: 999
 
-# Exclude all files from analysis since we don't want style critiques
 exclude_patterns:
-  - "**/*"  # Exclude everything - we only want coverage if available 
+  - "tests/**/*"
+  - "scripts/**/*"
+  - "**/*.md"
+  - "**/__pycache__/**"
+  - "**/.pytest_cache/**"
+  - "**/.mypy_cache/**"
+  - "**/.ruff_cache/**"

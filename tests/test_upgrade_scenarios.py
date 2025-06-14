@@ -58,9 +58,7 @@ def mock_span_panel():
 class TestUpgradeScenarios:
     """Test upgrade scenarios for different installation types."""
 
-    def test_legacy_installation_preserved_on_upgrade(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_legacy_installation_preserved_on_upgrade(self, mock_hass, mock_config_entry):
         """Test that legacy installations (pre-1.0.4) are preserved during upgrades."""
         # Legacy installation: no device prefix, no circuit numbers
         mock_config_entry.options = {
@@ -569,9 +567,7 @@ class TestUpgradeDocumentationCompliance:
                 pattern = flow._get_current_naming_pattern()
                 assert pattern == EntityNamingPattern.LEGACY_NAMES.value
 
-    def test_readme_compliance_friendly_names_pattern(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_readme_compliance_friendly_names_pattern(self, mock_hass, mock_config_entry):
         """Test that README examples match actual friendly names pattern behavior."""
         # Post-1.0.4 installation with friendly names
         mock_config_entry.options = {
@@ -592,9 +588,7 @@ class TestUpgradeDocumentationCompliance:
                 pattern = flow._get_current_naming_pattern()
                 assert pattern == EntityNamingPattern.FRIENDLY_NAMES.value
 
-    def test_readme_compliance_circuit_numbers_pattern(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_readme_compliance_circuit_numbers_pattern(self, mock_hass, mock_config_entry):
         """Test that README examples match actual circuit numbers pattern behavior."""
         # Post-1.0.9 installation with circuit numbers
         mock_config_entry.options = {
@@ -615,9 +609,7 @@ class TestUpgradeDocumentationCompliance:
                 pattern = flow._get_current_naming_pattern()
                 assert pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
-    def test_readme_compliance_new_installation_default(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_readme_compliance_new_installation_default(self, mock_hass, mock_config_entry):
         """Test that new installations default to circuit numbers as documented."""
         # New installation (post-1.0.9) - explicit defaults set by create_new_entry
         mock_config_entry.options = {

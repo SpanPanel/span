@@ -23,9 +23,7 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 def patch_dispatcher_send_for_teardown():
     """Patch dispatcher send for teardown."""
     yield
-    patch(
-        "homeassistant.helpers.dispatcher.dispatcher_send", lambda *a, **kw: None
-    ).start()  # type: ignore
+    patch("homeassistant.helpers.dispatcher.dispatcher_send", lambda *a, **kw: None).start()  # type: ignore
 
 
 @pytest.fixture(autouse=True, scope="session")

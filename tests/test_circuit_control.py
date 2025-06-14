@@ -124,9 +124,7 @@ async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: A
     # Verify API was called with correct parameters
     mock_panel.api.set_relay.assert_called_once()
     call_args = mock_panel.api.set_relay.call_args
-    assert (
-        call_args[0][1] == CircuitRelayState.CLOSED
-    )  # Second argument should be CLOSED
+    assert call_args[0][1] == CircuitRelayState.CLOSED  # Second argument should be CLOSED
 
     # Verify refresh was requested
     mock_coordinator.async_request_refresh.assert_called_once()
@@ -183,9 +181,7 @@ async def test_switch_state_reflects_relay_state(
     mock_coordinator_closed = MagicMock()
     mock_coordinator_closed.data = mock_panel_closed
 
-    switch_closed = SpanPanelCircuitsSwitch(
-        mock_coordinator_closed, "1", "Kitchen Outlets"
-    )
+    switch_closed = SpanPanelCircuitsSwitch(mock_coordinator_closed, "1", "Kitchen Outlets")
 
     # Check that switch is on for CLOSED relay
     assert switch_closed.is_on is True
@@ -210,9 +206,7 @@ async def test_switch_state_reflects_relay_state(
 
 
 @pytest.mark.asyncio
-async def test_switch_handles_missing_circuit(
-    hass: Any, enable_custom_integrations: Any
-):
+async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrations: Any):
     """Test that switch handles gracefully when circuit is missing."""
 
     # Empty circuits dict

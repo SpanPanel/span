@@ -131,9 +131,7 @@ class SpanPanelBinarySensor(
         else:
             self._attr_name = base_name or ""
 
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{description.key}"
-        )
+        self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
 
         _LOGGER.debug("CREATE BINSENSOR [%s]", self._attr_name)
 

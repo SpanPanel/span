@@ -6,9 +6,9 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 
-from .coordinator import SpanPanelCoordinator
-from .options import BATTERY_ENABLE, INVERTER_ENABLE
-from .sensor import (
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.options import BATTERY_ENABLE, INVERTER_ENABLE
+from custom_components.span_panel.sensor import (
     CIRCUITS_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_SENSORS,

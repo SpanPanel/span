@@ -150,8 +150,7 @@ def validate_solar_tabs(
 
         if phase1 == phase2:
             return False, (
-                f"Solar tabs {tab1} and {tab2} are both on {phase1}. "
-                f"For proper 240V measurement, tabs must be on opposite phases."
+                f"Solar tabs {tab1} and {tab2} are both on {phase1}. For proper 240V measurement, tabs must be on opposite phases."
             )
 
         return True, (
@@ -162,9 +161,7 @@ def validate_solar_tabs(
         return False, f"Invalid tab configuration: {e}"
 
 
-def get_phase_distribution(
-    tabs: list[int], valid_tabs: list[int] | None = None
-) -> dict:
+def get_phase_distribution(tabs: list[int], valid_tabs: list[int] | None = None) -> dict:
     """Analyze phase distribution across a list of tabs.
 
     Args:
@@ -205,9 +202,9 @@ def get_phase_distribution(
         "L2_count": l2_count,
         "L1_tabs": sorted(l1_tabs),
         "L2_tabs": sorted(l2_tabs),
-        "is_balanced": balance_difference <= 1,  # Allow 1-tab difference
+        "is_balanced": balance_difference <= 1,
         "balance_difference": balance_difference,
-    }
+    }  # Allow 1-tab difference
 
 
 def suggest_balanced_pairing(
