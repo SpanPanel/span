@@ -1,37 +1,53 @@
-# CodeFactor configuration - Disable all analysis
-# We use our own pre-commit hooks for code quality
+# CodeFactor configuration - Focus on custom_components only
+# We use our own pre-commit hooks for comprehensive code quality
 
-# Global disable - turn off all analysis
+# Enable CodeFactor with limited scope
 enabled: true
 
-# Alternative: disable all engines
+# Only enable essential engines for custom_components
 engines:
   pep8:
     enabled: true
+    # Disable line length checking - handled by ruff in CI/pre-commit
+    ignore:
+      - E501  # line too long
   pylint:
-    enabled: false
+    enabled: false  # We use ruff instead
   pyflakes:
-    enabled: false
+    enabled: false  # We use ruff instead
   mccabe:
-    enabled: false
+    enabled: false  # We use radon in pre-commit instead
   radon:
-    enabled: false
+    enabled: false  # We use radon in pre-commit instead
   bandit:
-    enabled: false
+    enabled: false  # We use bandit in pre-commit instead
   duplication:
-    enabled: true
+    enabled: true   # Keep duplication detection
   complexity:
-    enabled: false
+    enabled: false  # We use radon in pre-commit instead
 
-languages:
-  python:
-    line-length: 999
-
+# Explicitly exclude everything except custom_components
 exclude_patterns:
   - "tests/**/*"
   - "scripts/**/*"
+  - "docs/**/*"
+  - "examples/**/*"
+  - "htmlcov/**/*"
   - "**/*.md"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "**/*.json"
+  - "**/*.toml"
+  - "**/*.txt"
+  - "**/*.sh"
   - "**/__pycache__/**"
   - "**/.pytest_cache/**"
   - "**/.mypy_cache/**"
   - "**/.ruff_cache/**"
+  - "**/.git/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/node_modules/**"
+  - "poetry.lock"
+  - ".pre-commit-config.yaml"
+  - ".gitignore"

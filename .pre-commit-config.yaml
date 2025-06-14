@@ -60,7 +60,7 @@ repos:
       - id: bandit
         args: ['-c', 'pyproject.toml']
         additional_dependencies: ['bandit[toml]']
-        exclude: '^tests/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|^scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
 
   # Poetry check for pyproject.toml validation
   - repo: https://github.com/python-poetry/poetry
