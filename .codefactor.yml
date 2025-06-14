@@ -1,45 +1,26 @@
+# CodeFactor configuration - Coverage reporting only, no style/lint critiques
+# Disable all style and lint engines - we use our own standards and tools
+
 engines:
+  # Completely disable all style/lint engines
   pep8:
-    enabled: true
-    config:
-      max-line-length: 999  # Disable line length restrictions - we use our own standards
-      ignore:
-        - E501  # line too long
-        - W503  # line break before binary operator (conflicts with Black)
-        - W504  # line break after binary operator (conflicts with Black)
+    enabled: false
   pylint:
-    enabled: true
-    config:
-      max-line-length: 999
-      disable:
-        - attribute-defined-outside-init  # Common HA pattern for lazy initialization
-        - too-many-instance-attributes    # HA entities often have many attributes
-        - too-many-arguments             # HA constructors often need many params
-        - too-few-public-methods         # HA entities/helpers are often simple
-        - missing-docstring              # Not enforcing docstrings everywhere
-        - invalid-name                   # HA uses different naming conventions
-        - broad-except                   # Sometimes needed for robustness
-        - unused-argument                # HA callbacks often have unused params
-        - no-self-use                    # HA methods often don't use self but need to be methods
-
-# Disable overly strict engines that don't understand HA patterns
+    enabled: false
+  pyflakes:
+    enabled: false
+  mccabe:
+    enabled: false
   radon:
-    enabled: false  # Complexity metrics not useful for HA components
+    enabled: false
   bandit:
-    enabled: false  # Security scanner too strict for HA development patterns
+    enabled: false
+  duplication:
+    enabled: false
 
-# Exclude certain files/directories from analysis
+# Only allow coverage reporting (if CodeFactor supports it)
+# All other analysis is disabled
+
+# Exclude all files from analysis since we don't want style critiques
 exclude_patterns:
-  - "tests/**/*"           # Don't analyze test files
-  - "scripts/**/*"         # Don't analyze utility scripts
-  - "**/__pycache__/**/*"  # Python cache files
-  - "**/.venv/**/*"        # Virtual environment
-  - "**/venv/**/*"         # Virtual environment
-  - "**/.mypy_cache/**/*"  # MyPy cache
-  - "**/.pytest_cache/**/*" # Pytest cache
-  - "**/.ruff_cache/**/*"  # Ruff cache
-  - "**/htmlcov/**/*"      # Coverage HTML reports
-  - "**/dist/**/*"         # Distribution files
-  - "**/*.pyc"            # Compiled Python files
-  - "**/.git/**/*"        # Git files
-  - "**/node_modules/**/*" # Node modules if any 
+  - "**/*"  # Exclude everything - we only want coverage if available 

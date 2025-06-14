@@ -22,18 +22,21 @@ def construct_entity_id(
     span_panel: SpanPanel,
     platform: str,
     circuit_name: str,
-    circuit_number: str | int,
+    circuit_number: int | str,
     suffix: str,
 ) -> str | None:
     """Construct entity ID based on integration configuration flags.
+
+    This function handles entity naming for individual circuit entities based on the
+    USE_CIRCUIT_NUMBERS and USE_DEVICE_PREFIX configuration flags.
 
     Args:
         coordinator: The coordinator instance
         span_panel: The span panel data
         platform: Platform name ("sensor", "switch", "select")
         circuit_name: Human-readable circuit name
-        circuit_number: Circuit number (tab position)
-        suffix: Entity-specific suffix ("power", "breaker", "priority", etc.)
+        circuit_number: Circuit number/identifier
+        suffix: Entity-specific suffix ("power", "energy_produced", etc.)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
@@ -45,8 +48,16 @@ def construct_entity_id(
             "Config entry missing from coordinator - integration improperly set up"
         )
 
-    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
-    use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+    # For existing installations with empty options, default to False for backward compatibility
+    # For new installations, these will be explicitly set to True in create_new_entry()
+    if not config_entry.options:
+        # Empty options = existing installation, use legacy defaults
+        use_device_prefix = False
+        use_circuit_numbers = False
+    else:
+        # Has options = either new installation or existing installation that went through options flow
+        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
+        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
 
     # Get device info for device name
     device_info = panel_to_device_info(span_panel)
@@ -54,6 +65,7 @@ def construct_entity_id(
 
     if use_circuit_numbers:
         # New installation (v1.0.9+) - stable circuit-based entity IDs
+        # Format: sensor.span_panel_circuit_15_power
         if device_name_raw:
             device_name = sanitize_name_for_entity_id(device_name_raw)
             return f"{platform}.{device_name}_circuit_{circuit_number}_{suffix}"
@@ -61,7 +73,8 @@ def construct_entity_id(
             return None
 
     elif use_device_prefix:
-        # Post-1.0.4 installation - device prefix with circuit names
+        # Post-1.0.4 installation - friendly names with device prefix
+        # Format: sensor.span_panel_kitchen_outlets_power
         if device_name_raw:
             device_name = sanitize_name_for_entity_id(device_name_raw)
             circuit_name_sanitized = sanitize_name_for_entity_id(circuit_name)
@@ -121,8 +134,16 @@ def construct_synthetic_entity_id(
             "Config entry missing from coordinator - integration improperly set up"
         )
 
-    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
-    use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+    # For existing installations with empty options, default to False for backward compatibility
+    # For new installations, these will be explicitly set to True in create_new_entry()
+    if not config_entry.options:
+        # Empty options = existing installation, use legacy defaults
+        use_device_prefix = False
+        use_circuit_numbers = False
+    else:
+        # Has options = either new installation or existing installation that went through options flow
+        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
+        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
 
     # Get device info for device name
     device_info = panel_to_device_info(span_panel)
