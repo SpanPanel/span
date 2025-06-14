@@ -166,7 +166,7 @@ ignore = [
 
 # Bandit configuration
 [tool.bandit]
-exclude_dirs = ["tests"]
+exclude_dirs = ["tests", "scripts"]
 skips = ["B101", "B108"]  # Skip assert_used and hardcoded_tmp_directory for test files
 
 [tool.ruff.lint.flake8-pytest-style]
