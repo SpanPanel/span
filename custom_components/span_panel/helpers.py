@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
-from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
+
+if TYPE_CHECKING:
+    from .coordinator import SpanPanelCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -246,3 +249,51 @@ def construct_synthetic_friendly_name(
         return f"Circuit {valid_circuits[0]} {suffix_description}"
     else:
         return f"Unknown Circuit {suffix_description}"
+
+
+def construct_panel_entity_id(
+    coordinator: SpanPanelCoordinator,
+    span_panel: SpanPanel,
+    platform: str,
+    suffix: str,
+) -> str | None:
+    """Construct entity ID for panel-level entities based on integration configuration flags.
+
+    This function handles entity naming for panel-level entities based on the
+    USE_DEVICE_PREFIX configuration flag.
+
+    Args:
+        coordinator: The coordinator instance
+        span_panel: The span panel data
+        platform: Platform name ("sensor", "switch", "select")
+        suffix: Entity-specific suffix ("current_power", "dsm_state", etc.)
+
+    Returns:
+        Constructed entity ID string or None if device info unavailable
+
+    """
+    config_entry = coordinator.config_entry
+    if config_entry is None:
+        raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
+
+    # For existing installations with empty options, default to False for backward compatibility
+    # For new installations, these will be explicitly set to True in create_new_entry()
+    if not config_entry.options:
+        # Empty options = existing installation, use legacy defaults
+        use_device_prefix = False
+    else:
+        # Has options = either new installation or existing installation that went through options flow
+        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+    if use_device_prefix:
+        # With device prefix - Format: sensor.span_panel_current_power
+        device_info = panel_to_device_info(span_panel)
+        device_name_raw = device_info.get("name")
+        if device_name_raw:
+            device_name = sanitize_name_for_entity_id(device_name_raw)
+            return f"{platform}.{device_name}_{suffix}"
+        else:
+            return None
+    else:
+        # Without device prefix - Format: sensor.current_power
+        return f"{platform}.{suffix}"

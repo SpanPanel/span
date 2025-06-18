@@ -39,10 +39,11 @@ class SpanPanel:
         access_token: str | None = None,  # nosec
         options: Options | None = None,
         use_ssl: bool = False,
+        scan_interval: int | None = None,
     ) -> None:
         """Initialize the Span Panel."""
         self._options = options
-        self.api = SpanPanelApi(host, access_token, options, use_ssl)
+        self.api = SpanPanelApi(host, access_token, options, use_ssl, scan_interval)
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None
         self._circuits: dict[str, SpanPanelCircuit] = {}

@@ -41,12 +41,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     use_ssl_value = config.get(CONF_USE_SSL, False)
 
+    # Get scan interval from options with a default
+    scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds)
+    _LOGGER.debug("Using scan interval: %s seconds", scan_interval)
+
     try:
         span_panel = SpanPanel(
             host=config[CONF_HOST],
             access_token=config[CONF_ACCESS_TOKEN],
             options=Options(entry),
             use_ssl=use_ssl_value,
+            scan_interval=scan_interval,
         )
 
         _LOGGER.debug("Created SpanPanel instance: %s", span_panel)
@@ -71,10 +76,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.debug("Successfully tested authenticated connection")
 
         _LOGGER.debug("Successfully set up and tested SPAN Panel API client")
-
-        # Get scan interval from options with a default
-        scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds)
-        _LOGGER.debug("Using scan interval: %s seconds", scan_interval)
 
         coordinator = SpanPanelCoordinator(
             hass, span_panel, name, update_interval=scan_interval, config_entry=entry
@@ -110,7 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error("Failed to setup SPAN Panel integration: %s", e, exc_info=True)
         # Clean up on failure
         try:
-            if "span_panel" in locals():
+            if "span_panel" in locals() and isinstance(span_panel, SpanPanel):
                 await span_panel.close()
         except Exception as cleanup_error:
             _LOGGER.debug("Error during cleanup: %s", cleanup_error)
@@ -130,11 +131,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             span_panel = coordinator.span_panel_api
             try:
                 # SpanPanel has a close method that properly cleans up the API client
-                if hasattr(span_panel, "close") and callable(span_panel.close):
+                if isinstance(span_panel, SpanPanel):
                     await span_panel.close()
                     _LOGGER.debug("Successfully closed SpanPanel API client")
             except TypeError as e:
-                # Handle non-awaitable objects gracefully (e.g., in tests)
+                # Handle non-awaitable objects gracefully
                 _LOGGER.debug("API close method is not awaitable, skipping cleanup: %s", e)
             except Exception as e:
                 _LOGGER.error("Error during API cleanup: %s", e)

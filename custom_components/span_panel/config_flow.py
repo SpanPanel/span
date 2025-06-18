@@ -29,6 +29,7 @@ from custom_components.span_panel.span_panel_hardware_status import (
 )
 
 from .const import (
+    COORDINATOR,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ENTITY_NAMING_PATTERN,
@@ -47,11 +48,15 @@ from .const import (
     DEFAULT_API_RETRY_TIMEOUT,
     DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
 )
-from .entity_migration import EntityMigrationManager
 from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ConfigFlowError(Exception):
+    """Custom exception for config flow internal errors."""
+
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelClient
@@ -194,7 +199,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Set up the flow."""
 
         if self._is_flow_setup is True:
-            raise AssertionError("Flow is already set up")
+            _LOGGER.error("Flow setup attempted when already set up")
+            raise ConfigFlowError("Flow is already set up")
 
         # Use config settings for quick feedback - no retries and shorter timeout
         async with SpanPanelClient(
@@ -228,7 +234,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
         if self._is_flow_setup is False:
-            raise AssertionError("Flow is not set up")
+            _LOGGER.error("Flow method called before setup")
+            raise ConfigFlowError("Flow is not set up")
 
     async def ensure_not_already_configured(self) -> None:
         """Ensure the panel is not already configured."""
@@ -490,7 +497,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # An existing entry must exist before we can update it
         entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None:
-            raise AssertionError("Entry does not exist")
+            _LOGGER.error("Config entry %s does not exist during reauth", entry_id)
+            return self.async_abort(reason="reauth_failed")
 
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
@@ -755,29 +763,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Migrate entity IDs when naming pattern changes."""
         _LOGGER.info("Starting entity ID migration from %s to %s", old_pattern, new_pattern)
 
-        # Create migration manager
-        migration_manager = EntityMigrationManager(self.hass, self.config_entry.entry_id)
+        # Get the coordinator to handle migration using actual entity objects
+        coordinator_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
+        coordinator = coordinator_data.get(COORDINATOR)
 
-        # Convert string patterns to enum values
-        from_pattern = EntityNamingPattern(old_pattern)
-        to_pattern = EntityNamingPattern(new_pattern)
+        if not coordinator:
+            _LOGGER.error("Cannot migrate entities: coordinator not found")
+            return
 
-        # Perform the migration
-        success = await migration_manager.migrate_entities(from_pattern, to_pattern)
+        # Perform the migration using the coordinator
+        success = await coordinator.migrate_entities(old_pattern, new_pattern)
 
         if success:
             _LOGGER.info("Entity migration completed successfully")
         else:
             _LOGGER.error("Entity migration failed")
-
-    def _generate_new_entity_id(
-        self, old_entity_id: str, old_pattern: str, new_pattern: str
-    ) -> str | None:
-        """Generate new entity ID based on the new naming pattern."""
-        # This method is deprecated in favor of EntityMigrationManager
-        # Keeping it for backward compatibility but it will be removed
-        _LOGGER.warning("Using deprecated _generate_new_entity_id method for %s", old_entity_id)
-        return None
 
 
 # Register the config flow handler

@@ -5,10 +5,20 @@ import time
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
+
+
+def create_mock_config_entry(
+    data: dict[str, Any] | None = None, options: dict[str, Any] | None = None
+):
+    """Create a mock config entry with specified data and options."""
+    mock_entry = MagicMock()
+    mock_entry.data = data or {}
+    mock_entry.options = options or {}
+    return mock_entry
 
 
 def load_json_object_fixture(filename: str) -> dict[str, object]:

@@ -329,6 +329,7 @@ async def test_ensure_client_open_with_options():
             retries=5,
             retry_timeout=10,
             retry_backoff_multiplier=2.5,
+            cache_window=9.0,  # 60% of default 15-second scan interval
         )
 
 
