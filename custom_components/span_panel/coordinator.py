@@ -191,8 +191,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             for entity in entities:
                 # Skip unmapped_tab entities - they should never be renamed as they are used as
                 # variables in solar YAML configuration
-                if "unmapped_tab_" in entity.entity_id:
-                    _LOGGER.debug("Skipping unmapped_tab entity: %s", entity.entity_id)
+                if "unmapped_tab_" in entity.entity_id or self._is_panel_level_entity(entity):
+                    _LOGGER.debug("Skipping entity: %s", entity.entity_id)
                     continue
 
                 # Check if this is a synthetic sensor (solar inverter, etc.)
@@ -318,3 +318,54 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         except Exception as e:
             _LOGGER.warning("Failed to generate new entity ID for %s: %s", current_entity_id, e)
             return None
+
+    def _is_panel_level_entity(self, entity: er.RegistryEntry) -> bool:
+        """Check if entity is a panel-level entity that should not be migrated.
+
+        Panel-level entities represent the state of the panel itself (not circuits)
+        and should have stable entity IDs regardless of naming pattern changes.
+
+        Examples:
+        - binary_sensor.span_panel_door_state
+        - binary_sensor.span_panel_cellular_link
+        - sensor.current_power (or sensor.span_panel_current_power)
+        - sensor.dsm_state
+
+        """
+        if not entity.unique_id:
+            return False
+
+        # Panel-level binary sensors have unique_id pattern: span_{serial}_{key}
+        # where key is doorState, eth0Link, wlanLink, wwanLink
+        panel_binary_sensor_keys = [
+            "doorState",
+            "eth0Link",
+            "wlanLink",
+            "wwanLink",
+        ]
+
+        for key in panel_binary_sensor_keys:
+            if entity.unique_id.endswith(f"_{key}"):
+                return True
+
+        # Panel-level sensors have unique_id pattern: span_{serial}_{key}
+        # where key is instantGridPowerW, feedthroughPowerW, dsmState, etc.
+        panel_sensor_keys = [
+            "instantGridPowerW",
+            "feedthroughPowerW",
+            "mainMeterEnergy.producedEnergyWh",
+            "mainMeterEnergy.consumedEnergyWh",
+            "feedthroughEnergy.producedEnergyWh",
+            "feedthroughEnergy.consumedEnergyWh",
+            "currentRunConfig",
+            "dsmGridState",
+            "dsmState",
+            "mainRelayState",
+            "softwareVer",
+        ]
+
+        for key in panel_sensor_keys:
+            if entity.unique_id.endswith(f"_{key}"):
+                return True
+
+        return False
