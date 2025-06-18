@@ -18,7 +18,12 @@ from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from ha_synthetic_sensors.config_manager import ConfigManager
+from ha_synthetic_sensors.name_resolver import NameResolver
+from ha_synthetic_sensors.sensor_manager import SensorManager, SensorManagerConfig
 
 from .const import (
     CIRCUITS_ENERGY_CONSUMED,
@@ -32,21 +37,24 @@ from .const import (
     MAIN_RELAY_STATE,
     STATUS_SOFTWARE_VER,
     STORAGE_BATTERY_PERCENTAGE,
-    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_entity_id,
+    construct_panel_entity_id,
     construct_synthetic_entity_id,
     construct_synthetic_friendly_name,
     get_user_friendly_suffix,
+    sanitize_name_for_entity_id,
 )
-from .options import BATTERY_ENABLE, INVERTER_ENABLE
+from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from .solar_tab_manager import SolarTabManager
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
+from .synthetic_bridge import SyntheticSensorsBridge
 from .util import panel_to_device_info
 
 
@@ -363,19 +371,21 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         self._attr_device_info = device_info
         base_name: str | None = getattr(description, "name", None)
 
-        if (
-            data_coordinator.config_entry is not None
-            and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and "name" in device_info
-        ):
-            self._attr_name = f"{device_info['name']} {base_name or ''}"
-        else:
-            self._attr_name = base_name or ""
+        # Friendly name should never include device prefix - only entity_id follows naming patterns
+        # The device context is already provided by the device_info association
+        self._attr_name = base_name or ""
 
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
 
         self._attr_icon = "mdi:flash"
+
+        # Set entity registry defaults if they exist in the description
+        if hasattr(description, "entity_registry_enabled_default"):
+            self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
+        if hasattr(description, "entity_registry_visible_default"):
+            self._attr_entity_registry_visible_default = description.entity_registry_visible_default
+
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
 
     def _handle_coordinator_update(self) -> None:
@@ -455,6 +465,19 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 
+    def _construct_unmapped_entity_id_simple(
+        self, span_panel: SpanPanel, circuit_number: int | str, suffix: str
+    ) -> str:
+        """Construct entity ID for unmapped tab with consistent modern naming."""
+        # Always use device prefix and circuit numbers for unmapped entities
+        device_info = panel_to_device_info(span_panel)
+        device_name_raw = device_info.get("name")
+        if device_name_raw:
+            device_name = sanitize_name_for_entity_id(device_name_raw)
+            return f"sensor.{device_name}_unmapped_tab_{circuit_number}_{suffix}"
+        else:
+            return f"sensor.unmapped_tab_{circuit_number}_{suffix}"
+
 
 class SpanPanelCircuitSensor(
     SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
@@ -479,9 +502,22 @@ class SpanPanelCircuitSensor(
         circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
 
         entity_suffix = get_user_friendly_suffix(description.key)
-        self.entity_id = construct_entity_id(  # type: ignore[assignment]
-            coordinator, span_panel, "sensor", name, circuit_number, entity_suffix
-        )
+
+        # For unmapped circuits, always use device prefix and circuit numbers as they are invisible
+        if circuit_id.startswith("unmapped_tab_"):
+            entity_id = self._construct_unmapped_entity_id_simple(
+                span_panel, circuit_number, entity_suffix
+            )
+        else:
+            # Regular circuit - use standard naming logic
+            entity_id_result = construct_entity_id(
+                coordinator, span_panel, "sensor", name, circuit_number, entity_suffix
+            )
+            if entity_id_result is None:
+                raise ValueError(f"Failed to construct entity ID for circuit {circuit_id}")
+            entity_id = entity_id_result
+
+        self.entity_id = entity_id
 
         friendly_name = f"{name} {description.name}"
 
@@ -558,6 +594,24 @@ class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPa
 
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
     """Span Panel status sensor entity."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelDataSensorEntityDescription,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize the panel status sensor."""
+        super().__init__(data_coordinator, description, span_panel)
+
+        # Construct entity ID based on configuration
+        # Convert sensor name to entity ID suffix (e.g., "Current Power" -> "current_power")
+        sensor_name = description.name
+        if sensor_name and isinstance(sensor_name, str):
+            suffix = sanitize_name_for_entity_id(sensor_name)
+            entity_id = construct_panel_entity_id(data_coordinator, span_panel, "sensor", suffix)
+            if entity_id is not None:
+                self.entity_id = entity_id
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         """Get the data source for the panel status sensor."""
@@ -704,63 +758,56 @@ async def async_setup_entry(
 
     # Config entry should never be None here, but we check for safety
     solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
-    solar_descriptions = []  # Initialize for logging
     _LOGGER.info(
         "Solar sensor setup - enabled: %s, options: %s",
         solar_enabled,
         config_entry.options,
     )
 
-    if solar_enabled:
-        # Get inverter leg configuration from options
-        from .options import INVERTER_LEG1, INVERTER_LEG2
-
-        inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
-        inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
-
-        # Create solar inverter synthetic sensor configuration
-        solar_config = SyntheticSensorConfig(
-            friendly_name="Solar Inverter",
-            circuit_numbers=[inverter_leg1, inverter_leg2],
-            key_prefix="solar_inverter",
-            value_fn_map={
-                "instant_power": lambda panel_data: panel_data.solar_inverter_instant_power,
-                "energy_produced": lambda panel_data: panel_data.solar_inverter_energy_produced,
-                "energy_consumed": lambda panel_data: panel_data.solar_inverter_energy_consumed,
-            },
-        )
-
-        # Create the synthetic sensor descriptions
-        solar_descriptions = create_synthetic_sensor_descriptions(solar_config)
-
-        # Create entities from the synthetic descriptions
-        _LOGGER.info("Creating %d solar sensor entities", len(solar_descriptions))
-        for description_i in solar_descriptions:
-            solar_sensor = SpanPanelSyntheticSensor(
-                coordinator,
-                description_i,
-                span_panel,
-                solar_config.circuit_numbers,
-                solar_config.friendly_name,
-                solar_config.key_prefix,
-            )
-            _LOGGER.info(
-                "Created solar sensor: %s (unique_id: %s)",
-                solar_sensor.entity_id,
-                solar_sensor.unique_id,
-            )
-            entities.append(solar_sensor)
-
-    for description_ss in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
-
-    # Create circuit sensors (excluding synthetics)
+    # Create circuit sensors with visibility control for unmapped tabs
     circuit_sensor_count = 0
     for description_cs in CIRCUITS_SENSORS:
         for id_c, circuit_data in span_panel.circuits.items():
+            # Determine visibility defaults based on circuit type
+            if id_c.startswith("unmapped_tab_"):
+                # Unmapped tab circuits are enabled but hidden by default
+                # This allows them to be used by synthetic sensors without UI clutter
+                enabled_default = True
+                visible_default = False
+                _LOGGER.info("Creating enabled but hidden unmapped tab circuit sensor: %s", id_c)
+            else:
+                # Regular circuits use the original description defaults
+                enabled_default = description_cs.entity_registry_enabled_default
+                visible_default = description_cs.entity_registry_visible_default
+
+            # Create a new description with visibility control
+            circuit_description = SpanPanelCircuitsSensorEntityDescription(
+                key=description_cs.key,
+                name=description_cs.name,
+                device_class=description_cs.device_class,
+                entity_category=description_cs.entity_category,
+                entity_registry_enabled_default=enabled_default,
+                entity_registry_visible_default=visible_default,
+                force_update=description_cs.force_update,
+                icon=description_cs.icon,
+                has_entity_name=description_cs.has_entity_name,
+                translation_key=description_cs.translation_key,
+                translation_placeholders=description_cs.translation_placeholders,
+                unit_of_measurement=description_cs.unit_of_measurement,
+                native_unit_of_measurement=description_cs.native_unit_of_measurement,
+                state_class=description_cs.state_class,
+                suggested_display_precision=description_cs.suggested_display_precision,
+                suggested_unit_of_measurement=description_cs.suggested_unit_of_measurement,
+                value_fn=description_cs.value_fn,
+            )
+
             entities.append(
                 SpanPanelCircuitSensor(
-                    coordinator, description_cs, id_c, circuit_data.name, span_panel
+                    coordinator,
+                    circuit_description,
+                    id_c,
+                    circuit_data.name,
+                    span_panel,
                 )
             )
             circuit_sensor_count += 1
@@ -771,8 +818,87 @@ async def async_setup_entry(
         len(span_panel.circuits),
         len(CIRCUITS_SENSORS),
     )
-    if config_entry is not None and config_entry.options.get(BATTERY_ENABLE, False):
+
+    # Handle solar configuration with new synthetic sensors approach
+    if solar_enabled:
+        inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
+        inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
+
+        # Enable the required tab circuits (but keep them hidden)
+        tab_manager = SolarTabManager(hass, config_entry)
+        await tab_manager.enable_solar_tabs(inverter_leg1, inverter_leg2)
+
+        # Generate synthetic sensors YAML configuration
+        synthetic_bridge = SyntheticSensorsBridge(hass, config_entry)
+        await synthetic_bridge.generate_solar_config(inverter_leg1, inverter_leg2)
+
+        # Validate the generated configuration
+        if await synthetic_bridge.validate_config():
+            _LOGGER.info("Solar synthetic sensors configuration generated successfully")
+
+            # Set up ha-synthetic-sensors integration for device integration
+            try:
+                # Create name resolver for device integration
+                name_resolver = NameResolver(hass, variables={})
+
+                # Create device info for solar sensors
+                device_info = panel_to_device_info(span_panel)
+
+                # Configure sensor manager for device integration
+                manager_config = SensorManagerConfig(
+                    device_info=device_info,
+                    unique_id_prefix=f"span_panel_solar_{config_entry.entry_id}",
+                    lifecycle_managed_externally=True,
+                )
+
+                sensor_manager = SensorManager(
+                    hass, name_resolver, async_add_entities, manager_config
+                )
+
+                # Load the YAML configuration we generated
+                yaml_path = synthetic_bridge.config_file_path
+                if yaml_path and yaml_path.exists():
+                    config_manager = ConfigManager(hass)
+                    config = config_manager.load_from_file(str(yaml_path))
+                    await sensor_manager.load_configuration(config)
+                    _LOGGER.info("Solar synthetic sensors loaded successfully from %s", yaml_path)
+                else:
+                    _LOGGER.error("Solar synthetic sensors YAML file not found at %s", yaml_path)
+
+            except Exception as e:
+                _LOGGER.error("Failed to set up solar synthetic sensors: %s", e)
+        else:
+            _LOGGER.error("Failed to validate solar synthetic sensors configuration")
+    else:
+        # Clean up solar configuration when disabled
+        tab_manager = SolarTabManager(hass, config_entry)
+        synthetic_bridge = SyntheticSensorsBridge(hass, config_entry)
+
+        await tab_manager.disable_solar_tabs()
+        await synthetic_bridge.remove_solar_config()
+
+    for description_ss in STATUS_SENSORS:
+        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
+
+    if config_entry.options.get(BATTERY_ENABLE, False):
         for description_sb in STORAGE_BATTERY_SENSORS:
             entities.append(SpanPanelStorageBatteryStatus(coordinator, description_sb, span_panel))
 
     async_add_entities(entities)
+
+    # Ensure unmapped tab entities are enabled in the entity registry
+    # This is necessary because existing disabled entities in the registry
+    # override the entity_registry_enabled_default setting
+    entity_registry = er.async_get(hass)
+    for entity in entities:
+        # Check if this is an unmapped tab circuit sensor
+        if (
+            hasattr(entity, "unique_id")
+            and entity.unique_id
+            and "unmapped_tab_" in entity.unique_id
+        ):
+            entity_id = entity.entity_id
+            registry_entry = entity_registry.async_get(entity_id)
+            if registry_entry and registry_entry.disabled:
+                _LOGGER.info("Enabling previously disabled unmapped tab entity: %s", entity_id)
+                entity_registry.async_update_entity(entity_id, disabled_by=None)

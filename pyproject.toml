@@ -10,30 +10,29 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
-httpx = "^0.28.1"
-simpleeval = "^0.9.13" # Added simpleeval
+homeassistant = "*"  # This pulls in all HA's pinned dependencies automatically
 span-panel-api = {path = "../span-panel-api", develop = true}
-homeassistant = "^2025.6.0"
-pytest-homeassistant-custom-component = "^0.13.251"
+ha-synthetic-sensors = {path = "../ha-synthetic-sensors", develop = true}
+# Only add dependencies here that HA doesn't provide or where you need different versions
 
 [tool.poetry.group.dev.dependencies]
+# Type stubs and dev-only tools that don't conflict with HA runtime
 homeassistant-stubs = "*"
 types-requests = "*"
-ruff = "^0.11.8"
-mypy = ">=1.16.0"
-pyright = "^1.1.390"
-bandit = "^1.7.4"
-pre-commit = "^4.2.0"
-pydantic = ">=2.0.0,<3.0.0"
-voluptuous = ">=0.15.2"
-voluptuous-stubs = "^0.1.1"
-python-direnv = "^0.2.2"
-prettier = "^0.0.7"
-pytest = "^8.3.5"
-pytest-homeassistant-custom-component = "^0.13.0"
-homeassistant = "*"
-isort = "^6.0.1"
-radon = "^6.0.1"
+types-PyYAML = "*"
+mypy = "*"
+pyright = "*"
+ruff = "*"
+bandit = "*"
+pre-commit = "*"
+voluptuous-stubs = "*"
+python-direnv = "*"
+prettier = "*"
+radon = "*"
+# Testing dependencies
+pytest = "*"
+pytest-homeassistant-custom-component = "*"
+isort = "*"
 
 [build-system]
 requires = ["poetry-core"]
@@ -109,14 +108,27 @@ include = ["custom_components/span_panel"]
 exclude = [
     "venv",
     ".venv",
-    "scripts"
+    "scripts",
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache"
 ]
-pythonPlatform = "Linux"
+extraPaths = [
+    "./custom_components",
+    "../span-panel-api/src",
+    "../ha-synthetic-sensors/src"
+]
+pythonPlatform = "Darwin"
+pythonVersion = "3.13"
 typeCheckingMode = "basic"
 useLibraryCodeForTypes = true
 autoSearchPaths = true
+autoImportCompletions = true
 reportMissingImports = "warning"
 reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 100

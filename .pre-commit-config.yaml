@@ -27,10 +27,10 @@ repos:
     rev: v0.11.13
     hooks:
       - id: ruff-format
-        exclude: '\..*_cache/.*|dist/.*|venv/.*'
+        exclude: 'scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
       - id: ruff-check
         args: ['--fix']
-        exclude: '\..*_cache/.*|dist/.*|venv/.*'
+        exclude: 'scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
 
   # MyPy for type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -43,8 +43,9 @@ repos:
           - typing-extensions
           - pytest
           - homeassistant-stubs
+          - types-PyYAML
         args: ['--config-file=pyproject.toml']
-        exclude: '^tests/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|^scripts/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
 
   # Markdownlint for markdown files
   - repo: https://github.com/DavidAnson/markdownlint-cli2
