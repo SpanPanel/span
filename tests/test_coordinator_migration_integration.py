@@ -247,10 +247,13 @@ async def test_bidirectional_entity_migration_works_correctly(
     mock_panel.status.serial_number = "12345"
 
     # Create mock circuits for the test cases
-    for circuit_num in [10, 15, 20]:
+    circuit_names = {1: "Main Panel", 10: "Heat Pump", 15: "EV Charger", 20: "Pool Pump"}
+
+    for circuit_num in [1, 10, 15, 20]:
         circuit_id = str(circuit_num)
         mock_circuit = MagicMock()
         mock_circuit.tabs = [circuit_num]  # tab position is the circuit number
+        mock_circuit.name = circuit_names[circuit_num]  # Set the actual friendly name
         mock_panel.circuits[circuit_id] = mock_circuit
 
     real_coordinator.data = mock_panel
@@ -266,7 +269,7 @@ async def test_bidirectional_entity_migration_works_correctly(
         {
             "circuit_id": "switch.span_panel_circuit_15_breaker",
             "circuit_unique_id": "span_12345_relay_15",
-            "friendly_id": "switch.span_panel_ev_charger",
+            "friendly_id": "switch.span_panel_ev_charger_breaker",
             "friendly_name": "EV Charger",
         },
         {
@@ -349,10 +352,19 @@ async def test_entity_name_to_id_conversion_is_generic(
     mock_panel.status.serial_number = "12345"
 
     # Create mock circuits for the test cases
+    circuit_names = {
+        1: "Main Panel",
+        10: "Heat Pump",
+        15: "EV Charger",
+        20: "Pool Pump",
+        25: "Solar Inverter",
+    }
+
     for circuit_num in [1, 10, 15, 20, 25]:
         circuit_id = str(circuit_num)
         mock_circuit = MagicMock()
         mock_circuit.tabs = [circuit_num]  # tab position is the circuit number
+        mock_circuit.name = circuit_names[circuit_num]  # Set the actual friendly name
         mock_panel.circuits[circuit_id] = mock_circuit
 
     real_coordinator.data = mock_panel
@@ -379,7 +391,7 @@ async def test_entity_name_to_id_conversion_is_generic(
         },
         {
             "circuit_id": "switch.span_panel_circuit_1_breaker",
-            "friendly_id": "switch.span_panel_main_panel",
+            "friendly_id": "switch.span_panel_main_panel_breaker",
             "friendly_name": "Main Panel",
             "unique_id": "span_12345_relay_1",
         },

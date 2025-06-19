@@ -23,10 +23,8 @@ from span_panel_api.exceptions import (
 )
 
 from .const import API_TIMEOUT, EntityNamingPattern
-from .helpers import sanitize_name_for_entity_id
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
-from .util import panel_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -285,48 +283,43 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             # Extract domain from current entity ID
             domain = current_entity_id.split(".", 1)[0]
 
-            # Get device name for prefix logic
+            # For circuit entities, use the same logic as fresh install
+            if unique_id:
+                # Set target pattern for simulation
+                self._migration_target_pattern = to_pattern
+                try:
+                    circuit_entity_id = self._generate_circuit_entity_id_for_migration(
+                        domain, unique_id, entity_name
+                    )
+                    if circuit_entity_id:
+                        return circuit_entity_id
+                finally:
+                    # Clean up the target pattern
+                    if hasattr(self, "_migration_target_pattern"):
+                        delattr(self, "_migration_target_pattern")
+
+            # For non-circuit entities (panel-level), construct using appropriate helpers
+            from .helpers import sanitize_name_for_entity_id, panel_to_device_info
+
+            # Fallback: manual construction for non-circuit entities
             device_name = "span_panel"  # Default fallback
-            if hasattr(self, "data") and self.data:  # self.data is the SpanPanel object
+            if hasattr(self, "data") and self.data:
                 try:
                     device_info = panel_to_device_info(self.data)
                     device_name_raw = device_info.get("name")
                     if device_name_raw:
                         device_name = sanitize_name_for_entity_id(device_name_raw)
-                except (AttributeError, KeyError, TypeError) as exc:
-                    # Log the specific error but continue with fallback
-                    _LOGGER.debug(
-                        "Unable to get device name for entity ID migration, using fallback: %s", exc
-                    )
-                    # device_name remains the default "span_panel"
+                except (AttributeError, KeyError, TypeError):
+                    pass  # Use fallback
 
-            # Use the entity's actual name to create the new object ID
             name_based_object_id = sanitize_name_for_entity_id(entity_name)
 
-            # Apply device prefix based on target pattern
-            if to_pattern == EntityNamingPattern.CIRCUIT_NUMBERS:
-                # Circuit numbers pattern: device_circuit_N_suffix
-                # Use the same logic as fresh install - look up circuit data and use construct_entity_id
-                _LOGGER.debug("Migrating to CIRCUIT_NUMBERS pattern, unique_id: %s", unique_id)
-                circuit_entity_id = None
-                if unique_id:
-                    circuit_entity_id = self._generate_circuit_entity_id_for_migration(
-                        domain, unique_id, entity_name
-                    )
-                _LOGGER.debug("Generated circuit entity ID: %s", circuit_entity_id)
-                if circuit_entity_id:
-                    new_object_id = circuit_entity_id.split(".", 1)[1]  # Remove domain prefix
-                else:
-                    # Not a circuit entity, use friendly name
-                    _LOGGER.debug("Not a circuit entity, using friendly name fallback")
-                    new_object_id = f"{device_name}_{name_based_object_id}"
-            elif to_pattern == EntityNamingPattern.FRIENDLY_NAMES:
-                # Friendly names pattern: device_friendly_name_suffix
-                # Friendly names are just base names, so we add device prefix for entity_id
-                new_object_id = f"{device_name}_{name_based_object_id}"
-            else:
-                # Legacy pattern, no device prefix
+            # Apply device prefix based on target pattern (simplified logic for non-circuit entities)
+            if to_pattern == EntityNamingPattern.LEGACY_NAMES:
                 new_object_id = name_based_object_id
+            else:
+                # Both CIRCUIT_NUMBERS and FRIENDLY_NAMES use device prefix for non-circuit entities
+                new_object_id = f"{device_name}_{name_based_object_id}"
 
             return f"{domain}.{new_object_id}"
 
@@ -431,6 +424,18 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                     domain, circuit_id, circuit, entity_name
                 )
 
+        # If no circuit matched by unique_id, try to find circuit by friendly name
+        # This handles migration FROM friendly names TO circuit numbers
+        for circuit_id, circuit in self.data.circuits.items():
+            if circuit.name == entity_name.replace(" Breaker", "").replace(" Power", "").replace(
+                " Energy Consumed", ""
+            ).replace(" Energy Produced", "").replace(" Energy Imported", "").replace(
+                " Energy Exported", ""
+            ).replace(" Priority", ""):
+                return self._simulate_circuit_entity_creation(
+                    domain, circuit_id, circuit, circuit.name, unique_id
+                )
+
         return None
 
     def _simulate_circuit_entity_creation(
@@ -442,26 +447,72 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         unique_id: str | None = None,
     ) -> str | None:
         """Simulate circuit entity creation using the same logic as fresh install."""
-        from .helpers import construct_entity_id, get_circuit_number, get_user_friendly_suffix
+        from .helpers import (
+            get_circuit_number,
+            get_user_friendly_suffix,
+            sanitize_name_for_entity_id,
+        )
+        from .util import panel_to_device_info
 
-        # Get circuit number using the same helper that sensor.py and switch.py should use
+        # Get circuit number using the same helper that sensor.py and switch.py use
         circuit_number = get_circuit_number(circuit)
 
-        if domain == "switch":
-            # Switches: call construct_entity_id with "breaker" suffix (same as switch.py)
-            return construct_entity_id(
-                self, self.data, "switch", entity_name, circuit_number, "breaker"
-            )
+        # Use the circuit's actual friendly name from panel data (not the passed entity_name)
+        circuit_friendly_name = circuit.name
+
+        # For migration, we need to construct entity ID for the TARGET pattern, not current config
+        # Determine target pattern from the migration context
+        if hasattr(self, "_migration_target_pattern"):
+            target_pattern = self._migration_target_pattern
         else:
-            # Sensors: extract suffix and call construct_entity_id (same as sensor.py)
+            # Fallback to using construct_entity_id with current config
+            from .helpers import construct_entity_id
+
+            if domain == "switch":
+                return construct_entity_id(
+                    self, self.data, "switch", circuit_friendly_name, circuit_number, "breaker"
+                )
+            else:
+                if unique_id is None:
+                    return None
+                serial = self.data.status.serial_number
+                prefix = f"span_{serial}_{circuit_id}_"
+                suffix = unique_id[len(prefix) :]
+                entity_suffix = get_user_friendly_suffix(suffix)
+                return construct_entity_id(
+                    self, self.data, "sensor", circuit_friendly_name, circuit_number, entity_suffix
+                )
+
+        # Get device name for prefix
+        device_info = panel_to_device_info(self.data)
+        device_name_raw = device_info.get("name")
+        if device_name_raw:
+            device_name = sanitize_name_for_entity_id(device_name_raw)
+        else:
+            device_name = "span_panel"
+
+        # Construct entity ID based on target pattern
+        if domain == "switch":
+            entity_suffix = "breaker"
+        else:
             if unique_id is None:
                 return None
-
             serial = self.data.status.serial_number
             prefix = f"span_{serial}_{circuit_id}_"
             suffix = unique_id[len(prefix) :]
             entity_suffix = get_user_friendly_suffix(suffix)
 
-            return construct_entity_id(
-                self, self.data, "sensor", entity_name, circuit_number, entity_suffix
-            )
+        # Apply the target pattern format
+        from .const import EntityNamingPattern
+
+        if target_pattern == EntityNamingPattern.CIRCUIT_NUMBERS:
+            # Circuit numbers format: device_circuit_N_suffix
+            return f"{domain}.{device_name}_circuit_{circuit_number}_{entity_suffix}"
+        elif target_pattern == EntityNamingPattern.FRIENDLY_NAMES:
+            # Friendly names format: device_friendly_name_suffix
+            circuit_name_sanitized = sanitize_name_for_entity_id(circuit_friendly_name)
+            return f"{domain}.{device_name}_{circuit_name_sanitized}_{entity_suffix}"
+        else:
+            # Legacy format: friendly_name_suffix
+            circuit_name_sanitized = sanitize_name_for_entity_id(circuit_friendly_name)
+            return f"{domain}.{circuit_name_sanitized}_{entity_suffix}"
