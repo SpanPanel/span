@@ -11,6 +11,7 @@ from .util import panel_to_device_info
 
 if TYPE_CHECKING:
     from .coordinator import SpanPanelCoordinator
+    from .span_panel_circuit import SpanPanelCircuit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,6 +19,19 @@ _LOGGER = logging.getLogger(__name__)
 def sanitize_name_for_entity_id(name: str) -> str:
     """Sanitize a name for use in entity IDs."""
     return name.lower().replace(" ", "_").replace("-", "_")
+
+
+def get_circuit_number(circuit: SpanPanelCircuit) -> int | str:
+    """Extract circuit number (tab position) from circuit object.
+
+    Args:
+        circuit: SpanPanelCircuit object
+
+    Returns:
+        Circuit number (tab position) or circuit_id if no tabs
+
+    """
+    return circuit.tabs[0] if circuit.tabs else circuit.circuit_id
 
 
 def construct_entity_id(

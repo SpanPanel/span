@@ -44,6 +44,7 @@ from .helpers import (
     construct_panel_entity_id,
     construct_synthetic_entity_id,
     construct_synthetic_friendly_name,
+    get_circuit_number,
     get_user_friendly_suffix,
     sanitize_name_for_entity_id,
 )
@@ -499,7 +500,7 @@ class SpanPanelCircuitSensor(
             raise ValueError(f"Circuit {circuit_id} not found")
 
         # Get the circuit number (tab position)
-        circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
+        circuit_number = get_circuit_number(circuit)
 
         entity_suffix = get_user_friendly_suffix(description.key)
 
