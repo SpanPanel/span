@@ -13,7 +13,7 @@ from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
 from .const import COORDINATOR, DOMAIN, CircuitRelayState
 from .coordinator import SpanPanelCoordinator
-from .helpers import construct_entity_id
+from .helpers import construct_entity_id, get_circuit_number
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
 
@@ -35,7 +35,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             raise ValueError(f"Circuit {circuit_id} not found")
 
         # Get the actual circuit number (tab position)
-        circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
+        circuit_number = get_circuit_number(circuit)
 
         self.circuit_id: str = circuit_id
         self._attr_icon = "mdi:toggle-switch"

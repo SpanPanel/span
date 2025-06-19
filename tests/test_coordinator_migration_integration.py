@@ -224,6 +224,108 @@ async def test_coordinator_migration_handles_missing_entities_gracefully(
 
 
 @pytest.mark.asyncio
+async def test_bidirectional_entity_migration_works_correctly(
+    hass: HomeAssistant, setup_integration_with_yaml_config
+):
+    """Test that entity migration works correctly in both directions."""
+    setup = setup_integration_with_yaml_config
+
+    from custom_components.span_panel.coordinator import SpanPanelCoordinator
+
+    # Create a real coordinator instance
+    real_coordinator = SpanPanelCoordinator.__new__(SpanPanelCoordinator)
+    real_coordinator.hass = hass
+    real_coordinator.config_entry = setup["config_entry"]
+
+    # Add mock panel data with test circuits
+    from unittest.mock import MagicMock
+
+    mock_panel = MagicMock()
+    mock_panel.circuits = {}
+
+    # Set up the panel status with the expected serial number
+    mock_panel.status.serial_number = "12345"
+
+    # Create mock circuits for the test cases
+    for circuit_num in [10, 15, 20]:
+        circuit_id = str(circuit_num)
+        mock_circuit = MagicMock()
+        mock_circuit.tabs = [circuit_num]  # tab position is the circuit number
+        mock_panel.circuits[circuit_id] = mock_circuit
+
+    real_coordinator.data = mock_panel
+
+    # Test cases with different entity types
+    test_cases = [
+        {
+            "circuit_id": "sensor.span_panel_circuit_10_power",
+            "circuit_unique_id": "span_12345_10_power",
+            "friendly_id": "sensor.span_panel_heat_pump_power",
+            "friendly_name": "Heat Pump Power",
+        },
+        {
+            "circuit_id": "switch.span_panel_circuit_15_breaker",
+            "circuit_unique_id": "span_12345_relay_15",
+            "friendly_id": "switch.span_panel_ev_charger",
+            "friendly_name": "EV Charger",
+        },
+        {
+            "circuit_id": "sensor.span_panel_circuit_20_energy_produced",
+            "circuit_unique_id": "span_12345_20_producedEnergyWh",
+            "friendly_id": "sensor.span_panel_pool_pump_energy_produced",
+            "friendly_name": "Pool Pump Energy Produced",
+        },
+    ]
+
+    for test_case in test_cases:
+        print(f"\n=== Testing {test_case['friendly_name']} ===")
+
+        # Test: Circuit Numbers → Friendly Names
+        circuit_to_friendly = real_coordinator._generate_new_entity_id_from_name(
+            test_case["circuit_id"],
+            test_case["friendly_name"],
+            EntityNamingPattern.CIRCUIT_NUMBERS,
+            EntityNamingPattern.FRIENDLY_NAMES,
+            test_case["circuit_unique_id"],
+        )
+
+        print(f"Circuit → Friendly: {test_case['circuit_id']} → {circuit_to_friendly}")
+        assert circuit_to_friendly == test_case["friendly_id"], (
+            f"Circuit→Friendly failed: expected '{test_case['friendly_id']}', got '{circuit_to_friendly}'"
+        )
+
+        # Test: Friendly Names → Circuit Numbers
+        friendly_to_circuit = real_coordinator._generate_new_entity_id_from_name(
+            test_case["friendly_id"],
+            test_case["friendly_name"],
+            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS,
+            test_case["circuit_unique_id"],
+        )
+
+        print(f"Friendly → Circuit: {test_case['friendly_id']} → {friendly_to_circuit}")
+        assert friendly_to_circuit == test_case["circuit_id"], (
+            f"Friendly→Circuit failed: expected '{test_case['circuit_id']}', got '{friendly_to_circuit}'"
+        )
+
+        # Test: Round-trip consistency (Circuit → Friendly → Circuit)
+        roundtrip_result = real_coordinator._generate_new_entity_id_from_name(
+            circuit_to_friendly,
+            test_case["friendly_name"],
+            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS,
+            test_case["circuit_unique_id"],
+        )
+
+        print(f"Round-trip: {test_case['circuit_id']} → {circuit_to_friendly} → {roundtrip_result}")
+        assert roundtrip_result == test_case["circuit_id"], (
+            f"Round-trip failed: expected '{test_case['circuit_id']}', got '{roundtrip_result}'"
+        )
+
+    print(f"\n✓ Bidirectional migration works correctly for {len(test_cases)} entity types")
+    print("✓ All round-trip migrations are consistent")
+
+
 async def test_entity_name_to_id_conversion_is_generic(
     hass: HomeAssistant, setup_integration_with_yaml_config
 ):
@@ -237,43 +339,162 @@ async def test_entity_name_to_id_conversion_is_generic(
     real_coordinator.hass = hass
     real_coordinator.config_entry = setup["config_entry"]
 
-    # Test various non-solar entity names to verify genericity
+    # Add mock panel data with test circuits
+    from unittest.mock import MagicMock
+
+    mock_panel = MagicMock()
+    mock_panel.circuits = {}
+
+    # Set up the panel status with the expected serial number
+    mock_panel.status.serial_number = "12345"
+
+    # Create mock circuits for the test cases
+    for circuit_num in [1, 10, 15, 20, 25]:
+        circuit_id = str(circuit_num)
+        mock_circuit = MagicMock()
+        mock_circuit.tabs = [circuit_num]  # tab position is the circuit number
+        mock_panel.circuits[circuit_id] = mock_circuit
+
+    real_coordinator.data = mock_panel
+
+    # Test various circuit entity types for bidirectional migration
     test_cases = [
         {
-            "current_id": "sensor.span_panel_circuit_10_12_power_consumption",
-            "name": "Heat Pump Power Consumption",
-            "expected": "sensor.span_panel_heat_pump_power_consumption",
+            "circuit_id": "sensor.span_panel_circuit_10_power",
+            "friendly_id": "sensor.span_panel_heat_pump_power",
+            "friendly_name": "Heat Pump Power",
+            "unique_id": "span_12345_10_power",
         },
         {
-            "current_id": "sensor.span_panel_circuit_15_17_status",
-            "name": "EV Charger Status",
-            "expected": "sensor.span_panel_ev_charger_status",
+            "circuit_id": "sensor.span_panel_circuit_15_energy_produced",
+            "friendly_id": "sensor.span_panel_ev_charger_energy_produced",
+            "friendly_name": "EV Charger Energy Produced",
+            "unique_id": "span_12345_15_producedEnergyWh",
         },
         {
-            "current_id": "sensor.span_panel_circuit_20_22_energy_usage",
-            "name": "Pool Pump Energy Usage",
-            "expected": "sensor.span_panel_pool_pump_energy_usage",
+            "circuit_id": "sensor.span_panel_circuit_20_energy_consumed",
+            "friendly_id": "sensor.span_panel_pool_pump_energy_consumed",
+            "friendly_name": "Pool Pump Energy Consumed",
+            "unique_id": "span_12345_20_consumedEnergyWh",
         },
         {
-            "current_id": "sensor.span_panel_circuit_1_3_total_power",
-            "name": "Main Panel Total Power",
-            "expected": "sensor.span_panel_main_panel_total_power",
+            "circuit_id": "switch.span_panel_circuit_1_breaker",
+            "friendly_id": "switch.span_panel_main_panel",
+            "friendly_name": "Main Panel",
+            "unique_id": "span_12345_relay_1",
         },
     ]
 
+    print("Testing bidirectional entity migration...")
+
     for test_case in test_cases:
-        generated_id = real_coordinator._generate_new_entity_id_from_name(
-            test_case["current_id"],
-            test_case["name"],
+        # Test 1: Circuit Numbers → Friendly Names
+        circuit_to_friendly = real_coordinator._generate_new_entity_id_from_name(
+            test_case["circuit_id"],
+            test_case["friendly_name"],
             EntityNamingPattern.CIRCUIT_NUMBERS,
             EntityNamingPattern.FRIENDLY_NAMES,
+            test_case["unique_id"],
         )
-        assert generated_id == test_case["expected"], (
-            f"Expected '{test_case['expected']}' for name '{test_case['name']}', "
-            f"got '{generated_id}'"
+        assert circuit_to_friendly == test_case["friendly_id"], (
+            f"Circuit→Friendly: Expected '{test_case['friendly_id']}' for name '{test_case['friendly_name']}', "
+            f"got '{circuit_to_friendly}'"
         )
 
-    print(f"✓ Generic entity name conversion works for {len(test_cases)} different types")
+        # Test 2: Friendly Names → Circuit Numbers (THE CRITICAL TEST!)
+        friendly_to_circuit = real_coordinator._generate_new_entity_id_from_name(
+            test_case["friendly_id"],
+            test_case["friendly_name"],
+            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS,
+            test_case["unique_id"],
+        )
+        assert friendly_to_circuit == test_case["circuit_id"], (
+            f"Friendly→Circuit: Expected '{test_case['circuit_id']}' for name '{test_case['friendly_name']}', "
+            f"got '{friendly_to_circuit}'"
+        )
+
+        # Test 3: Round-trip consistency (Circuit → Friendly → Circuit)
+        round_trip_result = real_coordinator._generate_new_entity_id_from_name(
+            circuit_to_friendly,
+            test_case["friendly_name"],
+            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS,
+            test_case["unique_id"],
+        )
+        assert round_trip_result == test_case["circuit_id"], (
+            f"Round-trip failed: {test_case['circuit_id']} → {circuit_to_friendly} → {round_trip_result}"
+        )
+
+    print(f"✓ Bidirectional migration works correctly for {len(test_cases)} entity types")
+    print("✓ Round-trip migration consistency verified")
+
+
+@pytest.mark.asyncio
+async def test_migration_handles_panel_level_entities_correctly(
+    hass: HomeAssistant, setup_integration_with_yaml_config
+):
+    """Test that panel-level entities are handled correctly during migration."""
+    setup = setup_integration_with_yaml_config
+
+    from custom_components.span_panel.coordinator import SpanPanelCoordinator
+
+    # Create a real coordinator instance
+    real_coordinator = SpanPanelCoordinator.__new__(SpanPanelCoordinator)
+    real_coordinator.hass = hass
+    real_coordinator.config_entry = setup["config_entry"]
+
+    # Add mock panel data (needed for circuit lookup, even though this test focuses on panel-level entities)
+    from unittest.mock import MagicMock
+
+    mock_panel = MagicMock()
+    mock_panel.circuits = {}
+
+    # Set up the panel status with the expected serial number
+    mock_panel.status.serial_number = "12345"
+
+    real_coordinator.data = mock_panel
+
+    # Test panel-level entities (these should use friendly names regardless of pattern)
+    panel_level_cases = [
+        {
+            "entity_id": "sensor.span_panel_current_power",
+            "friendly_name": "Current Power",
+            "unique_id": "span_12345_instantGridPowerW",
+        },
+        {
+            "entity_id": "binary_sensor.span_panel_cellular_link",
+            "friendly_name": "Cellular Link",
+            "unique_id": "span_12345_wwanLink",
+        },
+        {
+            "entity_id": "sensor.span_panel_dsm_state",
+            "friendly_name": "DSM State",
+            "unique_id": "span_12345_dsmState",
+        },
+    ]
+
+    print("Testing panel-level entity migration...")
+
+    for test_case in panel_level_cases:
+        # Panel-level entities should maintain consistent naming regardless of pattern
+        for from_pattern, to_pattern in [
+            (EntityNamingPattern.CIRCUIT_NUMBERS, EntityNamingPattern.FRIENDLY_NAMES),
+            (EntityNamingPattern.FRIENDLY_NAMES, EntityNamingPattern.CIRCUIT_NUMBERS),
+        ]:
+            result = real_coordinator._generate_new_entity_id_from_name(
+                test_case["entity_id"],
+                test_case["friendly_name"],
+                from_pattern,
+                to_pattern,
+                test_case["unique_id"],
+            )
+            assert result == test_case["entity_id"], (
+                f"Panel-level entity should not change: {from_pattern.value}→{to_pattern.value} "
+                f"Expected '{test_case['entity_id']}', got '{result}'"
+            )
+
+    print(f"✓ Panel-level entities maintain stable IDs across {len(panel_level_cases)} test cases")
 
 
 @pytest.mark.asyncio
