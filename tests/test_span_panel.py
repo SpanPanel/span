@@ -1,7 +1,8 @@
 """Tests for the SpanPanel class."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from custom_components.span_panel.exceptions import SpanPanelReturnedEmptyData
 from custom_components.span_panel.options import Options

@@ -1,16 +1,17 @@
 """Tests for helper functions in the Span Panel integration."""
 
 from unittest.mock import MagicMock, patch
+
 import pytest
 
+from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from custom_components.span_panel.helpers import (
-    sanitize_name_for_entity_id,
     construct_entity_id,
     construct_synthetic_entity_id,
     construct_synthetic_friendly_name,
     get_user_friendly_suffix,
+    sanitize_name_for_entity_id,
 )
-from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 
 
 class TestHelperFunctions:

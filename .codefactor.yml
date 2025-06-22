@@ -1,53 +1,12 @@
-# CodeFactor configuration - Focus on custom_components only
-# We use our own pre-commit hooks for comprehensive code quality
+# CodeFactor configuration - DISABLED
+# We use our own comprehensive pre-commit hooks for all code quality checks:
+# - ruff (formatting, linting, import sorting)
+# - mypy (type checking)
+# - bandit (security)
+# - radon (complexity)
+# - pytest with coverage
+# - markdownlint
+# - pre-commit hooks for file validation
 
-# Enable CodeFactor with limited scope
-enabled: true
-
-# Only enable essential engines for custom_components
-engines:
-  pep8:
-    enabled: true
-    # Disable line length checking - handled by ruff in CI/pre-commit
-    ignore:
-      - E501  # line too long
-  pylint:
-    enabled: false  # We use ruff instead
-  pyflakes:
-    enabled: false  # We use ruff instead
-  mccabe:
-    enabled: false  # We use radon in pre-commit instead
-  radon:
-    enabled: false  # We use radon in pre-commit instead
-  bandit:
-    enabled: false  # We use bandit in pre-commit instead
-  duplication:
-    enabled: true   # Keep duplication detection
-  complexity:
-    enabled: false  # We use radon in pre-commit instead
-
-# Explicitly exclude everything except custom_components
-exclude_patterns:
-  - "tests/**/*"
-  - "scripts/**/*"
-  - "docs/**/*"
-  - "examples/**/*"
-  - "htmlcov/**/*"
-  - "**/*.md"
-  - "**/*.yml"
-  - "**/*.yaml"
-  - "**/*.json"
-  - "**/*.toml"
-  - "**/*.txt"
-  - "**/*.sh"
-  - "**/__pycache__/**"
-  - "**/.pytest_cache/**"
-  - "**/.mypy_cache/**"
-  - "**/.ruff_cache/**"
-  - "**/.git/**"
-  - "**/.venv/**"
-  - "**/venv/**"
-  - "**/node_modules/**"
-  - "poetry.lock"
-  - ".pre-commit-config.yaml"
-  - ".gitignore"
+# Disable CodeFactor entirely
+enabled: false

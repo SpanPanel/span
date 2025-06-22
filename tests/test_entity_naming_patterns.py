@@ -8,11 +8,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from custom_components.span_panel.const import EntityNamingPattern
 from custom_components.span_panel.config_flow import OptionsFlowHandler
-from custom_components.span_panel.helpers import construct_entity_id
-from custom_components.span_panel.helpers import sanitize_name_for_entity_id
-from custom_components.span_panel.helpers import construct_synthetic_entity_id
+from custom_components.span_panel.const import EntityNamingPattern
+from custom_components.span_panel.helpers import (
+    construct_entity_id,
+    construct_synthetic_entity_id,
+    sanitize_name_for_entity_id,
+)
 
 
 @pytest.fixture(autouse=True)

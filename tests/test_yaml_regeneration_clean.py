@@ -1,12 +1,12 @@
 """Tests for YAML regeneration when SPAN circuits change."""
 
-import tempfile
-import yaml
 from pathlib import Path
+import tempfile
 from unittest.mock import MagicMock
 
-import pytest
 from homeassistant.core import HomeAssistant
+import pytest
+import yaml
 
 from custom_components.span_panel.const import (
     DOMAIN,

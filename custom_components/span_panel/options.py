@@ -6,11 +6,11 @@ from homeassistant.config_entries import ConfigEntry
 
 from .const import (
     CONF_API_RETRIES,
-    CONF_API_RETRY_TIMEOUT,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
+    CONF_API_RETRY_TIMEOUT,
     DEFAULT_API_RETRIES,
-    DEFAULT_API_RETRY_TIMEOUT,
     DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
+    DEFAULT_API_RETRY_TIMEOUT,
 )
 
 INVERTER_ENABLE = "enable_solar_circuit"

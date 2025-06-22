@@ -4,9 +4,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+import yaml
 
 from .const import DOMAIN, USE_DEVICE_PREFIX
 from .helpers import (
@@ -311,8 +312,6 @@ class SolarSyntheticSensors:
             List of entity IDs for solar synthetic sensors
 
         """
-        from homeassistant.helpers import entity_registry as er
-
         entity_registry = er.async_get(self._hass)
         solar_entity_ids: list[str] = []
 
@@ -346,8 +345,6 @@ class SolarSyntheticSensors:
             entity_ids: List of entity IDs to remove from registry
 
         """
-        from homeassistant.helpers import entity_registry as er
-
         if not entity_ids:
             return
 

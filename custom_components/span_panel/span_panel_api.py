@@ -17,12 +17,12 @@ from span_panel_api.exceptions import (
 
 from .const import (
     API_TIMEOUT,
+    DEFAULT_API_RETRIES,
+    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
+    DEFAULT_API_RETRY_TIMEOUT,
     PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
     CircuitPriority,
     CircuitRelayState,
-    DEFAULT_API_RETRIES,
-    DEFAULT_API_RETRY_TIMEOUT,
-    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
 )
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options

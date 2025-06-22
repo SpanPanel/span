@@ -1,13 +1,15 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from custom_components.span_panel.span_panel_api import SpanPanelApi
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
     SpanPanelRetriableError,
     SpanPanelServerError,
 )
+
 from custom_components.span_panel.exceptions import SpanPanelReturnedEmptyData
+from custom_components.span_panel.span_panel_api import SpanPanelApi
 
 
 @pytest.mark.asyncio
@@ -192,8 +194,8 @@ async def test_get_storage_battery_data():
 
 @pytest.mark.asyncio
 async def test_set_relay():
-    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
     from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
@@ -225,8 +227,8 @@ async def test_set_relay():
 
 @pytest.mark.asyncio
 async def test_set_priority():
-    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
     from custom_components.span_panel.const import CircuitPriority, CircuitRelayState
+    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
@@ -582,8 +584,8 @@ async def test_get_storage_battery_data_auth_reset_on_auth_error():
 @pytest.mark.asyncio
 async def test_set_relay_retriable_error():
     """Test set_relay handles retriable errors correctly."""
-    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
     from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
@@ -617,8 +619,8 @@ async def test_set_relay_retriable_error():
 @pytest.mark.asyncio
 async def test_set_relay_server_error():
     """Test set_relay handles server errors correctly."""
-    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
     from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
@@ -650,8 +652,8 @@ async def test_set_relay_server_error():
 @pytest.mark.asyncio
 async def test_set_relay_auth_reset_on_auth_error():
     """Test that authentication flag is reset when auth error occurs in set_relay."""
-    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
     from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
     api = SpanPanelApi("host")
     api._authenticated = True  # Start as authenticated
@@ -687,8 +689,8 @@ async def test_set_relay_auth_reset_on_auth_error():
 @pytest.mark.asyncio
 async def test_set_priority_retriable_error():
     """Test set_priority handles retriable errors correctly."""
+    from custom_components.span_panel.const import CircuitPriority, CircuitRelayState
     from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
-    from custom_components.span_panel.const import CircuitRelayState, CircuitPriority
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
@@ -722,8 +724,8 @@ async def test_set_priority_retriable_error():
 @pytest.mark.asyncio
 async def test_set_priority_server_error():
     """Test set_priority handles server errors correctly."""
+    from custom_components.span_panel.const import CircuitPriority, CircuitRelayState
     from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
-    from custom_components.span_panel.const import CircuitRelayState, CircuitPriority
 
     api = SpanPanelApi("host")
     mock_client = MagicMock()
@@ -755,8 +757,8 @@ async def test_set_priority_server_error():
 @pytest.mark.asyncio
 async def test_set_priority_auth_reset_on_auth_error():
     """Test that authentication flag is reset when auth error occurs in set_priority."""
+    from custom_components.span_panel.const import CircuitPriority, CircuitRelayState
     from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
-    from custom_components.span_panel.const import CircuitRelayState, CircuitPriority
 
     api = SpanPanelApi("host")
     api._authenticated = True  # Start as authenticated

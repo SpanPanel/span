@@ -2,9 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from homeassistant.data_entry_flow import FlowResultType
+import pytest
 
 from custom_components.span_panel.config_flow import OptionsFlowHandler
 from custom_components.span_panel.const import (

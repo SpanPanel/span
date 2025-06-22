@@ -3,9 +3,9 @@
 import tempfile
 from unittest.mock import MagicMock, patch
 
+from homeassistant.core import HomeAssistant
 import pytest
 import yaml
-from homeassistant.core import HomeAssistant
 
 from custom_components.span_panel.const import (
     DOMAIN,

@@ -1,12 +1,12 @@
 """Test entity ID migration when device prefix setting changes."""
 
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest.mock import MagicMock
 
+from homeassistant.core import HomeAssistant
 import pytest
 import yaml
-from homeassistant.core import HomeAssistant
 
 from custom_components.span_panel.const import DOMAIN, USE_DEVICE_PREFIX
 from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors

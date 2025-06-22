@@ -1,7 +1,8 @@
 """Test upgrade scenarios to ensure existing installations are preserved."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from custom_components.span_panel.config_flow import OptionsFlowHandler
 from custom_components.span_panel.const import (

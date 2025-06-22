@@ -1,20 +1,20 @@
 """Integration tests for coordinator-based entity migration with real entities."""
 
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest.mock import MagicMock
 
-import pytest
-import yaml
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+import pytest
+import yaml
 
 from custom_components.span_panel.const import (
     COORDINATOR,
     DOMAIN,
-    EntityNamingPattern,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
+    EntityNamingPattern,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.options import (
@@ -23,7 +23,6 @@ from custom_components.span_panel.options import (
     INVERTER_LEG2,
 )
 from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
-
 from tests.common import create_mock_config_entry
 
 
@@ -521,8 +520,8 @@ async def test_unmapped_tab_entities_are_not_renamed_during_migration(
     """
     setup = setup_integration_with_yaml_config
 
-    from custom_components.span_panel.coordinator import SpanPanelCoordinator
     from custom_components.span_panel.const import EntityNamingPattern
+    from custom_components.span_panel.coordinator import SpanPanelCoordinator
 
     # Create a real coordinator instance
     real_coordinator = SpanPanelCoordinator.__new__(SpanPanelCoordinator)
@@ -614,8 +613,9 @@ async def test_unmapped_tab_entities_not_renamed():
     are never changed during migration, as they are used as variables in solar YAML.
     """
     from unittest.mock import MagicMock
-    from custom_components.span_panel.coordinator import SpanPanelCoordinator
+
     from custom_components.span_panel.const import EntityNamingPattern
+    from custom_components.span_panel.coordinator import SpanPanelCoordinator
 
     # Create a mock coordinator with proper initialization
     mock_hass = MagicMock()
@@ -665,6 +665,7 @@ async def test_synthetic_sensors_are_removed_during_migration():
     with the correct naming pattern.
     """
     from unittest.mock import MagicMock
+
     from custom_components.span_panel.coordinator import SpanPanelCoordinator
 
     # Create a mock coordinator with proper initialization

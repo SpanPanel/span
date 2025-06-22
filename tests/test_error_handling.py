@@ -5,9 +5,10 @@ Tests for error handling scenarios in the Span Panel integration.
 
 from typing import Any
 from unittest.mock import AsyncMock, patch
-import pytest
+
 import aiohttp
 from homeassistant.config_entries import ConfigEntryState
+import pytest
 
 from tests.factories import SpanPanelApiResponseFactory
 from tests.helpers import (

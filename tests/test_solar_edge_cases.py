@@ -1,21 +1,20 @@
 """Additional tests for edge cases in solar sensor features."""
 
-import tempfile
 from pathlib import Path
-
-import pytest
+import tempfile
 from unittest.mock import MagicMock
-from homeassistant.core import HomeAssistant
+
 from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+import pytest
 
 from custom_components.span_panel.options import (
     INVERTER_ENABLE,
     INVERTER_LEG1,
     INVERTER_LEG2,
 )
-from custom_components.span_panel.solar_tab_manager import SolarTabManager
 from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
-
+from custom_components.span_panel.solar_tab_manager import SolarTabManager
 from tests.common import create_mock_config_entry
 
 

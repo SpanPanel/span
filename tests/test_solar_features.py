@@ -1,23 +1,22 @@
 """Tests for solar sensor features using synthetic sensors integration."""
 
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest.mock import MagicMock, patch
 
-import pytest
-import yaml
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+import pytest
+import yaml
 
 from custom_components.span_panel.options import (
     INVERTER_ENABLE,
     INVERTER_LEG1,
     INVERTER_LEG2,
 )
-from custom_components.span_panel.solar_tab_manager import SolarTabManager
 from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
-
+from custom_components.span_panel.solar_tab_manager import SolarTabManager
 from tests.common import create_mock_config_entry
 
 
@@ -511,8 +510,8 @@ class TestCacheWindowConfiguration:
     @pytest.mark.asyncio
     async def test_solar_api_integration_with_cache(self, hass: HomeAssistant):
         """Test that solar API integration properly uses cache window."""
-        from custom_components.span_panel.span_panel import SpanPanel
         from custom_components.span_panel.options import Options
+        from custom_components.span_panel.span_panel import SpanPanel
 
         mock_config_entry = create_mock_config_entry(
             {CONF_HOST: "192.168.1.100"},

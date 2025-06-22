@@ -1,6 +1,7 @@
 """Test to verify panel-level entities are not migrated."""
 
 from unittest.mock import Mock
+
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 
 

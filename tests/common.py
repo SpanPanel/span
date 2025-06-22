@@ -1,11 +1,11 @@
 """Same as home assistant tests/common.py, a util for testing."""
 
+from datetime import UTC, datetime, timedelta
 import json
-import time
-from datetime import datetime, timedelta, UTC
 from pathlib import Path
+import time
 from typing import Any
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
