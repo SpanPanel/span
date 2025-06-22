@@ -13,13 +13,12 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 
-from .const import COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME, CONF_USE_SSL
+# Import config flow to ensure it's registered
+from . import config_flow  # noqa: F401
+from .const import CONF_USE_SSL, COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
 from .coordinator import SpanPanelCoordinator
 from .options import Options
 from .span_panel import SpanPanel
-
-# Import config flow to ensure it's registered
-from . import config_flow  # noqa: F401
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,

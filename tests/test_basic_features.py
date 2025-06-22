@@ -14,8 +14,8 @@ from tests.factories import (
     SpanPanelStatusFactory,
 )
 from tests.helpers import (
-    assert_entity_state,
     assert_entity_attribute,
+    assert_entity_state,
     get_circuit_entity_id,
     get_panel_entity_id,
     patch_span_panel_dependencies,

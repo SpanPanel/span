@@ -23,8 +23,15 @@ from span_panel_api.exceptions import (
 )
 
 from .const import API_TIMEOUT, EntityNamingPattern
+from .helpers import (
+    construct_entity_id,
+    get_circuit_number,
+    get_user_friendly_suffix,
+    sanitize_name_for_entity_id,
+)
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
+from .util import panel_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -299,8 +306,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                         delattr(self, "_migration_target_pattern")
 
             # For non-circuit entities (panel-level), construct using appropriate helpers
-            from .helpers import sanitize_name_for_entity_id, panel_to_device_info
-
             # Fallback: manual construction for non-circuit entities
             device_name = "span_panel"  # Default fallback
             if hasattr(self, "data") and self.data:
@@ -447,13 +452,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         unique_id: str | None = None,
     ) -> str | None:
         """Simulate circuit entity creation using the same logic as fresh install."""
-        from .helpers import (
-            get_circuit_number,
-            get_user_friendly_suffix,
-            sanitize_name_for_entity_id,
-        )
-        from .util import panel_to_device_info
-
         # Get circuit number using the same helper that sensor.py and switch.py use
         circuit_number = get_circuit_number(circuit)
 
@@ -466,8 +464,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             target_pattern = self._migration_target_pattern
         else:
             # Fallback to using construct_entity_id with current config
-            from .helpers import construct_entity_id
-
             if domain == "switch":
                 return construct_entity_id(
                     self, self.data, "switch", circuit_friendly_name, circuit_number, "breaker"
@@ -503,8 +499,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             entity_suffix = get_user_friendly_suffix(suffix)
 
         # Apply the target pattern format
-        from .const import EntityNamingPattern
-
         if target_pattern == EntityNamingPattern.CIRCUIT_NUMBERS:
             # Circuit numbers format: device_circuit_N_suffix
             return f"{domain}.{device_name}_circuit_{circuit_number}_{entity_suffix}"

@@ -4,6 +4,7 @@ Configuration-related edge case tests for Span Panel integration.
 """
 
 from typing import Any
+
 import pytest
 
 from tests.factories import (

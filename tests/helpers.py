@@ -1,7 +1,7 @@
 """Helper functions for testing the Span Panel integration."""
 
-import datetime
 from contextlib import contextmanager
+import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,10 +11,11 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.const import STORAGE_BATTERY_PERCENTAGE
+from custom_components.span_panel.span_panel_data import SpanPanelData
 from custom_components.span_panel.span_panel_hardware_status import (
     SpanPanelHardwareStatus,
 )
-from custom_components.span_panel.span_panel_data import SpanPanelData
+
 from .factories import SpanPanelApiResponseFactory
 
 

@@ -22,6 +22,18 @@ repos:
         args: ['--fix=lf']
         exclude: '\..*_cache/.*|dist/.*|venv/.*'
 
+  # Pylint check for import-outside-toplevel (run early, before other tools)
+  - repo: local
+    hooks:
+      - id: pylint-import-check
+        name: pylint import-outside-toplevel check
+        entry: poetry run pylint
+        language: system
+        args: ['--disable=all', '--enable=import-outside-toplevel', '--score=no', 'custom_components/span_panel/']
+        pass_filenames: false
+        files: \.py$
+        exclude: '^tests/.*|^scripts/.*'
+
   # Ruff for linting, import sorting, and primary formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.13

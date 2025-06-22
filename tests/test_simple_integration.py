@@ -1,8 +1,8 @@
 """Simple test to check if integration loads."""
 
-import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
+import pytest
 
 
 @pytest.mark.asyncio

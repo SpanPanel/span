@@ -7,6 +7,9 @@ from dataclasses import dataclass
 import logging
 from typing import Any, Generic, TypeVar
 
+from ha_synthetic_sensors.config_manager import ConfigManager
+from ha_synthetic_sensors.name_resolver import NameResolver
+from ha_synthetic_sensors.sensor_manager import SensorManager, SensorManagerConfig
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -16,14 +19,10 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-
-from ha_synthetic_sensors.config_manager import ConfigManager
-from ha_synthetic_sensors.name_resolver import NameResolver
-from ha_synthetic_sensors.sensor_manager import SensorManager, SensorManagerConfig
 
 from .const import (
     CIRCUITS_ENERGY_CONSUMED,
@@ -49,13 +48,13 @@ from .helpers import (
     sanitize_name_for_entity_id,
 )
 from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from .solar_synthetic_sensors import SolarSyntheticSensors
 from .solar_tab_manager import SolarTabManager
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
-from .solar_synthetic_sensors import SolarSyntheticSensors
 from .util import panel_to_device_info
 
 

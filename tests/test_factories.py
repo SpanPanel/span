@@ -1,14 +1,15 @@
 """Tests for the factory classes and their use of constants."""
 
+from custom_components.span_panel.binary_sensor import BINARY_SENSORS
 from custom_components.span_panel.const import (
     CURRENT_RUN_CONFIG,
     DSM_GRID_STATE,
     DSM_STATE,
     MAIN_RELAY_STATE,
+    SYSTEM_CELLULAR_LINK,
     SYSTEM_DOOR_STATE_CLOSED,
     SYSTEM_DOOR_STATE_OPEN,
     SYSTEM_ETHERNET_LINK,
-    SYSTEM_CELLULAR_LINK,
     SYSTEM_WIFI_LINK,
 )
 from custom_components.span_panel.span_panel_hardware_status import (
@@ -19,7 +20,6 @@ from tests.factories import (
     SpanPanelDataFactory,
     SpanPanelStatusFactory,
 )
-from custom_components.span_panel.binary_sensor import BINARY_SENSORS
 
 
 def test_panel_factory_uses_correct_constants():

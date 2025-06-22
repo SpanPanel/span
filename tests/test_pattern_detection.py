@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Test script to verify entity naming pattern detection logic."""
 
-import sys
 import os
+import sys
 
 # Add the custom_components path to sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "custom_components"))

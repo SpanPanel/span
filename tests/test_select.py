@@ -1,11 +1,13 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from custom_components.span_panel.select import (
-    SpanPanelCircuitsSelect,
-    CIRCUIT_PRIORITY_DESCRIPTION,
-)
+
 from homeassistant.exceptions import ServiceNotFound
+import pytest
 from span_panel_api.exceptions import SpanPanelServerError
+
+from custom_components.span_panel.select import (
+    CIRCUIT_PRIORITY_DESCRIPTION,
+    SpanPanelCircuitsSelect,
+)
 
 try:
     from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit

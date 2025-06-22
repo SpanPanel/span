@@ -3,10 +3,10 @@
 import tempfile
 from unittest.mock import patch
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+import pytest
 
 from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
 from tests.common import create_mock_config_entry
