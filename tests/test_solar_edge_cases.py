@@ -14,7 +14,7 @@ from custom_components.span_panel.options import (
     INVERTER_LEG2,
 )
 from custom_components.span_panel.solar_tab_manager import SolarTabManager
-from custom_components.span_panel.synthetic_bridge import SyntheticSensorsBridge
+from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
 
 from tests.common import create_mock_config_entry
 
@@ -39,8 +39,8 @@ class TestSolarEdgeCases:
         await manager.disable_solar_tabs()
 
     @pytest.mark.asyncio
-    async def test_synthetic_bridge_with_empty_hass_config(self, hass: HomeAssistant):
-        """Test SyntheticSensorsBridge when Home Assistant config path is None."""
+    async def test_solar_synthetic_sensors_with_empty_hass_config(self, hass: HomeAssistant):
+        """Test SolarSyntheticSensors when Home Assistant config path is None."""
         mock_config_entry = create_mock_config_entry(
             {CONF_HOST: "192.168.1.100"},
             {INVERTER_ENABLE: True, INVERTER_LEG1: 15, INVERTER_LEG2: 16},
@@ -51,13 +51,13 @@ class TestSolarEdgeCases:
 
         # Should raise ValueError when config_dir is None and no config_dir provided
         with pytest.raises(ValueError, match="Home Assistant config directory is not available"):
-            SyntheticSensorsBridge(hass, mock_config_entry)
+            SolarSyntheticSensors(hass, mock_config_entry)
 
         # But should work when providing an explicit config directory
         with tempfile.TemporaryDirectory() as temp_dir:
-            bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_dir)
-            await bridge.generate_solar_config(15, 16)
-            await bridge.remove_solar_config()
+            solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_dir)
+            await solar_sensors.generate_config(15, 16)
+            await solar_sensors.remove_config()
 
     @pytest.mark.asyncio
     async def test_solar_disabled_no_operation(self, hass: HomeAssistant):
@@ -68,15 +68,15 @@ class TestSolarEdgeCases:
         )
 
         manager = SolarTabManager(hass, mock_config_entry)
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry)
 
         # These should not perform any operations when solar is disabled
         await manager.enable_solar_tabs(15, 16)
-        await bridge.generate_solar_config(15, 16)
+        await solar_sensors.generate_config(15, 16)
 
         # Disable operations should still work
         await manager.disable_solar_tabs()
-        await bridge.remove_solar_config()
+        await solar_sensors.remove_config()
 
     @pytest.mark.asyncio
     async def test_concurrent_solar_operations(self, hass: HomeAssistant):
@@ -87,16 +87,16 @@ class TestSolarEdgeCases:
         )
 
         manager = SolarTabManager(hass, mock_config_entry)
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry)
 
         # Run operations concurrently (no need to patch since SolarTabManager is simplified)
         import asyncio
 
         await asyncio.gather(
             manager.enable_solar_tabs(15, 16),
-            bridge.generate_solar_config(15, 16),
+            solar_sensors.generate_config(15, 16),
             manager.disable_solar_tabs(),
-            bridge.remove_solar_config(),
+            solar_sensors.remove_config(),
         )
 
     @pytest.mark.asyncio
@@ -148,8 +148,8 @@ class TestSolarEdgeCases:
 
         # Use temporary directory instead of mocking file operations
         with tempfile.TemporaryDirectory() as temp_dir:
-            bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_dir)
-            await bridge.generate_solar_config(15, 16)
+            solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_dir)
+            await solar_sensors.generate_config(15, 16)
 
             # Verify file was created
             config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
@@ -164,14 +164,14 @@ class TestSolarEdgeCases:
         )
 
         manager = SolarTabManager(hass, mock_config_entry)
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry)
 
         # Test that operations work without error (simplified - no entity registry operations)
         await manager.enable_solar_tabs(15, 16)
 
         # Cleanup operations should still work
-        await bridge.remove_solar_config()
-        await bridge.remove_solar_config()
+        await solar_sensors.remove_config()
+        await solar_sensors.remove_config()
 
     @pytest.mark.asyncio
     async def test_multiple_config_entries(self, hass: HomeAssistant):
@@ -188,18 +188,18 @@ class TestSolarEdgeCases:
         manager_1 = SolarTabManager(hass, config_entry_1)
         manager_2 = SolarTabManager(hass, config_entry_2)
 
-        bridge_1 = SyntheticSensorsBridge(hass, config_entry_1)
-        bridge_2 = SyntheticSensorsBridge(hass, config_entry_2)
+        solar_sensors_1 = SolarSyntheticSensors(hass, config_entry_1)
+        solar_sensors_2 = SolarSyntheticSensors(hass, config_entry_2)
 
         # Both should operate independently (simplified - no entity registry manipulation)
         await manager_1.enable_solar_tabs(15, 16)
         await manager_2.enable_solar_tabs(17, 18)
 
-        await bridge_1.generate_solar_config(15, 16)
-        await bridge_2.generate_solar_config(17, 18)
+        await solar_sensors_1.generate_config(15, 16)
+        await solar_sensors_2.generate_config(17, 18)
 
         # Cleanup
         await manager_1.disable_solar_tabs()
         await manager_2.disable_solar_tabs()
-        await bridge_1.remove_solar_config()
-        await bridge_2.remove_solar_config()
+        await solar_sensors_1.remove_config()
+        await solar_sensors_2.remove_config()

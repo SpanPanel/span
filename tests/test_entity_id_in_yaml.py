@@ -12,7 +12,7 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
-from custom_components.span_panel.synthetic_bridge import SyntheticSensorsBridge
+from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
 from tests.common import create_mock_config_entry
 
 
@@ -32,7 +32,7 @@ class TestEntityIdInYaml:
     @pytest.fixture
     def hass_with_solar_data(self, hass, mock_config_entry):
         """Create hass instance with solar coordinator data."""
-        # Mock coordinator data that SyntheticSensorsBridge expects
+        # Mock coordinator data that SolarSyntheticSensors expects
         coordinator = MagicMock()
         coordinator.data = MagicMock()
         coordinator.data.circuits = {
@@ -56,12 +56,12 @@ class TestEntityIdInYaml:
         """Test that entity_id fields are present for all sensors in generated YAML."""
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            bridge = SyntheticSensorsBridge(hass_with_solar_data, mock_config_entry, temp_dir)
+            solar_sensors = SolarSyntheticSensors(hass_with_solar_data, mock_config_entry, temp_dir)
 
             # Generate YAML
-            await bridge.generate_solar_config(15, 16)
+            await solar_sensors.generate_config(15, 16)
 
-            yaml_path = bridge._config_file
+            yaml_path = solar_sensors.config_file_path
             assert yaml_path.exists()
 
             # Load and verify YAML content
@@ -124,7 +124,7 @@ class TestEntityIdInYaml:
             patch("custom_components.span_panel.helpers.construct_entity_id") as mock_construct,
             patch("custom_components.span_panel.helpers.get_user_friendly_suffix") as mock_suffix,
             patch(
-                "custom_components.span_panel.helpers.construct_solar_inverter_entity_id"
+                "custom_components.span_panel.solar_synthetic_sensors.SolarSyntheticSensors._construct_solar_inverter_entity_id"
             ) as mock_solar,
         ):
             mock_construct.return_value = "sensor.test_entity"
@@ -132,11 +132,13 @@ class TestEntityIdInYaml:
             mock_solar.return_value = "sensor.test_solar_power"
 
             with tempfile.TemporaryDirectory() as temp_dir:
-                bridge = SyntheticSensorsBridge(hass_with_solar_data, mock_config_entry, temp_dir)
+                solar_sensors = SolarSyntheticSensors(
+                    hass_with_solar_data, mock_config_entry, temp_dir
+                )
 
-                await bridge.generate_solar_config(15, 0)  # Single leg
+                await solar_sensors.generate_config(15, 0)  # Single leg
 
-                yaml_path = bridge._config_file
+                yaml_path = solar_sensors.config_file_path
                 with open(yaml_path, encoding="utf-8") as f:
                     yaml_content = yaml.safe_load(f)
 

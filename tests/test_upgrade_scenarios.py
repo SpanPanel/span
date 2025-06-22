@@ -387,8 +387,8 @@ class TestSyntheticEntityUpgradeScenarios:
                 "Solar Inverter",
             )
 
-            # Modern format: device prefix + circuit numbers
-            assert entity_id == "sensor.span_panel_circuit_30_32_power"
+            # Modern format: device prefix + friendly name (synthetic sensors always use friendly names)
+            assert entity_id == "sensor.span_panel_solar_inverter_power"
 
 
 class TestGeneralOptionsPreservesNamingFlags:

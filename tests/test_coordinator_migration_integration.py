@@ -22,7 +22,7 @@ from custom_components.span_panel.options import (
     INVERTER_LEG1,
     INVERTER_LEG2,
 )
-from custom_components.span_panel.synthetic_bridge import SyntheticSensorsBridge
+from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
 
 from tests.common import create_mock_config_entry
 
@@ -64,11 +64,11 @@ async def setup_integration_with_yaml_config(hass: HomeAssistant):
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][config_entry.entry_id] = {COORDINATOR: mock_coordinator}
 
-    # Mock the synthetic sensors bridge to create YAML with real entity names
-    bridge = SyntheticSensorsBridge(hass, config_entry, temp_dir)
+    # Mock the solar synthetic sensors to create YAML with real entity names
+    solar_sensors = SolarSyntheticSensors(hass, config_entry, temp_dir)
 
     # Generate the YAML configuration (this creates the real entity names)
-    await bridge.generate_solar_config(30, 32)
+    await solar_sensors.generate_config(30, 32)
 
     # Read the generated YAML configuration
     yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
@@ -94,11 +94,11 @@ async def test_yaml_config_generates_correct_entity_names(
     # Verify that the YAML config contains solar entities with correct names
     sensors = yaml_config.get("sensors", {})
 
-    # Check for expected solar sensors
+    # Check for expected solar sensors (stable naming)
     expected_sensors = {
-        "span_panel_circuit_30_32_instant_power": "Solar Inverter Instant Power",
-        "span_panel_circuit_30_32_energy_produced": "Solar Inverter Energy Produced",
-        "span_panel_circuit_30_32_energy_consumed": "Solar Inverter Energy Consumed",
+        "span_panel_solar_inverter_instant_power": "Solar Inverter Instant Power",
+        "span_panel_solar_inverter_energy_produced": "Solar Inverter Energy Produced",
+        "span_panel_solar_inverter_energy_consumed": "Solar Inverter Energy Consumed",
     }
 
     for sensor_key, expected_name in expected_sensors.items():
