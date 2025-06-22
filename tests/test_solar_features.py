@@ -16,7 +16,7 @@ from custom_components.span_panel.options import (
     INVERTER_LEG2,
 )
 from custom_components.span_panel.solar_tab_manager import SolarTabManager
-from custom_components.span_panel.synthetic_bridge import SyntheticSensorsBridge
+from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
 
 from tests.common import create_mock_config_entry
 
@@ -80,7 +80,7 @@ def hass_with_coordinator_data(mock_config_entry, mock_coordinator_with_circuits
 
     hass.async_add_executor_job = mock_async_add_executor_job
 
-    # Set up the data structure that SyntheticSensorsBridge expects
+    # Set up the data structure that SolarSyntheticSensors expects
     from custom_components.span_panel.const import DOMAIN
 
     hass.data = {
@@ -149,8 +149,8 @@ class TestSolarTabManager:
         assert mock_entity_registry.async_update_entity.call_count == 0
 
 
-class TestSyntheticSensorsBridge:
-    """Test the SyntheticSensorsBridge class."""
+class TestSolarSyntheticSensors:
+    """Test the SolarSyntheticSensors class."""
 
     @pytest.fixture
     def temp_config_dir(self, hass: HomeAssistant):
@@ -161,11 +161,11 @@ class TestSyntheticSensorsBridge:
 
     @pytest.mark.asyncio
     async def test_init(self, hass: HomeAssistant, mock_config_entry: ConfigEntry):
-        """Test SyntheticSensorsBridge initialization."""
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry)
-        assert bridge._hass == hass
-        assert bridge._config_entry == mock_config_entry
-        assert bridge._config_file.name == "span-ha-synthetic.yaml"
+        """Test SolarSyntheticSensors initialization."""
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry)
+        assert solar_sensors._hass == hass
+        assert solar_sensors._config_entry == mock_config_entry
+        assert solar_sensors.config_file_path.name == "span-ha-synthetic.yaml"
 
     @pytest.mark.asyncio
     async def test_generate_solar_config_dual_legs(
@@ -175,10 +175,10 @@ class TestSyntheticSensorsBridge:
         temp_config_dir,
     ):
         """Test generating YAML config for dual inverter legs."""
-        bridge = SyntheticSensorsBridge(
+        solar_sensors = SolarSyntheticSensors(
             hass_with_coordinator_data, mock_config_entry, temp_config_dir
         )
-        await bridge.generate_solar_config(15, 16)
+        await solar_sensors.generate_config(15, 16)
 
         # Check that config file was created
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
@@ -191,8 +191,9 @@ class TestSyntheticSensorsBridge:
         assert config["version"] == "1.0"
         assert "sensors" in config
 
-        # Check solar inverter instant power sensor - using the actual entity ID as key
-        power_sensor = config["sensors"]["span_panel_circuit_15_16_instant_power"]
+        # With stable naming, the keys should be based on friendly names, not circuit numbers
+        # Check solar inverter instant power sensor
+        power_sensor = config["sensors"]["span_panel_solar_inverter_instant_power"]
         assert power_sensor["name"] == "Solar Inverter Instant Power"
         assert power_sensor["formula"] == "leg1_power + leg2_power"
         # The entity IDs should use the stable unmapped naming logic
@@ -203,7 +204,7 @@ class TestSyntheticSensorsBridge:
         assert power_sensor["state_class"] == "measurement"
 
         # Check energy produced sensor
-        produced_sensor = config["sensors"]["span_panel_circuit_15_16_energy_produced"]
+        produced_sensor = config["sensors"]["span_panel_solar_inverter_energy_produced"]
         assert produced_sensor["name"] == "Solar Inverter Energy Produced"
         assert produced_sensor["formula"] == "leg1_produced + leg2_produced"
         # The entity IDs should use the stable unmapped naming logic
@@ -220,7 +221,7 @@ class TestSyntheticSensorsBridge:
         assert produced_sensor["state_class"] == "total_increasing"
 
         # Check energy consumed sensor
-        consumed_sensor = config["sensors"]["span_panel_circuit_15_16_energy_consumed"]
+        consumed_sensor = config["sensors"]["span_panel_solar_inverter_energy_consumed"]
         assert consumed_sensor["name"] == "Solar Inverter Energy Consumed"
         assert consumed_sensor["formula"] == "leg1_consumed + leg2_consumed"
         # The entity IDs should use the stable unmapped naming logic
@@ -244,17 +245,17 @@ class TestSyntheticSensorsBridge:
         temp_config_dir,
     ):
         """Test generating YAML config for single inverter leg."""
-        bridge = SyntheticSensorsBridge(
+        solar_sensors = SolarSyntheticSensors(
             hass_with_coordinator_data, mock_config_entry, temp_config_dir
         )
-        await bridge.generate_solar_config(15, 0)
+        await solar_sensors.generate_config(15, 0)
 
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
         with open(config_file) as f:
             config = yaml.safe_load(f)
 
-        # Check single-leg formulas
-        power_sensor = config["sensors"]["span_panel_circuit_15_instant_power"]
+        # Check single-leg formulas - should still be solar inverter sensors
+        power_sensor = config["sensors"]["span_panel_solar_inverter_instant_power"]
         assert power_sensor["formula"] == "leg1_power"
         assert "leg1_power" in power_sensor["variables"]
         assert "leg2_power" not in power_sensor["variables"]
@@ -264,8 +265,8 @@ class TestSyntheticSensorsBridge:
         self, hass: HomeAssistant, mock_config_entry: ConfigEntry, temp_config_dir
     ):
         """Test generating YAML config with no valid legs should not create file."""
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_config_dir)
-        await bridge.generate_solar_config(0, 0)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
+        await solar_sensors.generate_config(0, 0)
 
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
         assert not config_file.exists()
@@ -278,17 +279,17 @@ class TestSyntheticSensorsBridge:
         temp_config_dir,
     ):
         """Test removing the solar configuration file."""
-        bridge = SyntheticSensorsBridge(
+        solar_sensors = SolarSyntheticSensors(
             hass_with_coordinator_data, mock_config_entry, temp_config_dir
         )
 
         # First create a config file
-        await bridge.generate_solar_config(15, 16)
+        await solar_sensors.generate_config(15, 16)
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
         assert config_file.exists()
 
         # Then remove it
-        await bridge.remove_solar_config()
+        await solar_sensors.remove_config()
         assert not config_file.exists()
 
     @pytest.mark.asyncio
@@ -296,12 +297,12 @@ class TestSyntheticSensorsBridge:
         self, hass: HomeAssistant, mock_config_entry: ConfigEntry, temp_config_dir
     ):
         """Test removing a nonexistent config file should not error."""
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_config_dir)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
         assert not config_file.exists()
 
         # Should not raise an exception
-        await bridge.remove_solar_config()
+        await solar_sensors.remove_config()
 
     @pytest.mark.asyncio
     async def test_validate_config_valid(
@@ -311,42 +312,42 @@ class TestSyntheticSensorsBridge:
         temp_config_dir,
     ):
         """Test validating a valid configuration."""
-        bridge = SyntheticSensorsBridge(
+        solar_sensors = SolarSyntheticSensors(
             hass_with_coordinator_data, mock_config_entry, temp_config_dir
         )
-        await bridge.generate_solar_config(15, 16)
+        await solar_sensors.generate_config(15, 16)
 
-        assert await bridge.validate_config() is True
+        assert await solar_sensors.validate_config() is True
 
     @pytest.mark.asyncio
     async def test_validate_config_nonexistent(
         self, hass: HomeAssistant, mock_config_entry: ConfigEntry, temp_config_dir
     ):
         """Test validating a nonexistent configuration."""
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_config_dir)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
 
-        assert await bridge.validate_config() is False
+        assert await solar_sensors.validate_config() is False
 
     @pytest.mark.asyncio
     async def test_validate_config_invalid_yaml(
         self, hass: HomeAssistant, mock_config_entry: ConfigEntry, temp_config_dir
     ):
         """Test validating invalid YAML configuration."""
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_config_dir)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
 
         # Create invalid YAML
         with open(config_file, "w") as f:
             f.write("invalid: yaml: content:")
 
-        assert await bridge.validate_config() is False
+        assert await solar_sensors.validate_config() is False
 
     @pytest.mark.asyncio
     async def test_validate_config_missing_required_fields(
         self, hass: HomeAssistant, mock_config_entry: ConfigEntry, temp_config_dir
     ):
         """Test validating configuration missing required fields."""
-        bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_config_dir)
+        solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
         config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
 
         # Create YAML missing required fields
@@ -354,7 +355,7 @@ class TestSyntheticSensorsBridge:
         with open(config_file, "w") as f:
             yaml.dump(config, f)
 
-        assert await bridge.validate_config() is False
+        assert await solar_sensors.validate_config() is False
 
 
 class TestSolarSensorIntegration:
@@ -377,7 +378,7 @@ class TestSolarSensorIntegration:
 
             hass.async_add_executor_job = mock_async_add_executor_job
 
-            # Set up coordinator data structure for SyntheticSensorsBridge
+            # Set up coordinator data structure for SolarSyntheticSensors
             mock_coordinator = MagicMock()
             span_panel = MagicMock()
             span_panel.circuits = {
@@ -402,20 +403,20 @@ class TestSolarSensorIntegration:
 
             # Create managers (no need to patch since SolarTabManager is simplified)
             tab_manager = SolarTabManager(hass, mock_config_entry)
-            synthetic_bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_dir)
+            solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_dir)
 
             # Enable solar (simplified - no entity registry manipulation)
             await tab_manager.enable_solar_tabs(15, 16)
-            await synthetic_bridge.generate_solar_config(15, 16)
+            await solar_sensors.generate_config(15, 16)
 
             # Verify YAML config is created and valid
             config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
             assert config_file.exists()
-            assert await synthetic_bridge.validate_config() is True
+            assert await solar_sensors.validate_config() is True
 
             # Disable solar
             await tab_manager.disable_solar_tabs()
-            await synthetic_bridge.remove_solar_config()
+            await solar_sensors.remove_config()
 
             # Verify YAML config is removed
             assert not config_file.exists()
@@ -433,11 +434,11 @@ class TestSolarSensorIntegration:
 
             # Create managers (simplified - no entity registry manipulation)
             tab_manager = SolarTabManager(hass, mock_config_entry)
-            synthetic_bridge = SyntheticSensorsBridge(hass, mock_config_entry, temp_dir)
+            solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_dir)
 
             # When solar is disabled, cleanup should work safely
             await tab_manager.disable_solar_tabs()
-            await synthetic_bridge.remove_solar_config()
+            await solar_sensors.remove_config()
 
             # Should not error and no config file should exist
             config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
@@ -449,8 +450,10 @@ class TestSolarSensorIntegration:
     ):
         """Test that generated YAML is compliant with ha-synthetic-sensors format."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            bridge = SyntheticSensorsBridge(hass_with_coordinator_data, mock_config_entry, temp_dir)
-            await bridge.generate_solar_config(15, 16)
+            solar_sensors = SolarSyntheticSensors(
+                hass_with_coordinator_data, mock_config_entry, temp_dir
+            )
+            await solar_sensors.generate_config(15, 16)
 
             config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
             with open(config_file) as f:
@@ -474,11 +477,11 @@ class TestSolarSensorIntegration:
                 assert "device_class" in sensor_config
                 assert "state_class" in sensor_config
 
-            # Verify sensor keys match expected naming
+            # Verify sensor keys match expected naming (stable solar inverter naming)
             expected_sensors = [
-                "span_panel_circuit_15_16_instant_power",
-                "span_panel_circuit_15_16_energy_produced",
-                "span_panel_circuit_15_16_energy_consumed",
+                "span_panel_solar_inverter_instant_power",
+                "span_panel_solar_inverter_energy_produced",
+                "span_panel_solar_inverter_energy_consumed",
             ]
             for sensor_key in expected_sensors:
                 assert sensor_key in config["sensors"]

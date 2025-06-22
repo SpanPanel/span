@@ -125,11 +125,11 @@ def construct_synthetic_entity_id(
     suffix: str,
     friendly_name: str | None = None,
 ) -> str | None:
-    """Construct synthetic entity ID for multi-circuit entities based on integration config flags.
+    """Construct synthetic entity ID for multi-circuit entities using stable naming.
 
     This function handles entity naming for synthetic sensors that combine multiple circuits,
-    such as solar inverters or custom circuit groups (Phase 3). The naming pattern is determined
-    entirely by the USE_CIRCUIT_NUMBERS and USE_DEVICE_PREFIX configuration flags.
+    such as solar inverters or custom circuit groups. For backward compatibility, synthetic
+    sensors respect the USE_DEVICE_PREFIX setting, unlike individual circuit entities.
 
     Args:
         coordinator: The coordinator instance
@@ -147,91 +147,36 @@ def construct_synthetic_entity_id(
     if config_entry is None:
         raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
 
-    # For existing installations with empty options, default to False for backward compatibility
-    # For new installations, these will be explicitly set to True in create_new_entry()
-    if not config_entry.options:
-        # Empty options = existing installation, use legacy defaults
-        use_device_prefix = False
-        use_circuit_numbers = False
-    else:
-        # Has options = either new installation or existing installation that went through options flow
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
-
     # Get device info for device name
     device_info = panel_to_device_info(span_panel)
     device_name_raw = device_info.get("name")
 
-    if use_circuit_numbers:
-        # New installation (v1.0.9+) - stable circuit-based entity IDs
-        # Format: sensor.span_panel_circuit_30_32_instant_power
-        if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
-            # Filter out zero/invalid circuit numbers and create circuit specification
-            valid_circuits = [str(num) for num in circuit_numbers if num > 0]
-            circuit_spec = "_".join(valid_circuits) if valid_circuits else "unknown"
-            return f"{platform}.{device_name}_circuit_{circuit_spec}_{suffix}"
-        else:
-            return None
-
+    # Construct the entity name part
+    # Synthetic sensors always use friendly names regardless of USE_CIRCUIT_NUMBERS
+    if friendly_name:
+        # Convert friendly name to entity ID format (e.g., "Solar Inverter" -> "solar_inverter")
+        entity_name = sanitize_name_for_entity_id(friendly_name)
+        if suffix:
+            entity_name = f"{entity_name}_{suffix}"
     else:
-        # named based entity - use friendly name to construct entity ID
-        if friendly_name:
-            # Convert friendly name to entity ID format (e.g., "Solar Production" -> "solar_production")
-            entity_name = sanitize_name_for_entity_id(friendly_name)
-        else:
-            # Fallback to circuit-based naming if no friendly name provided
-            valid_circuits = [str(num) for num in circuit_numbers if num > 0]
-            entity_name = f"circuit_group_{'_'.join(valid_circuits)}"
+        # Fallback to generic synthetic naming if no friendly name provided
+        valid_circuits = [str(num) for num in circuit_numbers if num > 0]
+        entity_name = f"synthetic_sensor_{'_'.join(valid_circuits)}_{suffix}"
 
-        # Format: sensor.span_panel_solar_production_instant_power (with device prefix)
-        # Format: sensor.solar_production_instant_power (without device prefix)
-        if use_device_prefix and device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
-            return f"{platform}.{device_name}_{entity_name}_{suffix}"
-        else:
-            return f"{platform}.{entity_name}_{suffix}"
+    # Check if device prefix should be used (for backward compatibility)
+    # For existing installations with empty options, default to False for backward compatibility
+    if not config_entry.options:
+        # Empty options = existing installation, use legacy defaults
+        use_device_prefix = False
+    else:
+        # Has options = either new installation or existing installation that went through options flow
+        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
 
-
-def construct_solar_inverter_entity_id(
-    coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
-    platform: str,
-    inverter_leg1: int,
-    inverter_leg2: int,
-    suffix: str,
-    friendly_name: str | None = None,
-) -> str | None:
-    """Construct solar inverter entity ID based on integration configuration flags.
-
-    This is a convenience wrapper around construct_synthetic_entity_id for solar inverters.
-
-    Args:
-        coordinator: The coordinator instance
-        span_panel: The span panel data
-        platform: Platform name ("sensor")
-        inverter_leg1: First circuit/leg number
-        inverter_leg2: Second circuit/leg number
-        suffix: Entity-specific suffix ("instant_power", "energy_produced", etc.)
-        friendly_name: Optional friendly name for legacy installations (e.g., "Solar Production")
-
-    Returns:
-        Constructed entity ID string or None if device info unavailable
-
-    """
-    # Convert solar inverter legs to circuit numbers list
-    circuit_numbers = [inverter_leg1]
-    if inverter_leg2 > 0:
-        circuit_numbers.append(inverter_leg2)
-
-    return construct_synthetic_entity_id(
-        coordinator=coordinator,
-        span_panel=span_panel,
-        platform=platform,
-        circuit_numbers=circuit_numbers,
-        suffix=suffix,
-        friendly_name=friendly_name,
-    )
+    if use_device_prefix and device_name_raw:
+        device_name = sanitize_name_for_entity_id(device_name_raw)
+        return f"{platform}.{device_name}_{entity_name}"
+    else:
+        return f"{platform}.{entity_name}"
 
 
 def construct_synthetic_friendly_name(

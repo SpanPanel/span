@@ -55,7 +55,7 @@ from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
-from .synthetic_bridge import SyntheticSensorsBridge
+from .solar_synthetic_sensors import SolarSyntheticSensors
 from .util import panel_to_device_info
 
 
@@ -830,11 +830,11 @@ async def async_setup_entry(
         await tab_manager.enable_solar_tabs(inverter_leg1, inverter_leg2)
 
         # Generate synthetic sensors YAML configuration
-        synthetic_bridge = SyntheticSensorsBridge(hass, config_entry)
-        await synthetic_bridge.generate_solar_config(inverter_leg1, inverter_leg2)
+        solar_sensors = SolarSyntheticSensors(hass, config_entry)
+        await solar_sensors.generate_config(inverter_leg1, inverter_leg2)
 
         # Validate the generated configuration
-        if await synthetic_bridge.validate_config():
+        if await solar_sensors.validate_config():
             _LOGGER.info("Solar synthetic sensors configuration generated successfully")
 
             # Set up ha-synthetic-sensors integration for device integration
@@ -857,7 +857,7 @@ async def async_setup_entry(
                 )
 
                 # Load the YAML configuration we generated
-                yaml_path = synthetic_bridge.config_file_path
+                yaml_path = solar_sensors.config_file_path
                 if yaml_path and yaml_path.exists():
                     config_manager = ConfigManager(hass)
                     config = config_manager.load_from_file(str(yaml_path))
@@ -873,10 +873,10 @@ async def async_setup_entry(
     else:
         # Clean up solar configuration when disabled
         tab_manager = SolarTabManager(hass, config_entry)
-        synthetic_bridge = SyntheticSensorsBridge(hass, config_entry)
+        solar_sensors = SolarSyntheticSensors(hass, config_entry)
 
         await tab_manager.disable_solar_tabs()
-        await synthetic_bridge.remove_solar_config()
+        await solar_sensors.remove_config()
 
     for description_ss in STATUS_SENSORS:
         entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))

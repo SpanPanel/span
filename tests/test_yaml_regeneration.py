@@ -13,7 +13,7 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
-from custom_components.span_panel.synthetic_bridge import SyntheticSensorsBridge
+from custom_components.span_panel.solar_synthetic_sensors import SolarSyntheticSensors
 from tests.common import create_mock_config_entry
 
 
@@ -38,7 +38,7 @@ class TestYamlRegeneration:
             coordinator = MagicMock()
             coordinator.data = MagicMock()
 
-            # Create proper mock circuits that SyntheticSensorsBridge expects
+            # Create proper mock circuits that SolarSyntheticSensors expects
             # The bridge looks for circuits with IDs like "unmapped_tab_15", "unmapped_tab_30", etc.
             mock_circuit_30 = MagicMock()
             mock_circuit_30.name = "Unmapped Tab 30"
@@ -71,225 +71,230 @@ class TestYamlRegeneration:
         hass._test_coordinators = coordinators
         return hass
 
-    async def test_yaml_contains_proper_entity_ids_for_different_naming_patterns(
+    async def test_yaml_variables_update_when_circuits_change(
         self,
         hass_with_solar_data: HomeAssistant,
     ):
-        """Test that SyntheticSensorsBridge generates different entity IDs based on naming pattern."""
+        """Test that SolarSyntheticSensors updates variable entity IDs when underlying circuits change."""
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Get the config entries from the hass fixture
-            circuit_config = hass_with_solar_data._test_coordinators["circuit"]["config_entry"]
-            friendly_config = hass_with_solar_data._test_coordinators["friendly"]["config_entry"]
-
-            # Debug: Check the config entry options
-            print(f"Circuit pattern config options: {circuit_config.options}")
-
-            # First, generate YAML with circuit numbers pattern
-            bridge_circuit = SyntheticSensorsBridge(hass_with_solar_data, circuit_config, temp_dir)
-            await bridge_circuit.generate_solar_config(
-                30, 32
-            )  # Use circuits 30, 32 to match fixture
-
-            circuit_yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
-            if not circuit_yaml_path.exists():
-                # If generation failed, let's check what files were created
-                files = list(Path(temp_dir).glob("*"))
-                pytest.fail(f"Circuit pattern YAML not generated. Files in temp_dir: {files}")
-
-            with open(circuit_yaml_path, encoding="utf-8") as f:
-                generated_circuit_yaml = yaml.safe_load(f)
-
-            # Now generate YAML with friendly names pattern (in a new temp dir to avoid conflicts)
-            with tempfile.TemporaryDirectory() as temp_dir2:
-                # Debug: Check the config entry options
-                print(f"Friendly pattern config options: {friendly_config.options}")
-
-                bridge_friendly = SyntheticSensorsBridge(
-                    hass_with_solar_data, friendly_config, temp_dir2
-                )
-                await bridge_friendly.generate_solar_config(30, 32)  # Same circuits
-
-                friendly_yaml_path = Path(temp_dir2) / "span-ha-synthetic.yaml"
-                if not friendly_yaml_path.exists():
-                    files = list(Path(temp_dir2).glob("*"))
-                    pytest.fail(f"Friendly pattern YAML not generated. Files in temp_dir2: {files}")
-
-                with open(friendly_yaml_path, encoding="utf-8") as f:
-                    generated_friendly_yaml = yaml.safe_load(f)
-
-            # Load reference fixture files for comparison
+            # Use a fixture with mapped circuits instead of unmapped ones
             fixtures_dir = Path(__file__).parent / "fixtures"
+            source_yaml = fixtures_dir / "span-ha-synthetic-mixed-references.yaml"
+            test_yaml = Path(temp_dir) / "span-ha-synthetic.yaml"
 
-            with open(
-                fixtures_dir / "span-ha-synthetic-circuit-pattern.yaml", encoding="utf-8"
-            ) as f:
-                expected_circuit_yaml = yaml.safe_load(f)
+            # Copy the fixture to our test directory
+            import shutil
 
-            with open(
-                fixtures_dir / "span-ha-synthetic-friendly-pattern.yaml", encoding="utf-8"
-            ) as f:
-                expected_friendly_yaml = yaml.safe_load(f)
+            shutil.copy(source_yaml, test_yaml)
 
-            # Verify generated circuit pattern matches expected pattern
-            circuit_sensors = generated_circuit_yaml.get("sensors", {})
-            expected_circuit_sensors = expected_circuit_yaml.get("sensors", {})
+            # Get any config entry since we now use stable naming
+            config_entry = hass_with_solar_data._test_coordinators["friendly"]["config_entry"]
 
-            # Check that we have sensors and they match the expected pattern
-            assert len(circuit_sensors) > 0, "Circuit pattern should generate sensors"
+            # Create a solar sensors instance
+            solar_sensors = SolarSyntheticSensors(hass_with_solar_data, config_entry, temp_dir)
 
-            # For debugging: print what was actually generated vs expected
-            print(f"Generated circuit sensors: {list(circuit_sensors.keys())}")
-            print(f"Expected circuit sensors: {list(expected_circuit_sensors.keys())}")
+            # Read the original YAML
+            with open(test_yaml, encoding="utf-8") as f:
+                initial_yaml = yaml.safe_load(f)
 
-            # Test key entity IDs from the circuit pattern
-            for expected_key, expected_config in expected_circuit_sensors.items():
-                if expected_key in circuit_sensors:
-                    expected_entity_id = expected_config["entity_id"]
-                    actual_entity_id = circuit_sensors[expected_key]["entity_id"]
-                    assert actual_entity_id == expected_entity_id, (
-                        f"Circuit pattern entity ID mismatch for {expected_key}: "
-                        f"expected {expected_entity_id}, got {actual_entity_id}"
-                    )
+            # Verify initial variables point to the original circuit names
+            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            assert power_sensor["variables"]["leg1_power"] == "sensor.span_panel_main_kitchen_power"
+            assert power_sensor["variables"]["leg2_power"] == "sensor.span_panel_main_garage_power"
 
-            # Verify generated friendly pattern matches expected pattern
-            friendly_sensors = generated_friendly_yaml.get("sensors", {})
-            expected_friendly_sensors = expected_friendly_yaml.get("sensors", {})
+            # Now simulate circuit name changes by updating the coordinator data
+            coordinator = hass_with_solar_data.data[DOMAIN][config_entry.entry_id]["coordinator"]
 
-            assert len(friendly_sensors) > 0, "Friendly pattern should generate sensors"
+            # Add mapped circuits that would appear in the YAML variables
+            mock_kitchen_circuit = MagicMock()
+            mock_kitchen_circuit.name = "Solar East"  # Changed from "Main Kitchen"
+            mock_kitchen_circuit.circuit_id = "main_kitchen"
+            mock_kitchen_circuit.id = 1
 
-            print(f"Generated friendly sensors: {list(friendly_sensors.keys())}")
-            print(f"Expected friendly sensors: {list(expected_friendly_sensors.keys())}")
+            mock_garage_circuit = MagicMock()
+            mock_garage_circuit.name = "Solar West"  # Changed from "Main Garage"
+            mock_garage_circuit.circuit_id = "main_garage"
+            mock_garage_circuit.id = 2
 
-            # Test key entity IDs from the friendly pattern
-            for expected_key, expected_config in expected_friendly_sensors.items():
-                if expected_key in friendly_sensors:
-                    expected_entity_id = expected_config["entity_id"]
-                    actual_entity_id = friendly_sensors[expected_key]["entity_id"]
-                    assert actual_entity_id == expected_entity_id, (
-                        f"Friendly pattern entity ID mismatch for {expected_key}: "
-                        f"expected {expected_entity_id}, got {actual_entity_id}"
-                    )
-
-            # Verify the patterns produce different outputs
-            assert generated_circuit_yaml != generated_friendly_yaml, (
-                "Circuit and friendly naming patterns should produce different YAML content"
+            # Update coordinator data to include these mapped circuits
+            coordinator.data.circuits.update(
+                {
+                    "main_kitchen": mock_kitchen_circuit,
+                    "main_garage": mock_garage_circuit,
+                }
             )
 
-    async def test_yaml_patterns_generate_reverse_direction(
+            # Update the YAML variables to reflect the new names
+            await solar_sensors._update_yaml_variables_from_coordinator()
+
+            with open(test_yaml, encoding="utf-8") as f:
+                updated_yaml = yaml.safe_load(f)
+
+            # Verify variables now point to the new friendly names
+            updated_power_sensor = updated_yaml["sensors"][
+                "span_panel_solar_inverter_instant_power"
+            ]
+            # The entity IDs should now be based on the friendly names, not the original names
+            assert "solar_east" in updated_power_sensor["variables"]["leg1_power"]
+            assert "solar_west" in updated_power_sensor["variables"]["leg2_power"]
+
+            # But the sensor key itself should remain stable
+            assert "span_panel_solar_inverter_instant_power" in updated_yaml["sensors"]
+
+    async def test_yaml_variables_update_for_single_vs_dual_leg(
         self,
         hass_with_solar_data: HomeAssistant,
     ):
-        """Test that both naming patterns work in reverse direction (friendly → circuit).
-
-        This test validates the same anti-pattern fix but generates friendly names first,
-        then circuit numbers, to ensure both directions work correctly.
-        """
+        """Test that solar sensor variables change correctly between single and dual leg configurations."""
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Get the config entries from the hass fixture
-            friendly_config = hass_with_solar_data._test_coordinators["friendly"]["config_entry"]
-            circuit_config = hass_with_solar_data._test_coordinators["circuit"]["config_entry"]
+            config_entry = hass_with_solar_data._test_coordinators["friendly"]["config_entry"]
+            solar_sensors = SolarSyntheticSensors(hass_with_solar_data, config_entry, temp_dir)
 
-            # First, generate YAML with friendly names pattern
-            bridge_friendly = SyntheticSensorsBridge(
-                hass_with_solar_data, friendly_config, temp_dir
+            # Start with dual leg configuration
+            await solar_sensors.generate_config(30, 32)
+
+            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            with open(yaml_path, encoding="utf-8") as f:
+                dual_leg_yaml = yaml.safe_load(f)
+
+            # Verify dual leg formula and variables
+            power_sensor = dual_leg_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            assert power_sensor["formula"] == "leg1_power + leg2_power"
+            assert "leg1_power" in power_sensor["variables"]
+            assert "leg2_power" in power_sensor["variables"]
+
+            # Switch to single leg configuration
+            await solar_sensors.generate_config(30, 0)  # Only leg 1
+
+            with open(yaml_path, encoding="utf-8") as f:
+                single_leg_yaml = yaml.safe_load(f)
+
+            # Verify single leg formula and variables
+            single_power_sensor = single_leg_yaml["sensors"][
+                "span_panel_solar_inverter_instant_power"
+            ]
+            assert single_power_sensor["formula"] == "leg1_power"
+            assert "leg1_power" in single_power_sensor["variables"]
+            assert "leg2_power" not in single_power_sensor["variables"]
+
+            # The entity ID and sensor key should remain stable
+            assert single_power_sensor["entity_id"] == power_sensor["entity_id"]
+
+    async def test_yaml_variable_updates_with_mixed_references(
+        self,
+        hass_with_solar_data: HomeAssistant,
+    ):
+        """Test that YAML variables update correctly for SPAN sensors but not for non-SPAN sensors."""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Use a fixture with mixed SPAN and non-SPAN references
+            fixtures_dir = Path(__file__).parent / "fixtures"
+            source_yaml = fixtures_dir / "span-ha-synthetic-mixed-references.yaml"
+            test_yaml = Path(temp_dir) / "span-ha-synthetic.yaml"
+
+            # Copy the fixture to our test directory
+            import shutil
+
+            shutil.copy(source_yaml, test_yaml)
+
+            # Create a solar sensors instance
+            config_entry = hass_with_solar_data._test_coordinators["friendly"]["config_entry"]
+            solar_sensors = SolarSyntheticSensors(hass_with_solar_data, config_entry, temp_dir)
+
+            # Read the original YAML
+            with open(test_yaml, encoding="utf-8") as f:
+                original_yaml = yaml.safe_load(f)
+
+            # Simulate circuit name changes in the coordinator data
+            # Change "Main Kitchen" -> "Kitchen Updated" and "Main Garage" -> "Garage Updated"
+            coordinator = hass_with_solar_data.data[DOMAIN][config_entry.entry_id]["coordinator"]
+
+            # Add some mapped circuits that would appear in the YAML variables
+            mock_kitchen_circuit = MagicMock()
+            mock_kitchen_circuit.name = "Kitchen Updated"  # Changed from "Main Kitchen"
+            mock_kitchen_circuit.circuit_id = "main_kitchen"
+
+            mock_garage_circuit = MagicMock()
+            mock_garage_circuit.name = "Garage Updated"  # Changed from "Main Garage"
+            mock_garage_circuit.circuit_id = "main_garage"
+
+            mock_hvac_circuit = MagicMock()
+            mock_hvac_circuit.name = "HVAC System Updated"  # Changed from "HVAC Circuit"
+            mock_hvac_circuit.circuit_id = "hvac_circuit"
+
+            # Update coordinator data to include these mapped circuits
+            coordinator.data.circuits.update(
+                {
+                    "main_kitchen": mock_kitchen_circuit,
+                    "main_garage": mock_garage_circuit,
+                    "hvac_circuit": mock_hvac_circuit,
+                }
             )
-            await bridge_friendly.generate_solar_config(30, 32)
 
-            friendly_yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
-            if not friendly_yaml_path.exists():
-                files = list(Path(temp_dir).glob("*"))
-                pytest.fail(f"Friendly pattern YAML not generated. Files in temp_dir: {files}")
+            # Update the YAML with the new circuit names
+            await solar_sensors._update_yaml_variables_from_coordinator()
 
-            with open(friendly_yaml_path, encoding="utf-8") as f:
-                generated_friendly_yaml = yaml.safe_load(f)
+            # Read the updated YAML
+            with open(test_yaml, encoding="utf-8") as f:
+                updated_yaml = yaml.safe_load(f)
 
-            # Now generate YAML with circuit numbers pattern (in a new temp dir)
-            with tempfile.TemporaryDirectory() as temp_dir2:
-                bridge_circuit = SyntheticSensorsBridge(
-                    hass_with_solar_data, circuit_config, temp_dir2
-                )
-                await bridge_circuit.generate_solar_config(30, 32)  # Same circuits
+            # Verify SPAN circuit variables were updated
+            solar_power = updated_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            assert (
+                solar_power["variables"]["leg1_power"] == "sensor.span_panel_kitchen_updated_power"
+            )
+            assert (
+                solar_power["variables"]["leg2_power"] == "sensor.span_panel_garage_updated_power"
+            )
 
-                circuit_yaml_path = Path(temp_dir2) / "span-ha-synthetic.yaml"
-                if not circuit_yaml_path.exists():
-                    files = list(Path(temp_dir2).glob("*"))
-                    pytest.fail(f"Circuit pattern YAML not generated. Files in temp_dir2: {files}")
+            solar_energy = updated_yaml["sensors"]["span_panel_solar_inverter_energy_produced"]
+            assert (
+                solar_energy["variables"]["leg1_produced"]
+                == "sensor.span_panel_kitchen_updated_energy_produced"
+            )
+            assert (
+                solar_energy["variables"]["leg2_produced"]
+                == "sensor.span_panel_garage_updated_energy_produced"
+            )
 
-                with open(circuit_yaml_path, encoding="utf-8") as f:
-                    generated_circuit_yaml = yaml.safe_load(f)
+            # Verify mixed variables sensor
+            house_consumption = updated_yaml["sensors"]["span_panel_total_house_consumption"]
+            assert (
+                house_consumption["variables"]["main_consumption"]
+                == "sensor.span_panel_main_panel_instant_power"
+            )  # Direct sensor - should update if panel name changes
+            assert (
+                house_consumption["variables"]["hvac_consumption"]
+                == "sensor.span_panel_hvac_system_updated_power"
+            )  # Circuit name updated
+            assert (
+                house_consumption["variables"]["outdoor_sensor"]
+                == "sensor.outdoor_temperature_sensor"
+            )  # Non-SPAN - unchanged
 
-            # Extract entity IDs from the generated YAML (reverse order from main test)
-            friendly_sensors = list(generated_friendly_yaml.get("sensors", {}).keys())
-            circuit_sensors = list(generated_circuit_yaml.get("sensors", {}).keys())
+            # Verify non-SPAN sensor remains completely untouched
+            weather_calc = updated_yaml["sensors"]["external_weather_calculation"]
+            assert weather_calc == original_yaml["sensors"]["external_weather_calculation"]
 
-            # Expected entity IDs for friendly names pattern (USE_CIRCUIT_NUMBERS=False)
-            expected_friendly_sensors = [
+            # Verify unmapped circuits remain unchanged (stable entity IDs)
+            unmapped_total = updated_yaml["sensors"]["span_panel_unmapped_total"]
+            assert (
+                unmapped_total["variables"]["unmapped1"]
+                == "sensor.span_panel_unmapped_tab_15_power"
+            )
+            assert (
+                unmapped_total["variables"]["unmapped2"]
+                == "sensor.span_panel_unmapped_tab_16_power"
+            )
+
+            # Verify the sensor keys themselves remain stable (solar inverter naming)
+            expected_sensor_keys = {
                 "span_panel_solar_inverter_instant_power",
                 "span_panel_solar_inverter_energy_produced",
-                "span_panel_solar_inverter_energy_consumed",
-            ]
-
-            # Expected entity IDs for circuit numbers pattern (USE_CIRCUIT_NUMBERS=True)
-            expected_circuit_sensors = [
-                "span_panel_circuit_30_32_instant_power",
-                "span_panel_circuit_30_32_energy_produced",
-                "span_panel_circuit_30_32_energy_consumed",
-            ]
-
-            # EXPLICIT VALIDATION: Verify each pattern produces the expected entity IDs
-            for expected_entity_id in expected_friendly_sensors:
-                assert expected_entity_id in friendly_sensors, (
-                    f"Friendly pattern missing expected entity: {expected_entity_id}. "
-                    f"Generated: {friendly_sensors}"
-                )
-
-            for expected_entity_id in expected_circuit_sensors:
-                assert expected_entity_id in circuit_sensors, (
-                    f"Circuit pattern missing expected entity: {expected_entity_id}. "
-                    f"Generated: {circuit_sensors}"
-                )
-
-            # Verify entity IDs match exactly (same validation as main test, different order)
-            for actual_entity_id, expected_entity_id in zip(
-                friendly_sensors, expected_friendly_sensors
-            ):
-                assert actual_entity_id == expected_entity_id, (
-                    f"Friendly pattern entity ID mismatch: "
-                    f"expected {expected_entity_id}, got {actual_entity_id}"
-                )
-
-            for actual_entity_id, expected_entity_id in zip(
-                circuit_sensors, expected_circuit_sensors
-            ):
-                assert actual_entity_id == expected_entity_id, (
-                    f"Circuit pattern entity ID mismatch: "
-                    f"expected {expected_entity_id}, got {actual_entity_id}"
-                )
-
-            # Verify the patterns produce different outputs
-            assert generated_friendly_yaml != generated_circuit_yaml, (
-                "Friendly and circuit naming patterns should produce different YAML content"
-            )
-
-            # Load reference fixtures to validate against known-good patterns
-            fixtures_dir = Path(__file__).parent / "fixtures"
-
-            with open(
-                fixtures_dir / "span-ha-synthetic-friendly-pattern.yaml", encoding="utf-8"
-            ) as f:
-                expected_friendly_yaml = yaml.safe_load(f)
-
-            with open(
-                fixtures_dir / "span-ha-synthetic-circuit-pattern.yaml", encoding="utf-8"
-            ) as f:
-                expected_circuit_yaml = yaml.safe_load(f)
-
-            # Final validation: generated output should match fixture patterns exactly
-            assert generated_friendly_yaml == expected_friendly_yaml, (
-                "Generated friendly pattern YAML should match the fixture"
-            )
-            assert generated_circuit_yaml == expected_circuit_yaml, (
-                "Generated circuit pattern YAML should match the fixture"
-            )
+                "span_panel_total_house_consumption",
+                "external_weather_calculation",
+                "span_panel_unmapped_total",
+            }
+            assert set(updated_yaml["sensors"].keys()) == expected_sensor_keys

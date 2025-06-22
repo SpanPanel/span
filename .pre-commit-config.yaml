@@ -76,14 +76,14 @@ repos:
     hooks:
       - id: radon-complexity
         name: radon complexity check
-        entry: radon
+        entry: poetry run radon
         language: system
         args: ['cc', '--min=B', '--show-complexity', 'custom_components/span_panel/']
         pass_filenames: false
         files: \.py$
       - id: radon-maintainability
         name: radon maintainability index
-        entry: radon
+        entry: poetry run radon
         language: system
         args: ['mi', '--min=B', '--show', 'custom_components/span_panel/']
         pass_filenames: false
