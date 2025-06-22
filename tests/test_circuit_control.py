@@ -6,12 +6,10 @@ Tests for Span Panel circuit control functionality (switches, relay operations).
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
-
 import pytest
 
 from custom_components.span_panel.const import CircuitRelayState
-from custom_components.span_panel.switch import async_setup_entry
-from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
+from custom_components.span_panel.switch import SpanPanelCircuitsSwitch, async_setup_entry
 
 
 @pytest.fixture(autouse=True)

@@ -18,3 +18,4 @@ env/
 .coverage.*
 htmlcov/
 .pytest_cache/
+./custom_components/span-ha-synthetic.yaml

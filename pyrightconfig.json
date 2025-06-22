@@ -1,0 +1,37 @@
+{
+  "include": [
+    "custom_components"
+  ],
+  "exclude": [
+    ".venv",
+    "venv",
+    "scripts",
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "htmlcov",
+    "node_modules"
+  ],
+  "extraPaths": [
+    "./custom_components",
+    "../span-panel-api/src",
+    "../ha-synthetic-sensors/src",
+    "../core"
+  ],
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Darwin",
+  "typeCheckingMode": "strict",
+  "useLibraryCodeForTypes": true,
+  "autoSearchPaths": true,
+  "autoImportCompletions": true,
+  "reportMissingImports": "information",
+  "reportMissingTypeStubs": "none",
+  "reportOptionalMemberAccess": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "reportAttributeAccessIssue": "warning",
+  "venvPath": ".",
+  "venv": ".venv",
+  "diagnosticMode": "workspace",
+  "stubPath": "./typings"
+}

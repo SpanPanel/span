@@ -5,19 +5,19 @@ from unittest.mock import patch
 from homeassistant.config_entries import ConfigEntry
 
 from custom_components.span_panel.config_flow import create_config_client
-from custom_components.span_panel.options import Options
 from custom_components.span_panel.const import (
-    CONFIG_TIMEOUT,
-    CONFIG_API_RETRIES,
-    CONFIG_API_RETRY_TIMEOUT,
-    CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-    DEFAULT_API_RETRIES,
-    DEFAULT_API_RETRY_TIMEOUT,
-    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
     CONF_API_RETRIES,
-    CONF_API_RETRY_TIMEOUT,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
+    CONF_API_RETRY_TIMEOUT,
+    CONFIG_API_RETRIES,
+    CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
+    CONFIG_API_RETRY_TIMEOUT,
+    CONFIG_TIMEOUT,
+    DEFAULT_API_RETRIES,
+    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
+    DEFAULT_API_RETRY_TIMEOUT,
 )
+from custom_components.span_panel.options import Options
 
 
 class TestRetryConfiguration:

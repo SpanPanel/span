@@ -10,30 +10,30 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
-httpx = "^0.28.1"
-simpleeval = "^0.9.13" # Added simpleeval
+homeassistant = "*"  # This pulls in all HA's pinned dependencies automatically
 span-panel-api = {path = "../span-panel-api", develop = true}
-homeassistant = "^2025.6.0"
-pytest-homeassistant-custom-component = "^0.13.251"
+ha-synthetic-sensors = {path = "../ha-synthetic-sensors", develop = true}
+# Only add dependencies here that HA doesn't provide or where you need different versions
 
 [tool.poetry.group.dev.dependencies]
+# Type stubs and dev-only tools that don't conflict with HA runtime
 homeassistant-stubs = "*"
 types-requests = "*"
-ruff = "^0.11.8"
-mypy = ">=1.16.0"
-pyright = "^1.1.390"
-bandit = "^1.7.4"
-pre-commit = "^4.2.0"
-pydantic = ">=2.0.0,<3.0.0"
-voluptuous = ">=0.15.2"
-voluptuous-stubs = "^0.1.1"
-python-direnv = "^0.2.2"
-prettier = "^0.0.7"
-pytest = "^8.3.5"
-pytest-homeassistant-custom-component = "^0.13.0"
-homeassistant = "*"
-isort = "^6.0.1"
-radon = "^6.0.1"
+types-PyYAML = "*"
+mypy = "*"
+pyright = "*"
+ruff = "*"
+bandit = "*"
+pre-commit = "*"
+voluptuous-stubs = "*"
+python-direnv = "*"
+prettier = "*"
+radon = "*"
+pylint = "*"  # For import-outside-toplevel checks
+# Testing dependencies
+pytest = "*"
+pytest-homeassistant-custom-component = "*"
+isort = "*"
 
 [build-system]
 requires = ["poetry-core"]
@@ -109,14 +109,27 @@ include = ["custom_components/span_panel"]
 exclude = [
     "venv",
     ".venv",
-    "scripts"
+    "scripts",
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache"
 ]
-pythonPlatform = "Linux"
+extraPaths = [
+    "./custom_components",
+    "../span-panel-api/src",
+    "../ha-synthetic-sensors/src"
+]
+pythonPlatform = "Darwin"
+pythonVersion = "3.13"
 typeCheckingMode = "basic"
 useLibraryCodeForTypes = true
 autoSearchPaths = true
+autoImportCompletions = true
 reportMissingImports = "warning"
 reportMissingTypeStubs = false
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 100
@@ -128,8 +141,9 @@ select = [
     "B014", # Exception handler is an `except` clause that only reraises
     "C",  # complexity
     "D",  # docstrings
-    "E",  # pycodestyle
+    "E",  # pycodestyle (includes E402 - module level import not at top of file)
     "F",  # pyflakes/autoflake
+    "I",  # isort - import sorting and organization
     "ICN001", # import concentions; {name} should be imported as {asname}
     "PGH004",  # Use specific rule codes when using noqa
     "PLC0414", # Useless import alias. Import alias does not rename original package.
@@ -141,6 +155,7 @@ select = [
     "SIM300", # Yoda conditions. Use 'age == 42' instead of '42 == age'.
     "SIM401", # Use get from dict with default instead of conditional assignment
     "T20",  # flake8-print
+    "TID",  # flake8-tidy-imports - import organization and toplevel checking
     "TRY004", # Prefer TypeError exception for invalid type
     "RUF006", # Store a reference to the return value of asyncio.create_task
     "UP",  # pyupgrade
@@ -159,9 +174,9 @@ ignore = [
 
 # Per-file ignores for test and debug files
 [tool.ruff.lint.per-file-ignores]
-"test_*.py" = ["T201", "D103", "D100"]  # Allow print statements and missing docstrings in test files
-"debug_*.py" = ["T201", "D103", "D100"]  # Allow print statements and missing docstrings in debug files
-"tests/**/*.py" = ["T201", "D103", "D100"]  # Allow print statements and missing docstrings in test directory
+"test_*.py" = ["T201", "D103", "D100", "E402", "TID252"]  # Allow print statements, missing docstrings, and imports inside functions in test files
+"debug_*.py" = ["T201", "D103", "D100", "E402", "TID252"]  # Allow print statements, missing docstrings, and imports inside functions in debug files
+"tests/**/*.py" = ["T201", "D103", "D100", "E402", "TID252"]  # Allow print statements, missing docstrings, and imports inside functions in test directory
 
 # Bandit configuration
 [tool.bandit]

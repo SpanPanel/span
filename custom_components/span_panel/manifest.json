@@ -1,12 +1,17 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
-  "codeowners": ["@SpanPanel"],
+  "codeowners": [
+    "@SpanPanel"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/SpanPanel/span",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/SpanPanel/span/issues",
-  "requirements": ["span-panel-api~=1.0.0"],
+  "requirements": [
+    "span-panel-api~=1.1.0",
+    "ha-synthetic-sensors~=1.0.3"
+  ],
   "version": "1.2.0",
   "zeroconf": [
     {
