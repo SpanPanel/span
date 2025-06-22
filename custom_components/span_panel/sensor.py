@@ -847,7 +847,6 @@ async def async_setup_entry(
                 # Configure sensor manager for device integration
                 manager_config = SensorManagerConfig(
                     device_info=device_info,
-                    unique_id_prefix=f"span_panel_solar_{config_entry.entry_id}",
                     lifecycle_managed_externally=True,
                 )
 
