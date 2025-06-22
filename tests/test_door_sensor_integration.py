@@ -1,6 +1,7 @@
 """Integration tests for the door state tamper sensor."""
 
 from typing import Any
+
 import pytest
 
 from custom_components.span_panel.const import (

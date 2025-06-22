@@ -1,7 +1,8 @@
 """Test upgrade scenarios to ensure existing installations are preserved."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from custom_components.span_panel.config_flow import OptionsFlowHandler
 from custom_components.span_panel.const import (
@@ -387,8 +388,8 @@ class TestSyntheticEntityUpgradeScenarios:
                 "Solar Inverter",
             )
 
-            # Modern format: device prefix + circuit numbers
-            assert entity_id == "sensor.span_panel_circuit_30_32_power"
+            # Modern format: device prefix + friendly name (synthetic sensors always use friendly names)
+            assert entity_id == "sensor.span_panel_solar_inverter_power"
 
 
 class TestGeneralOptionsPreservesNamingFlags:

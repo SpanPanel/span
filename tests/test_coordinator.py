@@ -1,11 +1,12 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
     HomeAssistantError,
 )
 from homeassistant.helpers.update_coordinator import UpdateFailed
+import pytest
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -14,6 +15,7 @@ from span_panel_api.exceptions import (
     SpanPanelServerError,
     SpanPanelTimeoutError,
 )
+
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 
 

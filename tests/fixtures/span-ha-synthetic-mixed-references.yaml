@@ -1,0 +1,61 @@
+version: "1.0"
+sensors:
+  # Solar inverter sensors with SPAN circuit variables (should update when circuit names change)
+  span_panel_solar_inverter_instant_power:
+    name: "Solar Inverter Instant Power"
+    formula: "leg1_power + leg2_power"
+    variables:
+      leg1_power: "sensor.span_panel_main_kitchen_power"  # Mapped SPAN circuit - should update
+      leg2_power: "sensor.span_panel_main_garage_power"   # Mapped SPAN circuit - should update
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    entity_id: "sensor.span_panel_solar_inverter_instant_power"
+
+  span_panel_solar_inverter_energy_produced:
+    name: "Solar Inverter Energy Produced"
+    formula: "leg1_produced + leg2_produced"
+    variables:
+      leg1_produced: "sensor.span_panel_main_kitchen_energy_produced"  # Mapped SPAN circuit - should update
+      leg2_produced: "sensor.span_panel_main_garage_energy_produced"   # Mapped SPAN circuit - should update
+    unit_of_measurement: "Wh"
+    device_class: "energy"
+    state_class: "total_increasing"
+    entity_id: "sensor.span_panel_solar_inverter_energy_produced"
+
+  # Custom sensor with mixed variables (SPAN + non-SPAN)
+  span_panel_total_house_consumption:
+    name: "Total House Consumption"
+    formula: "main_consumption + hvac_consumption + outdoor_sensor"
+    variables:
+      main_consumption: "sensor.span_panel_main_panel_instant_power"     # Direct SPAN sensor - should update
+      hvac_consumption: "sensor.span_panel_hvac_circuit_power"           # Mapped SPAN circuit - should update
+      outdoor_sensor: "sensor.outdoor_temperature_sensor"               # Non-SPAN sensor - should NOT update
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    entity_id: "sensor.span_panel_total_house_consumption"
+
+  # Sensor with only non-SPAN references (should not be touched)
+  external_weather_calculation:
+    name: "Weather Calculation"
+    formula: "temp * humidity + wind"
+    variables:
+      temp: "sensor.weather_temperature"      # Non-SPAN - should NOT update
+      humidity: "sensor.weather_humidity"     # Non-SPAN - should NOT update
+      wind: "sensor.weather_wind_speed"       # Non-SPAN - should NOT update
+    unit_of_measurement: "index"
+    state_class: "measurement"
+    entity_id: "sensor.external_weather_calculation"
+
+  # Sensor with unmapped SPAN circuits (should NOT update when circuit names change)
+  span_panel_unmapped_total:
+    name: "Unmapped Circuits Total"
+    formula: "unmapped1 + unmapped2"
+    variables:
+      unmapped1: "sensor.span_panel_unmapped_tab_15_power"    # Unmapped SPAN - should NOT update
+      unmapped2: "sensor.span_panel_unmapped_tab_16_power"    # Unmapped SPAN - should NOT update
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    entity_id: "sensor.span_panel_unmapped_total"

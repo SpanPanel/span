@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from .options import INVERTER_MAXLEG, Options
+from .options import Options
 
 
 @dataclass
@@ -23,9 +23,6 @@ class SpanPanelData:
     dsm_grid_state: str
     dsm_state: str
     current_run_config: str
-    solar_inverter_instant_power: float
-    solar_inverter_energy_produced: float
-    solar_inverter_energy_consumed: float
     main_meter_energy: dict[str, Any] = field(default_factory=dict)
     feedthrough_energy: dict[str, Any] = field(default_factory=dict)
     solar_data: dict[str, Any] = field(default_factory=dict)
@@ -52,27 +49,12 @@ class SpanPanelData:
             "dsm_grid_state": str(data["dsmGridState"]),
             "dsm_state": str(data["dsmState"]),
             "current_run_config": str(data["currentRunConfig"]),
-            "solar_inverter_instant_power": 0.0,
-            "solar_inverter_energy_produced": 0.0,
-            "solar_inverter_energy_consumed": 0.0,
             "main_meter_energy": data.get("mainMeterEnergy", {}),
             "feedthrough_energy": data.get("feedthroughEnergy", {}),
             "solar_inverter_data": data.get("solarInverter", {}),
             "state_data": data.get("state", {}),
             "raw_data": data,
         }
-
-        if options and options.enable_solar_sensors:
-            for leg in [options.inverter_leg1, options.inverter_leg2]:
-                if 1 <= leg <= INVERTER_MAXLEG:
-                    branch = data["branches"][leg - 1]
-                    common_data["solar_inverter_instant_power"] += float(branch["instantPowerW"])
-                    common_data["solar_inverter_energy_produced"] += float(
-                        branch["importedActiveEnergyWh"]
-                    )
-                    common_data["solar_inverter_energy_consumed"] += float(
-                        branch["exportedActiveEnergyWh"]
-                    )
 
         return cls(**common_data)
 

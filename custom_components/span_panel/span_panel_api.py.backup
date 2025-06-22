@@ -1,4 +1,18 @@
-"""Span Panel API - Updated to use span-panel-api package."""
+"""Span Panel API - Updated to use span    def __init__(
+        self,
+        host: str,
+        access_token: str | None = None,  # nosec
+        options: Options | None = None,
+        use_ssl: bool = False,
+        scan_interval: int | None = None,
+    ) -> None:
+        """Initialize the Span Panel API."""
+        self.host: str = host.lower()
+        self.access_token: str | None = access_token
+        self.options: Options | None = options
+        self.scan_interval: int = scan_interval or 15  # Default to 15 seconds
+        self.use_ssl: bool = use_ssl
+        self._authenticated: bool = access_token is not Noneckage."""
 
 from copy import deepcopy
 import logging
@@ -17,12 +31,12 @@ from span_panel_api.exceptions import (
 
 from .const import (
     API_TIMEOUT,
-    DEFAULT_API_RETRIES,
-    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
-    DEFAULT_API_RETRY_TIMEOUT,
     PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE,
     CircuitPriority,
     CircuitRelayState,
+    DEFAULT_API_RETRIES,
+    DEFAULT_API_RETRY_TIMEOUT,
+    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
 )
 from .exceptions import SpanPanelReturnedEmptyData
 from .options import Options
@@ -51,7 +65,7 @@ class SpanPanelApi:
         self.options: Options | None = options
         self.scan_interval: int = scan_interval or 15  # Default to 15 seconds
         self.use_ssl: bool = use_ssl
-        self._authenticated = False
+        self._authenticated: bool = access_token is not None
 
         # Get retry configuration from options or use defaults
         if options:
