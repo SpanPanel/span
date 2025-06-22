@@ -20,8 +20,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Replace path dependency with PyPI version for CI
+          # Replace path dependencies with PyPI versions for CI
           sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = "^1.1.0"/' pyproject.toml
+          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.0.3"/' pyproject.toml
+          # Show the modified dependencies for debugging
+          echo "Modified pyproject.toml dependencies:"
+          grep -A 5 -B 5 "span-panel-api\|ha-synthetic-sensors" pyproject.toml
           # Regenerate lock file with the modified dependencies
           poetry lock
           poetry install --with dev
