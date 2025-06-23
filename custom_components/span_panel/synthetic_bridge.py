@@ -20,6 +20,7 @@ class SyntheticSensorsBridge:
         hass: HomeAssistant,
         config_entry: ConfigEntry,
         config_dir: str | None = None,
+        device_serial: str | None = None,
     ):
         """Initialize the synthetic sensors bridge.
 
@@ -27,10 +28,12 @@ class SyntheticSensorsBridge:
             hass: Home Assistant instance
             config_entry: Config entry for the integration
             config_dir: Optional directory to store config files. If None, uses integration directory.
+            device_serial: Optional device serial number for unique ID generation
 
         """
         self._hass = hass
         self._config_entry = config_entry
+        self._device_serial = device_serial
 
         # Use provided config_dir or default to integration directory
         if config_dir is not None:
@@ -49,6 +52,22 @@ class SyntheticSensorsBridge:
     def config_file_path(self) -> Path:
         """Get the path to the synthetic sensors config file."""
         return self._config_file
+
+    def get_unique_id_prefix(self) -> str:
+        """Get the appropriate unique ID prefix for SPAN synthetic sensors.
+
+        This generates a prefix that matches the v1.0.10 format for compatibility,
+        using the device serial number when available.
+
+        Returns:
+            Unique ID prefix (e.g., "span_ABC123_synthetic")
+
+        """
+        if not self._device_serial:
+            # Fallback to integration-based prefix if no device serial
+            return f"span_{self._config_entry.entry_id}_synthetic"
+
+        return f"span_{self._device_serial}_synthetic"
 
     async def remove_config(self) -> None:
         """Remove the configuration file."""
