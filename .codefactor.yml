@@ -1,5 +1,5 @@
-# CodeFactor configuration - DISABLED
-# We use our own comprehensive pre-commit hooks for all code quality checks:
+# CodeFactor configuration - Disable line length and style checks
+# We use our own pre-commit hooks for all code quality checks:
 # - ruff (formatting, linting, import sorting)
 # - mypy (type checking)
 # - bandit (security)
@@ -8,5 +8,26 @@
 # - markdownlint
 # - pre-commit hooks for file validation
 
-# Disable CodeFactor entirely
+# Disable specific engines that check line length
+engines:
+  pylint: false
+  pycodestyle: false
+  pep8: false
+  flake8: false
+  mypy: false
+  bandit: false
+  radon: false
+
+# Disable line length checks specifically
+checks:
+  line-length: false
+
+# Exclude all Python files from analysis
+exclude:
+  - "**/*.py"
+  - "**/*.pyx"
+  - "**/*.pyi"
+  - "**/*.md"
+
+# Disable all checks
 enabled: false

@@ -579,7 +579,7 @@ class SolarSyntheticSensors:
             "Solar Inverter",
         )
 
-        # Create power sensor - use full entity ID as key (without sensor. prefix)
+        # Create power sensor - use clean entity ID as key (without sensor. prefix)
         power_formula, power_variables = self._create_formula_and_variables(power_entities, "power")
         if power_entity_id:
             key = power_entity_id.replace("sensor.", "")
