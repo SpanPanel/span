@@ -95,9 +95,9 @@ async def test_yaml_config_generates_correct_entity_names(
 
     # Check for expected solar sensors (circuit-based keys for v1.0.10 compatibility)
     expected_sensors = {
-        "span_panel_solar_inverter_30_32_instant_power": "Solar Inverter Instant Power",
-        "span_panel_solar_inverter_30_32_energy_produced": "Solar Inverter Energy Produced",
-        "span_panel_solar_inverter_30_32_energy_consumed": "Solar Inverter Energy Consumed",
+        "solar_inverter_instant_power": "Solar Inverter Instant Power",
+        "solar_inverter_energy_produced": "Solar Inverter Energy Produced",
+        "solar_inverter_energy_consumed": "Solar Inverter Energy Consumed",
     }
 
     for sensor_key, expected_name in expected_sensors.items():
