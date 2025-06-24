@@ -774,7 +774,7 @@ async def async_setup_entry(
                 # This allows them to be used by synthetic sensors without UI clutter
                 enabled_default = True
                 visible_default = False
-                _LOGGER.info("Creating enabled but hidden unmapped tab circuit sensor: %s", id_c)
+                _LOGGER.debug("Creating enabled but hidden unmapped tab circuit sensor: %s", id_c)
             else:
                 # Regular circuits use the original description defaults
                 enabled_default = description_cs.entity_registry_enabled_default

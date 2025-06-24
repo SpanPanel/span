@@ -21,6 +21,7 @@ class SyntheticSensorsBridge:
         config_entry: ConfigEntry,
         config_dir: str | None = None,
         device_serial: str | None = None,
+        config_filename: str = "span-ha-synthetic.yaml",
     ):
         """Initialize the synthetic sensors bridge.
 
@@ -29,6 +30,7 @@ class SyntheticSensorsBridge:
             config_entry: Config entry for the integration
             config_dir: Optional directory to store config files. If None, uses integration directory.
             device_serial: Optional device serial number for unique ID generation
+            config_filename: Name of the config file to use
 
         """
         self._hass = hass
@@ -38,7 +40,7 @@ class SyntheticSensorsBridge:
         # Use provided config_dir or default to integration directory
         if config_dir is not None:
             # Use provided directory
-            self._config_file = Path(config_dir) / "span-ha-synthetic.yaml"
+            self._config_file = Path(config_dir) / config_filename
         else:
             # Default: place YAML file in the integration directory so it gets cleaned up
             # when the integration is deleted
@@ -46,7 +48,7 @@ class SyntheticSensorsBridge:
             if not hass_config_dir:
                 raise ValueError("Home Assistant config directory is not available")
             integration_dir = Path(hass_config_dir) / "custom_components" / "span_panel"
-            self._config_file = integration_dir / "span-ha-synthetic.yaml"
+            self._config_file = integration_dir / config_filename
 
     @property
     def config_file_path(self) -> Path:

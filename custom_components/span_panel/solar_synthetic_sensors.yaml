@@ -1,6 +1,6 @@
 version: '1.0'
 sensors:
-  span_panel_solar_inverter_instant_power:
+  span_panel_solar_inverter_30_32_instant_power:
     name: Solar Inverter Instant Power
     entity_id: sensor.span_panel_solar_inverter_instant_power
     formula: leg1_power + leg2_power
@@ -10,7 +10,7 @@ sensors:
     unit_of_measurement: W
     device_class: power
     state_class: measurement
-  span_panel_solar_inverter_energy_produced:
+  span_panel_solar_inverter_30_32_energy_produced:
     name: Solar Inverter Energy Produced
     entity_id: sensor.span_panel_solar_inverter_energy_produced
     formula: leg1_produced + leg2_produced
@@ -20,7 +20,7 @@ sensors:
     unit_of_measurement: Wh
     device_class: energy
     state_class: total_increasing
-  span_panel_solar_inverter_energy_consumed:
+  span_panel_solar_inverter_30_32_energy_consumed:
     name: Solar Inverter Energy Consumed
     entity_id: sensor.span_panel_solar_inverter_energy_consumed
     formula: leg1_consumed + leg2_consumed
