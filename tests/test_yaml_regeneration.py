@@ -81,7 +81,7 @@ class TestYamlRegeneration:
             # Use a fixture with mapped circuits instead of unmapped ones
             fixtures_dir = Path(__file__).parent / "fixtures"
             source_yaml = fixtures_dir / "span-ha-synthetic-mixed-references.yaml"
-            test_yaml = Path(temp_dir) / "span-ha-synthetic.yaml"
+            test_yaml = Path(temp_dir) / "solar_synthetic_sensors.yaml"
 
             # Copy the fixture to our test directory
             import shutil
@@ -99,7 +99,7 @@ class TestYamlRegeneration:
                 initial_yaml = yaml.safe_load(f)
 
             # Verify initial variables point to the original circuit names
-            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_30_32_instant_power"]
             assert power_sensor["variables"]["leg1_power"] == "sensor.span_panel_main_kitchen_power"
             assert power_sensor["variables"]["leg2_power"] == "sensor.span_panel_main_garage_power"
 
@@ -133,14 +133,14 @@ class TestYamlRegeneration:
 
             # Verify variables now point to the new friendly names
             updated_power_sensor = updated_yaml["sensors"][
-                "span_panel_solar_inverter_instant_power"
+                "span_panel_solar_inverter_30_32_instant_power"
             ]
             # The entity IDs should now be based on the friendly names, not the original names
             assert "solar_east" in updated_power_sensor["variables"]["leg1_power"]
             assert "solar_west" in updated_power_sensor["variables"]["leg2_power"]
 
             # But the sensor key itself should remain stable
-            assert "span_panel_solar_inverter_instant_power" in updated_yaml["sensors"]
+            assert "span_panel_solar_inverter_30_32_instant_power" in updated_yaml["sensors"]
 
     async def test_yaml_variables_update_for_single_vs_dual_leg(
         self,
@@ -155,12 +155,12 @@ class TestYamlRegeneration:
             # Start with dual leg configuration
             await solar_sensors.generate_config(30, 32)
 
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, encoding="utf-8") as f:
                 dual_leg_yaml = yaml.safe_load(f)
 
             # Verify dual leg formula and variables
-            power_sensor = dual_leg_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            power_sensor = dual_leg_yaml["sensors"]["span_panel_solar_inverter_30_32_instant_power"]
             assert power_sensor["formula"] == "leg1_power + leg2_power"
             assert "leg1_power" in power_sensor["variables"]
             assert "leg2_power" in power_sensor["variables"]
@@ -173,7 +173,7 @@ class TestYamlRegeneration:
 
             # Verify single leg formula and variables
             single_power_sensor = single_leg_yaml["sensors"][
-                "span_panel_solar_inverter_instant_power"
+                "span_panel_solar_inverter_30_instant_power"
             ]
             assert single_power_sensor["formula"] == "leg1_power"
             assert "leg1_power" in single_power_sensor["variables"]
@@ -192,7 +192,7 @@ class TestYamlRegeneration:
             # Use a fixture with mixed SPAN and non-SPAN references
             fixtures_dir = Path(__file__).parent / "fixtures"
             source_yaml = fixtures_dir / "span-ha-synthetic-mixed-references.yaml"
-            test_yaml = Path(temp_dir) / "span-ha-synthetic.yaml"
+            test_yaml = Path(temp_dir) / "solar_synthetic_sensors.yaml"
 
             # Copy the fixture to our test directory
             import shutil
@@ -241,7 +241,7 @@ class TestYamlRegeneration:
                 updated_yaml = yaml.safe_load(f)
 
             # Verify SPAN circuit variables were updated
-            solar_power = updated_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            solar_power = updated_yaml["sensors"]["span_panel_solar_inverter_30_32_instant_power"]
             assert (
                 solar_power["variables"]["leg1_power"] == "sensor.span_panel_kitchen_updated_power"
             )
@@ -249,7 +249,9 @@ class TestYamlRegeneration:
                 solar_power["variables"]["leg2_power"] == "sensor.span_panel_garage_updated_power"
             )
 
-            solar_energy = updated_yaml["sensors"]["span_panel_solar_inverter_energy_produced"]
+            solar_energy = updated_yaml["sensors"][
+                "span_panel_solar_inverter_30_32_energy_produced"
+            ]
             assert (
                 solar_energy["variables"]["leg1_produced"]
                 == "sensor.span_panel_kitchen_updated_energy_produced"
@@ -291,8 +293,8 @@ class TestYamlRegeneration:
 
             # Verify the sensor keys themselves remain stable (solar inverter naming)
             expected_sensor_keys = {
-                "span_panel_solar_inverter_instant_power",
-                "span_panel_solar_inverter_energy_produced",
+                "span_panel_solar_inverter_30_32_instant_power",
+                "span_panel_solar_inverter_30_32_energy_produced",
                 "span_panel_total_house_consumption",
                 "external_weather_calculation",
                 "span_panel_unmapped_total",

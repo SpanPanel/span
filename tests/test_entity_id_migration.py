@@ -62,7 +62,7 @@ class TestEntityIdMigration:
                 "sensors": {
                     "solar_inverter_instant_power": {
                         "name": "Solar Inverter Instant Power",
-                        "entity_id": "sensor.solar_inverter_instant_power",  # Legacy pattern
+                        "entity_id": "sensor.span_panel_solar_inverter_instant_power",  # Legacy pattern
                         "formula": "leg1_power + leg2_power",
                         "variables": {
                             "leg1_power": "sensor.span_panel_unmapped_tab_30_power",
@@ -98,7 +98,7 @@ class TestEntityIdMigration:
             }
 
             # Write legacy YAML to file
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, "w", encoding="utf-8") as f:
                 yaml.dump(legacy_yaml_content, f, default_flow_style=False)
 
@@ -116,12 +116,16 @@ class TestEntityIdMigration:
                 updated_yaml = yaml.safe_load(f)
 
             # Verify entity_id migration
-            solar_power_sensor = updated_yaml["sensors"]["solar_inverter_instant_power"]
+            solar_power_sensor = updated_yaml["sensors"][
+                "span_panel_solar_inverter_30_32_instant_power"
+            ]
             assert (
                 solar_power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_instant_power"
             )
 
-            solar_energy_sensor = updated_yaml["sensors"]["solar_inverter_energy_produced"]
+            solar_energy_sensor = updated_yaml["sensors"][
+                "span_panel_solar_inverter_30_32_energy_produced"
+            ]
             assert (
                 solar_energy_sensor["entity_id"]
                 == "sensor.span_panel_solar_inverter_energy_produced"
@@ -155,7 +159,7 @@ class TestEntityIdMigration:
                 "sensors": {
                     "solar_inverter_instant_power": {
                         "name": "Solar Inverter Instant Power",
-                        "entity_id": "sensor.solar_inverter_instant_power",  # Legacy pattern
+                        "entity_id": "sensor.span_panel_solar_inverter_instant_power",  # Legacy pattern
                         "formula": "leg1_power + leg2_power",
                         "variables": {
                             "leg1_power": "sensor.span_panel_unmapped_tab_30_power",
@@ -167,7 +171,7 @@ class TestEntityIdMigration:
                 },
             }
 
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, "w", encoding="utf-8") as f:
                 yaml.dump(legacy_yaml_content, f, default_flow_style=False)
 
@@ -183,7 +187,9 @@ class TestEntityIdMigration:
 
             # Verify legacy entity_id is preserved (no migration)
             solar_power_sensor = updated_yaml["sensors"]["solar_inverter_instant_power"]
-            assert solar_power_sensor["entity_id"] == "sensor.solar_inverter_instant_power"
+            assert (
+                solar_power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_instant_power"
+            )
 
     async def test_migration_handles_missing_yaml_gracefully(
         self,
@@ -201,5 +207,5 @@ class TestEntityIdMigration:
             await solar_sensors._migrate_entity_id_patterns_if_needed()
 
             # File should still not exist
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             assert not yaml_path.exists()

@@ -76,12 +76,12 @@ class TestYamlCircuitChanges:
             solar_sensors = SolarSyntheticSensors(hass_with_solar_data, config_entry, temp_dir)
             await solar_sensors.generate_config(30, 32)
 
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, encoding="utf-8") as f:
                 initial_yaml = yaml.safe_load(f)
 
             # Verify initial variables use unmapped tab names
-            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_30_32_instant_power"]
             assert "unmapped_tab_30" in power_sensor["variables"]["leg1_power"]
             assert "unmapped_tab_32" in power_sensor["variables"]["leg2_power"]
 
@@ -97,13 +97,13 @@ class TestYamlCircuitChanges:
 
             # Verify variables still use stable unmapped tab names (not friendly names)
             updated_power_sensor = updated_yaml["sensors"][
-                "span_panel_solar_inverter_instant_power"
+                "span_panel_solar_inverter_30_32_instant_power"
             ]
             assert "unmapped_tab_30" in updated_power_sensor["variables"]["leg1_power"]
             assert "unmapped_tab_32" in updated_power_sensor["variables"]["leg2_power"]
 
             # Verify sensor keys remain stable
-            assert "span_panel_solar_inverter_instant_power" in updated_yaml["sensors"]
+            assert "span_panel_solar_inverter_30_32_instant_power" in updated_yaml["sensors"]
             assert updated_power_sensor["entity_id"] == power_sensor["entity_id"]
 
     async def test_yaml_handles_circuit_addition_and_removal(
@@ -120,12 +120,12 @@ class TestYamlCircuitChanges:
             # Start with single leg configuration
             await solar_sensors.generate_config(30, 0)
 
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, encoding="utf-8") as f:
                 single_leg_yaml = yaml.safe_load(f)
 
             # Verify single leg formula
-            power_sensor = single_leg_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            power_sensor = single_leg_yaml["sensors"]["span_panel_solar_inverter_30_instant_power"]
             assert power_sensor["formula"] == "leg1_power"
             assert "leg1_power" in power_sensor["variables"]
             assert "leg2_power" not in power_sensor["variables"]
@@ -137,7 +137,9 @@ class TestYamlCircuitChanges:
                 dual_leg_yaml = yaml.safe_load(f)
 
             # Verify dual leg formula
-            dual_power_sensor = dual_leg_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            dual_power_sensor = dual_leg_yaml["sensors"][
+                "span_panel_solar_inverter_30_32_instant_power"
+            ]
             assert dual_power_sensor["formula"] == "leg1_power + leg2_power"
             assert "leg1_power" in dual_power_sensor["variables"]
             assert "leg2_power" in dual_power_sensor["variables"]
@@ -160,12 +162,12 @@ class TestYamlCircuitChanges:
             # Generate initial YAML with circuits 30 and 32
             await solar_sensors.generate_config(30, 32)
 
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, encoding="utf-8") as f:
                 initial_yaml = yaml.safe_load(f)
 
             # Verify initial circuit variables
-            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_30_32_instant_power"]
             initial_leg1 = power_sensor["variables"]["leg1_power"]
             initial_leg2 = power_sensor["variables"]["leg2_power"]
 
@@ -190,7 +192,7 @@ class TestYamlCircuitChanges:
 
             # Verify variables now point to new circuits
             updated_power_sensor = updated_yaml["sensors"][
-                "span_panel_solar_inverter_instant_power"
+                "span_panel_solar_inverter_28_29_instant_power"
             ]
             updated_leg1 = updated_power_sensor["variables"]["leg1_power"]
             updated_leg2 = updated_power_sensor["variables"]["leg2_power"]
@@ -222,12 +224,12 @@ class TestYamlCircuitChanges:
             # Generate initial YAML
             await solar_sensors.generate_config(30, 32)
 
-            yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, encoding="utf-8") as f:
                 initial_yaml = yaml.safe_load(f)
 
             # Get initial variables
-            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_instant_power"]
+            power_sensor = initial_yaml["sensors"]["span_panel_solar_inverter_30_32_instant_power"]
             initial_leg1 = power_sensor["variables"]["leg1_power"]
             initial_leg2 = power_sensor["variables"]["leg2_power"]
 
@@ -244,7 +246,7 @@ class TestYamlCircuitChanges:
 
             # Verify variables remain the same for unmapped circuits
             updated_power_sensor = updated_yaml["sensors"][
-                "span_panel_solar_inverter_instant_power"
+                "span_panel_solar_inverter_30_32_instant_power"
             ]
             updated_leg1 = updated_power_sensor["variables"]["leg1_power"]
             updated_leg2 = updated_power_sensor["variables"]["leg2_power"]
