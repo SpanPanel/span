@@ -867,7 +867,7 @@ async def async_setup_entry(
                 yaml_path = solar_sensors.config_file_path
                 if yaml_path and yaml_path.exists():
                     config_manager = ConfigManager(hass)
-                    config = config_manager.load_from_file(str(yaml_path))
+                    config = await config_manager.async_load_from_file(str(yaml_path))
                     await sensor_manager.load_configuration(config)
                     _LOGGER.info("Solar synthetic sensors loaded successfully from %s", yaml_path)
                 else:

@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -383,8 +383,15 @@ class SolarSyntheticSensors:
 
         # Read existing YAML
         try:
-            with open(self.config_file_path, encoding="utf-8") as f:
-                config = yaml.safe_load(f)
+
+            def _read_yaml() -> dict[str, Any]:
+                with open(self.config_file_path, encoding="utf-8") as f:
+                    result = yaml.safe_load(f)
+                    if isinstance(result, dict):
+                        return cast(dict[str, Any], result)
+                    return {}
+
+            config = await self._hass.async_add_executor_job(_read_yaml)
         except (yaml.YAMLError, OSError) as e:
             _LOGGER.error("Failed to read YAML config for update: %s", e)
             return
@@ -428,8 +435,12 @@ class SolarSyntheticSensors:
         # Write updated YAML if changes were made
         if updated:
             try:
-                with open(self.config_file_path, "w", encoding="utf-8") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+                def _write_yaml() -> None:
+                    with open(self.config_file_path, "w", encoding="utf-8") as f:
+                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+                await self._hass.async_add_executor_job(_write_yaml)
                 _LOGGER.info("Updated YAML variables to reflect circuit name changes")
             except OSError as e:
                 _LOGGER.error("Failed to write updated YAML config: %s", e)
@@ -669,8 +680,13 @@ class SolarSyntheticSensors:
 
         # Read existing YAML
         try:
-            with open(self.config_file_path, encoding="utf-8") as f:
-                config = yaml.safe_load(f)
+
+            def _read_yaml() -> dict[str, Any] | None:
+                with open(self.config_file_path, encoding="utf-8") as f:
+                    result = yaml.safe_load(f)
+                    return cast(dict[str, Any], result) if isinstance(result, dict) else None
+
+            config = await self._hass.async_add_executor_job(_read_yaml)
         except (yaml.YAMLError, OSError) as e:
             _LOGGER.error("Failed to read YAML config for migration: %s", e)
             return
@@ -724,8 +740,12 @@ class SolarSyntheticSensors:
         # Write updated YAML if changes were made
         if updated:
             try:
-                with open(self.config_file_path, "w", encoding="utf-8") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+                def _write_yaml() -> None:
+                    with open(self.config_file_path, "w", encoding="utf-8") as f:
+                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+
+                await self._hass.async_add_executor_job(_write_yaml)
                 _LOGGER.info("Migrated YAML entity IDs to use device prefix")
             except OSError as e:
                 _LOGGER.error("Failed to write migrated YAML config: %s", e)
