@@ -100,9 +100,9 @@ class TestEntityIdInYaml:
             # With USE_CIRCUIT_NUMBERS: False, we get name-based IDs
             # But YAML keys are circuit-based for v1.0.10 compatibility
             expected_sensors = {
-                "span_panel_solar_inverter_15_16_instant_power": "sensor.span_panel_solar_inverter_instant_power",
-                "span_panel_solar_inverter_15_16_energy_produced": "sensor.span_panel_solar_inverter_energy_produced",
-                "span_panel_solar_inverter_15_16_energy_consumed": "sensor.span_panel_solar_inverter_energy_consumed",
+                "solar_inverter_instant_power": "sensor.span_panel_solar_inverter_instant_power",
+                "solar_inverter_energy_produced": "sensor.span_panel_solar_inverter_energy_produced",
+                "solar_inverter_energy_consumed": "sensor.span_panel_solar_inverter_energy_consumed",
             }
 
             for sensor_key, expected_entity_id in expected_sensors.items():
