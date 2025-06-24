@@ -34,7 +34,7 @@ async def test_solar_synthetic_sensors_init(
 
     assert solar_sensors._hass == hass
     assert solar_sensors._config_entry == mock_config_entry
-    assert solar_sensors.config_file_path.name == "span-ha-synthetic.yaml"
+    assert solar_sensors.config_file_path.name == "solar_synthetic_sensors.yaml"
 
 
 @pytest.mark.asyncio

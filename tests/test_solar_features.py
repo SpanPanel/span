@@ -164,7 +164,7 @@ class TestSolarSyntheticSensors:
         solar_sensors = SolarSyntheticSensors(hass, mock_config_entry)
         assert solar_sensors._hass == hass
         assert solar_sensors._config_entry == mock_config_entry
-        assert solar_sensors.config_file_path.name == "span-ha-synthetic.yaml"
+        assert solar_sensors.config_file_path.name == "solar_synthetic_sensors.yaml"
 
     @pytest.mark.asyncio
     async def test_generate_solar_config_dual_legs(
@@ -180,7 +180,7 @@ class TestSolarSyntheticSensors:
         await solar_sensors.generate_config(15, 16)
 
         # Check that config file was created
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
         assert config_file.exists()
 
         # Load and verify the YAML content
@@ -192,7 +192,7 @@ class TestSolarSyntheticSensors:
 
         # With stable naming, the keys should be based on friendly names, not circuit numbers
         # Check solar inverter instant power sensor
-        power_sensor = config["sensors"]["span_panel_solar_inverter_instant_power"]
+        power_sensor = config["sensors"]["span_panel_solar_inverter_15_16_instant_power"]
         assert power_sensor["name"] == "Solar Inverter Instant Power"
         assert power_sensor["formula"] == "leg1_power + leg2_power"
         # The entity IDs should use the stable unmapped naming logic
@@ -203,7 +203,7 @@ class TestSolarSyntheticSensors:
         assert power_sensor["state_class"] == "measurement"
 
         # Check energy produced sensor
-        produced_sensor = config["sensors"]["span_panel_solar_inverter_energy_produced"]
+        produced_sensor = config["sensors"]["span_panel_solar_inverter_15_16_energy_produced"]
         assert produced_sensor["name"] == "Solar Inverter Energy Produced"
         assert produced_sensor["formula"] == "leg1_produced + leg2_produced"
         # The entity IDs should use the stable unmapped naming logic
@@ -220,7 +220,7 @@ class TestSolarSyntheticSensors:
         assert produced_sensor["state_class"] == "total_increasing"
 
         # Check energy consumed sensor
-        consumed_sensor = config["sensors"]["span_panel_solar_inverter_energy_consumed"]
+        consumed_sensor = config["sensors"]["span_panel_solar_inverter_15_16_energy_consumed"]
         assert consumed_sensor["name"] == "Solar Inverter Energy Consumed"
         assert consumed_sensor["formula"] == "leg1_consumed + leg2_consumed"
         # The entity IDs should use the stable unmapped naming logic
@@ -249,12 +249,12 @@ class TestSolarSyntheticSensors:
         )
         await solar_sensors.generate_config(15, 0)
 
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
         with open(config_file) as f:
             config = yaml.safe_load(f)
 
         # Check single-leg formulas - should still be solar inverter sensors
-        power_sensor = config["sensors"]["span_panel_solar_inverter_instant_power"]
+        power_sensor = config["sensors"]["span_panel_solar_inverter_15_instant_power"]
         assert power_sensor["formula"] == "leg1_power"
         assert "leg1_power" in power_sensor["variables"]
         assert "leg2_power" not in power_sensor["variables"]
@@ -267,7 +267,7 @@ class TestSolarSyntheticSensors:
         solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
         await solar_sensors.generate_config(0, 0)
 
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
         assert not config_file.exists()
 
     @pytest.mark.asyncio
@@ -284,7 +284,7 @@ class TestSolarSyntheticSensors:
 
         # First create a config file
         await solar_sensors.generate_config(15, 16)
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
         assert config_file.exists()
 
         # Then remove it
@@ -297,7 +297,7 @@ class TestSolarSyntheticSensors:
     ):
         """Test removing a nonexistent config file should not error."""
         solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
         assert not config_file.exists()
 
         # Should not raise an exception
@@ -333,7 +333,7 @@ class TestSolarSyntheticSensors:
     ):
         """Test validating invalid YAML configuration."""
         solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
 
         # Create invalid YAML
         with open(config_file, "w") as f:
@@ -347,7 +347,7 @@ class TestSolarSyntheticSensors:
     ):
         """Test validating configuration missing required fields."""
         solar_sensors = SolarSyntheticSensors(hass, mock_config_entry, temp_config_dir)
-        config_file = Path(temp_config_dir) / "span-ha-synthetic.yaml"
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
 
         # Create YAML missing required fields
         config = {"version": "1.0"}  # Missing "sensors"
@@ -409,7 +409,7 @@ class TestSolarSensorIntegration:
             await solar_sensors.generate_config(15, 16)
 
             # Verify YAML config is created and valid
-            config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
+            config_file = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             assert config_file.exists()
             assert await solar_sensors.validate_config() is True
 
@@ -440,7 +440,7 @@ class TestSolarSensorIntegration:
             await solar_sensors.remove_config()
 
             # Should not error and no config file should exist
-            config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
+            config_file = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             assert not config_file.exists()
 
     @pytest.mark.asyncio
@@ -454,7 +454,7 @@ class TestSolarSensorIntegration:
             )
             await solar_sensors.generate_config(15, 16)
 
-            config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
+            config_file = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(config_file) as f:
                 config = yaml.safe_load(f)
 
@@ -478,9 +478,9 @@ class TestSolarSensorIntegration:
 
             # Verify sensor keys match expected naming (stable solar inverter naming)
             expected_sensors = [
-                "span_panel_solar_inverter_instant_power",
-                "span_panel_solar_inverter_energy_produced",
-                "span_panel_solar_inverter_energy_consumed",
+                "span_panel_solar_inverter_15_16_instant_power",
+                "span_panel_solar_inverter_15_16_energy_produced",
+                "span_panel_solar_inverter_15_16_energy_consumed",
             ]
             for sensor_key in expected_sensors:
                 assert sensor_key in config["sensors"]

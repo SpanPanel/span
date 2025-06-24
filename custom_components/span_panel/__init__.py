@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = config[CONF_HOST]
     name = "SpanPanel"
 
-    _LOGGER.info("Setting up SPAN Panel integration for host: %s", host)
+    _LOGGER.debug("Setting up SPAN Panel integration for host: %s", host)
 
     use_ssl_value = config.get(CONF_USE_SSL, False)
 
@@ -146,7 +146,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-        _LOGGER.info("Successfully unloaded SPAN Panel integration")
+        _LOGGER.debug("Successfully unloaded SPAN Panel integration")
     else:
         _LOGGER.error("Failed to unload some platforms")
 
@@ -158,6 +158,6 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     _LOGGER.info("Configuration options changed, reloading SPAN Panel integration")
     try:
         await hass.config_entries.async_reload(entry.entry_id)
-        _LOGGER.info("Successfully reloaded SPAN Panel integration")
+        _LOGGER.debug("Successfully reloaded SPAN Panel integration")
     except Exception as e:
         _LOGGER.error("Failed to reload SPAN Panel integration: %s", e, exc_info=True)

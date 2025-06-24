@@ -98,10 +98,11 @@ class TestEntityIdInYaml:
 
             # Verify specific sensor entity_ids based on the friendly name "Solar Inverter"
             # With USE_CIRCUIT_NUMBERS: False, we get name-based IDs
+            # But YAML keys are circuit-based for v1.0.10 compatibility
             expected_sensors = {
-                "span_panel_solar_inverter_instant_power": "sensor.span_panel_solar_inverter_instant_power",
-                "span_panel_solar_inverter_energy_produced": "sensor.span_panel_solar_inverter_energy_produced",
-                "span_panel_solar_inverter_energy_consumed": "sensor.span_panel_solar_inverter_energy_consumed",
+                "span_panel_solar_inverter_15_16_instant_power": "sensor.span_panel_solar_inverter_instant_power",
+                "span_panel_solar_inverter_15_16_energy_produced": "sensor.span_panel_solar_inverter_energy_produced",
+                "span_panel_solar_inverter_15_16_energy_consumed": "sensor.span_panel_solar_inverter_energy_consumed",
             }
 
             for sensor_key, expected_entity_id in expected_sensors.items():
@@ -142,10 +143,10 @@ class TestEntityIdInYaml:
                 with open(yaml_path, encoding="utf-8") as f:
                     yaml_content = yaml.safe_load(f)
 
-                # For each sensor, verify that the entity_id field equals "sensor." + yaml_key
-                for sensor_key, sensor_config in yaml_content["sensors"].items():
-                    expected_entity_id = f"sensor.{sensor_key}"
+                # For each sensor, verify that the entity_id field uses the mocked value
+                # (With circuit-based YAML keys, entity_id is separate from the key)
+                for _sensor_key, sensor_config in yaml_content["sensors"].items():
                     actual_entity_id = sensor_config["entity_id"]
-                    assert actual_entity_id == expected_entity_id, (
-                        f"entity_id {actual_entity_id} should match sensor.{sensor_key}"
+                    assert actual_entity_id == "sensor.test_solar_power", (
+                        f"entity_id {actual_entity_id} should use mocked value sensor.test_solar_power"
                     )
