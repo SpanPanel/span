@@ -116,16 +116,12 @@ class TestEntityIdMigration:
                 updated_yaml = yaml.safe_load(f)
 
             # Verify entity_id migration
-            solar_power_sensor = updated_yaml["sensors"][
-                "span_panel_solar_inverter_30_32_instant_power"
-            ]
+            solar_power_sensor = updated_yaml["sensors"]["solar_inverter_instant_power"]
             assert (
                 solar_power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_instant_power"
             )
 
-            solar_energy_sensor = updated_yaml["sensors"][
-                "span_panel_solar_inverter_30_32_energy_produced"
-            ]
+            solar_energy_sensor = updated_yaml["sensors"]["solar_inverter_energy_produced"]
             assert (
                 solar_energy_sensor["entity_id"]
                 == "sensor.span_panel_solar_inverter_energy_produced"
@@ -187,9 +183,7 @@ class TestEntityIdMigration:
 
             # Verify legacy entity_id is preserved (no migration)
             solar_power_sensor = updated_yaml["sensors"]["solar_inverter_instant_power"]
-            assert (
-                solar_power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_instant_power"
-            )
+            assert solar_power_sensor["entity_id"] == "sensor.solar_inverter_instant_power"
 
     async def test_migration_handles_missing_yaml_gracefully(
         self,

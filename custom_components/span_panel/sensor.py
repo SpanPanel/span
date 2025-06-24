@@ -844,8 +844,8 @@ async def async_setup_entry(
                 # Create device info for solar sensors
                 device_info = panel_to_device_info(span_panel)
 
-                # Configure sensor manager for device integration with v1.0.10-compatible prefix
-                # Generate prefix to match v1.0.10 unique ID format for seamless upgrades
+                # Configure sensor manager for v1.0.10 compatibility
+                # Use same prefix format as v1.0.10: span_{serial}_synthetic_{circuits}
                 circuit_spec = "_".join(
                     str(num) for num in [inverter_leg1, inverter_leg2] if num > 0
                 )

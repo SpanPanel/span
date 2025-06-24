@@ -641,10 +641,11 @@ class SolarSyntheticSensors:
         return solar_sensors
 
     def _generate_circuit_based_key(self, leg1: int, leg2: int, suffix: str) -> str:
-        """Generate circuit-based YAML key that matches v1.0.10 unique_id format.
+        """Generate YAML key that matches v1.0.10 unique_id format.
 
-        This creates keys like 'span_panel_solar_inverter_2_14_instant_power' to match
-        the unique_id format used in v1.0.10, preserving historical data during upgrades.
+        In v1.0.10, unique_ids were: span_{serial}_synthetic_{circuits}_{key}
+        With prefix: span_{serial}_synthetic_{circuits}
+        The YAML key should be: solar_inverter_{suffix}
 
         Args:
             leg1: First solar inverter leg circuit number
@@ -652,17 +653,11 @@ class SolarSyntheticSensors:
             suffix: Sensor type suffix (instant_power, energy_produced, energy_consumed)
 
         Returns:
-            Circuit-based key for YAML configuration
+            YAML key for configuration
 
         """
-        # Generate key based on circuit numbers, matching v1.0.10 format
-        # Format: span_panel_solar_inverter_{leg1}_{leg2}_{suffix}
-        if leg2 > 0:
-            # Two legs configured
-            return f"span_panel_solar_inverter_{leg1}_{leg2}_{suffix}"
-        else:
-            # Single leg configured
-            return f"span_panel_solar_inverter_{leg1}_{suffix}"
+        # Generate key matching v1.0.10 format: solar_inverter_{suffix}
+        return f"solar_inverter_{suffix}"
 
     def _merge_solar_into_config(
         self, existing_config: dict[str, Any], solar_sensors: dict[str, Any]
@@ -673,11 +668,12 @@ class SolarSyntheticSensors:
             existing_config["sensors"] = {}
 
         # Remove any existing solar sensors first (to handle circuit number changes)
-        # Solar sensors have keys that start with "span_panel_solar_inverter_"
+        # Solar sensors have keys that start with "solar_inverter_" (v1.0.10 format)
+        # or "span_panel_solar_inverter_" (old circuit-based format)
         solar_keys_to_remove = [
             key
             for key in existing_config["sensors"]
-            if key.startswith("span_panel_solar_inverter_")
+            if key.startswith("solar_inverter_") or key.startswith("span_panel_solar_inverter_")
         ]
 
         for key in solar_keys_to_remove:

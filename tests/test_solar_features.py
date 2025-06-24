@@ -192,7 +192,7 @@ class TestSolarSyntheticSensors:
 
         # With stable naming, the keys should be based on friendly names, not circuit numbers
         # Check solar inverter instant power sensor
-        power_sensor = config["sensors"]["span_panel_solar_inverter_15_16_instant_power"]
+        power_sensor = config["sensors"]["solar_inverter_instant_power"]
         assert power_sensor["name"] == "Solar Inverter Instant Power"
         assert power_sensor["formula"] == "leg1_power + leg2_power"
         # The entity IDs should use the stable unmapped naming logic
@@ -203,7 +203,7 @@ class TestSolarSyntheticSensors:
         assert power_sensor["state_class"] == "measurement"
 
         # Check energy produced sensor
-        produced_sensor = config["sensors"]["span_panel_solar_inverter_15_16_energy_produced"]
+        produced_sensor = config["sensors"]["solar_inverter_energy_produced"]
         assert produced_sensor["name"] == "Solar Inverter Energy Produced"
         assert produced_sensor["formula"] == "leg1_produced + leg2_produced"
         # The entity IDs should use the stable unmapped naming logic
@@ -220,7 +220,7 @@ class TestSolarSyntheticSensors:
         assert produced_sensor["state_class"] == "total_increasing"
 
         # Check energy consumed sensor
-        consumed_sensor = config["sensors"]["span_panel_solar_inverter_15_16_energy_consumed"]
+        consumed_sensor = config["sensors"]["solar_inverter_energy_consumed"]
         assert consumed_sensor["name"] == "Solar Inverter Energy Consumed"
         assert consumed_sensor["formula"] == "leg1_consumed + leg2_consumed"
         # The entity IDs should use the stable unmapped naming logic
@@ -254,7 +254,7 @@ class TestSolarSyntheticSensors:
             config = yaml.safe_load(f)
 
         # Check single-leg formulas - should still be solar inverter sensors
-        power_sensor = config["sensors"]["span_panel_solar_inverter_15_instant_power"]
+        power_sensor = config["sensors"]["solar_inverter_instant_power"]
         assert power_sensor["formula"] == "leg1_power"
         assert "leg1_power" in power_sensor["variables"]
         assert "leg2_power" not in power_sensor["variables"]
@@ -478,9 +478,9 @@ class TestSolarSensorIntegration:
 
             # Verify sensor keys match expected naming (stable solar inverter naming)
             expected_sensors = [
-                "span_panel_solar_inverter_15_16_instant_power",
-                "span_panel_solar_inverter_15_16_energy_produced",
-                "span_panel_solar_inverter_15_16_energy_consumed",
+                "solar_inverter_instant_power",
+                "solar_inverter_energy_produced",
+                "solar_inverter_energy_consumed",
             ]
             for sensor_key in expected_sensors:
                 assert sensor_key in config["sensors"]
