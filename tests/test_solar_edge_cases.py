@@ -151,7 +151,7 @@ class TestSolarEdgeCases:
             await solar_sensors.generate_config(15, 16)
 
             # Verify file was created
-            config_file = Path(temp_dir) / "span-ha-synthetic.yaml"
+            config_file = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             assert config_file.exists()
 
     @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 version: "1.0"
 sensors:
   # Solar inverter sensors with SPAN circuit variables (should update when circuit names change)
-  span_panel_solar_inverter_instant_power:
+  span_panel_solar_inverter_30_32_instant_power:
     name: "Solar Inverter Instant Power"
     formula: "leg1_power + leg2_power"
     variables:
@@ -12,7 +12,7 @@ sensors:
     state_class: "measurement"
     entity_id: "sensor.span_panel_solar_inverter_instant_power"
 
-  span_panel_solar_inverter_energy_produced:
+  span_panel_solar_inverter_30_32_energy_produced:
     name: "Solar Inverter Energy Produced"
     formula: "leg1_produced + leg2_produced"
     variables:

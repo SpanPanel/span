@@ -41,8 +41,10 @@ class SolarSyntheticSensors:
         """
         self._hass = hass
         self._config_entry = config_entry
-        # Use the generic bridge for file operations
-        self._bridge = SyntheticSensorsBridge(hass, config_entry, config_dir)
+        # Use the generic bridge for file operations with solar-specific filename
+        self._bridge = SyntheticSensorsBridge(
+            hass, config_entry, config_dir, config_filename="solar_synthetic_sensors.yaml"
+        )
 
     @property
     def config_file_path(self) -> Path:
@@ -590,10 +592,10 @@ class SolarSyntheticSensors:
             "Solar Inverter",
         )
 
-        # Create power sensor - use clean entity ID as key (without sensor. prefix)
+        # Create power sensor - use circuit-based key to match v1.0.10 unique_id format
         power_formula, power_variables = self._create_formula_and_variables(power_entities, "power")
         if power_entity_id:
-            key = power_entity_id.replace("sensor.", "")
+            key = self._generate_circuit_based_key(leg1, leg2, "instant_power")
             solar_sensors[key] = {
                 "name": "Solar Inverter Instant Power",
                 "entity_id": power_entity_id,
@@ -609,7 +611,7 @@ class SolarSyntheticSensors:
             produced_entities, "produced"
         )
         if produced_entity_id:
-            key = produced_entity_id.replace("sensor.", "")
+            key = self._generate_circuit_based_key(leg1, leg2, "energy_produced")
             solar_sensors[key] = {
                 "name": "Solar Inverter Energy Produced",
                 "entity_id": produced_entity_id,
@@ -625,7 +627,7 @@ class SolarSyntheticSensors:
             consumed_entities, "consumed"
         )
         if consumed_entity_id:
-            key = consumed_entity_id.replace("sensor.", "")
+            key = self._generate_circuit_based_key(leg1, leg2, "energy_consumed")
             solar_sensors[key] = {
                 "name": "Solar Inverter Energy Consumed",
                 "entity_id": consumed_entity_id,
@@ -638,15 +640,50 @@ class SolarSyntheticSensors:
 
         return solar_sensors
 
+    def _generate_circuit_based_key(self, leg1: int, leg2: int, suffix: str) -> str:
+        """Generate circuit-based YAML key that matches v1.0.10 unique_id format.
+
+        This creates keys like 'span_panel_solar_inverter_2_14_instant_power' to match
+        the unique_id format used in v1.0.10, preserving historical data during upgrades.
+
+        Args:
+            leg1: First solar inverter leg circuit number
+            leg2: Second solar inverter leg circuit number
+            suffix: Sensor type suffix (instant_power, energy_produced, energy_consumed)
+
+        Returns:
+            Circuit-based key for YAML configuration
+
+        """
+        # Generate key based on circuit numbers, matching v1.0.10 format
+        # Format: span_panel_solar_inverter_{leg1}_{leg2}_{suffix}
+        if leg2 > 0:
+            # Two legs configured
+            return f"span_panel_solar_inverter_{leg1}_{leg2}_{suffix}"
+        else:
+            # Single leg configured
+            return f"span_panel_solar_inverter_{leg1}_{suffix}"
+
     def _merge_solar_into_config(
         self, existing_config: dict[str, Any], solar_sensors: dict[str, Any]
     ) -> dict[str, Any]:
-        """Merge solar sensors into existing configuration."""
+        """Merge solar sensors into existing configuration, replacing any existing solar sensors."""
         # Ensure the config has the right structure
         if "sensors" not in existing_config:
             existing_config["sensors"] = {}
 
-        # Merge in the solar sensors (this will overwrite any existing solar sensors)
+        # Remove any existing solar sensors first (to handle circuit number changes)
+        # Solar sensors have keys that start with "span_panel_solar_inverter_"
+        solar_keys_to_remove = [
+            key
+            for key in existing_config["sensors"]
+            if key.startswith("span_panel_solar_inverter_")
+        ]
+
+        for key in solar_keys_to_remove:
+            del existing_config["sensors"][key]
+
+        # Add the new solar sensors
         for key, value in solar_sensors.items():
             existing_config["sensors"][key] = value
 

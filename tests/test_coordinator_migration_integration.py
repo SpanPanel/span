@@ -70,7 +70,7 @@ async def setup_integration_with_yaml_config(hass: HomeAssistant):
     await solar_sensors.generate_config(30, 32)
 
     # Read the generated YAML configuration
-    yaml_path = Path(temp_dir) / "span-ha-synthetic.yaml"
+    yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
     with open(yaml_path) as f:
         yaml_config = yaml.safe_load(f)
 
@@ -93,11 +93,11 @@ async def test_yaml_config_generates_correct_entity_names(
     # Verify that the YAML config contains solar entities with correct names
     sensors = yaml_config.get("sensors", {})
 
-    # Check for expected solar sensors (stable naming)
+    # Check for expected solar sensors (circuit-based keys for v1.0.10 compatibility)
     expected_sensors = {
-        "span_panel_solar_inverter_instant_power": "Solar Inverter Instant Power",
-        "span_panel_solar_inverter_energy_produced": "Solar Inverter Energy Produced",
-        "span_panel_solar_inverter_energy_consumed": "Solar Inverter Energy Consumed",
+        "span_panel_solar_inverter_30_32_instant_power": "Solar Inverter Instant Power",
+        "span_panel_solar_inverter_30_32_energy_produced": "Solar Inverter Energy Produced",
+        "span_panel_solar_inverter_30_32_energy_consumed": "Solar Inverter Energy Consumed",
     }
 
     for sensor_key, expected_name in expected_sensors.items():

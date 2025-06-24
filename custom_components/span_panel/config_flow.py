@@ -773,7 +773,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         success = await coordinator.migrate_entities(old_pattern, new_pattern)
 
         if success:
-            _LOGGER.info("Entity migration completed successfully")
+            _LOGGER.debug("Entity migration completed successfully")
         else:
             _LOGGER.error("Entity migration failed")
 
