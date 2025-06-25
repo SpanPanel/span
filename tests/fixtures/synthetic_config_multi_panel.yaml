@@ -1,0 +1,160 @@
+version: "1.0"
+sensors:
+  # Panel 1 (TEST123) - Solar Inverter Sensors
+  solar_inverter_instant_power:
+    name: "Solar Inverter Instant Power"
+    entity_id: "sensor.span_panel_solar_inverter_instant_power"
+    formula: "leg1_power + leg2_power"
+    variables:
+      leg1_power: "sensor.span_panel_solar_east_power"
+      leg2_power: "sensor.span_panel_solar_west_power"
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    device_identifier: "span_panel_TEST123"
+
+  solar_inverter_energy_produced:
+    name: "Solar Inverter Energy Produced"
+    entity_id: "sensor.span_panel_solar_inverter_energy_produced"
+    formula: "leg1_produced + leg2_produced"
+    variables:
+      leg1_produced: "sensor.span_panel_solar_east_energy_produced"
+      leg2_produced: "sensor.span_panel_solar_west_energy_produced"
+    unit_of_measurement: "Wh"
+    device_class: "energy"
+    state_class: "total_increasing"
+    device_identifier: "span_panel_TEST123"
+
+  # Panel 1 (TEST123) - Custom House Total
+  house_total_consumption:
+    name: "House Total Consumption"
+    entity_id: "sensor.span_panel_house_total_consumption"
+    formula: "main_consumption + hvac_consumption"
+    variables:
+      main_consumption: "sensor.span_panel_main_panel_instant_power"
+      hvac_consumption: "sensor.span_panel_hvac_system_power"
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    device_identifier: "span_panel_TEST123"
+
+  # Panel 2 (TEST456) - Solar Inverter Sensors (different panel)
+  garage_solar_inverter_power:
+    name: "Garage Solar Inverter Power"
+    entity_id: "sensor.span_panel_garage_solar_inverter_instant_power"
+    formula: "garage_leg1_power"
+    variables:
+      garage_leg1_power: "sensor.span_panel_garage_solar_power"
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    device_identifier: "span_panel_TEST456"
+
+  garage_solar_inverter_energy:
+    name: "Garage Solar Inverter Energy"
+    entity_id: "sensor.span_panel_garage_solar_inverter_energy_produced"
+    formula: "garage_leg1_produced"
+    variables:
+      garage_leg1_produced: "sensor.span_panel_garage_solar_energy_produced"
+    unit_of_measurement: "Wh"
+    device_class: "energy"
+    state_class: "total_increasing"
+    device_identifier: "span_panel_TEST456"
+
+  # Panel 2 (TEST456) - Workshop Total
+  workshop_total_consumption:
+    name: "Workshop Total Consumption"
+    entity_id: "sensor.span_panel_workshop_total_consumption"
+    formula: "workshop_main + workshop_hvac"
+    variables:
+      workshop_main: "sensor.span_panel_workshop_main_power"
+      workshop_hvac: "sensor.span_panel_workshop_ac_power"
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    device_identifier: "span_panel_TEST456"
+    attributes:
+      last_updated: "{{ now() }}"
+      data_source: "SPAN Panel Workshop"
+      calculation_method: "sum"
+
+  # Panel 1 (TEST123) - Net Energy Sensor with attributes
+  net_energy_flow:
+    name: "Net Energy Flow"
+    entity_id: "sensor.span_panel_net_energy_flow"
+    formula: "solar_produced - house_consumed"
+    variables:
+      solar_produced: "sensor.span_panel_solar_inverter_instant_power"
+      house_consumed: "sensor.span_panel_house_total_consumption"
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    device_identifier: "span_panel_TEST123"
+    attributes:
+      flow_direction: >
+        {% if value > 0 %}
+          export
+        {% else %}
+          import
+        {% endif %}
+      abs_value: "{{ value | abs }}"
+      panel_efficiency: "{{ (solar_produced / 5000 * 100) | round(1) }}%"
+      timestamp: "{{ now().isoformat() }}"
+
+  # Panel 2 (TEST456) - Peak Load Tracker with complex attributes
+  peak_load_tracker:
+    name: "Peak Load Tracker"
+    entity_id: "sensor.span_panel_garage_peak_load_tracker"
+    formula: "max(current_load, historical_peak or 0)"
+    variables:
+      current_load: "sensor.span_panel_garage_solar_inverter_instant_power"
+      historical_peak: "sensor.span_panel_garage_peak_load_tracker"
+    unit_of_measurement: "W"
+    device_class: "power"
+    state_class: "measurement"
+    device_identifier: "span_panel_TEST456"
+    attributes:
+      peak_time: >
+        {% if current_load == value %}
+          {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
+        {% else %}
+          {{ state_attr('sensor.span_panel_garage_peak_load_tracker', 'peak_time') }}
+        {% endif %}
+      days_since_peak: >
+        {% set peak_time = state_attr('sensor.span_panel_garage_peak_load_tracker', 'peak_time') %}
+        {% if peak_time %}
+          {{ ((now() - strptime(peak_time, '%Y-%m-%d %H:%M:%S')).days) }}
+        {% else %}
+          0
+        {% endif %}
+      load_category: >
+        {% if value < 1000 %}
+          low
+        {% elif value < 3000 %}
+          medium
+        {% else %}
+          high
+        {% endif %}
+
+  # Panel 1 (TEST123) - Daily Energy Summary with multiple attributes
+  daily_energy_summary:
+    name: "Daily Energy Summary"
+    entity_id: "sensor.span_panel_daily_energy_summary"
+    formula: "produced_today + consumed_today"
+    variables:
+      produced_today: "sensor.span_panel_solar_inverter_energy_produced"
+      consumed_today: "sensor.span_panel_house_total_consumption"
+    unit_of_measurement: "Wh"
+    device_class: "energy"
+    state_class: "total"
+    device_identifier: "span_panel_TEST123"
+    attributes:
+      net_energy: "{{ produced_today - consumed_today }}"
+      self_consumption_ratio: "{{ (consumed_today / produced_today * 100) | round(1) if produced_today > 0 else 0 }}%"
+      export_ratio: "{{ ((produced_today - consumed_today) / produced_today * 100) | round(1) if produced_today > 0 else 0 }}%"
+      daily_savings: "${{ ((produced_today * 0.12) | round(2)) }}"
+      report_date: "{{ now().strftime('%Y-%m-%d') }}"
+      data_quality: "high"
+      source_sensors:
+        - "sensor.span_panel_solar_inverter_energy_produced"
+        - "sensor.span_panel_house_total_consumption"

@@ -38,6 +38,10 @@ class TestYamlRegeneration:
             coordinator = MagicMock()
             coordinator.data = MagicMock()
 
+            # Set up status with serial number
+            coordinator.data.status = MagicMock()
+            coordinator.data.status.serial_number = "TEST12345"
+
             # Create proper mock circuits that SolarSyntheticSensors expects
             # The bridge looks for circuits with IDs like "unmapped_tab_15", "unmapped_tab_30", etc.
             mock_circuit_30 = MagicMock()
