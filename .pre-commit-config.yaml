@@ -112,3 +112,15 @@ repos:
         pass_filenames: false
         always_run: true
         verbose: true
+
+  # Sync dependencies from manifest.json to CI workflow (run last)
+  - repo: local
+    hooks:
+      - id: sync-dependencies
+        name: sync dependency versions between manifest.json and CI workflow
+        entry: python scripts/sync-dependencies.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+        verbose: true
