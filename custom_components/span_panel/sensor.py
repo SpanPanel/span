@@ -812,7 +812,7 @@ async def async_setup_entry(
             )
             circuit_sensor_count += 1
 
-    _LOGGER.info(
+    _LOGGER.debug(
         "Created %d circuit sensors for %d circuits (%d sensors per circuit)",
         circuit_sensor_count,
         len(span_panel.circuits),
@@ -834,7 +834,7 @@ async def async_setup_entry(
 
         # Validate the generated configuration
         if await solar_sensors.validate_config():
-            _LOGGER.info("Solar synthetic sensors configuration generated successfully")
+            _LOGGER.debug("Solar synthetic sensors configuration generated successfully")
 
             # Set up ha-synthetic-sensors integration for device integration
             try:
@@ -869,7 +869,7 @@ async def async_setup_entry(
                     config_manager = ConfigManager(hass)
                     config = await config_manager.async_load_from_file(str(yaml_path))
                     await sensor_manager.load_configuration(config)
-                    _LOGGER.info("Solar synthetic sensors loaded successfully from %s", yaml_path)
+                    _LOGGER.debug("Solar synthetic sensors loaded successfully from %s", yaml_path)
                 else:
                     _LOGGER.error("Solar synthetic sensors YAML file not found at %s", yaml_path)
 
