@@ -554,6 +554,156 @@ class SpanPanelCircuitSensor(
 
         # Store initial circuit name for change detection in auto-sync names
         self._previous_circuit_name = name
+        
+        #Energy validation for detecting anomalous readings (such as after firmware updates)
+        self._previous_energy_reading = None
+        self._previous_energy_timestamp = None
+
+        # Circuit-specific thresholds (I've made them adjustable based on real-world data just in case)
+        self._max_energy_jump_wh = 20000  # 20 kWh max jump between readings (a 60amp circuit can't pull more than 15 kwh)
+        self._max_energy_rate_w = 50000   # 50 kW max power rate (very generous to avoid false positives I think)
+
+    def _validate_energy_reading(self, current_value: float, circuit: SpanPanelCircuit) -> bool:
+        """Validate energy reading to detect panel reset anomalies.
+        
+        Args:
+            current_value: Current energy reading from the circuit
+            circuit: SpanPanelCircuit object with timestamp information
+            
+        Returns:
+            True if reading is valid, False if it should be filtered out
+        """
+        current_timestamp = circuit.energy_accum_update_time
+        
+        # Always accept the first reading
+        if self._previous_energy_reading is None:
+            self._previous_energy_reading = current_value
+            self._previous_energy_timestamp = current_timestamp
+            return True
+        
+        # Calculate time delta
+        time_delta_seconds = current_timestamp - self._previous_energy_timestamp
+        
+        # If timestamp went backwards or stayed the same, use the old reading
+        if time_delta_seconds <= 0:
+            _LOGGER.debug(
+                "Circuit %s: Timestamp anomaly - current: %s, previous: %s, keeping previous reading",
+                self.id, current_timestamp, self._previous_energy_timestamp
+            )
+            return False
+        
+        # Calculate energy delta  
+        energy_delta_wh = current_value - self._previous_energy_reading
+        
+        # Check for backwards movement (might indicate counter reset)
+        if energy_delta_wh < 0:
+            _LOGGER.warning(
+                "Circuit %s: Energy reading went backwards from %s to %s Wh - possible panel reset, accepting new baseline",
+                self.id, self._previous_energy_reading, current_value
+            )
+            # Reset to new baseline after counter reset
+            self._previous_energy_reading = current_value
+            self._previous_energy_timestamp = current_timestamp  
+            return True
+        
+        # Check for unreasonably large jumps
+        if energy_delta_wh > self._max_energy_jump_wh:
+            _LOGGER.warning(
+                "Circuit %s: Anomalous energy jump detected - delta: %s Wh over %s seconds, rejecting reading",
+                self.id, energy_delta_wh, time_delta_seconds
+            )
+        return False
+        
+        # Check for physically impossible power rates
+        implied_power_w = (energy_delta_wh * 3600) / time_delta_seconds  # Convert Wh/s to W
+        if abs(implied_power_w) > self._max_energy_rate_w:
+            _LOGGER.warning(
+                "Circuit %s: Impossible power rate detected - %s W over %s seconds, rejecting reading",
+                self.id, implied_power_w, time_delta_seconds
+            )
+            return False
+        
+        # Check for large timestamp gaps (indicating panel disconnect/reconnect)
+        if time_delta_seconds > 300:  # 5 minutes
+            _LOGGER.info(
+                "Circuit %s: Large timestamp gap detected (%s seconds) - treating as potential reset",
+                self.id, time_delta_seconds
+            )
+            # For large gaps, be more accepting of energy changes
+
+        # Reading passed all validations
+        self._previous_energy_reading = current_value
+        self._previous_energy_timestamp = current_timestamp
+        return True
+
+    def _update_native_value(self) -> None:
+        """Update the native value of the sensor with energy validation."""
+        if not self.coordinator.last_update_success:
+            self._attr_native_value = None
+            return
+
+        value_function: Callable[[SpanPanelCircuit], float | int | str | None] | None = getattr(
+            self.entity_description, "value_fn", None
+        )
+        if value_function is None:
+            self._attr_native_value = None
+            return
+
+        try:
+            circuit: SpanPanelCircuit = self.get_data_source(self.coordinator.data)
+            raw_value: float | int | str | None = value_function(circuit)
+
+            # Apply energy validation for energy sensors
+            if (hasattr(self.entity_description, 'key') and 
+                self.entity_description.key in [CIRCUITS_ENERGY_CONSUMED, CIRCUITS_ENERGY_PRODUCED] and
+                isinstance(raw_value, (int, float))):
+                
+                if not self._validate_energy_reading(float(raw_value), circuit):
+                    _LOGGER.debug(
+                        "Circuit %s: Filtered anomalous %s reading: %s Wh", 
+                        self.id, self.entity_description.key, raw_value
+                    )
+                    # Keep previous value, don't update
+                    return
+
+            # Debug logging for circuit power sensors (existing code)
+            if hasattr(self, "id") and hasattr(circuit, "instant_power"):
+                circuit_id = getattr(self, "id", "unknown")
+                instant_power = getattr(circuit, "instant_power", None)
+                description_key = getattr(self.entity_description, "key", "unknown")
+                _LOGGER.debug(
+                    "CIRCUIT_POWER_DEBUG: Circuit %s, sensor %s, instant_power=%s, data_source type=%s",
+                    circuit_id,
+                    description_key,
+                    instant_power,
+                    type(circuit).__name__,
+                )
+
+                # Extra debug for circuit 15 (the problematic one)
+                if circuit_id == "15":
+                    _LOGGER.debug(
+                        "CIRCUIT_15_POWER_DEBUG: Circuit 15 detailed - instant_power=%s, produced_energy=%s, consumed_energy=%s",
+                        instant_power,
+                        getattr(circuit, "produced_energy", None),
+                        getattr(circuit, "consumed_energy", None),
+                    )
+
+            _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
+
+            if raw_value is None:
+                self._attr_native_value = None
+            elif isinstance(raw_value, float | int):
+                self._attr_native_value = float(raw_value)
+            else:
+                # For string values, keep as string - this is valid for Home Assistant sensors
+                self._attr_native_value = str(raw_value)  # type: ignore[assignment]
+        except (AttributeError, KeyError, IndexError) as e:
+            _LOGGER.debug(
+                "CIRCUIT_POWER_ERROR: Error in _update_native_value for %s: %s",
+                self._attr_name,
+                e,
+            )
+            self._attr_native_value = None
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
