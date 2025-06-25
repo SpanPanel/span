@@ -63,6 +63,11 @@ def mock_coordinator_with_circuits():
         "unmapped_tab_15": MagicMock(name="Unmapped Tab 15"),
         "unmapped_tab_16": MagicMock(name="Unmapped Tab 16"),
     }
+
+    # Add mock status with serial number for device identification
+    span_panel.status = MagicMock()
+    span_panel.status.serial_number = "TEST123456"
+
     coordinator.data = span_panel
     return coordinator
 
@@ -191,7 +196,7 @@ class TestSolarSyntheticSensors:
         assert "sensors" in config
 
         # With stable naming, the keys should be based on friendly names, not circuit numbers
-        # Check solar inverter instant power sensor
+        # Check solar inverter instant power sensor (v1.0.10 compatible key)
         power_sensor = config["sensors"]["solar_inverter_instant_power"]
         assert power_sensor["name"] == "Solar Inverter Instant Power"
         assert power_sensor["formula"] == "leg1_power + leg2_power"
@@ -201,8 +206,10 @@ class TestSolarSyntheticSensors:
         assert power_sensor["unit_of_measurement"] == "W"
         assert power_sensor["device_class"] == "power"
         assert power_sensor["state_class"] == "measurement"
+        # Check device association
+        assert power_sensor["device_identifier"] == "span_panel_TEST123456"
 
-        # Check energy produced sensor
+        # Check energy produced sensor (v1.0.10 compatible key)
         produced_sensor = config["sensors"]["solar_inverter_energy_produced"]
         assert produced_sensor["name"] == "Solar Inverter Energy Produced"
         assert produced_sensor["formula"] == "leg1_produced + leg2_produced"
@@ -218,8 +225,10 @@ class TestSolarSyntheticSensors:
         assert produced_sensor["unit_of_measurement"] == "Wh"
         assert produced_sensor["device_class"] == "energy"
         assert produced_sensor["state_class"] == "total_increasing"
+        # Check device association
+        assert produced_sensor["device_identifier"] == "span_panel_TEST123456"
 
-        # Check energy consumed sensor
+        # Check energy consumed sensor (v1.0.10 compatible key)
         consumed_sensor = config["sensors"]["solar_inverter_energy_consumed"]
         assert consumed_sensor["name"] == "Solar Inverter Energy Consumed"
         assert consumed_sensor["formula"] == "leg1_consumed + leg2_consumed"
@@ -235,6 +244,8 @@ class TestSolarSyntheticSensors:
         assert consumed_sensor["unit_of_measurement"] == "Wh"
         assert consumed_sensor["device_class"] == "energy"
         assert consumed_sensor["state_class"] == "total_increasing"
+        # Check device association
+        assert consumed_sensor["device_identifier"] == "span_panel_TEST123456"
 
     @pytest.mark.asyncio
     async def test_generate_solar_config_single_leg(
@@ -253,11 +264,13 @@ class TestSolarSyntheticSensors:
         with open(config_file) as f:
             config = yaml.safe_load(f)
 
-        # Check single-leg formulas - should still be solar inverter sensors
+        # Check single-leg formulas - should still be solar inverter sensors (v1.0.10 compatible key)
         power_sensor = config["sensors"]["solar_inverter_instant_power"]
         assert power_sensor["formula"] == "leg1_power"
         assert "leg1_power" in power_sensor["variables"]
         assert "leg2_power" not in power_sensor["variables"]
+        # Check device association
+        assert power_sensor["device_identifier"] == "span_panel_TEST123456"
 
     @pytest.mark.asyncio
     async def test_generate_solar_config_no_valid_legs(
