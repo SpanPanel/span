@@ -10,6 +10,7 @@ sensors:
     unit_of_measurement: W
     device_class: power
     state_class: measurement
+    device_identifier: span_panel_nj-2316-005k6
   solar_inverter_energy_produced:
     name: Solar Inverter Energy Produced
     entity_id: sensor.span_panel_solar_inverter_energy_produced
@@ -20,6 +21,7 @@ sensors:
     unit_of_measurement: Wh
     device_class: energy
     state_class: total_increasing
+    device_identifier: span_panel_nj-2316-005k6
   solar_inverter_energy_consumed:
     name: Solar Inverter Energy Consumed
     entity_id: sensor.span_panel_solar_inverter_energy_consumed
@@ -30,3 +32,4 @@ sensors:
     unit_of_measurement: Wh
     device_class: energy
     state_class: total_increasing
+    device_identifier: span_panel_nj-2316-005k6

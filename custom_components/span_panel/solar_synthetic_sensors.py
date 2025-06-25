@@ -143,7 +143,7 @@ class SolarSyntheticSensors:
         for sensor_key, sensor_config in solar_sensors.items():
             await config_manager.create_sensor(device_id, sensor_key, sensor_config)
 
-        _LOGGER.info("Generated %d solar sensors for panel %s", len(solar_sensors), panel_serial)
+        _LOGGER.debug("Generated %d solar sensors for panel %s", len(solar_sensors), panel_serial)
 
     async def remove_config(self) -> None:
         """Remove the solar configuration for this panel."""
@@ -212,7 +212,7 @@ class SolarSyntheticSensors:
                     yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
             await self._hass.async_add_executor_job(_write_yaml)
-            _LOGGER.info("Generated solar synthetic sensors config using compatibility method")
+            _LOGGER.debug("Generated solar synthetic sensors config using compatibility method")
         except Exception as e:
             _LOGGER.error("Failed to write synthetic sensors config: %s", e)
 
