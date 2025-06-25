@@ -22,7 +22,7 @@ repos:
         args: ['--fix=lf']
         exclude: '\..*_cache/.*|dist/.*|venv/.*'
 
-  # Pylint check for import-outside-toplevel (run early, before other tools)
+  # Pylint check for import-outside-toplevel (run before ruff)
   - repo: local
     hooks:
       - id: pylint-import-check
@@ -111,4 +111,16 @@ repos:
         args: ['-c', 'echo "Running tests with coverage..."; poetry run pytest tests/ --cov=custom_components/span_panel --cov-config=pyproject.toml --cov-report=term-missing:skip-covered -v; exit_code=$?; echo; if [ $exit_code -eq 0 ]; then echo "✅ Tests passed with coverage report above"; else echo "❌ Tests failed"; fi; exit $exit_code']
         pass_filenames: false
         always_run: true
+        verbose: true
+
+  # Sync dependencies from manifest.json to CI workflow (run last)
+  - repo: local
+    hooks:
+      - id: sync-dependencies
+        name: sync dependency versions between manifest.json and CI workflow
+        entry: python scripts/sync-dependencies.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
         verbose: true
