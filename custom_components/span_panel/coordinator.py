@@ -66,6 +66,28 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         self._needs_reload = True
         _LOGGER.debug("Integration reload requested for next update cycle")
 
+    def last_update_success_with_grace_period(self) -> bool:
+    """Return if coordinator is considered successful with grace period for outages.
+    
+    Extends availability during short outages to prevent Home Assistant
+    from treating recovery as counter resets in energy statistics by setting states 
+    to Unavailable and breaking delta calculations.
+    """
+    if self.last_update_success:
+        # Store successful update time
+        import time
+        self._last_successful_update = time.time()
+        return True
+    else:
+        # Check if we have a recent successful update
+        if hasattr(self, '_last_successful_update'):
+            import time
+            outage_duration = time.time() - self._last_successful_update
+            # Stay "successful" for 15 minutes during outages
+            return outage_duration < 900
+        # No previous success time, truly failed
+        return False
+
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""
         # Check if reload is needed before updating (auto-sync)
