@@ -45,13 +45,6 @@ async def setup_synthetic_sensors(
     """Set up synthetic sensors using proper submodule import pattern."""
 
     try:
-        # Configure debug logging for ha-synthetic-sensors package (lightweight)
-        ha_synthetic_sensors.configure_logging(logging.DEBUG)
-
-        # Check current logging configuration
-        logging_info = ha_synthetic_sensors.get_logging_info()
-        _LOGGER.debug("Synthetic sensors logging config: %s", logging_info)
-
         # Create SpanSensorManager for YAML generation
         unified_manager = SpanSensorManager(hass, entry)
 
@@ -97,6 +90,27 @@ async def setup_synthetic_sensors(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
+
+    # Configure ha-synthetic-sensors logging to match this integration's level
+    try:
+        # Use the same logging level as this integration
+        integration_level = _LOGGER.getEffectiveLevel()
+        ha_synthetic_sensors.configure_logging(integration_level)
+
+        # Test that logging is working - this will output test messages
+        if hasattr(ha_synthetic_sensors, "test_logging"):
+            ha_synthetic_sensors.test_logging()
+
+        # Check the configuration
+        logging_info = ha_synthetic_sensors.get_logging_info()
+        _LOGGER.debug(
+            "Synthetic sensors logging configured to level %s: %s",
+            logging.getLevelName(integration_level),
+            logging_info,
+        )
+    except Exception as e:
+        _LOGGER.warning("Failed to configure ha-synthetic-sensors logging: %s", e)
+
     config = entry.data
     host = config[CONF_HOST]
     name = "SpanPanel"
