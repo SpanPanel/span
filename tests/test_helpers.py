@@ -101,7 +101,12 @@ class TestHelperFunctions:
 
         # Test with friendly name - legacy installation should not use device prefix
         result = construct_synthetic_entity_id(
-            coordinator, span_panel, "sensor", [30, 32], "power", "Solar Production Power"
+            coordinator,
+            span_panel,
+            "sensor",
+            [30, 32],
+            "power",
+            "Solar Production Power",
         )
         assert result == "sensor.solar_production_power_power"
 

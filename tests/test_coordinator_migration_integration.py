@@ -215,7 +215,8 @@ async def test_coordinator_migration_handles_missing_entities_gracefully(
 
     # Migration should succeed even with no entities registered
     success = await real_coordinator.migrate_entities(
-        EntityNamingPattern.CIRCUIT_NUMBERS.value, EntityNamingPattern.FRIENDLY_NAMES.value
+        EntityNamingPattern.CIRCUIT_NUMBERS.value,
+        EntityNamingPattern.FRIENDLY_NAMES.value,
     )
 
     assert success, "Migration should succeed even with no entities"
@@ -246,7 +247,12 @@ async def test_bidirectional_entity_migration_works_correctly(
     mock_panel.status.serial_number = "12345"
 
     # Create mock circuits for the test cases
-    circuit_names = {1: "Main Panel", 10: "Heat Pump", 15: "EV Charger", 20: "Pool Pump"}
+    circuit_names = {
+        1: "Main Panel",
+        10: "Heat Pump",
+        15: "EV Charger",
+        20: "Pool Pump",
+    }
 
     for circuit_num in [1, 10, 15, 20]:
         circuit_id = str(circuit_num)

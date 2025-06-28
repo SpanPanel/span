@@ -1,7 +1,9 @@
 """Generic configuration manager for synthetic sensors with CRUD operations."""
 
 import asyncio
+import fcntl
 import logging
+import os
 from pathlib import Path
 from typing import Any, cast
 
@@ -247,16 +249,28 @@ class SyntheticConfigManager:
         """Read the configuration file (public method)."""
         return await self._read_config()
 
+    async def write_config(self, config: dict[str, Any]) -> None:
+        """Write the entire configuration file atomically (public method)."""
+        async with self._file_lock:
+            await self._write_config(config)
+
     async def _read_config(self) -> dict[str, Any]:
         """Read the configuration file."""
+        _LOGGER.debug("CONFIG_DEBUG: Reading config file from: %s", self._config_file)
         if not self._config_file.exists():
+            _LOGGER.debug("CONFIG_DEBUG: Config file does not exist, returning empty config")
             return {"version": "1.0", "sensors": {}}
 
         try:
 
             def _read_yaml() -> dict[str, Any]:
+                _LOGGER.debug("CONFIG_DEBUG: Opening YAML file for reading: %s", self._config_file)
                 with open(self._config_file, encoding="utf-8") as f:
                     result = yaml.safe_load(f)
+                    _LOGGER.debug(
+                        "CONFIG_DEBUG: Successfully read YAML file, got %d sensors",
+                        len(result.get("sensors", {})) if isinstance(result, dict) else 0,
+                    )
                     return (
                         cast(dict[str, Any], result)
                         if isinstance(result, dict)
@@ -269,15 +283,36 @@ class SyntheticConfigManager:
             return {"version": "1.0", "sensors": {}}
 
     async def _write_config(self, config: dict[str, Any]) -> None:
-        """Write the configuration file."""
+        """Write the configuration file with OS-level file locking."""
+        _LOGGER.debug("CONFIG_DEBUG: Writing config file to: %s", self._config_file)
+        _LOGGER.debug("CONFIG_DEBUG: Config contains %d sensors", len(config.get("sensors", {})))
         try:
 
             def _write_yaml() -> None:
                 # Ensure directory exists
                 self._config_file.parent.mkdir(parents=True, exist_ok=True)
+                _LOGGER.debug(
+                    "CONFIG_DEBUG: Created directory (if needed): %s", self._config_file.parent
+                )
 
+                # Use OS-level exclusive file locking
                 with open(self._config_file, "w", encoding="utf-8") as f:
-                    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                    try:
+                        # Acquire exclusive lock - blocks until available
+                        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                        _LOGGER.debug("CONFIG_DEBUG: Acquired exclusive file lock")
+
+                        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                        f.flush()  # Ensure data is written to OS buffer
+
+                        os.fsync(f.fileno())  # Force OS to write to disk
+
+                        _LOGGER.debug(
+                            "CONFIG_DEBUG: Successfully wrote, flushed, and synced YAML file"
+                        )
+                    finally:
+                        # Lock is automatically released when file is closed
+                        pass
 
             await self._hass.async_add_executor_job(_write_yaml)
         except OSError as e:

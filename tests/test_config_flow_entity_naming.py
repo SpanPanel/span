@@ -89,7 +89,8 @@ class TestEntityNamingOptionsWithCoordinator:
 
             # Verify migration was called on the coordinator
             mock_coordinator.migrate_entities.assert_called_once_with(
-                EntityNamingPattern.CIRCUIT_NUMBERS.value, EntityNamingPattern.FRIENDLY_NAMES.value
+                EntityNamingPattern.CIRCUIT_NUMBERS.value,
+                EntityNamingPattern.FRIENDLY_NAMES.value,
             )
 
             # Verify reload was scheduled (task creation was called)

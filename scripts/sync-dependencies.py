@@ -8,9 +8,9 @@ Used as a pre-commit hook to ensure CI workflow stays in sync with manifest vers
 """
 
 import json
+from pathlib import Path
 import re
 import sys
-from pathlib import Path
 
 
 def get_manifest_versions():
@@ -22,23 +22,23 @@ def get_manifest_versions():
         return None
 
     try:
-        with open(manifest_path, 'r') as f:
+        with open(manifest_path) as f:
             manifest = json.load(f)
 
-        requirements = manifest.get('requirements', [])
+        requirements = manifest.get("requirements", [])
         versions = {}
 
         for req in requirements:
-            if req.startswith('span-panel-api'):
+            if req.startswith("span-panel-api"):
                 # Extract version from span-panel-api~=1.1.0
-                match = re.search(r'span-panel-api[~=]+([0-9.]+)', req)
+                match = re.search(r"span-panel-api[~=]+([0-9.]+)", req)
                 if match:
-                    versions['span-panel-api'] = match.group(1)
-            elif req.startswith('ha-synthetic-sensors'):
+                    versions["span-panel-api"] = match.group(1)
+            elif req.startswith("ha-synthetic-sensors"):
                 # Extract version from ha-synthetic-sensors~=1.0.8
-                match = re.search(r'ha-synthetic-sensors[~=]+([0-9.]+)', req)
+                match = re.search(r"ha-synthetic-sensors[~=]+([0-9.]+)", req)
                 if match:
-                    versions['ha-synthetic-sensors'] = match.group(1)
+                    versions["ha-synthetic-sensors"] = match.group(1)
 
         return versions
 
@@ -56,32 +56,32 @@ def update_ci_workflow(versions):
         return False
 
     try:
-        with open(ci_path, 'r') as f:
+        with open(ci_path) as f:
             content = f.read()
 
         original_content = content
 
         # Update span-panel-api version
-        if 'span-panel-api' in versions:
-            span_version = versions['span-panel-api']
+        if "span-panel-api" in versions:
+            span_version = versions["span-panel-api"]
             content = re.sub(
                 r'span-panel-api = "\^[0-9.]+"',
                 f'span-panel-api = "^{span_version}"',
-                content
+                content,
             )
 
         # Update ha-synthetic-sensors version
-        if 'ha-synthetic-sensors' in versions:
-            ha_version = versions['ha-synthetic-sensors']
+        if "ha-synthetic-sensors" in versions:
+            ha_version = versions["ha-synthetic-sensors"]
             content = re.sub(
                 r'ha-synthetic-sensors = "\^[0-9.]+"',
                 f'ha-synthetic-sensors = "^{ha_version}"',
-                content
+                content,
             )
 
         # Check if changes were made
         if content != original_content:
-            with open(ci_path, 'w') as f:
+            with open(ci_path, "w") as f:
                 f.write(content)
             return True
 

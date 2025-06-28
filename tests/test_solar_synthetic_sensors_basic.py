@@ -201,7 +201,13 @@ async def test_construct_solar_inverter_entity_id_dual_leg(
         mock_construct.return_value = "sensor.span_panel_solar_production_power"
 
         result = solar_sensors._construct_solar_inverter_entity_id(
-            mock_coordinator, mock_span_panel, "sensor", 30, 32, "power", "Solar Production"
+            mock_coordinator,
+            mock_span_panel,
+            "sensor",
+            30,
+            32,
+            "power",
+            "Solar Production",
         )
 
         # Verify it was called with correct circuit numbers

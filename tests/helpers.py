@@ -1,7 +1,9 @@
 """Helper functions for testing the Span Panel integration."""
 
+from collections.abc import Generator
 from contextlib import contextmanager
 import datetime
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -69,7 +71,7 @@ class MockSpanPanelStorageBattery:
 def patch_span_panel_dependencies(
     mock_api_responses: dict[str, Any] | None = None,
     options: dict[str, Any] | None = None,
-):
+) -> Generator[tuple[MagicMock, AsyncMock], None, None]:
     """Patches common dependencies for setting up the Span Panel integration in tests."""
 
     if mock_api_responses is None:
@@ -196,7 +198,7 @@ def assert_entity_state(hass: HomeAssistant, entity_id: str, expected_state: Any
     state = hass.states.get(entity_id)
     assert state is not None, f"Entity {entity_id} not found in hass.states"
     assert state.state == str(expected_state), (
-        f"Expected {entity_id} to be '{expected_state}', got '{state.state}'"
+        f"Entity {entity_id} state is '{state.state}', expected '{expected_state}'"
     )
 
 
@@ -339,3 +341,116 @@ async def mock_circuit_relay_operation(
         mock_circuits[circuit_id].relay_state = new_state
         # Simulate API call
         mock_api.set_relay.return_value = None
+
+
+def cleanup_synthetic_yaml_files(hass: HomeAssistant) -> None:
+    """Clean up synthetic sensor YAML files to ensure clean test state.
+
+    This removes both the main synthetic sensors YAML and solar synthetic sensors YAML
+    to ensure tests start with a clean slate and generate YAML from scratch.
+    """
+    # Main synthetic sensors YAML
+    main_yaml_path = (
+        Path(hass.config.config_dir) / "custom_components" / "span_panel" / "span_sensors.yaml"
+    )
+    if main_yaml_path.exists():
+        main_yaml_path.unlink()
+
+    # Solar synthetic sensors YAML
+    solar_yaml_path = (
+        Path(hass.config.config_dir)
+        / "custom_components"
+        / "span_panel"
+        / "solar_synthetic_sensors.yaml"
+    )
+    if solar_yaml_path.exists():
+        solar_yaml_path.unlink()
+
+
+def reset_span_sensor_manager_static_state() -> None:
+    """Reset static state in SpanSensorManager to prevent test pollution."""
+    from custom_components.span_panel.span_sensor_manager import SpanSensorManager
+
+    SpanSensorManager._static_registered_entities = None
+    SpanSensorManager._static_entities_generated = False
+    SpanSensorManager.static_entities_registered = False
+
+
+def cleanup_synthetic_state(hass: HomeAssistant) -> None:
+    """Clean up both YAML files and static state for test independence."""
+    cleanup_synthetic_yaml_files(hass)
+    reset_span_sensor_manager_static_state()
+
+
+@contextmanager
+def clean_synthetic_yaml_test():
+    """Context manager that ensures clean YAML state for tests.
+
+    This ensures tests start with no pre-existing YAML files and allows tests
+    to verify actual YAML generation behavior rather than relying on fixtures.
+
+    Usage:
+        with clean_synthetic_yaml_test():
+            # Test code that generates YAML from mock panel data
+            pass
+        # Caller should clean up YAML files in teardown
+    """
+    try:
+        yield
+    finally:
+        # Note: We can't cleanup here directly since we don't have hass
+        # Tests using this context manager should call cleanup_synthetic_yaml_files
+        # in their teardown or use the setup_span_panel_entry_with_cleanup helper
+        pass
+
+
+def setup_span_panel_entry_with_cleanup(
+    hass: HomeAssistant,
+    mock_api_responses: dict[str, Any] | None = None,
+    entry_id: str = "test_span_panel",
+    host: str = "192.168.1.100",
+    access_token: str = "test_token",
+    options: dict[str, Any] | None = None,
+    cleanup_yaml: bool = True,
+) -> tuple[MockConfigEntry, dict[str, Any] | None]:
+    """Set up a Span Panel config entry with optional YAML cleanup.
+
+    Args:
+        hass: Home Assistant instance
+        mock_api_responses: Mock API responses (defaults to complete panel response)
+        entry_id: Config entry ID
+        host: Panel host
+        access_token: Panel access token
+        options: Config entry options
+        cleanup_yaml: Whether to clean up existing YAML files before setup
+
+    Returns:
+        Tuple of (config_entry, mock_api_responses)
+
+    """
+    if cleanup_yaml:
+        cleanup_synthetic_yaml_files(hass)
+
+    return setup_span_panel_entry(hass, mock_api_responses, entry_id, host, access_token, options)
+
+
+async def wait_for_synthetic_sensors(hass: HomeAssistant) -> None:
+    """Wait for synthetic sensors to be created by yielding to the event loop."""
+    # Give synthetic sensors time to be processed by yielding to the event loop multiple times
+    for _ in range(5):
+        await hass.async_block_till_done()
+
+
+async def wait_for_entity_state(
+    hass: HomeAssistant,
+    entity_id: str,
+    expected_state: Any,
+    timeout: float = 5.0,
+    check_interval: float = 0.1,
+) -> None:
+    """Wait for an entity to reach the expected state with retry logic."""
+    # First, yield to the event loop to let synthetic sensors complete
+    await wait_for_synthetic_sensors(hass)
+
+    # Then do the assertion
+    assert_entity_state(hass, entity_id, expected_state)

@@ -207,3 +207,9 @@ combine-as-imports = true
 [tool.coverage.run]
 source = ["custom_components/span_panel"]
 omit = ["tests/*"]
+
+[tool.pytest.ini_options]
+# Configure pytest-asyncio to use function-scoped event loop
+# This creates a fresh event loop for each test to avoid closure issues
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"

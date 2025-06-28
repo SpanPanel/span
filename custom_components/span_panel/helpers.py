@@ -113,8 +113,22 @@ def get_user_friendly_suffix(description_key: str) -> str:
         "importedEnergyWh": "energy_imported",
         "exportedEnergyWh": "energy_exported",
         "circuit_priority": "priority",
+        # Panel sensor API field mappings
+        "instantGridPowerW": "current_power",
+        "feedthroughPowerW": "feed_through_power",
+        "mainMeterEnergyProducedWh": "main_meter_produced_energy",
+        "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",
+        "feedthroughEnergyProducedWh": "feed_through_produced_energy",
+        "feedthroughEnergyConsumedWh": "feed_through_consumed_energy",
+        "batteryPercentage": "battery_percentage",
+        "dsmState": "dsm_state",
     }
-    return suffix_mapping.get(description_key, description_key.lower())
+    # If we have a direct mapping, use it
+    if description_key in suffix_mapping:
+        return suffix_mapping[description_key]
+
+    # Otherwise, sanitize by converting dots to underscores and making lowercase
+    return description_key.replace(".", "_").lower()
 
 
 def construct_synthetic_entity_id(
@@ -216,7 +230,7 @@ def construct_panel_entity_id(
     platform: str,
     suffix: str,
 ) -> str | None:
-    """Construct entity ID for panel-level entities based on integration configuration flags.
+    """Construct entity ID for panel-level sensors based on integration configuration flags.
 
     This function handles entity naming for panel-level entities based on the
     USE_DEVICE_PREFIX configuration flag.
@@ -225,7 +239,7 @@ def construct_panel_entity_id(
         coordinator: The coordinator instance
         span_panel: The span panel data
         platform: Platform name ("sensor", "switch", "select")
-        suffix: Entity-specific suffix ("current_power", "dsm_state", etc.)
+        suffix: Entity-specific suffix ("current_power", "feed_through_power", etc.)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
@@ -244,15 +258,81 @@ def construct_panel_entity_id(
         # Has options = either new installation or existing installation that went through options flow
         use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
 
+    # Get device info for device name
+    device_info = panel_to_device_info(span_panel)
+    device_name_raw = device_info.get("name")
+
     if use_device_prefix:
-        # With device prefix - Format: sensor.span_panel_current_power
-        device_info = panel_to_device_info(span_panel)
-        device_name_raw = device_info.get("name")
+        # Installation with device prefix enabled
+        # Format: sensor.span_panel_current_power
         if device_name_raw:
             device_name = sanitize_name_for_entity_id(device_name_raw)
             return f"{platform}.{device_name}_{suffix}"
         else:
             return None
     else:
-        # Without device prefix - Format: sensor.current_power
+        # Installation without device prefix
+        # Format: sensor.current_power
         return f"{platform}.{suffix}"
+
+
+def construct_backing_entity_id(
+    span_panel: SpanPanel,
+    circuit_number: str | int | None = None,
+    circuit_name: str | None = None,
+    suffix: str = "",
+    entity_type: str = "circuit",
+) -> str:
+    """Construct human-readable backing entity ID for internal data provider use.
+
+    These are internal references used only within synthetic sensor YAML configuration
+    and are never registered in Home Assistant. They provide clear, readable names
+    for humans working with the YAML files.
+
+    For circuit sensors, uses only circuit numbers (tab positions) to create stable
+    references that don't change when users rename circuits in the SPAN mobile app.
+    Friendly names are used only in user-facing synthetic sensors, not in backing entity IDs.
+
+    Args:
+        span_panel: The span panel data
+        circuit_number: Circuit number/tab position (for circuit sensors)
+        circuit_name: Human-readable circuit name (for circuit sensors - not used in backing IDs)
+        suffix: Sensor type suffix ("power", "energy_produced", etc.)
+        entity_type: Type of entity ("circuit", "panel", "battery")
+
+    Returns:
+        Backing entity ID like "span_panel_synthetic_backing.circuit_15_power"
+
+    Examples:
+        Circuit: "span_panel_synthetic_backing.circuit_15_power"
+        Panel: "span_panel_synthetic_backing.panel_grid_power"
+        Battery: "span_panel_synthetic_backing.battery_percentage"
+
+    """
+    # Get device name for consistent prefix
+    device_info = panel_to_device_info(span_panel)
+    device_name_raw = device_info.get("name", "span_panel")
+    device_name = sanitize_name_for_entity_id(device_name_raw or "span_panel")
+
+    # Construct the backing entity ID parts
+    base_prefix = f"{device_name}_synthetic_backing"
+
+    if entity_type == "circuit" and circuit_number:
+        # Circuit sensors: use circuit number for stable reference
+        # Friendly names are only used in user-facing synthetic sensors, not backing entities
+        entity_part = f"circuit_{circuit_number}"
+        if suffix:
+            entity_part = f"{entity_part}_{suffix}"
+    elif entity_type == "panel":
+        # Panel sensors: use circuit_0 for consistency with circuit sensor format
+        # This keeps all backing entity IDs in the same format: circuit_X_suffix
+        entity_part = f"circuit_0_{suffix}" if suffix else "circuit_0"
+    elif entity_type == "battery":
+        # Battery sensors: use circuit_0 for consistency (batteries are panel-level)
+        # This keeps all backing entity IDs in the same format: circuit_X_suffix
+        entity_part = f"circuit_0_{suffix}" if suffix else "circuit_0"
+    else:
+        # Fallback for other types
+        entity_part = f"{entity_type}_{suffix}" if suffix else entity_type
+
+    return f"{base_prefix}.{entity_part}"

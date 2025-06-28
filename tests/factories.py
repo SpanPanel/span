@@ -162,7 +162,7 @@ class SpanPanelDataFactory:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Create panel data with optional defaults."""
-        panel_data = copy.deepcopy(SpanPanelDataFactory._panel_defaults)
+        panel_data: dict[str, Any] = copy.deepcopy(SpanPanelDataFactory._panel_defaults)
         panel_data[PANEL_POWER] = grid_power
         panel_data["instantGridPowerW"] = grid_power
         panel_data[DSM_GRID_STATE] = dsm_grid_state
@@ -207,7 +207,7 @@ class SpanPanelStatusFactory:
             "env": "prod",
         },
         "system": {
-            "serial": "ABC123456789",
+            "serial": "sp3-242424-001",
             "manufacturer": "Span",
             "model": "Panel",
             "doorState": SYSTEM_DOOR_STATE_CLOSED,
@@ -222,7 +222,7 @@ class SpanPanelStatusFactory:
 
     @staticmethod
     def create_status(
-        serial_number: str = "ABC123456789",
+        serial_number: str = "sp3-242424-001",
         software_version: str = "1.2.3",
         door_state: str = SYSTEM_DOOR_STATE_CLOSED,
         ethernet_link: bool = True,
@@ -231,7 +231,7 @@ class SpanPanelStatusFactory:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Create status data with optional defaults."""
-        status = copy.deepcopy(SpanPanelStatusFactory._status_defaults)
+        status: dict[str, Any] = copy.deepcopy(SpanPanelStatusFactory._status_defaults)
         status["system"]["serial"] = serial_number
         status["software"]["firmwareVersion"] = software_version
         status["system"]["doorState"] = door_state
@@ -244,11 +244,11 @@ class SpanPanelStatusFactory:
             if "." in k:
                 # Handle nested keys like "system.uptime"
                 parts = k.split(".")
-                current = status
+                current: dict[str, Any] = status
                 for part in parts[:-1]:
                     if part not in current:
                         current[part] = {}
-                    current = current[part]
+                    current = current[part]  # type: ignore[assignment]
                 current[parts[-1]] = v
             else:
                 status[k] = v
@@ -269,7 +269,7 @@ class SpanPanelStorageBatteryFactory:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Create battery data with optional defaults."""
-        battery = copy.deepcopy(SpanPanelStorageBatteryFactory._battery_defaults)
+        battery: dict[str, Any] = copy.deepcopy(SpanPanelStorageBatteryFactory._battery_defaults)
         battery[STORAGE_BATTERY_PERCENTAGE] = battery_percentage
 
         # Add any additional overrides

@@ -236,7 +236,8 @@ class SolarSyntheticSensors:
 
         except Exception as e:
             _LOGGER.warning(
-                "Failed to reload ha-synthetic-sensors after solar config removal: %s", e
+                "Failed to reload ha-synthetic-sensors after solar config removal: %s",
+                e,
             )
             return False
 

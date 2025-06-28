@@ -4,9 +4,10 @@ Run this periodically to keep your pyproject.toml aligned with HA.
 """
 
 import json
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
+
 import toml
 
 
@@ -53,7 +54,9 @@ def update_pyproject_constraints(ha_deps):
 
         # Update constraints for deps we care about
         deps = (
-            pyproject.setdefault("tool", {}).setdefault("poetry", {}).setdefault("dependencies", {})
+            pyproject.setdefault("tool", {})
+            .setdefault("poetry", {})
+            .setdefault("dependencies", {})
         )
 
         updated = []

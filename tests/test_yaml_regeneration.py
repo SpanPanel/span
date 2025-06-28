@@ -61,7 +61,10 @@ class TestYamlRegeneration:
             coordinator.config_entry = config_entry
 
             # Store both coordinator and config entry
-            coordinators[pattern_name] = {"coordinator": coordinator, "config_entry": config_entry}
+            coordinators[pattern_name] = {
+                "coordinator": coordinator,
+                "config_entry": config_entry,
+            }
 
         # Store coordinators in hass.data using the correct structure
         hass.data = {

@@ -1,0 +1,27 @@
+# Expected YAML structure for panel and circuit sensors with legacy behavior
+# Configuration: {} (empty options - existing installation defaults)
+# USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False
+
+# Panel-level sensor: No device prefix, just sensor name
+span_sp3-242424-001_instantgridpowerw:
+  name: "Current Power"
+  entity_id: "sensor.current_power"
+  formula: "source_value"
+  variables:
+    source_value: "span_panel_synthetic_backing.circuit_0_instant_grid_power"
+  unit_of_measurement: "W"
+  device_class: "power"
+  state_class: "measurement"
+  device_identifier: "span_panel_sp3-242424-001"
+
+# Circuit-level sensor: No device prefix, just friendly circuit name
+span_sp3-242424-001_circuit_1_instantpowerw:
+  name: "Test Circuit Power"
+  entity_id: "sensor.test_circuit_power"
+  formula: "source_value"
+  variables:
+    source_value: "span_panel_synthetic_backing.circuit_1_power"
+  unit_of_measurement: "W"
+  device_class: "power"
+  state_class: "measurement"
+  device_identifier: "span_panel_sp3-242424-001"

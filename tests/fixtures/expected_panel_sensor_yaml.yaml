@@ -1,0 +1,13 @@
+# Expected YAML structure for panel sensor with device prefix (original test)
+# Configuration: {"use_device_prefix": True, "use_circuit_numbers": False}
+
+span_sp3-242424-001_instantgridpowerw:
+  name: "Current Power"
+  entity_id: "sensor.span_panel_current_power"
+  formula: "source_value"
+  variables:
+    source_value: "span_panel_synthetic_backing.circuit_0_instant_grid_power"
+  unit_of_measurement: "W"
+  device_class: "power"
+  state_class: "measurement"
+  device_identifier: "span_panel_sp3-242424-001"

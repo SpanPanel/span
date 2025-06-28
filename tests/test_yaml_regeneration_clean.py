@@ -25,7 +25,8 @@ class TestYamlCircuitChanges:
         """Create hass instance with mocked SPAN panel circuits."""
         # Create config entry with stable naming (friendly names)
         config_entry = create_mock_config_entry(
-            {"host": "192.168.1.100"}, {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
+            {"host": "192.168.1.100"},
+            {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True},
         )
         config_entry.entry_id = "test_entry_id"
 

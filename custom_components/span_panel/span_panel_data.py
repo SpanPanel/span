@@ -61,3 +61,34 @@ class SpanPanelData:
     def copy(self) -> "SpanPanelData":
         """Create a deep copy for atomic operations."""
         return deepcopy(self)
+
+    # Add camelCase properties for panel sensor mappings
+    @property
+    def instantGridPowerW(self) -> float:
+        """Grid power in watts (camelCase for sensor mapping)."""
+        return self.instant_grid_power
+
+    @property
+    def feedthroughPowerW(self) -> float:
+        """Feedthrough power in watts (camelCase for sensor mapping)."""
+        return self.feedthrough_power
+
+    @property
+    def mainMeterEnergyProducedWh(self) -> float:
+        """Main meter produced energy in Wh (camelCase for sensor mapping)."""
+        return self.main_meter_energy_produced
+
+    @property
+    def mainMeterEnergyConsumedWh(self) -> float:
+        """Main meter consumed energy in Wh (camelCase for sensor mapping)."""
+        return self.main_meter_energy_consumed
+
+    @property
+    def feedthroughEnergyProducedWh(self) -> float:
+        """Feedthrough produced energy in Wh (camelCase for sensor mapping)."""
+        return self.feedthrough_energy_produced
+
+    @property
+    def feedthroughEnergyConsumedWh(self) -> float:
+        """Feedthrough consumed energy in Wh (camelCase for sensor mapping)."""
+        return self.feedthrough_energy_consumed

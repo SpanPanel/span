@@ -37,7 +37,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
-    """Coordinator for Span Panel."""
+    """Class to manage fetching data from the API."""
 
     def __init__(
         self,
@@ -47,24 +47,20 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         update_interval: int,
         config_entry: ConfigEntry,
     ) -> None:
-        """Initialize the coordinator."""
+        """Initialize."""
         super().__init__(
             hass,
             _LOGGER,
-            name=f"span panel {name}",
+            name=name,
             update_interval=timedelta(seconds=update_interval),
-            always_update=True,
         )
         self.span_panel_api = span_panel
-        self.config_entry: ConfigEntry | None = config_entry
-
-        # Flag for panel name auto-sync integration reload
+        self.config_entry = config_entry
         self._needs_reload = False
 
     def request_reload(self) -> None:
-        """Request an integration reload for the next update cycle."""
+        """Request a reload of the integration."""
         self._needs_reload = True
-        _LOGGER.debug("Integration reload requested for next update cycle")
 
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""
@@ -234,7 +230,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                         migration_count += 1
                     except Exception as e:
                         _LOGGER.error(
-                            "Failed to migrate %s to %s: %s", entity.entity_id, new_entity_id, e
+                            "Failed to migrate %s to %s: %s",
+                            entity.entity_id,
+                            new_entity_id,
+                            e,
                         )
 
             _LOGGER.info(
@@ -405,7 +404,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             return None
 
         _LOGGER.debug(
-            "Attempting migration for unique_id: %s, entity_name: %s", unique_id, entity_name
+            "Attempting migration for unique_id: %s, entity_name: %s",
+            unique_id,
+            entity_name,
         )
 
         # Find which circuit this unique_id belongs to by checking all circuits
@@ -466,7 +467,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             # Fallback to using construct_entity_id with current config
             if domain == "switch":
                 return construct_entity_id(
-                    self, self.data, "switch", circuit_friendly_name, circuit_number, "breaker"
+                    self,
+                    self.data,
+                    "switch",
+                    circuit_friendly_name,
+                    circuit_number,
+                    "breaker",
                 )
             else:
                 if unique_id is None:
@@ -476,7 +482,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                 suffix = unique_id[len(prefix) :]
                 entity_suffix = get_user_friendly_suffix(suffix)
                 return construct_entity_id(
-                    self, self.data, "sensor", circuit_friendly_name, circuit_number, entity_suffix
+                    self,
+                    self.data,
+                    "sensor",
+                    circuit_friendly_name,
+                    circuit_number,
+                    entity_suffix,
                 )
 
         # Get device name for prefix

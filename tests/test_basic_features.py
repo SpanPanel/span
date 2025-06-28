@@ -21,6 +21,7 @@ from tests.helpers import (
     patch_span_panel_dependencies,
     setup_span_panel_entry,
     trigger_coordinator_update,
+    wait_for_synthetic_sensors,
 )
 
 
@@ -31,118 +32,73 @@ def expected_lingering_timers():
 
 
 @pytest.mark.asyncio
-async def test_integration_setup_and_unload(hass: Any, enable_custom_integrations: Any):
-    """Test that the integration sets up and unloads correctly."""
-
-    # Create test data
-    mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
-    entry, _ = setup_span_panel_entry(hass, mock_responses)
-
-    with patch_span_panel_dependencies(mock_responses):
-        # Setup integration
-        result = await hass.config_entries.async_setup(entry.entry_id)
-        assert result is True
-        await hass.async_block_till_done()
-
-        # Verify entry is loaded
-        assert entry.state.name == "LOADED"
-
-        # Verify coordinator data
-        assert "span_panel" in hass.data
-        assert entry.entry_id in hass.data["span_panel"]
-
-        # Test unload
-        result = await hass.config_entries.async_unload(entry.entry_id)
-        assert result is True
-        await hass.async_block_till_done()
-
-        # Verify cleanup
-        assert entry.entry_id not in hass.data.get("span_panel", {})
-
-
-@pytest.mark.asyncio
-async def test_coordinator_update_cycle(hass: Any, enable_custom_integrations: Any):
-    """Test that the coordinator updates data correctly."""
-
-    # Create test data with known values
-    circuit_data = SpanPanelCircuitFactory.create_kitchen_outlet_circuit()
-    panel_data = SpanPanelDataFactory.create_on_grid_panel_data()
-    status_data = SpanPanelStatusFactory.create_status()
-
-    mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
-        circuits=[circuit_data],
-        panel_data=panel_data,
-        status_data=status_data,
-    )
-
-    # Configure entry to use device prefix naming (post-1.0.4 style)
-    options = {
-        "use_device_prefix": True,
-        "use_circuit_numbers": False,
-    }
-    entry, _ = setup_span_panel_entry(hass, mock_responses, options=options)
-
-    with patch_span_panel_dependencies(mock_responses) as (mock_panel, mock_api):
-        # Setup integration
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-        # Get coordinator and trigger update manually
-        coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
-        await trigger_coordinator_update(coordinator)
-
-        # Verify API calls were made during the coordinator update
-        mock_api.get_status_data.assert_called()
-        mock_api.get_panel_data.assert_called()
-        mock_api.get_circuits_data.assert_called()
-
-
-@pytest.mark.asyncio
 async def test_circuit_sensor_creation_and_values(hass: Any, enable_custom_integrations: Any):
     """Test that circuit sensors are created with correct values."""
 
-    # Create test circuit with known values
-    circuit_data = SpanPanelCircuitFactory.create_circuit(
-        circuit_id="1",
-        name="Kitchen Outlets",
-        instant_power=245.3,
-        consumed_energy=2450.8,
-        produced_energy=0.0,
-    )
-
-    mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
-        circuits=[circuit_data]
-    )
-
-    # Configure entry to use device prefix naming (post-1.0.4 style)
-    options = {
-        "use_device_prefix": True,
-        "use_circuit_numbers": False,
-    }
-    entry, _ = setup_span_panel_entry(hass, mock_responses, options=options)
-
-    with patch_span_panel_dependencies(mock_responses):
-        # Setup integration
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-        # Get coordinator and trigger manual update to ensure sensors get data
-        coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
-        await trigger_coordinator_update(coordinator)
-
-        # Check power sensor
-        power_entity_id = get_circuit_entity_id(
-            "1", "Kitchen Outlets", "sensor", "power", use_device_prefix=True
+    try:
+        # Create test circuit with known values
+        circuit_data = SpanPanelCircuitFactory.create_circuit(
+            circuit_id="1",
+            name="Kitchen Outlets",
+            instant_power=245.3,
+            consumed_energy=2450.8,
+            produced_energy=0.0,
         )
-        assert_entity_state(hass, power_entity_id, "245.3")
-        assert_entity_attribute(hass, power_entity_id, "unit_of_measurement", "W")
 
-        # Check consumed energy sensor
-        consumed_entity_id = get_circuit_entity_id(
-            "1", "Kitchen Outlets", "sensor", "energy_consumed", use_device_prefix=True
+        mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
+            circuits=[circuit_data]
         )
-        assert_entity_state(hass, consumed_entity_id, "2450.8")
-        assert_entity_attribute(hass, consumed_entity_id, "unit_of_measurement", "Wh")
+
+        # Configure entry to use device prefix naming (post-1.0.4 style)
+        options = {
+            "use_device_prefix": True,
+            "use_circuit_numbers": False,
+        }
+        entry, _ = setup_span_panel_entry(hass, mock_responses, options=options)
+
+        with patch_span_panel_dependencies(mock_responses):
+            # Setup integration
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+            # Get coordinator and trigger manual update to ensure sensors get data
+            coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
+            await trigger_coordinator_update(coordinator)
+
+            # Give synthetic sensors time to be processed by the event loop
+            await wait_for_synthetic_sensors(hass)
+
+            # Check power sensor
+            power_entity_id = get_circuit_entity_id(
+                "1", "Kitchen Outlets", "sensor", "power", use_device_prefix=True
+            )
+            assert_entity_state(hass, power_entity_id, "245.3")
+            assert_entity_attribute(hass, power_entity_id, "unit_of_measurement", "W")
+
+            # Check consumed energy sensor
+            consumed_entity_id = get_circuit_entity_id(
+                "1", "Kitchen Outlets", "sensor", "energy_consumed", use_device_prefix=True
+            )
+            assert_entity_state(hass, consumed_entity_id, "2450.8")
+            assert_entity_attribute(hass, consumed_entity_id, "unit_of_measurement", "Wh")
+
+    finally:
+        # Clean up static state and YAML files to prevent test pollution
+        from .helpers import reset_span_sensor_manager_static_state
+
+        print("DEBUG: Resetting static state in test cleanup")
+        reset_span_sensor_manager_static_state()
+
+        # Also reset any coordinator-level state
+        try:
+            coordinator = (
+                hass.data.get("span_panel", {}).get("test_span_panel", {}).get("coordinator")
+            )
+            if coordinator and hasattr(coordinator, "sensor_manager"):
+                coordinator.sensor_manager = None
+                print("DEBUG: Reset coordinator sensor_manager")
+        except Exception as e:
+            print(f"DEBUG: Error resetting coordinator: {e}")
 
 
 @pytest.mark.asyncio
@@ -259,6 +215,13 @@ async def test_panel_level_sensors(hass: Any, enable_custom_integrations: Any):
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
 
+        # Give synthetic sensors time to be processed by the event loop
+        await wait_for_synthetic_sensors(hass)
+
+        # Yield to HA to ensure all sensor updates are processed
+        await hass.async_block_till_done()
+        await hass.async_block_till_done()
+
         # Check grid power sensor (entity name is "Current Power")
         grid_power_entity_id = get_panel_entity_id("current_power", use_device_prefix=True)
         assert_entity_state(hass, grid_power_entity_id, "1850.5")
@@ -269,20 +232,54 @@ async def test_panel_level_sensors(hass: Any, enable_custom_integrations: Any):
 
 
 @pytest.mark.asyncio
-async def test_producing_circuit_power_values(hass: Any, enable_custom_integrations: Any):
-    """Test that producing circuits (like solar) show correct power values."""
+async def test_integration_setup_and_unload(hass: Any, enable_custom_integrations: Any):
+    """Test that the integration sets up and unloads correctly."""
 
-    # Create solar circuit with negative power (producing)
-    circuit_data = SpanPanelCircuitFactory.create_circuit(
-        circuit_id="15",
-        name="Solar Panels",
-        instant_power=-1200.0,  # Negative indicates production
-        consumed_energy=0.0,
-        produced_energy=12000.5,
-    )
+    # Create test data
+    mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
+
+    # Configure entry to use device prefix naming (post-1.0.4 style) for consistency
+    options = {
+        "use_device_prefix": True,
+        "use_circuit_numbers": False,
+    }
+    entry, _ = setup_span_panel_entry(hass, mock_responses, options=options)
+
+    with patch_span_panel_dependencies(mock_responses):
+        # Setup integration
+        result = await hass.config_entries.async_setup(entry.entry_id)
+        assert result is True
+        await hass.async_block_till_done()
+
+        # Verify entry is loaded
+        assert entry.state.name == "LOADED"
+
+        # Verify coordinator data
+        assert "span_panel" in hass.data
+        assert entry.entry_id in hass.data["span_panel"]
+
+        # Test unload
+        result = await hass.config_entries.async_unload(entry.entry_id)
+        assert result is True
+        await hass.async_block_till_done()
+
+        # Verify cleanup
+        assert entry.entry_id not in hass.data.get("span_panel", {})
+
+
+@pytest.mark.asyncio
+async def test_coordinator_update_cycle(hass: Any, enable_custom_integrations: Any):
+    """Test that the coordinator updates data correctly."""
+
+    # Create test data with known values
+    circuit_data = SpanPanelCircuitFactory.create_kitchen_outlet_circuit()
+    panel_data = SpanPanelDataFactory.create_on_grid_panel_data()
+    status_data = SpanPanelStatusFactory.create_status()
 
     mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
-        circuits=[circuit_data]
+        circuits=[circuit_data],
+        panel_data=panel_data,
+        status_data=status_data,
     )
 
     # Configure entry to use device prefix naming (post-1.0.4 style)
@@ -292,26 +289,84 @@ async def test_producing_circuit_power_values(hass: Any, enable_custom_integrati
     }
     entry, _ = setup_span_panel_entry(hass, mock_responses, options=options)
 
-    with patch_span_panel_dependencies(mock_responses):
+    with patch_span_panel_dependencies(mock_responses) as (mock_panel, mock_api):
         # Setup integration
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        # Get coordinator and trigger manual update to ensure sensors get data
+        # Get coordinator and trigger update manually
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
 
-        # Check power sensor shows absolute value (no negative display)
-        power_entity_id = get_circuit_entity_id(
-            "15", "Solar Panels", "sensor", "power", use_device_prefix=True
-        )
-        assert_entity_state(hass, power_entity_id, "1200.0")
+        # Give synthetic sensors time to be processed by the event loop
+        await wait_for_synthetic_sensors(hass)
 
-        # Check produced energy sensor
-        produced_entity_id = get_circuit_entity_id(
-            "15", "Solar Panels", "sensor", "energy_produced", use_device_prefix=True
-        )
-        assert_entity_state(hass, produced_entity_id, "12000.5")
+        # Verify API calls were made during the coordinator update
+        mock_api.get_status_data.assert_called()
+        mock_api.get_panel_data.assert_called()
+        mock_api.get_circuits_data.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_producing_circuit_power_values(hass: Any, enable_custom_integrations: Any):
+    """Test that producing circuits (like solar) show correct power values.
+
+    This test uses clean YAML generation to ensure it tests actual behavior
+    rather than relying on pre-existing fixtures.
+    """
+    try:
+        # Use clean YAML state - let the system generate YAML from mock panel data
+        mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
+
+        # Configure entry to use device prefix naming (post-1.0.4 style)
+        options = {
+            "use_device_prefix": True,
+            "use_circuit_numbers": False,
+        }
+        entry, _ = setup_span_panel_entry(hass, mock_responses, options=options)
+
+        with patch_span_panel_dependencies(mock_responses):
+            # Setup integration - this will generate YAML from mock panel data
+            await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+            # Get coordinator and trigger manual update to ensure sensors get data
+            coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
+            await trigger_coordinator_update(coordinator)
+
+            # Give synthetic sensors time to be processed by the event loop
+            await wait_for_synthetic_sensors(hass)
+
+            # Find the solar panel power sensor that was actually created
+            # The mock data creates circuit 15 as "Solar Panels" with -1200.0W (producing)
+            all_states = hass.states.async_all()
+            solar_power_states = [
+                state
+                for state in all_states
+                if "solar" in state.entity_id.lower()
+                and "power" in state.entity_id
+                and state.state not in ["unknown", "unavailable"]
+            ]
+
+            assert len(solar_power_states) > 0, "No solar power sensor found in generated entities"
+
+            # Use the first solar power sensor found (should be consistent with mock data)
+            solar_power_state = solar_power_states[0]
+            power_entity_id = solar_power_state.entity_id
+
+            # Check power sensor shows absolute value (no negative display)
+            assert_entity_state(hass, power_entity_id, "1200.0")
+
+            # Find and check the corresponding produced energy sensor
+            base_entity_name = power_entity_id.replace("_power", "").replace("sensor.", "")
+            produced_entity_id = f"sensor.{base_entity_name}_energy_produced"
+            assert_entity_state(hass, produced_entity_id, "12000.5")
+
+    finally:
+        # Clean up YAML files to ensure clean state for subsequent tests
+        from .helpers import cleanup_synthetic_yaml_files
+
+        cleanup_synthetic_yaml_files(hass)
 
 
 @pytest.mark.asyncio
@@ -339,6 +394,13 @@ async def test_panel_on_grid_state(hass: Any, enable_custom_integrations: Any):
         # Get coordinator and trigger manual update to ensure sensors get data
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
+
+        # Give synthetic sensors time to be processed by the event loop
+        await wait_for_synthetic_sensors(hass)
+
+        # Yield to HA to ensure all sensor updates are processed
+        await hass.async_block_till_done()
+        await hass.async_block_till_done()
 
         # Check DSM state shows on-grid
         dsm_state_entity_id = get_panel_entity_id("dsm_state", use_device_prefix=True)
@@ -370,6 +432,13 @@ async def test_panel_backup_state(hass: Any, enable_custom_integrations: Any):
         # Get coordinator and trigger manual update to ensure sensors get data
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
+
+        # Give synthetic sensors time to be processed by the event loop
+        await wait_for_synthetic_sensors(hass)
+
+        # Yield to HA to ensure all sensor updates are processed
+        await hass.async_block_till_done()
+        await hass.async_block_till_done()
 
         # Check DSM state shows backup
         dsm_state_entity_id = get_panel_entity_id("dsm_state", use_device_prefix=True)

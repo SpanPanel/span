@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+# Lightweight import for logging configuration only
+import ha_synthetic_sensors
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
@@ -14,11 +16,18 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 
 # Import config flow to ensure it's registered
-from . import config_flow  # noqa: F401
-from .const import CONF_USE_SSL, COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN, NAME
+from . import config_flow  # noqa: F401  # type: ignore[misc]
+from .const import (
+    CONF_USE_SSL,
+    COORDINATOR,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    NAME,
+)
 from .coordinator import SpanPanelCoordinator
-from .options import Options
 from .span_panel import SpanPanel
+from .span_panel_api import Options
+from .span_sensor_manager import SpanSensorManager
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -30,13 +39,69 @@ PLATFORMS: list[Platform] = [
 _LOGGER = logging.getLogger(__name__)
 
 
+async def setup_synthetic_sensors(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: SpanPanelCoordinator
+) -> None:
+    """Set up synthetic sensors using proper submodule import pattern."""
+
+    try:
+        # Configure debug logging for ha-synthetic-sensors package (lightweight)
+        ha_synthetic_sensors.configure_logging(logging.DEBUG)
+
+        # Check current logging configuration
+        logging_info = ha_synthetic_sensors.get_logging_info()
+        _LOGGER.debug("Synthetic sensors logging config: %s", logging_info)
+
+        # Create SpanSensorManager for YAML generation
+        unified_manager = SpanSensorManager(hass, entry)
+
+        # Generate YAML configuration
+        _LOGGER.debug("SYNTHETIC_SETUP_DEBUG: Generating YAML configuration")
+        config_generated = await unified_manager.generate_unified_config(
+            coordinator, coordinator.data
+        )
+        if not config_generated:
+            _LOGGER.error("Failed to generate synthetic sensor YAML configuration")
+            return
+        _LOGGER.debug("SYNTHETIC_SETUP_DEBUG: Successfully generated YAML configuration")
+
+        # Get YAML file path
+        yaml_path_str = await unified_manager.get_config_file_path()
+        if not yaml_path_str:
+            _LOGGER.error("YAML file path not available for synthetic sensors")
+            return
+
+        # Get all backing entities that we can provide data for
+        registered_entities = await unified_manager.get_registered_entity_ids(coordinator.data)
+        _LOGGER.debug(
+            "SYNTHETIC_SETUP_DEBUG: Got %d registered backing entities", len(registered_entities)
+        )
+
+        # Store the sensor manager and backing entities in hass.data for sensor.py to use
+        if DOMAIN not in hass.data:
+            hass.data[DOMAIN] = {}
+        if entry.entry_id not in hass.data[DOMAIN]:
+            hass.data[DOMAIN][entry.entry_id] = {}
+
+        hass.data[DOMAIN][entry.entry_id]["synthetic_manager"] = unified_manager
+        hass.data[DOMAIN][entry.entry_id]["backing_entities"] = registered_entities
+        hass.data[DOMAIN][entry.entry_id]["yaml_path"] = yaml_path_str
+
+        _LOGGER.info(
+            "SYNTHETIC_SETUP_DEBUG: Synthetic sensors setup completed successfully using submodule imports"
+        )
+
+    except Exception as e:
+        _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     config = entry.data
     host = config[CONF_HOST]
     name = "SpanPanel"
 
-    _LOGGER.debug("Setting up SPAN Panel integration for host: %s", host)
+    _LOGGER.error("DEBUG: Starting SPAN Panel integration setup for host: %s", host)
 
     use_ssl_value = config.get(CONF_USE_SSL, False)
 
@@ -79,12 +144,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator = SpanPanelCoordinator(
             hass, span_panel, name, update_interval=scan_interval, config_entry=entry
         )
-        _LOGGER.debug("Created coordinator: %s", coordinator)
+        _LOGGER.error("DEBUG: Created coordinator: %s", coordinator)
 
-        _LOGGER.debug("Performing initial data refresh")
         await coordinator.async_config_entry_first_refresh()
-        _LOGGER.debug(
-            "Initial data refresh completed - coordinator data: %s",
+        _LOGGER.error(
+            "DEBUG: Initial data refresh completed - coordinator data: %s",
             type(coordinator.data).__name__ if coordinator.data else "None",
         )
 
@@ -96,22 +160,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             NAME: name,
         }
 
-        _LOGGER.debug("Setting up platforms: %s", PLATFORMS)
+        # Set up synthetic sensors with full YAML generation and registration BEFORE platforms
+        try:
+            await setup_synthetic_sensors(hass, entry, coordinator)
+            _LOGGER.debug("Successfully set up synthetic sensors")
+        except Exception as e:
+            _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
+
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-        _LOGGER.debug("Platform setup completed")
 
-        # Debug logging of entity summary
-        _LOGGER.debug("Logging entity summary")
-
-        _LOGGER.info("Successfully set up SPAN Panel integration")
         return True
 
     except Exception as e:
         _LOGGER.error("Failed to setup SPAN Panel integration: %s", e, exc_info=True)
         # Clean up on failure
         try:
-            if "span_panel" in locals() and isinstance(span_panel, SpanPanel):
-                await span_panel.close()
+            if "span_panel" in locals():
+                span_panel_instance = locals().get("span_panel")
+                if isinstance(span_panel_instance, SpanPanel):
+                    await span_panel_instance.close()
         except Exception as cleanup_error:
             _LOGGER.debug("Error during cleanup: %s", cleanup_error)
         raise

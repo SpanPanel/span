@@ -8,13 +8,12 @@ from homeassistant.config_entries import ConfigEntry
 
 from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
-from .sensor import (
+from .sensor_definitions import (
     CIRCUITS_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_SENSORS,
     STATUS_SENSORS,
     STORAGE_BATTERY_SENSORS,
-    SYNTHETIC_SENSOR_TEMPLATES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,13 +59,14 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
     # Circuit sensors are created for all circuits in the circuits collection
     # Solar legs are NOT in this collection - they're accessed via raw branch data
     circuit_sensors = total_circuits * len(CIRCUITS_SENSORS)
-    synthetic_sensors = len(SYNTHETIC_SENSOR_TEMPLATES) if solar_enabled else 0
+    # Solar synthetic sensors are now handled separately by SolarSyntheticSensors
+    solar_sensors = 3 if solar_enabled else 0  # Power, Produced Energy, Consumed Energy
     panel_sensor_count = len(PANEL_SENSORS) + len(PANEL_DATA_STATUS_SENSORS)
     status_sensors = len(STATUS_SENSORS)
     battery_sensors = len(STORAGE_BATTERY_SENSORS) if battery_enabled else 0
 
     total_sensors = (
-        circuit_sensors + synthetic_sensors + panel_sensor_count + status_sensors + battery_sensors
+        circuit_sensors + solar_sensors + panel_sensor_count + status_sensors + battery_sensors
     )
     total_switches = controllable_circuits  # Only controllable circuits get switches
     total_selects = controllable_circuits  # Only controllable circuits get selects
@@ -99,7 +99,7 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
         len(CIRCUITS_SENSORS),
     )
     if solar_enabled:
-        log_func("Synthetic sensors: %d (solar inverter)", synthetic_sensors)
+        log_func("Solar sensors: %d (synthetic inverter sensors)", solar_sensors)
     else:
         log_func("Synthetic sensors: 0 (solar disabled)")
     log_func("Panel sensors: %d", panel_sensor_count)

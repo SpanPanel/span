@@ -13,7 +13,7 @@ from homeassistant.util import dt as dt_util
 
 def create_mock_config_entry(
     data: dict[str, Any] | None = None, options: dict[str, Any] | None = None
-):
+) -> MagicMock:
     """Create a mock config entry with specified data and options."""
     mock_entry = MagicMock()
     mock_entry.data = data or {}
@@ -21,11 +21,11 @@ def create_mock_config_entry(
     return mock_entry
 
 
-def load_json_object_fixture(filename: str) -> dict[str, object]:
+def load_json_object_fixture(filename: str) -> dict[str, Any]:
     """Load a JSON object from a fixture in the local test/fixtures directory."""
     fixture_path = Path(__file__).parent / "fixtures" / filename
     with open(fixture_path, encoding="utf-8") as f:
-        return json.load(f)
+        return json.load(f)  # type: ignore[no-any-return]
 
 
 @callback

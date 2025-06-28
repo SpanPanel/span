@@ -72,15 +72,8 @@ async def test_legacy_naming_scheme_compatibility(hass: Any, enable_custom_integ
 async def test_config_entry_migration_from_legacy(hass: Any, enable_custom_integrations: Any):
     """Test migration of config entry from legacy format to new format."""
 
-    circuit_data = SpanPanelCircuitFactory.create_circuit(
-        circuit_id="1",
-        name="Test Circuit",
-        instant_power=100.0,
-    )
-
-    mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response(
-        circuits=[circuit_data]
-    )
+    # Use existing circuit data that other tests use - the test is about migration/naming, not circuit creation
+    mock_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
 
     # Start with legacy config (no options set, but include defaults for the integration)
     options = {
@@ -97,8 +90,9 @@ async def test_config_entry_migration_from_legacy(hass: Any, enable_custom_integ
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
 
+        # Test uses existing "Kitchen Outlets" circuit (circuit 1) from default panel data
         power_entity_id = get_circuit_entity_id(
-            "1", "Test Circuit", "sensor", "power", use_device_prefix=True
+            "1", "Kitchen Outlets", "sensor", "power", use_device_prefix=True
         )
         assert hass.states.get(power_entity_id) is not None
 
