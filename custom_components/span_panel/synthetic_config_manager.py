@@ -76,7 +76,9 @@ class SyntheticConfigManager:
 
             # Add device_identifier to the sensor config
             sensor_config_with_device = sensor_config.copy()
-            sensor_config_with_device["device_identifier"] = f"span_panel_{device_id}"
+            sensor_config_with_device["device_identifier"] = (
+                device_id  # PHASE 1: Use clean device identifier
+            )
 
             # Use the original sensor key (no device scoping)
             config["sensors"][sensor_key] = sensor_config_with_device
@@ -102,7 +104,7 @@ class SyntheticConfigManager:
                 return None
 
             # Check if this sensor belongs to the requested device
-            expected_device_id = f"span_panel_{device_id}"
+            expected_device_id = device_id  # PHASE 1: Use clean device identifier
             if sensor_config.get("device_identifier") != expected_device_id:
                 return None
 
@@ -130,7 +132,7 @@ class SyntheticConfigManager:
 
             # Check if this sensor belongs to the requested device
             existing_sensor = config["sensors"][sensor_key]
-            expected_device_id = f"span_panel_{device_id}"
+            expected_device_id = device_id  # PHASE 1: Use clean device identifier
             if existing_sensor.get("device_identifier") != expected_device_id:
                 return False
 
@@ -162,7 +164,7 @@ class SyntheticConfigManager:
 
             # Check if this sensor belongs to the requested device
             existing_sensor = config["sensors"][sensor_key]
-            expected_device_id = f"span_panel_{device_id}"
+            expected_device_id = device_id  # PHASE 1: Use clean device identifier
             if existing_sensor.get("device_identifier") != expected_device_id:
                 return False
 
@@ -181,7 +183,7 @@ class SyntheticConfigManager:
             Number of sensors deleted
 
         """
-        expected_device_id = f"span_panel_{device_id}"
+        expected_device_id = device_id  # PHASE 1: Use clean device identifier
 
         async with self._file_lock:
             config = await self._read_config()
@@ -221,7 +223,7 @@ class SyntheticConfigManager:
             Dictionary of sensor_key -> sensor_config for this device
 
         """
-        expected_device_id = f"span_panel_{device_id}"
+        expected_device_id = device_id  # PHASE 1: Use clean device identifier
 
         async with self._file_lock:
             config = await self._read_config()

@@ -57,6 +57,12 @@ async def setup_integration_with_yaml_config(hass: HomeAssistant):
         "unmapped_tab_30": MagicMock(name="Unmapped Tab 30"),
         "unmapped_tab_32": MagicMock(name="Unmapped Tab 32"),
     }
+    # PHASE 1: Add required status attributes for device identifier
+    span_panel.status = MagicMock()
+    span_panel.status.serial_number = "TEST12345"
+    span_panel.status.model = "Test Model"
+    span_panel.status.firmware_version = "1.0.0"
+    span_panel.host = "192.168.1.100"
     mock_coordinator.data = span_panel
 
     # Store coordinator in hass.data BEFORE creating the bridge
@@ -157,8 +163,8 @@ async def test_coordinator_entity_id_generation_from_names(
         generated_id = real_coordinator._generate_new_entity_id_from_name(
             current_id,
             entity_name,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
-            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
         )
 
         assert generated_id == expected_id, (
@@ -292,8 +298,8 @@ async def test_bidirectional_entity_migration_works_correctly(
         circuit_to_friendly = real_coordinator._generate_new_entity_id_from_name(
             test_case["circuit_id"],
             test_case["friendly_name"],
-            EntityNamingPattern.CIRCUIT_NUMBERS,
-            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
             test_case["circuit_unique_id"],
         )
 
@@ -306,8 +312,8 @@ async def test_bidirectional_entity_migration_works_correctly(
         friendly_to_circuit = real_coordinator._generate_new_entity_id_from_name(
             test_case["friendly_id"],
             test_case["friendly_name"],
-            EntityNamingPattern.FRIENDLY_NAMES,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
             test_case["circuit_unique_id"],
         )
 
@@ -320,8 +326,8 @@ async def test_bidirectional_entity_migration_works_correctly(
         roundtrip_result = real_coordinator._generate_new_entity_id_from_name(
             circuit_to_friendly,
             test_case["friendly_name"],
-            EntityNamingPattern.FRIENDLY_NAMES,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
             test_case["circuit_unique_id"],
         )
 
@@ -409,8 +415,8 @@ async def test_entity_name_to_id_conversion_is_generic(
         circuit_to_friendly = real_coordinator._generate_new_entity_id_from_name(
             test_case["circuit_id"],
             test_case["friendly_name"],
-            EntityNamingPattern.CIRCUIT_NUMBERS,
-            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
             test_case["unique_id"],
         )
         assert circuit_to_friendly == test_case["friendly_id"], (
@@ -422,8 +428,8 @@ async def test_entity_name_to_id_conversion_is_generic(
         friendly_to_circuit = real_coordinator._generate_new_entity_id_from_name(
             test_case["friendly_id"],
             test_case["friendly_name"],
-            EntityNamingPattern.FRIENDLY_NAMES,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
             test_case["unique_id"],
         )
         assert friendly_to_circuit == test_case["circuit_id"], (
@@ -435,8 +441,8 @@ async def test_entity_name_to_id_conversion_is_generic(
         round_trip_result = real_coordinator._generate_new_entity_id_from_name(
             circuit_to_friendly,
             test_case["friendly_name"],
-            EntityNamingPattern.FRIENDLY_NAMES,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
             test_case["unique_id"],
         )
         assert round_trip_result == test_case["circuit_id"], (
@@ -496,8 +502,8 @@ async def test_migration_handles_panel_level_entities_correctly(
     for test_case in panel_level_cases:
         # Panel-level entities should maintain consistent naming regardless of pattern
         for from_pattern, to_pattern in [
-            (EntityNamingPattern.CIRCUIT_NUMBERS, EntityNamingPattern.FRIENDLY_NAMES),
-            (EntityNamingPattern.FRIENDLY_NAMES, EntityNamingPattern.CIRCUIT_NUMBERS),
+            (EntityNamingPattern.CIRCUIT_NUMBERS.value, EntityNamingPattern.FRIENDLY_NAMES.value),
+            (EntityNamingPattern.FRIENDLY_NAMES.value, EntityNamingPattern.CIRCUIT_NUMBERS.value),
         ]:
             result = real_coordinator._generate_new_entity_id_from_name(
                 test_case["entity_id"],
@@ -507,7 +513,7 @@ async def test_migration_handles_panel_level_entities_correctly(
                 test_case["unique_id"],
             )
             assert result == test_case["entity_id"], (
-                f"Panel-level entity should not change: {from_pattern.value}→{to_pattern.value} "
+                f"Panel-level entity should not change: {from_pattern}→{to_pattern} "
                 f"Expected '{test_case['entity_id']}', got '{result}'"
             )
 
@@ -565,8 +571,8 @@ async def test_unmapped_tab_entities_are_not_renamed_during_migration(
         generated_id = real_coordinator._generate_new_entity_id_from_name(
             entity_id,
             friendly_name,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
-            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
         )
 
         # For unmapped entities, the generated ID should either be None (skip)
@@ -597,8 +603,8 @@ async def test_unmapped_tab_entities_are_not_renamed_during_migration(
         generated_id = real_coordinator._generate_new_entity_id_from_name(
             entity_id,
             friendly_name,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
-            EntityNamingPattern.FRIENDLY_NAMES,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
+            EntityNamingPattern.FRIENDLY_NAMES.value,
         )
 
         # Regular entities should get new IDs based on their friendly names
@@ -649,8 +655,8 @@ async def test_unmapped_tab_entities_not_renamed():
         new_entity_id = coordinator._generate_new_entity_id_from_name(
             entity_id,
             "Some Friendly Name",  # Name doesn't matter for unmapped_tab
-            EntityNamingPattern.LEGACY_NAMES,
-            EntityNamingPattern.CIRCUIT_NUMBERS,
+            EntityNamingPattern.LEGACY_NAMES.value,
+            EntityNamingPattern.CIRCUIT_NUMBERS.value,
         )
 
         # Should return None, indicating no renaming should occur

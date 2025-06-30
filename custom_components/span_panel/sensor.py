@@ -296,6 +296,7 @@ async def async_setup_entry(
                 unique_id_prefix="",
                 lifecycle_managed_externally=True,
                 data_provider_callback=data_provider_callback,
+                integration_domain=DOMAIN,  # PHASE 1: Add integration domain
             )
 
             sensor_manager = SensorManager(hass, name_resolver, async_add_entities, manager_config)  # type: ignore[misc]
@@ -391,6 +392,7 @@ async def async_setup_entry(
                     device_info=device_info,
                     unique_id_prefix=unique_id_prefix,
                     lifecycle_managed_externally=True,
+                    integration_domain=DOMAIN,  # PHASE 1: Add integration domain
                 )
 
                 sensor_manager = SensorManager(

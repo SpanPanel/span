@@ -553,7 +553,7 @@ class SolarSyntheticSensors:
         solar_sensors: dict[str, Any] = {}
 
         # Get device identifier for this panel to associate sensors with the correct device
-        device_identifier = f"span_panel_{span_panel.status.serial_number}"
+        device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
 
         # Construct synthetic entity IDs using stable, friendly naming pattern
         # These should always be stable regardless of underlying circuit naming

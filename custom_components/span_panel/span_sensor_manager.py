@@ -445,7 +445,7 @@ class SpanSensorManager:
             await config_manager.delete_all_device_sensors(device_id)
 
             # Write entire configuration atomically
-            device_identifier = f"span_panel_{device_id}"
+            device_identifier = device_id  # PHASE 1: Use clean device identifier
             config_to_write = {
                 "version": "1.0",
                 "sensors": {
@@ -496,7 +496,7 @@ class SpanSensorManager:
         """
 
         sensors: dict[str, Any] = {}
-        device_identifier = f"span_panel_{span_panel.status.serial_number}"
+        device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
 
         for circuit_id, circuit_data in span_panel.circuits.items():
             # Skip status sensors and unmapped tabs (they stay native)
@@ -572,7 +572,7 @@ class SpanSensorManager:
         """
 
         sensors: dict[str, Any] = {}
-        device_identifier = f"span_panel_{span_panel.status.serial_number}"
+        device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
 
         for description in PANEL_SENSORS:
             if description.key not in self.PANEL_SENSOR_MAPPING:
@@ -635,7 +635,7 @@ class SpanSensorManager:
         if not battery_enabled:
             return sensors
 
-        device_identifier = f"span_panel_{span_panel.status.serial_number}"
+        device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
 
         for description in STORAGE_BATTERY_SENSORS:
             if description.key not in self.PANEL_SENSOR_MAPPING:
@@ -905,6 +905,7 @@ class SpanSensorManager:
                 unique_id_prefix="",  # No prefix needed - we control unique IDs directly
                 lifecycle_managed_externally=True,
                 data_provider_callback=data_provider_callback,
+                integration_domain=DOMAIN,  # PHASE 1: Add integration domain
             )
 
             sensor_manager = SensorManager(

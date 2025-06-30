@@ -60,7 +60,7 @@ async def test_panel_sensor_yaml_generation_device_prefix(hass):
     assert panel_sensor["unit_of_measurement"] == "W"
     assert panel_sensor["device_class"] == "power"
     assert panel_sensor["state_class"] == "measurement"
-    assert panel_sensor["device_identifier"] == "span_panel_sp3-242424-001"
+    assert panel_sensor["device_identifier"] == "sp3-242424-001"
 
 
 @pytest.mark.asyncio
@@ -115,7 +115,7 @@ async def test_circuit_sensor_yaml_generation_device_prefix(hass):
     assert circuit_sensor["unit_of_measurement"] == "W"
     assert circuit_sensor["device_class"] == "power"
     assert circuit_sensor["state_class"] == "measurement"
-    assert circuit_sensor["device_identifier"] == "span_panel_sp3-242424-001"
+    assert circuit_sensor["device_identifier"] == "sp3-242424-001"
 
 
 @pytest.mark.asyncio
@@ -164,7 +164,7 @@ async def test_panel_sensor_yaml_generation_legacy(hass):
         panel_sensor["variables"]["source_value"]
         == "span_panel_synthetic_backing.circuit_0_instant_grid_power"
     )
-    assert panel_sensor["device_identifier"] == "span_panel_sp3-242424-001"
+    assert panel_sensor["device_identifier"] == "sp3-242424-001"
 
 
 @pytest.mark.asyncio
@@ -213,7 +213,7 @@ async def test_circuit_sensor_yaml_generation_legacy(hass):
         circuit_sensor["variables"]["source_value"]
         == "span_panel_synthetic_backing.circuit_1_power"
     )
-    assert circuit_sensor["device_identifier"] == "span_panel_sp3-242424-001"
+    assert circuit_sensor["device_identifier"] == "sp3-242424-001"
 
 
 @pytest.mark.asyncio
@@ -261,4 +261,4 @@ async def test_circuit_numbers_yaml_generation(hass):
         circuit_sensor["name"] == "Test Circuit Power"
     )  # Should use circuit name, not "Circuit 1 Power"
     assert circuit_sensor["entity_id"] == "sensor.span_panel_circuit_1_power"
-    assert circuit_sensor["device_identifier"] == "span_panel_sp3-242424-001"
+    assert circuit_sensor["device_identifier"] == "sp3-242424-001"

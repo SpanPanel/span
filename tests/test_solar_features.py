@@ -207,7 +207,7 @@ class TestSolarSyntheticSensors:
         assert power_sensor["device_class"] == "power"
         assert power_sensor["state_class"] == "measurement"
         # Check device association
-        assert power_sensor["device_identifier"] == "span_panel_TEST123456"
+        assert power_sensor["device_identifier"] == "TEST123456"
 
         # Check energy produced sensor (v1.0.10 compatible key)
         produced_sensor = config["sensors"]["solar_inverter_energy_produced"]
@@ -226,7 +226,7 @@ class TestSolarSyntheticSensors:
         assert produced_sensor["device_class"] == "energy"
         assert produced_sensor["state_class"] == "total_increasing"
         # Check device association
-        assert produced_sensor["device_identifier"] == "span_panel_TEST123456"
+        assert produced_sensor["device_identifier"] == "TEST123456"
 
         # Check energy consumed sensor (v1.0.10 compatible key)
         consumed_sensor = config["sensors"]["solar_inverter_energy_consumed"]
@@ -245,7 +245,89 @@ class TestSolarSyntheticSensors:
         assert consumed_sensor["device_class"] == "energy"
         assert consumed_sensor["state_class"] == "total_increasing"
         # Check device association
-        assert consumed_sensor["device_identifier"] == "span_panel_TEST123456"
+        assert consumed_sensor["device_identifier"] == "TEST123456"
+
+    @pytest.mark.asyncio
+    async def test_generate_solar_config_modern_naming_with_device_prefix(self, temp_config_dir):
+        """Test generating YAML config with modern naming (USE_DEVICE_PREFIX=True) for post-v1.0.4 installations."""
+        # Create config entry with modern options (USE_DEVICE_PREFIX=True)
+        from custom_components.span_panel.const import USE_DEVICE_PREFIX
+
+        mock_config_entry = create_mock_config_entry(
+            {CONF_HOST: "192.168.1.100"},
+            {INVERTER_ENABLE: True, INVERTER_LEG1: 15, INVERTER_LEG2: 16, USE_DEVICE_PREFIX: True},
+        )
+
+        # Create coordinator with mock data
+        mock_coordinator = MagicMock()
+        span_panel = MagicMock()
+        span_panel.circuits = {
+            "unmapped_tab_15": MagicMock(name="Unmapped Tab 15"),
+            "unmapped_tab_16": MagicMock(name="Unmapped Tab 16"),
+        }
+        # Set the status with proper serial number for device_identifier
+        span_panel.status = MagicMock()
+        span_panel.status.serial_number = "TEST123456"
+        mock_coordinator.data = span_panel
+        mock_coordinator.config_entry = mock_config_entry
+
+        # Create mock hass with coordinator data
+        mock_hass = MagicMock()
+        mock_hass.config.config_dir = temp_config_dir
+
+        async def mock_async_add_executor_job(func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        mock_hass.async_add_executor_job = mock_async_add_executor_job
+
+        from custom_components.span_panel.const import DOMAIN
+
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"coordinator": mock_coordinator}}}
+
+        solar_sensors = SolarSyntheticSensors(mock_hass, mock_config_entry, temp_config_dir)
+        await solar_sensors.generate_config(15, 16)
+
+        # Check that config file was created
+        config_file = Path(temp_config_dir) / "solar_synthetic_sensors.yaml"
+        assert config_file.exists()
+
+        # Load and verify the YAML content
+        with open(config_file) as f:
+            config = yaml.safe_load(f)
+
+        assert config["version"] == "1.0"
+        assert "sensors" in config
+
+        # Check solar inverter instant power sensor with modern naming
+        power_sensor = config["sensors"]["solar_inverter_instant_power"]
+        assert power_sensor["name"] == "Solar Inverter Instant Power"
+        assert power_sensor["formula"] == "leg1_power + leg2_power"
+
+        # Variables should still reference the existing SPAN entities (with device prefix)
+        assert power_sensor["variables"]["leg1_power"] == "sensor.span_panel_unmapped_tab_15_power"
+        assert power_sensor["variables"]["leg2_power"] == "sensor.span_panel_unmapped_tab_16_power"
+
+        # Device identifier should be clean (Phase 1 requirement)
+        assert power_sensor["device_identifier"] == "TEST123456"
+
+        # The synthetic entity_id should include device prefix for modern installations
+        assert power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_instant_power"
+
+        assert power_sensor["unit_of_measurement"] == "W"
+        assert power_sensor["device_class"] == "power"
+        assert power_sensor["state_class"] == "measurement"
+
+        # Check energy produced sensor with modern naming
+        produced_sensor = config["sensors"]["solar_inverter_energy_produced"]
+        assert produced_sensor["name"] == "Solar Inverter Energy Produced"
+        assert produced_sensor["entity_id"] == "sensor.span_panel_solar_inverter_energy_produced"
+        assert produced_sensor["device_identifier"] == "TEST123456"
+
+        # Check energy consumed sensor with modern naming
+        consumed_sensor = config["sensors"]["solar_inverter_energy_consumed"]
+        assert consumed_sensor["name"] == "Solar Inverter Energy Consumed"
+        assert consumed_sensor["entity_id"] == "sensor.span_panel_solar_inverter_energy_consumed"
+        assert consumed_sensor["device_identifier"] == "TEST123456"
 
     @pytest.mark.asyncio
     async def test_generate_solar_config_single_leg(
@@ -270,7 +352,7 @@ class TestSolarSyntheticSensors:
         assert "leg1_power" in power_sensor["variables"]
         assert "leg2_power" not in power_sensor["variables"]
         # Check device association
-        assert power_sensor["device_identifier"] == "span_panel_TEST123456"
+        assert power_sensor["device_identifier"] == "TEST123456"
 
     @pytest.mark.asyncio
     async def test_generate_solar_config_no_valid_legs(
@@ -397,6 +479,9 @@ class TestSolarSensorIntegration:
                 "unmapped_tab_15": MagicMock(name="Unmapped Tab 15"),
                 "unmapped_tab_16": MagicMock(name="Unmapped Tab 16"),
             }
+            # Set the status with proper serial number for device_identifier
+            span_panel.status = MagicMock()
+            span_panel.status.serial_number = "TEST123456"
             mock_coordinator.data = span_panel
 
             from custom_components.span_panel.const import DOMAIN

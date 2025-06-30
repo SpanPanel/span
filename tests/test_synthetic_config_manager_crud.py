@@ -113,7 +113,7 @@ class TestSyntheticConfigManagerCRUD:
         assert sensor_key in config["sensors"]
 
         created_sensor = config["sensors"][sensor_key]
-        assert created_sensor["device_identifier"] == f"span_panel_{device_id}"
+        assert created_sensor["device_identifier"] == device_id  # PHASE 1: Clean device identifier
         assert created_sensor["name"] == sample_sensor_config["name"]
         assert created_sensor["formula"] == sample_sensor_config["formula"]
         assert created_sensor["attributes"] == sample_sensor_config["attributes"]
@@ -138,7 +138,7 @@ class TestSyntheticConfigManagerCRUD:
         assert sensor_key in updated_config["sensors"]
 
         created_sensor = updated_config["sensors"][sensor_key]
-        assert created_sensor["device_identifier"] == f"span_panel_{device_id}"
+        assert created_sensor["device_identifier"] == device_id  # PHASE 1: Clean device identifier
 
     async def test_create_sensor_with_complex_attributes(
         self, config_manager, complex_sensor_config
@@ -168,7 +168,7 @@ class TestSyntheticConfigManagerCRUD:
 
         assert sensor_config is not None
         assert sensor_config["name"] == "Solar Inverter Instant Power"
-        assert sensor_config["device_identifier"] == f"span_panel_{device_id}"
+        assert sensor_config["device_identifier"] == device_id  # PHASE 1: Clean device identifier
         assert "variables" in sensor_config
         assert "leg1_power" in sensor_config["variables"]
 
@@ -221,7 +221,7 @@ class TestSyntheticConfigManagerCRUD:
         assert sensor_config["name"] == "Updated Solar Inverter Power"
         assert sensor_config["formula"] == "leg1_power + leg2_power + boost"
         assert "boost" in sensor_config["variables"]
-        assert sensor_config["device_identifier"] == f"span_panel_{device_id}"
+        assert sensor_config["device_identifier"] == device_id  # PHASE 1: Clean device identifier
 
     async def test_update_sensor_not_exists(self, populated_config_manager, sample_sensor_config):
         """Test updating a non-existent sensor."""
@@ -370,7 +370,9 @@ class TestSyntheticConfigManagerCRUD:
 
         # All sensors should have correct device_identifier
         for sensor_config in sensors.values():
-            assert sensor_config["device_identifier"] == f"span_panel_{device_id}"
+            assert (
+                sensor_config["device_identifier"] == device_id
+            )  # PHASE 1: Clean device identifier
 
     async def test_list_device_sensors_no_device(self, populated_config_manager):
         """Test listing sensors for a non-existent device."""

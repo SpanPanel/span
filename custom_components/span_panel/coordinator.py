@@ -24,7 +24,6 @@ from span_panel_api.exceptions import (
 
 from .const import API_TIMEOUT, EntityNamingPattern
 from .helpers import (
-    construct_entity_id,
     get_circuit_number,
     get_user_friendly_suffix,
     sanitize_name_for_entity_id,
@@ -38,6 +37,8 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
     """Class to manage fetching data from the API."""
+
+    _migration_target_pattern: EntityNamingPattern | str | None = None
 
     def __init__(
         self,
@@ -460,42 +461,30 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         circuit_friendly_name = circuit.name
 
         # For migration, we need to construct entity ID for the TARGET pattern, not current config
-        # Determine target pattern from the migration context
-        if hasattr(self, "_migration_target_pattern"):
-            target_pattern = self._migration_target_pattern
+        # The target pattern should always be set during migration
+        if not hasattr(self, "_migration_target_pattern"):
+            _LOGGER.error("_migration_target_pattern not set during migration simulation")
+            return None
+
+        # Get the target pattern value (convert enum to string if needed)
+        if self._migration_target_pattern is None:
+            _LOGGER.error("_migration_target_pattern is None during migration simulation")
+            return None
+        elif hasattr(self._migration_target_pattern, "value"):
+            target_pattern = self._migration_target_pattern.value
         else:
-            # Fallback to using construct_entity_id with current config
-            if domain == "switch":
-                return construct_entity_id(
-                    self,
-                    self.data,
-                    "switch",
-                    circuit_friendly_name,
-                    circuit_number,
-                    "breaker",
-                )
-            else:
-                if unique_id is None:
-                    return None
-                serial = self.data.status.serial_number
-                prefix = f"span_{serial}_{circuit_id}_"
-                suffix = unique_id[len(prefix) :]
-                entity_suffix = get_user_friendly_suffix(suffix)
-                return construct_entity_id(
-                    self,
-                    self.data,
-                    "sensor",
-                    circuit_friendly_name,
-                    circuit_number,
-                    entity_suffix,
-                )
+            target_pattern = self._migration_target_pattern
 
         # Get device name for prefix
-        device_info = panel_to_device_info(self.data)
-        device_name_raw = device_info.get("name")
-        if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
-        else:
+        try:
+            device_info = panel_to_device_info(self.data)
+            device_name_raw = device_info.get("name")
+            if device_name_raw:
+                device_name = sanitize_name_for_entity_id(device_name_raw)
+            else:
+                device_name = "span_panel"
+        except Exception as e:
+            _LOGGER.debug("Failed to get device info: %s, using fallback", e)
             device_name = "span_panel"
 
         # Construct entity ID based on target pattern
@@ -510,10 +499,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             entity_suffix = get_user_friendly_suffix(suffix)
 
         # Apply the target pattern format
-        if target_pattern == EntityNamingPattern.CIRCUIT_NUMBERS:
+        if target_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value:
             # Circuit numbers format: device_circuit_N_suffix
             return f"{domain}.{device_name}_circuit_{circuit_number}_{entity_suffix}"
-        elif target_pattern == EntityNamingPattern.FRIENDLY_NAMES:
+        elif target_pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
             # Friendly names format: device_friendly_name_suffix
             circuit_name_sanitized = sanitize_name_for_entity_id(circuit_friendly_name)
             return f"{domain}.{device_name}_{circuit_name_sanitized}_{entity_suffix}"

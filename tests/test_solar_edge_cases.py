@@ -133,6 +133,9 @@ class TestSolarEdgeCases:
             "unmapped_tab_15": MagicMock(name="Unmapped Tab 15"),
             "unmapped_tab_16": MagicMock(name="Unmapped Tab 16"),
         }
+        # Set the status with proper serial number for device_identifier
+        span_panel.status = MagicMock()
+        span_panel.status.serial_number = "TEST123456"
         mock_coordinator.data = span_panel
 
         # Mock async_add_executor_job

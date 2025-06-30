@@ -40,6 +40,9 @@ class TestEntityIdInYaml:
             "unmapped_tab_16": MagicMock(name="Solar Leg 2"),
         }
         coordinator.data.name = "Test Panel"
+        # Set the status with proper serial number for device_identifier
+        coordinator.data.status = MagicMock()
+        coordinator.data.status.serial_number = "TEST123456"
         # Set the config entry so entity ID generation works correctly
         coordinator.config_entry = mock_config_entry
 

@@ -14,6 +14,7 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401  # type: ignore[misc]
@@ -28,6 +29,7 @@ from .coordinator import SpanPanelCoordinator
 from .span_panel import SpanPanel
 from .span_panel_api import Options
 from .span_sensor_manager import SpanSensorManager
+from .util import panel_to_device_info
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -37,6 +39,21 @@ PLATFORMS: list[Platform] = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def ensure_device_registered(
+    hass: HomeAssistant, entry: ConfigEntry, span_panel: SpanPanel
+) -> None:
+    """Ensure SPAN device is registered in device registry before synthetic sensor creation."""
+    device_registry = dr.async_get(hass)
+    device_info = panel_to_device_info(span_panel)
+
+    # Register device if it doesn't exist
+    device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+    _LOGGER.debug(
+        "DEVICE_REGISTRATION: Ensured device is registered for serial %s",
+        span_panel.status.serial_number,
+    )
 
 
 async def setup_synthetic_sensors(
@@ -173,6 +190,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             COORDINATOR: coordinator,
             NAME: name,
         }
+
+        # PHASE 1 FIX: Ensure device is registered BEFORE synthetic sensors are created
+        await ensure_device_registered(hass, entry, span_panel)
 
         # Set up synthetic sensors with full YAML generation and registration BEFORE platforms
         try:

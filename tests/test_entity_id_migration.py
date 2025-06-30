@@ -30,6 +30,10 @@ class TestEntityIdMigration:
         coordinator.data = MagicMock()
         coordinator.config_entry = config_entry
 
+        # Set the status with proper serial number for device_identifier
+        coordinator.data.status = MagicMock()
+        coordinator.data.status.serial_number = "TEST123456"
+
         # Create mock circuits
         mock_circuit_30 = MagicMock()
         mock_circuit_30.name = "Unmapped Tab 30"

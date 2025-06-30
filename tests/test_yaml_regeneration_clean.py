@@ -34,6 +34,13 @@ class TestYamlCircuitChanges:
         coordinator = MagicMock()
         coordinator.data = MagicMock()
 
+        # Mock the panel status with serial number
+        coordinator.data.status = MagicMock()
+        coordinator.data.status.serial_number = "TEST123456"
+        coordinator.data.status.model = "TEST_MODEL"
+        coordinator.data.status.firmware_version = "1.0.0"
+        coordinator.data.status.host = "192.168.1.100"
+
         # Create initial mock circuits
         mock_circuit_30 = MagicMock()
         mock_circuit_30.name = "Unmapped Tab 30"

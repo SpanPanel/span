@@ -11,7 +11,7 @@ sensors:
     unit_of_measurement: "W"
     device_class: "power"
     state_class: "measurement"
-    device_identifier: "span_panel_TEST123"
+    device_identifier: "TEST123"
 
   solar_inverter_energy_produced:
     name: "Solar Inverter Energy Produced"
@@ -23,7 +23,7 @@ sensors:
     unit_of_measurement: "Wh"
     device_class: "energy"
     state_class: "total_increasing"
-    device_identifier: "span_panel_TEST123"
+    device_identifier: "TEST123"
 
   # Panel 1 (TEST123) - Custom House Total
   house_total_consumption:
@@ -36,7 +36,7 @@ sensors:
     unit_of_measurement: "W"
     device_class: "power"
     state_class: "measurement"
-    device_identifier: "span_panel_TEST123"
+    device_identifier: "TEST123"
 
   # Panel 2 (TEST456) - Solar Inverter Sensors (different panel)
   garage_solar_inverter_power:
@@ -48,7 +48,7 @@ sensors:
     unit_of_measurement: "W"
     device_class: "power"
     state_class: "measurement"
-    device_identifier: "span_panel_TEST456"
+    device_identifier: "TEST456"
 
   garage_solar_inverter_energy:
     name: "Garage Solar Inverter Energy"
@@ -59,7 +59,7 @@ sensors:
     unit_of_measurement: "Wh"
     device_class: "energy"
     state_class: "total_increasing"
-    device_identifier: "span_panel_TEST456"
+    device_identifier: "TEST456"
 
   # Panel 2 (TEST456) - Workshop Total
   workshop_total_consumption:
@@ -72,7 +72,7 @@ sensors:
     unit_of_measurement: "W"
     device_class: "power"
     state_class: "measurement"
-    device_identifier: "span_panel_TEST456"
+    device_identifier: "TEST456"
     attributes:
       last_updated: "{{ now() }}"
       data_source: "SPAN Panel Workshop"
@@ -89,7 +89,7 @@ sensors:
     unit_of_measurement: "W"
     device_class: "power"
     state_class: "measurement"
-    device_identifier: "span_panel_TEST123"
+    device_identifier: "TEST123"
     attributes:
       flow_direction: >
         {% if value > 0 %}
@@ -112,7 +112,7 @@ sensors:
     unit_of_measurement: "W"
     device_class: "power"
     state_class: "measurement"
-    device_identifier: "span_panel_TEST456"
+    device_identifier: "TEST456"
     attributes:
       peak_time: >
         {% if current_load == value %}
@@ -147,7 +147,7 @@ sensors:
     unit_of_measurement: "Wh"
     device_class: "energy"
     state_class: "total"
-    device_identifier: "span_panel_TEST123"
+    device_identifier: "TEST123"
     attributes:
       net_energy: "{{ produced_today - consumed_today }}"
       self_consumption_ratio: "{{ (consumed_today / produced_today * 100) | round(1) if produced_today > 0 else 0 }}%"
