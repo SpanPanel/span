@@ -360,10 +360,9 @@ class SpanUnmappedCircuitSensor(
         description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str | None:
         """Generate entity ID for unmapped circuit sensors."""
-        tab_number = self.circuit_id.replace("unmapped_tab_", "")
-        # Map raw sensor keys to legacy simplified format for backward compatibility
+        # Pass the full circuit_id to the helper (e.g., "unmapped_tab_32")
         sensor_suffix = self._map_key_to_legacy_format(description.key)
-        return construct_unmapped_entity_id(span_panel, tab_number, sensor_suffix)
+        return construct_unmapped_entity_id(span_panel, self.circuit_id, sensor_suffix)
 
     def _map_key_to_legacy_format(self, key: str) -> str:
         """Map raw sensor keys to legacy simplified format for backward compatibility."""

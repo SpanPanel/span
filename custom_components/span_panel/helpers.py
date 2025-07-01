@@ -565,18 +565,18 @@ def construct_unmapped_unique_id(
     return f"span_{span_panel.status.serial_number}_unmapped_tab_{circuit_number}_{suffix}"
 
 
-def construct_unmapped_entity_id(
-    span_panel: SpanPanel, circuit_number: int | str, suffix: str
-) -> str:
+def construct_unmapped_entity_id(span_panel: SpanPanel, circuit_id: str, suffix: str) -> str:
     """Construct entity ID for unmapped tab with consistent modern naming."""
-    # Always use device prefix and circuit numbers for unmapped entities
+    # Always use device prefix for unmapped entities
+    # circuit_id is "unmapped_tab_32", add device prefix and suffix to create
+    # "sensor.span_panel_unmapped_tab_32_power"
     device_info = panel_to_device_info(span_panel)
     device_name_raw = device_info.get("name")
     if device_name_raw:
         device_name = slugify(device_name_raw)
-        return f"sensor.{device_name}_unmapped_tab_{circuit_number}_{suffix}"
+        return f"sensor.{device_name}_{circuit_id}_{suffix}"
     else:
-        return f"sensor.unmapped_tab_{circuit_number}_{suffix}"
+        return f"sensor.{circuit_id}_{suffix}"
 
 
 def construct_unmapped_friendly_name(
