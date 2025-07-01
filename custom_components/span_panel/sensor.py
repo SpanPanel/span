@@ -28,13 +28,13 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    construct_circuit_unique_id,
     construct_panel_entity_id,
     construct_panel_friendly_name,
     construct_panel_unique_id,
     construct_status_friendly_name,
     construct_unmapped_entity_id,
     construct_unmapped_friendly_name,
-    construct_unmapped_unique_id,
     panel_to_device_info,
 )
 from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
@@ -340,10 +340,10 @@ class SpanUnmappedCircuitSensor(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
         """Generate unique ID for unmapped circuit sensors."""
-        tab_number = self.circuit_id.replace("unmapped_tab_", "")
-        # Map raw sensor keys to legacy simplified format for backward compatibility
+        # Unmapped tab sensors are regular circuit sensors, use standard circuit unique ID pattern
+        # circuit_id is already "unmapped_tab_32", so this creates "span_{serial}_unmapped_tab_32_{suffix}"
         sensor_suffix = self._map_key_to_legacy_format(description.key)
-        return construct_unmapped_unique_id(span_panel, tab_number, sensor_suffix)
+        return construct_circuit_unique_id(span_panel, self.circuit_id, sensor_suffix)
 
     def _generate_friendly_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
