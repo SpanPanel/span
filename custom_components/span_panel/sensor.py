@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 import logging
 from typing import Any, Generic, TypeVar
@@ -19,6 +20,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import (
     COORDINATOR,
@@ -27,8 +29,12 @@ from .const import (
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_panel_entity_id,
+    construct_panel_friendly_name,
+    construct_panel_unique_id,
+    construct_status_friendly_name,
     construct_unmapped_entity_id,
     construct_unmapped_friendly_name,
+    construct_unmapped_unique_id,
     panel_to_device_info,
 )
 from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
@@ -54,8 +60,8 @@ T = TypeVar("T", bound=SensorEntityDescription)
 D = TypeVar("D")  # For the type returned by get_data_source
 
 
-class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D]):
-    """Base class for Span Panel Sensors."""
+class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D], ABC):
+    """Abstract base class for Span Panel Sensors with overrideable methods."""
 
     def __init__(
         self,
@@ -74,14 +80,17 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info  # Re-enable device info
-        base_name: str | None = getattr(description, "name", None)
 
-        # Friendly name should never include device prefix - only entity_id follows naming patterns
-        # The device context is already provided by the device_info association
-        self._attr_name = base_name or ""
+        # Use abstract methods to generate entity properties
+        self._attr_name = self._generate_friendly_name(span_panel, description)
 
         if span_panel.status.serial_number and description.key:
-            self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
+            self._attr_unique_id = self._generate_unique_id(span_panel, description)
+
+        # Generate entity_id using abstract method
+        entity_id = self._generate_entity_id(data_coordinator, span_panel, description)
+        if entity_id:
+            self.entity_id = entity_id
 
         self._attr_icon = "mdi:flash"
 
@@ -92,6 +101,54 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._attr_entity_registry_visible_default = description.entity_registry_visible_default
 
         _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+
+    @abstractmethod
+    def _generate_unique_id(self, span_panel: SpanPanel, description: T) -> str:
+        """Generate unique ID for the sensor.
+
+        Subclasses must implement this to define their unique ID strategy.
+
+        Args:
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Unique ID string
+
+        """
+
+    @abstractmethod
+    def _generate_friendly_name(self, span_panel: SpanPanel, description: T) -> str:
+        """Generate friendly name for the sensor.
+
+        Subclasses must implement this to define their naming strategy.
+
+        Args:
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Friendly name string
+
+        """
+
+    @abstractmethod
+    def _generate_entity_id(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel, description: T
+    ) -> str | None:
+        """Generate entity ID for the sensor.
+
+        Subclasses must implement this to define their entity ID strategy.
+
+        Args:
+            coordinator: The coordinator instance
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Entity ID string or None
+
+        """
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -136,27 +193,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
                     type(data_source).__name__,
                 )
 
-                # Extra debug for circuit 15 (the problematic one)
-                if circuit_id == "15":
-                    _LOGGER.debug(
-                        "CIRCUIT_15_POWER_DEBUG: Circuit 15 detailed - instant_power=%s, produced_energy=%s, consumed_energy=%s",
-                        instant_power,
-                        getattr(data_source, "produced_energy", None),
-                        getattr(data_source, "consumed_energy", None),
-                    )
-
             raw_value: float | int | str | None = value_function(data_source)
-
-            # Debug the function result
-            if hasattr(self, "id") and hasattr(data_source, "instant_power"):
-                circuit_id = getattr(self, "id", "unknown")
-                description_key = getattr(self.entity_description, "key", "unknown")
-                _LOGGER.debug(
-                    "CIRCUIT_POWER_RESULT: Circuit %s, sensor %s, raw_value after value_function=%s",
-                    circuit_id,
-                    description_key,
-                    raw_value,
-                )
 
             _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
 
@@ -190,21 +227,34 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         span_panel: SpanPanel,
     ) -> None:
         """Initialize the Span Panel data status sensor."""
-        _LOGGER.debug(
-            "STATUS_SENSOR_DEBUG: Initializing SpanPanelPanelStatus for %s", description.name
-        )
         super().__init__(data_coordinator, description, span_panel)
         _LOGGER.debug(
             "STATUS_SENSOR_DEBUG: SpanPanelPanelStatus initialized for %s", description.name
         )
 
-        # Override entity_id to use panel-level naming pattern
-        if hasattr(description, "key") and description.key:
-            entity_id = construct_panel_entity_id(
-                data_coordinator, span_panel, "sensor", description.key
-            )
-            if entity_id:
-                self.entity_id = entity_id
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for panel data sensors."""
+        return construct_panel_unique_id(span_panel, description.key)
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for panel data sensors."""
+        return construct_panel_friendly_name(description.name)
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelDataSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for panel data sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            return construct_panel_entity_id(coordinator, span_panel, "sensor", entity_suffix)
+        return None
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
         """Get the data source for the panel data status sensor."""
@@ -227,13 +277,29 @@ class SpanPanelStatus(
         super().__init__(data_coordinator, description, span_panel)
         _LOGGER.debug("STATUS_SENSOR_DEBUG: SpanPanelStatus initialized for %s", description.name)
 
-        # Override entity_id to use panel-level naming pattern
-        if hasattr(description, "key") and description.key:
-            entity_id = construct_panel_entity_id(
-                data_coordinator, span_panel, "sensor", description.key
-            )
-            if entity_id:
-                self.entity_id = entity_id
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelStatusSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for panel status sensors."""
+        return construct_panel_unique_id(span_panel, description.key)
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelStatusSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for panel status sensors."""
+        return construct_status_friendly_name(description.name)
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelStatusSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for panel status sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            return construct_panel_entity_id(coordinator, span_panel, "sensor", entity_suffix)
+        return None
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
         """Get the data source for the panel status sensor."""
@@ -270,30 +336,34 @@ class SpanUnmappedCircuitSensor(
 
         super().__init__(data_coordinator, description_with_circuit, span_panel)
 
-        # Override friendly name to include unmapped tab information
-        if circuit_id.startswith("unmapped_tab_"):
-            tab_number = circuit_id.replace("unmapped_tab_", "")
-            description_name = str(description.name) if description.name else "Sensor"
-            self._attr_name = construct_unmapped_friendly_name(tab_number, description_name)
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for unmapped circuit sensors."""
+        tab_number = self.circuit_id.replace("unmapped_tab_", "")
+        # Map raw sensor keys to legacy simplified format for backward compatibility
+        sensor_suffix = self._map_key_to_legacy_format(description.key)
+        return construct_unmapped_unique_id(span_panel, tab_number, sensor_suffix)
 
-        # Override unique_id to use unmapped pattern
-        if span_panel.status.serial_number:
-            # Extract tab number from circuit_id (e.g., "unmapped_tab_15" -> "15")
-            tab_number = circuit_id.replace("unmapped_tab_", "")
-            # Map raw sensor keys to legacy simplified format for backward compatibility
-            sensor_suffix = self._map_key_to_legacy_format(description.key)
-            self._attr_unique_id = (
-                f"span_{span_panel.status.serial_number}_unmapped_tab_{tab_number}_{sensor_suffix}"
-            )
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for unmapped circuit sensors."""
+        tab_number = self.circuit_id.replace("unmapped_tab_", "")
+        description_name = str(description.name) if description.name else "Sensor"
+        return construct_unmapped_friendly_name(tab_number, description_name)
 
-        # Override entity_id to use stable unmapped pattern
-        if circuit_id.startswith("unmapped_tab_"):
-            tab_number = circuit_id.replace("unmapped_tab_", "")
-            # Map raw sensor keys to legacy simplified format for backward compatibility
-            sensor_suffix = self._map_key_to_legacy_format(description.key)
-            entity_id = construct_unmapped_entity_id(span_panel, tab_number, sensor_suffix)
-            if entity_id:
-                self.entity_id = entity_id
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelCircuitsSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for unmapped circuit sensors."""
+        tab_number = self.circuit_id.replace("unmapped_tab_", "")
+        # Map raw sensor keys to legacy simplified format for backward compatibility
+        sensor_suffix = self._map_key_to_legacy_format(description.key)
+        return construct_unmapped_entity_id(span_panel, tab_number, sensor_suffix)
 
     def _map_key_to_legacy_format(self, key: str) -> str:
         """Map raw sensor keys to legacy simplified format for backward compatibility."""

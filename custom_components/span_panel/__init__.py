@@ -14,7 +14,7 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401  # type: ignore[misc]
@@ -26,6 +26,11 @@ from .const import (
     NAME,
 )
 from .coordinator import SpanPanelCoordinator
+from .helpers import (
+    build_circuit_unique_id,
+    build_panel_unique_id,
+    build_synthetic_unique_id,
+)
 from .span_panel import SpanPanel
 from .span_panel_api import Options
 from .span_sensor_manager import SpanSensorManager
@@ -39,6 +44,119 @@ PLATFORMS: list[Platform] = [
 ]
 
 _LOGGER = logging.getLogger(__name__)
+
+# Config entry version for unique ID consistency migration
+CURRENT_CONFIG_VERSION = 2
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate config entry for unique ID consistency."""
+    _LOGGER.debug("Checking config entry version: %s", config_entry.version)
+
+    if config_entry.version < CURRENT_CONFIG_VERSION:
+        _LOGGER.info(
+            "Migrating config entry from version %s to %s for unique ID consistency",
+            config_entry.version,
+            CURRENT_CONFIG_VERSION,
+        )
+
+        # Perform unique ID migration
+        await migrate_unique_ids_for_consistency(hass, config_entry)
+
+        # Update config entry version
+        config_entry.version = CURRENT_CONFIG_VERSION
+        _LOGGER.info("Successfully migrated config entry to version %s", CURRENT_CONFIG_VERSION)
+
+    return True
+
+
+async def migrate_unique_ids_for_consistency(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
+    """Migrate existing unique IDs to consistent pattern."""
+
+    entity_registry = er.async_get(hass)
+
+    # Get all entities for this config entry
+    entities = er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
+
+    migration_count = 0
+    for entity in entities:
+        old_unique_id = entity.unique_id
+
+        # Convert old inconsistent patterns to new consistent pattern
+        new_unique_id = convert_to_consistent_unique_id_pattern(old_unique_id)
+
+        if new_unique_id != old_unique_id:
+            _LOGGER.info("Migrating unique ID: %s -> %s", old_unique_id, new_unique_id)
+
+            # Update entity with new unique ID (Home Assistant handles previous_unique_id automatically)
+            entity_registry.async_update_entity(entity.entity_id, new_unique_id=new_unique_id)
+            migration_count += 1
+
+    _LOGGER.info("Migrated %d unique IDs to consistent pattern", migration_count)
+
+
+def convert_to_consistent_unique_id_pattern(old_unique_id: str) -> str:
+    """Convert old unique ID patterns to consistent format using pure helper functions.
+
+    This function uses the same pure build functions that generate new unique IDs to ensure
+    consistency. It extracts components from old unique IDs and reconstructs them using
+    current generation logic as the single source of truth.
+    """
+    # Handle legacy synthetic patterns - convert to new format
+    if "_synthetic_" in old_unique_id:
+        # Legacy: span_abc123_synthetic_15_16_solar_inverter_instant_power
+        # Extract serial and sensor name, let helper build the new format
+        parts = old_unique_id.split("_synthetic_")
+        if len(parts) == 2:
+            serial = parts[0].replace("span_", "")
+            remainder = parts[1]  # 15_16_solar_inverter_instant_power
+
+            # Skip circuit numbers, get sensor name
+            remainder_parts = remainder.split("_")
+            if len(remainder_parts) >= 3:
+                sensor_name = "_".join(remainder_parts[2:])  # solar_inverter_instant_power
+
+                # Fix known legacy suffix inconsistencies
+                if sensor_name.endswith("_instant_power"):
+                    sensor_name = sensor_name.replace("_instant_power", "_power")
+
+                # Let the helper build the correct unique ID
+                return build_synthetic_unique_id(serial, sensor_name)
+
+    # For other patterns, extract components and use pure build functions
+    if old_unique_id.startswith("span_"):
+        parts = old_unique_id.split("_")
+        if len(parts) >= 3:
+            serial = parts[1]  # abc123
+
+            # Check if it's a circuit pattern
+            if len(parts) >= 5 and parts[2] == "circuit":
+                # Pattern: span_serial_circuit_uuid_suffix
+                circuit_id = f"circuit_{parts[3]}"  # circuit_uuid
+                old_suffix = parts[4]  # Just the suffix part
+
+                # Use pure build function to generate what it should be
+                return build_circuit_unique_id(serial, circuit_id, old_suffix)
+
+            elif len(parts) >= 4 and len(parts[2]) == 32:
+                # Pattern: span_serial_uuid_suffix (no circuit_ prefix)
+                circuit_id = parts[2]  # uuid
+                old_suffix = parts[3]  # Just the suffix part
+
+                # Use pure build function to generate what it should be
+                return build_circuit_unique_id(serial, circuit_id, old_suffix)
+
+            else:
+                # Panel pattern: span_serial_description_key
+                description_key = "_".join(parts[2:])
+
+                # Use pure build function to generate what it should be
+                return build_panel_unique_id(serial, description_key)
+
+    # If we can't parse it, return unchanged
+    return old_unique_id
 
 
 async def ensure_device_registered(

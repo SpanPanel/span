@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.util import slugify
 
@@ -57,8 +57,6 @@ def construct_entity_id(
 
     """
     config_entry = coordinator.config_entry
-    if config_entry is None:
-        raise RuntimeError("Config entry missing from coordinator")
 
     # For existing installations with empty options, default to False for backward compatibility
     # For new installations, these will be explicitly set to True in create_new_entry()
@@ -101,7 +99,7 @@ def construct_entity_id(
 
 
 def get_user_friendly_suffix(description_key: str) -> str:
-    """Convert API field names to user-friendly entity ID suffixes."""
+    """Convert API description keys to user-friendly suffixes for consistent naming."""
     suffix_mapping = {
         # Circuit sensor API field mappings
         "instantPowerW": "power",
@@ -110,13 +108,13 @@ def get_user_friendly_suffix(description_key: str) -> str:
         "importedEnergyWh": "energy_imported",
         "exportedEnergyWh": "energy_exported",
         "circuit_priority": "priority",
-        # Panel sensor API field mappings
-        "instantGridPowerW": "current_power",
+        # Panel sensor API field mappings - CONSISTENT PATTERN
+        "instantGridPowerW": "grid_power",  # Descriptive to differentiate from other power types
         "feedthroughPowerW": "feed_through_power",
-        "mainMeterEnergyProducedWh": "main_meter_produced_energy",
-        "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",
-        "feedthroughEnergyProducedWh": "feed_through_produced_energy",
-        "feedthroughEnergyConsumedWh": "feed_through_consumed_energy",
+        "mainMeterEnergyProducedWh": "main_meter_energy_produced",  # Consistent naming
+        "mainMeterEnergyConsumedWh": "main_meter_energy_consumed",  # Consistent naming
+        "feedthroughEnergyProducedWh": "feed_through_energy_produced",  # Consistent naming
+        "feedthroughEnergyConsumedWh": "feed_through_energy_consumed",  # Consistent naming
         "batteryPercentage": "battery_percentage",
         "dsmState": "dsm_state",
     }
@@ -126,6 +124,233 @@ def get_user_friendly_suffix(description_key: str) -> str:
 
     # Otherwise, sanitize by converting dots to underscores and making lowercase
     return description_key.replace(".", "_").lower()
+
+
+def build_circuit_unique_id(serial: str, circuit_id: str, description_key: str) -> str:
+    """Build unique ID for circuit sensors using consistent pattern (pure function).
+
+    Args:
+        serial: Panel serial number
+        circuit_id: Circuit ID from panel API (UUID or tab number)
+        description_key: Sensor description key (e.g., "instantPowerW")
+
+    Returns:
+        Unique ID like "span_{serial}_{circuit_id}_{consistent_suffix}"
+
+    """
+    consistent_suffix = get_user_friendly_suffix(description_key)
+    return f"span_{serial.lower()}_{circuit_id}_{consistent_suffix}"
+
+
+def build_panel_unique_id(serial: str, description_key: str) -> str:
+    """Build unique ID for panel-level sensors using consistent pattern (pure function).
+
+    Args:
+        serial: Panel serial number
+        description_key: Sensor description key (e.g., "instantGridPowerW")
+
+    Returns:
+        Unique ID like "span_{serial}_{consistent_suffix}"
+
+    """
+    consistent_suffix = get_user_friendly_suffix(description_key)
+    return f"span_{serial.lower()}_{consistent_suffix}"
+
+
+def build_switch_unique_id(serial: str, circuit_id: str) -> str:
+    """Build unique ID for switch entities using consistent pattern (pure function).
+
+    Args:
+        serial: Panel serial number
+        circuit_id: Circuit ID from panel API
+
+    Returns:
+        Unique ID like "span_{serial}_relay_{circuit_id}"
+
+    """
+    return f"span_{serial}_relay_{circuit_id}"
+
+
+def build_binary_sensor_unique_id(serial: str, description_key: str) -> str:
+    """Build unique ID for binary sensor entities using consistent pattern (pure function).
+
+    Args:
+        serial: Panel serial number
+        description_key: Sensor description key (e.g., "doorState")
+
+    Returns:
+        Unique ID like "span_{serial}_{description_key}"
+
+    """
+    return f"span_{serial}_{description_key}"
+
+
+def build_select_unique_id(serial: str, select_id: str) -> str:
+    """Build unique ID for select entities using consistent pattern (pure function).
+
+    Args:
+        serial: Panel serial number
+        select_id: Select entity identifier
+
+    Returns:
+        Unique ID like "span_{serial}_select_{select_id}"
+
+    """
+    return f"span_{serial}_select_{select_id}"
+
+
+def build_synthetic_unique_id(serial: str, sensor_name: str) -> str:
+    """Build unique ID for synthetic sensors using consistent pattern (pure function).
+
+    Args:
+        serial: Panel serial number
+        sensor_name: Complete sensor name with suffix (e.g., "solar_inverter_power")
+
+    Returns:
+        Unique ID like "span_{serial}_{sensor_name}"
+
+    """
+    return f"span_{serial.lower()}_{sensor_name}"
+
+
+def construct_circuit_unique_id(
+    span_panel: SpanPanel, circuit_id: str, description_key: str
+) -> str:
+    """Construct unique ID for circuit sensors using consistent pattern.
+
+    Args:
+        span_panel: The span panel data
+        circuit_id: Circuit ID from panel API (UUID or tab number)
+        description_key: Sensor description key (e.g., "instantPowerW")
+
+    Returns:
+        Unique ID like "span_{serial}_{circuit_id}_{consistent_suffix}"
+
+    Examples:
+        span_abc123_0dad2f16cd514812ae1807b0457d473e_power
+        span_abc123_circuit_15_energy_produced
+
+    """
+    return build_circuit_unique_id(span_panel.status.serial_number, circuit_id, description_key)
+
+
+def construct_panel_unique_id(span_panel: SpanPanel, description_key: str) -> str:
+    """Construct unique ID for panel-level sensors using consistent pattern.
+
+    Args:
+        span_panel: The span panel data
+        description_key: Sensor description key (e.g., "instantGridPowerW")
+
+    Returns:
+        Unique ID like "span_{serial}_{consistent_suffix}" (uses descriptive consistent names)
+
+    Examples:
+        span_abc123_grid_power
+        span_abc123_feed_through_power
+        span_abc123_dsm_state
+
+    """
+    return build_panel_unique_id(span_panel.status.serial_number, description_key)
+
+
+def construct_switch_unique_id(span_panel: SpanPanel, circuit_id: str) -> str:
+    """Construct unique ID for switch entities using consistent pattern.
+
+    Args:
+        span_panel: The span panel data
+        circuit_id: Circuit ID from panel API
+
+    Returns:
+        Unique ID like "span_{serial}_relay_{circuit_id}"
+
+    Examples:
+        span_abc123_relay_0dad2f16cd514812ae1807b0457d473e
+
+    """
+    return build_switch_unique_id(span_panel.status.serial_number, circuit_id)
+
+
+def construct_binary_sensor_unique_id(span_panel: SpanPanel, description_key: str) -> str:
+    """Construct unique ID for binary sensor entities using consistent pattern.
+
+    Args:
+        span_panel: The span panel data
+        description_key: Sensor description key (e.g., "doorState")
+
+    Returns:
+        Unique ID like "span_{serial}_{description_key}"
+
+    Examples:
+        span_abc123_doorState
+        span_abc123_eth0Link
+
+    """
+    return build_binary_sensor_unique_id(span_panel.status.serial_number, description_key)
+
+
+def construct_select_unique_id(span_panel: SpanPanel, select_id: str) -> str:
+    """Construct unique ID for select entities using consistent pattern.
+
+    Args:
+        span_panel: The span panel data
+        select_id: Select entity identifier
+
+    Returns:
+        Unique ID like "span_{serial}_select_{select_id}"
+
+    Examples:
+        span_abc123_select_priority_mode
+
+    """
+    return build_select_unique_id(span_panel.status.serial_number, select_id)
+
+
+def construct_synthetic_unique_id(span_panel: SpanPanel, sensor_name: str) -> str:
+    """Construct unique ID for synthetic sensors using consistent pattern.
+
+    Args:
+        span_panel: The span panel data
+        sensor_name: Complete sensor name with suffix (e.g., "solar_inverter_power")
+
+    Returns:
+        Unique ID like "span_{serial}_{sensor_name}"
+
+    Examples:
+        span_abc123_solar_inverter_power
+        span_abc123_backup_circuits_power
+        span_abc123_whole_house_net_power
+
+    """
+    return build_synthetic_unique_id(span_panel.status.serial_number, sensor_name)
+
+
+def construct_sensor_manager_unique_id(
+    serial_number: str, circuit_id: str | None, description_key: str
+) -> str:
+    """Construct unique ID for sensor manager (synthetic sensors) using consistent pattern.
+
+    This function generates unique IDs that match the native sensor patterns
+    using consistent suffixes for compatibility with migration logic.
+
+    Args:
+        serial_number: Panel serial number
+        circuit_id: Circuit ID (None for panel-level sensors)
+        description_key: Sensor description key
+
+    Returns:
+        Unique ID string following consistent pattern
+
+    Examples:
+        Circuit: span_abc123_0dad2f16cd514812ae1807b0457d473e_power
+        Panel: span_abc123_power
+
+    """
+    if circuit_id:
+        # Circuit sensor: use build_circuit_unique_id for consistency
+        return build_circuit_unique_id(serial_number, circuit_id, description_key)
+    else:
+        # Panel sensor: use build_panel_unique_id for consistency
+        return build_panel_unique_id(serial_number, description_key)
 
 
 def construct_synthetic_entity_id(
@@ -360,3 +585,29 @@ def construct_unmapped_friendly_name(
     """Construct friendly name for unmapped circuit sensors."""
     # Format: "Unmapped Tab 32 Consumed Energy"
     return f"Unmapped Tab {circuit_number} {sensor_description_name}"
+
+
+def construct_panel_friendly_name(description_name: Any) -> str:
+    """Construct friendly name for panel-level sensors.
+
+    Args:
+        description_name: The sensor description name (can be str, None, or UndefinedType)
+
+    Returns:
+        Friendly name string
+
+    """
+    return str(description_name) if description_name else ""
+
+
+def construct_status_friendly_name(description_name: Any) -> str:
+    """Construct friendly name for status sensors.
+
+    Args:
+        description_name: The sensor description name (can be str, None, or UndefinedType)
+
+    Returns:
+        Friendly name string
+
+    """
+    return str(description_name) if description_name else ""

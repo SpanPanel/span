@@ -24,6 +24,7 @@ from .helpers import (
     construct_backing_entity_id,
     construct_entity_id,
     construct_panel_entity_id,
+    construct_sensor_manager_unique_id,
     get_circuit_number,
     get_user_friendly_suffix,
     panel_to_device_info,
@@ -43,14 +44,15 @@ class SpanSensorManager:
     static_entities_registered: bool = False  # Public for cross-module access
 
     # Static mappings for sensor data access using circuit_0 scheme
+    # Backing entity names should mirror the synthetic sensor naming
     PANEL_SENSOR_MAP: dict[str, str] = {
-        "instant_grid_power": "instantGridPowerW",
-        "feedthrough_power": "feedthroughPowerW",
-        "main_meter_energy_produced": "mainMeterEnergyProducedWh",
-        "main_meter_energy_consumed": "mainMeterEnergyConsumedWh",
-        "feedthrough_energy_produced": "feedthroughEnergyProducedWh",
-        "feedthrough_energy_consumed": "feedthroughEnergyConsumedWh",
-        "battery_percentage": "storage_battery.storage_battery_percentage",
+        "current_power": "instantGridPowerW",
+        "feed_through_power": "feedthroughPowerW",
+        "main_meter_produced_energy": "mainMeterEnergyProducedWh",
+        "main_meter_consumed_energy": "mainMeterEnergyConsumedWh",
+        "feed_through_produced_energy": "feedthroughEnergyProducedWh",
+        "feed_through_consumed_energy": "feedthroughEnergyConsumedWh",
+        "battery_level": "storage_battery.storage_battery_percentage",
     }
 
     CIRCUIT_FIELD_MAP: dict[str, Callable[[Any], Any]] = {
@@ -67,28 +69,28 @@ class SpanSensorManager:
     }
 
     # Mapping from panel sensor keys to virtual entity suffixes and friendly names
-    # Using circuit_0 scheme for consistency
+    # Using circuit_0 scheme for consistency - backing entity names mirror synthetic sensor naming
     PANEL_SENSOR_MAPPING: dict[str, tuple[str, str]] = {
-        "instantGridPowerW": ("instant_grid_power", "Current Power"),
-        "feedthroughPowerW": ("feedthrough_power", "Feed Through Power"),
+        "instantGridPowerW": ("current_power", "Current Power"),
+        "feedthroughPowerW": ("feed_through_power", "Feed Through Power"),
         "mainMeterEnergyProducedWh": (
-            "main_meter_energy_produced",
+            "main_meter_produced_energy",
             "Main Meter Produced Energy",
         ),
         "mainMeterEnergyConsumedWh": (
-            "main_meter_energy_consumed",
+            "main_meter_consumed_energy",
             "Main Meter Consumed Energy",
         ),
         "feedthroughEnergyProducedWh": (
-            "feedthrough_energy_produced",
+            "feed_through_produced_energy",
             "Feed Through Produced Energy",
         ),
         "feedthroughEnergyConsumedWh": (
-            "feedthrough_energy_consumed",
+            "feed_through_consumed_energy",
             "Feed Through Consumed Energy",
         ),
         "batteryPercentage": (
-            "battery_percentage",
+            "battery_level",
             "Battery Level",
         ),
     }
@@ -124,11 +126,9 @@ class SpanSensorManager:
     def _construct_unique_id(
         self, span_panel: Any, circuit_id: str | None, description_key: str
     ) -> str:
-        """Construct unique ID following the same pattern as native sensors.
+        """Construct unique ID following consistent pattern without circuit_ prefix.
 
-        Must comply with ha-synthetic-sensors schema: ^[a-z][a-z0-9_]*$
-        - Must start with lowercase letter
-        - Only lowercase letters, numbers, and underscores allowed
+        Uses the helper function to ensure consistency across all unique ID generation.
 
         Args:
             span_panel: SPAN panel data instance
@@ -139,17 +139,9 @@ class SpanSensorManager:
             Schema-compliant unique ID string
 
         """
-        serial_number = span_panel.status.serial_number.lower()  # Convert to lowercase
-        # Sanitize description_key: convert dots to underscores and lowercase
-        sanitized_key = description_key.replace(".", "_").lower()
-
-        if circuit_id:
-            # Circuit sensor: span_{serial}_circuit_{circuit_id}_{description_key}
-            # Prefix circuit_id with 'circuit_' to ensure no leading numbers
-            return f"span_{serial_number}_circuit_{circuit_id}_{sanitized_key}"
-        else:
-            # Panel sensor: span_{serial}_{description_key}
-            return f"span_{serial_number}_{sanitized_key}"
+        return construct_sensor_manager_unique_id(
+            span_panel.status.serial_number, circuit_id, description_key
+        )
 
     async def _get_config_manager(self) -> SyntheticConfigManager:
         """Get the centralized config manager instance."""
@@ -586,17 +578,15 @@ class SpanSensorManager:
                 entity_type="panel",
             )
 
-            # Generate unique ID using same pattern as native sensors
-            unique_id = self._construct_unique_id(span_panel, None, description.key)
+            # Generate unique ID and entity ID based on display name for consistency
+            display_name_suffix = slugify(str(description.name))
+            unique_id = f"span_{span_panel.status.serial_number.lower()}_{display_name_suffix}"
 
-            # Generate entity ID using same pattern as native panel sensors
-            # Use construct_panel_entity_id to respect device prefix settings
-            suffix = get_user_friendly_suffix(description.key)
             entity_id = construct_panel_entity_id(
                 coordinator,
                 span_panel,
                 "sensor",
-                suffix,
+                display_name_suffix,
             )
 
             # Create sensor config
@@ -649,17 +639,15 @@ class SpanSensorManager:
                 entity_type="battery",
             )
 
-            # Generate unique ID using same pattern as native sensors
-            unique_id = self._construct_unique_id(span_panel, None, description.key)
+            # Generate unique ID and entity ID based on display name for consistency
+            display_name_suffix = slugify(str(description.name))
+            unique_id = f"span_{span_panel.status.serial_number.lower()}_{display_name_suffix}"
 
-            # Generate entity ID using same pattern as native battery sensors
-            # Use construct_panel_entity_id to respect device prefix settings
-            suffix = get_user_friendly_suffix(description.key)
             entity_id = construct_panel_entity_id(
                 coordinator,
                 span_panel,
                 "sensor",
-                suffix,
+                display_name_suffix,
             )
 
             # Create sensor config

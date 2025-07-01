@@ -94,15 +94,17 @@ async def test_yaml_content_structure(hass: Any, enable_custom_integrations: Any
         # Check for expected sensor types
         sensor_keys = list(sensors.keys())
 
-        # Should have circuit sensors (look for instantpowerw pattern)
-        circuit_power_sensors = [k for k in sensor_keys if "circuit_" in k and "instantpowerw" in k]
+        # Should have circuit sensors (look for circuit number and power pattern)
+        circuit_power_sensors = [
+            k for k in sensor_keys if "_power" in k and any(f"_{i}_" in k for i in range(1, 33))
+        ]
         assert len(circuit_power_sensors) > 0, (
             f"Should have circuit power sensors, found keys: {sensor_keys}"
         )
 
-        # Should have panel sensors (look for grid power or feedthrough patterns)
+        # Should have panel sensors (look for current_power or feed_through_power patterns)
         panel_sensors = [
-            k for k in sensor_keys if "instantgridpowerw" in k or "feedthroughpowerw" in k
+            k for k in sensor_keys if "current_power" in k or "feed_through_power" in k
         ]
         assert len(panel_sensors) > 0, f"Should have panel sensors, found keys: {sensor_keys}"
 

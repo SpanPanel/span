@@ -45,7 +45,7 @@ async def test_panel_sensor_yaml_generation_device_prefix(hass):
     yaml_config = manager.generate_unified_config_sync(mock_coordinator, mock_panel)
 
     # Check that panel sensor has correct structure
-    panel_sensor_key = "span_sp3-242424-001_instantgridpowerw"  # Realistic SPAN serial with hyphens
+    panel_sensor_key = "span_sp3-242424-001_current_power"  # Realistic SPAN serial with hyphens
     assert panel_sensor_key in yaml_config
 
     panel_sensor = yaml_config[panel_sensor_key]
@@ -55,7 +55,7 @@ async def test_panel_sensor_yaml_generation_device_prefix(hass):
     assert "variables" in panel_sensor
     assert (
         panel_sensor["variables"]["source_value"]
-        == "span_panel_synthetic_backing.circuit_0_instant_grid_power"
+        == "span_panel_synthetic_backing.circuit_0_current_power"
     )
     assert panel_sensor["unit_of_measurement"] == "W"
     assert panel_sensor["device_class"] == "power"
@@ -100,7 +100,7 @@ async def test_circuit_sensor_yaml_generation_device_prefix(hass):
     yaml_config = manager.generate_unified_config_sync(mock_coordinator, mock_panel)
 
     # Check that circuit sensor has correct structure
-    circuit_sensor_key = "span_sp3-242424-001_circuit_1_instantpowerw"
+    circuit_sensor_key = "span_sp3-242424-001_1_power"
     assert circuit_sensor_key in yaml_config
 
     circuit_sensor = yaml_config[circuit_sensor_key]
@@ -152,7 +152,7 @@ async def test_panel_sensor_yaml_generation_legacy(hass):
     yaml_config = manager.generate_unified_config_sync(mock_coordinator, mock_panel)
 
     # Check that panel sensor has correct structure
-    panel_sensor_key = "span_sp3-242424-001_instantgridpowerw"
+    panel_sensor_key = "span_sp3-242424-001_current_power"
     assert panel_sensor_key in yaml_config
 
     panel_sensor = yaml_config[panel_sensor_key]
@@ -162,7 +162,7 @@ async def test_panel_sensor_yaml_generation_legacy(hass):
     assert "variables" in panel_sensor
     assert (
         panel_sensor["variables"]["source_value"]
-        == "span_panel_synthetic_backing.circuit_0_instant_grid_power"
+        == "span_panel_synthetic_backing.circuit_0_current_power"
     )
     assert panel_sensor["device_identifier"] == "sp3-242424-001"
 
@@ -201,7 +201,7 @@ async def test_circuit_sensor_yaml_generation_legacy(hass):
     yaml_config = manager.generate_unified_config_sync(mock_coordinator, mock_panel)
 
     # Check that circuit sensor has correct structure
-    circuit_sensor_key = "span_sp3-242424-001_circuit_1_instantpowerw"
+    circuit_sensor_key = "span_sp3-242424-001_1_power"
     assert circuit_sensor_key in yaml_config
 
     circuit_sensor = yaml_config[circuit_sensor_key]
@@ -253,7 +253,7 @@ async def test_circuit_numbers_yaml_generation(hass):
     yaml_config = manager.generate_unified_config_sync(mock_coordinator, mock_panel)
 
     # Check that circuit sensor has correct structure with circuit number
-    circuit_sensor_key = "span_sp3-242424-001_circuit_1_instantpowerw"
+    circuit_sensor_key = "span_sp3-242424-001_1_power"
     assert circuit_sensor_key in yaml_config
 
     circuit_sensor = yaml_config[circuit_sensor_key]
