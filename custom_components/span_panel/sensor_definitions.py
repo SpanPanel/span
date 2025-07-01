@@ -183,6 +183,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="dsm_state",
@@ -199,52 +200,19 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         name="Current Run Config",
         value_fn=lambda panel_data: panel_data.current_run_config,
     ),
+    SpanPanelDataSensorEntityDescription(
+        key="main_relay_state",
+        name="Main Relay State",
+        value_fn=lambda panel_data: panel_data.main_relay_state,
+    ),
 )
 
 # Status sensor definitions
-STATUS_SENSORS: tuple[
-    SpanPanelStatusSensorEntityDescription,
-    SpanPanelStatusSensorEntityDescription,
-    SpanPanelStatusSensorEntityDescription,
-    SpanPanelStatusSensorEntityDescription,
-    SpanPanelStatusSensorEntityDescription,
-    SpanPanelStatusSensorEntityDescription,
-] = (
+STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription,] = (
     SpanPanelStatusSensorEntityDescription(
         key="software_version",
         name="Software Version",
         value_fn=lambda status: getattr(status, "firmware_version", "Unknown"),
-    ),
-    SpanPanelStatusSensorEntityDescription(
-        key="main_relay_state",
-        name="Main Relay State",
-        value_fn=lambda status: getattr(status, "main_relay_state", "Unknown"),
-    ),
-    SpanPanelStatusSensorEntityDescription(
-        key="door_state",
-        name="Door State",
-        value_fn=lambda status: status.door_state or "Unknown",
-    ),
-    SpanPanelStatusSensorEntityDescription(
-        key="ethernet",
-        name="Ethernet",
-        value_fn=lambda status: (
-            "Connected" if getattr(status, "is_ethernet_connected", False) else "Disconnected"
-        ),
-    ),
-    SpanPanelStatusSensorEntityDescription(
-        key="wifi",
-        name="WiFi",
-        value_fn=lambda status: (
-            "Connected" if getattr(status, "is_wifi_connected", False) else "Disconnected"
-        ),
-    ),
-    SpanPanelStatusSensorEntityDescription(
-        key="cellular",
-        name="Cellular",
-        value_fn=lambda status: (
-            "Connected" if getattr(status, "is_cellular_connected", False) else "Disconnected"
-        ),
     ),
 )
 
@@ -257,5 +225,49 @@ STORAGE_BATTERY_SENSORS: tuple[SpanPanelStorageBatterySensorEntityDescription] =
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.BATTERY,
         value_fn=lambda storage_battery: storage_battery.storage_battery_percentage,
+    ),
+)
+
+# Alias for backward compatibility
+SpanCircuitSensorEntityDescription = SpanPanelCircuitsSensorEntityDescription
+
+# Unmapped circuit sensor definitions - these are invisible sensors for synthetic calculations
+UNMAPPED_SENSORS: tuple[
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+] = (
+    SpanPanelCircuitsSensorEntityDescription(
+        key=CIRCUITS_POWER,
+        name="Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.POWER,
+        value_fn=lambda circuit: abs(circuit.instant_power),
+        entity_registry_enabled_default=True,  # Enabled but invisible
+        entity_registry_visible_default=False,  # Hidden from UI
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key=CIRCUITS_ENERGY_PRODUCED,
+        name="Produced Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda circuit: circuit.produced_energy,
+        entity_registry_enabled_default=True,  # Enabled but invisible
+        entity_registry_visible_default=False,  # Hidden from UI
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key=CIRCUITS_ENERGY_CONSUMED,
+        name="Consumed Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda circuit: circuit.consumed_energy,
+        entity_registry_enabled_default=True,  # Enabled but invisible
+        entity_registry_visible_default=False,  # Hidden from UI
     ),
 )

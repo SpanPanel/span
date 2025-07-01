@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import slugify
 import yaml
 
 from .const import DOMAIN, USE_DEVICE_PREFIX
@@ -16,12 +17,11 @@ from .helpers import (
     construct_entity_id,
     construct_synthetic_entity_id,
     get_user_friendly_suffix,
-    sanitize_name_for_entity_id,
+    panel_to_device_info,
 )
 
 # Import at module level to avoid linter issues
 from .synthetic_config_manager import SyntheticConfigManager
-from .util import panel_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -468,7 +468,7 @@ class SolarSyntheticSensors:
         device_info = panel_to_device_info(span_panel)
         device_name_raw = device_info.get("name")
         if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
+            device_name = slugify(device_name_raw)
             return f"sensor.{device_name}_unmapped_tab_{leg_number}_{suffix}"
         else:
             return f"sensor.unmapped_tab_{leg_number}_{suffix}"

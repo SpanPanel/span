@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
+from homeassistant.util import slugify
 
 from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from custom_components.span_panel.helpers import (
@@ -10,19 +10,18 @@ from custom_components.span_panel.helpers import (
     construct_synthetic_entity_id,
     construct_synthetic_friendly_name,
     get_user_friendly_suffix,
-    sanitize_name_for_entity_id,
 )
 
 
 class TestHelperFunctions:
     """Test the helper functions."""
 
-    def test_sanitize_name_for_entity_id(self):
-        """Test name sanitization for entity IDs."""
-        assert sanitize_name_for_entity_id("Kitchen Outlets") == "kitchen_outlets"
-        assert sanitize_name_for_entity_id("Main-Panel") == "main_panel"
-        assert sanitize_name_for_entity_id("Test Name") == "test_name"
-        assert sanitize_name_for_entity_id("UPPER CASE") == "upper_case"
+    def test_slugify_name_for_entity_id(self):
+        """Test name sanitization for entity IDs using HA's slugify."""
+        assert slugify("Kitchen Outlets") == "kitchen_outlets"
+        assert slugify("Main-Panel") == "main_panel"
+        assert slugify("Test Name") == "test_name"
+        assert slugify("UPPER CASE") == "upper_case"
 
     def test_get_user_friendly_suffix(self):
         """Test suffix mapping conversion."""
@@ -32,13 +31,15 @@ class TestHelperFunctions:
         assert get_user_friendly_suffix("unknown_field") == "unknown_field"
 
     def test_construct_entity_id_config_entry_none(self):
-        """Test construct_entity_id raises error when config_entry is None."""
+        """Test construct_entity_id works with valid coordinator (None config_entry should be caught at coordinator level)."""
         coordinator = MagicMock()
-        coordinator.config_entry = None
+        coordinator.config_entry.options = {}
         span_panel = MagicMock()
 
-        with pytest.raises(RuntimeError, match="Config entry missing from coordinator"):
-            construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        # This should work fine - the coordinator should validate config_entry at construction time
+        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        # With empty options, should use legacy naming (no device prefix)
+        assert result == "sensor.kitchen_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
     def test_construct_entity_id_empty_options_legacy(self, mock_device_info):
@@ -82,13 +83,15 @@ class TestHelperFunctions:
         assert result is None
 
     def test_construct_synthetic_entity_id_config_entry_none(self):
-        """Test construct_synthetic_entity_id raises error when config_entry is None."""
+        """Test construct_synthetic_entity_id works with valid coordinator (None config_entry should be caught at coordinator level)."""
         coordinator = MagicMock()
-        coordinator.config_entry = None
+        coordinator.config_entry.options = {}
         span_panel = MagicMock()
 
-        with pytest.raises(RuntimeError, match="Config entry missing from coordinator"):
-            construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
+        # This should work fine - the coordinator should validate config_entry at construction time
+        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
+        # With empty options, should use legacy naming (no device prefix)
+        assert result == "sensor.synthetic_sensor_30_32_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
     def test_construct_synthetic_entity_id_empty_options(self, mock_device_info):

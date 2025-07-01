@@ -104,37 +104,13 @@ async def test_async_update_data_with_reload():
     await created_tasks[0]
 
 
-@pytest.mark.asyncio
-async def test_async_update_data_reload_no_config_entry():
-    """Test reload logic when config_entry is None."""
+def test_coordinator_init_none_config_entry():
+    """Test coordinator initialization with None config_entry raises ValueError."""
     hass = MagicMock()
-    hass.async_block_till_done = AsyncMock()
-
-    # Create a list to capture tasks and mock async_create_task to return a mock task
-    created_tasks = []
-
-    def mock_create_task(coro):
-        task = AsyncMock()
-        created_tasks.append(coro)
-        return task
-
-    hass.async_create_task = mock_create_task
-
     span_panel = MagicMock()
 
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, None)
-    coordinator._needs_reload = True
-
-    result = await coordinator._async_update_data()
-
-    # Should still return span_panel and reset reload flag
-    assert result is span_panel
-    assert coordinator._needs_reload is False
-    # Should still schedule a task (error handling is inside the task)
-    assert len(created_tasks) == 1
-
-    # Execute the scheduled task to avoid warnings
-    await created_tasks[0]
+    with pytest.raises(ValueError, match="config_entry cannot be None"):
+        SpanPanelCoordinator(hass, span_panel, "test", 30, None)
 
 
 @pytest.mark.asyncio
@@ -376,29 +352,4 @@ async def test_reload_task_successful():
     hass.config_entries.async_reload.assert_called_once_with("test_entry_id")
 
 
-@pytest.mark.asyncio
-async def test_reload_task_none_config_entry():
-    """Test the reload task when config_entry is None."""
-    hass = MagicMock()
-    hass.async_block_till_done = AsyncMock()
-
-    span_panel = MagicMock()
-
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, None)
-    coordinator._needs_reload = True
-
-    # Capture the task that gets created
-    created_task = None
-
-    def capture_task(task):
-        nonlocal created_task
-        created_task = task
-        return MagicMock()
-
-    hass.async_create_task.side_effect = capture_task
-
-    await coordinator._async_update_data()
-
-    # Execute the captured task - should handle None config_entry gracefully
-    assert created_task is not None
-    await created_task
+# Test removed - coordinator constructor now validates config_entry is not None

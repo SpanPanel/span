@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from homeassistant.util import slugify
+
 from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
@@ -14,11 +16,6 @@ if TYPE_CHECKING:
     from .span_panel_circuit import SpanPanelCircuit
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def sanitize_name_for_entity_id(name: str) -> str:
-    """Sanitize a name for use in entity IDs."""
-    return name.lower().replace(" ", "_").replace("-", "_")
 
 
 def get_circuit_number(circuit: SpanPanelCircuit) -> int | str:
@@ -61,7 +58,7 @@ def construct_entity_id(
     """
     config_entry = coordinator.config_entry
     if config_entry is None:
-        raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
+        raise RuntimeError("Config entry missing from coordinator")
 
     # For existing installations with empty options, default to False for backward compatibility
     # For new installations, these will be explicitly set to True in create_new_entry()
@@ -82,7 +79,7 @@ def construct_entity_id(
         # New installation (v1.0.9+) - stable circuit-based entity IDs
         # Format: sensor.span_panel_circuit_15_power
         if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
+            device_name = slugify(device_name_raw)
             return f"{platform}.{device_name}_circuit_{circuit_number}_{suffix}"
         else:
             return None
@@ -91,15 +88,15 @@ def construct_entity_id(
         # Post-1.0.4 installation - friendly names with device prefix
         # Format: sensor.span_panel_kitchen_outlets_power
         if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
-            circuit_name_sanitized = sanitize_name_for_entity_id(circuit_name)
+            device_name = slugify(device_name_raw)
+            circuit_name_sanitized = slugify(circuit_name)
             return f"{platform}.{device_name}_{circuit_name_sanitized}_{suffix}"
         else:
             return None
 
     else:
         # Pre-1.0.4 installation - no device prefix, just circuit names
-        circuit_name_sanitized = sanitize_name_for_entity_id(circuit_name)
+        circuit_name_sanitized = slugify(circuit_name)
         return f"{platform}.{circuit_name_sanitized}_{suffix}"
 
 
@@ -158,8 +155,6 @@ def construct_synthetic_entity_id(
 
     """
     config_entry = coordinator.config_entry
-    if config_entry is None:
-        raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
 
     # Get device info for device name
     device_info = panel_to_device_info(span_panel)
@@ -169,7 +164,7 @@ def construct_synthetic_entity_id(
     # Synthetic sensors always use friendly names regardless of USE_CIRCUIT_NUMBERS
     if friendly_name:
         # Convert friendly name to entity ID format (e.g., "Solar Inverter" -> "solar_inverter")
-        entity_name = sanitize_name_for_entity_id(friendly_name)
+        entity_name = slugify(friendly_name)
         if suffix:
             entity_name = f"{entity_name}_{suffix}"
     else:
@@ -187,7 +182,7 @@ def construct_synthetic_entity_id(
         use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
 
     if use_device_prefix and device_name_raw:
-        device_name = sanitize_name_for_entity_id(device_name_raw)
+        device_name = slugify(device_name_raw)
         return f"{platform}.{device_name}_{entity_name}"
     else:
         return f"{platform}.{entity_name}"
@@ -246,8 +241,6 @@ def construct_panel_entity_id(
 
     """
     config_entry = coordinator.config_entry
-    if config_entry is None:
-        raise RuntimeError("Config entry missing from coordinator - integration improperly set up")
 
     # For existing installations with empty options, default to False for backward compatibility
     # For new installations, these will be explicitly set to True in create_new_entry()
@@ -266,7 +259,7 @@ def construct_panel_entity_id(
         # Installation with device prefix enabled
         # Format: sensor.span_panel_current_power
         if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
+            device_name = slugify(device_name_raw)
             return f"{platform}.{device_name}_{suffix}"
         else:
             return None
@@ -312,7 +305,7 @@ def construct_backing_entity_id(
     # Get device name for consistent prefix
     device_info = panel_to_device_info(span_panel)
     device_name_raw = device_info.get("name", "span_panel")
-    device_name = sanitize_name_for_entity_id(device_name_raw or "span_panel")
+    device_name = slugify(device_name_raw or "span_panel")
 
     # Construct the backing entity ID parts
     base_prefix = f"{device_name}_synthetic_backing"
@@ -336,3 +329,34 @@ def construct_backing_entity_id(
         entity_part = f"{entity_type}_{suffix}" if suffix else entity_type
 
     return f"{base_prefix}.{entity_part}"
+
+
+def construct_unmapped_unique_id(
+    span_panel: SpanPanel, circuit_number: int | str, suffix: str
+) -> str:
+    """Construct unique ID for unmapped circuit sensors."""
+    # Always use consistent unique ID pattern for unmapped circuits
+    # Format: span_{serial}_unmapped_tab_{circuit_number}_{suffix}
+    return f"span_{span_panel.status.serial_number}_unmapped_tab_{circuit_number}_{suffix}"
+
+
+def construct_unmapped_entity_id(
+    span_panel: SpanPanel, circuit_number: int | str, suffix: str
+) -> str:
+    """Construct entity ID for unmapped tab with consistent modern naming."""
+    # Always use device prefix and circuit numbers for unmapped entities
+    device_info = panel_to_device_info(span_panel)
+    device_name_raw = device_info.get("name")
+    if device_name_raw:
+        device_name = slugify(device_name_raw)
+        return f"sensor.{device_name}_unmapped_tab_{circuit_number}_{suffix}"
+    else:
+        return f"sensor.unmapped_tab_{circuit_number}_{suffix}"
+
+
+def construct_unmapped_friendly_name(
+    circuit_number: int | str, sensor_description_name: str
+) -> str:
+    """Construct friendly name for unmapped circuit sensors."""
+    # Format: "Unmapped Tab 32 Consumed Energy"
+    return f"Unmapped Tab {circuit_number} {sensor_description_name}"

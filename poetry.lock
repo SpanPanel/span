@@ -1679,6 +1679,7 @@ files = []
 develop = true
 
 [package.dependencies]
+aiofiles = "*"
 jsonschema = "^4.17.0"
 pyyaml = "*"
 simpleeval = "^1.0.3"

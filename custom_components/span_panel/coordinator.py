@@ -13,6 +13,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import slugify
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -26,7 +27,6 @@ from .const import API_TIMEOUT, EntityNamingPattern
 from .helpers import (
     get_circuit_number,
     get_user_friendly_suffix,
-    sanitize_name_for_entity_id,
 )
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
@@ -46,9 +46,14 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         span_panel: SpanPanel,
         name: str,
         update_interval: int,
-        config_entry: ConfigEntry,
+        config_entry: ConfigEntry | None,  # None is an error, throw an exception
     ) -> None:
         """Initialize."""
+        if config_entry is None:
+            raise ValueError(
+                "config_entry cannot be None - coordinator requires valid configuration"
+            )
+
         super().__init__(
             hass,
             _LOGGER,
@@ -77,7 +82,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                     # Wait for current operations to complete
                     await self.hass.async_block_till_done()
 
-                    if self.config_entry is None:
+                    if self.config_entry is None:  # type: ignore[unreachable]
                         _LOGGER.error(
                             "Cannot reload: config_entry is None - integration incorrectly initialized"
                         )
@@ -169,7 +174,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         _LOGGER.info("Starting entity migration from %s to %s", from_pattern, to_pattern)
 
         try:
-            if self.config_entry is None:
+            if self.config_entry is None:  # type: ignore[unreachable]
                 _LOGGER.error("Cannot migrate entities: config_entry is None")
                 return False
 
@@ -313,11 +318,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                     device_info = panel_to_device_info(self.data)
                     device_name_raw = device_info.get("name")
                     if device_name_raw:
-                        device_name = sanitize_name_for_entity_id(device_name_raw)
+                        device_name = slugify(device_name_raw)
                 except (AttributeError, KeyError, TypeError):
                     pass  # Use fallback
 
-            name_based_object_id = sanitize_name_for_entity_id(entity_name)
+            name_based_object_id = slugify(entity_name)
 
             # Apply device prefix based on target pattern (simplified logic for non-circuit entities)
             if to_pattern == EntityNamingPattern.LEGACY_NAMES:
@@ -480,7 +485,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             device_info = panel_to_device_info(self.data)
             device_name_raw = device_info.get("name")
             if device_name_raw:
-                device_name = sanitize_name_for_entity_id(device_name_raw)
+                device_name = slugify(device_name_raw)
             else:
                 device_name = "span_panel"
         except Exception as e:
@@ -504,9 +509,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             return f"{domain}.{device_name}_circuit_{circuit_number}_{entity_suffix}"
         elif target_pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
             # Friendly names format: device_friendly_name_suffix
-            circuit_name_sanitized = sanitize_name_for_entity_id(circuit_friendly_name)
+            circuit_name_sanitized = slugify(circuit_friendly_name)
             return f"{domain}.{device_name}_{circuit_name_sanitized}_{entity_suffix}"
         else:
             # Legacy format: friendly_name_suffix
-            circuit_name_sanitized = sanitize_name_for_entity_id(circuit_friendly_name)
+            circuit_name_sanitized = slugify(circuit_friendly_name)
             return f"{domain}.{circuit_name_sanitized}_{entity_suffix}"

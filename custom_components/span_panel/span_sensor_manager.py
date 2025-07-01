@@ -17,6 +17,7 @@ from ha_synthetic_sensors.types import DataProviderResult
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import Entity
+from homeassistant.util import slugify
 
 from .const import COORDINATOR, DOMAIN
 from .helpers import (
@@ -26,7 +27,6 @@ from .helpers import (
     get_circuit_number,
     get_user_friendly_suffix,
     panel_to_device_info,
-    sanitize_name_for_entity_id,
 )
 from .sensor_definitions import CIRCUITS_SENSORS, PANEL_SENSORS, STORAGE_BATTERY_SENSORS
 from .synthetic_config_manager import SyntheticConfigManager
@@ -227,7 +227,7 @@ class SpanSensorManager:
                 # Get device name for consistent virtual entity ID prefix
                 device_info = panel_to_device_info(span_panel)
                 device_name_raw = device_info.get("name", "span_panel")
-                device_name = sanitize_name_for_entity_id(device_name_raw or "span_panel")
+                device_name = slugify(device_name_raw or "span_panel")
                 expected_prefix = f"{device_name}_synthetic_backing."
 
                 _LOGGER.info("BACKING_SENSOR_DEBUG: Expected prefix: %s", expected_prefix)
@@ -804,7 +804,7 @@ class SpanSensorManager:
         # Get device name for consistent virtual entity ID prefix
         device_info = panel_to_device_info(span_panel)
         device_name_raw = device_info.get("name", "span_panel")
-        device_name = sanitize_name_for_entity_id(device_name_raw or "span_panel")
+        device_name = slugify(device_name_raw or "span_panel")
 
         entity_ids: set[str] = set()
 

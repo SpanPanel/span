@@ -27,19 +27,23 @@ from .const import (
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_panel_entity_id,
+    construct_unmapped_entity_id,
+    construct_unmapped_friendly_name,
     panel_to_device_info,
-    sanitize_name_for_entity_id,
 )
 from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from .sensor_definitions import (
     PANEL_DATA_STATUS_SENSORS,
     STATUS_SENSORS,
+    UNMAPPED_SENSORS,
+    SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelStatusSensorEntityDescription,
 )
 from .solar_synthetic_sensors import SolarSyntheticSensors
 from .solar_tab_manager import SolarTabManager
 from .span_panel import SpanPanel
+from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 
@@ -69,7 +73,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._attr_device_class = description.device_class
 
         device_info: DeviceInfo = panel_to_device_info(span_panel)
-        self._attr_device_info = device_info
+        self._attr_device_info = device_info  # Re-enable device info
         base_name: str | None = getattr(description, "name", None)
 
         # Friendly name should never include device prefix - only entity_id follows naming patterns
@@ -175,19 +179,6 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 
-    def _construct_unmapped_entity_id_simple(
-        self, span_panel: SpanPanel, circuit_number: int | str, suffix: str
-    ) -> str:
-        """Construct entity ID for unmapped tab with consistent modern naming."""
-        # Always use device prefix and circuit numbers for unmapped entities
-        device_info = panel_to_device_info(span_panel)
-        device_name_raw = device_info.get("name")
-        if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
-            return f"sensor.{device_name}_unmapped_tab_{circuit_number}_{suffix}"
-        else:
-            return f"sensor.unmapped_tab_{circuit_number}_{suffix}"
-
 
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
     """Span Panel data status sensor entity."""
@@ -247,6 +238,75 @@ class SpanPanelStatus(
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
         """Get the data source for the panel status sensor."""
         return span_panel.status
+
+
+class SpanUnmappedCircuitSensor(
+    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
+    """Span Panel unmapped circuit sensor entity - native sensors for synthetic calculations."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        span_panel: SpanPanel,
+        circuit_id: str,
+    ) -> None:
+        """Initialize the Span Panel unmapped circuit sensor."""
+        self.circuit_id = circuit_id
+
+        # Override the description key to use the circuit_id for data lookup
+        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+            key=circuit_id,  # Use circuit_id for data source lookup
+            name=description.name,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            device_class=description.device_class,
+            value_fn=description.value_fn,
+            entity_registry_enabled_default=True,  # Enabled but invisible
+            entity_registry_visible_default=False,  # Hidden from UI
+        )
+
+        super().__init__(data_coordinator, description_with_circuit, span_panel)
+
+        # Override friendly name to include unmapped tab information
+        if circuit_id.startswith("unmapped_tab_"):
+            tab_number = circuit_id.replace("unmapped_tab_", "")
+            description_name = str(description.name) if description.name else "Sensor"
+            self._attr_name = construct_unmapped_friendly_name(tab_number, description_name)
+
+        # Override unique_id to use unmapped pattern
+        if span_panel.status.serial_number:
+            # Extract tab number from circuit_id (e.g., "unmapped_tab_15" -> "15")
+            tab_number = circuit_id.replace("unmapped_tab_", "")
+            # Map raw sensor keys to legacy simplified format for backward compatibility
+            sensor_suffix = self._map_key_to_legacy_format(description.key)
+            self._attr_unique_id = (
+                f"span_{span_panel.status.serial_number}_unmapped_tab_{tab_number}_{sensor_suffix}"
+            )
+
+        # Override entity_id to use stable unmapped pattern
+        if circuit_id.startswith("unmapped_tab_"):
+            tab_number = circuit_id.replace("unmapped_tab_", "")
+            # Map raw sensor keys to legacy simplified format for backward compatibility
+            sensor_suffix = self._map_key_to_legacy_format(description.key)
+            entity_id = construct_unmapped_entity_id(span_panel, tab_number, sensor_suffix)
+            if entity_id:
+                self.entity_id = entity_id
+
+    def _map_key_to_legacy_format(self, key: str) -> str:
+        """Map raw sensor keys to legacy simplified format for backward compatibility."""
+        key_mapping = {
+            "instantPowerW": "power",
+            "producedEnergyWh": "energy_produced",
+            "consumedEnergyWh": "energy_consumed",
+        }
+        return key_mapping.get(key, key)
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the unmapped circuit sensor."""
+        return span_panel.circuits[self.circuit_id]
 
 
 async def async_setup_entry(
@@ -329,6 +389,19 @@ async def async_setup_entry(
     # Add panel data status sensors (DSM State, DSM Grid State, etc.)
     for description in PANEL_DATA_STATUS_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
+    # Add unmapped circuit sensors (native sensors for synthetic calculations)
+    # These are invisible sensors that provide stable entity IDs for solar synthetics
+    for circuit_id in span_panel.circuits:
+        if circuit_id.startswith("unmapped_tab_"):
+            _LOGGER.debug("Creating unmapped circuit sensors for circuit: %s", circuit_id)
+            for unmapped_description in UNMAPPED_SENSORS:
+                # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
+                entities.append(
+                    SpanUnmappedCircuitSensor(
+                        coordinator, unmapped_description, span_panel, circuit_id
+                    )
+                )
 
     # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
     for description_ss in STATUS_SENSORS:

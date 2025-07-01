@@ -6,6 +6,7 @@ Tests for Span Panel entity naming pattern functionality.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from homeassistant.util import slugify
 import pytest
 
 from custom_components.span_panel.config_flow import OptionsFlowHandler
@@ -13,7 +14,6 @@ from custom_components.span_panel.const import EntityNamingPattern
 from custom_components.span_panel.helpers import (
     construct_entity_id,
     construct_synthetic_entity_id,
-    sanitize_name_for_entity_id,
 )
 
 
@@ -240,14 +240,14 @@ async def test_friendly_name_sanitization():
 
     test_cases = [
         ("Kitchen Outlets", "kitchen_outlets"),
-        ("Living Room - Lights", "living_room___lights"),
-        ("HVAC System #1", "hvac_system_#1"),
-        ("Garage Door (Main)", "garage_door_(main)"),
-        ("Pool Pump & Filter", "pool_pump_&_filter"),
+        ("Living Room - Lights", "living_room_lights"),
+        ("HVAC System #1", "hvac_system_1"),
+        ("Garage Door (Main)", "garage_door_main"),
+        ("Pool Pump & Filter", "pool_pump_filter"),
     ]
 
     for input_name, expected_suffix in test_cases:
-        result = sanitize_name_for_entity_id(input_name)
+        result = slugify(input_name)
         assert result == expected_suffix, (
             f"Failed for '{input_name}': expected '{expected_suffix}', got '{result}'"
         )
