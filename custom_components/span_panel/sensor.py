@@ -464,6 +464,9 @@ async def async_setup_entry(
         await solar_sensors.remove_config()
 
     # NOW set up synthetic sensors after native entities are added and available in HA
+    # Create shared name resolver for all synthetic sensors
+    name_resolver = NameResolver(hass, variables={})  # type: ignore[misc]
+
     # Set up synthetic sensors if they were prepared in __init__.py
     try:
         synthetic_manager = data.get("synthetic_manager")
@@ -489,8 +492,7 @@ async def async_setup_entry(
                 coordinator, coordinator.data
             )
 
-            # Create name resolver and device info
-            name_resolver = NameResolver(hass, variables={})  # type: ignore[misc]
+            # Create device info
             device_info = panel_to_device_info(coordinator.data)
 
             # Create SensorManager with data provider configuration
@@ -524,6 +526,10 @@ async def async_setup_entry(
         # Also set up solar synthetic sensors if they were generated
         if solar_enabled:
             try:
+                # Force coordinator update to ensure unmapped sensors have data
+                _LOGGER.debug("Forcing coordinator update before creating solar sensors")
+                await coordinator.async_request_refresh()
+
                 # Create a separate sensor manager for solar sensors
                 solar_device_info = panel_to_device_info(coordinator.data)
 
