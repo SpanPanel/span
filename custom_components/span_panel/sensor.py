@@ -35,6 +35,7 @@ from .helpers import (
     construct_status_friendly_name,
     construct_unmapped_entity_id,
     construct_unmapped_friendly_name,
+    get_user_friendly_suffix,
     panel_to_device_info,
 )
 from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
@@ -320,6 +321,8 @@ class SpanUnmappedCircuitSensor(
     ) -> None:
         """Initialize the Span Panel unmapped circuit sensor."""
         self.circuit_id = circuit_id
+        # Store the original description key for unique ID and entity ID generation
+        self.original_key = description.key
 
         # Override the description key to use the circuit_id for data lookup
         description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
@@ -342,8 +345,8 @@ class SpanUnmappedCircuitSensor(
         """Generate unique ID for unmapped circuit sensors."""
         # Unmapped tab sensors are regular circuit sensors, use standard circuit unique ID pattern
         # circuit_id is already "unmapped_tab_32", so this creates "span_{serial}_unmapped_tab_32_{suffix}"
-        sensor_suffix = self._map_key_to_legacy_format(description.key)
-        return construct_circuit_unique_id(span_panel, self.circuit_id, sensor_suffix)
+        # Use the original key (e.g., "instantPowerW") instead of the modified description.key
+        return construct_circuit_unique_id(span_panel, self.circuit_id, self.original_key)
 
     def _generate_friendly_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
@@ -361,17 +364,9 @@ class SpanUnmappedCircuitSensor(
     ) -> str | None:
         """Generate entity ID for unmapped circuit sensors."""
         # Pass the full circuit_id to the helper (e.g., "unmapped_tab_32")
-        sensor_suffix = self._map_key_to_legacy_format(description.key)
+        # Use the original key instead of the modified description.key
+        sensor_suffix = get_user_friendly_suffix(self.original_key)
         return construct_unmapped_entity_id(span_panel, self.circuit_id, sensor_suffix)
-
-    def _map_key_to_legacy_format(self, key: str) -> str:
-        """Map raw sensor keys to legacy simplified format for backward compatibility."""
-        key_mapping = {
-            "instantPowerW": "power",
-            "producedEnergyWh": "energy_produced",
-            "consumedEnergyWh": "energy_consumed",
-        }
-        return key_mapping.get(key, key)
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the unmapped circuit sensor."""
@@ -390,6 +385,85 @@ async def async_setup_entry(
     span_panel: SpanPanel = coordinator.data
     _LOGGER.debug("SENSOR_SETUP_DEBUG: Got coordinator and span_panel data")
 
+    # First, create all the native sensors that synthetic sensors will depend on
+    entities: list[SpanSensorBase[Any, Any]] = []
+
+    # Add panel data status sensors (DSM State, DSM Grid State, etc.)
+    for description in PANEL_DATA_STATUS_SENSORS:
+        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
+    # Add unmapped circuit sensors (native sensors for synthetic calculations)
+    # These are invisible sensors that provide stable entity IDs for solar synthetics
+    for circuit_id in span_panel.circuits:
+        if circuit_id.startswith("unmapped_tab_"):
+            _LOGGER.debug("Creating unmapped circuit sensors for circuit: %s", circuit_id)
+            for unmapped_description in UNMAPPED_SENSORS:
+                # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
+                entities.append(
+                    SpanUnmappedCircuitSensor(
+                        coordinator, unmapped_description, span_panel, circuit_id
+                    )
+                )
+
+    # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
+    for description_ss in STATUS_SENSORS:
+        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
+
+    # Add the status sensor entities FIRST
+    async_add_entities(entities)
+
+    # Ensure unmapped tab entities are enabled in the entity registry
+    # This is necessary because existing disabled entities in the registry
+    # override the entity_registry_enabled_default setting
+    entity_registry = er.async_get(hass)
+    for entity in entities:
+        # Check if this is an unmapped tab circuit sensor
+        if (
+            hasattr(entity, "unique_id")
+            and entity.unique_id
+            and "unmapped_tab_" in entity.unique_id
+        ):
+            entity_id = entity.entity_id
+            registry_entry = entity_registry.async_get(entity_id)
+            if registry_entry and registry_entry.disabled:
+                _LOGGER.info("Enabling previously disabled unmapped tab entity: %s", entity_id)
+                entity_registry.async_update_entity(entity_id, disabled_by=None)
+
+    # Handle solar configuration - generate YAML for solar synthetic sensors if enabled
+    # This happens AFTER native sensors are available but BEFORE synthetic sensors are created
+    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
+    inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
+    inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
+
+    _LOGGER.info(
+        "Solar sensor setup - enabled: %s, options: %s",
+        solar_enabled,
+        config_entry.options,
+    )
+
+    if solar_enabled:
+        # Enable the required tab circuits (but keep them hidden)
+        tab_manager = SolarTabManager(hass, config_entry)
+        await tab_manager.enable_solar_tabs(inverter_leg1, inverter_leg2)
+
+        # Generate synthetic sensors YAML configuration
+        solar_sensors = SolarSyntheticSensors(hass, config_entry)
+        await solar_sensors.generate_config(inverter_leg1, inverter_leg2)
+
+        # Validate the generated configuration
+        if await solar_sensors.validate_config():
+            _LOGGER.debug("Solar synthetic sensors configuration generated successfully")
+        else:
+            _LOGGER.error("Failed to validate solar synthetic sensors configuration")
+    else:
+        # Clean up solar configuration when disabled
+        tab_manager = SolarTabManager(hass, config_entry)
+        solar_sensors = SolarSyntheticSensors(hass, config_entry)
+
+        await tab_manager.disable_solar_tabs()
+        await solar_sensors.remove_config()
+
+    # NOW set up synthetic sensors after native entities are added and available in HA
     # Set up synthetic sensors if they were prepared in __init__.py
     try:
         synthetic_manager = data.get("synthetic_manager")
@@ -447,82 +521,13 @@ async def async_setup_entry(
             await sensor_manager.load_configuration(config)  # type: ignore[misc]
             _LOGGER.info("SENSOR_SETUP_DEBUG: Synthetic sensors created successfully")
 
-    except Exception as e:
-        _LOGGER.error(
-            "SENSOR_SETUP_DEBUG: Failed to set up synthetic sensors: %s", e, exc_info=True
-        )
-
-    # Only create non-circuit/panel sensors that are not replaced by synthetic sensors
-    entities: list[SpanSensorBase[Any, Any]] = []
-
-    # Add panel data status sensors (DSM State, DSM Grid State, etc.)
-    for description in PANEL_DATA_STATUS_SENSORS:
-        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
-
-    # Add unmapped circuit sensors (native sensors for synthetic calculations)
-    # These are invisible sensors that provide stable entity IDs for solar synthetics
-    for circuit_id in span_panel.circuits:
-        if circuit_id.startswith("unmapped_tab_"):
-            _LOGGER.debug("Creating unmapped circuit sensors for circuit: %s", circuit_id)
-            for unmapped_description in UNMAPPED_SENSORS:
-                # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
-                entities.append(
-                    SpanUnmappedCircuitSensor(
-                        coordinator, unmapped_description, span_panel, circuit_id
-                    )
-                )
-
-    # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
-    for description_ss in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
-
-    # Check for synthetic entities that were prepared in __init__.py
-    entry_data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
-    synthetic_entities = entry_data.get("synthetic_entities", [])
-    if synthetic_entities:
-        _LOGGER.debug(
-            "SENSOR_SETUP_DEBUG: Adding %d synthetic entities from __init__.py",
-            len(synthetic_entities),
-        )
-        async_add_entities(synthetic_entities)
-    else:
-        _LOGGER.debug("SENSOR_SETUP_DEBUG: No synthetic entities found from __init__.py")
-
-    # Config entry should never be None here, but we check for safety
-    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
-    _LOGGER.info(
-        "Solar sensor setup - enabled: %s, options: %s",
-        solar_enabled,
-        config_entry.options,
-    )
-
-    # Handle solar configuration with new synthetic sensors approach
-    if solar_enabled:
-        inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
-        inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
-
-        # Enable the required tab circuits (but keep them hidden)
-        tab_manager = SolarTabManager(hass, config_entry)
-        await tab_manager.enable_solar_tabs(inverter_leg1, inverter_leg2)
-
-        # Generate synthetic sensors YAML configuration
-        solar_sensors = SolarSyntheticSensors(hass, config_entry)
-        await solar_sensors.generate_config(inverter_leg1, inverter_leg2)
-
-        # Validate the generated configuration
-        if await solar_sensors.validate_config():
-            _LOGGER.debug("Solar synthetic sensors configuration generated successfully")
-
-            # Set up ha-synthetic-sensors integration for device integration
+        # Also set up solar synthetic sensors if they were generated
+        if solar_enabled:
             try:
-                # Create name resolver for device integration
-                name_resolver = NameResolver(hass, variables={})
+                # Create a separate sensor manager for solar sensors
+                solar_device_info = panel_to_device_info(coordinator.data)
 
-                # Create device info for solar sensors
-                device_info = panel_to_device_info(span_panel)
-
-                # Configure sensor manager for v1.0.10 compatibility
-                # Use same prefix format as v1.0.10: span_{serial}_synthetic_{circuits}
+                # Configure sensor manager for solar sensors
                 circuit_spec = "_".join(
                     str(num) for num in [inverter_leg1, inverter_leg2] if num > 0
                 )
@@ -530,55 +535,37 @@ async def async_setup_entry(
                     f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}"
                 )
 
-                manager_config = SensorManagerConfig(
-                    device_info=device_info,
+                solar_manager_config = SensorManagerConfig(  # type: ignore[misc]
+                    device_info=solar_device_info,
                     unique_id_prefix=unique_id_prefix,
                     lifecycle_managed_externally=True,
-                    integration_domain=DOMAIN,  # PHASE 1: Add integration domain
+                    integration_domain=DOMAIN,
                 )
 
-                sensor_manager = SensorManager(
-                    hass, name_resolver, async_add_entities, manager_config
-                )
+                solar_sensor_manager = SensorManager(
+                    hass, name_resolver, async_add_entities, solar_manager_config
+                )  # type: ignore[misc]
 
-                # Load the YAML configuration we generated
-                yaml_path = solar_sensors.config_file_path
-                if yaml_path and yaml_path.exists():
-                    config_manager = ConfigManager(hass)
-                    config = await config_manager.async_load_from_file(str(yaml_path))
-                    await sensor_manager.load_configuration(config)  # type: ignore[misc]
-                    _LOGGER.debug("Solar synthetic sensors loaded successfully from %s", yaml_path)
+                # Load the solar YAML configuration
+                solar_yaml_path = solar_sensors.config_file_path
+                if solar_yaml_path and solar_yaml_path.exists():
+                    solar_config_manager = ConfigManager(hass)
+                    solar_config = await solar_config_manager.async_load_from_file(
+                        str(solar_yaml_path)
+                    )  # type: ignore[misc]
+                    await solar_sensor_manager.load_configuration(solar_config)  # type: ignore[misc]
+                    _LOGGER.debug(
+                        "Solar synthetic sensors loaded successfully from %s", solar_yaml_path
+                    )
                 else:
-                    _LOGGER.error("Solar synthetic sensors YAML file not found at %s", yaml_path)
+                    _LOGGER.error(
+                        "Solar synthetic sensors YAML file not found at %s", solar_yaml_path
+                    )
 
             except Exception as e:
                 _LOGGER.error("Failed to set up solar synthetic sensors: %s", e)
-        else:
-            _LOGGER.error("Failed to validate solar synthetic sensors configuration")
-    else:
-        # Clean up solar configuration when disabled
-        tab_manager = SolarTabManager(hass, config_entry)
-        solar_sensors = SolarSyntheticSensors(hass, config_entry)
 
-        await tab_manager.disable_solar_tabs()
-        await solar_sensors.remove_config()
-
-    # Add the status sensor entities
-    async_add_entities(entities)
-
-    # Ensure unmapped tab entities are enabled in the entity registry
-    # This is necessary because existing disabled entities in the registry
-    # override the entity_registry_enabled_default setting
-    entity_registry = er.async_get(hass)
-    for entity in entities:
-        # Check if this is an unmapped tab circuit sensor
-        if (
-            hasattr(entity, "unique_id")
-            and entity.unique_id
-            and "unmapped_tab_" in entity.unique_id
-        ):
-            entity_id = entity.entity_id
-            registry_entry = entity_registry.async_get(entity_id)
-            if registry_entry and registry_entry.disabled:
-                _LOGGER.info("Enabling previously disabled unmapped tab entity: %s", entity_id)
-                entity_registry.async_update_entity(entity_id, disabled_by=None)
+    except Exception as e:
+        _LOGGER.error(
+            "SENSOR_SETUP_DEBUG: Failed to set up synthetic sensors: %s", e, exc_info=True
+        )
