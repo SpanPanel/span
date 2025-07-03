@@ -9,7 +9,7 @@ This module implements Synthetic Phase 2 by:
 
 from collections.abc import Callable, Iterable
 import logging
-from typing import Any
+from typing import Any, TypedDict
 
 from ha_synthetic_sensors.name_resolver import NameResolver
 from ha_synthetic_sensors.sensor_manager import SensorManager, SensorManagerConfig
@@ -20,6 +20,7 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
 from .const import COORDINATOR, DOMAIN
+from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_backing_entity_id,
     construct_entity_id,
@@ -30,9 +31,24 @@ from .helpers import (
     panel_to_device_info,
 )
 from .sensor_definitions import CIRCUITS_SENSORS, PANEL_SENSORS, STORAGE_BATTERY_SENSORS
+from .span_panel import SpanPanel
+from .span_panel_circuit import SpanPanelCircuit
 from .synthetic_config_manager import SyntheticConfigManager
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class SyntheticSensorConfig(TypedDict):
+    """Type definition for synthetic sensor configuration."""
+
+    name: str
+    entity_id: str
+    formula: str
+    variables: dict[str, str]
+    unit_of_measurement: str
+    device_class: str | None
+    state_class: str | None
+    device_identifier: str
 
 
 class SpanSensorManager:
@@ -55,7 +71,7 @@ class SpanSensorManager:
         "battery_level": "storage_battery.storage_battery_percentage",
     }
 
-    CIRCUIT_FIELD_MAP: dict[str, Callable[[Any], Any]] = {
+    CIRCUIT_FIELD_MAP: dict[str, Callable[[SpanPanelCircuit], Any]] = {
         "_power": lambda c: abs(c.instant_power),  # type: ignore[misc]
         "_energy_produced": lambda c: c.produced_energy,  # type: ignore[misc]
         "_energy_consumed": lambda c: c.consumed_energy,  # type: ignore[misc]
@@ -124,7 +140,7 @@ class SpanSensorManager:
         self._cached_registered_entity_ids: set[str] | None = None
 
     def _construct_unique_id(
-        self, span_panel: Any, circuit_id: str | None, description_key: str
+        self, span_panel: SpanPanel, circuit_id: str | None, description_key: str
     ) -> str:
         """Construct unique ID following consistent pattern without circuit_ prefix.
 
@@ -174,7 +190,7 @@ class SpanSensorManager:
         return self._config_manager
 
     def create_data_provider_callback(
-        self, coordinator: Any, span_panel: Any
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
     ) -> Callable[[str], DataProviderResult]:
         """Create data provider callback that provides direct coordinator data access.
 
@@ -306,7 +322,7 @@ class SpanSensorManager:
 
         return data_provider
 
-    def _get_panel_sensor_data(self, entity_part: str, span_panel: Any) -> DataProviderResult:
+    def _get_panel_sensor_data(self, entity_part: str, span_panel: SpanPanel) -> DataProviderResult:
         """Get panel-level sensor data.
 
         Args:
@@ -356,13 +372,15 @@ class SpanSensorManager:
                 return {"value": None, "exists": False}
 
             _LOGGER.debug("Panel sensor %s returning value: %s", entity_part, value)
-            return {"value": value, "exists": True}
+            return {"value": value, "exists": True}  # type: ignore[return-value]
 
         except Exception as e:
             _LOGGER.warning("Error getting panel sensor data for %s: %s", entity_part, e)
             return {"value": None, "exists": False}
 
-    def generate_unified_config_sync(self, coordinator: Any, span_panel: Any) -> dict[str, Any]:
+    def generate_unified_config_sync(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    ) -> dict[str, SyntheticSensorConfig]:
         """Generate unified YAML configuration for all SPAN sensors synchronously.
 
         This creates the YAML configuration that defines all circuit and panel sensors
@@ -399,12 +417,15 @@ class SpanSensorManager:
             # Convert enum state_class to string for YAML serialization
             if sensor_config.get("state_class") is not None:
                 sensor_config["state_class"] = str(sensor_config["state_class"])
-            # Remove None values to keep YAML clean
-            all_sensors[sensor_key] = {k: v for k, v in sensor_config.items() if v is not None}
+            # Remove None values to keep YAML clean - use type cast for compatibility
+            filtered_config = {k: v for k, v in sensor_config.items() if v is not None}
+            all_sensors[sensor_key] = filtered_config  # type: ignore[assignment]
 
         return all_sensors
 
-    async def generate_unified_config(self, coordinator: Any, span_panel: Any) -> bool:
+    async def generate_unified_config(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    ) -> bool:
         """Generate unified synthetic sensor configuration.
 
         This method creates a comprehensive YAML configuration that replaces all
@@ -475,7 +496,9 @@ class SpanSensorManager:
             _LOGGER.error("Failed to generate unified sensor configuration: %s", e)
             return False
 
-    def _generate_circuit_sensors(self, coordinator: Any, span_panel: Any) -> dict[str, Any]:
+    def _generate_circuit_sensors(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    ) -> dict[str, SyntheticSensorConfig]:
         """Generate synthetic sensor configs for all circuit sensors.
 
         Args:
@@ -487,7 +510,7 @@ class SpanSensorManager:
 
         """
 
-        sensors: dict[str, Any] = {}
+        sensors: dict[str, SyntheticSensorConfig] = {}
         device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
 
         for circuit_id, circuit_data in span_panel.circuits.items():
@@ -547,11 +570,13 @@ class SpanSensorManager:
                 #         description.suggested_display_precision
                 #     )
 
-                sensors[unique_id] = sensor_config
+                sensors[unique_id] = sensor_config  # type: ignore[assignment]
 
         return sensors
 
-    def _generate_panel_sensors(self, coordinator: Any, span_panel: Any) -> dict[str, Any]:
+    def _generate_panel_sensors(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    ) -> dict[str, SyntheticSensorConfig]:
         """Generate synthetic sensor configs for panel-level sensors.
 
         Args:
@@ -563,7 +588,7 @@ class SpanSensorManager:
 
         """
 
-        sensors: dict[str, Any] = {}
+        sensors: dict[str, SyntheticSensorConfig] = {}
         device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
 
         for description in PANEL_SENSORS:
@@ -603,11 +628,13 @@ class SpanSensorManager:
                 "device_identifier": device_identifier,
             }
 
-            sensors[unique_id] = sensor_config
+            sensors[unique_id] = sensor_config  # type: ignore[assignment]
 
         return sensors
 
-    def _generate_battery_sensors(self, coordinator: Any, span_panel: Any) -> dict[str, Any]:
+    def _generate_battery_sensors(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    ) -> dict[str, SyntheticSensorConfig]:
         """Generate synthetic sensor configs for battery sensors.
 
         Args:
@@ -618,7 +645,7 @@ class SpanSensorManager:
             Dictionary of sensor configs keyed by sensor key
 
         """
-        sensors: dict[str, Any] = {}
+        sensors: dict[str, SyntheticSensorConfig] = {}
 
         # Check if battery is enabled in options
         battery_enabled = self._config_entry.options.get("battery_enable", False)
@@ -664,11 +691,11 @@ class SpanSensorManager:
                 "device_identifier": device_identifier,
             }
 
-            sensors[unique_id] = sensor_config
+            sensors[unique_id] = sensor_config  # type: ignore[assignment]
 
         return sensors
 
-    def _update_registered_entities(self, sensor_configs: dict[str, Any]) -> None:
+    def _update_registered_entities(self, sensor_configs: dict[str, SyntheticSensorConfig]) -> None:
         """Update the set of registered entities from sensor configs.
 
         Args:
@@ -764,7 +791,7 @@ class SpanSensorManager:
             _LOGGER.error("Unified config validation failed: %s", e)
             return False
 
-    async def get_registered_entity_ids(self, span_panel: Any) -> set[str]:
+    async def get_registered_entity_ids(self, span_panel: SpanPanel) -> set[str]:
         """Get the set of entity IDs that this integration can provide data for.
 
         Args:
@@ -845,7 +872,7 @@ class SpanSensorManager:
 
         return entity_ids
 
-    async def create_and_register_sensor_manager(self, span_panel: Any) -> Any:
+    async def create_and_register_sensor_manager(self, span_panel: SpanPanel) -> SensorManager:
         """Create and register a SensorManager that can be shared across the integration.
 
         This should be called once after all platforms are loaded.

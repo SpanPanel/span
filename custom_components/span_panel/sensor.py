@@ -81,13 +81,11 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         device_info: DeviceInfo = panel_to_device_info(span_panel)
         self._attr_device_info = device_info  # Re-enable device info
 
-        # Use abstract methods to generate entity properties
         self._attr_name = self._generate_friendly_name(span_panel, description)
 
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = self._generate_unique_id(span_panel, description)
 
-        # Generate entity_id using abstract method
         entity_id = self._generate_entity_id(data_coordinator, span_panel, description)
         if entity_id:
             self.entity_id = entity_id
@@ -180,7 +178,6 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         try:
             data_source: D = self.get_data_source(self.coordinator.data)
 
-            # Debug logging specifically for circuit power sensors
             if hasattr(self, "id") and hasattr(data_source, "instant_power"):
                 circuit_id = getattr(self, "id", "unknown")
                 instant_power = getattr(data_source, "instant_power", None)
@@ -203,7 +200,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
                 self._attr_native_value = float(raw_value)
             else:
                 # For string values, keep as string - this is valid for Home Assistant sensors
-                self._attr_native_value = str(raw_value)  # type: ignore[assignment]
+                self._attr_native_value = str(raw_value)
         except (AttributeError, KeyError, IndexError) as e:
             _LOGGER.debug(
                 "CIRCUIT_POWER_ERROR: Error in _update_native_value for %s: %s",
@@ -325,15 +322,15 @@ class SpanUnmappedCircuitSensor(
 
         # Override the description key to use the circuit_id for data lookup
         description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
-            key=circuit_id,  # Use circuit_id for data source lookup
+            key=circuit_id,
             name=description.name,
             native_unit_of_measurement=description.native_unit_of_measurement,
             state_class=description.state_class,
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
-            entity_registry_enabled_default=True,  # Enabled but invisible
-            entity_registry_visible_default=False,  # Hidden from UI
+            entity_registry_enabled_default=True,
+            entity_registry_visible_default=False,
         )
 
         super().__init__(data_coordinator, description_with_circuit, span_panel)
@@ -384,8 +381,8 @@ async def async_setup_entry(
     span_panel: SpanPanel = coordinator.data
     _LOGGER.debug("SENSOR_SETUP_DEBUG: Got coordinator and span_panel data")
 
-    # First, create all the native sensors that synthetic sensors will depend on
-    entities: list[SpanSensorBase[Any, Any]] = []
+    # First, creatr all the native sensors that synthetic sensors may depend on
+    entities: list[SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus] = []
 
     # Add panel data status sensors (DSM State, DSM Grid State, etc.)
     for description in PANEL_DATA_STATUS_SENSORS:
@@ -484,19 +481,19 @@ async def async_setup_entry(
             device_info = panel_to_device_info(coordinator.data)
 
             # Create SensorManager with data provider configuration
-            manager_config = SensorManagerConfig(  # type: ignore[misc]
+            manager_config = SensorManagerConfig(
                 device_info=device_info,
                 unique_id_prefix="",
                 lifecycle_managed_externally=True,
                 data_provider_callback=data_provider_callback,
-                integration_domain=DOMAIN,  # PHASE 1: Add integration domain
+                integration_domain=DOMAIN,
             )
 
-            sensor_manager = SensorManager(hass, name_resolver, async_add_entities, manager_config)  # type: ignore[misc]
+            sensor_manager = SensorManager(hass, name_resolver, async_add_entities, manager_config)
             _LOGGER.debug("SENSOR_SETUP_DEBUG: Created SensorManager with data provider callback")
 
             # Register backing entities with the sensor manager
-            sensor_manager.register_data_provider_entities(backing_entities)  # type: ignore[misc]
+            sensor_manager.register_data_provider_entities(backing_entities)
             _LOGGER.debug(
                 "SENSOR_SETUP_DEBUG: Registered %d backing entities with sensor manager",
                 len(backing_entities),
@@ -504,11 +501,11 @@ async def async_setup_entry(
 
             # Load YAML configuration into the sensor manager
             config_manager = ConfigManager(hass)
-            config = await config_manager.async_load_from_file(yaml_path)  # type: ignore[misc]
+            config = await config_manager.async_load_from_file(str(yaml_path))
             _LOGGER.debug("SENSOR_SETUP_DEBUG: Loaded YAML configuration from %s", yaml_path)
 
             # Load configuration to create synthetic sensors
-            await sensor_manager.load_configuration(config)  # type: ignore[misc]
+            await sensor_manager.load_configuration(config)
             _LOGGER.debug("SENSOR_SETUP_DEBUG: Synthetic sensors created successfully")
 
             # Also load solar synthetic sensors if they exist
@@ -519,8 +516,8 @@ async def async_setup_entry(
                         "SENSOR_SETUP_DEBUG: Loading solar YAML configuration from %s",
                         solar_yaml_path,
                     )
-                    solar_config = await config_manager.async_load_from_file(str(solar_yaml_path))  # type: ignore[misc]
-                    await sensor_manager.load_configuration(solar_config)  # type: ignore[misc]
+                    solar_config = await config_manager.async_load_from_file(str(solar_yaml_path))
+                    await sensor_manager.load_configuration(solar_config)
                     _LOGGER.debug(
                         "SENSOR_SETUP_DEBUG: Solar synthetic sensors created successfully"
                     )

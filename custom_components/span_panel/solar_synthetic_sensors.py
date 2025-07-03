@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -10,6 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import yaml
 
 from .const import DOMAIN
+from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_synthetic_entity_id,
     construct_synthetic_unique_id,
@@ -17,9 +18,23 @@ from .helpers import (
     get_user_friendly_suffix,
 )
 from .solar_tab_manager import SolarTabManager
+from .span_panel import SpanPanel
 from .synthetic_config_manager import SyntheticConfigManager
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class SolarSensorConfig(TypedDict):
+    """Type definition for solar synthetic sensor configuration."""
+
+    name: str
+    entity_id: str
+    formula: str
+    variables: dict[str, str]
+    unit_of_measurement: str
+    device_class: str
+    state_class: str
+    device_identifier: str
 
 
 class SolarSyntheticSensors:
@@ -50,8 +65,8 @@ class SolarSyntheticSensors:
 
     async def setup_solar_sensors(
         self,
-        coordinator: Any,
-        span_panel: Any,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
         async_add_entities: AddEntitiesCallback,
         inverter_leg1: int,
         inverter_leg2: int,
@@ -64,8 +79,8 @@ class SolarSyntheticSensors:
         3. Creating synthetic sensors
 
         Args:
-            coordinator: The coordinator instance
-            span_panel: The span panel data
+            coordinator: The SPAN panel coordinator instance
+            span_panel: The SPAN panel data instance
             async_add_entities: Callback to add entities
             inverter_leg1: First solar inverter leg circuit number
             inverter_leg2: Second solar inverter leg circuit number
@@ -115,7 +130,7 @@ class SolarSyntheticSensors:
             _LOGGER.error("Failed to clean up solar sensors: %s", e)
 
     async def _generate_solar_config(
-        self, coordinator: Any, span_panel: Any, leg1: int, leg2: int
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel, leg1: int, leg2: int
     ) -> None:
         """Generate YAML configuration for solar inverter sensors using existing helpers.
 
@@ -159,12 +174,13 @@ class SolarSyntheticSensors:
         # Create each sensor with the config manager
         device_id = panel_serial
         for sensor_key, sensor_config in solar_sensors.items():
-            await config_manager.create_sensor(device_id, sensor_key, sensor_config)
+            # Type cast to dict[str, Any] for compatibility with create_sensor
+            await config_manager.create_sensor(device_id, sensor_key, dict(sensor_config))
 
         _LOGGER.debug("Generated %d solar sensors for panel %s", len(solar_sensors), panel_serial)
 
     def _get_unmapped_entity_ids(
-        self, span_panel: Any, leg1: int, leg2: int, field: str
+        self, span_panel: SpanPanel, leg1: int, leg2: int, field: str
     ) -> dict[str, str | None]:
         """Get entity IDs for unmapped circuits using existing helpers.
 
@@ -188,19 +204,19 @@ class SolarSyntheticSensors:
 
     def _build_simplified_solar_sensors(
         self,
-        coordinator: Any,
-        span_panel: Any,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
         leg1: int,
         leg2: int,
         power_entities: dict[str, str | None],
         produced_entities: dict[str, str | None],
         consumed_entities: dict[str, str | None],
-    ) -> dict[str, Any]:
+    ) -> dict[str, SolarSensorConfig]:
         """Build solar sensor configurations using existing helpers.
 
         This replaces the complex _build_solar_sensors method with a simplified version.
         """
-        solar_sensors: dict[str, Any] = {}
+        solar_sensors: dict[str, SolarSensorConfig] = {}
         device_identifier = span_panel.status.serial_number
         circuit_numbers = [num for num in [leg1, leg2] if num > 0]
 
