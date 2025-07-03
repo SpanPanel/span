@@ -425,7 +425,7 @@ async def async_setup_entry(
             entity_id = entity.entity_id
             registry_entry = entity_registry.async_get(entity_id)
             if registry_entry and registry_entry.disabled:
-                _LOGGER.info("Enabling previously disabled unmapped tab entity: %s", entity_id)
+                _LOGGER.debug("Enabling previously disabled unmapped tab entity: %s", entity_id)
                 entity_registry.async_update_entity(entity_id, disabled_by=None)
 
     # Handle solar configuration - setup or cleanup based on enabled state
@@ -433,7 +433,7 @@ async def async_setup_entry(
     inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
     inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
 
-    _LOGGER.info(
+    _LOGGER.debug(
         "Solar sensor setup - enabled: %s, options: %s",
         solar_enabled,
         config_entry.options,
@@ -509,9 +509,23 @@ async def async_setup_entry(
 
             # Load configuration to create synthetic sensors
             await sensor_manager.load_configuration(config)  # type: ignore[misc]
-            _LOGGER.info("SENSOR_SETUP_DEBUG: Synthetic sensors created successfully")
+            _LOGGER.debug("SENSOR_SETUP_DEBUG: Synthetic sensors created successfully")
 
-        # Solar synthetic sensors are now handled in the solar_sensors.setup_solar_sensors() call above
+            # Also load solar synthetic sensors if they exist
+            if solar_enabled:
+                solar_yaml_path = solar_sensors.config_file_path
+                if solar_yaml_path.exists():
+                    _LOGGER.debug(
+                        "SENSOR_SETUP_DEBUG: Loading solar YAML configuration from %s",
+                        solar_yaml_path,
+                    )
+                    solar_config = await config_manager.async_load_from_file(str(solar_yaml_path))  # type: ignore[misc]
+                    await sensor_manager.load_configuration(solar_config)  # type: ignore[misc]
+                    _LOGGER.debug(
+                        "SENSOR_SETUP_DEBUG: Solar synthetic sensors created successfully"
+                    )
+                else:
+                    _LOGGER.warning("Solar enabled but YAML file not found: %s", solar_yaml_path)
 
     except Exception as e:
         _LOGGER.error(
