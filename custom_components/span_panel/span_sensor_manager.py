@@ -8,6 +8,7 @@ This module implements Synthetic Phase 2 by:
 """
 
 from collections.abc import Callable, Iterable
+import enum
 import logging
 from typing import Any, TypedDict
 
@@ -24,7 +25,8 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_backing_entity_id,
     construct_entity_id,
-    construct_panel_entity_id,
+    construct_panel_friendly_name,
+    construct_panel_unique_id,
     construct_sensor_manager_unique_id,
     get_circuit_number,
     get_user_friendly_suffix,
@@ -342,41 +344,84 @@ class SpanSensorManager:
 
             if entity_part not in self.PANEL_SENSOR_MAP:
                 _LOGGER.debug("Entity part %s not found in PANEL_SENSOR_MAP", entity_part)
-                return {"value": None, "exists": False}
+                return DataProviderResult(value=None, exists=False)
 
             attribute_path = self.PANEL_SENSOR_MAP[entity_part]
-            _LOGGER.debug("Attribute path for %s: %s", entity_part, attribute_path)
+            _LOGGER.debug("Found attribute path for %s: %s", entity_part, attribute_path)
 
-            # Get the actual panel data object (span_panel.panel contains the SpanPanelData)
-            panel_data = getattr(span_panel, "panel", span_panel)
+            # Special handling for battery_level
+            if entity_part == "battery_level":
+                _LOGGER.debug("Processing battery_level sensor")
+                _LOGGER.debug("span_panel.options: %s", span_panel.options)
 
-            # Handle nested attributes (e.g., "storage_battery.storage_battery_percentage")
-            if "." in attribute_path:
-                parts = attribute_path.split(".")
-                obj = panel_data
-                for part in parts:
-                    obj = getattr(obj, part, None)
-                    if obj is None:
-                        _LOGGER.debug("Nested attribute %s.%s is None", obj, part)
-                        return {"value": None, "exists": False}
-                value = obj
-            else:
-                value = getattr(panel_data, attribute_path, None)
+                # Check if battery is enabled
+                if span_panel.options and span_panel.options.enable_battery_percentage:
+                    _LOGGER.debug("Battery percentage is enabled in options")
 
-            _LOGGER.debug(
-                "Panel sensor %s raw value: %s (type: %s)", entity_part, value, type(value).__name__
-            )
+                    # Check if storage_battery exists
+                    try:
+                        storage_battery = span_panel.storage_battery
+                        _LOGGER.debug("storage_battery object: %s", storage_battery)
+                        _LOGGER.debug(
+                            "storage_battery.storage_battery_percentage: %s",
+                            storage_battery.storage_battery_percentage,
+                        )
 
-            if value is None:
-                _LOGGER.debug("Panel sensor %s value is None", entity_part)
-                return {"value": None, "exists": False}
+                        value = storage_battery.storage_battery_percentage
+                        _LOGGER.debug("Battery percentage value: %s", value)
 
-            _LOGGER.debug("Panel sensor %s returning value: %s", entity_part, value)
-            return {"value": value, "exists": True}  # type: ignore[return-value]
+                        return DataProviderResult(value=value, exists=True)
+
+                    except RuntimeError as e:
+                        _LOGGER.debug("RuntimeError accessing storage_battery: %s", e)
+                        return DataProviderResult(value=None, exists=False)
+                    except Exception as e:
+                        _LOGGER.debug("Exception accessing storage_battery: %s", e)
+                        return DataProviderResult(value=None, exists=False)
+                else:
+                    _LOGGER.debug("Battery percentage is not enabled in options")
+                    return DataProviderResult(value=None, exists=False)
+
+            # Handle other panel sensors using attribute path
+            try:
+                # Parse the attribute path (e.g., "storage_battery.storage_battery_percentage")
+                path_parts = attribute_path.split(".")
+                _LOGGER.debug("Attribute path parts: %s", path_parts)
+
+                # Start with the panel_data object
+                panel_data = span_panel.panel
+                _LOGGER.debug("Panel data object: %s", panel_data)
+
+                # Navigate through the path
+                current_obj = panel_data
+                for i, part in enumerate(path_parts):
+                    _LOGGER.debug("Navigating to part %d: %s", i, part)
+
+                    if not hasattr(current_obj, part):
+                        _LOGGER.debug("Object %s does not have attribute %s", current_obj, part)
+                        return DataProviderResult(value=None, exists=False)
+
+                    current_obj = getattr(current_obj, part)
+                    _LOGGER.debug("Current object after part %s: %s", part, current_obj)
+
+                    if current_obj is None:
+                        _LOGGER.debug("Nested attribute %s is None", ".".join(path_parts[: i + 1]))
+                        return DataProviderResult(value=None, exists=False)
+
+                _LOGGER.debug("Final value from attribute path: %s", current_obj)
+                # Cast to the appropriate type for DataProviderResult
+                return DataProviderResult(value=current_obj, exists=True)  # type: ignore[arg-type]
+
+            except AttributeError as e:
+                _LOGGER.debug("AttributeError navigating path %s: %s", attribute_path, e)
+                return DataProviderResult(value=None, exists=False)
+            except Exception as e:
+                _LOGGER.debug("Exception navigating path %s: %s", attribute_path, e)
+                return DataProviderResult(value=None, exists=False)
 
         except Exception as e:
-            _LOGGER.warning("Error getting panel sensor data for %s: %s", entity_part, e)
-            return {"value": None, "exists": False}
+            _LOGGER.error("Error in _get_panel_sensor_data: %s", e, exc_info=True)
+            return DataProviderResult(value=None, exists=False)
 
     def generate_unified_config_sync(
         self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
@@ -547,6 +592,17 @@ class SpanSensorManager:
                 )
 
                 # Create sensor config
+                unit_value = description.native_unit_of_measurement
+                # Convert enum constants to strings to avoid YAML serialization issues
+
+                if isinstance(unit_value, enum.Enum):
+                    # This is an enum - convert to string value
+                    unit_value = unit_value.value
+                elif unit_value is not None:
+                    unit_value = str(unit_value)
+                else:
+                    unit_value = ""
+
                 sensor_config = {
                     "name": f"{circuit_data.name} {description.name}",
                     "entity_id": entity_id,
@@ -554,7 +610,7 @@ class SpanSensorManager:
                     "variables": {
                         "source_value": virtual_entity_id,
                     },
-                    "unit_of_measurement": str(description.native_unit_of_measurement),
+                    "unit_of_measurement": unit_value,
                     "device_class": str(description.device_class)
                     if description.device_class
                     else None,
@@ -587,50 +643,9 @@ class SpanSensorManager:
             Dictionary of sensor configs keyed by sensor key
 
         """
-
-        sensors: dict[str, SyntheticSensorConfig] = {}
-        device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
-
-        for description in PANEL_SENSORS:
-            if description.key not in self.PANEL_SENSOR_MAPPING:
-                continue
-
-            virtual_entity_id, _ = self.PANEL_SENSOR_MAPPING[description.key]
-            # Use consistent backing entity ID format (circuit_0 scheme)
-            virtual_entity_id = construct_backing_entity_id(
-                span_panel,
-                suffix=virtual_entity_id,  # Use the suffix directly
-                entity_type="panel",
-            )
-
-            # Generate unique ID and entity ID based on display name for consistency
-            display_name_suffix = slugify(str(description.name))
-            unique_id = f"span_{span_panel.status.serial_number.lower()}_{display_name_suffix}"
-
-            entity_id = construct_panel_entity_id(
-                coordinator,
-                span_panel,
-                "sensor",
-                display_name_suffix,
-            )
-
-            # Create sensor config
-            sensor_config = {
-                "name": description.name,
-                "entity_id": entity_id,
-                "formula": "source_value",
-                "variables": {
-                    "source_value": virtual_entity_id,
-                },
-                "unit_of_measurement": str(description.native_unit_of_measurement),
-                "device_class": description.device_class,
-                "state_class": description.state_class,
-                "device_identifier": device_identifier,
-            }
-
-            sensors[unique_id] = sensor_config  # type: ignore[assignment]
-
-        return sensors
+        return self._generate_sensor_configs_from_descriptions(
+            coordinator, span_panel, PANEL_SENSORS, entity_type="panel"
+        )
 
     def _generate_battery_sensors(
         self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel
@@ -645,55 +660,38 @@ class SpanSensorManager:
             Dictionary of sensor configs keyed by sensor key
 
         """
-        sensors: dict[str, SyntheticSensorConfig] = {}
-
         # Check if battery is enabled in options
-        battery_enabled = self._config_entry.options.get("battery_enable", False)
+        battery_enabled = self._config_entry.options.get("enable_battery_percentage", False)
+        _LOGGER.debug(
+            "Battery sensor generation: enable_battery_percentage option = %s", battery_enabled
+        )
+        _LOGGER.debug("All config entry options: %s", self._config_entry.options)
+
         if not battery_enabled:
-            return sensors
+            _LOGGER.debug("Battery sensors skipped - enable_battery_percentage option is False")
+            return {}
 
-        device_identifier = span_panel.status.serial_number  # PHASE 1: Use clean device identifier
+        # Check if battery data is available on the panel
+        try:
+            # Test if we can access battery data
+            _ = span_panel.storage_battery
+            _LOGGER.debug("Battery data is available on the panel")
+        except RuntimeError:
+            _LOGGER.debug("Battery data is not available on the panel - skipping battery sensors")
+            return {}
 
-        for description in STORAGE_BATTERY_SENSORS:
-            if description.key not in self.PANEL_SENSOR_MAPPING:
-                continue
+        _LOGGER.debug(
+            "Generating battery sensors - enable_battery_percentage option is True and battery data is available"
+        )
 
-            virtual_entity_id, _ = self.PANEL_SENSOR_MAPPING[description.key]
-            # Use consistent backing entity ID format (circuit_0 scheme)
-            virtual_entity_id = construct_backing_entity_id(
-                span_panel,
-                suffix=virtual_entity_id,  # Use the suffix directly
-                entity_type="battery",
-            )
-
-            # Generate unique ID and entity ID based on display name for consistency
-            display_name_suffix = slugify(str(description.name))
-            unique_id = f"span_{span_panel.status.serial_number.lower()}_{display_name_suffix}"
-
-            entity_id = construct_panel_entity_id(
-                coordinator,
-                span_panel,
-                "sensor",
-                display_name_suffix,
-            )
-
-            # Create sensor config
-            sensor_config = {
-                "name": description.name,
-                "entity_id": entity_id,
-                "formula": "source_value",
-                "variables": {
-                    "source_value": virtual_entity_id,
-                },
-                "unit_of_measurement": str(description.native_unit_of_measurement),
-                "device_class": description.device_class,
-                "state_class": description.state_class,
-                "device_identifier": device_identifier,
-            }
-
-            sensors[unique_id] = sensor_config  # type: ignore[assignment]
-
-        return sensors
+        # Use the helper method to generate sensor configs
+        return self._generate_sensor_configs_from_descriptions(
+            coordinator,
+            span_panel,
+            STORAGE_BATTERY_SENSORS,
+            entity_type="circuit",
+            circuit_number="0",
+        )
 
     def _update_registered_entities(self, sensor_configs: dict[str, SyntheticSensorConfig]) -> None:
         """Update the set of registered entities from sensor configs.
@@ -938,3 +936,83 @@ class SpanSensorManager:
         except Exception as e:
             _LOGGER.error("Failed to create shared SensorManager: %s", e)
             raise
+
+    def _generate_sensor_configs_from_descriptions(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        descriptions: tuple,
+        entity_type: str = "panel",
+        circuit_number: str = "0",
+    ) -> dict[str, SyntheticSensorConfig]:
+        """Generate sensor configs from sensor descriptions.
+
+        Args:
+            coordinator: SPAN panel coordinator instance
+            span_panel: SPAN panel data instance
+            descriptions: Tuple of sensor descriptions to process
+            entity_type: Type for backing entity ID construction ("panel" or "circuit")
+            circuit_number: Circuit number for backing entity ID (used when entity_type="circuit")
+
+        Returns:
+            Dictionary of sensor configs keyed by unique ID
+
+        """
+        sensors: dict[str, SyntheticSensorConfig] = {}
+        device_identifier = span_panel.status.serial_number
+
+        for description in descriptions:
+            if description.key not in self.PANEL_SENSOR_MAPPING:
+                continue
+
+            # Get the mapped sensor info
+            sensor_suffix, friendly_name_base = self.PANEL_SENSOR_MAPPING[description.key]
+
+            # Use helpers for consistent naming
+            friendly_name = construct_panel_friendly_name(friendly_name_base)
+            unique_id = construct_panel_unique_id(span_panel, description.key)
+
+            # Construct backing entity ID
+            if entity_type == "panel":
+                virtual_entity_id = construct_backing_entity_id(
+                    span_panel,
+                    suffix=sensor_suffix,
+                    entity_type="panel",
+                )
+            else:  # entity_type == "circuit"
+                virtual_entity_id = construct_backing_entity_id(
+                    span_panel,
+                    circuit_number=circuit_number,
+                    suffix=sensor_suffix,
+                    entity_type="circuit",
+                )
+
+            # Construct synthetic entity ID using the same suffix as the backing entity
+            synthetic_entity_id = f"sensor.span_panel_{sensor_suffix}"
+
+            # Create sensor config
+            unit_value = getattr(description, "native_unit_of_measurement", "") or ""
+            # Convert enum constants to strings to avoid YAML serialization issues
+
+            if isinstance(unit_value, enum.Enum):
+                # This is an enum - convert to string value
+                unit_value = unit_value.value
+            elif unit_value is not None:
+                unit_value = str(unit_value)
+            else:
+                unit_value = ""
+
+            sensor_config: SyntheticSensorConfig = {
+                "name": friendly_name,
+                "entity_id": synthetic_entity_id,
+                "formula": "source_value",
+                "variables": {"source_value": virtual_entity_id},
+                "unit_of_measurement": unit_value,
+                "device_class": str(description.device_class) if description.device_class else None,
+                "state_class": str(description.state_class) if description.state_class else None,
+                "device_identifier": device_identifier,
+            }
+
+            sensors[unique_id] = sensor_config
+
+        return sensors
