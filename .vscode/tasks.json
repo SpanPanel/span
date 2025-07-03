@@ -6,8 +6,13 @@
       "type": "shell",
       "command": "${workspaceFolder}/setup-hooks.sh",
       "presentation": {
-        "reveal": "silent",
-        "clear": true
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false,
+        "close": true
       },
       "problemMatcher": [],
       "runOptions": {

@@ -104,32 +104,7 @@ init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
-[tool.pyright]
-include = ["custom_components/span_panel"]
-exclude = [
-    "venv",
-    ".venv",
-    "scripts",
-    ".git",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache"
-]
-extraPaths = [
-    "./custom_components",
-    "../span-panel-api/src",
-    "../ha-synthetic-sensors/src"
-]
-pythonPlatform = "Darwin"
-pythonVersion = "3.13"
-typeCheckingMode = "basic"
-useLibraryCodeForTypes = true
-autoSearchPaths = true
-autoImportCompletions = true
-reportMissingImports = "warning"
-reportMissingTypeStubs = false
-venvPath = "."
-venv = ".venv"
+
 
 [tool.ruff]
 line-length = 100

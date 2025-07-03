@@ -62,7 +62,12 @@ class TestEntityIdInYaml:
             solar_sensors = SolarSyntheticSensors(hass_with_solar_data, mock_config_entry, temp_dir)
 
             # Generate YAML
-            await solar_sensors.generate_config(15, 16)
+            # Get coordinator and span panel data from the test setup
+            coordinator_data = hass_with_solar_data.data[DOMAIN]["test_entry_id"]
+            coordinator = coordinator_data["coordinator"]
+            span_panel = coordinator.data
+
+            await solar_sensors._generate_solar_config(coordinator, span_panel, 15, 16)
 
             yaml_path = solar_sensors.config_file_path
             assert yaml_path.exists()
@@ -101,11 +106,11 @@ class TestEntityIdInYaml:
 
             # Verify specific sensor entity_ids based on the friendly name "Solar Inverter"
             # With USE_CIRCUIT_NUMBERS: False, we get name-based IDs
-            # But YAML keys are circuit-based for v1.0.10 compatibility
+            # YAML keys now use proper unique identifiers with device prefix
             expected_sensors = {
-                "solar_inverter_instant_power": "sensor.span_panel_solar_inverter_instant_power",
-                "solar_inverter_energy_produced": "sensor.span_panel_solar_inverter_energy_produced",
-                "solar_inverter_energy_consumed": "sensor.span_panel_solar_inverter_energy_consumed",
+                "span_test123456_solar_inverter_power": "sensor.span_panel_solar_inverter_power",
+                "span_test123456_solar_inverter_energy_produced": "sensor.span_panel_solar_inverter_energy_produced",
+                "span_test123456_solar_inverter_energy_consumed": "sensor.span_panel_solar_inverter_energy_consumed",
             }
 
             for sensor_key, expected_entity_id in expected_sensors.items():
@@ -125,22 +130,27 @@ class TestEntityIdInYaml:
         """Test that the entity_id field matches the YAML key (with sensor. prefix)."""
 
         with (
-            patch("custom_components.span_panel.helpers.construct_entity_id") as mock_construct,
-            patch("custom_components.span_panel.helpers.get_user_friendly_suffix") as mock_suffix,
             patch(
-                "custom_components.span_panel.solar_synthetic_sensors.SolarSyntheticSensors._construct_solar_inverter_entity_id"
-            ) as mock_solar,
+                "custom_components.span_panel.solar_synthetic_sensors.construct_synthetic_entity_id"
+            ) as mock_construct,
+            patch("custom_components.span_panel.helpers.get_user_friendly_suffix") as mock_suffix,
         ):
-            mock_construct.return_value = "sensor.test_entity"
+            mock_construct.return_value = "sensor.test_solar_power"
             mock_suffix.return_value = "power"
-            mock_solar.return_value = "sensor.test_solar_power"
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 solar_sensors = SolarSyntheticSensors(
                     hass_with_solar_data, mock_config_entry, temp_dir
                 )
 
-                await solar_sensors.generate_config(15, 0)  # Single leg
+                # Get coordinator and span panel data from the test setup
+                coordinator_data = hass_with_solar_data.data[DOMAIN]["test_entry_id"]
+                coordinator = coordinator_data["coordinator"]
+                span_panel = coordinator.data
+
+                await solar_sensors._generate_solar_config(
+                    coordinator, span_panel, 15, 0
+                )  # Single leg
 
                 yaml_path = solar_sensors.config_file_path
                 with open(yaml_path, encoding="utf-8") as f:

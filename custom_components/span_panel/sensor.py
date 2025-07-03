@@ -48,7 +48,6 @@ from .sensor_definitions import (
     SpanPanelStatusSensorEntityDescription,
 )
 from .solar_synthetic_sensors import SolarSyntheticSensors
-from .solar_tab_manager import SolarTabManager
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
@@ -429,8 +428,7 @@ async def async_setup_entry(
                 _LOGGER.info("Enabling previously disabled unmapped tab entity: %s", entity_id)
                 entity_registry.async_update_entity(entity_id, disabled_by=None)
 
-    # Handle solar configuration - generate YAML for solar synthetic sensors if enabled
-    # This happens AFTER native sensors are available but BEFORE synthetic sensors are created
+    # Handle solar configuration - setup or cleanup based on enabled state
     solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
     inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
     inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
@@ -441,27 +439,17 @@ async def async_setup_entry(
         config_entry.options,
     )
 
+    # Initialize solar sensors manager
+    solar_sensors = SolarSyntheticSensors(hass, config_entry)
+
     if solar_enabled:
-        # Enable the required tab circuits (but keep them hidden)
-        tab_manager = SolarTabManager(hass, config_entry)
-        await tab_manager.enable_solar_tabs(inverter_leg1, inverter_leg2)
-
-        # Generate synthetic sensors YAML configuration
-        solar_sensors = SolarSyntheticSensors(hass, config_entry)
-        await solar_sensors.generate_config(inverter_leg1, inverter_leg2)
-
-        # Validate the generated configuration
-        if await solar_sensors.validate_config():
-            _LOGGER.debug("Solar synthetic sensors configuration generated successfully")
-        else:
-            _LOGGER.error("Failed to validate solar synthetic sensors configuration")
+        # Set up complete solar sensor infrastructure
+        await solar_sensors.setup_solar_sensors(
+            coordinator, span_panel, async_add_entities, inverter_leg1, inverter_leg2
+        )
     else:
         # Clean up solar configuration when disabled
-        tab_manager = SolarTabManager(hass, config_entry)
-        solar_sensors = SolarSyntheticSensors(hass, config_entry)
-
-        await tab_manager.disable_solar_tabs()
-        await solar_sensors.remove_config()
+        await solar_sensors.cleanup_solar_sensors()
 
     # NOW set up synthetic sensors after native entities are added and available in HA
     # Create shared name resolver for all synthetic sensors
@@ -523,53 +511,7 @@ async def async_setup_entry(
             await sensor_manager.load_configuration(config)  # type: ignore[misc]
             _LOGGER.info("SENSOR_SETUP_DEBUG: Synthetic sensors created successfully")
 
-        # Also set up solar synthetic sensors if they were generated
-        if solar_enabled:
-            try:
-                # Force coordinator update to ensure unmapped sensors have data
-                _LOGGER.debug("Forcing coordinator update before creating solar sensors")
-                await coordinator.async_request_refresh()
-
-                # Create a separate sensor manager for solar sensors
-                solar_device_info = panel_to_device_info(coordinator.data)
-
-                # Configure sensor manager for solar sensors
-                circuit_spec = "_".join(
-                    str(num) for num in [inverter_leg1, inverter_leg2] if num > 0
-                )
-                unique_id_prefix = (
-                    f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}"
-                )
-
-                solar_manager_config = SensorManagerConfig(  # type: ignore[misc]
-                    device_info=solar_device_info,
-                    unique_id_prefix=unique_id_prefix,
-                    lifecycle_managed_externally=True,
-                    integration_domain=DOMAIN,
-                )
-
-                solar_sensor_manager = SensorManager(
-                    hass, name_resolver, async_add_entities, solar_manager_config
-                )  # type: ignore[misc]
-
-                # Load the solar YAML configuration
-                solar_yaml_path = solar_sensors.config_file_path
-                if solar_yaml_path and solar_yaml_path.exists():
-                    solar_config_manager = ConfigManager(hass)
-                    solar_config = await solar_config_manager.async_load_from_file(
-                        str(solar_yaml_path)
-                    )  # type: ignore[misc]
-                    await solar_sensor_manager.load_configuration(solar_config)  # type: ignore[misc]
-                    _LOGGER.debug(
-                        "Solar synthetic sensors loaded successfully from %s", solar_yaml_path
-                    )
-                else:
-                    _LOGGER.error(
-                        "Solar synthetic sensors YAML file not found at %s", solar_yaml_path
-                    )
-
-            except Exception as e:
-                _LOGGER.error("Failed to set up solar synthetic sensors: %s", e)
+        # Solar synthetic sensors are now handled in the solar_sensors.setup_solar_sensors() call above
 
     except Exception as e:
         _LOGGER.error(

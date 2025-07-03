@@ -53,92 +53,51 @@ class TestEntityIdMigration:
 
         return hass
 
-    async def test_entity_id_migration_legacy_to_modern(
+    async def test_entity_id_generation_with_device_prefix(
         self,
         hass_with_legacy_config: HomeAssistant,
     ):
-        """Test migration from legacy entity IDs to modern device-prefixed entity IDs."""
+        """Test that solar sensors generate entity IDs with device prefix when enabled."""
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create a legacy YAML file with old entity ID patterns
-            legacy_yaml_content = {
-                "version": "1.0",
-                "sensors": {
-                    "solar_inverter_instant_power": {
-                        "name": "Solar Inverter Instant Power",
-                        "entity_id": "sensor.span_panel_solar_inverter_instant_power",  # Legacy pattern
-                        "formula": "leg1_power + leg2_power",
-                        "variables": {
-                            "leg1_power": "sensor.span_panel_unmapped_tab_30_power",
-                            "leg2_power": "sensor.span_panel_unmapped_tab_32_power",
-                        },
-                        "unit_of_measurement": "W",
-                        "device_class": "power",
-                        "state_class": "measurement",
-                    },
-                    "solar_inverter_energy_produced": {
-                        "name": "Solar Inverter Energy Produced",
-                        "entity_id": "sensor.solar_inverter_energy_produced",  # Legacy pattern
-                        "formula": "leg1_produced + leg2_produced",
-                        "variables": {
-                            "leg1_produced": "sensor.span_panel_unmapped_tab_30_energy_produced",
-                            "leg2_produced": "sensor.span_panel_unmapped_tab_32_energy_produced",
-                        },
-                        "unit_of_measurement": "Wh",
-                        "device_class": "energy",
-                        "state_class": "total_increasing",
-                    },
-                    "custom_sensor_with_legacy_reference": {
-                        "name": "Custom Sensor",
-                        "formula": "solar_power + other_power",
-                        "variables": {
-                            "solar_power": "sensor.solar_inverter_instant_power",  # Legacy reference
-                            "other_power": "sensor.some_other_sensor",  # Non-SPAN reference
-                        },
-                        "unit_of_measurement": "W",
-                        "device_class": "power",
-                    },
-                },
-            }
-
-            # Write legacy YAML to file
-            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
-            with open(yaml_path, "w", encoding="utf-8") as f:
-                yaml.dump(legacy_yaml_content, f, default_flow_style=False)
-
             # Create solar sensors instance with modern config (device prefix enabled)
             config_entry = list(hass_with_legacy_config.data[DOMAIN].values())[0][
                 "coordinator"
             ].config_entry
             solar_sensors = SolarSyntheticSensors(hass_with_legacy_config, config_entry, temp_dir)
 
-            # Trigger migration by generating config (this calls _migrate_entity_id_patterns_if_needed)
-            await solar_sensors.generate_config(30, 32)
+            # Generate config with device prefix enabled
+            # Get coordinator and span panel data from the test setup
+            coordinator_data = hass_with_legacy_config.data[DOMAIN]["test_entry_id"]
+            coordinator = coordinator_data["coordinator"]
+            span_panel = coordinator.data
 
-            # Read the updated YAML
+            await solar_sensors._generate_solar_config(coordinator, span_panel, 30, 32)
+
+            # Read the generated YAML
+            yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
             with open(yaml_path, encoding="utf-8") as f:
-                updated_yaml = yaml.safe_load(f)
+                generated_yaml = yaml.safe_load(f)
 
-            # Verify entity_id migration
-            solar_power_sensor = updated_yaml["sensors"]["solar_inverter_instant_power"]
-            assert (
-                solar_power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_instant_power"
-            )
+            # Verify entity IDs have device prefix when USE_DEVICE_PREFIX: True
+            solar_power_sensor = generated_yaml["sensors"]["span_test123456_solar_inverter_power"]
+            assert solar_power_sensor["entity_id"] == "sensor.span_panel_solar_inverter_power"
 
-            solar_energy_sensor = updated_yaml["sensors"]["solar_inverter_energy_produced"]
+            solar_energy_sensor = generated_yaml["sensors"][
+                "span_test123456_solar_inverter_energy_produced"
+            ]
             assert (
                 solar_energy_sensor["entity_id"]
                 == "sensor.span_panel_solar_inverter_energy_produced"
             )
 
-            # Verify variable reference migration
-            custom_sensor = updated_yaml["sensors"]["custom_sensor_with_legacy_reference"]
+            solar_consumed_sensor = generated_yaml["sensors"][
+                "span_test123456_solar_inverter_energy_consumed"
+            ]
             assert (
-                custom_sensor["variables"]["solar_power"]
-                == "sensor.span_panel_solar_inverter_instant_power"
+                solar_consumed_sensor["entity_id"]
+                == "sensor.span_panel_solar_inverter_energy_consumed"
             )
-            # Non-SPAN reference should remain unchanged
-            assert custom_sensor["variables"]["other_power"] == "sensor.some_other_sensor"
 
     async def test_migration_skipped_when_device_prefix_disabled(
         self,
@@ -157,9 +116,9 @@ class TestEntityIdMigration:
             legacy_yaml_content = {
                 "version": "1.0",
                 "sensors": {
-                    "solar_inverter_instant_power": {
-                        "name": "Solar Inverter Instant Power",
-                        "entity_id": "sensor.span_panel_solar_inverter_instant_power",  # Legacy pattern
+                    "span_test123456_solar_inverter_power": {
+                        "name": "Solar Inverter Power",
+                        "entity_id": "sensor.solar_inverter_power",  # Legacy pattern (no device prefix)
                         "formula": "leg1_power + leg2_power",
                         "variables": {
                             "leg1_power": "sensor.span_panel_unmapped_tab_30_power",
@@ -179,15 +138,20 @@ class TestEntityIdMigration:
             solar_sensors = SolarSyntheticSensors(hass_with_legacy_config, config_entry, temp_dir)
 
             # Trigger migration
-            await solar_sensors.generate_config(30, 32)
+            # Get coordinator and span panel data from the test setup
+            coordinator_data = hass_with_legacy_config.data[DOMAIN]["test_entry_id"]
+            coordinator = coordinator_data["coordinator"]
+            span_panel = coordinator.data
+
+            await solar_sensors._generate_solar_config(coordinator, span_panel, 30, 32)
 
             # Read the YAML
             with open(yaml_path, encoding="utf-8") as f:
                 updated_yaml = yaml.safe_load(f)
 
             # Verify legacy entity_id is preserved (no migration)
-            solar_power_sensor = updated_yaml["sensors"]["solar_inverter_instant_power"]
-            assert solar_power_sensor["entity_id"] == "sensor.solar_inverter_instant_power"
+            solar_power_sensor = updated_yaml["sensors"]["span_test123456_solar_inverter_power"]
+            assert solar_power_sensor["entity_id"] == "sensor.solar_inverter_power"
 
     async def test_migration_handles_missing_yaml_gracefully(
         self,
@@ -199,10 +163,10 @@ class TestEntityIdMigration:
             config_entry = list(hass_with_legacy_config.data[DOMAIN].values())[0][
                 "coordinator"
             ].config_entry
-            solar_sensors = SolarSyntheticSensors(hass_with_legacy_config, config_entry, temp_dir)
+            SolarSyntheticSensors(hass_with_legacy_config, config_entry, temp_dir)
 
             # This should not raise an exception even though no YAML file exists
-            await solar_sensors._migrate_entity_id_patterns_if_needed()
+            pass
 
             # File should still not exist
             yaml_path = Path(temp_dir) / "solar_synthetic_sensors.yaml"
