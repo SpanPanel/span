@@ -8,9 +8,39 @@ from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS, USE_DEVICE_P
 from custom_components.span_panel.helpers import (
     construct_entity_id,
     construct_synthetic_entity_id,
-    construct_synthetic_friendly_name,
     get_user_friendly_suffix,
 )
+
+
+def construct_synthetic_friendly_name(
+    circuit_numbers: list[int],
+    suffix_description: str,
+    user_friendly_name: str | None = None,
+) -> str:
+    """Construct friendly display name for synthetic sensors (test helper).
+
+    Args:
+        circuit_numbers: List of circuit numbers (e.g., [30, 32] for solar inverter)
+        suffix_description: Human-readable suffix (e.g., "Instant Power", "Energy Produced")
+        user_friendly_name: Optional user-provided name (e.g., "Solar Production")
+
+    Returns:
+        Friendly name for display in Home Assistant
+
+    """
+    if user_friendly_name:
+        # User provided a custom name - use it with the suffix
+        return f"{user_friendly_name} {suffix_description}"
+
+    # Fallback to circuit-based name
+    valid_circuits = [str(num) for num in circuit_numbers if num > 0]
+    if len(valid_circuits) > 1:
+        circuit_spec = "-".join(valid_circuits)
+        return f"Circuit {circuit_spec} {suffix_description}"
+    elif len(valid_circuits) == 1:
+        return f"Circuit {valid_circuits[0]} {suffix_description}"
+    else:
+        return f"Unknown Circuit {suffix_description}"
 
 
 class TestHelperFunctions:
