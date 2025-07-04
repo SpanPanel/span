@@ -82,8 +82,11 @@ class TestHelperFunctions:
         result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
         assert result is None
 
-    def test_construct_synthetic_entity_id_config_entry_none(self):
+    @patch("custom_components.span_panel.helpers.er.async_get")
+    def test_construct_synthetic_entity_id_config_entry_none(self, mock_registry):
         """Test construct_synthetic_entity_id works with valid coordinator (None config_entry should be caught at coordinator level)."""
+        mock_registry.return_value = None
+
         coordinator = MagicMock()
         coordinator.config_entry.options = {}
         span_panel = MagicMock()
@@ -91,11 +94,13 @@ class TestHelperFunctions:
         # This should work fine - the coordinator should validate config_entry at construction time
         result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
         # With empty options, should use legacy naming (no device prefix)
-        assert result == "sensor.synthetic_sensor_30_32_power"
+        assert result == "sensor.synthetic_sensor_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
-    def test_construct_synthetic_entity_id_empty_options(self, mock_device_info):
+    @patch("custom_components.span_panel.helpers.er.async_get")
+    def test_construct_synthetic_entity_id_empty_options(self, mock_registry, mock_device_info):
         """Test construct_synthetic_entity_id with stable naming (synthetic sensors are always stable)."""
+        mock_registry.return_value = None
         mock_device_info.return_value = {"name": "Span Panel"}
 
         coordinator = MagicMock()
@@ -111,24 +116,26 @@ class TestHelperFunctions:
             "power",
             "Solar Production Power",
         )
-        assert result == "sensor.solar_production_power_power"
+        assert result == "sensor.solar_production_power"
 
         # Test without friendly name - legacy installation should not use device prefix
         result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
-        assert result == "sensor.synthetic_sensor_30_32_power"
+        assert result == "sensor.synthetic_sensor_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
-    def test_construct_synthetic_entity_id_no_device_name(self, mock_device_info):
-        """Test construct_synthetic_entity_id with no device name - should still work with stable naming."""
+    @patch("custom_components.span_panel.helpers.er.async_get")
+    def test_construct_synthetic_entity_id_no_device_name(self, mock_registry, mock_device_info):
+        """Test construct_synthetic_entity_id with no device name - should return None."""
+        mock_registry.return_value = None
         mock_device_info.return_value = {"name": None}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
         span_panel = MagicMock()
 
-        # Synthetic sensors should always use stable naming, even without device name
+        # Synthetic sensors should return None if no device name available
         result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
-        assert result == "sensor.synthetic_sensor_30_32_power"
+        assert result is None
 
     def test_construct_synthetic_friendly_name_with_user_name(self):
         """Test construct_synthetic_friendly_name with user-provided name."""

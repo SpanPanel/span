@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
@@ -31,6 +33,48 @@ def get_circuit_number(circuit: SpanPanelCircuit) -> int | str:
     return circuit.tabs[0] if circuit.tabs else circuit.circuit_id
 
 
+def get_friendly_name_from_registry(
+    hass: HomeAssistant, unique_id: str | None, default_name: str
+) -> str:
+    """Check entity registry for user's customized friendly name.
+
+    If a user has customized the friendly name of an entity in Home Assistant,
+    this function will return the user's custom name instead of the default one.
+    This prevents the integration from overriding user customizations.
+
+    Args:
+        hass: Home Assistant instance
+        unique_id: The unique ID to look up in the registry (None to skip registry check)
+        default_name: The default friendly name to use if not found in registry
+
+    Returns:
+        The user's custom friendly name from registry if found, otherwise the default name
+
+    """
+    # If no unique_id provided, return default name immediately
+    if unique_id is None:
+        return default_name
+
+    entity_registry = er.async_get(hass)
+
+    # First get the entity_id using the unique_id
+    existing_entity_id = entity_registry.async_get_entity_id("sensor", "span_panel", unique_id)
+
+    if existing_entity_id:
+        # Now get the full entity entry using the entity_id
+        entity_entry = entity_registry.entities.get(existing_entity_id)
+
+        if entity_entry and entity_entry.name:
+            _LOGGER.debug(
+                "Found custom friendly name in registry: unique_id=%s -> name=%s",
+                unique_id,
+                entity_entry.name,
+            )
+            return entity_entry.name
+
+    return default_name
+
+
 def construct_entity_id(
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
@@ -38,11 +82,13 @@ def construct_entity_id(
     circuit_name: str,
     circuit_number: int | str,
     suffix: str,
+    unique_id: str | None = None,
 ) -> str | None:
     """Construct entity ID based on integration configuration flags.
 
     This function handles entity naming for individual circuit entities based on the
-    USE_CIRCUIT_NUMBERS and USE_DEVICE_PREFIX configuration flags.
+    USE_CIRCUIT_NUMBERS and USE_DEVICE_PREFIX configuration flags. It also checks
+    the entity registry to respect user customizations when unique_id is provided.
 
     Args:
         coordinator: The coordinator instance
@@ -51,51 +97,55 @@ def construct_entity_id(
         circuit_name: Human-readable circuit name
         circuit_number: Circuit number/identifier
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
+        unique_id: The unique ID for this entity (None to skip registry lookup)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
+    # Check registry first only if unique_id is provided
+    if unique_id is not None:
+        entity_registry = er.async_get(coordinator.hass)
+        existing_entity_id = entity_registry.async_get_entity_id("sensor", "span_panel", unique_id)
+
+        if existing_entity_id:
+            _LOGGER.debug(
+                "Found existing entity in registry: unique_id=%s -> entity_id=%s",
+                unique_id,
+                existing_entity_id,
+            )
+            return existing_entity_id
+
+    # Construct default entity_id
     config_entry = coordinator.config_entry
-
-    # For existing installations with empty options, default to False for backward compatibility
-    # For new installations, these will be explicitly set to True in create_new_entry()
-    if not config_entry.options:
-        # Empty options = existing installation, use legacy defaults
-        use_device_prefix = False
-        use_circuit_numbers = False
-    else:
-        # Has options = either new installation or existing installation that went through options flow
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
-
-    # Get device info for device name
     device_info = panel_to_device_info(span_panel)
-    device_name_raw = device_info.get("name")
+
+    if not device_info or not device_info.get("name"):
+        return None
+
+    device_name = device_info.get("name")
+    if not device_name:
+        return None
+
+    use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
+
+    # Build entity ID components
+    parts = []
+
+    if use_device_prefix:
+        parts.append(device_name.lower().replace(" ", "_"))
 
     if use_circuit_numbers:
-        # New installation (v1.0.9+) - stable circuit-based entity IDs
-        # Format: sensor.span_panel_circuit_15_power
-        if device_name_raw:
-            device_name = slugify(device_name_raw)
-            return f"{platform}.{device_name}_circuit_{circuit_number}_{suffix}"
-        else:
-            return None
-
-    elif use_device_prefix:
-        # Post-1.0.4 installation - friendly names with device prefix
-        # Format: sensor.span_panel_kitchen_outlets_power
-        if device_name_raw:
-            device_name = slugify(device_name_raw)
-            circuit_name_sanitized = slugify(circuit_name)
-            return f"{platform}.{device_name}_{circuit_name_sanitized}_{suffix}"
-        else:
-            return None
-
+        parts.append(f"circuit_{circuit_number}")
     else:
-        # Pre-1.0.4 installation - no device prefix, just circuit names
-        circuit_name_sanitized = slugify(circuit_name)
-        return f"{platform}.{circuit_name_sanitized}_{suffix}"
+        parts.append(circuit_name.lower().replace(" ", "_"))
+
+    if suffix:
+        parts.append(suffix)
+
+    entity_id = f"{platform}.{'_'.join(parts)}"
+    return entity_id
 
 
 def get_user_friendly_suffix(description_key: str) -> str:
@@ -360,57 +410,77 @@ def construct_synthetic_entity_id(
     circuit_numbers: list[int],
     suffix: str,
     friendly_name: str | None = None,
+    unique_id: str | None = None,
 ) -> str | None:
     """Construct synthetic entity ID for multi-circuit entities using stable naming.
 
     This function handles entity naming for synthetic sensors that combine multiple circuits,
     such as solar inverters or custom circuit groups. For backward compatibility, synthetic
     sensors respect the USE_DEVICE_PREFIX setting, unlike individual circuit entities.
+    It also checks the entity registry to respect user customizations when unique_id is provided.
 
     Args:
         coordinator: The coordinator instance
         span_panel: The span panel data
         platform: Platform name ("sensor", "switch", "select")
-        circuit_numbers: List of circuit numbers to combine (e.g., [30, 32] for solar inverter)
-        suffix: Entity-specific suffix ("instant_power", "energy_produced", etc.)
-        friendly_name: Optional friendly name for name-based entity
+        circuit_numbers: List of circuit numbers to combine (e.g., [1, 2, 3])
+        suffix: Entity-specific suffix ("power", "energy_produced", etc.)
+        friendly_name: Optional friendly name for the entity
+        unique_id: The unique ID for this entity (None to skip registry lookup)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
+    # Check registry first only if unique_id is provided
+    if unique_id is not None:
+        entity_registry = er.async_get(coordinator.hass)
+        existing_entity_id = entity_registry.async_get_entity_id("sensor", "span_panel", unique_id)
+
+        if existing_entity_id:
+            _LOGGER.debug(
+                "Found existing entity in registry: unique_id=%s -> entity_id=%s",
+                unique_id,
+                existing_entity_id,
+            )
+            return existing_entity_id
+
+    # Construct default entity_id
     config_entry = coordinator.config_entry
-
-    # Get device info for device name
     device_info = panel_to_device_info(span_panel)
-    device_name_raw = device_info.get("name")
 
-    # Construct the entity name part
-    # Synthetic sensors always use friendly names regardless of USE_CIRCUIT_NUMBERS
+    if not device_info or not device_info.get("name"):
+        return None
+
+    device_name = device_info.get("name")
+    if not device_name:
+        return None
+
+    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
+
+    # Build entity ID components
+    parts = []
+
+    if use_device_prefix:
+        parts.append(device_name.lower().replace(" ", "_"))
+
+    # Use friendly name if provided, otherwise use a default synthetic pattern
     if friendly_name:
-        # Convert friendly name to entity ID format (e.g., "Solar Inverter" -> "solar_inverter")
-        entity_name = slugify(friendly_name)
+        # Use slugified friendly name for entity ID
+        slugified_name = slugify(friendly_name)
+        parts.append(slugified_name)
+
+        # Only add suffix if the slugified friendly name doesn't already end with it
+        if suffix and not slugified_name.endswith(f"_{suffix}"):
+            parts.append(suffix)
+    else:
+        # Default pattern for synthetic sensors without friendly name
+        parts.append("synthetic_sensor")
         if suffix:
-            entity_name = f"{entity_name}_{suffix}"
-    else:
-        # Fallback to generic synthetic naming if no friendly name provided
-        valid_circuits = [str(num) for num in circuit_numbers if num > 0]
-        entity_name = f"synthetic_sensor_{'_'.join(valid_circuits)}_{suffix}"
+            parts.append(suffix)
 
-    # Check if device prefix should be used (for backward compatibility)
-    # For existing installations with empty options, default to False for backward compatibility
-    if not config_entry.options:
-        # Empty options = existing installation, use legacy defaults
-        use_device_prefix = False
-    else:
-        # Has options = either new installation or existing installation that went through options flow
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-    if use_device_prefix and device_name_raw:
-        device_name = slugify(device_name_raw)
-        return f"{platform}.{device_name}_{entity_name}"
-    else:
-        return f"{platform}.{entity_name}"
+    entity_id = f"{platform}.{'_'.join(parts)}"
+    return entity_id
 
 
 def construct_synthetic_friendly_name(
@@ -449,49 +519,61 @@ def construct_panel_entity_id(
     span_panel: SpanPanel,
     platform: str,
     suffix: str,
+    unique_id: str | None = None,
 ) -> str | None:
     """Construct entity ID for panel-level sensors based on integration configuration flags.
 
     This function handles entity naming for panel-level entities based on the
-    USE_DEVICE_PREFIX configuration flag.
+    USE_DEVICE_PREFIX configuration flag. It also checks the entity registry
+    to respect user customizations when unique_id is provided.
 
     Args:
         coordinator: The coordinator instance
         span_panel: The span panel data
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("current_power", "feed_through_power", etc.)
+        unique_id: The unique ID for this entity (None to skip registry lookup)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
+    # Check registry first only if unique_id is provided
+    if unique_id is not None:
+        entity_registry = er.async_get(coordinator.hass)
+        existing_entity_id = entity_registry.async_get_entity_id("sensor", "span_panel", unique_id)
+
+        if existing_entity_id:
+            _LOGGER.debug(
+                "Found existing entity in registry: unique_id=%s -> entity_id=%s",
+                unique_id,
+                existing_entity_id,
+            )
+            return existing_entity_id
+
+    # Construct default entity_id
     config_entry = coordinator.config_entry
-
-    # For existing installations with empty options, default to False for backward compatibility
-    # For new installations, these will be explicitly set to True in create_new_entry()
-    if not config_entry.options:
-        # Empty options = existing installation, use legacy defaults
-        use_device_prefix = False
-    else:
-        # Has options = either new installation or existing installation that went through options flow
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-    # Get device info for device name
     device_info = panel_to_device_info(span_panel)
-    device_name_raw = device_info.get("name")
+
+    if not device_info or not device_info.get("name"):
+        return None
+
+    device_name = device_info.get("name")
+    if not device_name:
+        return None
+
+    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
+
+    # Build entity ID components
+    parts = []
 
     if use_device_prefix:
-        # Installation with device prefix enabled
-        # Format: sensor.span_panel_current_power
-        if device_name_raw:
-            device_name = slugify(device_name_raw)
-            return f"{platform}.{device_name}_{suffix}"
-        else:
-            return None
-    else:
-        # Installation without device prefix
-        # Format: sensor.current_power
-        return f"{platform}.{suffix}"
+        parts.append(device_name.lower().replace(" ", "_"))
+
+    parts.append(suffix)
+
+    entity_id = f"{platform}.{'_'.join(parts)}"
+    return entity_id
 
 
 def construct_backing_entity_id(

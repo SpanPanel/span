@@ -307,10 +307,13 @@ class TestEntityIdConstructionUpgradeScenarios:
 class TestSyntheticEntityUpgradeScenarios:
     """Test synthetic entity construction preserves existing patterns during upgrades."""
 
+    @patch("custom_components.span_panel.helpers.er.async_get")
     def test_legacy_synthetic_entity_construction_preserved(
-        self, mock_coordinator, mock_span_panel
+        self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that legacy synthetic entity construction is preserved."""
+        mock_registry.return_value = None
+
         # Legacy installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
@@ -335,10 +338,13 @@ class TestSyntheticEntityUpgradeScenarios:
             # Legacy format: no device prefix, use friendly name
             assert entity_id == "sensor.solar_inverter_power"
 
+    @patch("custom_components.span_panel.helpers.er.async_get")
     def test_post_104_synthetic_entity_construction_preserved(
-        self, mock_coordinator, mock_span_panel
+        self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that post-1.0.4 synthetic entity construction is preserved."""
+        mock_registry.return_value = None
+
         # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
@@ -363,10 +369,13 @@ class TestSyntheticEntityUpgradeScenarios:
             # Post-1.0.4 format: device prefix + friendly name
             assert entity_id == "sensor.span_panel_solar_inverter_power"
 
+    @patch("custom_components.span_panel.helpers.er.async_get")
     def test_modern_synthetic_entity_construction_preserved(
-        self, mock_coordinator, mock_span_panel
+        self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that modern synthetic entity construction is preserved."""
+        mock_registry.return_value = None
+
         # Modern circuit numbers installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
