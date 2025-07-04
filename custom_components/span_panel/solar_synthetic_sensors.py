@@ -13,8 +13,8 @@ from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_synthetic_entity_id,
-    construct_synthetic_unique_id,
     construct_unmapped_entity_id,
+    constuct_synthetic_unique_id,
     get_user_friendly_suffix,
 )
 from .solar_tab_manager import SolarTabManager
@@ -222,7 +222,9 @@ class SolarSyntheticSensors:
         # Solar sensor definitions with consistent naming using helper functions
         sensor_definitions: list[dict[str, Any]] = [
             {
-                "key": construct_synthetic_unique_id(span_panel, "solar_inverter_power"),
+                "key": constuct_synthetic_unique_id(
+                    span_panel.status.serial_number, "solar_inverter_power"
+                ),
                 "name": "Solar Inverter Power",
                 "entities": power_entities,
                 "var_prefix": "power",
@@ -232,7 +234,9 @@ class SolarSyntheticSensors:
                 "suffix": "power",
             },
             {
-                "key": construct_synthetic_unique_id(span_panel, "solar_inverter_energy_produced"),
+                "key": constuct_synthetic_unique_id(
+                    span_panel.status.serial_number, "solar_inverter_energy_produced"
+                ),
                 "name": "Solar Inverter Energy Produced",
                 "entities": produced_entities,
                 "var_prefix": "produced",
@@ -242,7 +246,9 @@ class SolarSyntheticSensors:
                 "suffix": "energy_produced",
             },
             {
-                "key": construct_synthetic_unique_id(span_panel, "solar_inverter_energy_consumed"),
+                "key": constuct_synthetic_unique_id(
+                    span_panel.status.serial_number, "solar_inverter_energy_consumed"
+                ),
                 "name": "Solar Inverter Energy Consumed",
                 "entities": consumed_entities,
                 "var_prefix": "consumed",

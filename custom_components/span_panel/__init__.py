@@ -29,7 +29,7 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_circuit_unique_id,
     build_panel_unique_id,
-    build_synthetic_unique_id,
+    constuct_synthetic_unique_id,
 )
 from .span_panel import SpanPanel
 from .span_panel_api import Options
@@ -123,7 +123,7 @@ def convert_to_consistent_unique_id_pattern(old_unique_id: str) -> str:
                     sensor_name = sensor_name.replace("_instant_power", "_power")
 
                 # Let the helper build the correct unique ID
-                return build_synthetic_unique_id(serial, sensor_name)
+                return constuct_synthetic_unique_id(serial, sensor_name)
 
     # For other patterns, extract components and use pure build functions
     if old_unique_id.startswith("span_"):

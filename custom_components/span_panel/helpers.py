@@ -249,7 +249,7 @@ def build_select_unique_id(serial: str, select_id: str) -> str:
     return f"span_{serial}_select_{select_id}"
 
 
-def build_synthetic_unique_id(serial: str, sensor_name: str) -> str:
+def constuct_synthetic_unique_id(serial: str, sensor_name: str) -> str:
     """Build unique ID for synthetic sensors using consistent pattern (pure function).
 
     Args:
@@ -353,25 +353,6 @@ def construct_select_unique_id(span_panel: SpanPanel, select_id: str) -> str:
 
     """
     return build_select_unique_id(span_panel.status.serial_number, select_id)
-
-
-def construct_synthetic_unique_id(span_panel: SpanPanel, sensor_name: str) -> str:
-    """Construct unique ID for synthetic sensors using consistent pattern.
-
-    Args:
-        span_panel: The span panel data
-        sensor_name: Complete sensor name with suffix (e.g., "solar_inverter_power")
-
-    Returns:
-        Unique ID like "span_{serial}_{sensor_name}"
-
-    Examples:
-        span_abc123_solar_inverter_power
-        span_abc123_backup_circuits_power
-        span_abc123_whole_house_net_power
-
-    """
-    return build_synthetic_unique_id(span_panel.status.serial_number, sensor_name)
 
 
 def construct_sensor_manager_unique_id(
