@@ -92,7 +92,7 @@ class TestHelperFunctions:
         span_panel = MagicMock()
 
         # This should work fine - the coordinator should validate config_entry at construction time
-        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
+        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", "power")
         # With empty options, should use legacy naming (no device prefix)
         assert result == "sensor.synthetic_sensor_power"
 
@@ -112,14 +112,13 @@ class TestHelperFunctions:
             coordinator,
             span_panel,
             "sensor",
-            [30, 32],
             "power",
             "Solar Production Power",
         )
         assert result == "sensor.solar_production_power"
 
         # Test without friendly name - legacy installation should not use device prefix
-        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
+        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", "power")
         assert result == "sensor.synthetic_sensor_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
@@ -134,7 +133,7 @@ class TestHelperFunctions:
         span_panel = MagicMock()
 
         # Synthetic sensors should return None if no device name available
-        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", [30, 32], "power")
+        result = construct_synthetic_entity_id(coordinator, span_panel, "sensor", "power")
         assert result is None
 
     def test_construct_synthetic_friendly_name_with_user_name(self):

@@ -407,7 +407,6 @@ def construct_synthetic_entity_id(
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
     platform: str,
-    circuit_numbers: list[int],
     suffix: str,
     friendly_name: str | None = None,
     unique_id: str | None = None,
@@ -423,7 +422,6 @@ def construct_synthetic_entity_id(
         coordinator: The coordinator instance
         span_panel: The span panel data
         platform: Platform name ("sensor", "switch", "select")
-        circuit_numbers: List of circuit numbers to combine (e.g., [1, 2, 3])
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         friendly_name: Optional friendly name for the entity
         unique_id: The unique ID for this entity (None to skip registry lookup)

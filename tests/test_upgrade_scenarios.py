@@ -330,7 +330,6 @@ class TestSyntheticEntityUpgradeScenarios:
                 mock_coordinator,
                 mock_span_panel,
                 "sensor",
-                [30, 32],
                 "power",
                 "Solar Inverter",
             )
@@ -361,7 +360,6 @@ class TestSyntheticEntityUpgradeScenarios:
                 mock_coordinator,
                 mock_span_panel,
                 "sensor",
-                [30, 32],
                 "power",
                 "Solar Inverter",
             )
@@ -392,7 +390,6 @@ class TestSyntheticEntityUpgradeScenarios:
                 mock_coordinator,
                 mock_span_panel,
                 "sensor",
-                [30, 32],
                 "power",
                 "Solar Inverter",
             )

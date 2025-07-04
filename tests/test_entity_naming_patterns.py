@@ -276,7 +276,6 @@ async def test_synthetic_entity_naming():
             coordinator=mock_coordinator,
             span_panel=mock_span_panel,
             platform="sensor",
-            circuit_numbers=[30, 32],
             suffix="power",
             friendly_name="solar_inverter",
         )

@@ -218,7 +218,6 @@ class SolarSyntheticSensors:
         """
         solar_sensors: dict[str, SolarSensorConfig] = {}
         device_identifier = span_panel.status.serial_number
-        circuit_numbers = [num for num in [leg1, leg2] if num > 0]
 
         # Solar sensor definitions with consistent naming using helper functions
         sensor_definitions: list[dict[str, Any]] = [
@@ -270,7 +269,6 @@ class SolarSyntheticSensors:
                 coordinator=coordinator,
                 span_panel=span_panel,
                 platform="sensor",
-                circuit_numbers=circuit_numbers,
                 suffix=sensor_def["suffix"],
                 friendly_name="Solar Inverter",
             )
