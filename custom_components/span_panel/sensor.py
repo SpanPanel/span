@@ -479,15 +479,15 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             return f"sensor.unmapped_tab_{circuit_number}_{suffix}"
 
     def available(self) -> bool:
-    """Return if entity is available with grace period for energy sensors."""
-    # For energy sensors, use extended availability
-    if (hasattr(self.entity_description, 'key') and 
-        hasattr(self.entity_description, 'state_class') and
-        self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING):
-        return self.coordinator.last_update_success_with_grace_period
-    
-    # For other sensors, use immediate availability
-    return self.coordinator.last_update_success
+        """Return if entity is available with grace period for energy sensors."""
+        # For energy sensors, use extended availability
+        if (hasattr(self.entity_description, 'key') and 
+            hasattr(self.entity_description, 'state_class') and
+            self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING):
+            return self.coordinator.last_update_success_with_grace_period
+        
+        # For other sensors, use immediate availability
+        return self.coordinator.last_update_success
 
 
 class SpanPanelCircuitSensor(
