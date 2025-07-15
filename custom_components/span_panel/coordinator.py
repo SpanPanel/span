@@ -68,20 +68,22 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
 
     def last_update_success_with_grace_period(self) -> bool:
         """Return if coordinator is considered successful with grace period for outages.
-        
+
         Extends availability during short outages to prevent Home Assistant
-        from treating recovery as counter resets in energy statistics by setting states 
+        from treating recovery as counter resets in energy statistics by setting states
         to Unavailable and breaking delta calculations.
         """
         if self.last_update_success:
             # Store successful update time
             import time
+
             self._last_successful_update = time.time()
             return True
         else:
             # Check if we have a recent successful update
-            if hasattr(self, '_last_successful_update'):
+            if hasattr(self, "_last_successful_update"):
                 import time
+
                 outage_duration = time.time() - self._last_successful_update
                 # Stay "successful" for 15 minutes during outages
                 return outage_duration < 900
