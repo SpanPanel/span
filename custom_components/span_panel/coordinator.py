@@ -79,16 +79,17 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
 
             self._last_successful_update = time.time()
             return True
-        else:
-            # Check if we have a recent successful update
-            if hasattr(self, "_last_successful_update"):
-                import time
 
-                outage_duration = time.time() - self._last_successful_update
-                # Stay "successful" for 15 minutes during outages
-                return outage_duration < 900
-            # No previous success time, truly failed
-            return False
+        # Check if we have a recent successful update
+        if hasattr(self, "_last_successful_update"):
+            import time
+
+            outage_duration = time.time() - self._last_successful_update
+            # Stay "successful" for 15 minutes during outages
+            return outage_duration < 900
+
+        # No previous success time, truly failed
+        return False
 
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""

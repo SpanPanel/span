@@ -486,10 +486,10 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             and hasattr(self.entity_description, "state_class")
             and self.entity_description.state_class == SensorStateClass.TOTAL_INCREASING
         ):
-            return self.coordinator.last_update_success_with_grace_period
+            return self.coordinator.last_update_success_with_grace_period()  # type: ignore[no-any-return]
 
         # For other sensors, use immediate availability
-        return self.coordinator.last_update_success
+        return self.coordinator.last_update_success  # type: ignore[no-any-return]
 
 
 class SpanPanelCircuitSensor(
