@@ -1,0 +1,68 @@
+name: CI with Simulation Tests
+
+on:
+    workflow_call:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+
+      - name: Install dependencies
+        run: |
+          # Replace path dependencies with PyPI versions for CI
+          sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = "^1.1.5"/' pyproject.toml
+          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.1.1"/' pyproject.toml
+          # Regenerate lock file with the modified dependencies
+          poetry lock
+          poetry install --with dev
+          # Install bandit with TOML support
+          poetry run pip install 'bandit[toml]'
+
+      - name: Format check with ruff
+        run: poetry run ruff format --check custom_components/span_panel
+
+      - name: Lint with ruff
+        run: poetry run ruff check custom_components/span_panel
+
+      - name: Type check with mypy
+        run: poetry run mypy custom_components/span_panel
+
+      - name: Security check with bandit
+        run: poetry run bandit -c pyproject.toml -r custom_components/span_panel
+
+      - name: Check poetry configuration
+        run: poetry check
+
+      - name: Run pre-commit hooks (for extra validation)
+        run: poetry run pre-commit run --all-files --show-diff-on-failure
+
+      # Regular tests - simulation tests are automatically skipped
+      - name: Run tests with coverage
+        run: poetry run pytest tests/ --cov=custom_components/span_panel --cov-report=xml --cov-report=term-missing
+
+      # Optional: Run simulation tests separately if desired
+      - name: Run simulation tests
+        env:
+          SPAN_USE_REAL_SIMULATION: 1
+        run: poetry run pytest tests/test_solar_configuration_with_simulator.py -v
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          slug: SpanPanel/span
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          # Note: Token not required for public repos with tokenless upload

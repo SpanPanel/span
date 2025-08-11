@@ -4,6 +4,9 @@
 .DS_Store
 .vscode/*
 .cursor/*
+.cursorignore
+.cursorindexingignore
+xnotes/*
 !.vscode/settings.json.example
 !.vscode/tasks.json
 .git/
@@ -18,4 +21,4 @@ env/
 .coverage.*
 htmlcov/
 .pytest_cache/
-custom_components/span-ha-synthetic.yaml
+docs/agile-readme.md

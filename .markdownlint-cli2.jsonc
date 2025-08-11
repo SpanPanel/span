@@ -1,10 +1,27 @@
 {
+  "globs": [
+    "*.md",
+    "docs/**/*.md"
+  ],
+  "ignores": [
+    ".venv/**",
+    "venv/**",
+    "node_modules/**",
+    "__pycache__/**",
+    "htmlcov/**",
+    ".mypy_cache/**",
+    ".pytest_cache/**",
+    "dist/**",
+    "build/**",
+    ".cursor/**",
+    "tests/**"
+  ],
   "config": {
     "default": true,
     "MD013": {
-      "line_length": 200,
-      "heading_line_length": 200,
-      "code_block_line_length": 200,
+      "line_length": 160,
+      "heading_line_length": 160,
+      "code_block_line_length": 160,
       "tables": false
     },
     "MD025": false,

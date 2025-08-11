@@ -18,8 +18,14 @@
       },
       "user": {
         "data": {
-          "host": "Host"
+          "host": "Host",
+          "simulator_mode": "Modo Simulador"
         },
+        "data_description": {
+          "host": "Dirección IP o nombre de host del SPAN Panel (para simulación: use número de serie como 'sp3-simulation-001' o déjelo vacío para el predeterminado)",
+          "simulator_mode": "Habilitar modo simulador para pruebas (no se requiere hardware). Deje el host vacío para simulación predeterminada, o ingrese un número de serie personalizado."
+        },
+        "description": "Ingrese los detalles de conexión para su SPAN Panel. Para modo simulador, marque la casilla del simulador y opcionalmente ingrese un número de serie personalizado.",
         "title": "Establecer conexión al Span Panel"
       },
       "choose_auth_type": {
@@ -43,12 +49,18 @@
     }
   },
   "options": {
+    "error": {
+      "directory": "Se requiere la ruta del archivo",
+      "base": "Falló la exportación: {error}"
+    },
     "step": {
       "init": {
         "title": "Menú de Opciones",
         "menu_options": {
           "general_options": "Opciones Generales",
-          "entity_naming": "Patrón de Nomenclatura de Entidades"
+          "entity_naming": "Patrón de Nomenclatura de Entidades",
+          "export_config": "Exportar Configuración de Sensores Sintéticos",
+          "simulation_options": "Opciones de Simulación"
         }
       },
       "general_options": {
@@ -57,11 +69,18 @@
           "scan_interval": "Intervalo de escaneo en segundos",
           "enable_battery_percentage": "Habilitar Sensor de Porcentaje de Batería",
           "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
-          "leg1": "Pata solar 1 (0 no se utiliza)",
-          "leg2": "Pata solar 2 (0 no se utiliza)",
+          "leg1": "Pata solar 1",
+          "leg2": "Pata solar 2",
           "api_retries": "Reintentos de API (0-10)",
           "api_retry_timeout": "Tiempo de espera de reintento de API (segundos)",
-          "api_retry_backoff_multiplier": "Multiplicador de retraso de reintento de API"
+          "api_retry_backoff_multiplier": "Multiplicador de retraso de reintento de API",
+          "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
+          "legacy_upgrade_to_friendly": "Actualizar a Nombres Amigables"
+        },
+        "data_description": {
+          "enable_solar_circuit": "Habilitar sensores sintéticos para monitoreo de inversor solar. Requiere selección de dos pestañas no mapeadas en fases eléctricas opuestas.",
+          "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
+          "legacy_upgrade_to_friendly": "Actualice la nomenclatura de entidades del formato heredado a nombres amigables. Esto renombrará sus entidades existentes para usar nombres descriptivos en lugar de números de circuito."
         }
       },
       "entity_naming": {
@@ -70,6 +89,34 @@
         "data": {
           "entity_naming_pattern": "Patrón de Nomenclatura de Entidades"
         }
+      },
+      "export_config": {
+        "title": "Exportar Configuración de Sensores Sintéticos",
+        "description": "Exportar la configuración actual de sensores sintéticos a un archivo YAML. Puede especificar un directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa. Nombre de archivo predeterminado: '{filename}'",
+        "data": {
+          "directory": "Ruta del Archivo"
+        },
+        "data_description": {
+          "directory": "Una ruta de directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa que termine en .yaml donde se guardará la configuración."
+        }
+      },
+      "simulation_options": {
+        "title": "Opciones de Simulación",
+        "description": "Configurar ajustes específicos de simulación. Los cambios en el tiempo de simulación recargarán la integración para aplicar el nuevo tiempo.",
+        "data": {
+          "simulation_start_time": "Tiempo de Inicio de Simulación"
+        },
+        "data_description": {
+          "simulation_start_time": "Formato de tiempo: HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deje vacío para usar el tiempo actual. La integración se recargará para aplicar los cambios."
+        }
+      }
+    }
+  },
+  "selector": {
+    "entity_naming_pattern": {
+      "options": {
+        "friendly_names": "Nombres Amigables (ej., span_panel_cocina_tomacorrientes_power)",
+        "circuit_numbers": "Números de Circuito (ej., span_panel_circuit_15_power)"
       }
     }
   }

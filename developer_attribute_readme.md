@@ -2,15 +2,15 @@
 
 ## The Dual Attribute Pattern in Home Assistant
 
-Home Assistant uses two different patterns for entity attributes that can be confusing and lead to subtle bugs. This guide
-explains these patterns to help you avoid common pitfalls when developing integrations.
+Home Assistant uses two different patterns for entity attributes that can be confusing and lead to subtle bugs. This guide explains these patterns to help you
+avoid common pitfalls when developing integrations.
 
 ## Two Attribute Patterns
 
 ### 1. Protected Attributes (`_attr_*`)
 
-For most entity attributes (state, name, icon, etc.), Home Assistant uses protected attributes with an `_attr_` prefix. These
-are managed by the `CachedProperties` metaclass which provides automatic caching and invalidation:
+For most entity attributes (state, name, icon, etc.), Home Assistant uses protected attributes with an `_attr_` prefix. These are managed by the
+`CachedProperties` metaclass which provides automatic caching and invalidation:
 
 ```python
 class MyEntity(Entity):
@@ -58,9 +58,8 @@ The reason these attributes are public varies:
 
 ## Type Annotations and Custom EntityDescriptions
 
-When extending an entity description with custom attributes, type checkers will often complain when you try to access the
-custom attributes. This is because the type system only sees the base class type (e.g., `BinarySensorEntityDescription`),
-not your custom type.
+When extending an entity description with custom attributes, type checkers will often complain when you try to access the custom attributes. This is because the
+type system only sees the base class type (e.g., `BinarySensorEntityDescription`), not your custom type.
 
 ### Example Issue
 
@@ -213,8 +212,7 @@ def device_class(self) -> str | None:
     return None
 ```
 
-This pattern appears throughout Home Assistant's code. The framework first checks the direct attribute, then falls back to the
-entity description if available.
+This pattern appears throughout Home Assistant's code. The framework first checks the direct attribute, then falls back to the entity description if available.
 
 ## Why The Dual Pattern Exists
 
@@ -229,22 +227,18 @@ Home Assistant's approach evolved over time:
 
 Home Assistant likely uses a public attribute for `entity_description` for several reasons:
 
-1. **API Contract**: The entity description represents a public API contract that is meant to be preserved and
-   directly accessed
-2. **Composition vs. Inheritance**: It emphasizes composition (an entity has a description) rather than inheritance (an
-   entity is a description)
-3. **Interoperability**: Allows for more flexible interoperability between integrations and the core
-   framework
+1. **API Contract**: The entity description represents a public API contract that is meant to be preserved and directly accessed
+2. **Composition vs. Inheritance**: It emphasizes composition (an entity has a description) rather than inheritance (an entity is a description)
+3. **Interoperability**: Allows for more flexible interoperability between integrations and the core framework
 4. **Serialization**: May facilitate easier serialization/deserialization when needed
 5. **Accessor Pattern**: Other parts of Home Assistant can access the description directly without needing accessor methods
 
-The inconsistency between `entity_description` and other `_attr_*` attributes may simply be an architectural decision made at
-different points in Home Assistant's development history.
+The inconsistency between `entity_description` and other `_attr_*` attributes may simply be an architectural decision made at different points in Home
+Assistant's development history.
 
 ## Best Practices
 
 1. **Use `self._attr_*` for entity attributes** - This automatically gets you:
-
    - Protected attribute storage
    - Cached property getters/setters (via the `CachedProperties` metaclass)
    - Proper type annotation handling
@@ -253,13 +247,11 @@ different points in Home Assistant's development history.
 2. **Use `self.entity_description`** (never `self._attr_entity_description`) for entity descriptions
 
 3. **When extending `Entity` classes:**
-
    - Check the parent class implementation to understand the attribute pattern
    - Use the same pattern as the parent class for consistency
    - Include proper type annotations to help catch issues earlier
 
 4. **For custom entity descriptions:**
-
    - Store direct references to custom description attributes in your entity's `__init__` method
    - Use proper type annotations to avoid type checker issues
    - Test property access, especially for device_class and other properties that might come from entity_description
