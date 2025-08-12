@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 import enum
 import logging
+from pathlib import Path
+import shutil
 from typing import TYPE_CHECKING, Any
 import uuid
 
@@ -16,11 +19,22 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+from homeassistant.util import slugify
 from homeassistant.util.network import is_ipv4_address
+from packaging.version import Version
 from span_panel_api import SpanPanelClient
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+from span_panel_api.phase_validation import (
+    are_tabs_opposite_phase,
+    get_tab_phase,
+    validate_solar_tabs,
+)
+from span_panel_api.simulation import DynamicSimulationEngine
 import voluptuous as vol
+import yaml
 
 from custom_components.span_panel.span_panel_hardware_status import (
     SpanPanelHardwareStatus,
@@ -30,6 +44,8 @@ from .const import (
     CONF_API_RETRIES,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
     CONF_API_RETRY_TIMEOUT,
+    CONF_SIMULATION_CONFIG,
+    CONF_SIMULATION_START_TIME,
     CONF_USE_SSL,
     CONFIG_API_RETRIES,
     CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
@@ -42,14 +58,199 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ENTITY_NAMING_PATTERN,
+    ISO_DATETIME_FORMAT,
+    TIME_ONLY_FORMATS,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from .helpers import construct_sensor_set_id
+from .options import (
+    BATTERY_ENABLE,
+    ENERGY_DISPLAY_PRECISION,
+    ENERGY_REPORTING_GRACE_PERIOD,
+    INVERTER_ENABLE,
+    INVERTER_LEG1,
+    INVERTER_LEG2,
+    POWER_DISPLAY_PRECISION,
+)
+from .simulation_generator import (
+    SimulationYamlGenerator,
+)  # lazy import to keep CF lean
 from .span_panel_api import SpanPanelApi
+from .synthetic_sensors import find_synthetic_coordinator_for
+from .version import get_version  # lazy import
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# Simulation config import/export option keys
+SIM_FILE_KEY = "simulation_config_file"
+SIM_EXPORT_PATH = "simulation_export_path"
+SIM_IMPORT_PATH = "simulation_import_path"
+
+
+def get_available_simulation_configs() -> dict[str, str]:
+    """Get available simulation configuration files.
+
+    Returns:
+        Dictionary mapping config keys to display names
+
+    """
+    configs = {}
+
+    # Get the integration's simulation_configs directory
+    current_file = Path(__file__)
+    config_dir = current_file.parent / "simulation_configs"
+
+    if config_dir.exists():
+        for yaml_file in config_dir.glob("*.yaml"):
+            config_key = yaml_file.stem
+
+            # Create user-friendly display names from filename
+            display_name = config_key.replace("simulation_config_", "").replace("_", " ").title()
+
+            configs[config_key] = display_name
+
+    # If no configs found, provide a default
+    if not configs:
+        configs["simulation_config_32_circuit"] = "32-Circuit Residential Panel (Default)"
+
+    return configs
+
+
+async def get_available_unmapped_tabs(hass: HomeAssistant, config_entry: ConfigEntry) -> list[int]:
+    """Get list of available unmapped tab numbers from panel data.
+
+    Args:
+        hass: Home Assistant instance
+        config_entry: Configuration entry for this integration
+
+    Returns:
+        List of unmapped tab numbers available for solar configuration
+
+    """
+    try:
+        # Get the coordinator from the integration's data
+        coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
+        panel_data = coordinator.data
+
+        if not panel_data or not hasattr(panel_data, "circuits"):
+            return []
+
+        # Get all tab numbers from circuits that start with "unmapped_tab_"
+        unmapped_tabs = []
+        for circuit_id in panel_data.circuits:
+            if circuit_id.startswith("unmapped_tab_"):
+                try:
+                    tab_number = int(circuit_id.replace("unmapped_tab_", ""))
+                    unmapped_tabs.append(tab_number)
+                except ValueError:
+                    continue
+
+        return sorted(unmapped_tabs)
+
+    except (KeyError, AttributeError) as e:
+        _LOGGER.warning("Could not get unmapped tabs from panel data: %s", e)
+        return []
+
+
+def validate_solar_tab_selection(
+    tab1: int, tab2: int, available_tabs: list[int]
+) -> tuple[bool, str]:
+    """Validate solar tab selection for proper 240V configuration.
+
+    Args:
+        tab1: First selected tab number
+        tab2: Second selected tab number
+        available_tabs: List of available unmapped tab numbers
+
+    Returns:
+        tuple of (is_valid, error_message) where:
+        - is_valid: True if selection is valid for 240V solar
+        - error_message: Description of validation result or error
+
+    """
+    # Check if both tabs are provided
+    if tab1 == 0 or tab2 == 0:
+        return (
+            False,
+            "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.",
+        )
+
+    # Check if tabs are the same
+    if tab1 == tab2:
+        return (
+            False,
+            f"Solar legs cannot use the same tab ({tab1}). Two different tabs are required for 240V measurement.",
+        )
+
+    # Check if both tabs are available (unmapped)
+    if tab1 not in available_tabs:
+        return False, f"Tab {tab1} is not available or is already mapped to a circuit."
+
+    if tab2 not in available_tabs:
+        return False, f"Tab {tab2} is not available or is already mapped to a circuit."
+
+    # Use phase validation from the API package
+    is_valid, message = validate_solar_tabs(tab1, tab2, available_tabs)
+
+    # If validation failed due to same phase, provide more detailed error
+    if not is_valid and "both on" in message:
+        try:
+            phase1 = get_tab_phase(tab1)
+            phase2 = get_tab_phase(tab2)
+            return False, (
+                f"Invalid selection: Tab {tab1} ({phase1}) and Tab {tab2} ({phase2}) are both on the same phase. "
+                f"For proper 240V measurement, tabs must be on opposite phases (L1 + L2)."
+            )
+        except ValueError:
+            pass
+
+    return is_valid, message
+
+
+def get_filtered_tab_options(
+    selected_tab: int, available_tabs: list[int], include_none: bool = True
+) -> dict[int, str]:
+    """Get filtered tab options based on opposite phase requirement.
+
+    Args:
+        selected_tab: Currently selected tab (0 for none)
+        available_tabs: List of all available unmapped tabs
+        include_none: Whether to include "None (Disabled)" option
+
+    Returns:
+        Dictionary mapping tab numbers to display names, filtered to show only
+        tabs on the opposite phase of the selected tab (or all if no tab selected)
+
+    """
+    tab_options = {}
+
+    # Always include "None (Disabled)" option if requested
+    if include_none:
+        tab_options[0] = "None (Disabled)"
+
+    # If no tab is selected (0), show all available tabs with phase info
+    if selected_tab == 0:
+        for tab in available_tabs:
+            try:
+                phase = get_tab_phase(tab)
+                tab_options[tab] = f"Tab {tab} ({phase})"
+            except ValueError:
+                tab_options[tab] = f"Tab {tab}"
+        return tab_options
+
+    # Filter to show only tabs on the opposite phase using the API function
+    for tab in available_tabs:
+        if are_tabs_opposite_phase(selected_tab, tab, available_tabs):
+            try:
+                phase = get_tab_phase(tab)
+                tab_options[tab] = f"Tab {tab} ({phase})"
+            except ValueError:
+                tab_options[tab] = f"Tab {tab}"
+
+    return tab_options
 
 
 class ConfigFlowError(Exception):
@@ -59,12 +260,21 @@ class ConfigFlowError(Exception):
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelClient
 
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_USE_SSL, default=False): bool,
-    }
-)
+
+def get_user_data_schema(default_host: str = "") -> vol.Schema:
+    """Get the user data schema with optional default host."""
+    return vol.Schema(
+        {
+            vol.Optional(CONF_HOST, default=default_host): str,
+            vol.Optional(CONF_USE_SSL, default=False): bool,
+            vol.Optional("simulator_mode", default=False): bool,
+            vol.Optional(POWER_DISPLAY_PRECISION, default=0): int,
+            vol.Optional(ENERGY_DISPLAY_PRECISION, default=2): int,
+        }
+    )
+
+
+STEP_USER_DATA_SCHEMA = get_user_data_schema()
 
 STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
     {
@@ -188,8 +398,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.serial_number: str | None = None
         self.access_token: str | None = None
         self.use_ssl: bool = False
+        self.power_display_precision: int = 0
+        self.energy_display_precision: int = 2
         self._is_flow_setup: bool = False
         self.context: ConfigFlowContext = {}
+        # Initial naming selection chosen during pre-setup
+        self._chosen_use_device_prefix: bool | None = None
+        self._chosen_use_circuit_numbers: bool | None = None
 
     async def setup_flow(
         self, trigger_type: TriggerFlowType, host: str, use_ssl: bool = False
@@ -267,7 +482,30 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
-        host: str = user_input[CONF_HOST].strip()
+        # Store precision settings from user input (needed for both simulator and regular mode)
+        self.power_display_precision = user_input.get(POWER_DISPLAY_PRECISION, 0)
+        self.energy_display_precision = user_input.get(ENERGY_DISPLAY_PRECISION, 2)
+
+        _LOGGER.debug(
+            "CONFIG_INPUT_DEBUG: User input precision - power: %s, energy: %s, full input: %s",
+            self.power_display_precision,
+            self.energy_display_precision,
+            user_input,
+        )
+
+        # Check if simulator mode is enabled
+        if user_input.get("simulator_mode", False):
+            return await self._handle_simulator_setup(user_input)
+
+        # For non-simulator mode, host is required
+        host: str = user_input.get(CONF_HOST, "").strip()
+        if not host:
+            return self.async_show_form(
+                step_id="user",
+                data_schema=STEP_USER_DATA_SCHEMA,
+                errors={"base": "host_required"},
+            )
+
         use_ssl: bool = user_input.get(CONF_USE_SSL, False)
 
         # Validate host before setting up flow
@@ -287,6 +525,154 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             await self.ensure_not_already_configured()
 
         return await self.async_step_choose_auth_type()
+
+    async def _handle_simulator_setup(self, user_input: dict[str, Any]) -> ConfigFlowResult:
+        """Handle simulator mode setup."""
+        # Precision settings already stored in async_step_user
+
+        # Check if this is the initial simulator selection or the config selection
+        if CONF_SIMULATION_CONFIG not in user_input:
+            # Show simulator configuration selection
+            return await self.async_step_simulator_config()
+
+        # Get the simulation config and host
+        simulation_config = user_input[CONF_SIMULATION_CONFIG]
+        host = user_input.get(CONF_HOST, "").strip()
+        simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
+
+        # If no host provided, try to extract serial from the selected config
+        if not host:
+            try:
+                from tests.test_factories.span_panel_simulation_factory import (  # pylint: disable=import-outside-toplevel
+                    SpanPanelSimulationFactory,
+                )
+
+                config_path = (
+                    Path(__file__).parent / "simulation_configs" / f"{simulation_config}.yaml"
+                )
+                if config_path.exists():
+                    host = await SpanPanelSimulationFactory.extract_serial_number_from_yaml(
+                        str(config_path)
+                    )
+                else:
+                    host = "span-sim-001"
+            except (ImportError, FileNotFoundError, Exception):
+                # Fallback to a default
+                host = "span-sim-001"
+
+        # Create entry for simulator mode
+        base_name = "Span Simulator"
+        device_name = self.get_unique_device_name(base_name)
+
+        # Prepare config data
+        config_data = {
+            CONF_HOST: host,
+            CONF_ACCESS_TOKEN: "simulator_token",
+            CONF_USE_SSL: False,
+            "simulation_mode": True,
+            CONF_SIMULATION_CONFIG: simulation_config,
+            "device_name": device_name,
+        }
+
+        # Add simulation start time if provided
+        if simulation_start_time:
+            try:
+                validated_time = validate_simulation_time(simulation_start_time)
+                config_data[CONF_SIMULATION_START_TIME] = validated_time
+            except ValueError as e:
+                return self.async_show_form(
+                    step_id="simulator_config",
+                    data_schema=self.add_suggested_values_to_schema(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_SIMULATION_CONFIG, default="simulation_config_32_circuit"
+                                ): vol.In(get_available_simulation_configs()),
+                                vol.Optional(CONF_HOST, default=""): str,
+                                vol.Optional(CONF_SIMULATION_START_TIME, default=""): str,
+                            }
+                        ),
+                        user_input,
+                    ),
+                    errors={"base": str(e)},
+                )
+
+        _LOGGER.debug(
+            "SIMULATOR_CONFIG_DEBUG: Creating simulator entry with precision - power: %s, energy: %s",
+            self.power_display_precision,
+            self.energy_display_precision,
+        )
+        # Determine simulator naming flags based on selection (default Friendly Names)
+        selected_pattern = user_input.get(
+            ENTITY_NAMING_PATTERN, EntityNamingPattern.FRIENDLY_NAMES.value
+        )
+        sim_use_device_prefix = True
+        sim_use_circuit_numbers = selected_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
+
+        return self.async_create_entry(
+            title=device_name,
+            data=config_data,
+            options={
+                USE_DEVICE_PREFIX: sim_use_device_prefix,
+                USE_CIRCUIT_NUMBERS: sim_use_circuit_numbers,
+                POWER_DISPLAY_PRECISION: self.power_display_precision,
+                ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
+            },
+        )
+
+    async def async_step_simulator_config(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle simulator configuration selection."""
+        if user_input is None:
+            # Discover files dynamically and build dropdown options
+            available_configs = get_available_simulation_configs()
+            options_list = [
+                {"value": key, "label": label} for key, label in available_configs.items()
+            ]
+
+            # Choose a sensible default
+            default_key = (
+                "simulation_config_32_circuit"
+                if "simulation_config_32_circuit" in available_configs
+                else next(iter(available_configs.keys()))
+            )
+
+            # Create schema with forced dropdown for simulation configuration
+            schema = vol.Schema(
+                {
+                    vol.Required(CONF_SIMULATION_CONFIG, default=default_key): selector(
+                        {
+                            "select": {
+                                "options": options_list,
+                                "mode": "dropdown",
+                            }
+                        }
+                    ),
+                    vol.Optional(CONF_HOST, default=""): str,
+                    vol.Optional(CONF_SIMULATION_START_TIME, default=""): str,
+                    vol.Required(
+                        ENTITY_NAMING_PATTERN, default=EntityNamingPattern.FRIENDLY_NAMES.value
+                    ): vol.In(
+                        {
+                            EntityNamingPattern.FRIENDLY_NAMES.value: "Circuit Friendly Names",
+                            EntityNamingPattern.CIRCUIT_NUMBERS.value: "Tab Based Names",
+                        }
+                    ),
+                }
+            )
+
+            return self.async_show_form(
+                step_id="simulator_config",
+                data_schema=schema,
+                description_placeholders={"config_count": str(len(available_configs))},
+            )
+
+        # Continue with simulator setup using the selected config
+        # Ensure simulator_mode is set since it's not in the form data
+        user_input_with_sim_mode = dict(user_input)
+        user_input_with_sim_mode["simulator_mode"] = True
+        return await self._handle_simulator_setup(user_input_with_sim_mode)
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle a flow initiated by re-auth."""
@@ -417,7 +803,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                     errors={"base": "invalid_access_token"},
                 )
 
-            # Proceed to the next step upon successful validation
+            # Proceed to pre-setup naming selection then to entry creation
             return await self.async_step_resolve_entity(user_input)
 
         # If no access token was provided or it's empty, show form with error
@@ -443,7 +829,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                     raise ValueError("Serial number cannot be None when creating a new entry")
                 if self.access_token is None:
                     raise ValueError("Access token cannot be None when creating a new entry")
-                return self.create_new_entry(self.host, self.serial_number, self.access_token)
+                # Before creating the entry, prompt for naming pattern selection
+                return await self.async_step_choose_entity_naming_initial()
             case TriggerFlowType.UPDATE_ENTRY:
                 if self.host is None:
                     raise ValueError("Host cannot be None when updating an entry")
@@ -464,16 +851,34 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self, host: str, serial_number: str, access_token: str
     ) -> ConfigFlowResult:
         """Create a new SPAN panel entry."""
+        base_name = "Span Panel"
+        device_name = self.get_unique_device_name(base_name)
+        _LOGGER.debug(
+            "CONFIG_FLOW_DEBUG: Creating entry with precision - power: %s, energy: %s",
+            self.power_display_precision,
+            self.energy_display_precision,
+        )
+        # Determine initial naming flags with default to Friendly Names
+        use_device_prefix = (
+            True if self._chosen_use_device_prefix is None else self._chosen_use_device_prefix
+        )
+        use_circuit_numbers = (
+            False if self._chosen_use_circuit_numbers is None else self._chosen_use_circuit_numbers
+        )
+
         return self.async_create_entry(
-            title=serial_number,
+            title=device_name,
             data={
                 CONF_HOST: host,
                 CONF_ACCESS_TOKEN: access_token,
                 CONF_USE_SSL: self.use_ssl,
+                "device_name": device_name,
             },
             options={
-                USE_DEVICE_PREFIX: True,
-                USE_CIRCUIT_NUMBERS: True,
+                USE_DEVICE_PREFIX: use_device_prefix,
+                USE_CIRCUIT_NUMBERS: use_circuit_numbers,
+                POWER_DISPLAY_PRECISION: self.power_display_precision,
+                ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
             },
         )
 
@@ -502,6 +907,53 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
         return self.async_abort(reason="reauth_successful")
 
+    def get_unique_device_name(self, base_name: str) -> str:
+        """Return a unique device name based on existing config entry titles."""
+        existing_names = {entry.title for entry in self.hass.config_entries.async_entries(DOMAIN)}
+        if base_name not in existing_names:
+            return base_name
+        i = 2
+        while f"{base_name} {i}" in existing_names:
+            i += 1
+        return f"{base_name} {i}"
+
+    async def async_step_choose_entity_naming_initial(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pre-setup choice of Entity ID naming pattern.
+
+        Default to Friendly Names; both choices imply device prefix enabled.
+        """
+
+        self.ensure_flow_is_set_up()
+
+        pattern_options = {
+            EntityNamingPattern.FRIENDLY_NAMES.value: "Circuit Friendly Names",
+            EntityNamingPattern.CIRCUIT_NUMBERS.value: "Tab Based Names",
+        }
+
+        if user_input is None:
+            schema = vol.Schema(
+                {
+                    vol.Required(
+                        ENTITY_NAMING_PATTERN, default=EntityNamingPattern.FRIENDLY_NAMES.value
+                    ): vol.In(pattern_options)
+                }
+            )
+            return self.async_show_form(
+                step_id="choose_entity_naming_initial",
+                data_schema=schema,
+            )
+
+        selected = user_input.get(ENTITY_NAMING_PATTERN, EntityNamingPattern.FRIENDLY_NAMES.value)
+        self._chosen_use_device_prefix = True
+        self._chosen_use_circuit_numbers = selected == EntityNamingPattern.CIRCUIT_NUMBERS.value
+
+        # Proceed to create the entry
+        if self.host is None or self.serial_number is None or self.access_token is None:
+            raise ConfigFlowError("Missing required parameters during entry creation")
+        return self.create_new_entry(self.host, self.serial_number, self.access_token)
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -526,6 +978,7 @@ OPTIONS_SCHEMA: Any = vol.Schema(
         vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
             vol.Coerce(float), vol.Range(min=1.0, max=5.0)
         ),
+        vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
     }
 )
 
@@ -536,12 +989,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the main options menu."""
         if user_input is None:
+            menu_options = {
+                "general_options": "General Options",
+                "export_config": "Export Synthetic Sensor Config",
+            }
+
+            # Add simulation options if this is a simulation mode integration
+            if self.config_entry.data.get("simulation_mode", False):
+                menu_options["simulation_options"] = "Simulation Options"
+            else:
+                # Live panel: offer cloning into a simulation config
+                menu_options["clone_panel_to_simulation"] = "Clone Panel To Simulation"
+
             return self.async_show_menu(
                 step_id="init",
-                menu_options={
-                    "general_options": "General Options",
-                    "entity_naming": "Entity Naming Pattern",
-                },
+                menu_options=menu_options,
             )
 
             # This shouldn't be reached since we're showing a menu
@@ -551,20 +1013,107 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
+        errors: dict[str, str] = {}
+
+        # Get available unmapped tabs for dropdown
+        available_tabs = await get_available_unmapped_tabs(self.hass, self.config_entry)
+
         if user_input is not None:
-            # Preserve existing naming flags (don't change them in general options)
-            use_prefix: Any | bool = self.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            user_input[USE_DEVICE_PREFIX] = use_prefix
-
-            use_circuit_numbers: Any | bool = self.config_entry.options.get(
-                USE_CIRCUIT_NUMBERS, False
+            # Filter out separator fields from user input
+            filtered_input = {k: v for k, v in user_input.items() if not k.startswith("_separator")}
+            # Handle legacy upgrade flag if present
+            legacy_upgrade_requested: bool = bool(
+                user_input.get("legacy_upgrade_to_friendly", False)
             )
-            user_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
+            filtered_input.pop("legacy_upgrade_to_friendly", None)
 
-            # Remove any entity naming pattern from input (shouldn't be there anyway)
-            user_input.pop(ENTITY_NAMING_PATTERN, None)
+            # Validate solar tab selection if solar is enabled
+            if filtered_input.get(INVERTER_ENABLE, False):
+                # Coerce selector values (strings) back to integers
+                leg1_raw = filtered_input.get(INVERTER_LEG1, 0)
+                leg2_raw = filtered_input.get(INVERTER_LEG2, 0)
+                try:
+                    leg1 = int(leg1_raw)
+                except (TypeError, ValueError):
+                    leg1 = 0
+                try:
+                    leg2 = int(leg2_raw)
+                except (TypeError, ValueError):
+                    leg2 = 0
 
-            return self.async_create_entry(title="", data=user_input)
+                # Only validate when we actually have available tabs information
+                if available_tabs:
+                    is_valid, error_message = validate_solar_tab_selection(
+                        leg1, leg2, available_tabs
+                    )
+                    if not is_valid:
+                        errors["base"] = error_message
+                        _LOGGER.warning("Solar tab validation failed: %s", error_message)
+
+                # Persist coerced integer values
+                filtered_input[INVERTER_LEG1] = leg1
+                filtered_input[INVERTER_LEG2] = leg2
+
+            # If no errors, proceed with saving options
+            if not errors:
+                # Preserve existing naming flags by default.
+                # Important: default use_device_prefix to True for new installs
+                # so we do not accidentally treat them as legacy when the option
+                # was not yet persisted.
+                use_prefix: Any | bool = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
+                use_circuit_numbers: Any | bool = self.config_entry.options.get(
+                    USE_CIRCUIT_NUMBERS, False
+                )
+
+                # If legacy upgrade requested and device prefix is absent, migrate to Friendly Names
+                if legacy_upgrade_requested and not bool(use_prefix):
+                    # Safety guard: if entities already appear to use the device prefix,
+                    # skip migration to avoid double-prefixing and just persist flags.
+                    if self._entities_have_device_prefix(self.hass, self.config_entry):
+                        _LOGGER.info(
+                            "Skipping migration: entities already use device prefix; persisting flags only"
+                        )
+                        use_prefix = True
+                        use_circuit_numbers = False
+                    else:
+                        await self._migrate_entity_ids(
+                            EntityNamingPattern.LEGACY_NAMES.value,
+                            EntityNamingPattern.FRIENDLY_NAMES.value,
+                        )
+                        use_prefix = True
+                        use_circuit_numbers = False
+
+                filtered_input[USE_DEVICE_PREFIX] = use_prefix
+                filtered_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
+
+                # Remove any entity naming pattern from input (shouldn't be there anyway)
+                filtered_input.pop(ENTITY_NAMING_PATTERN, None)
+
+                return self.async_create_entry(title="", data=filtered_input)
+
+        # Get current values for dynamic filtering
+        current_leg1 = self.config_entry.options.get(INVERTER_LEG1, 0)
+        current_leg2 = self.config_entry.options.get(INVERTER_LEG2, 0)
+
+        # If user_input exists, use those values for filtering (for dynamic updates)
+        if user_input is not None:
+            leg1_raw_dyn = user_input.get(INVERTER_LEG1, current_leg1)
+            leg2_raw_dyn = user_input.get(INVERTER_LEG2, current_leg2)
+            try:
+                current_leg1 = int(leg1_raw_dyn)
+            except (TypeError, ValueError):
+                current_leg1 = 0
+            try:
+                current_leg2 = int(leg2_raw_dyn)
+            except (TypeError, ValueError):
+                current_leg2 = 0
+
+        # Create filtered tab options for each dropdown
+        leg1_options = get_filtered_tab_options(current_leg2, available_tabs)
+        leg2_options = get_filtered_tab_options(current_leg1, available_tabs)
+        # Convert to selector options lists (value/label) to force dropdowns
+        leg1_select_options = [{"value": str(k), "label": v} for k, v in leg1_options.items()]
+        leg2_select_options = [{"value": str(k), "label": v} for k, v in leg2_options.items()]
 
         # Show general options form (without entity naming)
         defaults: dict[str, Any] = {
@@ -573,8 +1122,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ),
             BATTERY_ENABLE: self.config_entry.options.get("enable_battery_percentage", False),
             INVERTER_ENABLE: self.config_entry.options.get("enable_solar_circuit", False),
-            INVERTER_LEG1: self.config_entry.options.get(INVERTER_LEG1, 0),
-            INVERTER_LEG2: self.config_entry.options.get(INVERTER_LEG2, 0),
+            # Defaults for selector values must be strings
+            INVERTER_LEG1: str(current_leg1),
+            INVERTER_LEG2: str(current_leg2),
             CONF_API_RETRIES: self.config_entry.options.get(CONF_API_RETRIES, DEFAULT_API_RETRIES),
             CONF_API_RETRY_TIMEOUT: self.config_entry.options.get(
                 CONF_API_RETRY_TIMEOUT, DEFAULT_API_RETRY_TIMEOUT
@@ -582,13 +1132,58 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             CONF_API_RETRY_BACKOFF_MULTIPLIER: self.config_entry.options.get(
                 CONF_API_RETRY_BACKOFF_MULTIPLIER, DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
             ),
+            ENERGY_REPORTING_GRACE_PERIOD: self.config_entry.options.get(
+                ENERGY_REPORTING_GRACE_PERIOD, 15
+            ),
         }
+
+        # Create schema with filtered dropdown selections for solar tabs
+        schema_fields = {
+            vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
+            vol.Optional(BATTERY_ENABLE): bool,
+            vol.Optional(INVERTER_ENABLE): bool,
+            vol.Optional(INVERTER_LEG1, default=str(current_leg1)): selector(
+                {"select": {"options": leg1_select_options, "mode": "dropdown"}}
+            ),
+            vol.Optional(INVERTER_LEG2, default=str(current_leg2)): selector(
+                {"select": {"options": leg2_select_options, "mode": "dropdown"}}
+            ),
+            vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
+            vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
+                vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+            ),
+            vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
+                vol.Coerce(float), vol.Range(min=1.0, max=5.0)
+            ),
+            vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
+        }
+
+        # If legacy (no device prefix), show upgrade toggle in general options.
+        # Option 1: Detect by option presence/flag
+        is_legacy_install = not self.config_entry.options.get(USE_DEVICE_PREFIX, False)
+
+        # Option 2 (safety): Also guard by integration version.
+        # Legacy upgrade UI only applies to versions prior to 1.0.4 where
+        # non-prefixed entities were originally created. If the installed
+        # integration version is >= 1.0.4, always suppress the legacy toggle
+        # regardless of options state to avoid confusion on fresh installs.
+        try:
+            installed = Version(get_version())
+            if installed >= Version("1.0.4"):
+                is_legacy_install = False
+        except (ValueError, TypeError, AttributeError):
+            # On version parsing or attribute errors, fall back to option-based detection
+            pass
+        if is_legacy_install:
+            schema_fields[vol.Optional("legacy_upgrade_to_friendly", default=False)] = bool
+            defaults["legacy_upgrade_to_friendly"] = False
+
+        schema = vol.Schema(schema_fields)
 
         return self.async_show_form(
             step_id="general_options",
-            data_schema=self.add_suggested_values_to_schema(
-                self._get_general_options_schema(), defaults
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, defaults),
+            errors=errors,
         )
 
     async def async_step_entity_naming(
@@ -648,14 +1243,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     for k, v in current_options.items()
                     if k not in [USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX]
                 }
-                _LOGGER.info("Preserving existing options: %s", preserved_options)
-                _LOGGER.info(
+                _LOGGER.debug("Preserving existing options: %s", preserved_options)
+                _LOGGER.debug(
                     "Solar sensor enabled: %s",
                     current_options.get(INVERTER_ENABLE, False),
                 )
-                _LOGGER.info("Inverter leg 1: %s", current_options.get(INVERTER_LEG1, 0))
-                _LOGGER.info("Inverter leg 2: %s", current_options.get(INVERTER_LEG2, 0))
-                _LOGGER.info("All options after update: %s", current_options)
+                _LOGGER.debug("Inverter leg 1: %s", current_options.get(INVERTER_LEG1, 0))
+                _LOGGER.debug("Inverter leg 2: %s", current_options.get(INVERTER_LEG2, 0))
+                _LOGGER.debug("All options after update: %s", current_options)
 
                 # Schedule reload after the options flow completes
                 async def reload_after_options_complete() -> None:
@@ -667,7 +1262,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 self.hass.async_create_task(reload_after_options_complete())
 
                 # Return success with the updated options - this will update the config entry
-                _LOGGER.info("Returning updated options to complete the flow")
+                _LOGGER.debug("Returning updated options to complete the flow")
                 return self.async_create_entry(title="", data=current_options)
             else:
                 # No pattern change - just return success
@@ -693,9 +1288,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             "circuit_example": "**Circuit Numbers Example**: span_panel_circuit_15_power",
         }
 
-        # Debug logging to help diagnose the translation issue
-        _LOGGER.info("Entity naming step - current pattern: %s", current_pattern)
-        _LOGGER.info(
+        _LOGGER.debug("Entity naming step - current pattern: %s", current_pattern)
+        _LOGGER.debug(
             "Entity naming step - description placeholders: %s",
             description_placeholders,
         )
@@ -708,35 +1302,479 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             description_placeholders=description_placeholders,
         )
 
-    def _get_general_options_schema(self) -> vol.Schema:
-        """Get the general options schema (excluding entity naming)."""
-        return vol.Schema(
+    async def async_step_simulation_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show simulation-related actions."""
+        if user_input is None:
+            return self.async_show_menu(
+                step_id="simulation_options",
+                menu_options={
+                    "edit_simulation_settings": "Edit Simulation Settings",
+                    "manage_simulation_configs": "Manage Simulation Configurations",
+                },
+            )
+        return self.async_abort(reason="unknown")
+
+    async def async_step_edit_simulation_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit simulation settings (time and performance)."""
+        if user_input is not None:
+            simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
+            if simulation_start_time:
+                try:
+                    simulation_start_time = validate_simulation_time(simulation_start_time)
+                    user_input[CONF_SIMULATION_START_TIME] = simulation_start_time
+                except ValueError as e:
+                    return self.async_show_form(
+                        step_id="edit_simulation_settings",
+                        data_schema=self.add_suggested_values_to_schema(
+                            self._get_simulation_schema(),
+                            self._get_simulation_defaults(),
+                        ),
+                        errors={"base": str(e)},
+                    )
+
+            async def reload_after_options_complete() -> None:
+                await self.hass.async_block_till_done()
+                _LOGGER.info("Reloading integration after simulation time change")
+                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
+            self.hass.async_create_task(reload_after_options_complete())
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="edit_simulation_settings",
+            data_schema=self.add_suggested_values_to_schema(
+                self._get_simulation_schema(),
+                self._get_simulation_defaults(),
+            ),
+        )
+
+    async def async_step_simulation_export(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle simulation config export."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            config_key = user_input.get(SIM_FILE_KEY, "")
+            export_path_raw = str(user_input.get(SIM_EXPORT_PATH, "")).strip()
+
+            if not config_key:
+                errors[SIM_FILE_KEY] = "Please select a simulation config to export"
+            elif not export_path_raw:
+                errors[SIM_EXPORT_PATH] = "Export path is required"
+            else:
+                try:
+                    current_file = Path(__file__)
+                    config_dir = current_file.parent / "simulation_configs"
+                    src_yaml = config_dir / f"{config_key}.yaml"
+
+                    export_path = Path(export_path_raw)
+                    await self.hass.async_add_executor_job(
+                        lambda: export_path.parent.mkdir(parents=True, exist_ok=True)
+                    )
+                    if not await self.hass.async_add_executor_job(src_yaml.exists):
+                        raise FileNotFoundError(f"Source simulation file not found: {src_yaml}")
+                    await self.hass.async_add_executor_job(shutil.copyfile, src_yaml, export_path)
+                    _LOGGER.info("Exported simulation config '%s' to %s", config_key, export_path)
+
+                    # Build friendly name for confirmation
+                    friendly = get_available_simulation_configs().get(config_key, config_key)
+                    return self.async_create_entry(
+                        title="",
+                        data={},
+                        description=f"Exported '{friendly}' to {export_path}",
+                    )
+
+                except Exception as e:
+                    _LOGGER.error("Simulation config export error: %s", e)
+                    errors["base"] = f"Export failed: {e}"
+
+        # Show export form
+        available_configs = get_available_simulation_configs()
+        options_list = [{"value": k, "label": v} for k, v in available_configs.items()]
+        current_config_key = self.config_entry.data.get(
+            CONF_SIMULATION_CONFIG, "simulation_config_32_circuit"
+        )
+        default_export = f"/tmp/{current_config_key}.yaml"  # nosec
+
+        export_schema = vol.Schema(
             {
-                vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
-                vol.Optional(BATTERY_ENABLE): bool,
-                vol.Optional(INVERTER_ENABLE): bool,
-                vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
-                vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
-                vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
-                vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
-                    vol.Coerce(float), vol.Range(min=0.1, max=10.0)
+                vol.Required(SIM_FILE_KEY, default=current_config_key): selector(
+                    {
+                        "select": {
+                            "options": options_list,
+                            "mode": "dropdown",
+                        }
+                    }
                 ),
-                vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
-                    vol.Coerce(float), vol.Range(min=1.0, max=5.0)
-                ),
+                vol.Required(SIM_EXPORT_PATH, default=default_export): str,
             }
         )
 
+        return self.async_show_form(
+            step_id="simulation_export",
+            data_schema=export_schema,
+            errors=errors,
+        )
+
+    async def async_step_simulation_import(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle simulation config import."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            import_path_raw = str(user_input.get(SIM_IMPORT_PATH, "")).strip()
+
+            if not import_path_raw:
+                errors[SIM_IMPORT_PATH] = "Import path is required"
+            else:
+                try:
+                    import_path = Path(import_path_raw)
+                    if not await self.hass.async_add_executor_job(import_path.exists):
+                        raise FileNotFoundError(f"Import file not found: {import_path}")
+
+                    # Load and validate YAML using span-panel-api's validator
+                    def load_yaml_file() -> dict[str, Any]:
+                        with import_path.open("r", encoding="utf-8") as f:
+                            result = yaml.safe_load(f)
+                            if result is None:
+                                return {}
+                            if isinstance(result, dict):
+                                return result
+                            return {}
+
+                    loaded_yaml = await self.hass.async_add_executor_job(load_yaml_file)
+                    # Use DynamicSimulationEngine internal validation
+                    engine = DynamicSimulationEngine(config_data=loaded_yaml)
+                    await engine.initialize_async()
+
+                    # Copy to simulation_configs directory
+                    current_file = Path(__file__)
+                    config_dir = current_file.parent / "simulation_configs"
+                    dest_name = (
+                        import_path.name if import_path.suffix else f"{import_path.name}.yaml"
+                    )
+                    dest_yaml = config_dir / dest_name
+                    await self.hass.async_add_executor_job(
+                        lambda: dest_yaml.parent.mkdir(parents=True, exist_ok=True)
+                    )
+                    await self.hass.async_add_executor_job(shutil.copyfile, import_path, dest_yaml)
+                    _LOGGER.info("Imported and validated simulation config to %s", dest_yaml)
+
+                    # Update config entry to point to the imported simulation config
+                    try:
+                        new_data = dict(self.config_entry.data)
+                        new_data[CONF_SIMULATION_CONFIG] = dest_yaml.stem
+                        self.hass.config_entries.async_update_entry(
+                            self.config_entry, data=new_data
+                        )
+                        _LOGGER.debug("Set CONF_SIMULATION_CONFIG to %s", dest_yaml.stem)
+                    except Exception as update_err:
+                        _LOGGER.warning(
+                            "Failed to set CONF_SIMULATION_CONFIG to %s: %s",
+                            dest_yaml.stem,
+                            update_err,
+                        )
+
+                    return self.async_create_entry(
+                        title="",
+                        data={},
+                        description=f"Imported '{dest_yaml.stem}' into simulation configurations",
+                    )
+
+                except Exception as e:
+                    _LOGGER.error("Simulation config import error: %s", e)
+                    errors["base"] = f"Import failed: {e}"
+
+        # Show import form
+        import_schema = vol.Schema(
+            {
+                vol.Required(SIM_IMPORT_PATH, default=""): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="simulation_import",
+            data_schema=import_schema,
+            errors=errors,
+        )
+
+    async def async_step_export_config(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle export synthetic sensor config."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            export_directory = user_input.get("directory", "").strip()
+
+            if not export_directory:
+                errors["directory"] = "Directory path is required"
+            else:
+                try:
+                    # Determine the correct sensor_set_id for this config entry
+                    # Prefer the deterministic id stored on the SpanPanel coordinator
+                    coordinator_data = self.hass.data.get(DOMAIN, {}).get(
+                        self.config_entry.entry_id, {}
+                    )
+                    coordinator = coordinator_data.get(COORDINATOR)
+
+                    sensor_set_id: str | None = None
+                    if coordinator is not None:
+                        # First choice: explicit value set during synthetic setup
+                        sensor_set_id = getattr(
+                            coordinator, "get_synthetic_sensor_set_id", lambda: None
+                        )()
+                        if not sensor_set_id:
+                            # Second choice: ask the synthetic coordinator for its computed value
+                            synth_coord = find_synthetic_coordinator_for(coordinator)
+                            if synth_coord:
+                                sensor_set_id = synth_coord.get_sensor_set_id()
+
+                    # Final fallback for simulator-mode entries when coordinator isn't available
+                    if sensor_set_id is None and self.config_entry.data.get(
+                        "simulation_mode", False
+                    ):
+                        device_identifier = slugify(
+                            self.config_entry.data.get("device_name", self.config_entry.title)
+                        )
+                        sensor_set_id = construct_sensor_set_id(device_identifier)
+
+                    if not sensor_set_id:
+                        raise RuntimeError("Unable to determine sensor_set_id for export")
+
+                    # Call the export service
+                    await self.hass.services.async_call(
+                        DOMAIN,
+                        "export_synthetic_config",
+                        {"directory": export_directory, "sensor_set_id": sensor_set_id},
+                        blocking=True,
+                    )
+
+                    # Return success message
+                    return self.async_create_entry(
+                        title="",
+                        data={},
+                        description="Synthetic sensor configuration exported successfully!",
+                    )
+
+                except Exception as e:
+                    _LOGGER.error("Failed to export config: %s", e)
+                    errors["base"] = f"Export failed: {str(e)}"
+
+        # Generate default filename with device name
+        device_name = self.config_entry.data.get("device_name", self.config_entry.title)
+        # Use slugify to make device name filesystem-safe (consistent with entity IDs)
+        if device_name and isinstance(device_name, str):
+            safe_device_name = slugify(device_name)
+        else:
+            safe_device_name = "span_panel"
+        default_filename = f"{safe_device_name}_sensor_config.yaml"
+        default_path = f"/tmp/{default_filename}"  # nosec
+
+        # Show export form with default file path
+        export_schema = vol.Schema(
+            {
+                vol.Required("directory", default=default_path): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="export_config",
+            data_schema=export_schema,
+            errors=errors,
+            description_placeholders={"filename": default_filename},
+        )
+
+    async def async_step_clone_panel_to_simulation(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Clone the live panel into a simulation YAML stored in simulation_configs."""
+        errors: dict[str, str] = {}
+
+        # Resolve coordinator (live)
+        coordinator_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
+        coordinator = coordinator_data.get(COORDINATOR)
+        if coordinator is None:
+            return self.async_abort(reason="coordinator_unavailable")
+
+        # Compute default filename
+        device_name = self.config_entry.data.get("device_name", self.config_entry.title)
+        safe_device = slugify(device_name) if isinstance(device_name, str) else "span_panel"
+
+        # Default assumption when we can't infer (recomputed later from tabs)
+        num_tabs = 32
+        config_dir = Path(__file__).parent / "simulation_configs"
+        base_name = f"simulation_config_{safe_device}_{num_tabs}_circuit.yaml"
+        dest_path = config_dir / base_name
+
+        # Suffix if exists: _2, _3, ...
+        suffix_index = 1
+        if await self.hass.async_add_executor_job(dest_path.exists):
+            suffix_index = 2
+            while True:
+                candidate = (
+                    config_dir
+                    / f"simulation_config_{safe_device}_{num_tabs}_circuit_{suffix_index}.yaml"
+                )
+                if not await self.hass.async_add_executor_job(candidate.exists):
+                    dest_path = candidate
+                    break
+                suffix_index += 1
+
+        if user_input is not None:
+            try:
+                # Use a separate generator to build YAML purely from live data
+                # Pass solar leg selections from options if present
+                leg1_opt = self.config_entry.options.get(INVERTER_LEG1, 0)
+                leg2_opt = self.config_entry.options.get(INVERTER_LEG2, 0)
+                generator = SimulationYamlGenerator(
+                    hass=self.hass,
+                    coordinator=coordinator,
+                    solar_leg1=int(leg1_opt) if leg1_opt else None,
+                    solar_leg2=int(leg2_opt) if leg2_opt else None,
+                )
+                snapshot_yaml, num_tabs = await generator.build_yaml_from_live_panel()
+
+                def infer_template_for(name: str, tabs: list[int]) -> str:
+                    lname = str(name).lower()
+                    if any(k in lname for k in ["light", "lights"]):
+                        return "lighting"
+                    if "kitchen" in lname and "outlet" in lname:
+                        return "kitchen_outlets"
+                    if any(
+                        k in lname
+                        for k in ["hvac", "furnace", "air conditioner", "ac", "heat pump"]
+                    ):
+                        return "hvac"
+                    if any(k in lname for k in ["fridge", "refrigerator", "wine fridge"]):
+                        return "refrigerator"
+                    if any(k in lname for k in ["ev", "charger"]):
+                        return "ev_charger"
+                    if any(k in lname for k in ["pool", "spa", "fountain"]):
+                        return "pool_equipment"
+                    if any(k in lname for k in ["internet", "router", "network", "modem"]):
+                        return "always_on"
+                    # Heuristics: 240V multi-tab loads as major appliances
+                    if len(tabs) >= 2:
+                        return "major_appliance"
+                    # Fallbacks
+                    if "outlet" in lname:
+                        return "outlets"
+                    return "major_appliance"
+
+                # snapshot_yaml and num_tabs returned by generator
+                snapshot_yaml["panel_config"]["serial_number"] = f"{safe_device}_simulation" + (
+                    "" if suffix_index == 1 else f"_{suffix_index}"
+                )
+
+                # Ensure correct filename reflects computed num_tabs
+                base_name = f"simulation_config_{safe_device}_{num_tabs}_circuit.yaml"
+                dest_path = config_dir / base_name
+
+                # Ensure directory exists and write file
+                await self.hass.async_add_executor_job(
+                    lambda: dest_path.parent.mkdir(parents=True, exist_ok=True)
+                )
+
+                def _write_yaml() -> None:
+                    with dest_path.open("w", encoding="utf-8") as f:
+                        yaml.safe_dump(snapshot_yaml, f, sort_keys=False)
+
+                await self.hass.async_add_executor_job(_write_yaml)
+                _LOGGER.info("Cloned live panel to simulation YAML at %s", dest_path)
+
+                # Update config entry to point to the new simulation config
+                try:
+                    new_data = dict(self.config_entry.data)
+                    new_data[CONF_SIMULATION_CONFIG] = dest_path.stem
+                    self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+                    _LOGGER.debug("Set CONF_SIMULATION_CONFIG to %s", dest_path.stem)
+                except Exception as update_err:
+                    _LOGGER.warning(
+                        "Failed to set CONF_SIMULATION_CONFIG to %s: %s",
+                        dest_path.stem,
+                        update_err,
+                    )
+
+                return self.async_create_entry(
+                    title="",
+                    data={},
+                    description=f"Cloned panel to {dest_path.name} in simulation_configs",
+                )
+
+            except Exception as e:
+                _LOGGER.error("Clone to simulation failed: %s", e)
+                errors["base"] = f"Clone failed: {e}"
+
+        # Confirm form with destination field
+        schema = vol.Schema(
+            {
+                vol.Required("destination", default=str(dest_path)): selector(
+                    {"text": {"multiline": False}}
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="clone_panel_to_simulation",
+            data_schema=schema,
+            description_placeholders={
+                "panel": device_name or "Span Panel",
+                "tabs": str(num_tabs),
+            },
+            errors=errors,
+        )
+
+    async def async_step_manage_simulation_configs(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu to import or export simulation configs."""
+        if user_input is None:
+            return self.async_show_menu(
+                step_id="manage_simulation_configs",
+                menu_options={
+                    "simulation_import": "Import Simulation Config",
+                    "simulation_export": "Export Simulation Config",
+                },
+            )
+        return self.async_abort(reason="unknown")
+
+    def _get_simulation_schema(self) -> vol.Schema:
+        """Get the simulation options schema."""
+        return vol.Schema(
+            {
+                vol.Optional(CONF_SIMULATION_START_TIME): str,
+            }
+        )
+
+    def _get_simulation_defaults(self) -> dict[str, Any]:
+        """Get the simulation options defaults."""
+        return {
+            CONF_SIMULATION_START_TIME: self.config_entry.options.get(
+                CONF_SIMULATION_START_TIME, ""
+            ),
+        }
+
     def _get_entity_naming_schema(self) -> vol.Schema:
         """Get the entity naming options schema."""
-        # Pre-1.0.4 installations can only migrate to the two modern patterns
-        # Modern installations can switch between the two modern patterns
+        current_pattern = self._get_current_naming_pattern()
 
-        # Create friendly descriptions with examples
-        pattern_options = {
-            EntityNamingPattern.FRIENDLY_NAMES.value: "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
-            EntityNamingPattern.CIRCUIT_NUMBERS.value: "Circuit Numbers (e.g., span_panel_circuit_15_power)",
-        }
+        # Legacy installations can only migrate to friendly names first
+        if current_pattern == EntityNamingPattern.LEGACY_NAMES.value:
+            pattern_options = {
+                EntityNamingPattern.FRIENDLY_NAMES.value: "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
+            }
+        else:
+            # Modern installations can switch between the two modern patterns
+            pattern_options = {
+                EntityNamingPattern.FRIENDLY_NAMES.value: "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
+                EntityNamingPattern.CIRCUIT_NUMBERS.value: "Circuit Numbers (e.g., span_panel_circuit_15_power)",
+            }
 
         return vol.Schema(
             {
@@ -769,14 +1807,98 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             _LOGGER.error("Cannot migrate entities: coordinator not found")
             return
 
-        # Perform the migration using the coordinator
-        success = await coordinator.migrate_entities(old_pattern, new_pattern)
+        # Determine old and new flags based on patterns
+        old_flags = self._pattern_to_flags(old_pattern)
+        new_flags = self._pattern_to_flags(new_pattern)
+
+        # Perform the migration using the coordinator with old and new flags
+        success = await coordinator.migrate_synthetic_entities(old_flags, new_flags)
 
         if success:
             _LOGGER.debug("Entity migration completed successfully")
         else:
             _LOGGER.error("Entity migration failed")
 
+    @staticmethod
+    def _entities_have_device_prefix(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+        """Best-effort detection if entities already use the device prefix.
+
+        Checks the entity registry for any entity belonging to this config entry where
+        the object_id starts with 'span_panel_'. Both FRIENDLY_NAMES and CIRCUIT_NUMBERS
+        patterns include the prefix; only LEGACY lacks it.
+        """
+        registry = er.async_get(hass)
+        for entry in registry.entities.values():
+            try:
+                if entry.config_entry_id != config_entry.entry_id:
+                    continue
+                object_id = entry.entity_id.split(".", 1)[1]
+                if object_id.startswith("span_panel_"):
+                    return True
+            except (IndexError, AttributeError):
+                continue
+        return False
+
+    def _pattern_to_flags(self, pattern: str) -> dict[str, bool]:
+        """Convert entity naming pattern to configuration flags."""
+        if pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value:
+            return {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
+        elif pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
+            return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
+        else:  # LEGACY_NAMES
+            return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
+
 
 # Register the config flow handler
 config_entries.HANDLERS.register(DOMAIN)(SpanPanelConfigFlow)
+
+
+def validate_simulation_time(time_input: str) -> str:
+    """Validate and convert simulation time input.
+
+    Supports:
+    - Time-only formats: "17:30", "5:30" (24-hour and 12-hour)
+    - Full ISO datetime: "2024-06-15T17:30:00"
+
+    Returns:
+        ISO datetime string with current date if time-only, or original if full datetime
+
+    Raises:
+        ValueError: If the time format is invalid
+
+    """
+    if not time_input.strip():
+        return ""
+
+    time_input = time_input.strip()
+
+    # Check if it's a full ISO datetime first
+    try:
+        datetime.fromisoformat(time_input)
+        return time_input  # Valid ISO datetime, return as-is
+    except ValueError:
+        pass  # Not a full datetime, try time-only formats
+
+    # Try time-only formats (HH:MM or H:MM)
+    try:
+        # Parse the time
+        if ":" in time_input:
+            parts = time_input.split(":")
+            if len(parts) == 2:
+                hour = int(parts[0])
+                minute = int(parts[1])
+
+                # Validate hour and minute ranges
+                if 0 <= hour <= 23 and 0 <= minute <= 59:
+                    # Convert to current date with the specified time
+                    now = datetime.now()
+                    time_only = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    return time_only.isoformat()
+
+        raise ValueError(
+            f"Invalid time format. Use {', '.join(TIME_ONLY_FORMATS)} or {ISO_DATETIME_FORMAT}"
+        )
+    except (ValueError, IndexError) as e:
+        raise ValueError(
+            f"Invalid time format. Use {', '.join(TIME_ONLY_FORMATS)} or {ISO_DATETIME_FORMAT}"
+        ) from e

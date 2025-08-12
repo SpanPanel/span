@@ -1,0 +1,321 @@
+# 40-tab panel configuration with battery storage and unmapped tabs
+# This config intentionally leaves some tabs unmapped to test edge cases
+
+panel_config:
+  serial_number: "SPAN-40-BATTERY-001"
+  total_tabs: 40
+  main_size: 400  # Larger main breaker for 40-tab panel
+
+circuit_templates:
+  # Standard templates
+  lighting:
+    energy_profile:
+      mode: "consumer"
+      power_range: [5.0, 50.0]
+      typical_power: 25.0
+      power_variation: 0.15
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  outlets:
+    energy_profile:
+      mode: "bidirectional"
+      power_range: [0.0, 1800.0]
+      typical_power: 150.0
+      power_variation: 0.4
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  hvac:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 3000.0]
+      typical_power: 1500.0
+      power_variation: 0.2
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+    cycling_pattern:
+      on_duration: 900    # 15 minutes
+      off_duration: 1800  # 30 minutes
+
+  solar:
+    energy_profile:
+      mode: "producer"
+      power_range: [-8000.0, 0.0]
+      typical_power: -4000.0
+      power_variation: 0.4
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+
+  battery:
+    energy_profile:
+      mode: "bidirectional"
+      power_range: [-5000.0, 5000.0]  # Can charge or discharge
+      typical_power: 0.0  # Neutral when idle
+      power_variation: 0.1
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+    battery_behavior:
+      enabled: true
+      charge_efficiency: 0.95  # 95% efficient charging
+      discharge_efficiency: 0.95  # 95% efficient discharging
+      charge_hours: [9, 10, 11, 12, 13, 14, 15, 16]  # Solar hours
+      discharge_hours: [17, 18, 19, 20, 21]  # Peak demand hours
+      max_charge_power: -3000.0  # Max charging power (negative)
+      max_discharge_power: 2500.0  # Max discharge power (positive)
+      idle_hours: [0, 1, 2, 3, 4, 5, 6, 7, 8, 22, 23]  # Low activity hours
+      idle_power_range: [-100.0, 100.0]  # Random power during idle hours
+      # Solar intensity profile for charging (hour: intensity_factor)
+      solar_intensity_profile:
+        9: 0.2
+        10: 0.4
+        11: 0.7
+        12: 1.0  # Peak solar
+        13: 1.0
+        14: 0.8
+        15: 0.6
+        16: 0.3
+      # Demand factor profile for discharging (hour: demand_factor)
+      demand_factor_profile:
+        17: 0.6  # Early evening
+        18: 0.8  # Peak start
+        19: 1.0  # Peak demand
+        20: 0.9  # High demand
+        21: 0.7  # Demand decreasing
+
+circuits:
+  # Define only 37 circuits for a 40-tab panel (tabs 38-40 will be unmapped)
+
+  # Main lighting circuits (tabs 1-8)
+  - id: "kitchen_lights"
+    name: "Kitchen Lights"
+    template: "lighting"
+    tabs: [1]
+
+  - id: "living_room_lights"
+    name: "Living Room Lights"
+    template: "lighting"
+    tabs: [2]
+
+  - id: "bedroom_lights"
+    name: "Bedroom Lights"
+    template: "lighting"
+    tabs: [3]
+
+  - id: "bathroom_lights"
+    name: "Bathroom Lights"
+    template: "lighting"
+    tabs: [4]
+
+  - id: "outdoor_lights"
+    name: "Outdoor Lights"
+    template: "lighting"
+    tabs: [5]
+
+  - id: "garage_lights"
+    name: "Garage Lights"
+    template: "lighting"
+    tabs: [6]
+
+  - id: "basement_lights"
+    name: "Basement Lights"
+    template: "lighting"
+    tabs: [7]
+
+  - id: "office_lights"
+    name: "Office Lights"
+    template: "lighting"
+    tabs: [8]
+
+  # Outlet circuits (tabs 9-16)
+  - id: "kitchen_outlets"
+    name: "Kitchen Outlets"
+    template: "outlets"
+    tabs: [9]
+
+  - id: "living_room_outlets"
+    name: "Living Room Outlets"
+    template: "outlets"
+    tabs: [10]
+
+  - id: "bedroom_outlets"
+    name: "Bedroom Outlets"
+    template: "outlets"
+    tabs: [11]
+
+  - id: "bathroom_outlets"
+    name: "Bathroom Outlets"
+    template: "outlets"
+    tabs: [12]
+
+  - id: "garage_outlets"
+    name: "Garage Outlets"
+    template: "outlets"
+    tabs: [13]
+
+  - id: "basement_outlets"
+    name: "Basement Outlets"
+    template: "outlets"
+    tabs: [14]
+
+  - id: "office_outlets"
+    name: "Office Outlets"
+    template: "outlets"
+    tabs: [15]
+
+  - id: "outdoor_outlets"
+    name: "Outdoor Outlets"
+    template: "outlets"
+    tabs: [16]
+
+  # HVAC systems (240V, using opposing tabs)
+  - id: "main_hvac"
+    name: "Main HVAC System"
+    template: "hvac"
+    tabs: [17, 19]
+
+  - id: "secondary_hvac"
+    name: "Secondary HVAC System"
+    template: "hvac"
+    tabs: [18, 20]
+
+  # Major appliances (240V)
+  - id: "electric_range"
+    name: "Electric Range"
+    template: "outlets"
+    tabs: [21, 23]
+    overrides:
+      power_range: [0.0, 8000.0]
+      typical_power: 2000.0
+
+  - id: "electric_dryer"
+    name: "Electric Dryer"
+    template: "outlets"
+    tabs: [22, 24]
+    overrides:
+      power_range: [0.0, 5000.0]
+      typical_power: 1500.0
+
+  - id: "water_heater"
+    name: "Water Heater"
+    template: "outlets"
+    tabs: [25, 27]
+    overrides:
+      power_range: [0.0, 4500.0]
+      typical_power: 2000.0
+
+  - id: "ev_charger"
+    name: "EV Charger"
+    template: "outlets"
+    tabs: [26, 28]
+    overrides:
+      power_range: [0.0, 7200.0]
+      typical_power: 3600.0
+
+  # Solar and battery systems
+  - id: "solar_inverter_1"
+    name: "Solar Inverter 1"
+    template: "solar"
+    tabs: [29, 31]
+
+  - id: "solar_inverter_2"
+    name: "Solar Inverter 2"
+    template: "solar"
+    tabs: [30, 32]
+
+  # Battery storage on opposing phased tabs as requested
+  - id: "battery_system_1"
+    name: "Battery System 1"
+    template: "battery"
+    tabs: [33, 35]
+
+  - id: "battery_system_2"
+    name: "Battery System 2"
+    template: "battery"
+    tabs: [34, 36]
+
+  # Additional circuit (using tab 37)
+  - id: "pool_pump"
+    name: "Pool Pump"
+    template: "outlets"
+    tabs: [37]
+    overrides:
+      power_range: [0.0, 2000.0]
+      typical_power: 800.0
+
+  # Tabs 38-40 are intentionally left unmapped to test unmapped tab creation
+  # This will trigger the code in lines 866-876 of client.py
+
+# Circuit synchronizations for 240V battery systems and solar arrays
+tab_synchronizations:
+  - tabs: [33, 35]  # Battery System 1 - 240V split phase
+    behavior: "240v_split_phase"
+    power_split: "equal"
+    energy_sync: true
+    template: "battery_sync"
+
+  - tabs: [34, 36]  # Battery System 2 - 240V split phase
+    behavior: "240v_split_phase"
+    power_split: "equal"
+    energy_sync: true
+    template: "battery_sync"
+
+  - tabs: [29, 31]  # Solar Inverter 1 - 240V split phase
+    behavior: "240v_split_phase"
+    power_split: "equal"
+    energy_sync: true
+    template: "solar_sync"
+
+  - tabs: [30, 32]  # Solar Inverter 2 - 240V split phase
+    behavior: "240v_split_phase"
+    power_split: "equal"
+    energy_sync: true
+    template: "solar_sync"
+
+# Explicitly list unmapped tabs for testing purposes
+unmapped_tabs: [38, 39, 40]  # These tabs will have auto-generated behavior
+
+# Unmapped tab templates for tabs that should have behavior but remain unmapped
+unmapped_tab_templates:
+  "38":
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1000.0]
+      typical_power: 200.0
+      power_variation: 0.3
+    relay_behavior: "non_controllable"
+    priority: "NON_ESSENTIAL"
+
+  "39":
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 800.0]
+      typical_power: 150.0
+      power_variation: 0.2
+    relay_behavior: "non_controllable"
+    priority: "NON_ESSENTIAL"
+
+  "40":
+    energy_profile:
+      mode: "producer"
+      power_range: [-1500.0, 0.0]
+      typical_power: -500.0
+      power_variation: 0.4
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [11, 12, 13, 14, 15]
+      peak_multiplier: 1.0
+      off_peak_multiplier: 0.0
+
+simulation_params:
+  enable_realistic_behaviors: true
+  noise_factor: 0.02
+  time_acceleration: 1.0
+  update_interval: 5
+  # Advanced battery behavior
+  battery_behaviors:
+    charge_efficiency: 0.95
+    discharge_efficiency: 0.90
+    self_discharge_rate: 0.001  # 0.1% per hour

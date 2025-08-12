@@ -9,7 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.span_panel.const import CircuitRelayState
-from custom_components.span_panel.switch import SpanPanelCircuitsSwitch, async_setup_entry
+from custom_components.span_panel.switch import (
+    SpanPanelCircuitsSwitch,
+    async_setup_entry,
+)
 
 
 @pytest.fixture(autouse=True)

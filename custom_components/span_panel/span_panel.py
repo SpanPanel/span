@@ -1,5 +1,6 @@
 """Module to read production and consumption values from a Span panel."""
 
+from datetime import datetime
 import logging
 
 from .exceptions import SpanPanelReturnedEmptyData
@@ -40,10 +41,22 @@ class SpanPanel:
         options: Options | None = None,
         use_ssl: bool = False,
         scan_interval: int | None = None,
+        simulation_mode: bool = False,
+        simulation_config_path: str | None = None,
+        simulation_start_time: datetime | None = None,
     ) -> None:
         """Initialize the Span Panel."""
         self._options = options
-        self.api = SpanPanelApi(host, access_token, options, use_ssl, scan_interval)
+        self.api = SpanPanelApi(
+            host,
+            access_token,
+            options,
+            use_ssl,
+            scan_interval,
+            simulation_mode,
+            simulation_config_path,
+            simulation_start_time,
+        )
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None
         self._circuits: dict[str, SpanPanelCircuit] = {}
@@ -87,6 +100,9 @@ class SpanPanel:
 
     def _update_circuits(self, new_circuits: dict[str, SpanPanelCircuit]) -> None:
         """Atomic update of circuits data."""
+        circuit_keys = list(new_circuits.keys())
+        _LOGGER.debug("Updating circuits. Total: %s", len(circuit_keys))
+
         self._circuits = new_circuits
 
     def _update_storage_battery(self, new_battery: SpanPanelStorageBattery) -> None:
@@ -96,23 +112,21 @@ class SpanPanel:
     async def update(self) -> None:
         """Update all panel data atomically."""
         try:
-            _LOGGER.debug("Starting panel update")
             # Get new data
             new_status = await self.api.get_status_data()
-            _LOGGER.debug("Got status data: %s", new_status)
             new_panel = await self.api.get_panel_data()
-            _LOGGER.debug("Got panel data: %s", new_panel)
             new_circuits = await self.api.get_circuits_data()
-            _LOGGER.debug("Got circuits data: %s", new_circuits)
 
             # Atomic updates
             self._update_status(new_status)
             self._update_panel(new_panel)
             self._update_circuits(new_circuits)
 
-            if self._options and self._options.enable_battery_percentage:
+            # Debug battery option status
+            battery_option_enabled = self._options and self._options.enable_battery_percentage
+
+            if battery_option_enabled:
                 new_battery = await self.api.get_storage_battery_data()
-                _LOGGER.debug("Got battery data: %s", new_battery)
                 self._update_storage_battery(new_battery)
 
             _LOGGER.debug("Panel update completed successfully")
@@ -125,7 +139,8 @@ class SpanPanel:
     @property
     def status(self) -> SpanPanelHardwareStatus:
         """Get status data atomically."""
-        return self._get_hardware_status()
+        result = self._get_hardware_status()
+        return result
 
     @property
     def panel(self) -> SpanPanelData:
@@ -140,7 +155,8 @@ class SpanPanel:
     @property
     def storage_battery(self) -> SpanPanelStorageBattery:
         """Get storage battery data atomically."""
-        return self._get_storage_battery()
+        result = self._get_storage_battery()
+        return result
 
     async def close(self) -> None:
         """Close the API client and clean up resources."""
