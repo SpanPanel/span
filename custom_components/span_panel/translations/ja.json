@@ -18,8 +18,14 @@
       },
       "user": {
         "data": {
-          "host": "ホスト"
+          "host": "ホスト",
+          "simulator_mode": "シミュレーターモード"
         },
+        "data_description": {
+          "host": "SPAN PanelのIPアドレスまたはホスト名（シミュレーション用：'sp3-simulation-001'のようなシリアル番号を使用するか、デフォルトの場合は空にしてください）",
+          "simulator_mode": "テスト用のシミュレーターモードを有効にします（ハードウェア不要）。デフォルトシミュレーションの場合はホストを空にするか、カスタムシリアル番号を入力してください。"
+        },
+        "description": "SPAN Panelの接続詳細を入力してください。シミュレーターモードの場合は、シミュレーターチェックボックスをチェックし、必要に応じてカスタムシリアル番号を入力してください。",
         "title": "スパンパネルに接続"
       },
       "choose_auth_type": {
@@ -57,11 +63,18 @@
           "scan_interval": "スキャンインターバル(秒)",
           "enable_battery_percentage": "バッテリーパーセントセンサーを有効にする",
           "enable_solar_circuit": "ソーラーインバーターセンサーを有効にする",
-          "leg1": "ソーラーレッグ1（0は使用されません）",
-          "leg2": "ソーラーレッグ2（0は使用されません）",
+          "leg1": "ソーラーレッグ1",
+          "leg2": "ソーラーレッグ2",
           "api_retries": "APIリトライ回数 (0-10)",
           "api_retry_timeout": "APIリトライタイムアウト (秒)",
-          "api_retry_backoff_multiplier": "APIリトライバックオフ倍率"
+          "api_retry_backoff_multiplier": "APIリトライバックオフ倍率",
+          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
+          "legacy_upgrade_to_friendly": "フレンドリ名にアップグレード"
+        },
+        "data_description": {
+          "enable_solar_circuit": "ソーラーインバーター監視用の合成センサーを有効にします。反対の電気相の2つの未マップタブの選択が必要です。",
+          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
+          "legacy_upgrade_to_friendly": "レガシー形式からフレンドリ名にエンティティ命名をアップグレードします。これにより、既存のエンティティが回路番号の代わりに説明的な名前を使用するように名前変更されます。"
         }
       },
       "entity_naming": {

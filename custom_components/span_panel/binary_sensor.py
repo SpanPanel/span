@@ -26,6 +26,10 @@ from .const import (
     USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
+from .helpers import (
+    build_binary_sensor_unique_id_for_entry,
+    construct_panel_entity_id,
+)
 from .span_panel import SpanPanel
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .util import panel_to_device_info
@@ -117,22 +121,43 @@ class SpanPanelBinarySensor(
         # entity_description later, avoiding type issues
         self._value_fn = description.value_fn
 
-        device_info: DeviceInfo = panel_to_device_info(span_panel)
+        # Consistent device name logic (matches switch)
+        self._device_name = data_coordinator.config_entry.data.get(
+            "device_name", data_coordinator.config_entry.title
+        )
+
+        device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
         self._attr_device_info = device_info
         base_name: str | None = f"{description.name}"
 
         if (
             data_coordinator.config_entry is not None
             and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and "name" in device_info
+            and self._device_name
         ):
-            self._attr_name = f"{device_info['name']} {base_name or ''}"
+            self._attr_name = f"{self._device_name} {base_name or ''}"
         else:
             self._attr_name = base_name or ""
 
-        self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
+        self._attr_unique_id = self._construct_binary_sensor_unique_id(
+            data_coordinator, span_panel, description.key
+        )
 
-        _LOGGER.debug("CREATE BINSENSOR [%s]", self._attr_name)
+        # Get the device prefix setting
+        use_device_prefix = data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+        # Use the panel-level helper for entity_id construction (status sensor pattern)
+        entity_id = construct_panel_entity_id(
+            data_coordinator,
+            span_panel,
+            "binary_sensor",
+            description.key.lower(),
+            self._device_name,
+            self._attr_unique_id,
+            use_device_prefix,
+        )
+        if entity_id is not None:
+            self.entity_id = entity_id
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -145,14 +170,18 @@ class SpanPanelBinarySensor(
         self._attr_is_on = status_value
         self._attr_available = status_value is not None
 
-        _LOGGER.debug(
-            "BINSENSOR [%s] updated: is_on=%s, available=%s",
-            self._attr_name,
-            self._attr_is_on,
-            self._attr_available,
-        )
-
         super()._handle_coordinator_update()
+
+    def _construct_binary_sensor_unique_id(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description_key: str,
+    ) -> str:
+        """Construct unique ID for binary sensor entities."""
+        return build_binary_sensor_unique_id_for_entry(
+            data_coordinator, span_panel, description_key, self._device_name
+        )
 
 
 async def async_setup_entry(
@@ -173,3 +202,6 @@ async def async_setup_entry(
         entities.append(SpanPanelBinarySensor(coordinator, description))
 
     async_add_entities(entities)
+
+    # Force immediate coordinator refresh to ensure hardware sensors update right away
+    await coordinator.async_request_refresh()

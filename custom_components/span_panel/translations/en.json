@@ -8,7 +8,8 @@
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
       "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "host_required": "Host is required for live panel connections"
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -18,8 +19,14 @@
       },
       "user": {
         "data": {
-          "host": "Host"
+          "host": "Host",
+          "simulator_mode": "Simulator Mode"
         },
+        "data_description": {
+          "host": "IP address or hostname of SPAN Panel (required for live panels, optional for simulation)",
+          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host can be left empty for default simulation."
+        },
+        "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and leave host empty (or enter a custom serial number).",
         "title": "Connect to the Span Panel"
       },
       "choose_auth_type": {
@@ -39,16 +46,39 @@
         "data": {
           "access_token": "Access Token"
         }
+      },
+      "simulator_config": {
+        "title": "Simulator Configuration",
+        "description": "Choose the simulation configuration for your SPAN Panel. This determines the number of circuits and behaviors. {config_count} configurations are available.",
+        "data": {
+          "simulation_config": "Simulation Configuration",
+          "host": "Custom Serial Number (optional)"
+        },
+        "data_description": {
+          "simulation_config": "Select the panel configuration to simulate",
+          "host": "Leave empty to use the default serial number from the selected configuration"
+        }
       }
     }
   },
   "options": {
+    "error": {
+      "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.": "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.",
+      "Solar legs cannot use the same tab ({tab}). Two different tabs are required for 240V measurement.": "Solar legs cannot use the same tab. Two different tabs are required for 240V measurement.",
+      "Tab {tab} is not available or is already mapped to a circuit.": "Selected tab is not available or is already mapped to a circuit.",
+      "Solar tabs {tab1} and {tab2} are both on {phase}. For proper 240V measurement, tabs must be on opposite phases.": "Selected solar tabs are both on the same electrical phase. For proper 240V measurement, tabs must be on opposite phases (L1 and L2).",
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Invalid time format. Use HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS)",
+      "directory": "File path is required",
+      "base": "Export failed: {error}"
+    },
     "step": {
       "init": {
         "title": "Options Menu",
         "menu_options": {
           "general_options": "General Options",
-          "entity_naming": "Entity Naming Pattern"
+          "entity_naming": "Entity Naming Pattern",
+          "export_config": "Export Synthetic Sensor Config",
+          "simulation_options": "Simulation Options"
         }
       },
       "general_options": {
@@ -57,11 +87,18 @@
           "scan_interval": "Scan interval in seconds",
           "enable_battery_percentage": "Enable Battery Percentage Sensor",
           "enable_solar_circuit": "Enable Solar Inverter Sensors",
-          "leg1": "Solar Leg 1 (0 is not used)",
-          "leg2": "Solar Leg 2 (0 is not used)",
+          "leg1": "Solar Leg 1",
+          "leg2": "Solar Leg 2",
           "api_retries": "API Retries (0-10)",
           "api_retry_timeout": "API Retry Timeout (seconds)",
-          "api_retry_backoff_multiplier": "API Retry Backoff Multiplier"
+          "api_retry_backoff_multiplier": "API Retry Backoff Multiplier",
+          "energy_reporting_grace_period": "Energy Sensor Grace Period (minutes)",
+          "legacy_upgrade_to_friendly": "Upgrade to Friendly Names"
+        },
+        "data_description": {
+          "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
+          "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
+          "legacy_upgrade_to_friendly": "Upgrade your entity naming from legacy format to friendly names. This will rename your existing entities to use descriptive names instead of circuit numbers."
         }
       },
       "entity_naming": {
@@ -70,6 +107,34 @@
         "data": {
           "entity_naming_pattern": "Entity Naming Pattern"
         }
+      },
+      "export_config": {
+        "title": "Export Synthetic Sensor Config",
+        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: '{filename}'",
+        "data": {
+          "directory": "File Path"
+        },
+        "data_description": {
+          "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
+        }
+      },
+      "simulation_options": {
+        "title": "Simulation Options",
+        "description": "Configure simulation-specific settings. Changes to simulation time will reload the integration to apply the new time.",
+        "data": {
+          "simulation_start_time": "Simulation Start Time"
+        },
+        "data_description": {
+          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time. Integration will reload to apply changes."
+        }
+      }
+    }
+  },
+  "selector": {
+    "entity_naming_pattern": {
+      "options": {
+        "friendly_names": "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
+        "circuit_numbers": "Circuit Numbers (e.g., span_panel_circuit_15_power)"
       }
     }
   }

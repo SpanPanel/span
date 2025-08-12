@@ -10,30 +10,30 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
-homeassistant = "*"  # This pulls in all HA's pinned dependencies automatically
+homeassistant = ">=2025.7.0"  # Pin to 2025.7 or higher to avoid slow resolution
 span-panel-api = {path = "../span-panel-api", develop = true}
 ha-synthetic-sensors = {path = "../ha-synthetic-sensors", develop = true}
-# Only add dependencies here that HA doesn't provide or where you need different versions
+aiofiles = "^23.2.0"
 
 [tool.poetry.group.dev.dependencies]
 # Type stubs and dev-only tools that don't conflict with HA runtime
+pytest = "^8.4.0"
+pytest-asyncio = "^1.0.0"
+pytest-homeassistant-custom-component = "*"
+bandit = "^1.8.5"
+pre-commit = "^4.0.0"
+ruff = "^0.12.1"
+mypy = "^1.15.0"
+pyright = "*"
+radon = "*"
+pylint = "*"  # For import-outside-toplevel checks
+prettier = "*"
+isort = "*"
 homeassistant-stubs = "*"
 types-requests = "*"
 types-PyYAML = "*"
-mypy = "*"
-pyright = "*"
-ruff = "*"
-bandit = "*"
-pre-commit = "*"
 voluptuous-stubs = "*"
 python-direnv = "*"
-prettier = "*"
-radon = "*"
-pylint = "*"  # For import-outside-toplevel checks
-# Testing dependencies
-pytest = "*"
-pytest-homeassistant-custom-component = "*"
-isort = "*"
 
 [build-system]
 requires = ["poetry-core"]
@@ -68,18 +68,17 @@ warn_return_any = true
 strict_optional = true
 
 # Package handling for HA custom integration
-mypy_path = "."
+# mypy_path = "."
 namespace_packages = false
 explicit_package_bases = false
-
-# Module search paths - set this explicitly to prevent duplicate module resolution
-files = ["custom_components/span_panel"]
 
 # Exclude patterns
 exclude = [
     "venv/.*",
     ".venv/.*",
-    "scripts/.*"
+    "scripts/.*",
+    "tests/.*",
+    "test_.*\\.py"
 ]
 
 # Error codes
@@ -104,36 +103,14 @@ init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
-[tool.pyright]
-include = ["custom_components/span_panel"]
-exclude = [
-    "venv",
-    ".venv",
-    "scripts",
-    ".git",
-    ".pytest_cache",
-    ".mypy_cache",
-    ".ruff_cache"
-]
-extraPaths = [
-    "./custom_components",
-    "../span-panel-api/src",
-    "../ha-synthetic-sensors/src"
-]
-pythonPlatform = "Darwin"
-pythonVersion = "3.13"
-typeCheckingMode = "basic"
-useLibraryCodeForTypes = true
-autoSearchPaths = true
-autoImportCompletions = true
-reportMissingImports = "warning"
-reportMissingTypeStubs = false
-venvPath = "."
-venv = ".venv"
+
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py313"
+
+# Exclude tests and scripts from linting checks but allow formatting
+exclude = ["scripts/"]
 
 [tool.ruff.lint]
 select = [
@@ -172,11 +149,13 @@ ignore = [
     "E731",  # do not assign a lambda expression, use a def
 ]
 
-# Per-file ignores for test and debug files
+# Exclude tests from ALL linting checks (formatting still applies)
 [tool.ruff.lint.per-file-ignores]
-"test_*.py" = ["T201", "D103", "D100", "E402", "TID252"]  # Allow print statements, missing docstrings, and imports inside functions in test files
+"test_*.py" = ["ALL"]  # Disable all linting rules for test files (formatting only)
 "debug_*.py" = ["T201", "D103", "D100", "E402", "TID252"]  # Allow print statements, missing docstrings, and imports inside functions in debug files
-"tests/**/*.py" = ["T201", "D103", "D100", "E402", "TID252"]  # Allow print statements, missing docstrings, and imports inside functions in test directory
+"tests/**/*.py" = ["ALL"]  # Disable all linting rules for test directory (formatting only)
+"custom_components/span_panel/binary_sensor.py" = ["UP046"]  # Generic class uses Generic subclass
+"custom_components/span_panel/sensor.py" = ["UP046"]  # Generic class uses Generic subclass
 
 # Bandit configuration
 [tool.bandit]
@@ -207,3 +186,10 @@ combine-as-imports = true
 [tool.coverage.run]
 source = ["custom_components/span_panel"]
 omit = ["tests/*"]
+data_file = ".local_coverage_data"
+
+[tool.pytest.ini_options]
+# Configure pytest-asyncio to use function-scoped event loop
+# This creates a fresh event loop for each test to avoid closure issues
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"

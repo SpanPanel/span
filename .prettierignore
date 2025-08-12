@@ -1,0 +1,43 @@
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Cache directories
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node modules
+node_modules/
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+
+# Poetry
+poetry.lock
+
+# Test files (optional - remove if you want to format test files)
+# tests/
+
+# Keep docs directory included for formatting

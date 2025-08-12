@@ -18,8 +18,14 @@
       },
       "user": {
         "data": {
-          "host": "Anfitrião"
+          "host": "Anfitrião",
+          "simulator_mode": "Modo Simulador"
         },
+        "data_description": {
+          "host": "Endereço IP ou nome do host do SPAN Panel (para simulação: use número de série como 'sp3-simulation-001' ou deixe vazio para padrão)",
+          "simulator_mode": "Ativar modo simulador para testes (não requer hardware). Deixe o host vazio para simulação padrão, ou insira um número de série personalizado."
+        },
+        "description": "Insira os detalhes de conexão para seu SPAN Panel. Para modo simulador, marque a caixa do simulador e opcionalmente insira um número de série personalizado.",
         "title": "Ligar ao Painel Span"
       },
       "choose_auth_type": {
@@ -57,11 +63,18 @@
           "scan_interval": "Intervalo de verificação em segundos",
           "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria",
           "enable_solar_circuit": "Ativar Sensores do Inversor Solar",
-          "leg1": "Fase Solar 1 (0 não utilizado)",
-          "leg2": "Fase Solar 2 (0 não utilizado)",
+          "leg1": "Fase Solar 1",
+          "leg2": "Fase Solar 2",
           "api_retries": "Tentativas de API (0-10)",
           "api_retry_timeout": "Tempo limite de tentativa de API (segundos)",
-          "api_retry_backoff_multiplier": "Multiplicador de atraso de tentativa de API"
+          "api_retry_backoff_multiplier": "Multiplicador de atraso de tentativa de API",
+          "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)",
+          "legacy_upgrade_to_friendly": "Atualizar para Nomes Amigáveis"
+        },
+        "data_description": {
+          "enable_solar_circuit": "Ativar sensores sintéticos para monitoramento do inversor solar. Requer seleção de duas abas não mapeadas em fases elétricas opostas.",
+          "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
+          "legacy_upgrade_to_friendly": "Atualize a nomenclatura de entidades do formato legado para nomes amigáveis. Isso renomeará suas entidades existentes para usar nomes descritivos em vez de números de circuito."
         }
       },
       "entity_naming": {
