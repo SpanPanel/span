@@ -1,0 +1,443 @@
+# Example YAML simulation configuration for a 32-circuit residential panel
+# This demonstrates the new flexible simulation system
+
+panel_config:
+  serial_number: "SPAN-32-SIM-001"
+  total_tabs: 32
+  main_size: 200  # Main breaker size in Amps
+
+# Circuit templates define reusable behavior patterns
+circuit_templates:
+  # Always-on base load
+  always_on:
+    energy_profile:
+      mode: "consumer"  # Consumes power only
+      power_range: [40.0, 100.0]
+      typical_power: 60.0
+      power_variation: 0.1
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  # Exterior lighting with time-based patterns
+  lighting:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 500.0]
+      typical_power: 300.0
+      power_variation: 0.05
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [18, 19, 20, 21, 22]  # Evening hours
+
+  # HVAC with cycling behavior
+  hvac:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 3500.0]
+      typical_power: 2800.0
+      power_variation: 0.1
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+    cycling_pattern:
+      on_duration: 1200   # 20 minutes
+      off_duration: 2400  # 40 minutes
+
+  # Large appliances (dishwasher, laundry, etc.)
+  large_appliance:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 2500.0]
+      typical_power: 1800.0
+      power_variation: 0.15
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  # Refrigerator with compressor cycling
+  refrigerator:
+    energy_profile:
+      mode: "consumer"
+      power_range: [50.0, 200.0]
+      typical_power: 120.0
+      power_variation: 0.2
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+    cycling_pattern:
+      on_duration: 600    # 10 minutes
+      off_duration: 1800  # 30 minutes
+
+  # EV charger with smart grid response
+  ev_charger:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 11500.0]
+      typical_power: 7200.0  # Level 2 charging
+      power_variation: 0.05
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    smart_behavior:
+      responds_to_grid: true
+      max_power_reduction: 0.6  # Can reduce to 40% during grid stress
+
+  # Pool equipment
+  pool_equipment:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1200.0]
+      typical_power: 800.0
+      power_variation: 0.1
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    cycling_pattern:
+      on_duration: 7200   # 2 hours on
+      off_duration: 14400 # 4 hours off
+
+  # Solar production system - generic producer
+  solar_production:
+    energy_profile:
+      mode: "producer"  # Produces power (negative values)
+      power_range: [-4000.0, 0.0]  # 4kW peak production
+      typical_power: -2500.0  # Average production
+      power_variation: 0.3
+      efficiency: 0.85  # 85% efficiency
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [11, 12, 13, 14, 15]  # Peak production 11 AM - 3 PM
+      peak_multiplier: 1.0
+      off_peak_multiplier: 0.0  # No production at night
+      hourly_multipliers:
+        6: 0.1   # Dawn - 10% production
+        7: 0.2   # Early morning
+        8: 0.4   # Morning
+        9: 0.6   # Mid morning
+        10: 0.8  # Late morning
+        11: 1.0  # Peak hours
+        12: 1.0
+        13: 1.0
+        14: 1.0
+        15: 1.0  # End peak
+        16: 0.8  # Afternoon
+        17: 0.6  # Late afternoon
+        18: 0.4  # Evening
+        19: 0.2  # Dusk
+        20: 0.0  # Night starts
+
+  # Backup generator - another producer type
+  backup_generator:
+    energy_profile:
+      mode: "producer"
+      power_range: [-8000.0, 0.0]  # 8kW backup generator
+      typical_power: -6000.0
+      power_variation: 0.05  # Generators are very stable
+      efficiency: 0.92  # 92% fuel efficiency
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  # Battery storage - bidirectional
+  battery_storage:
+    energy_profile:
+      mode: "bidirectional"  # Can charge or discharge
+      power_range: [-5000.0, 5000.0]  # ±5kW battery
+      typical_power: 0.0  # Neutral when idle
+      power_variation: 0.02  # Very stable
+      efficiency: 0.95  # 95% round-trip efficiency
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+    battery_behavior:
+      enabled: true
+      charge_power: 3000.0
+      discharge_power: -3000.0
+      idle_power: 0.0
+
+  # Wind turbine - variable producer
+  wind_production:
+    energy_profile:
+      mode: "producer"
+      power_range: [-2000.0, 0.0]  # 2kW small wind turbine
+      typical_power: -800.0
+      power_variation: 0.5  # Very variable based on wind
+      efficiency: 0.75  # 75% efficiency
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+
+  # General outlet circuits
+  outlets:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1800.0]
+      typical_power: 150.0
+      power_variation: 0.4  # Very variable loads
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  # Kitchen specific outlets (higher capacity)
+  kitchen_outlets:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 2400.0]
+      typical_power: 300.0
+      power_variation: 0.5  # Very variable - appliances
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  # Heat pump with seasonal efficiency
+  heat_pump:
+    energy_profile:
+      mode: "consumer"
+      power_range: [500.0, 4000.0]
+      typical_power: 2800.0
+      power_variation: 0.25  # Efficiency varies with temperature
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    cycling_pattern:
+      on_duration: 900    # 15 minutes on
+      off_duration: 1800  # 30 minutes off
+
+  # Major appliances (dishwasher, laundry, etc.)
+  major_appliance:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 2500.0]
+      typical_power: 800.0
+      power_variation: 0.3
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+circuits:
+  # Lighting circuits (tabs 1-6)
+  - id: "master_bedroom_lights"
+    name: "Master Bedroom Lights"
+    template: "lighting"
+    tabs: [1]
+    overrides:
+      typical_power: 35.0  # Slightly higher for master
+
+  - id: "living_room_lights"
+    name: "Living Room Lights"
+    template: "lighting"
+    tabs: [2]
+    overrides:
+      typical_power: 45.0  # Higher for main living area
+
+  - id: "kitchen_lights"
+    name: "Kitchen Lights"
+    template: "lighting"
+    tabs: [3]
+    overrides:
+      typical_power: 40.0
+
+  - id: "bedroom_lights"
+    name: "Bedroom Lights"
+    template: "lighting"
+    tabs: [4]
+
+  - id: "bathroom_lights"
+    name: "Bathroom Lights"
+    template: "lighting"
+    tabs: [5]
+    overrides:
+      typical_power: 30.0
+
+  - id: "exterior_lights"
+    name: "Exterior Lights"
+    template: "lighting"
+    tabs: [6]
+    overrides:
+      typical_power: 60.0
+      time_of_day_profile:
+        enabled: true
+        peak_hours: [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6]  # Nighttime
+
+  # Outlet circuits (tabs 7-14)
+  - id: "master_bedroom_outlets"
+    name: "Master Bedroom Outlets"
+    template: "outlets"
+    tabs: [7]
+
+  - id: "living_room_outlets"
+    name: "Living Room Outlets"
+    template: "outlets"
+    tabs: [8]
+    overrides:
+      typical_power: 200.0  # TV, entertainment system
+
+  - id: "kitchen_outlets_1"
+    name: "Kitchen Outlets 1"
+    template: "kitchen_outlets"
+    tabs: [9]  # 120V circuit
+
+  - id: "kitchen_outlets_2"
+    name: "Kitchen Outlets 2"
+    template: "kitchen_outlets"
+    tabs: [12]  # 120V circuit
+
+  - id: "office_outlets"
+    name: "Office Outlets"
+    template: "outlets"
+    tabs: [11]
+    overrides:
+      typical_power: 300.0  # Computers, monitors
+
+  - id: "garage_outlets"
+    name: "Garage Outlets"
+    template: "outlets"
+    tabs: [10]
+
+  - id: "laundry_outlets"
+    name: "Laundry Room Outlets"
+    template: "outlets"
+    tabs: [13]
+
+  - id: "guest_room_outlets"
+    name: "Guest Room Outlets"
+    template: "outlets"
+    tabs: [14]
+
+  # Major appliances (tabs 15-22)
+  - id: "refrigerator"
+    name: "Refrigerator"
+    template: "always_on"
+    tabs: [15]
+    overrides:
+      typical_power: 150.0
+
+  - id: "dishwasher"
+    name: "Dishwasher"
+    template: "major_appliance"
+    tabs: [16]
+    overrides:
+      typical_power: 1200.0
+
+  - id: "washing_machine"
+    name: "Washing Machine"
+    template: "major_appliance"
+    tabs: [17]
+    overrides:
+      typical_power: 1000.0
+
+  - id: "dryer"
+    name: "Electric Dryer"
+    template: "major_appliance"
+    tabs: [18, 20]  # 240V appliance
+    overrides:
+      typical_power: 3000.0
+      power_range: [0.0, 4000.0]
+
+  - id: "oven"
+    name: "Electric Oven"
+    template: "major_appliance"
+    tabs: [19, 21]  # 240V appliance
+    overrides:
+      typical_power: 2500.0
+      power_range: [0.0, 3500.0]
+
+  - id: "microwave"
+    name: "Microwave"
+    template: "major_appliance"
+    tabs: [22]
+    overrides:
+      typical_power: 1000.0
+
+  # HVAC systems (tabs 23-26)
+  - id: "main_hvac"
+    name: "Main HVAC Unit"
+    template: "hvac"
+    tabs: [23, 25]  # 240V system
+
+  - id: "heat_pump_backup"
+    name: "Heat Pump Backup"
+    template: "heat_pump"
+    tabs: [24, 26]  # 240V system
+
+  # EV charging (tabs 27-29)
+  - id: "ev_charger_garage"
+    name: "Garage EV Charger"
+    template: "ev_charger"
+    tabs: [27, 29]  # 240V Level 2 charger
+
+# Configuration for unmapped tabs with specific behaviors
+# Tabs 30 and 32: Solar production tabs for integration testing
+# These tabs remain unmapped (no circuits) but have synchronized behavior
+unmapped_tab_templates:
+  "30":
+    energy_profile:
+      mode: "producer"
+      power_range: [-2000.0, 0.0]  # 2kW production capacity per phase
+      typical_power: -1500.0  # 1.5kW average per phase
+      power_variation: 0.2
+      efficiency: 0.85
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [11, 12, 13, 14, 15]  # Peak production 11 AM - 3 PM
+      peak_multiplier: 1.0
+      off_peak_multiplier: 0.0  # No production at night
+      hourly_multipliers:
+        6: 0.1   # Dawn - 10% production
+        7: 0.2   # Early morning
+        8: 0.4   # Morning
+        9: 0.6   # Mid morning
+        10: 0.8  # Late morning
+        11: 1.0  # Peak hours
+        12: 1.0
+        13: 1.0
+        14: 1.0
+        15: 1.0  # End peak
+        16: 0.8  # Afternoon
+        17: 0.6  # Late afternoon
+        18: 0.4  # Evening
+        19: 0.2  # Dusk
+        20: 0.0  # Night starts
+
+  "32":
+    energy_profile:
+      mode: "producer"
+      power_range: [-2000.0, 0.0]  # 2kW production capacity per phase
+      typical_power: -1500.0  # 1.5kW average per phase
+      power_variation: 0.2
+      efficiency: 0.85
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [11, 12, 13, 14, 15]  # Peak production 11 AM - 3 PM
+      peak_multiplier: 1.0
+      off_peak_multiplier: 0.0  # No production at night
+      hourly_multipliers:
+        6: 0.1   # Dawn - 10% production
+        7: 0.2   # Early morning
+        8: 0.4   # Morning
+        9: 0.6   # Mid morning
+        10: 0.8  # Late morning
+        11: 1.0  # Peak hours
+        12: 1.0
+        13: 1.0
+        14: 1.0
+        15: 1.0  # End peak
+        16: 0.8  # Afternoon
+        17: 0.6  # Late afternoon
+        18: 0.4  # Evening
+        19: 0.2  # Dusk
+        20: 0.0  # Night starts
+
+# Tab synchronization for coordinated behavior (e.g., 240V loads, multi-phase production)
+tab_synchronizations:
+  - tabs: [30, 32]
+    behavior: "240v_split_phase"  # Two phases of same 240V system
+    power_split: "equal"  # Equal power on both phases
+    energy_sync: true  # Synchronized energy accumulation
+    template: "solar_production"  # Generic production template
+
+# Unmapped tabs that should have behavior but remain unmapped (no circuits created)
+unmapped_tabs: [30, 32]
+
+# Global simulation parameters
+simulation_params:
+  update_interval: 5          # Update every 5 seconds
+  time_acceleration: 1.0      # Real-time simulation
+  noise_factor: 0.02          # ±2% random noise on all values
+  enable_realistic_behaviors: true

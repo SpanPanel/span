@@ -8,13 +8,10 @@ from homeassistant.config_entries import ConfigEntry
 
 from .coordinator import SpanPanelCoordinator
 from .options import BATTERY_ENABLE, INVERTER_ENABLE
-from .sensor import (
-    CIRCUITS_SENSORS,
+from .sensor_definitions import (
     PANEL_DATA_STATUS_SENSORS,
-    PANEL_SENSORS,
     STATUS_SENSORS,
-    STORAGE_BATTERY_SENSORS,
-    SYNTHETIC_SENSOR_TEMPLATES,
+    UNMAPPED_SENSORS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,17 +54,28 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
     solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
     battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
 
-    # Circuit sensors are created for all circuits in the circuits collection
-    # Solar legs are NOT in this collection - they're accessed via raw branch data
-    circuit_sensors = total_circuits * len(CIRCUITS_SENSORS)
-    synthetic_sensors = len(SYNTHETIC_SENSOR_TEMPLATES) if solar_enabled else 0
-    panel_sensor_count = len(PANEL_SENSORS) + len(PANEL_DATA_STATUS_SENSORS)
-    status_sensors = len(STATUS_SENSORS)
-    battery_sensors = len(STORAGE_BATTERY_SENSORS) if battery_enabled else 0
+    # Native sensors only - synthetic sensors now handled by template system
+    unmapped_sensors = total_circuits * len(UNMAPPED_SENSORS)  # Invisible backing sensors
+    panel_status_sensors = len(PANEL_DATA_STATUS_SENSORS)  # Panel status only
+    status_sensors = len(STATUS_SENSORS)  # Hardware status
 
-    total_sensors = (
-        circuit_sensors + synthetic_sensors + panel_sensor_count + status_sensors + battery_sensors
+    # Native battery sensor (conditionally created)
+    native_battery_sensors = 1 if battery_enabled else 0  # Battery level (native sensor)
+
+    # Synthetic sensors (now handled by template system - counts are estimates)
+    synthetic_circuit_sensors = (
+        total_circuits * 3 if total_circuits > 0 else 0
+    )  # Power, Produced, Consumed per circuit
+    synthetic_panel_sensors = 6  # Panel power sensors (current power, feedthrough, energy sensors)
+    synthetic_solar_sensors = 3 if solar_enabled else 0  # Power, Produced Energy, Consumed Energy
+
+    total_native_sensors = (
+        unmapped_sensors + panel_status_sensors + status_sensors + native_battery_sensors
     )
+    total_synthetic_sensors = (
+        synthetic_circuit_sensors + synthetic_panel_sensors + synthetic_solar_sensors
+    )
+    total_sensors = total_native_sensors + total_synthetic_sensors
     total_switches = controllable_circuits  # Only controllable circuits get switches
     total_selects = controllable_circuits  # Only controllable circuits get selects
 
@@ -92,22 +100,29 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
     else:
         main_logger.info("Non-controllable circuits: None")
 
+    log_func("=== NATIVE SENSORS ===")
     log_func(
-        "Circuit sensors: %d (%d circuits x %d sensors per circuit)",
-        circuit_sensors,
+        "Unmapped circuit sensors: %d (%d circuits x %d sensors per circuit) - invisible backing data",
+        unmapped_sensors,
         total_circuits,
-        len(CIRCUITS_SENSORS),
+        len(UNMAPPED_SENSORS),
     )
-    if solar_enabled:
-        log_func("Synthetic sensors: %d (solar inverter)", synthetic_sensors)
-    else:
-        log_func("Synthetic sensors: 0 (solar disabled)")
-    log_func("Panel sensors: %d", panel_sensor_count)
-    log_func("Status sensors: %d", status_sensors)
+    log_func("Panel status sensors: %d", panel_status_sensors)
+    log_func("Hardware status sensors: %d", status_sensors)
     if battery_enabled:
-        log_func("Battery sensors: %d", battery_sensors)
+        log_func("Battery sensors: %d (native sensor)", native_battery_sensors)
     else:
         log_func("Battery sensors: 0 (battery disabled)")
+    log_func("Total native sensors: %d", total_native_sensors)
+
+    log_func("=== SYNTHETIC SENSORS (Template-based) ===")
+    log_func("Circuit synthetic sensors: %d", synthetic_circuit_sensors)
+    log_func("Panel synthetic sensors: %d", synthetic_panel_sensors)
+    if solar_enabled:
+        log_func("Solar synthetic sensors: %d", synthetic_solar_sensors)
+    else:
+        log_func("Solar synthetic sensors: 0 (solar disabled)")
+    log_func("Total synthetic sensors: %d", total_synthetic_sensors)
     log_func("Circuit switches: %d (controllable circuits only)", total_switches)
     log_func("Circuit selects: %d (controllable circuits only)", total_selects)
     log_func(

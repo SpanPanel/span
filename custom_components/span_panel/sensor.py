@@ -2,345 +2,71 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
 import logging
 from typing import Any, Generic, TypeVar
 
-from ha_synthetic_sensors.config_manager import ConfigManager
-from ha_synthetic_sensors.name_resolver import NameResolver
-from ha_synthetic_sensors.sensor_manager import SensorManager, SensorManagerConfig
+from ha_synthetic_sensors import StorageManager
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
-    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
+
+from custom_components.span_panel.options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from custom_components.span_panel.synthetic_sensors import (
+    setup_synthetic_configuration,
+    setup_synthetic_sensors,
+)
+from custom_components.span_panel.synthetic_solar import (
+    handle_solar_options_change,
+)
 
 from .const import (
-    CIRCUITS_ENERGY_CONSUMED,
-    CIRCUITS_ENERGY_PRODUCED,
-    CIRCUITS_POWER,
     COORDINATOR,
-    CURRENT_RUN_CONFIG,
     DOMAIN,
-    DSM_GRID_STATE,
-    DSM_STATE,
-    MAIN_RELAY_STATE,
-    STATUS_SOFTWARE_VER,
-    STORAGE_BATTERY_PERCENTAGE,
+    SENSOR_SET,
+    SIGNAL_STAGE_NATIVE_SENSORS,
+    STORAGE_MANAGER,
+    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
-    construct_entity_id,
+    construct_circuit_unique_id_for_entry,
     construct_panel_entity_id,
-    construct_synthetic_entity_id,
-    construct_synthetic_friendly_name,
-    get_circuit_number,
+    construct_panel_friendly_name,
+    construct_panel_unique_id_for_entry,
+    construct_sensor_set_id,
+    construct_status_friendly_name,
+    construct_unmapped_friendly_name,
     get_user_friendly_suffix,
-    sanitize_name_for_entity_id,
 )
-from .options import BATTERY_ENABLE, INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
-from .solar_synthetic_sensors import SolarSyntheticSensors
-from .solar_tab_manager import SolarTabManager
+from .options import BATTERY_ENABLE
+from .sensor_definitions import (
+    BATTERY_SENSOR,
+    PANEL_DATA_STATUS_SENSORS,
+    STATUS_SENSORS,
+    UNMAPPED_SENSORS,
+    SpanPanelBatterySensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelStatusSensorEntityDescription,
+)
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
+from .synthetic_sensors import find_synthetic_coordinator_for
 from .util import panel_to_device_info
-
-
-@dataclass(frozen=True)
-class SyntheticSensorConfig:
-    """Configuration for a synthetic sensor entity."""
-
-    friendly_name: str
-    circuit_numbers: list[int]
-    key_prefix: str  # e.g., "solar_inverter", "battery_bank", etc.
-    value_fn_map: dict[str, Callable[[SpanPanelData], float | str]]
-
-
-def create_synthetic_sensor_descriptions(
-    config: SyntheticSensorConfig,
-) -> list[SpanPanelDataSensorEntityDescription]:
-    """Create synthetic sensor descriptions from a configuration."""
-    descriptions = []
-
-    for template in SYNTHETIC_SENSOR_TEMPLATES:
-        # Create a unique key for this synthetic sensor
-        synthetic_key = f"{config.key_prefix}_{template.key}"
-
-        # Get the appropriate value function from the configuration
-        value_fn = config.value_fn_map.get(template.key, lambda panel_data: 0.0)
-
-        # Create the configured description
-        synthetic_description = SpanPanelDataSensorEntityDescription(
-            key=synthetic_key,
-            name=template.name,
-            device_class=template.device_class,
-            entity_category=template.entity_category,
-            entity_registry_enabled_default=template.entity_registry_enabled_default,
-            entity_registry_visible_default=template.entity_registry_visible_default,
-            force_update=template.force_update,
-            icon=template.icon,
-            has_entity_name=template.has_entity_name,
-            translation_key=template.translation_key,
-            translation_placeholders=template.translation_placeholders,
-            unit_of_measurement=template.unit_of_measurement,
-            native_unit_of_measurement=template.native_unit_of_measurement,
-            state_class=template.state_class,
-            suggested_display_precision=template.suggested_display_precision,
-            suggested_unit_of_measurement=template.suggested_unit_of_measurement,
-            value_fn=value_fn,
-        )
-
-        descriptions.append(synthetic_description)
-
-    return descriptions
-
-
-@dataclass(frozen=True)
-class SpanPanelCircuitsRequiredKeysMixin:
-    """Required keys mixin for Span Panel circuit sensors."""
-
-    value_fn: Callable[[SpanPanelCircuit], float]
-
-
-@dataclass(frozen=True)
-class SpanPanelCircuitsSensorEntityDescription(
-    SensorEntityDescription, SpanPanelCircuitsRequiredKeysMixin
-):
-    """Describes a Span Panel circuit sensor entity."""
-
-
-@dataclass(frozen=True)
-class SpanPanelDataRequiredKeysMixin:
-    """Required keys mixin for Span Panel data sensors."""
-
-    value_fn: Callable[[SpanPanelData], float | str]
-
-
-@dataclass(frozen=True)
-class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDataRequiredKeysMixin):
-    """Describes a Span Panel data sensor entity."""
-
-
-@dataclass(frozen=True)
-class SpanPanelStatusRequiredKeysMixin:
-    """Required keys mixin for Span Panel status sensors."""
-
-    value_fn: Callable[[SpanPanelHardwareStatus], str]
-
-
-@dataclass(frozen=True)
-class SpanPanelStatusSensorEntityDescription(
-    SensorEntityDescription, SpanPanelStatusRequiredKeysMixin
-):
-    """Describes a Span Panel status sensor entity."""
-
-
-@dataclass(frozen=True)
-class SpanPanelStorageBatteryRequiredKeysMixin:
-    """Required keys mixin for Span Panel storage battery sensors."""
-
-    value_fn: Callable[[SpanPanelStorageBattery], int]
-
-
-@dataclass(frozen=True)
-class SpanPanelStorageBatterySensorEntityDescription(
-    SensorEntityDescription, SpanPanelStorageBatteryRequiredKeysMixin
-):
-    """Describes a Span Panel storage battery sensor entity."""
-
-
-# pylint: disable=unexpected-keyword-arg
-CIRCUITS_SENSORS: tuple[
-    SpanPanelCircuitsSensorEntityDescription,
-    SpanPanelCircuitsSensorEntityDescription,
-    SpanPanelCircuitsSensorEntityDescription,
-] = (
-    SpanPanelCircuitsSensorEntityDescription(
-        key=CIRCUITS_POWER,
-        name="Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.POWER,
-        value_fn=lambda circuit: abs(circuit.instant_power),
-    ),
-    SpanPanelCircuitsSensorEntityDescription(
-        key=CIRCUITS_ENERGY_PRODUCED,
-        name="Produced Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: circuit.produced_energy,
-    ),
-    SpanPanelCircuitsSensorEntityDescription(
-        key=CIRCUITS_ENERGY_CONSUMED,
-        name="Consumed Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: circuit.consumed_energy,
-    ),
-)
-
-PANEL_SENSORS: tuple[
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-] = (
-    SpanPanelDataSensorEntityDescription(
-        key="instantGridPowerW",
-        name="Current Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        value_fn=lambda panel_data: panel_data.instant_grid_power,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="feedthroughPowerW",
-        name="Feed Through Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-        value_fn=lambda panel_data: panel_data.feedthrough_power,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="mainMeterEnergy.producedEnergyWh",
-        name="Main Meter Produced Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.main_meter_energy_produced,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="mainMeterEnergy.consumedEnergyWh",
-        name="Main Meter Consumed Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.main_meter_energy_consumed,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="feedthroughEnergy.producedEnergyWh",
-        name="Feed Through Produced Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.feedthrough_energy_produced,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="feedthroughEnergy.consumedEnergyWh",
-        name="Feed Through Consumed Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.feedthrough_energy_consumed,
-    ),
-)
-
-# Generic synthetic sensor templates that can be applied to any multi-circuit entity
-SYNTHETIC_SENSOR_TEMPLATES: tuple[
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-] = (
-    SpanPanelDataSensorEntityDescription(
-        key="instant_power",
-        name="Instant Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        suggested_display_precision=2,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda panel_data: 0.0,  # Placeholder - will be replaced
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="energy_produced",
-        name="Energy Produced",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        suggested_display_precision=2,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda panel_data: 0.0,  # Placeholder - will be replaced
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key="energy_consumed",
-        name="Energy Consumed",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        suggested_display_precision=2,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda panel_data: 0.0,  # Placeholder - will be replaced
-    ),
-)
-
-PANEL_DATA_STATUS_SENSORS: tuple[
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-    SpanPanelDataSensorEntityDescription,
-] = (
-    SpanPanelDataSensorEntityDescription(
-        key=CURRENT_RUN_CONFIG,
-        name="Current Run Config",
-        value_fn=lambda panel_data: panel_data.current_run_config,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key=DSM_GRID_STATE,
-        name="DSM Grid State",
-        value_fn=lambda panel_data: panel_data.dsm_grid_state,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key=DSM_STATE,
-        name="DSM State",
-        value_fn=lambda panel_data: panel_data.dsm_state,
-    ),
-    SpanPanelDataSensorEntityDescription(
-        key=MAIN_RELAY_STATE,
-        name="Main Relay State",
-        value_fn=lambda panel_data: panel_data.main_relay_state,
-    ),
-)
-
-STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription] = (
-    SpanPanelStatusSensorEntityDescription(
-        key=STATUS_SOFTWARE_VER,
-        name="Software Version",
-        value_fn=lambda status: getattr(status, "firmware_version", "unknown_version"),
-    ),
-)
-
-STORAGE_BATTERY_SENSORS: tuple[SpanPanelStorageBatterySensorEntityDescription] = (
-    SpanPanelStorageBatterySensorEntityDescription(
-        key=STORAGE_BATTERY_PERCENTAGE,
-        name="SPAN Storage Battery Percentage",
-        native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.BATTERY,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda storage_battery: (storage_battery.storage_battery_percentage),
-    ),
-)
 
 ICON = "mdi:flash"
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -349,8 +75,8 @@ T = TypeVar("T", bound=SensorEntityDescription)
 D = TypeVar("D")  # For the type returned by get_data_source
 
 
-class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D]):
-    """Base class for Span Panel Sensors."""
+class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D], ABC):
+    """Abstract base class for Span Panel Sensors with overrideable methods."""
 
     def __init__(
         self,
@@ -367,16 +93,22 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if hasattr(description, "device_class"):
             self._attr_device_class = description.device_class
 
-        device_info: DeviceInfo = panel_to_device_info(span_panel)
-        self._attr_device_info = device_info
-        base_name: str | None = getattr(description, "name", None)
+        # Get device name from config entry data
+        self._device_name = data_coordinator.config_entry.data.get(
+            "device_name", data_coordinator.config_entry.title
+        )
 
-        # Friendly name should never include device prefix - only entity_id follows naming patterns
-        # The device context is already provided by the device_info association
-        self._attr_name = base_name or ""
+        device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
+        self._attr_device_info = device_info  # Re-enable device info
+
+        self._attr_name = self._generate_friendly_name(span_panel, description)
 
         if span_panel.status.serial_number and description.key:
-            self._attr_unique_id = f"span_{span_panel.status.serial_number}_{description.key}"
+            self._attr_unique_id = self._generate_unique_id(span_panel, description)
+
+        entity_id = self._generate_entity_id(data_coordinator, span_panel, description)
+        if entity_id:
+            self.entity_id = entity_id
 
         self._attr_icon = "mdi:flash"
 
@@ -386,7 +118,79 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if hasattr(description, "entity_registry_visible_default"):
             self._attr_entity_registry_visible_default = description.entity_registry_visible_default
 
-        _LOGGER.debug("CREATE SENSOR SPAN [%s]", self._attr_name)
+        # Subscribe native sensors to the third stage. Schedule on the event
+        # loop to keep async_write_ha_state on the loop thread. Synthetic
+        # sensors subscribe in synthetic_sensors.py for the fourth stage.
+        def _on_stage() -> None:
+            if self.hass is None:
+                return
+
+            def _run_on_loop() -> None:
+                self._update_native_value()
+                self.async_write_ha_state()
+
+            self.hass.loop.call_soon_threadsafe(_run_on_loop)
+
+        self._unsub_stage = async_dispatcher_connect(
+            data_coordinator.hass, SIGNAL_STAGE_NATIVE_SENSORS, _on_stage
+        )
+
+    @abstractmethod
+    def _generate_unique_id(self, span_panel: SpanPanel, description: T) -> str:
+        """Generate unique ID for the sensor.
+
+        Subclasses must implement this to define their unique ID strategy.
+
+        Args:
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Unique ID string
+
+        """
+
+    @abstractmethod
+    def _generate_friendly_name(self, span_panel: SpanPanel, description: T) -> str:
+        """Generate friendly name for the sensor.
+
+        Subclasses must implement this to define their naming strategy.
+
+        Args:
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Friendly name string
+
+        """
+
+    @abstractmethod
+    def _generate_entity_id(
+        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel, description: T
+    ) -> str | None:
+        """Generate entity ID for the sensor.
+
+        Subclasses must implement this to define their entity ID strategy.
+
+        Args:
+            coordinator: The coordinator instance
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Entity ID string or None
+
+        """
+
+    def _construct_sensor_unmapped_entity_id(self, circuit_id: str, suffix: str) -> str:
+        """Construct entity ID for unmapped tab sensors in sensor platform."""
+        # Always use device prefix for unmapped entities
+        if self._device_name:
+            device_name_slug = slugify(self._device_name)
+            return f"sensor.{device_name_slug}_{circuit_id}_{suffix}"
+        else:
+            return f"sensor.{circuit_id}_{suffix}"
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -395,7 +199,11 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
     def _update_native_value(self) -> None:
         """Update the native value of the sensor."""
+
         if not self.coordinator.last_update_success:
+            _LOGGER.debug(
+                "STATUS_SENSOR_DEBUG: Coordinator update not successful for %s", self._attr_name
+            )
             self._attr_native_value = None
             return
 
@@ -403,13 +211,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self.entity_description, "value_fn", None
         )
         if value_function is None:
+            _LOGGER.debug("STATUS_SENSOR_DEBUG: No value_function for %s", self._attr_name)
             self._attr_native_value = None
             return
 
         try:
             data_source: D = self.get_data_source(self.coordinator.data)
 
-            # Debug logging specifically for circuit power sensors
             if hasattr(self, "id") and hasattr(data_source, "instant_power"):
                 circuit_id = getattr(self, "id", "unknown")
                 instant_power = getattr(data_source, "instant_power", None)
@@ -422,29 +230,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
                     type(data_source).__name__,
                 )
 
-                # Extra debug for circuit 15 (the problematic one)
-                if circuit_id == "15":
-                    _LOGGER.debug(
-                        "CIRCUIT_15_POWER_DEBUG: Circuit 15 detailed - instant_power=%s, produced_energy=%s, consumed_energy=%s",
-                        instant_power,
-                        getattr(data_source, "produced_energy", None),
-                        getattr(data_source, "consumed_energy", None),
-                    )
-
             raw_value: float | int | str | None = value_function(data_source)
-
-            # Debug the function result
-            if hasattr(self, "id") and hasattr(data_source, "instant_power"):
-                circuit_id = getattr(self, "id", "unknown")
-                description_key = getattr(self.entity_description, "key", "unknown")
-                _LOGGER.debug(
-                    "CIRCUIT_POWER_RESULT: Circuit %s, sensor %s, raw_value after value_function=%s",
-                    circuit_id,
-                    description_key,
-                    raw_value,
-                )
-
-            _LOGGER.debug("native_value:[%s] [%s]", self._attr_name, raw_value)
 
             if raw_value is None:
                 self._attr_native_value = None
@@ -452,148 +238,26 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
                 self._attr_native_value = float(raw_value)
             else:
                 # For string values, keep as string - this is valid for Home Assistant sensors
-                self._attr_native_value = str(raw_value)  # type: ignore[assignment]
-        except (AttributeError, KeyError, IndexError) as e:
-            _LOGGER.debug(
-                "CIRCUIT_POWER_ERROR: Error in _update_native_value for %s: %s",
-                self._attr_name,
-                e,
-            )
+                self._attr_native_value = str(raw_value)
+        except (AttributeError, KeyError, IndexError):
             self._attr_native_value = None
 
     def get_data_source(self, span_panel: SpanPanel) -> D:
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 
-    def _construct_unmapped_entity_id_simple(
-        self, span_panel: SpanPanel, circuit_number: int | str, suffix: str
-    ) -> str:
-        """Construct entity ID for unmapped tab with consistent modern naming."""
-        # Always use device prefix and circuit numbers for unmapped entities
-        device_info = panel_to_device_info(span_panel)
-        device_name_raw = device_info.get("name")
-        if device_name_raw:
-            device_name = sanitize_name_for_entity_id(device_name_raw)
-            return f"sensor.{device_name}_unmapped_tab_{circuit_number}_{suffix}"
-        else:
-            return f"sensor.unmapped_tab_{circuit_number}_{suffix}"
-
-
-class SpanPanelCircuitSensor(
-    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
-):
-    """Span Panel circuit sensor entity."""
-
-    def __init__(
-        self,
-        coordinator: SpanPanelCoordinator,
-        description: SpanPanelCircuitsSensorEntityDescription,
-        circuit_id: str,
-        name: str,
-        span_panel: SpanPanel,
-    ) -> None:
-        """Initialize Span Panel Circuit entity."""
-        # Get the circuit from the span_panel to access its properties
-        circuit = span_panel.circuits.get(circuit_id)
-        if not circuit:
-            raise ValueError(f"Circuit {circuit_id} not found")
-
-        # Get the circuit number (tab position)
-        circuit_number = get_circuit_number(circuit)
-
-        entity_suffix = get_user_friendly_suffix(description.key)
-
-        # For unmapped circuits, always use device prefix and circuit numbers as they are invisible
-        if circuit_id.startswith("unmapped_tab_"):
-            entity_id = self._construct_unmapped_entity_id_simple(
-                span_panel, circuit_number, entity_suffix
-            )
-        else:
-            # Regular circuit - use standard naming logic
-            entity_id_result = construct_entity_id(
-                coordinator, span_panel, "sensor", name, circuit_number, entity_suffix
-            )
-            if entity_id_result is None:
-                raise ValueError(f"Failed to construct entity ID for circuit {circuit_id}")
-            entity_id = entity_id_result
-
-        self.entity_id = entity_id
-
-        friendly_name = f"{name} {description.name}"
-
-        # Create a new description with the friendly name
-        circuit_description = SpanPanelCircuitsSensorEntityDescription(
-            key=description.key,
-            name=friendly_name,
-            device_class=description.device_class,
-            entity_category=description.entity_category,
-            entity_registry_enabled_default=description.entity_registry_enabled_default,
-            entity_registry_visible_default=description.entity_registry_visible_default,
-            force_update=description.force_update,
-            icon=description.icon,
-            has_entity_name=description.has_entity_name,
-            translation_key=description.translation_key,
-            translation_placeholders=description.translation_placeholders,
-            unit_of_measurement=description.unit_of_measurement,
-            native_unit_of_measurement=description.native_unit_of_measurement,
-            state_class=description.state_class,
-            suggested_display_precision=description.suggested_display_precision,
-            suggested_unit_of_measurement=description.suggested_unit_of_measurement,
-            value_fn=description.value_fn,
-        )
-
-        super().__init__(coordinator, circuit_description, span_panel)
-        self.id: str = circuit_id
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_{circuit_id}_{description.key}"
-        )
-
-        # Ensure the native_unit_of_measurement is set correctly from the description
-        if description.native_unit_of_measurement:
-            self._attr_native_unit_of_measurement = description.native_unit_of_measurement
-
-        # Store initial circuit name for change detection in auto-sync names
-        self._previous_circuit_name = name
-
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        # Check for circuit name changes
-        span_panel: SpanPanel = self.coordinator.data
-        circuit = span_panel.circuits.get(self.id)
-        if circuit:
-            current_circuit_name = circuit.name
-
-            # Only request reload if the circuit name has actually changed
-            if current_circuit_name != self._previous_circuit_name:
-                _LOGGER.info(
-                    "Auto-sync detected circuit name change from '%s' to '%s', requesting integration reload",
-                    self._previous_circuit_name,
-                    current_circuit_name,
-                )
-
-                # Update stored previous name for next comparison
-                self._previous_circuit_name = current_circuit_name
-
-                # Request integration reload for next update cycle
-                self.coordinator.request_reload()
-
-        super()._handle_coordinator_update()
-
-    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
-        """Get the data source for the circuit sensor."""
-        return span_panel.circuits[self.id]
-
-
-class SpanPanelPanel(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
-    """Span Panel data sensor entity."""
-
-    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
-        """Get the data source for the panel sensor."""
-        return span_panel.panel
+    def __del__(self) -> None:
+        """Clean up dispatcher subscription on object destruction."""
+        # Best-effort disconnect of dispatcher subscription
+        try:
+            if hasattr(self, "_unsub_stage") and self._unsub_stage is not None:
+                self._unsub_stage()
+        except Exception as e:  # pragma: no cover – defensive
+            _LOGGER.debug("Failed to cleanup dispatcher subscription: %s", e)
 
 
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
-    """Span Panel status sensor entity."""
+    """Span Panel data status sensor entity."""
 
     def __init__(
         self,
@@ -601,20 +265,48 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         description: SpanPanelDataSensorEntityDescription,
         span_panel: SpanPanel,
     ) -> None:
-        """Initialize the panel status sensor."""
+        """Initialize the Span Panel data status sensor."""
         super().__init__(data_coordinator, description, span_panel)
 
-        # Construct entity ID based on configuration
-        # Convert sensor name to entity ID suffix (e.g., "Current Power" -> "current_power")
-        sensor_name = description.name
-        if sensor_name and isinstance(sensor_name, str):
-            suffix = sanitize_name_for_entity_id(sensor_name)
-            entity_id = construct_panel_entity_id(data_coordinator, span_panel, "sensor", suffix)
-            if entity_id is not None:
-                self.entity_id = entity_id
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for panel data sensors."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, span_panel, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for panel data sensors."""
+        return construct_panel_friendly_name(description.name)
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelDataSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for panel data sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            # Get the device prefix setting from config entry options
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                self._attr_unique_id,
+                use_device_prefix,
+            )
+        return None
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
-        """Get the data source for the panel status sensor."""
+        """Get the data source for the panel data status sensor."""
         return span_panel.panel
 
 
@@ -623,119 +315,191 @@ class SpanPanelStatus(
 ):
     """Span Panel hardware status sensor entity."""
 
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelStatusSensorEntityDescription,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize the Span Panel hardware status sensor."""
+        super().__init__(data_coordinator, description, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelStatusSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for panel status sensors."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, span_panel, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelStatusSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for panel status sensors."""
+        return construct_status_friendly_name(description.name)
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelStatusSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for panel status sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            # Get the device prefix setting from config entry options
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                self._attr_unique_id,
+                use_device_prefix,
+            )
+        return None
+
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelHardwareStatus:
         """Get the data source for the panel status sensor."""
-        return span_panel.status
+        try:
+            result = span_panel.status
+            return result
+        except Exception as e:
+            _LOGGER.error("HARDWARE_STATUS_DEBUG: Error getting status data: %s", e)
+            raise
 
 
-class SpanPanelStorageBatteryStatus(
-    SpanSensorBase[SpanPanelStorageBatterySensorEntityDescription, SpanPanelStorageBattery]
+class SpanPanelBattery(
+    SpanSensorBase[SpanPanelBatterySensorEntityDescription, SpanPanelStorageBattery]
 ):
-    """Span Panel storage battery sensor entity."""
+    """Span Panel battery sensor entity."""
 
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
-        description: SpanPanelStorageBatterySensorEntityDescription,
+        description: SpanPanelBatterySensorEntityDescription,
         span_panel: SpanPanel,
     ) -> None:
-        """Initialize the storage battery sensor."""
+        """Initialize the Span Panel battery sensor."""
         super().__init__(data_coordinator, description, span_panel)
-        self._attr_icon = "mdi:battery"
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelBatterySensorEntityDescription
+    ) -> str:
+        """Generate unique ID for battery sensors."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, span_panel, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelBatterySensorEntityDescription
+    ) -> str:
+        """Generate friendly name for battery sensors."""
+        return construct_panel_friendly_name(description.name)
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelBatterySensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for battery sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            # Get the device prefix setting from config entry options
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                self._attr_unique_id,
+                use_device_prefix,
+            )
+        return None
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelStorageBattery:
-        """Get the data source for the storage battery status sensor."""
-        return span_panel.storage_battery
+        """Get the data source for the battery sensor."""
+        _LOGGER.debug("BATTERY_DEBUG: get_data_source called for battery sensor")
+        try:
+            result = span_panel.storage_battery
+            _LOGGER.debug("BATTERY_DEBUG: Successfully got battery data: %s", type(result).__name__)
+            return result
+        except Exception as e:
+            _LOGGER.error("BATTERY_DEBUG: Error getting battery data: %s", e)
+            raise
 
 
-class SpanPanelSyntheticSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
-    """Generic span panel synthetic sensor entity for multi-circuit entities."""
+class SpanUnmappedCircuitSensor(
+    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
+    """Span Panel unmapped circuit sensor entity - native sensors for synthetic calculations."""
 
     def __init__(
         self,
-        coordinator: SpanPanelCoordinator,
-        description: SpanPanelDataSensorEntityDescription,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
         span_panel: SpanPanel,
-        circuit_numbers: list[int],
-        friendly_name: str | None = None,
-        key_prefix: str | None = None,
+        circuit_id: str,
     ) -> None:
-        """Initialize Span Panel Synthetic Sensor entity."""
-        # Extract template key from synthetic key for entity ID construction
-        # Synthetic keys follow pattern: "{prefix}_{template_key}"
-        # We need the template key for proper entity ID suffix generation
-        if key_prefix and description.key.startswith(f"{key_prefix}_"):
-            # Remove the known prefix to get the template key
-            template_key = description.key[len(key_prefix) + 1 :]
-        elif "_" in description.key:
-            # Fallback: extract everything after the first underscore
-            template_key = description.key.split("_", 1)[1]
-        else:
-            # Fallback for unexpected format
-            template_key = description.key
+        """Initialize the Span Panel unmapped circuit sensor."""
+        self.circuit_id = circuit_id
+        # Store the original description key for unique ID and entity ID generation
+        self.original_key = description.key
 
-        # Use the helper function to construct appropriate entity ID
-        entity_suffix = get_user_friendly_suffix(template_key)
-        self.entity_id = construct_synthetic_entity_id(  # type: ignore[assignment]
-            coordinator,
-            span_panel,
-            "sensor",
-            circuit_numbers,
-            entity_suffix,
-            friendly_name,
-        )
-
-        # Create display name using friendly name if provided
-        description_name = getattr(description, "name", "Unknown") or "Unknown"
-        if friendly_name:
-            display_name: str = f"{friendly_name} {description_name}"
-        else:
-            # No friendly name provided - use circuit-based fallback
-            display_name = construct_synthetic_friendly_name(
-                circuit_numbers=circuit_numbers,
-                suffix_description=description_name,
-                user_friendly_name=None,
-            )
-
-        # Create a new description with the friendly name
-        synthetic_description = SpanPanelDataSensorEntityDescription(
-            key=description.key,
-            name=display_name,
-            device_class=description.device_class,
-            entity_category=description.entity_category,
-            entity_registry_enabled_default=description.entity_registry_enabled_default,
-            entity_registry_visible_default=description.entity_registry_visible_default,
-            force_update=description.force_update,
-            icon=description.icon,
-            has_entity_name=description.has_entity_name,
-            translation_key=description.translation_key,
-            translation_placeholders=description.translation_placeholders,
-            unit_of_measurement=description.unit_of_measurement,
+        # Override the description key to use the circuit_id for data lookup
+        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+            key=circuit_id,
+            name=description.name,
             native_unit_of_measurement=description.native_unit_of_measurement,
             state_class=description.state_class,
             suggested_display_precision=description.suggested_display_precision,
-            suggested_unit_of_measurement=description.suggested_unit_of_measurement,
+            device_class=description.device_class,
             value_fn=description.value_fn,
+            entity_registry_enabled_default=True,
+            entity_registry_visible_default=False,
         )
 
-        super().__init__(coordinator, synthetic_description, span_panel)
+        super().__init__(data_coordinator, description_with_circuit, span_panel)
 
-        # For synthetic sensors, we want complete control over the friendly name
-        self._attr_name = display_name
-
-        # Create unique ID based on circuit numbers
-        circuit_spec = "_".join(str(num) for num in circuit_numbers)
-        self._attr_unique_id = (
-            f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}_{description.key}"
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for unmapped circuit sensors."""
+        # Unmapped tab sensors are regular circuit sensors, use standard circuit unique ID pattern
+        # circuit_id is already "unmapped_tab_32", so this creates "span_{serial}_unmapped_tab_32_{suffix}"
+        # Use the original key (e.g., "instantPowerW") instead of the modified description.key
+        return construct_circuit_unique_id_for_entry(
+            self.coordinator, span_panel, self.circuit_id, self.original_key, self._device_name
         )
 
-        # Ensure the native_unit_of_measurement is set correctly from the description
-        if description.native_unit_of_measurement:
-            self._attr_native_unit_of_measurement = description.native_unit_of_measurement
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for unmapped circuit sensors."""
+        tab_number = self.circuit_id.replace("unmapped_tab_", "")
+        description_name = str(description.name) if description.name else "Sensor"
+        return construct_unmapped_friendly_name(tab_number, description_name)
 
-    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
-        """Get the data source for the synthetic sensor."""
-        return span_panel.panel
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelCircuitsSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for unmapped circuit sensors."""
+        # Pass the full circuit_id to the helper (e.g., "unmapped_tab_32")
+        # Use the original key instead of the modified description.key
+        sensor_suffix = get_user_friendly_suffix(self.original_key)
+        return self._construct_sensor_unmapped_entity_id(self.circuit_id, sensor_suffix)
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the unmapped circuit sensor."""
+        return span_panel.circuits[self.circuit_id]
 
 
 async def async_setup_entry(
@@ -744,169 +508,182 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor platform."""
-    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator: SpanPanelCoordinator = data[COORDINATOR]
-    span_panel: SpanPanel = coordinator.data
+    try:
+        data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
+        coordinator: SpanPanelCoordinator = data[COORDINATOR]
+        span_panel: SpanPanel = coordinator.data
 
-    entities: list[SpanSensorBase[Any, Any]] = []
+        # First, create all the native sensors that synthetic sensors may depend on
+        entities: list[
+            SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus | SpanPanelBattery
+        ] = []
 
-    for description in PANEL_SENSORS:
-        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+        # Add panel data status sensors (DSM State, DSM Grid State, etc.)
+        for description in PANEL_DATA_STATUS_SENSORS:
+            entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
 
-    for description in PANEL_DATA_STATUS_SENSORS:
-        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+        # Add unmapped circuit sensors (native sensors for synthetic calculations)
+        # These are invisible sensors that provide stable entity IDs for solar synthetics
+        unmapped_circuits = [cid for cid in span_panel.circuits if cid.startswith("unmapped_tab_")]
+        for circuit_id in unmapped_circuits:
+            for unmapped_description in UNMAPPED_SENSORS:
+                # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
+                entities.append(
+                    SpanUnmappedCircuitSensor(
+                        coordinator, unmapped_description, span_panel, circuit_id
+                    )
+                )
 
-    # Config entry should never be None here, but we check for safety
-    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
-    _LOGGER.info(
-        "Solar sensor setup - enabled: %s, options: %s",
-        solar_enabled,
-        config_entry.options,
-    )
+        # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
+        for description_ss in STATUS_SENSORS:
+            entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
 
-    # Create circuit sensors with visibility control for unmapped tabs
-    circuit_sensor_count = 0
-    for description_cs in CIRCUITS_SENSORS:
-        for id_c, circuit_data in span_panel.circuits.items():
-            # Determine visibility defaults based on circuit type
-            if id_c.startswith("unmapped_tab_"):
-                # Unmapped tab circuits are enabled but hidden by default
-                # This allows them to be used by synthetic sensors without UI clutter
-                enabled_default = True
-                visible_default = False
-                _LOGGER.debug("Creating enabled but hidden unmapped tab circuit sensor: %s", id_c)
+        # Add battery sensor if enabled
+        battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
+        if battery_enabled:
+            entities.append(SpanPanelBattery(coordinator, BATTERY_SENSOR, span_panel))
+
+        # Add the status sensor entities FIRST
+        async_add_entities(entities)
+
+        # Ensure unmapped tab entities are enabled in the entity registry
+        # This is necessary because existing disabled entities in the registry
+        # override the entity_registry_enabled_default setting
+        entity_registry = er.async_get(hass)
+        for entity in entities:
+            # Check if this is an unmapped tab circuit sensor
+            if (
+                hasattr(entity, "unique_id")
+                and entity.unique_id
+                and "unmapped_tab_" in entity.unique_id
+            ):
+                entity_id = entity.entity_id
+                registry_entry = entity_registry.async_get(entity_id)
+                if registry_entry and registry_entry.disabled:
+                    _LOGGER.debug("Enabling previously disabled unmapped tab entity: %s", entity_id)
+                    entity_registry.async_update_entity(entity_id, disabled_by=None)
+
+        # Delegate synthetic sensor setup to ha-synthetic-sensors package
+        try:
+            # Ensure coordinator has valid data before setting up synthetic sensors
+            if not coordinator.last_update_success or not coordinator.data:
+                _LOGGER.warning(
+                    "Coordinator not ready for synthetic sensor setup - "
+                    "attempting refresh before proceeding"
+                )
+                await coordinator.async_refresh()
+
+                if not coordinator.last_update_success or not coordinator.data:
+                    _LOGGER.error(
+                        "Failed to get valid coordinator data - synthetic sensors may not have initial values"
+                    )
+
+            # Set up synthetic sensor configuration
+            # Check if migration just occurred - if so, use existing YAML instead of regenerating
+            storage_manager = StorageManager(hass, DOMAIN, integration_domain=DOMAIN)
+            await storage_manager.async_load()
+
+            # If sensor sets already exist (from migration), use them directly
+            sensor_sets = storage_manager.list_sensor_sets()
+            _LOGGER.info("SENSOR SETUP DEBUG: Found %d existing sensor sets", len(sensor_sets))
+            for sensor_set in sensor_sets:
+                _LOGGER.info(
+                    "SENSOR SETUP DEBUG: Sensor set - id=%s, device=%s",
+                    sensor_set.sensor_set_id,
+                    sensor_set.device_identifier,
+                )
+
+            if sensor_sets:
+                _LOGGER.info(
+                    "SENSOR SETUP DEBUG: Using existing sensor configuration from migration"
+                )
             else:
-                # Regular circuits use the original description defaults
-                enabled_default = description_cs.entity_registry_enabled_default
-                visible_default = description_cs.entity_registry_visible_default
+                # Fresh install - generate new configuration
+                _LOGGER.info("SENSOR SETUP DEBUG: Fresh install - generating new configuration")
+                storage_manager = await setup_synthetic_configuration(
+                    hass, config_entry, coordinator
+                )
+            # Use simplified setup interface that handles everything
+            sensor_manager = await setup_synthetic_sensors(
+                hass=hass,
+                config_entry=config_entry,
+                async_add_entities=async_add_entities,
+                coordinator=coordinator,
+                storage_manager=storage_manager,
+            )
+            # Get and store the SensorSet for this device
+            # Use the per-entry device_identifier chosen during synthetic setup
+            synth_coord = find_synthetic_coordinator_for(coordinator)
+            device_identifier = (
+                synth_coord.device_identifier
+                if synth_coord and synth_coord.device_identifier
+                else coordinator.data.status.serial_number
+            )
+            sensor_set_id = construct_sensor_set_id(device_identifier)
+            sensor_set = storage_manager.get_sensor_set(sensor_set_id)
 
-            # Create a new description with visibility control
-            circuit_description = SpanPanelCircuitsSensorEntityDescription(
-                key=description_cs.key,
-                name=description_cs.name,
-                device_class=description_cs.device_class,
-                entity_category=description_cs.entity_category,
-                entity_registry_enabled_default=enabled_default,
-                entity_registry_visible_default=visible_default,
-                force_update=description_cs.force_update,
-                icon=description_cs.icon,
-                has_entity_name=description_cs.has_entity_name,
-                translation_key=description_cs.translation_key,
-                translation_placeholders=description_cs.translation_placeholders,
-                unit_of_measurement=description_cs.unit_of_measurement,
-                native_unit_of_measurement=description_cs.native_unit_of_measurement,
-                state_class=description_cs.state_class,
-                suggested_display_precision=description_cs.suggested_display_precision,
-                suggested_unit_of_measurement=description_cs.suggested_unit_of_measurement,
-                value_fn=description_cs.value_fn,
+            if sensor_set is None:
+                _LOGGER.error("Sensor set not found: %s", sensor_set_id)
+                _LOGGER.debug("Available sensor sets: %s", storage_manager.list_sensor_sets())
+
+            # Store managers and sensor set for potential reload functionality
+            data["sensor_manager"] = sensor_manager
+            data[STORAGE_MANAGER] = storage_manager
+            data[SENSOR_SET] = sensor_set
+
+            _LOGGER.debug(
+                "Successfully set up synthetic sensors and cached SensorSet: %s", sensor_set_id
             )
 
-            entities.append(
-                SpanPanelCircuitSensor(
-                    coordinator,
-                    circuit_description,
-                    id_c,
-                    circuit_data.name,
-                    span_panel,
-                )
-            )
-            circuit_sensor_count += 1
+            # Check if solar is enabled in options and set up solar sensors if needed
+            # This handles the case where solar is already enabled during initial setup
+            solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
+            if solar_enabled and sensor_set is not None:
+                # Coerce leg options to integers to handle any legacy string-stored values
+                leg1_raw = config_entry.options.get(INVERTER_LEG1, 0)
+                leg2_raw = config_entry.options.get(INVERTER_LEG2, 0)
+                try:
+                    leg1 = int(leg1_raw)
+                except (TypeError, ValueError):
+                    leg1 = 0
+                try:
+                    leg2 = int(leg2_raw)
+                except (TypeError, ValueError):
+                    leg2 = 0
+                # Get device name from config entry like sensors do
+                device_name = config_entry.data.get("device_name", config_entry.title)
 
-    _LOGGER.debug(
-        "Created %d circuit sensors for %d circuits (%d sensors per circuit)",
-        circuit_sensor_count,
-        len(span_panel.circuits),
-        len(CIRCUITS_SENSORS),
-    )
-
-    # Handle solar configuration with new synthetic sensors approach
-    if solar_enabled:
-        inverter_leg1 = config_entry.options.get(INVERTER_LEG1, 0)
-        inverter_leg2 = config_entry.options.get(INVERTER_LEG2, 0)
-
-        # Enable the required tab circuits (but keep them hidden)
-        tab_manager = SolarTabManager(hass, config_entry)
-        await tab_manager.enable_solar_tabs(inverter_leg1, inverter_leg2)
-
-        # Generate synthetic sensors YAML configuration
-        solar_sensors = SolarSyntheticSensors(hass, config_entry)
-        await solar_sensors.generate_config(inverter_leg1, inverter_leg2)
-
-        # Validate the generated configuration
-        if await solar_sensors.validate_config():
-            _LOGGER.debug("Solar synthetic sensors configuration generated successfully")
-
-            # Set up ha-synthetic-sensors integration for device integration
-            try:
-                # Create name resolver for device integration
-                name_resolver = NameResolver(hass, variables={})
-
-                # Create device info for solar sensors
-                device_info = panel_to_device_info(span_panel)
-
-                # Configure sensor manager for v1.0.10 compatibility
-                # Use same prefix format as v1.0.10: span_{serial}_synthetic_{circuits}
-                circuit_spec = "_".join(
-                    str(num) for num in [inverter_leg1, inverter_leg2] if num > 0
-                )
-                unique_id_prefix = (
-                    f"span_{span_panel.status.serial_number}_synthetic_{circuit_spec}"
+                _LOGGER.debug(
+                    "Solar enabled during initial setup - setting up solar sensors (leg1: %s, leg2: %s)",
+                    leg1,
+                    leg2,
                 )
 
-                manager_config = SensorManagerConfig(
-                    device_info=device_info,
-                    unique_id_prefix=unique_id_prefix,
-                    lifecycle_managed_externally=True,
-                )
+                try:
+                    result = await handle_solar_options_change(
+                        hass,
+                        config_entry,
+                        coordinator,
+                        sensor_set,
+                        solar_enabled,
+                        leg1,
+                        leg2,
+                        device_name,
+                    )
+                    if result:
+                        _LOGGER.debug("Initial solar sensor setup completed successfully")
+                    else:
+                        _LOGGER.warning("Initial solar sensor setup failed")
+                except Exception as e:
+                    _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
 
-                sensor_manager = SensorManager(
-                    hass, name_resolver, async_add_entities, manager_config
-                )
+        except Exception as e:
+            _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
 
-                # Load the YAML configuration we generated
-                yaml_path = solar_sensors.config_file_path
-                if yaml_path and yaml_path.exists():
-                    config_manager = ConfigManager(hass)
-                    config = await config_manager.async_load_from_file(str(yaml_path))
-                    await sensor_manager.load_configuration(config)
-                    _LOGGER.debug("Solar synthetic sensors loaded successfully from %s", yaml_path)
-                else:
-                    _LOGGER.error("Solar synthetic sensors YAML file not found at %s", yaml_path)
+        # Force immediate coordinator refresh to ensure all sensors (native and synthetic) update right away
+        await coordinator.async_request_refresh()
 
-            except Exception as e:
-                _LOGGER.error("Failed to set up solar synthetic sensors: %s", e)
-        else:
-            _LOGGER.error("Failed to validate solar synthetic sensors configuration")
-    else:
-        # Clean up solar configuration when disabled
-        tab_manager = SolarTabManager(hass, config_entry)
-        solar_sensors = SolarSyntheticSensors(hass, config_entry)
-
-        await tab_manager.disable_solar_tabs()
-        await solar_sensors.remove_config()
-
-    for description_ss in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
-
-    if config_entry.options.get(BATTERY_ENABLE, False):
-        for description_sb in STORAGE_BATTERY_SENSORS:
-            entities.append(SpanPanelStorageBatteryStatus(coordinator, description_sb, span_panel))
-
-    async_add_entities(entities)
-
-    # Ensure unmapped tab entities are enabled in the entity registry
-    # This is necessary because existing disabled entities in the registry
-    # override the entity_registry_enabled_default setting
-    entity_registry = er.async_get(hass)
-    for entity in entities:
-        # Check if this is an unmapped tab circuit sensor
-        if (
-            hasattr(entity, "unique_id")
-            and entity.unique_id
-            and "unmapped_tab_" in entity.unique_id
-        ):
-            entity_id = entity.entity_id
-            registry_entry = entity_registry.async_get(entity_id)
-            if registry_entry and registry_entry.disabled:
-                _LOGGER.info("Enabling previously disabled unmapped tab entity: %s", entity_id)
-                entity_registry.async_update_entity(entity_id, disabled_by=None)
+        _LOGGER.debug("Sensor platform setup completed")
+    except Exception as e:
+        _LOGGER.error("SENSOR_ENTRY_DEBUG: Error in async_setup_entry: %s", e, exc_info=True)
+        raise

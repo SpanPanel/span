@@ -1,0 +1,73 @@
+# Simple test configuration with minimal circuits for testing
+# Demonstrates basic YAML simulation functionality
+
+panel_config:
+  serial_number: "SPAN-TEST-001"
+  total_tabs: 8
+  main_size: 100
+
+circuit_templates:
+  lighting:
+    energy_profile:
+      mode: "consumer"
+      power_range: [5.0, 50.0]
+      typical_power: 25.0
+      power_variation: 0.1
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  outlets:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1800.0]
+      typical_power: 150.0
+      power_variation: 0.3
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  hvac:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 3000.0]
+      typical_power: 2000.0
+      power_variation: 0.15
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  solar:
+    energy_profile:
+      mode: "producer"
+      power_range: [-5000.0, 0.0]
+      typical_power: -2500.0
+      power_variation: 0.2
+    relay_behavior: "non_controllable"
+    priority: "MUST_HAVE"
+
+circuits:
+  - id: "living_room_lights"
+    name: "Living Room Lights"
+    template: "lighting"
+    tabs: [1, 3]  # L1 + L2 = Valid 240V
+
+  - id: "kitchen_outlets"
+    name: "Kitchen Outlets"
+    template: "outlets"
+    tabs: [2, 4]  # L1 + L2 = Valid 240V
+
+  - id: "main_hvac"
+    name: "Main HVAC"
+    template: "hvac"
+    tabs: [5, 7]  # L1 + L2 = Valid 240V
+
+  - id: "solar_inverter"
+    name: "Solar Inverter"
+    template: "solar"
+    tabs: [6, 8]  # L1 + L2 = Valid 240V
+
+unmapped_tabs: []
+
+simulation_params:
+  update_interval: 5
+  time_acceleration: 1.0
+  noise_factor: 0.02
+  enable_realistic_behaviors: true

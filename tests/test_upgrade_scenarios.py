@@ -12,7 +12,7 @@ from custom_components.span_panel.const import (
 )
 from custom_components.span_panel.helpers import (
     construct_entity_id,
-    construct_synthetic_entity_id,
+    construct_multi_circuit_entity_id,
 )
 
 
@@ -307,10 +307,13 @@ class TestEntityIdConstructionUpgradeScenarios:
 class TestSyntheticEntityUpgradeScenarios:
     """Test synthetic entity construction preserves existing patterns during upgrades."""
 
+    @patch("custom_components.span_panel.helpers.er.async_get")
     def test_legacy_synthetic_entity_construction_preserved(
-        self, mock_coordinator, mock_span_panel
+        self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that legacy synthetic entity construction is preserved."""
+        mock_registry.return_value = None
+
         # Legacy installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
@@ -323,22 +326,25 @@ class TestSyntheticEntityUpgradeScenarios:
         with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
-            entity_id = construct_synthetic_entity_id(
+            entity_id = construct_multi_circuit_entity_id(
                 mock_coordinator,
                 mock_span_panel,
                 "sensor",
-                [30, 32],
                 "power",
-                "Solar Inverter",
+                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
+                friendly_name="Solar Inverter",
             )
 
             # Legacy format: no device prefix, use friendly name
             assert entity_id == "sensor.solar_inverter_power"
 
+    @patch("custom_components.span_panel.helpers.er.async_get")
     def test_post_104_synthetic_entity_construction_preserved(
-        self, mock_coordinator, mock_span_panel
+        self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that post-1.0.4 synthetic entity construction is preserved."""
+        mock_registry.return_value = None
+
         # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
@@ -351,22 +357,25 @@ class TestSyntheticEntityUpgradeScenarios:
         with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
-            entity_id = construct_synthetic_entity_id(
+            entity_id = construct_multi_circuit_entity_id(
                 mock_coordinator,
                 mock_span_panel,
                 "sensor",
-                [30, 32],
                 "power",
-                "Solar Inverter",
+                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
+                friendly_name="Solar Inverter",
             )
 
             # Post-1.0.4 format: device prefix + friendly name
             assert entity_id == "sensor.span_panel_solar_inverter_power"
 
+    @patch("custom_components.span_panel.helpers.er.async_get")
     def test_modern_synthetic_entity_construction_preserved(
-        self, mock_coordinator, mock_span_panel
+        self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that modern synthetic entity construction is preserved."""
+        mock_registry.return_value = None
+
         # Modern circuit numbers installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
@@ -379,17 +388,17 @@ class TestSyntheticEntityUpgradeScenarios:
         with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
             mock_device_info.return_value = {"name": "Span Panel"}
 
-            entity_id = construct_synthetic_entity_id(
+            entity_id = construct_multi_circuit_entity_id(
                 mock_coordinator,
                 mock_span_panel,
                 "sensor",
-                [30, 32],
                 "power",
-                "Solar Inverter",
+                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
+                friendly_name="Solar Inverter",
             )
 
-            # Modern format: device prefix + friendly name (synthetic sensors always use friendly names)
-            assert entity_id == "sensor.span_panel_solar_inverter_power"
+            # Modern format: device prefix + circuit numbers (when USE_CIRCUIT_NUMBERS is True)
+            assert entity_id == "sensor.span_panel_circuit_30_32_power"
 
 
 class TestGeneralOptionsPreservesNamingFlags:

@@ -4,9 +4,10 @@ Run this periodically to keep your pyproject.toml aligned with HA.
 """
 
 import json
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
+
 import toml
 
 
