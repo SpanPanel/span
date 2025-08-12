@@ -115,7 +115,7 @@ async def test_sensor_set_building():
 
     # Test building sensor set
     sensor_set_dict, backing_entities, global_settings = await generate_panel_sensors(
-        mock_coordinator, mock_span_panel
+        mock_coordinator, mock_span_panel, "Test Device"
     )
 
     # Verify sensor set structure

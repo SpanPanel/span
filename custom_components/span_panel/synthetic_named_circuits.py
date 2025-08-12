@@ -25,6 +25,7 @@ from .helpers import (
 )
 from .span_panel import SpanPanel
 from .synthetic_utils import BackingEntity, combine_yaml_templates
+from .migration_utils import classify_sensor_from_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,7 +72,10 @@ def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
 
 
 async def generate_named_circuit_sensors(
-    coordinator: SpanPanelCoordinator, span_panel: SpanPanel, device_name: str
+    coordinator: SpanPanelCoordinator, 
+    span_panel: SpanPanel, 
+    device_name: str,
+    existing_sensor_mappings: dict[str, str] | None = None
 ) -> tuple[dict[str, Any], list[BackingEntity], dict[str, Any], dict[str, str]]:
     """Generate named circuit synthetic sensors and their backing entities.
 
@@ -82,6 +86,8 @@ async def generate_named_circuit_sensors(
         coordinator: The SpanPanelCoordinator instance
         span_panel: The SpanPanel data
         device_name: The device name to use for entity IDs and friendly names
+        existing_sensor_mappings: Optional dict mapping unique_id to entity_id for migration.
+                                 If None, generates new keys using helpers.
 
     Returns:
         Tuple of (sensor_configs_dict, list_of_backing_entities, global_settings, sensor_to_backing_mapping)
@@ -135,48 +141,69 @@ async def generate_named_circuit_sensors(
             circuit_number = get_circuit_number(circuit_data)
             circuit_name = circuit_data.name or f"Circuit {circuit_number}"
 
-            # Generate entity ID using appropriate synthetic helper based on number of tabs
-            entity_suffix = get_user_friendly_suffix(sensor_def["key"])
+            # Check if this sensor definition matches any existing sensor for this circuit
+            sensor_unique_id = None
+            entity_id = None
+            
+            if existing_sensor_mappings:
+                for existing_unique_id, existing_entity_id in existing_sensor_mappings.items():
+                    try:
+                        category, sensor_type, api_key = classify_sensor_from_unique_id(existing_unique_id)
+                        # Check if this is a circuit sensor with matching API key and circuit ID
+                        if (category == 'circuit' and 
+                            api_key == sensor_def["key"] and 
+                            circuit_id in existing_unique_id):
+                            # Found matching existing sensor
+                            sensor_unique_id = existing_unique_id
+                            entity_id = existing_entity_id
+                            break
+                    except ValueError:
+                        continue
+            
+            # If no existing sensor found, generate new keys (new installation)
+            if sensor_unique_id is None:
+                # Generate entity ID using appropriate synthetic helper based on number of tabs
+                entity_suffix = get_user_friendly_suffix(sensor_def["key"])
 
-            # Check the number of tabs to determine which helper to use
-            if len(circuit_data.tabs) == 2:
-                # 240V circuit - use 240V synthetic helper
-                entity_id = construct_240v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="sensor",
-                    suffix=entity_suffix,
-                    friendly_name=circuit_name,
-                    tab1=circuit_data.tabs[0],
-                    tab2=circuit_data.tabs[1],
-                    unique_id=None,
-                )
-            elif len(circuit_data.tabs) == 1:
-                # 120V circuit - use 120V synthetic helper
-                entity_id = construct_120v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="sensor",
-                    suffix=entity_suffix,
-                    friendly_name=circuit_name,
-                    tab=circuit_data.tabs[0],
-                    unique_id=None,
-                )
-            else:
-                # Invalid number of tabs for US electrical system
-                raise ValueError(
-                    f"Circuit {circuit_id} ({circuit_name}) has {len(circuit_data.tabs)} tabs. "
-                    f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
-                    f"Tabs: {circuit_data.tabs}"
-                )
+                # Check the number of tabs to determine which helper to use
+                if len(circuit_data.tabs) == 2:
+                    # 240V circuit - use 240V synthetic helper
+                    entity_id = construct_240v_synthetic_entity_id(
+                        coordinator=coordinator,
+                        span_panel=span_panel,
+                        platform="sensor",
+                        suffix=entity_suffix,
+                        friendly_name=circuit_name,
+                        tab1=circuit_data.tabs[0],
+                        tab2=circuit_data.tabs[1],
+                        unique_id=None,
+                    )
+                elif len(circuit_data.tabs) == 1:
+                    # 120V circuit - use 120V synthetic helper
+                    entity_id = construct_120v_synthetic_entity_id(
+                        coordinator=coordinator,
+                        span_panel=span_panel,
+                        platform="sensor",
+                        suffix=entity_suffix,
+                        friendly_name=circuit_name,
+                        tab=circuit_data.tabs[0],
+                        unique_id=None,
+                    )
+                else:
+                    # Invalid number of tabs for US electrical system
+                    raise ValueError(
+                        f"Circuit {circuit_id} ({circuit_name}) has {len(circuit_data.tabs)} tabs. "
+                        f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
+                        f"Tabs: {circuit_data.tabs}"
+                    )
 
-            # Generate unique ID for synthetic sensor following documented pattern
-            # Pattern: span_{serial}_{circuit_id}_{sensor_key} where sensor_key is descriptive
-            # Use circuit ID and entity suffix to ensure uniqueness across circuits
-            sensor_name = f"{circuit_id}_{entity_suffix}"
-            sensor_unique_id = construct_synthetic_unique_id(
-                device_identifier_for_uniques, sensor_name
-            )
+                # Generate unique ID for synthetic sensor following documented pattern
+                # Pattern: span_{serial}_{circuit_id}_{sensor_key} where sensor_key is descriptive
+                # Use circuit ID and entity suffix to ensure uniqueness across circuits
+                sensor_name = f"{circuit_id}_{entity_suffix}"
+                sensor_unique_id = construct_synthetic_unique_id(
+                    device_identifier_for_uniques, sensor_name
+                )
 
             # Generate backing entity ID
             backing_suffix = get_user_friendly_suffix(sensor_def["key"])

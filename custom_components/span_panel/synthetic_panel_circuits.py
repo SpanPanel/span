@@ -22,6 +22,7 @@ from .helpers import (
 )
 from .span_panel import SpanPanel
 from .synthetic_utils import BackingEntity, combine_yaml_templates
+from .migration_utils import classify_sensor_from_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,7 +94,10 @@ def get_panel_data_value(span_panel: SpanPanel, data_path: str) -> float:
 
 
 async def generate_panel_sensors(
-    coordinator: SpanPanelCoordinator, span_panel: SpanPanel, device_name: str
+    coordinator: SpanPanelCoordinator, 
+    span_panel: SpanPanel, 
+    device_name: str,
+    existing_sensor_mappings: dict[str, str] | None = None
 ) -> tuple[dict[str, Any], list[BackingEntity], dict[str, Any], dict[str, str]]:
     """Generate panel-level synthetic sensors and their backing entities.
 
@@ -101,6 +105,8 @@ async def generate_panel_sensors(
         coordinator: The SpanPanelCoordinator instance
         span_panel: The SpanPanel data
         device_name: The name of the device to use for sensor generation
+        existing_sensor_mappings: Optional dict mapping unique_id to entity_id for migration.
+                                 If None, generates new keys using helpers.
 
     Returns:
         Tuple of (sensor_configs_dict, list_of_backing_entities, global_settings, sensor_to_backing_mapping)
@@ -169,10 +175,33 @@ async def generate_panel_sensors(
 
         # Generate the sensor key following documented pattern
         # Pattern: span_{identifier}_{sensor_key} where identifier is per-device
-        entity_suffix = get_panel_entity_suffix(sensor_def["key"])
-        sensor_unique_id = construct_synthetic_unique_id(
-            device_identifier_for_uniques, entity_suffix
-        )
+        # Use existing mapping if provided (for migration), otherwise generate new keys
+        sensor_unique_id = None
+        entity_id = None
+        
+        # Check if this sensor definition matches any existing sensor
+        if existing_sensor_mappings:
+            for existing_unique_id, existing_entity_id in existing_sensor_mappings.items():
+                try:
+                    category, sensor_type, api_key = classify_sensor_from_unique_id(existing_unique_id)
+                    if category == 'panel' and api_key == sensor_def["key"]:
+                        # Found matching existing sensor
+                        sensor_unique_id = existing_unique_id
+                        entity_id = existing_entity_id
+                        break
+                except ValueError:
+                    continue
+        
+        # If no existing sensor found, generate new keys (new installation)
+        if sensor_unique_id is None:
+            entity_suffix = get_panel_entity_suffix(sensor_def["key"])
+            sensor_unique_id = construct_synthetic_unique_id(
+                device_identifier_for_uniques, entity_suffix
+            )
+            # Also generate entity_id for new installation
+            entity_id = construct_panel_synthetic_entity_id(
+                coordinator, span_panel, "sensor", entity_suffix, device_name
+            )
 
         # Create placeholders for this specific sensor
         sensor_placeholders = {
