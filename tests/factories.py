@@ -17,7 +17,14 @@ from custom_components.span_panel.const import (
     CURRENT_RUN_CONFIG,
     DSM_GRID_STATE,
     DSM_STATE,
+    DSM_GRID_DOWN,
+    DSM_GRID_UP,
+    DSM_OFF_GRID,
+    DSM_ON_GRID,
     MAIN_RELAY_STATE,
+    PANEL_BACKUP,
+    PANEL_OFF_GRID,
+    PANEL_ON_GRID,
     PANEL_POWER,
     STORAGE_BATTERY_PERCENTAGE,
     SYSTEM_CELLULAR_LINK,
@@ -134,9 +141,9 @@ class SpanPanelDataFactory:
 
     _panel_defaults = {
         PANEL_POWER: 2500.75,
-        CURRENT_RUN_CONFIG: "PANEL_ON_GRID",
-        DSM_GRID_STATE: "DSM_GRID_UP",
-        DSM_STATE: "DSM_ON_GRID",
+        CURRENT_RUN_CONFIG: PANEL_ON_GRID,
+        DSM_GRID_STATE: DSM_GRID_UP,
+        DSM_STATE: DSM_ON_GRID,
         MAIN_RELAY_STATE: "CLOSED",
         "instantGridPowerW": 2500.75,
         "feedthroughPowerW": 0.0,
@@ -155,14 +162,14 @@ class SpanPanelDataFactory:
     @staticmethod
     def create_panel_data(
         grid_power: float = 2500.75,
-        dsm_grid_state: str = "DSM_GRID_UP",
-        dsm_state: str = "DSM_ON_GRID",
+        dsm_grid_state: str = DSM_GRID_UP,
+        dsm_state: str = DSM_ON_GRID,
         main_relay_state: str = "CLOSED",
-        current_run_config: str = "PANEL_ON_GRID",
+        current_run_config: str = PANEL_ON_GRID,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Create panel data with optional defaults."""
-        panel_data = copy.deepcopy(SpanPanelDataFactory._panel_defaults)
+        panel_data: dict[str, Any] = copy.deepcopy(SpanPanelDataFactory._panel_defaults)
         panel_data[PANEL_POWER] = grid_power
         panel_data["instantGridPowerW"] = grid_power
         panel_data[DSM_GRID_STATE] = dsm_grid_state
@@ -181,9 +188,9 @@ class SpanPanelDataFactory:
         """Create panel data for on-grid operation."""
         return SpanPanelDataFactory.create_panel_data(
             grid_power=1850.5,
-            dsm_grid_state="DSM_GRID_UP",
-            dsm_state="DSM_ON_GRID",
-            current_run_config="PANEL_ON_GRID",
+            dsm_grid_state=DSM_GRID_UP,
+            dsm_state=DSM_ON_GRID,
+            current_run_config=PANEL_ON_GRID,
         )
 
     @staticmethod
@@ -191,9 +198,9 @@ class SpanPanelDataFactory:
         """Create panel data for backup operation."""
         return SpanPanelDataFactory.create_panel_data(
             grid_power=0.0,
-            dsm_grid_state="DSM_GRID_DOWN",
-            dsm_state="DSM_ON_BACKUP",
-            current_run_config="PANEL_ON_BACKUP",
+            dsm_grid_state=DSM_GRID_DOWN,
+            dsm_state=DSM_OFF_GRID,
+            current_run_config=PANEL_BACKUP,
         )
 
 
@@ -207,7 +214,7 @@ class SpanPanelStatusFactory:
             "env": "prod",
         },
         "system": {
-            "serial": "ABC123456789",
+            "serial": "sp3-242424-001",
             "manufacturer": "Span",
             "model": "Panel",
             "doorState": SYSTEM_DOOR_STATE_CLOSED,
@@ -222,7 +229,7 @@ class SpanPanelStatusFactory:
 
     @staticmethod
     def create_status(
-        serial_number: str = "ABC123456789",
+        serial_number: str = "Unspecified",
         software_version: str = "1.2.3",
         door_state: str = SYSTEM_DOOR_STATE_CLOSED,
         ethernet_link: bool = True,
@@ -231,8 +238,9 @@ class SpanPanelStatusFactory:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Create status data with optional defaults."""
-        status = copy.deepcopy(SpanPanelStatusFactory._status_defaults)
+        status: dict[str, Any] = copy.deepcopy(SpanPanelStatusFactory._status_defaults)
         status["system"]["serial"] = serial_number
+        status["serial_number"] = serial_number
         status["software"]["firmwareVersion"] = software_version
         status["system"]["doorState"] = door_state
         status["network"][SYSTEM_ETHERNET_LINK] = ethernet_link
@@ -244,11 +252,11 @@ class SpanPanelStatusFactory:
             if "." in k:
                 # Handle nested keys like "system.uptime"
                 parts = k.split(".")
-                current = status
+                current: dict[str, Any] = status
                 for part in parts[:-1]:
                     if part not in current:
                         current[part] = {}
-                    current = current[part]
+                    current = current[part]  # type: ignore[assignment]
                 current[parts[-1]] = v
             else:
                 status[k] = v
@@ -269,7 +277,7 @@ class SpanPanelStorageBatteryFactory:
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Create battery data with optional defaults."""
-        battery = copy.deepcopy(SpanPanelStorageBatteryFactory._battery_defaults)
+        battery: dict[str, Any] = copy.deepcopy(SpanPanelStorageBatteryFactory._battery_defaults)
         battery[STORAGE_BATTERY_PERCENTAGE] = battery_percentage
 
         # Add any additional overrides
@@ -288,6 +296,7 @@ class SpanPanelApiResponseFactory:
         panel_data: dict[str, Any] | None = None,
         status_data: dict[str, Any] | None = None,
         battery_data: dict[str, Any] | None = None,
+        serial_number: str | None = None,
     ) -> dict[str, Any]:
         """Create a complete panel response with all components."""
         if circuits is None:
@@ -301,7 +310,10 @@ class SpanPanelApiResponseFactory:
             panel_data = SpanPanelDataFactory.create_on_grid_panel_data()
 
         if status_data is None:
-            status_data = SpanPanelStatusFactory.create_status()
+            if serial_number is not None:
+                status_data = SpanPanelStatusFactory.create_status(serial_number=serial_number)
+            else:
+                status_data = SpanPanelStatusFactory.create_status()
 
         if battery_data is None:
             battery_data = SpanPanelStorageBatteryFactory.create_battery_data()
@@ -333,12 +345,14 @@ class SpanPanelApiResponseFactory:
         # Add branches to panel data
         panel_data["branches"] = branches
 
-        return {
+        response = {
             "circuits": {circuit["id"]: circuit for circuit in circuits},
             "panel": panel_data,
             "status": status_data,
             "battery": battery_data,
         }
+
+        return response
 
     @staticmethod
     def create_minimal_panel_response() -> dict[str, Any]:
