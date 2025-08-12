@@ -1,0 +1,29 @@
+  {{sensor_key}}:
+    name: "Solar Consumed Energy"
+    entity_id: "{{entity_id}}"
+    formula: "leg1_consumed + leg2_consumed"
+    UNAVAILABLE:
+      formula: "state if within_grace else UNKNOWN"
+    UNKNOWN:
+      formula: "state if within_grace else UNKNOWN"
+    variables:
+      leg1_consumed: "{{leg1_consumed_entity}}"
+      leg2_consumed: "{{leg2_consumed_entity}}"
+      within_grace:
+        formula: "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes"
+        UNAVAILABLE: false
+        UNKNOWN: false
+    attributes:
+      tabs: "{{tabs_attribute}}"
+      voltage: {{voltage_attribute}}
+      energy_reporting_status:
+        formula: "'Live'"
+        UNAVAILABLE:
+          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+        UNKNOWN:
+          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+    metadata:
+      unit_of_measurement: "Wh"
+      device_class: "energy"
+      state_class: "total_increasing"
+      suggested_display_precision: {{energy_display_precision}}

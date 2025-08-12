@@ -4,6 +4,13 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from .const import (
+    CURRENT_RUN_CONFIG,
+    DSM_GRID_STATE,
+    DSM_STATE,
+    MAIN_RELAY_STATE,
+    PANEL_POWER,
+)
 from .options import Options
 
 
@@ -37,18 +44,18 @@ class SpanPanelData:
         """Create instance from dict with deep copy of input data."""
         data = deepcopy(data)
         common_data: dict[str, Any] = {
-            "main_relay_state": str(data["mainRelayState"]),
+            "main_relay_state": str(data[MAIN_RELAY_STATE]),
             "main_meter_energy_produced": float(data["mainMeterEnergy"]["producedEnergyWh"]),
             "main_meter_energy_consumed": float(data["mainMeterEnergy"]["consumedEnergyWh"]),
-            "instant_grid_power": float(data["instantGridPowerW"]),
+            "instant_grid_power": float(data[PANEL_POWER]),
             "feedthrough_power": float(data["feedthroughPowerW"]),
             "feedthrough_energy_produced": float(data["feedthroughEnergy"]["producedEnergyWh"]),
             "feedthrough_energy_consumed": float(data["feedthroughEnergy"]["consumedEnergyWh"]),
             "grid_sample_start_ms": int(data["gridSampleStartMs"]),
             "grid_sample_end_ms": int(data["gridSampleEndMs"]),
-            "dsm_grid_state": str(data["dsmGridState"]),
-            "dsm_state": str(data["dsmState"]),
-            "current_run_config": str(data["currentRunConfig"]),
+            "dsm_grid_state": str(data[DSM_GRID_STATE]),
+            "dsm_state": str(data[DSM_STATE]),
+            "current_run_config": str(data[CURRENT_RUN_CONFIG]),
             "main_meter_energy": data.get("mainMeterEnergy", {}),
             "feedthrough_energy": data.get("feedthroughEnergy", {}),
             "solar_inverter_data": data.get("solarInverter", {}),
@@ -61,3 +68,34 @@ class SpanPanelData:
     def copy(self) -> "SpanPanelData":
         """Create a deep copy for atomic operations."""
         return deepcopy(self)
+
+    # Add camelCase properties for panel sensor mappings
+    @property
+    def instantGridPowerW(self) -> float:
+        """Grid power in watts (camelCase for sensor mapping)."""
+        return self.instant_grid_power
+
+    @property
+    def feedthroughPowerW(self) -> float:
+        """Feedthrough power in watts (camelCase for sensor mapping)."""
+        return self.feedthrough_power
+
+    @property
+    def mainMeterEnergyProducedWh(self) -> float:
+        """Main meter produced energy in Wh (camelCase for sensor mapping)."""
+        return self.main_meter_energy_produced
+
+    @property
+    def mainMeterEnergyConsumedWh(self) -> float:
+        """Main meter consumed energy in Wh (camelCase for sensor mapping)."""
+        return self.main_meter_energy_consumed
+
+    @property
+    def feedthroughEnergyProducedWh(self) -> float:
+        """Feedthrough produced energy in Wh (camelCase for sensor mapping)."""
+        return self.feedthrough_energy_produced
+
+    @property
+    def feedthroughEnergyConsumedWh(self) -> float:
+        """Feedthrough consumed energy in Wh (camelCase for sensor mapping)."""
+        return self.feedthrough_energy_consumed

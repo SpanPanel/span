@@ -1,0 +1,109 @@
+# 8-tab workshop panel configuration with 4 realistic circuits
+# Tabs 5-8 left unmapped for automatic unmapped tab detection testing
+
+panel_config:
+  serial_number: "SPAN-WORKSHOP-001"
+  total_tabs: 8
+  main_size: 200
+
+circuit_templates:
+  # Workshop-specific templates with realistic power ranges
+
+  workshop_lighting:
+    energy_profile:
+      mode: "consumer"
+      power_range: [20.0, 80.0]
+      typical_power: 45.0
+      power_variation: 0.2
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [7, 8, 17, 18, 19, 20]
+      peak_multiplier: 1.0
+      off_peak_multiplier: 0.1
+
+  heavy_machinery:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 3500.0]
+      typical_power: 2200.0
+      power_variation: 0.4
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    cycling_pattern:
+      enabled: true
+      on_duration_minutes: 15
+      off_duration_minutes: 10
+      duty_cycle: 0.6
+
+  power_tools:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1800.0]
+      typical_power: 400.0
+      power_variation: 0.6
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    cycling_pattern:
+      enabled: true
+      on_duration_minutes: 8
+      off_duration_minutes: 25
+      duty_cycle: 0.25
+
+  hvac_workshop:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 2400.0]
+      typical_power: 1500.0
+      power_variation: 0.3
+    relay_behavior: "controllable"
+    priority: "NICE_TO_HAVE"
+    time_of_day_profile:
+      enabled: true
+      peak_hours: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+      peak_multiplier: 1.0
+      off_peak_multiplier: 0.2
+    cycling_pattern:
+      enabled: true
+      on_duration_minutes: 20
+      off_duration_minutes: 15
+      duty_cycle: 0.57
+
+circuits:
+  - id: 1
+    name: "Workshop LED Lighting"
+    template: "workshop_lighting"
+    tabs: [1]
+
+  - id: 2
+    name: "Table Saw & Planer"
+    template: "heavy_machinery"
+    tabs: [2]
+
+  - id: 3
+    name: "Power Tool Outlets"
+    template: "power_tools"
+    tabs: [3]
+
+  - id: 4
+    name: "Workshop HVAC"
+    template: "hvac_workshop"
+    tabs: [4]
+
+# Tabs 5, 6, 7, 8 are intentionally left unmapped
+
+behavior_engine:
+  enabled: true
+  time_of_day_enabled: true
+  hvac_cycling_enabled: true
+  weather_simulation_enabled: true
+  smart_grid_enabled: true
+  solar:
+    enabled: false  # Workshop typically doesn't have solar
+
+simulation_params:
+  enable_realistic_behaviors: true
+  noise_factor: 0.03  # Slightly more variation for workshop equipment
+  time_acceleration: 1.0
+  update_interval: 5

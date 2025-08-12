@@ -6,8 +6,13 @@
       "type": "shell",
       "command": "${workspaceFolder}/setup-hooks.sh",
       "presentation": {
-        "reveal": "silent",
-        "clear": true
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "clear": false,
+        "close": true
       },
       "problemMatcher": [],
       "runOptions": {
@@ -53,26 +58,47 @@
       }
     },
     {
-      "label": "Run black format",
+      "label": "Check Implementation Quality",
       "type": "shell",
-      "command": "${workspaceFolder}/scripts/run-in-env.sh black .",
+      "command": "${workspaceFolder}/scripts/check-implementation.sh",
       "group": "test",
       "presentation": {
         "reveal": "always",
-        "panel": "new"
+        "panel": "new",
+        "clear": true
       },
-      "problemMatcher": []
-    },
-    {
-      "label": "Run ruff check",
-      "type": "shell",
-      "command": "${workspaceFolder}/scripts/run-in-env.sh ruff check --fix .",
-      "group": "test",
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      },
-      "problemMatcher": []
+      "problemMatcher": [
+        {
+          "owner": "ruff",
+          "fileLocation": [
+            "relative",
+            "${workspaceFolder}"
+          ],
+          "pattern": {
+            "regexp": "^(.+):(\\d+):(\\d+): ([A-Z]\\d+) (.+)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "code": 4,
+            "message": 5
+          }
+        },
+        {
+          "owner": "mypy",
+          "fileLocation": [
+            "relative",
+            "${workspaceFolder}"
+          ],
+          "pattern": {
+            "regexp": "^(.+):(\\d+): (error|warning|note): (.+)$",
+            "file": 1,
+            "line": 2,
+            "severity": 3,
+            "message": 4
+          }
+        }
+      ],
+      "detail": "Run ruff and mypy checks on implementation code only"
     },
     {
       "label": "Run coverage",
@@ -95,6 +121,36 @@
         "panel": "new"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "Fix markdown formatting",
+      "type": "shell",
+      "command": "/Users/bflood/projects/scripts/fix-markdown.sh",
+      "args": [
+        "${workspaceFolder}"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": [],
+      "detail": "Comprehensive markdown formatting using shared script (Prettier + markdownlint)"
+    },
+    {
+      "label": "Format and Lint Markdown",
+      "type": "shell",
+      "command": "/Users/bflood/projects/scripts/fix-markdown.sh",
+      "args": [
+        "${workspaceFolder}"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": [],
+      "detail": "Format and lint markdown files using shared script (Prettier + markdownlint)"
     }
   ]
 }
