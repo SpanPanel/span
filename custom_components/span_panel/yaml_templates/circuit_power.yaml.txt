@@ -1,0 +1,18 @@
+  {{sensor_key}}:
+    name: "{{sensor_name}}"
+    entity_id: "{{entity_id}}"
+    formula: "state"
+    attributes:
+      tabs: "{{tabs_attribute}}"
+      voltage: {{voltage_attribute}}
+      amperage:
+        formula: "state / {{voltage_attribute}}"
+        metadata:
+          unit_of_measurement: "A"
+          device_class: "current"
+          suggested_display_precision: {{power_display_precision}}
+    metadata:
+      unit_of_measurement: "W"
+      device_class: "power"
+      state_class: "measurement"
+      suggested_display_precision: {{power_display_precision}}

@@ -6,10 +6,20 @@ from typing import Final
 
 DOMAIN: Final = "span_panel"
 COORDINATOR = "coordinator"
+STORAGE_MANAGER = "storage_manager"
+SENSOR_SET = "sensor_set"
 NAME = "name"
 
 CONF_SERIAL_NUMBER = "serial_number"
 CONF_USE_SSL = "use_ssl"
+
+# Simulation configuration
+CONF_SIMULATION_CONFIG = "simulation_config"
+CONF_SIMULATION_START_TIME = "simulation_start_time"
+
+# Time format constants for simulation
+TIME_ONLY_FORMATS = ["HH:MM", "H:MM"]  # 24-hour and 12-hour formats
+ISO_DATETIME_FORMAT = "YYYY-MM-DDTHH:MM:SS"  # Full ISO datetime format
 
 URL_STATUS = "http://{}/api/v1/status"
 URL_SPACES = "http://{}/api/v1/spaces"
@@ -52,6 +62,24 @@ PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE = "UNKNOWN"
 USE_DEVICE_PREFIX = "use_device_prefix"
 USE_CIRCUIT_NUMBERS = "use_circuit_numbers"
 
+# Migration constants
+MIGRATION_COMPLETED = "migration_completed"
+GENERATED_YAML = "generated_yaml"
+MIGRATION_VERSION = "migration_version"
+
+# SPAN Panel State Constants
+# DSM (Demand Side Management) States
+DSM_GRID_UP = "DSM_GRID_UP"
+DSM_GRID_DOWN = "DSM_GRID_DOWN"
+DSM_ON_GRID = "DSM_ON_GRID"
+DSM_OFF_GRID = "DSM_OFF_GRID"
+
+# Panel Run Configuration States
+PANEL_ON_GRID = "PANEL_ON_GRID"
+PANEL_OFF_GRID = "PANEL_OFF_GRID"
+PANEL_BACKUP = "PANEL_BACKUP"
+
+
 # Entity naming pattern options
 ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 
@@ -70,10 +98,21 @@ DEFAULT_API_RETRIES = 3
 DEFAULT_API_RETRY_TIMEOUT = 0.5
 DEFAULT_API_RETRY_BACKOFF_MULTIPLIER = 2.0
 
+
 # Config operation settings (no retries for quick feedback)
 CONFIG_API_RETRIES = 0
 CONFIG_API_RETRY_TIMEOUT = 0.5
 CONFIG_API_RETRY_BACKOFF_MULTIPLIER = 2.0
+
+# Dispatcher signal names used to stage platform updates deterministically
+# The coordinator emits these signals in this strict order each tick so that
+# entity updates are applied without creating a single large burst to the
+# EntityPlatform. Subscribers should perform their state write when their
+# stage signal fires.
+SIGNAL_STAGE_SWITCHES: Final = f"{DOMAIN}_stage_switches"
+SIGNAL_STAGE_SELECTS: Final = f"{DOMAIN}_stage_selects"
+SIGNAL_STAGE_NATIVE_SENSORS: Final = f"{DOMAIN}_stage_native_sensors"
+SIGNAL_STAGE_SYNTHETIC_SENSORS: Final = f"{DOMAIN}_stage_synthetic_sensors"
 
 
 class CircuitRelayState(enum.Enum):
