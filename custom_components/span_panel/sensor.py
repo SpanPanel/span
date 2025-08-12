@@ -583,7 +583,7 @@ async def async_setup_entry(
             await storage_manager.async_load()
 
             # If sensor sets already exist (from migration), use them directly
-            if storage_manager.get_all_sensor_set_ids():
+            if storage_manager.list_sensor_sets():
                 _LOGGER.info("Using existing sensor configuration from migration")
             else:
                 # Fresh install - generate new configuration
