@@ -7,6 +7,7 @@ from collections.abc import Callable
 import logging
 from typing import Any, Generic, TypeVar
 
+from ha_synthetic_sensors import StorageManager
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
@@ -577,7 +578,18 @@ async def async_setup_entry(
                     )
 
             # Set up synthetic sensor configuration
-            storage_manager = await setup_synthetic_configuration(hass, config_entry, coordinator)
+            # Check if migration just occurred - if so, use existing YAML instead of regenerating
+            storage_manager = StorageManager(hass, DOMAIN, integration_domain=DOMAIN)
+            await storage_manager.async_load()
+
+            # If sensor sets already exist (from migration), use them directly
+            if storage_manager.get_all_sensor_set_ids():
+                _LOGGER.info("Using existing sensor configuration from migration")
+            else:
+                # Fresh install - generate new configuration
+                storage_manager = await setup_synthetic_configuration(
+                    hass, config_entry, coordinator
+                )
             # Use simplified setup interface that handles everything
             sensor_manager = await setup_synthetic_sensors(
                 hass=hass,

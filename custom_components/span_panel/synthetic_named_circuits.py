@@ -23,9 +23,9 @@ from .helpers import (
     get_circuit_number,
     get_user_friendly_suffix,
 )
+from .migration_utils import classify_sensor_from_unique_id
 from .span_panel import SpanPanel
 from .synthetic_utils import BackingEntity, combine_yaml_templates
-from .migration_utils import classify_sensor_from_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,10 +72,10 @@ def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
 
 
 async def generate_named_circuit_sensors(
-    coordinator: SpanPanelCoordinator, 
-    span_panel: SpanPanel, 
+    coordinator: SpanPanelCoordinator,
+    span_panel: SpanPanel,
     device_name: str,
-    existing_sensor_mappings: dict[str, str] | None = None
+    existing_sensor_mappings: dict[str, str] | None = None,
 ) -> tuple[dict[str, Any], list[BackingEntity], dict[str, Any], dict[str, str]]:
     """Generate named circuit synthetic sensors and their backing entities.
 
@@ -144,22 +144,26 @@ async def generate_named_circuit_sensors(
             # Check if this sensor definition matches any existing sensor for this circuit
             sensor_unique_id = None
             entity_id = None
-            
+
             if existing_sensor_mappings:
                 for existing_unique_id, existing_entity_id in existing_sensor_mappings.items():
                     try:
-                        category, sensor_type, api_key = classify_sensor_from_unique_id(existing_unique_id)
+                        category, sensor_type, api_key = classify_sensor_from_unique_id(
+                            existing_unique_id
+                        )
                         # Check if this is a circuit sensor with matching API key and circuit ID
-                        if (category == 'circuit' and 
-                            api_key == sensor_def["key"] and 
-                            circuit_id in existing_unique_id):
+                        if (
+                            category == "circuit"
+                            and api_key == sensor_def["key"]
+                            and circuit_id in existing_unique_id
+                        ):
                             # Found matching existing sensor
                             sensor_unique_id = existing_unique_id
                             entity_id = existing_entity_id
                             break
                     except ValueError:
                         continue
-            
+
             # If no existing sensor found, generate new keys (new installation)
             if sensor_unique_id is None:
                 # Generate entity ID using appropriate synthetic helper based on number of tabs

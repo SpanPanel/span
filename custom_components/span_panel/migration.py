@@ -63,14 +63,16 @@ async def migrate_config_entry_to_synthetic_sensors(
         )
 
         # Classify existing sensors by category
-        panel_mappings, circuit_mappings, solar_mappings = group_existing_sensors_by_category(sensor_entities)
-        
+        panel_mappings, circuit_mappings, solar_mappings = group_existing_sensors_by_category(
+            sensor_entities
+        )
+
         _LOGGER.debug(
             "Classified sensors for device %s: %d panel, %d circuit, %d solar",
             device_identifier,
             len(panel_mappings),
-            len(circuit_mappings), 
-            len(solar_mappings)
+            len(circuit_mappings),
+            len(solar_mappings),
         )
 
         # Generate YAML configuration for this device using classified mappings
@@ -152,15 +154,15 @@ def generate_device_yaml_from_classified_entities(
     config_entry: ConfigEntry,
     device_identifier: str,
     panel_mappings: dict[str, str],
-    circuit_mappings: dict[str, str], 
+    circuit_mappings: dict[str, str],
     solar_mappings: dict[str, str],
 ) -> str:
     """Generate YAML configuration using classified sensor mappings."""
-    
+
     # For now, use the simple approach until we integrate with generation functions
     # This will be enhanced to call the actual generation functions
     sensor_configs = {}
-    
+
     # Add panel sensors
     for unique_id, entity_id in panel_mappings.items():
         sensor_configs[unique_id] = {
@@ -168,15 +170,15 @@ def generate_device_yaml_from_classified_entities(
             "name": entity_id.replace("sensor.", "").replace("_", " ").title(),
             "formula": "state",  # Simple pass-through for migration
         }
-    
-    # Add circuit sensors  
+
+    # Add circuit sensors
     for unique_id, entity_id in circuit_mappings.items():
         sensor_configs[unique_id] = {
             "entity_id": entity_id,
             "name": entity_id.replace("sensor.", "").replace("_", " ").title(),
             "formula": "state",  # Simple pass-through for migration
         }
-        
+
     # Add solar sensors
     for unique_id, entity_id in solar_mappings.items():
         sensor_configs[unique_id] = {
