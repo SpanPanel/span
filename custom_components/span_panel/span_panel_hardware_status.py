@@ -34,16 +34,11 @@ class SpanPanelHardwareStatus:
     @property
     def is_door_closed(self) -> bool | None:
         """Return whether the door is closed, or None if state is unknown."""
-        _LOGGER.debug("Door state raw value: %s", self.door_state)
         if self.door_state is None:
-            _LOGGER.debug("Door state is None")
             return None
         if self.door_state not in (SYSTEM_DOOR_STATE_OPEN, SYSTEM_DOOR_STATE_CLOSED):
-            _LOGGER.debug("Door state is not OPEN or CLOSED: %s", self.door_state)
             return None
-        result = self.door_state == SYSTEM_DOOR_STATE_CLOSED
-        _LOGGER.debug("is_door_closed returning: %s", result)
-        return result
+        return self.door_state == SYSTEM_DOOR_STATE_CLOSED
 
     @property
     def system_data(self) -> dict[str, Any]:

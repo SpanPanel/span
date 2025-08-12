@@ -4,18 +4,30 @@ from collections.abc import Callable
 import logging
 from typing import Any, Final
 
-from homeassistant.components.persistent_notification import async_create
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceNotFound
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api.exceptions import SpanPanelServerError
 
-from .const import COORDINATOR, DOMAIN, CircuitPriority
+from .const import (
+    COORDINATOR,
+    DOMAIN,
+    SIGNAL_STAGE_SELECTS,
+    USE_CIRCUIT_NUMBERS,
+    USE_DEVICE_PREFIX,
+    CircuitPriority,
+)
 from .coordinator import SpanPanelCoordinator
-from .helpers import construct_entity_id, get_user_friendly_suffix
+from .helpers import (
+    async_create_span_notification,
+    build_select_unique_id_for_entry,
+    get_user_friendly_suffix,
+)
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .util import panel_to_device_info
@@ -69,6 +81,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         description: SpanPanelSelectEntityDescriptionWrapper,
         circuit_id: str,
         name: str,
+        device_name: str,
     ) -> None:
         """Initialize the select."""
         super().__init__(coordinator)
@@ -85,13 +98,14 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self.entity_description = description.entity_description
         self.description_wrapper = description  # Keep reference to wrapper for custom functions
         self.id = circuit_id
+        self._device_name = device_name
 
-        self._attr_unique_id = f"span_{span_panel.status.serial_number}_select_{self.id}"
-        self._attr_device_info = panel_to_device_info(span_panel)
+        self._attr_unique_id = self._construct_select_unique_id(coordinator, span_panel, self.id)
+        self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
         entity_suffix = get_user_friendly_suffix(description.entity_description.key)
-        self.entity_id = construct_entity_id(  # type: ignore[assignment]
-            coordinator, span_panel, "select", name, circuit_number, entity_suffix
+        self.entity_id = self._construct_select_entity_id(  # type: ignore[assignment]
+            coordinator, name, circuit_number, entity_suffix
         )
 
         friendly_name = f"{name} {description.entity_description.name}"
@@ -102,10 +116,26 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)
 
-        _LOGGER.debug("CREATE SELECT %s with options: %s", self._attr_name, self._attr_options)
-
         # Store initial circuit name for change detection in auto-sync of names
         self._previous_circuit_name = name
+
+        # Subscribe to staged updates so selects run after switches. We schedule
+        # the update on the event loop to satisfy HA's thread-safety checks.
+        def _on_stage() -> None:
+            if self.hass is None:
+                return
+
+            def _run_on_loop() -> None:
+                circuit = self._get_circuit()
+                self._attr_options = self.description_wrapper.options_fn(circuit)
+                self._attr_current_option = self.description_wrapper.current_option_fn(circuit)
+                self.async_write_ha_state()
+
+            self.hass.loop.call_soon_threadsafe(_run_on_loop)
+
+        self._unsub_stage = async_dispatcher_connect(
+            coordinator.hass, SIGNAL_STAGE_SELECTS, _on_stage
+        )
 
     def _get_circuit(self) -> SpanPanelCircuit:
         """Get the circuit for this entity."""
@@ -126,7 +156,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
             await self.coordinator.async_request_refresh()
         except ServiceNotFound as snf:
             _LOGGER.warning("Service not found when setting priority: %s", snf)
-            async_create(
+            await async_create_span_notification(
                 self.hass,
                 message="The requested service is not available in the SPAN API.",
                 title="Service Not Found",
@@ -140,7 +170,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                 f"this operation."
             )
             _LOGGER.warning("SPAN API may not support setting priority")
-            async_create(
+            await async_create_span_notification(
                 self.hass,
                 message=warning_msg,
                 title="SPAN API Error",
@@ -180,6 +210,77 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_current_option = self.description_wrapper.current_option_fn(circuit)
         super()._handle_coordinator_update()
 
+    def _construct_select_unique_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        select_id: str,
+    ) -> str:
+        """Construct unique ID for select entities."""
+        return build_select_unique_id_for_entry(
+            coordinator, span_panel, select_id, self._device_name
+        )
+
+    def _construct_select_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        circuit_name: str,
+        circuit_number: int | str,
+        suffix: str,
+        unique_id: str | None = None,
+    ) -> str | None:
+        """Construct entity ID for select entities."""
+        # Check registry first only if unique_id is provided
+        if unique_id is not None:
+            entity_registry = er.async_get(coordinator.hass)
+            existing_entity_id = entity_registry.async_get_entity_id(
+                "select", "span_panel", unique_id
+            )
+
+            if existing_entity_id:
+                return existing_entity_id
+
+        # Construct default entity_id
+        config_entry = coordinator.config_entry
+
+        if not self._device_name:
+            return None
+
+        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
+        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+        # Build entity ID components
+        parts = []
+
+        if use_device_prefix:
+            parts.append(self._device_name.lower().replace(" ", "_"))
+
+        if use_circuit_numbers:
+            parts.append(f"circuit_{circuit_number}")
+        else:
+            circuit_name_slug = circuit_name.lower().replace(" ", "_")
+            parts.append(circuit_name_slug)
+
+        # Only add suffix if it's different from the last word in the circuit name
+        if suffix:
+            circuit_name_words = circuit_name.lower().split()
+            last_word = circuit_name_words[-1] if circuit_name_words else ""
+            last_word_normalized = last_word.replace(" ", "_")
+
+            if suffix != last_word_normalized:
+                parts.append(suffix)
+
+        entity_id = f"select.{'_'.join(parts)}"
+        return entity_id
+
+    def __del__(self) -> None:
+        """Ensure dispatcher subscription is released at GC time."""
+        try:
+            if hasattr(self, "_unsub_stage") and self._unsub_stage is not None:
+                self._unsub_stage()
+        except Exception as e:  # pragma: no cover – defensive
+            _LOGGER.debug("Failed to cleanup dispatcher subscription: %s", e)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -194,6 +295,9 @@ async def async_setup_entry(
     coordinator: SpanPanelCoordinator = data[COORDINATOR]
     span_panel: SpanPanel = coordinator.data
 
+    # Get device name from config entry data
+    device_name = config_entry.data.get("device_name", config_entry.title)
+
     entities: list[SpanPanelCircuitsSelect] = []
 
     for circuit_id, circuit_data in span_panel.circuits.items():
@@ -204,6 +308,7 @@ async def async_setup_entry(
                     CIRCUIT_PRIORITY_DESCRIPTION,
                     circuit_id,
                     circuit_data.name,
+                    device_name,
                 )
             )
 
