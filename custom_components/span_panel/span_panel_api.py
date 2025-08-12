@@ -1,11 +1,13 @@
 """Span Panel API - Updated to use span-panel-api package."""
 
 from copy import deepcopy
+from datetime import datetime
 import logging
+import os
 from typing import Any
 import uuid
 
-from span_panel_api import SpanPanelClient
+from span_panel_api import SpanPanelClient, set_async_delay_func
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -44,38 +46,36 @@ class SpanPanelApi:
         options: Options | None = None,
         use_ssl: bool = False,
         scan_interval: int | None = None,
+        simulation_mode: bool = False,
+        simulation_config_path: str | None = None,
+        simulation_start_time: datetime | None = None,
     ) -> None:
         """Initialize the Span Panel API."""
-        self.host: str = host.lower()
+        # For simulation mode, keep the original host (which should be the serial number)
+        # For real hardware, normalize to lowercase
+        self.host: str = host if simulation_mode else host.lower()
         self.access_token: str | None = access_token
         self.options: Options | None = options
         self.scan_interval: int = scan_interval or 15  # Default to 15 seconds
         self.use_ssl: bool = use_ssl
+        self.simulation_mode: bool = simulation_mode
+        self.simulation_config_path: str | None = simulation_config_path
+        self.simulation_start_time: datetime | None = simulation_start_time
         self._authenticated = False
 
+        # Store client parameters for lazy initialization
         # Get retry configuration from options or use defaults
         if options:
-            retries = options.api_retries
-            retry_timeout = options.api_retry_timeout
-            retry_backoff_multiplier = options.api_retry_backoff_multiplier
+            self._retries = options.api_retries
+            self._retry_timeout = options.api_retry_timeout
+            self._retry_backoff_multiplier = options.api_retry_backoff_multiplier
         else:
-            retries = DEFAULT_API_RETRIES
-            retry_timeout = DEFAULT_API_RETRY_TIMEOUT
-            retry_backoff_multiplier = DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
+            self._retries = DEFAULT_API_RETRIES
+            self._retry_timeout = DEFAULT_API_RETRY_TIMEOUT
+            self._retry_backoff_multiplier = DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
 
-        # Let the library use default ports instead of hardcoding
-        self._client: SpanPanelClient | None = SpanPanelClient(
-            host=self.host,
-            timeout=API_TIMEOUT,
-            use_ssl=use_ssl,
-            retries=retries,
-            retry_timeout=retry_timeout,
-            retry_backoff_multiplier=retry_backoff_multiplier,
-            cache_window=self._calculate_cache_window(),
-        )
-        if self.access_token:
-            self._client.set_access_token(self.access_token)
-            self._authenticated = True
+        # Initialize client as None - will be created in setup()
+        self._client: SpanPanelClient | None = None
 
     def _calculate_cache_window(self) -> float:
         """Calculate optimal cache window based on polling interval.
@@ -94,14 +94,72 @@ class SpanPanelApi:
         # Ensure minimum 1 second cache window
         return max(cache_window, 1.0)
 
+    def _create_client(self) -> None:
+        """Create the SpanPanelClient with stored parameters."""
+        _LOGGER.debug("[SpanPanelApi] Creating SpanPanelClient for host=%s", self.host)
+
+        # Determine simulation config path if in simulation mode
+        config_path = None
+        if self.simulation_mode:
+            if self.simulation_config_path:
+                config_path = self.simulation_config_path
+            else:
+                # Use default 32-circuit config relative to this file
+                current_dir = os.path.dirname(__file__)
+                config_path = os.path.join(
+                    current_dir, "simulation_configs", "simulation_config_32_circuit.yaml"
+                )
+                _LOGGER.debug("[SpanPanelApi] Using default simulation config: %s", config_path)
+
+        # Create client with appropriate parameters based on mode
+        if self.simulation_mode:
+            # Convert datetime to ISO format string if provided
+            simulation_start_time_str = None
+            if self.simulation_start_time:
+                simulation_start_time_str = self.simulation_start_time.isoformat()
+
+            self._client = SpanPanelClient(
+                host=self.host,
+                timeout=API_TIMEOUT,
+                use_ssl=self.use_ssl,
+                retries=self._retries,
+                retry_timeout=self._retry_timeout,
+                retry_backoff_multiplier=self._retry_backoff_multiplier,
+                cache_window=self._calculate_cache_window(),
+                simulation_mode=self.simulation_mode,
+                simulation_config_path=config_path,
+                simulation_start_time=simulation_start_time_str,
+            )
+        else:
+            # For live panels, don't pass simulation parameters
+            self._client = SpanPanelClient(
+                host=self.host,
+                timeout=API_TIMEOUT,
+                use_ssl=self.use_ssl,
+                retries=self._retries,
+                retry_timeout=self._retry_timeout,
+                retry_backoff_multiplier=self._retry_backoff_multiplier,
+                cache_window=self._calculate_cache_window(),
+            )
+        if self.access_token:
+            self._client.set_access_token(self.access_token)
+            # Mark as authenticated since we have a token - avoid unnecessary re-auth
+            self._authenticated = True
+
     def _ensure_client_open(self) -> None:
-        # Check if client was explicitly closed
-        if self._client is None:
+        # Check if client was explicitly closed (None and we've tried to create it before)
+        if self._client is None and hasattr(self, "_client_created"):
             _LOGGER.debug(
                 "[SpanPanelApi] Client was closed, cannot recreate after explicit close for host=%s",
                 self.host,
             )
             raise SpanPanelAPIError("API client has been closed")
+
+        # Create client if it doesn't exist yet
+        if self._client is None:
+            self._create_client()
+            self._client_created = True
+            return
 
         client_obj = getattr(self._client, "_client", None)
         if client_obj is not None and getattr(client_obj, "is_closed", False):
@@ -110,29 +168,7 @@ class SpanPanelApi:
                 self.host,
                 self.use_ssl,
             )
-
-            # Get retry configuration from options or use defaults
-            if self.options:
-                retries = self.options.api_retries
-                retry_timeout = self.options.api_retry_timeout
-                retry_backoff_multiplier = self.options.api_retry_backoff_multiplier
-            else:
-                retries = DEFAULT_API_RETRIES
-                retry_timeout = DEFAULT_API_RETRY_TIMEOUT
-                retry_backoff_multiplier = DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
-
-            # Let the library use default ports instead of hardcoding
-            self._client = SpanPanelClient(
-                host=self.host,
-                timeout=API_TIMEOUT,
-                use_ssl=self.use_ssl,
-                retries=retries,
-                retry_timeout=retry_timeout,
-                retry_backoff_multiplier=retry_backoff_multiplier,
-                cache_window=self._calculate_cache_window(),
-            )
-            if self.access_token:
-                self._client.set_access_token(self.access_token)
+            self._create_client()
 
     def _debug_check_client(self, method_name: str) -> None:
         # Check if the client is in a closed or invalid state
@@ -143,20 +179,11 @@ class SpanPanelApi:
             )
             return
 
-        in_context = getattr(self._client, "_in_context", None)
         client_obj = getattr(self._client, "_client", None)
         is_closed = False
         if client_obj is not None:
             # httpx.AsyncClient has a .is_closed property
             is_closed = getattr(client_obj, "is_closed", False)
-        _LOGGER.debug(
-            "[SpanPanelApi] %s: _client=%s, _in_context=%s, client_obj=%s, is_closed=%s",
-            method_name,
-            type(self._client).__name__,
-            in_context,
-            type(client_obj).__name__ if client_obj else None,
-            is_closed,
-        )
         if is_closed:
             _LOGGER.error(
                 "[SpanPanelApi] Attempting to use a closed client in %s! This will cause runtime errors.",
@@ -166,12 +193,18 @@ class SpanPanelApi:
     async def setup(self) -> None:
         """Initialize the API client (Long-Lived Pattern setup)."""
         _LOGGER.debug("[SpanPanelApi] Setting up API client for host=%s", self.host)
+
+        # Create the client first
+        if self._client is None:
+            self._create_client()
+            self._client_created = True
+
         try:
             # If we have a token, verify it works
             if self.access_token:
                 _LOGGER.debug("[SpanPanelApi] Testing existing access token")
                 await self.get_panel_data()  # Test authenticated endpoint
-                self._authenticated = True
+                # _authenticated should already be True from _create_client
                 _LOGGER.debug("[SpanPanelApi] Existing access token is valid")
             else:
                 _LOGGER.debug("[SpanPanelApi] No access token provided during setup")
@@ -233,6 +266,10 @@ class SpanPanelApi:
             SpanPanelTimeoutError,
             SpanPanelReturnedEmptyData,
         ):
+            return False
+        except Exception as e:
+            # Catch any other authentication-related errors from span-panel-api
+            _LOGGER.warning("Unexpected error during authentication test: %s", e)
             return False
 
     async def get_access_token(self) -> str:
@@ -341,8 +378,14 @@ class SpanPanelApi:
             circuits_data: dict[str, SpanPanelCircuit] = {}
             for circuit_id, raw_circuit_data in raw_circuits_data.items():
                 # Convert attrs model to dict
-                circuit_dict = raw_circuit_data.to_dict()  # type: ignore[attr-defined]
-                circuits_data[circuit_id] = SpanPanelCircuit.from_dict(circuit_dict)
+                try:
+                    circuit_dict = raw_circuit_data.to_dict()  # type: ignore[attr-defined]
+                    circuits_data[circuit_id] = SpanPanelCircuit.from_dict(circuit_dict)
+                except Exception as e:
+                    if circuit_id.startswith("unmapped_tab_"):
+                        _LOGGER.error("Failed to convert unmapped circuit %s: %s", circuit_id, e)
+                    raise
+
             return circuits_data
 
         except SpanPanelRetriableError as e:
@@ -471,3 +514,10 @@ class SpanPanelApi:
             finally:
                 # Reset client reference to prevent further use
                 self._client = None
+
+
+# Re-export items that are imported by __init__.py
+# Options is already imported above, SpanPanelAuthError comes from span_panel_api package
+
+# Export list for this module
+__all__ = ["SpanPanelApi", "Options", "SpanPanelAuthError", "set_async_delay_func"]

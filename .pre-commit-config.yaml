@@ -39,10 +39,10 @@ repos:
     rev: v0.11.13
     hooks:
       - id: ruff-format
-        exclude: 'scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
       - id: ruff-check
         args: ['--fix']
-        exclude: 'scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
+        exclude: '^tests/.*|scripts/.*|\..*_cache/.*|dist/.*|venv/.*'
 
   # MyPy for type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -56,6 +56,7 @@ repos:
           - pytest
           - homeassistant-stubs
           - types-PyYAML
+          - types-aiofiles
         args: ['--config-file=pyproject.toml']
         exclude: '^tests/.*|^scripts/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
 
@@ -65,7 +66,19 @@ repos:
     hooks:
       - id: markdownlint-cli2
         args: ['--config', '.markdownlint-cli2.jsonc']
-        exclude: '\..*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*'
+        exclude: '\..*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*|tests/.*'
+
+  # Markdown formatting using shared script
+  - repo: local
+    hooks:
+      - id: markdown-format
+        name: Format markdown files
+        entry: /Users/bflood/projects/scripts/fix-markdown.sh
+        language: system
+        args: [.]
+        types: [markdown]
+        pass_filenames: false
+        always_run: true
 
   # Check for common security issues
   - repo: https://github.com/PyCQA/bandit

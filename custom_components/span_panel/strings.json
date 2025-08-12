@@ -7,6 +7,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
+      "host_required": "Host is required for non-simulator mode",
       "invalid_auth": "Invalid authentication",
       "unknown": "Unexpected error"
     },
@@ -18,8 +19,14 @@
       },
       "user": {
         "data": {
-          "host": "Host"
+          "host": "Host",
+          "simulator_mode": "Simulator Mode"
         },
+        "data_description": {
+          "host": "IP address or hostname of SPAN Panel (required for real hardware, optional for simulation mode)",
+          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled."
+        },
+        "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and the host field becomes optional.",
         "title": "Connect to the Span Panel"
       },
       "choose_auth_type": {
@@ -39,29 +46,80 @@
         "data": {
           "access_token": "Access Token"
         }
+      },
+      "simulator_config": {
+        "title": "Simulator Configuration",
+        "description": "Select a simulation configuration and optionally set a custom start time. {config_count} configurations available.",
+        "data": {
+          "simulation_config": "Simulation Configuration",
+          "host": "Host (Serial Number)",
+          "simulation_start_time": "Simulation Start Time (Optional)"
+        },
+        "data_description": {
+          "simulation_config": "Choose a simulation configuration that defines circuit templates and energy profiles",
+          "host": "Custom serial number for the simulated panel (optional, will use config default if empty)",
+          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time."
+        }
       }
     }
   },
   "options": {
+    "error": {
+      "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.": "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.",
+      "Solar legs cannot use the same tab ({tab}). Two different tabs are required for 240V measurement.": "Solar legs cannot use the same tab. Two different tabs are required for 240V measurement.",
+      "Tab {tab} is not available or is already mapped to a circuit.": "Selected tab is not available or is already mapped to a circuit.",
+      "Solar tabs {tab1} and {tab2} are both on {phase}. For proper 240V measurement, tabs must be on opposite phases.": "Selected solar tabs are both on the same electrical phase. For proper 240V measurement, tabs must be on opposite phases (L1 and L2).",
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Invalid time format. Use HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS)",
+      "directory": "Directory path is required",
+      "base": "Export failed: {error}"
+    },
     "step": {
       "init": {
         "title": "Options Menu",
         "menu_options": {
           "general_options": "General Options",
-          "entity_naming": "Entity Naming Pattern"
+          "entity_naming": "Entity Naming Pattern",
+          "export_config": "Export Synthetic Sensor Config",
+          "simulation_options": "Simulation Options"
         }
       },
       "general_options": {
         "title": "General Options",
+        "description": "Configure SPAN Panel integration settings. For solar configuration, select two unmapped tabs that are on opposite electrical phases (L1 and L2) to ensure proper 240V measurement.",
         "data": {
           "scan_interval": "Scan interval in seconds",
           "enable_battery_percentage": "Enable Battery Percentage Sensor",
           "enable_solar_circuit": "Enable Solar Inverter Sensors",
-          "leg1": "Solar Leg 1 (0 is not used)",
-          "leg2": "Solar Leg 2 (0 is not used)",
+          "leg1": "Solar Leg 1 (must be unmapped tab on opposite phase from Leg 2)",
+          "leg2": "Solar Leg 2 (must be unmapped tab on opposite phase from Leg 1)",
           "api_retries": "API Retries (0-10)",
           "api_retry_timeout": "API Retry Timeout (seconds)",
           "api_retry_backoff_multiplier": "API Retry Backoff Multiplier"
+        },
+        "data_description": {
+          "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
+          "leg1": "Select the first solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 2 for proper 240V measurement.",
+          "leg2": "Select the second solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 1 for proper 240V measurement."
+        }
+      },
+      "simulation_options": {
+        "title": "Simulation Options",
+        "description": "Configure simulation-specific settings. Changes to simulation time will reload the integration to apply the new time.",
+        "data": {
+          "simulation_start_time": "Simulation Start Time"
+        },
+        "data_description": {
+          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time. Integration will reload to apply changes."
+        }
+      },
+      "export_config": {
+        "title": "Export Synthetic Sensor Config",
+        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: '{filename}'",
+        "data": {
+          "directory": "File Path"
+        },
+        "data_description": {
+          "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
         }
       },
       "entity_naming": {
