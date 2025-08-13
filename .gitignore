@@ -19,6 +19,7 @@ env/
 # Coverage files
 .coverage
 .coverage.*
+.local_coverage_data
 htmlcov/
 .pytest_cache/
 docs/agile-readme.md
