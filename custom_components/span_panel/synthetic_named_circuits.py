@@ -138,16 +138,14 @@ async def generate_named_circuit_sensors(
     global_settings: dict[str, Any] = {}
     sensor_to_backing_mapping: dict[str, str] = {}
 
-    # Get display precision from options
-    if coordinator is not None:
-        power_precision = coordinator.config_entry.options.get("power_display_precision", 0)
-        energy_precision = coordinator.config_entry.options.get("energy_display_precision", 2)
-        is_simulator: bool = bool(coordinator.config_entry.data.get("simulation_mode", False))
-    else:
-        # During migration, use defaults
-        power_precision = 0
-        energy_precision = 2
-        is_simulator = False
+    # Get display precision from options - coordinator should always be available during YAML generation
+    if coordinator is None:
+        raise ValueError("Coordinator is required for YAML generation but was None")
+    
+    power_precision = coordinator.config_entry.options.get("power_display_precision", 0)
+    energy_precision = coordinator.config_entry.options.get("energy_display_precision", 2)
+    is_simulator: bool = bool(coordinator.config_entry.data.get("simulation_mode", False))
+
     if span_panel is not None:
         device_identifier_for_uniques: str = (
             slugify(device_name)
@@ -155,18 +153,13 @@ async def generate_named_circuit_sensors(
             else span_panel.status.serial_number
         )
     else:
-        # During migration, device identifier is already provided via device_name
-        # which is actually the device identifier passed from migration
-        device_identifier_for_uniques = device_name
+        # This should only happen during migration step (no coordinator), but we shouldn't be generating YAML then
+        raise ValueError("span_panel is None during YAML generation - coordinator should provide live data")
 
     # Create common placeholders for header template
-    if coordinator is not None:
-        energy_grace_period = coordinator.config_entry.options.get(
-            "energy_reporting_grace_period", 15
-        )
-    else:
-        # During migration, use default
-        energy_grace_period = 15
+    energy_grace_period = coordinator.config_entry.options.get(
+        "energy_reporting_grace_period", 15
+    )
 
     common_placeholders = {
         "device_identifier": device_identifier_for_uniques,
@@ -177,36 +170,15 @@ async def generate_named_circuit_sensors(
     }
 
     # Filter to only normal named circuits (not unmapped)
-    if span_panel is not None:
-        named_circuits = {
-            circuit_id: circuit_data
-            for circuit_id, circuit_data in span_panel.circuits.items()
-            if not circuit_id.startswith("unmapped_tab_")
-        }
-    else:
-        # During migration, we don't generate new circuits
-        # We only preserve existing sensor mappings
-        named_circuits = {}
+    named_circuits = {
+        circuit_id: circuit_data
+        for circuit_id, circuit_data in span_panel.circuits.items()
+        if not circuit_id.startswith("unmapped_tab_")
+    }
 
-    # During migration with existing_sensor_mappings, we process those mappings
-    # For fresh installs, we need circuits data
-    if not named_circuits and not existing_sensor_mappings:
-        _LOGGER.warning("GENERATE_NAMED_CIRCUITS: No named circuits found to process!")
-        return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
-
-    # During migration, if we have existing mappings but no circuits,
-    # just preserve the mappings without generating new configs
-    if existing_sensor_mappings and not named_circuits:
-        _LOGGER.info(
-            "MIGRATION: Processing %d existing sensor mappings without circuit data",
-            len(existing_sensor_mappings),
-        )
-        # Return the existing mappings as sensor configs
-        for unique_id, existing_entity_id in existing_sensor_mappings.items():
-            sensor_configs[unique_id] = {"entity_id": existing_entity_id}
-        return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
-
-    # migration_mode provided by caller
+    # For fresh installs or normal boot after migration, we need circuits data
+    if not named_circuits:
+        raise ValueError(f"No named circuits found to process (span_panel available: {span_panel is not None}). Cannot generate synthetic sensors without circuit data.")
 
     for circuit_id, circuit_data in named_circuits.items():
         for sensor_def in NAMED_CIRCUIT_SENSOR_DEFINITIONS:
