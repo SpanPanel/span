@@ -67,10 +67,18 @@ _LOGGER.debug("SPAN PANEL MODULE LOADED! Version: %s", CURRENT_CONFIG_VERSION)
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate config entry for synthetic sensor YAML generation."""
-    _LOGGER.error("MIGRATION FUNCTION CALLED! Entry ID: %s, Version: %s, Target: %s", 
-                  config_entry.entry_id, config_entry.version, CURRENT_CONFIG_VERSION)
-    _LOGGER.info("MIGRATION CHECK: Config entry %s version %s, current target version %s", 
-                 config_entry.entry_id, config_entry.version, CURRENT_CONFIG_VERSION)
+    _LOGGER.error(
+        "MIGRATION FUNCTION CALLED! Entry ID: %s, Version: %s, Target: %s",
+        config_entry.entry_id,
+        config_entry.version,
+        CURRENT_CONFIG_VERSION,
+    )
+    _LOGGER.info(
+        "MIGRATION CHECK: Config entry %s version %s, current target version %s",
+        config_entry.entry_id,
+        config_entry.version,
+        CURRENT_CONFIG_VERSION,
+    )
 
     if config_entry.version < CURRENT_CONFIG_VERSION:
         _LOGGER.debug(
