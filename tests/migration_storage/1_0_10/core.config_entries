@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "minor_version": 5,
+  "key": "core.config_entries",
+  "data": {
+    "entries": [
+      {"created_at":"2025-08-13T18:33:25.522226+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"sun","entry_id":"01K2JBAPRJGMHHG5E8GW97HFKG","minor_version":1,"modified_at":"2025-08-13T18:33:25.522229+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"import","subentries":[],"title":"Sun","unique_id":null,"version":1},
+      {"created_at":"2025-08-13T18:33:27.274139+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"hassio","entry_id":"01K2JBARFARWNFC92NKX1158S6","minor_version":1,"modified_at":"2025-08-13T18:33:27.274142+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"system","subentries":[],"title":"Supervisor","unique_id":null,"version":1},
+      {"created_at":"2025-08-13T18:33:28.394102+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"backup","entry_id":"01K2JBASJA50R982BKFZB254V1","minor_version":1,"modified_at":"2025-08-13T18:33:28.394105+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"system","subentries":[],"title":"Backup","unique_id":null,"version":1},
+      {"created_at":"2025-08-13T18:34:38.137465+00:00","data":{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJob21lLWFzc2lzdGFudC1qYXZhNjU2NTY1NjY1IiwiaWF0IjoxNzA2OTA4OTEwfQ.nMbv3zkNTm4l8BIvhOQy1xTU6lP2FpKGNEQFnZ2QCT4","host":"192.168.65.71"},"disabled_by":null,"discovery_keys":{"zeroconf":[{"domain":"zeroconf","key":["_span._tcp.local.","span-nj-2316-005k6._span._tcp.local."],"version":1}]},"domain":"span_panel","entry_id":"01K2JBCXNSB9Q489RMG3XTMTJE","minor_version":1,"modified_at":"2025-08-13T18:47:05.191863+00:00","options":{"enable_battery_percentage":true,"enable_solar_circuit":true,"leg1":30,"leg2":32,"scan_interval":15,"use_circuit_numbers":true,"use_device_prefix":true},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"zeroconf","subentries":[],"title":"nj-2316-005k6","unique_id":"nj-2316-005k6","version":1}
+    ]
+  }
+}
