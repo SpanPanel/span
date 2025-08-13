@@ -40,7 +40,6 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
-    construct_backing_entity_id_for_entry,
     construct_circuit_unique_id_for_entry,
     construct_panel_entity_id,
     construct_panel_friendly_name,
@@ -67,7 +66,11 @@ from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
-from .synthetic_sensors import find_synthetic_coordinator_for
+from .synthetic_sensors import (
+    SyntheticSensorCoordinator,
+    _synthetic_coordinators,
+    find_synthetic_coordinator_for,
+)
 from .util import panel_to_device_info
 
 ICON = "mdi:flash"
@@ -601,12 +604,10 @@ async def async_setup_entry(
                 )
                 # For migration, we still need to create the SyntheticSensorCoordinator
                 # even though we're not generating new configuration
-                from .synthetic_sensors import SyntheticSensorCoordinator, _synthetic_coordinators
-                
                 device_name = config_entry.data.get("device_name", config_entry.title)
                 synthetic_coord = SyntheticSensorCoordinator(hass, coordinator, device_name)
                 _synthetic_coordinators[config_entry.entry_id] = synthetic_coord
-                
+
                 # Determine the correct sensor_set_id for THIS entry and ensure it exists
                 current_identifier = get_device_identifier_for_entry(
                     coordinator, coordinator.data, device_name
@@ -620,6 +621,8 @@ async def async_setup_entry(
                     storage_manager = await setup_synthetic_configuration(
                         hass, config_entry, coordinator
                     )
+                # Initialize the synthetic coordinator configuration so backing metadata is populated
+                await synthetic_coord.setup_configuration(config_entry)
                 # Prime the coordinator so downstream setup uses the correct set
                 synthetic_coord.sensor_set_id = current_sensor_set_id
                 synthetic_coord.device_identifier = current_identifier

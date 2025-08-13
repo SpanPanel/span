@@ -20,8 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def reconstruct_sensor_to_backing_mapping(
-    device_identifier: str,
-    sensor_mappings: dict[str, str]
+    device_identifier: str, sensor_mappings: dict[str, str]
 ) -> dict[str, str]:
     """Reconstruct sensor-to-backing entity ID mapping from existing sensors.
 
@@ -40,7 +39,6 @@ def reconstruct_sensor_to_backing_mapping(
         "mainMeterEnergy.consumedEnergyWh": "main_meter_consumed_energy",
         "feedthroughEnergy.producedEnergyWh": "feed_through_produced_energy",
         "feedthroughEnergy.consumedEnergyWh": "feed_through_consumed_energy",
-
         # Circuit sensors - old raw API fields
         "instantPowerW": "power",
         "producedEnergyWh": "energy_produced",
@@ -58,8 +56,11 @@ def reconstruct_sensor_to_backing_mapping(
 
         # Check if this is the expected device
         if parts[1] != device_identifier:
-            _LOGGER.warning("Unexpected device identifier in unique_id: %s (expected %s)",
-                          parts[1], device_identifier)
+            _LOGGER.warning(
+                "Unexpected device identifier in unique_id: %s (expected %s)",
+                parts[1],
+                device_identifier,
+            )
             continue
 
         # Remaining part after device_id
@@ -82,7 +83,7 @@ def reconstruct_sensor_to_backing_mapping(
             last_underscore = remainder.rfind("_")
             if last_underscore > 0:
                 potential_circuit_id = remainder[:last_underscore]
-                potential_api_field = remainder[last_underscore + 1:]
+                potential_api_field = remainder[last_underscore + 1 :]
 
                 # Validate it's a known API field
                 if potential_api_field in api_to_backing_suffix:
@@ -100,7 +101,9 @@ def reconstruct_sensor_to_backing_mapping(
             continue
 
         # Construct backing entity ID
-        backing_entity_id = f"sensor.span_{device_identifier.lower()}_{circuit_id}_backing_{backing_suffix}"
+        backing_entity_id = (
+            f"sensor.span_{device_identifier.lower()}_{circuit_id}_backing_{backing_suffix}"
+        )
 
         # Add to mapping
         mapping[unique_id] = backing_entity_id
@@ -131,12 +134,16 @@ async def migrate_config_entry_to_synthetic_sensors(
         entity_registry = er.async_get(hass)
         entities = er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
 
-        _LOGGER.info("MIGRATION DEBUG: Found %d total entities for config entry %s",
-                     len(entities), config_entry.entry_id)
+        _LOGGER.info(
+            "MIGRATION DEBUG: Found %d total entities for config entry %s",
+            len(entities),
+            config_entry.entry_id,
+        )
 
         # Extract device identifier from config entry unique_id (migration only deals with real panels)
         # During migration, coordinator hasn't been set up yet, so we use config entry data
-        device_identifier: str = config_entry.unique_id
+        device_identifier_raw = config_entry.unique_id
+        device_identifier: str = device_identifier_raw if device_identifier_raw is not None else ""
         device_name = config_entry.title
 
         _LOGGER.info("MIGRATION DEBUG: Config entry: %s", config_entry.entry_id)
@@ -239,8 +246,10 @@ async def migrate_config_entry_to_synthetic_sensors(
             device_identifier, all_mappings
         )
 
-        _LOGGER.info("Reconstructed %d sensor-to-backing mappings for migration",
-                     len(sensor_to_backing_mapping))
+        _LOGGER.info(
+            "Reconstructed %d sensor-to-backing mappings for migration",
+            len(sensor_to_backing_mapping),
+        )
 
         # Store the mapping in hass.data for sensor setup to retrieve
         # This is temporary storage that sensor.py will consume
@@ -249,7 +258,9 @@ async def migrate_config_entry_to_synthetic_sensors(
         if config_entry.entry_id not in hass.data[DOMAIN]:
             hass.data[DOMAIN][config_entry.entry_id] = {}
 
-        hass.data[DOMAIN][config_entry.entry_id]["migration_sensor_to_backing_mapping"] = sensor_to_backing_mapping
+        hass.data[DOMAIN][config_entry.entry_id]["migration_sensor_to_backing_mapping"] = (
+            sensor_to_backing_mapping
+        )
 
         return True
 

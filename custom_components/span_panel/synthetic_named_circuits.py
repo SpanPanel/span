@@ -71,6 +71,43 @@ def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
         return 0.0
 
 
+def _match_existing_mapping(
+    mappings: dict[str, str] | None, sensor_key: str, circuit: Any
+) -> tuple[str | None, str | None]:
+    """Try to match an existing mapping for this circuit and sensor key.
+
+    Returns (sensor_unique_id, entity_id) if a match is found, otherwise (None, None).
+    """
+    if not mappings:
+        return None, None
+    for existing_unique_id, existing_entity_id in mappings.items():
+        try:
+            category, sensor_type, api_key = classify_sensor_from_unique_id(existing_unique_id)
+            if category != "generic" or api_key != sensor_key:
+                continue
+            # For circuit sensors, verify circuit number matches
+            if "_circuit_" in existing_entity_id:
+                try:
+                    parts = existing_entity_id.split("_circuit_")
+                    if len(parts) > 1:
+                        number_part = parts[1].split("_")[0]
+                        circuit_number_from_entity = int(number_part)
+                        current_circuit_number = get_circuit_number(circuit)
+                        if circuit_number_from_entity != current_circuit_number:
+                            continue
+                except (ValueError, IndexError):
+                    continue
+            elif "_circuit_" not in existing_entity_id:
+                # Panel-level sensor (no circuit number) - match by API key only
+                pass
+            else:
+                continue
+            return existing_unique_id, existing_entity_id
+        except ValueError:
+            continue
+    return None, None
+
+
 async def generate_named_circuit_sensors(
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
@@ -122,11 +159,13 @@ async def generate_named_circuit_sensors(
 
     # Create common placeholders for header template
     if coordinator is not None:
-        energy_grace_period = coordinator.config_entry.options.get("energy_reporting_grace_period", 15)
+        energy_grace_period = coordinator.config_entry.options.get(
+            "energy_reporting_grace_period", 15
+        )
     else:
         # During migration, use default
         energy_grace_period = 15
-        
+
     common_placeholders = {
         "device_identifier": device_identifier_for_uniques,
         "panel_id": device_identifier_for_uniques,
@@ -152,15 +191,17 @@ async def generate_named_circuit_sensors(
     if not named_circuits and not existing_sensor_mappings:
         _LOGGER.warning("GENERATE_NAMED_CIRCUITS: No named circuits found to process!")
         return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
-    
+
     # During migration, if we have existing mappings but no circuits,
     # just preserve the mappings without generating new configs
     if existing_sensor_mappings and not named_circuits:
-        _LOGGER.info("MIGRATION: Processing %d existing sensor mappings without circuit data", 
-                     len(existing_sensor_mappings))
+        _LOGGER.info(
+            "MIGRATION: Processing %d existing sensor mappings without circuit data",
+            len(existing_sensor_mappings),
+        )
         # Return the existing mappings as sensor configs
-        for unique_id, entity_id in existing_sensor_mappings.items():
-            sensor_configs[unique_id] = {"entity_id": entity_id}
+        for unique_id, existing_entity_id in existing_sensor_mappings.items():
+            sensor_configs[unique_id] = {"entity_id": existing_entity_id}
         return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
 
     for circuit_id, circuit_data in named_circuits.items():
@@ -170,67 +211,36 @@ async def generate_named_circuit_sensors(
             circuit_name = circuit_data.name or f"Circuit {circuit_number}"
 
             # Check if this sensor definition matches any existing sensor for this circuit
-            sensor_unique_id = None
-            entity_id = None
+            sensor_unique_id: str | None = None
+            entity_id: str | None = None
 
-            if existing_sensor_mappings:
-                # For migration: just check if any existing sensor matches the current sensor definition
-                # by API key. We preserve the EXACT unique_id and entity_id from registry.
-                for existing_unique_id, existing_entity_id in existing_sensor_mappings.items():
-                    try:
-                        category, sensor_type, api_key = classify_sensor_from_unique_id(
-                            existing_unique_id
-                        )
-                        # Check if this is a circuit sensor with matching API key
-                        if (
-                            category == "generic"  # Migration classifies all non-solar as generic
-                            and api_key == sensor_def["key"]
-                        ):
-                            # Match circuit by number extracted from entity_id for circuit sensors
-                            if "_circuit_" in existing_entity_id:
-                                try:
-                                    # Extract circuit number from entity_id like "sensor.span_panel_circuit_16_power"
-                                    parts = existing_entity_id.split("_circuit_")
-                                    if len(parts) > 1:
-                                        # Get the number part after "_circuit_"
-                                        number_part = parts[1].split("_")[0]
-                                        circuit_number_from_entity = int(number_part)
-                                        current_circuit_number = get_circuit_number(circuit_data)
-                                        if circuit_number_from_entity != current_circuit_number:
-                                            continue  # Wrong circuit
-                                except (ValueError, IndexError):
-                                    continue
-                            elif "_circuit_" not in existing_entity_id:
-                                # Panel-level sensor (no circuit number) - match by API key only
-                                pass
-                            else:
-                                continue  # Skip if we can't determine the matching logic
-                            
-                            # Found matching existing sensor - use EXACT unique_id and entity_id
-                            _LOGGER.info(
-                                "MIGRATION: Using existing entity %s (unique_id: %s) for sensor key %s", 
-                                existing_entity_id, existing_unique_id, sensor_def["key"]
-                            )
-                            sensor_unique_id = existing_unique_id  # Use EXACT existing unique_id as sensor key
-                            entity_id = existing_entity_id  # Use EXACT existing entity_id
-                            break
-                    except ValueError:
-                        continue
+            match_uid, match_entity = _match_existing_mapping(
+                existing_sensor_mappings, sensor_def["key"], circuit_data
+            )
+            if match_uid and match_entity:
+                _LOGGER.info(
+                    "MIGRATION: Using existing entity %s (unique_id: %s) for sensor key %s",
+                    match_entity,
+                    match_uid,
+                    sensor_def["key"],
+                )
+                sensor_unique_id = match_uid
+                entity_id = match_entity
 
             # If no existing sensor found, generate new keys (new installation)
             if sensor_unique_id is None:
                 if existing_sensor_mappings:
                     _LOGGER.info(
-                        "MIGRATION: No existing entity found for circuit %s, key %s. Generating new entity ID.", 
-                        circuit_id, sensor_def["key"]
+                        "MIGRATION: No existing entity found for circuit %s, key %s. Generating new entity ID.",
+                        circuit_id,
+                        sensor_def["key"],
                     )
                 # Generate entity ID using appropriate synthetic helper based on number of tabs
                 entity_suffix = get_user_friendly_suffix(sensor_def["key"])
 
                 # Check the number of tabs to determine which helper to use
                 if len(circuit_data.tabs) == 2:
-                    # 240V circuit - use 240V synthetic helper
-                    entity_id = construct_240v_synthetic_entity_id(
+                    tmp_eid = construct_240v_synthetic_entity_id(
                         coordinator=coordinator,
                         span_panel=span_panel,
                         platform="sensor",
@@ -241,8 +251,7 @@ async def generate_named_circuit_sensors(
                         unique_id=None,
                     )
                 elif len(circuit_data.tabs) == 1:
-                    # 120V circuit - use 120V synthetic helper
-                    entity_id = construct_120v_synthetic_entity_id(
+                    tmp_eid = construct_120v_synthetic_entity_id(
                         coordinator=coordinator,
                         span_panel=span_panel,
                         platform="sensor",
@@ -252,16 +261,16 @@ async def generate_named_circuit_sensors(
                         unique_id=None,
                     )
                 else:
-                    # Invalid number of tabs for US electrical system
                     raise ValueError(
                         f"Circuit {circuit_id} ({circuit_name}) has {len(circuit_data.tabs)} tabs. "
                         f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
                         f"Tabs: {circuit_data.tabs}"
                     )
+                if tmp_eid is None:
+                    raise ValueError("Failed to build entity_id for circuit sensor")
+                entity_id = tmp_eid
 
                 # Generate unique ID for synthetic sensor following documented pattern
-                # Pattern: span_{serial}_{circuit_id}_{sensor_key} where sensor_key is descriptive
-                # Use circuit ID and entity suffix to ensure uniqueness across circuits
                 sensor_name = f"{circuit_id}_{entity_suffix}"
                 sensor_unique_id = construct_synthetic_unique_id(
                     device_identifier_for_uniques, sensor_name
@@ -281,8 +290,13 @@ async def generate_named_circuit_sensors(
             voltage_attribute = construct_voltage_attribute(circuit_data)
 
             # Use the full tabs attribute for template usage (template will add quotes)
-            # construct_tabs_attribute returns "tabs [27]" and template has "{{tabs_attribute}}"
             tabs_attribute = tabs_attribute_full if tabs_attribute_full else ""
+
+            # Ensure non-None before use
+            if entity_id is None:
+                raise ValueError("Entity ID was not generated for circuit sensor")
+            if sensor_unique_id is None:
+                raise ValueError("Sensor unique_id was not generated for circuit sensor")
 
             # Create placeholders for this sensor
             sensor_placeholders = {
@@ -291,9 +305,7 @@ async def generate_named_circuit_sensors(
                 "entity_id": entity_id,
                 "backing_entity_id": backing_entity_id,
                 "tabs_attribute": tabs_attribute,
-                "voltage_attribute": str(
-                    voltage_attribute
-                ),  # Keep voltage as string for numeric YAML
+                "voltage_attribute": str(voltage_attribute),
             }
 
             # Combine common and sensor-specific placeholders
