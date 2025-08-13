@@ -265,6 +265,7 @@ total_increasing, but its state is not strictly increasing, you can opt to disab
    we don't fully understand.
 
 ### Limitations
+
 The original SPAN Panel MAIN 32 has a fairly somewhat well documented, but not officially supported, API, that is leveraged by this integration with support maintained to the best of the ability of the maintainers.
 
 However, the new SPAN Panel MAIN 40 and MLO 48 that were released in Q2 of 2025 leverage an entirely new hardware/software stack, even going so far as to use a different mobile app logins. This stack is not yet publicly documented anywhere and as such, we have not had a chance to discern how to support this stack at the time of writing this. However, the underlying software is the same codebase as the MAIN 32, so in theory once we understand how to get *through* whatever new layer sits between the LAN and the software layer API, (if we can) then we will hopefully be able to support it.
