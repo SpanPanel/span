@@ -1,0 +1,236 @@
+# Migration test simulation configuration using actual registry circuit IDs
+# This matches the real circuit IDs from the 1.0.10 entity registry
+
+panel_config:
+  serial_number: "nj-2316-005k6"
+  total_tabs: 32
+  main_size: 200  # Main breaker size in Amps
+
+# Circuit templates define reusable behavior patterns
+circuit_templates:
+  # Lighting circuits
+  lighting:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 500.0]
+      typical_power: 300.0
+      power_variation: 0.05
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  # Outlet circuits
+  outlets:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1800.0]
+      typical_power: 150.0
+      power_variation: 0.4
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  # Kitchen specific outlets (higher capacity)
+  kitchen_outlets:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 2400.0]
+      typical_power: 300.0
+      power_variation: 0.5
+    relay_behavior: "controllable"
+    priority: "MUST_HAVE"
+
+  # Major appliances
+  major_appliance:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 2500.0]
+      typical_power: 800.0
+      power_variation: 0.3
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  # Large appliances (240V)
+  large_appliance_240v:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 4000.0]
+      typical_power: 2000.0
+      power_variation: 0.15
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  # HVAC/AC systems
+  hvac:
+    energy_profile:
+      mode: "consumer"
+      power_range: [500.0, 4000.0]
+      typical_power: 2800.0
+      power_variation: 0.25
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  # EV chargers
+  ev_charger:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 11500.0]
+      typical_power: 7200.0
+      power_variation: 0.05
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+  # Special equipment
+  special_equipment:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 1200.0]
+      typical_power: 400.0
+      power_variation: 0.2
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+
+circuits:
+  # Using actual circuit IDs from the registry
+  - id: "0dad2f16cd514812ae1807b0457d473e"
+    name: "Lights Dining Room"
+    template: "lighting"
+    tabs: [1]
+
+  - id: "11a47a0f69d54e12b7200f730c2ffda1"
+    name: "Lights-Outlets Bedroom"
+    template: "outlets"
+    tabs: [2]
+
+  - id: "12ce227695cd44338864b0ef2ec4168b"
+    name: "Dining Room Wine Fridge"
+    template: "major_appliance"
+    tabs: [3]
+    overrides:
+      typical_power: 150.0
+
+  - id: "1ad73b0eb44e4022bb6270c76baed0c1"
+    name: "Dryer"
+    template: "large_appliance_240v"
+    tabs: [4, 6]  # 240V appliance
+    overrides:
+      typical_power: 3000.0
+
+  - id: "31b36cde0fc642b39eec515267707a6f"
+    name: "Outlets / Kitchen"
+    template: "kitchen_outlets"
+    tabs: [5]
+
+  - id: "3a847fe6eb374ec3bf92cee1ffaf2eda"
+    name: "Microwave & Oven"
+    template: "large_appliance_240v"
+    tabs: [7, 9]  # 240V appliance
+    overrides:
+      typical_power: 2500.0
+
+  - id: "497ae7ebb2844772bf926f2f094c81bc"
+    name: "Dishwasher"
+    template: "major_appliance"
+    tabs: [8]
+    overrides:
+      typical_power: 1200.0
+
+  - id: "617059df47bb49bd8545a36a6b6b23d2"
+    name: "Spa"
+    template: "special_equipment"
+    tabs: [10, 12]  # 240V equipment
+    overrides:
+      typical_power: 1500.0
+
+  - id: "6ad65cf2ad6443448e33973f26f7df3e"
+    name: "Kitchen Disposal"
+    template: "major_appliance"
+    tabs: [11]
+    overrides:
+      typical_power: 800.0
+
+  - id: "795e8eddb4f448af9625130332a41df8"
+    name: "Fountain"
+    template: "special_equipment"
+    tabs: [13]
+    overrides:
+      typical_power: 200.0
+
+  - id: "82a0888dc072416598d99f8b74ee3d8d"
+    name: "Internet Living room"
+    template: "outlets"
+    tabs: [14]
+    overrides:
+      typical_power: 100.0
+
+  - id: "8a2ffda9dbd24bada9a01b880e910612"
+    name: "Large Garage EV"
+    template: "ev_charger"
+    tabs: [15, 17]  # 240V EV charger
+    overrides:
+      typical_power: 7200.0
+
+  - id: "914943d4798c462cadf5e5144989dd5b"
+    name: "Other Outlets"
+    template: "outlets"
+    tabs: [16]
+
+  - id: "926441605113492189f9aa13dac356cd"
+    name: "Master bedroom"
+    template: "outlets"
+    tabs: [18]
+
+  - id: "941d6a8b41ab4c57a6b8be14b5981fe6"
+    name: "Air Conditioner"
+    template: "hvac"
+    tabs: [19, 21]  # 240V AC unit
+    overrides:
+      typical_power: 3500.0
+
+  - id: "988af7bb1fc04aac8bb3b45c660d920a"
+    name: "Garage Outlets"
+    template: "outlets"
+    tabs: [20]
+
+  - id: "9941b417bfa046ef908d97c998c54c50"
+    name: "Refrigerator"
+    template: "major_appliance"
+    tabs: [22]
+    overrides:
+      typical_power: 150.0
+
+  - id: "cbe98d7307ca42658983b9f673211e14"
+    name: "Furnace"
+    template: "hvac"
+    tabs: [23, 25]  # 240V furnace
+    overrides:
+      typical_power: 2800.0
+
+  - id: "d88c0c0e7c584472b2ec7e4d3c53c3b8"
+    name: "Small Garage EV"
+    template: "ev_charger"
+    tabs: [24, 26]  # 240V EV charger
+    overrides:
+      typical_power: 3600.0
+
+  - id: "e3cb78d38dae41cdb50faee7bfa4ab80"
+    name: "Washing Machine Area"
+    template: "major_appliance"
+    tabs: [27]
+    overrides:
+      typical_power: 1000.0
+
+  - id: "ece352c3dc5c417e80757b716f24ba90"
+    name: "Kitchen and Master Bath"
+    template: "outlets"
+    tabs: [28]
+
+  - id: "f19d909abcc4421f9ec630f82458c7ac"
+    name: "Lights Kitchen Master bathroom"
+    template: "lighting"
+    tabs: [29]
+
+# Global simulation parameters
+simulation_params:
+  update_interval: 5
+  time_acceleration: 1.0
+  noise_factor: 0.02
+  enable_realistic_behaviors: true

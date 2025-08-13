@@ -320,11 +320,23 @@ class SyntheticSensorCoordinator:
         if not global_settings and named_global_settings:
             global_settings = named_global_settings
 
-        _LOGGER.debug(
+        # Debug: check for power sensors specifically
+        power_sensors = [key for key in all_sensor_configs.keys() if "power" in key.lower()]
+        circuit_power_sensors = [key for key in power_sensors if "circuit" in key.lower()]
+        
+        # WFF - Change to debug
+        _LOGGER.error(
             "Setting up synthetic sensors: %d panel + %d named circuit = %d total sensors",
             len(panel_sensor_configs),
             len(named_circuit_configs),
             len(all_sensor_configs),
+        )
+        # WFF - Change to debug
+        _LOGGER.error(
+            "Power sensor breakdown: %d total power sensors, %d circuit power sensors: %s",
+            len(power_sensors),
+            len(circuit_power_sensors), 
+            circuit_power_sensors[:5]  # Show first 5 as examples
         )
 
         # Always populate backing entity metadata for data provider callback
