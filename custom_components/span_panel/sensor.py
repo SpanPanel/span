@@ -709,8 +709,23 @@ async def async_setup_entry(
             # If this was a migration boot for this entry, clear the per-entry migration flag now
             try:
                 entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-                if entry_data.get("migration_mode"):
+                # Prefer persisted option, but clear both option and transient flag
+                if entry_data.get("migration_mode") or config_entry.options.get("migration_mode"):
                     entry_data.pop("migration_mode", None)
+                    # Clear persisted option flag
+                    try:
+                        new_options = dict(config_entry.options)
+                        if "migration_mode" in new_options:
+                            del new_options["migration_mode"]
+                            hass.config_entries.async_update_entry(
+                                config_entry, options=new_options
+                            )
+                    except Exception as opt_err:
+                        _LOGGER.debug(
+                            "Failed to clear persisted migration flag for %s: %s",
+                            config_entry.entry_id,
+                            opt_err,
+                        )
                     _LOGGER.info(
                         "Migration mode completed for entry %s: cleared per-entry flag",
                         config_entry.entry_id,

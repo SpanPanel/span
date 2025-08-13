@@ -118,10 +118,25 @@ async def migrate_config_entry_to_synthetic_sensors(
             config_entry.entry_id,
         )
 
-        # Set per-entry migration flag for first normal boot
+        # Set per-entry migration flag for first normal boot (transient and persisted)
         hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})["migration_mode"] = (
             True
         )
+        try:
+            # Persist flag in options so it survives reboots
+            new_options = dict(config_entry.options)
+            new_options["migration_mode"] = True
+            hass.config_entries.async_update_entry(config_entry, options=new_options)
+            _LOGGER.info(
+                "MIGRATION: Set per-entry migration_mode option for entry %s",
+                config_entry.entry_id,
+            )
+        except Exception as opt_err:
+            _LOGGER.warning(
+                "MIGRATION: Failed to persist migration_mode option for entry %s: %s",
+                config_entry.entry_id,
+                opt_err,
+            )
 
         return True
 

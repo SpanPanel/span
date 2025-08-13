@@ -97,16 +97,20 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
         # Update config entry version using HA API
         hass.config_entries.async_update_entry(
-            config_entry, data=config_entry.data, options=config_entry.options, title=config_entry.title
+            config_entry,
+            data=config_entry.data,
+            options=config_entry.options,
+            title=config_entry.title,
         )
         try:
             object.__setattr__(config_entry, "version", CURRENT_CONFIG_VERSION)  # type: ignore[attr-defined]
         except Exception:
             # Fallback to documented API
             hass.config_entries._async_update_entry(  # type: ignore[attr-defined]
-                config_entry, {
+                config_entry,
+                {
                     "version": CURRENT_CONFIG_VERSION,
-                }
+                },
             )
         _LOGGER.debug(
             "Successfully migrated config entry %s to version %s",

@@ -272,9 +272,10 @@ class SyntheticSensorCoordinator:
         """Set up configuration for live panel data (existing implementation)."""
         # Generate panel sensors and backing entities with global settings
         span_panel = self.coordinator.data
-        # Determine migration mode once and log it for traceability
+        # Determine migration mode (prefer persisted option, fallback to hass.data)
         migration_mode = bool(
-            self.hass.data.get(DOMAIN, {})
+            self.coordinator.config_entry.options.get("migration_mode", False)
+            or self.hass.data.get(DOMAIN, {})
             .get(self.coordinator.config_entry.entry_id, {})
             .get("migration_mode", False)
         )
