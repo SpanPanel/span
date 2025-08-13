@@ -581,6 +581,18 @@ async def setup_synthetic_sensors(
     synthetic_coord = find_synthetic_coordinator_for(coordinator)
     sensor_to_backing_mapping = synthetic_coord.sensor_to_backing_mapping if synthetic_coord else {}
 
+    # Check if this is a migration - retrieve stored mapping if available
+#    if not sensor_to_backing_mapping and DOMAIN in hass.data and config_entry.entry_id in hass.data[DOMAIN]:
+#        migration_mapping = hass.data[DOMAIN][config_entry.entry_id].get("migration_sensor_to_backing_mapping")
+#        if migration_mapping:
+#            sensor_to_backing_mapping = migration_mapping
+#            _LOGGER.info("Using %d sensor-to-backing mappings from migration", len(sensor_to_backing_mapping))
+#            # Set the mapping on the coordinator if it exists
+#            if synthetic_coord:
+#                synthetic_coord.sensor_to_backing_mapping = sensor_to_backing_mapping
+#            # Clean up the temporary storage
+#            del hass.data[DOMAIN][config_entry.entry_id]["migration_sensor_to_backing_mapping"]
+
     _LOGGER.debug(
         "SETUP_SENSORS_DEBUG: Using %d sensor-to-backing mappings", len(sensor_to_backing_mapping)
     )
