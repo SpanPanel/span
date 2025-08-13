@@ -277,7 +277,16 @@ class SyntheticSensorCoordinator:
             panel_backing_entities,
             global_settings,
             panel_mappings,
-        ) = await generate_panel_sensors(self.coordinator, span_panel, self.device_name)
+        ) = await generate_panel_sensors(
+            self.coordinator,
+            span_panel,
+            self.device_name,
+            migration_mode=bool(
+                self.hass.data.get(DOMAIN, {})
+                .get(self.coordinator.config_entry.entry_id, {})
+                .get("migration_mode", False)
+            ),
+        )
 
         # Generate named circuit sensors and backing entities
         (
@@ -285,7 +294,16 @@ class SyntheticSensorCoordinator:
             named_circuit_backing_entities,
             named_global_settings,
             circuit_mappings,
-        ) = await generate_named_circuit_sensors(self.coordinator, span_panel, self.device_name)
+        ) = await generate_named_circuit_sensors(
+            self.coordinator,
+            span_panel,
+            self.device_name,
+            migration_mode=bool(
+                self.hass.data.get(DOMAIN, {})
+                .get(self.coordinator.config_entry.entry_id, {})
+                .get("migration_mode", False)
+            ),
+        )
 
         # Combine all sensor configs and backing entities
         all_sensor_configs = {**panel_sensor_configs, **named_circuit_configs}

@@ -706,6 +706,18 @@ async def async_setup_entry(
                 except Exception as e:
                     _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
 
+            # If this was a migration boot for this entry, clear the per-entry migration flag now
+            try:
+                entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
+                if entry_data.get("migration_mode"):
+                    entry_data.pop("migration_mode", None)
+                    _LOGGER.info(
+                        "Migration mode completed for entry %s: cleared per-entry flag",
+                        config_entry.entry_id,
+                    )
+            except Exception as e:
+                _LOGGER.debug("Failed to clear migration flag for %s: %s", config_entry.entry_id, e)
+
         except Exception as e:
             _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
 
