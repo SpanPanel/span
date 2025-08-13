@@ -39,7 +39,8 @@ def _normalize_panel_description_key(raw_key: str) -> str:
 def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
     """Compute helper-format unique_id from an existing raw unique_id.
 
-    Handles both panel and circuit sensors.
+    Handles both panel and circuit sensors. Case-insensitive for legacy circuit
+    API suffixes and correctly distinguishes circuit vs panel forms.
     Returns None if the unique_id cannot be parsed.
     """
     try:
@@ -49,22 +50,28 @@ def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
         device_identifier = parts[1]
         remainder = parts[2]
 
-        # Panel case: remainder matches a panel key (including dotted variants)
-        normalized_panel_key = _normalize_panel_description_key(remainder)
-        # Try building via helper (returns span_{id}_{entity_suffix})
-        if normalized_panel_key.endswith("W") or normalized_panel_key.endswith("Wh"):
-            return build_panel_unique_id(device_identifier, normalized_panel_key)
-
-        # Circuit case: split into circuit_id and api_field by last underscore
+        # If remainder contains an underscore, treat as circuit: {circuit_id}_{api_field}
         last_underscore = remainder.rfind("_")
         if last_underscore > 0:
             circuit_id = remainder[:last_underscore]
-            api_field = remainder[last_underscore + 1 :]
-            # Use helper to construct with consistent suffix mapping
-            if api_field in ("instantPowerW", "producedEnergyWh", "consumedEnergyWh"):
-                return build_circuit_unique_id(device_identifier, circuit_id, api_field)
+            raw_api_field = remainder[last_underscore + 1 :]
+            # Normalize legacy variants in a case-insensitive way
+            api_key_lc = raw_api_field.replace(".", "").lower()
+            circuit_map: dict[str, str] = {
+                "instantpowerw": "instantPowerW",
+                "power": "instantPowerW",  # tolerate already-normalized suffix
+                "producedenergywh": "producedEnergyWh",
+                "consumedenergywh": "consumedEnergyWh",
+            }
+            canonical_api = circuit_map.get(api_key_lc)
+            if canonical_api is None:
+                return None
+            return build_circuit_unique_id(device_identifier, circuit_id, canonical_api)
 
-        return None
+        # Panel case: normalize dotted/camel variants to helper description keys
+        normalized_panel_key = _normalize_panel_description_key(remainder)
+        return build_panel_unique_id(device_identifier, normalized_panel_key)
+
     except Exception:
         return None
 
