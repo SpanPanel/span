@@ -874,6 +874,9 @@ def construct_multi_circuit_entity_id(
 
         if existing_entity_id:
             return existing_entity_id
+        else:
+            # During migration, unique_id lookup should always succeed
+            raise ValueError(f"Registry lookup failed for unique_id '{unique_id}' during migration. Entity should exist in registry.")
 
     # Get device name from config entry title
     device_name = coordinator.config_entry.title

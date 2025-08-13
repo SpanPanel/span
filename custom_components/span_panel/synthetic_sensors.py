@@ -398,11 +398,28 @@ class SyntheticSensorCoordinator:
                 )
                 _LOGGER.info("Initial sensor configuration imported for fresh installation")
             else:
-                _LOGGER.debug(
-                    "Existing sensor set found - using stored configuration (no YAML generation needed)"
-                )
-                # Existing installation - sensors already configured in storage
-                # Just ensure the backing entity metadata is populated for the data provider
+                if migration_mode:
+                    _LOGGER.info(
+                        "Migration mode detected - regenerating and importing YAML for existing sensor set"
+                    )
+                    yaml_content = await _construct_complete_yaml_config(
+                        all_sensor_configs, global_settings
+                    )
+                    await self.storage_manager.async_from_yaml(
+                        yaml_content=yaml_content,
+                        sensor_set_id=self.sensor_set_id,
+                        device_identifier=device_identifier,
+                        replace_existing=True,
+                    )
+                    _LOGGER.info(
+                        "Re-imported sensor configuration during migration (existing set updated)"
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Existing sensor set found - using stored configuration (no YAML generation needed)"
+                    )
+                    # Existing installation - sensors already configured in storage
+                    # Just ensure the backing entity metadata is populated for the data provider
 
         _LOGGER.debug(
             "Sensor set configuration ready - fresh install imported, existing install loaded from storage"
