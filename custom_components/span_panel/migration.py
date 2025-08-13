@@ -19,6 +19,97 @@ from .synthetic_sensors import _construct_complete_yaml_config
 _LOGGER = logging.getLogger(__name__)
 
 
+def reconstruct_sensor_to_backing_mapping(
+    device_identifier: str,
+    sensor_mappings: dict[str, str]
+) -> dict[str, str]:
+    """Reconstruct sensor-to-backing entity ID mapping from existing sensors.
+
+    This uses the deterministic pattern that backing entity IDs follow
+    to recreate the mapping that would have been created during fresh install.
+    """
+    mapping = {}
+
+    # API field to backing suffix mapping
+    # Maps the old raw API field names (from entity registry) to new backing suffixes
+    api_to_backing_suffix = {
+        # Panel sensors (circuit_id = "0") - old raw API fields
+        "instantGridPowerW": "current_power",
+        "feedthroughPowerW": "feed_through_power",
+        "mainMeterEnergy.producedEnergyWh": "main_meter_produced_energy",
+        "mainMeterEnergy.consumedEnergyWh": "main_meter_consumed_energy",
+        "feedthroughEnergy.producedEnergyWh": "feed_through_produced_energy",
+        "feedthroughEnergy.consumedEnergyWh": "feed_through_consumed_energy",
+
+        # Circuit sensors - old raw API fields
+        "instantPowerW": "power",
+        "producedEnergyWh": "energy_produced",
+        "consumedEnergyWh": "energy_consumed",
+    }
+
+    for unique_id, _ in sensor_mappings.items():
+        # Parse unique_id to extract components
+        # Pattern: span_{device_id}_{circuit_id}_{api_field} or span_{device_id}_{api_field}
+        parts = unique_id.split("_", 2)  # Split into at most 3 parts
+
+        if len(parts) < 3:
+            _LOGGER.warning("Cannot parse unique_id for backing mapping: %s", unique_id)
+            continue
+
+        # Check if this is the expected device
+        if parts[1] != device_identifier:
+            _LOGGER.warning("Unexpected device identifier in unique_id: %s (expected %s)",
+                          parts[1], device_identifier)
+            continue
+
+        # Remaining part after device_id
+        remainder = parts[2]
+
+        # Try to identify panel vs circuit sensor
+        circuit_id = None
+        api_field = None
+
+        # Check if it's a panel sensor (direct API field)
+        for field in api_to_backing_suffix:
+            if remainder == field:
+                # Panel sensor
+                circuit_id = "0"
+                api_field = field
+                break
+
+        if api_field is None:
+            # Circuit sensor - split by last underscore to separate circuit_id and api_field
+            last_underscore = remainder.rfind("_")
+            if last_underscore > 0:
+                potential_circuit_id = remainder[:last_underscore]
+                potential_api_field = remainder[last_underscore + 1:]
+
+                # Validate it's a known API field
+                if potential_api_field in api_to_backing_suffix:
+                    circuit_id = potential_circuit_id
+                    api_field = potential_api_field
+
+        if circuit_id is None or api_field is None:
+            _LOGGER.warning("Cannot determine circuit_id/api_field from unique_id: %s", unique_id)
+            continue
+
+        # Get backing suffix
+        backing_suffix = api_to_backing_suffix.get(api_field)
+        if backing_suffix is None:
+            _LOGGER.warning("Unknown API field for backing mapping: %s", api_field)
+            continue
+
+        # Construct backing entity ID
+        backing_entity_id = f"sensor.span_{device_identifier.lower()}_{circuit_id}_backing_{backing_suffix}"
+
+        # Add to mapping
+        mapping[unique_id] = backing_entity_id
+
+        _LOGGER.debug("Mapped sensor %s -> backing %s", unique_id, backing_entity_id)
+
+    return mapping
+
+
 async def migrate_config_entry_to_synthetic_sensors(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -142,6 +233,24 @@ async def migrate_config_entry_to_synthetic_sensors(
             sensor_set_id,
         )
 
+        # Reconstruct sensor-to-backing mapping for synthetic sensors
+        all_mappings = {**generic_mappings, **solar_mappings}
+        sensor_to_backing_mapping = reconstruct_sensor_to_backing_mapping(
+            device_identifier, all_mappings
+        )
+
+        _LOGGER.info("Reconstructed %d sensor-to-backing mappings for migration",
+                     len(sensor_to_backing_mapping))
+
+        # Store the mapping in hass.data for sensor setup to retrieve
+        # This is temporary storage that sensor.py will consume
+        if DOMAIN not in hass.data:
+            hass.data[DOMAIN] = {}
+        if config_entry.entry_id not in hass.data[DOMAIN]:
+            hass.data[DOMAIN][config_entry.entry_id] = {}
+
+        hass.data[DOMAIN][config_entry.entry_id]["migration_sensor_to_backing_mapping"] = sensor_to_backing_mapping
+
         return True
 
     except Exception as e:
@@ -182,7 +291,7 @@ async def generate_device_yaml_from_classified_entities(
         named_global_settings,
         circuit_mappings,
     ) = await generate_named_circuit_sensors(
-        coordinator, span_panel, device_name, existing_sensor_mappings=generic_mappings
+        coordinator, span_panel, device_identifier, existing_sensor_mappings=generic_mappings
     )
 
     # Generate solar sensors if any exist

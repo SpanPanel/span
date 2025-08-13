@@ -121,12 +121,16 @@ async def generate_named_circuit_sensors(
         device_identifier_for_uniques = device_name
 
     # Create common placeholders for header template
+    if coordinator is not None:
+        energy_grace_period = coordinator.config_entry.options.get("energy_reporting_grace_period", 15)
+    else:
+        # During migration, use default
+        energy_grace_period = 15
+        
     common_placeholders = {
         "device_identifier": device_identifier_for_uniques,
         "panel_id": device_identifier_for_uniques,
-        "energy_grace_period_minutes": str(
-            coordinator.config_entry.options.get("energy_reporting_grace_period", 15)
-        ),
+        "energy_grace_period_minutes": str(energy_grace_period),
         "power_display_precision": str(power_precision),
         "energy_display_precision": str(energy_precision),
     }

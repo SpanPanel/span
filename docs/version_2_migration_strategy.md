@@ -396,11 +396,100 @@ If migration fails, the system should:
 4. **Version Compatibility**: Handles different legacy versions appropriately
 5. **Future-Proof**: Sets up proper synthetic sensor architecture for future enhancements
 
+### Critical Implementation Findings
+
+#### sensor_to_backing_mapping Must Be Provided Every Boot
+
+**Key Discovery**: The `sensor_to_backing_mapping` is NOT persisted by the synthetic sensors package. It's stored as an in-memory instance variable in `SensorManager` and must be recreated on every Home Assistant restart.
+
+**Evidence**:
+- `SensorManager._sensor_to_backing_mapping` starts empty on each boot
+- Fresh install debug shows mapping like: `{'span_nj-2316-005k6_current_power': 'sensor.span_nj-2316-005k6_0_backing_current_power', ...}`
+- All YAML templates use `formula: "state"` which requires the mapping to resolve backing entities
+- Synthetic sensors package calls `register_sensor_to_backing_mapping()` automatically when mapping is provided
+
+**Implications**:
+- **Fresh installs**: Must recreate mapping every boot (likely through generation process)
+- **Migration**: Must reconstruct mapping from entity registry data and provide it every boot
+- **Storage**: Only YAML is persisted; mapping must be regenerated from available data
+
+#### Migration Mapping Reconstruction
+
+**Pattern Analysis** from real fresh install:
+```python
+# Panel sensors (circuit_id = "0")
+'span_nj-2316-005k6_current_power' → 'sensor.span_nj-2316-005k6_0_backing_current_power'
+'span_nj-2316-005k6_feed_through_power' → 'sensor.span_nj-2316-005k6_0_backing_feed_through_power'
+
+# Circuit sensors (using UUID as circuit_id)  
+'span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_power' → 'sensor.span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_backing_power'
+```
+
+**Old Entity Registry Patterns** (what migration will find):
+```python
+# Panel sensors use raw API field names
+'span_nj-2316-005k6_instantGridPowerW' → 'sensor.span_nj-2316-005k6_0_backing_current_power'
+'span_nj-2316-005k6_feedthroughPowerW' → 'sensor.span_nj-2316-005k6_0_backing_feed_through_power'
+
+# Circuit sensors use raw API field names
+'span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_instantPowerW' → 'sensor.span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_backing_power'
+```
+
+**Mapping Function** (implemented in `migration.py`):
+```python
+def reconstruct_sensor_to_backing_mapping(device_identifier: str, sensor_mappings: dict[str, str]) -> dict[str, str]:
+    # Maps old raw API field names to new backing suffixes
+    api_to_backing_suffix = {
+        # Panel sensors (circuit_id = "0")
+        "instantGridPowerW": "current_power",
+        "feedthroughPowerW": "feed_through_power", 
+        "mainMeterEnergy.producedEnergyWh": "main_meter_produced_energy",
+        "mainMeterEnergy.consumedEnergyWh": "main_meter_consumed_energy",
+        "feedthroughEnergy.producedEnergyWh": "feed_through_produced_energy", 
+        "feedthroughEnergy.consumedEnergyWh": "feed_through_consumed_energy",
+        
+        # Circuit sensors
+        "instantPowerW": "power",
+        "producedEnergyWh": "energy_produced",
+        "consumedEnergyWh": "energy_consumed",
+    }
+    # Parse unique_id patterns and construct backing entity IDs deterministically
+```
+
+#### Fresh Install Boot Sequence Question
+
+**Current Mystery**: How do fresh installs recreate the mapping on subsequent boots when:
+1. Sensor sets exist in storage → generation is skipped
+2. `SyntheticSensorCoordinator.sensor_to_backing_mapping` starts empty  
+3. No migration mapping exists
+4. Templates require `formula: "state"` which needs the mapping
+
+**Possible Solutions** (needs investigation):
+1. Fresh installs DO run generation every time (our assumption about skipping was wrong)
+2. There's another mechanism that recreates mapping from stored YAML
+3. Fresh installs are actually broken on subsequent boots (contradicts user statement)
+
+#### Implementation Status
+
+**Completed**:
+- Migration trigger mechanism (ConfigFlow.VERSION = 2)
+- Sensor classification from entity registry 
+- Deterministic mapping reconstruction
+- Integration with synthetic sensors package
+- Temporary mapping storage in hass.data
+
+**Remaining Questions**:
+- How fresh installs handle mapping persistence
+- Whether generation should run every boot vs. only once
+
 ### Conclusion
 
-This migration strategy prioritizes user experience and data preservation while enabling the transition to the new synthetic sensor architecture. By generating
-YAML configurations from existing installations rather than attempting to normalize unique IDs, we ensure a smooth upgrade process that maintains all existing
-functionality while unlocking new synthetic sensor capabilities.
+This migration strategy prioritizes user experience and data preservation while enabling the transition to the new synthetic sensor architecture. The critical insight is that `sensor_to_backing_mapping` must be provided every boot, requiring either generation or reconstruction from persisted data.
+
+**Next Steps**:
+1. Investigate fresh install boot sequence to understand mapping recreation
+2. Ensure migration provides mapping every boot (not just during migration)
+3. Test complete migration flow with real data
 
 ## Specific Code Changes Required
 

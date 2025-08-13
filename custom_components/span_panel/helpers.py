@@ -664,9 +664,9 @@ def _get_device_identifier_for_unique_ids(
     """
     is_simulator = bool(coordinator.config_entry.data.get("simulation_mode", False))
     if is_simulator:
-        effective_name = device_name or coordinator.config_entry.data.get(
-            "device_name", coordinator.config_entry.title
-        )
+        # For simulators, ALWAYS use the config entry title first since it's guaranteed unique
+        # device_name parameter might not be unique between multiple simulator configs
+        effective_name = coordinator.config_entry.title or device_name or coordinator.config_entry.data.get("device_name")
         return slugify(effective_name) if effective_name else span_panel.status.serial_number
     return span_panel.status.serial_number
 
