@@ -167,6 +167,12 @@ async def generate_panel_sensors(
             device_name,
             unique_id=sensor_unique_id if migration_mode else None,
         )
+        _LOGGER.debug(
+            "GEN_PANEL_DEBUG: migration_mode=%s, unique_id=%s, resolved_entity_id=%s",
+            migration_mode,
+            sensor_unique_id,
+            entity_id,
+        )
 
         # Generate friendly name using existing helper
         friendly_name = construct_panel_friendly_name(sensor_def["name"])

@@ -272,6 +272,18 @@ class SyntheticSensorCoordinator:
         """Set up configuration for live panel data (existing implementation)."""
         # Generate panel sensors and backing entities with global settings
         span_panel = self.coordinator.data
+        # Determine migration mode once and log it for traceability
+        migration_mode = bool(
+            self.hass.data.get(DOMAIN, {})
+            .get(self.coordinator.config_entry.entry_id, {})
+            .get("migration_mode", False)
+        )
+        _LOGGER.debug(
+            "SYN_SETUP_DEBUG: migration_mode=%s for entry_id=%s",
+            migration_mode,
+            self.coordinator.config_entry.entry_id,
+        )
+
         (
             panel_sensor_configs,
             panel_backing_entities,
@@ -281,11 +293,7 @@ class SyntheticSensorCoordinator:
             self.coordinator,
             span_panel,
             self.device_name,
-            migration_mode=bool(
-                self.hass.data.get(DOMAIN, {})
-                .get(self.coordinator.config_entry.entry_id, {})
-                .get("migration_mode", False)
-            ),
+            migration_mode=migration_mode,
         )
 
         # Generate named circuit sensors and backing entities
@@ -298,11 +306,7 @@ class SyntheticSensorCoordinator:
             self.coordinator,
             span_panel,
             self.device_name,
-            migration_mode=bool(
-                self.hass.data.get(DOMAIN, {})
-                .get(self.coordinator.config_entry.entry_id, {})
-                .get("migration_mode", False)
-            ),
+            migration_mode=migration_mode,
         )
 
         # Combine all sensor configs and backing entities
