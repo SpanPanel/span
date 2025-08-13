@@ -3,6 +3,7 @@
 import asyncio
 from datetime import timedelta
 import logging
+import time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -74,16 +75,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         to Unavailable and breaking delta calculations.
         """
         if self.last_update_success:
-            # Store successful update time
-            import time
-
             self._last_successful_update = time.time()
             return True
 
         # Check if we have a recent successful update
         if hasattr(self, "_last_successful_update"):
-            import time
-
             outage_duration = time.time() - self._last_successful_update
             # Stay "successful" for 15 minutes during outages
             return outage_duration < 900
