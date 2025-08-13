@@ -113,6 +113,7 @@ async def generate_named_circuit_sensors(
     span_panel: SpanPanel,
     device_name: str,
     existing_sensor_mappings: dict[str, str] | None = None,
+    migration_mode: bool = False,
 ) -> tuple[dict[str, Any], list[BackingEntity], dict[str, Any], dict[str, str]]:
     """Generate named circuit synthetic sensors and their backing entities.
 
@@ -125,6 +126,7 @@ async def generate_named_circuit_sensors(
         device_name: The device name to use for entity IDs and friendly names
         existing_sensor_mappings: Optional dict mapping unique_id to entity_id for migration.
                                  If None, generates new keys using helpers.
+        migration_mode: When True, resolve entity_ids by registry lookup using helper-format unique_id
 
     Returns:
         Tuple of (sensor_configs_dict, list_of_backing_entities, global_settings, sensor_to_backing_mapping)
@@ -204,6 +206,8 @@ async def generate_named_circuit_sensors(
             sensor_configs[unique_id] = {"entity_id": existing_entity_id}
         return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
 
+    # migration_mode provided by caller
+
     for circuit_id, circuit_data in named_circuits.items():
         for sensor_def in NAMED_CIRCUIT_SENSOR_DEFINITIONS:
             # Get circuit number for helpers
@@ -227,18 +231,15 @@ async def generate_named_circuit_sensors(
                 sensor_unique_id = match_uid
                 entity_id = match_entity
 
-            # If no existing sensor found, generate new keys (new installation)
+            # If no existing sensor found, generate new keys (new installation) or lookup by unique_id in migration mode
             if sensor_unique_id is None:
-                if existing_sensor_mappings:
-                    _LOGGER.info(
-                        "MIGRATION: No existing entity found for circuit %s, key %s. Generating new entity ID.",
-                        circuit_id,
-                        sensor_def["key"],
-                    )
-                # Generate entity ID using appropriate synthetic helper based on number of tabs
                 entity_suffix = get_user_friendly_suffix(sensor_def["key"])
-
-                # Check the number of tabs to determine which helper to use
+                # Build helper-format unique_id for this circuit sensor
+                sensor_name = f"{circuit_id}_{entity_suffix}"
+                sensor_unique_id = construct_synthetic_unique_id(
+                    device_identifier_for_uniques, sensor_name
+                )
+                # Generate entity ID using appropriate helper; pass unique_id in migration mode to retrieve existing entity_id
                 if len(circuit_data.tabs) == 2:
                     tmp_eid = construct_240v_synthetic_entity_id(
                         coordinator=coordinator,
@@ -248,7 +249,7 @@ async def generate_named_circuit_sensors(
                         friendly_name=circuit_name,
                         tab1=circuit_data.tabs[0],
                         tab2=circuit_data.tabs[1],
-                        unique_id=None,
+                        unique_id=sensor_unique_id if migration_mode else None,
                     )
                 elif len(circuit_data.tabs) == 1:
                     tmp_eid = construct_120v_synthetic_entity_id(
@@ -258,7 +259,7 @@ async def generate_named_circuit_sensors(
                         suffix=entity_suffix,
                         friendly_name=circuit_name,
                         tab=circuit_data.tabs[0],
-                        unique_id=None,
+                        unique_id=sensor_unique_id if migration_mode else None,
                     )
                 else:
                     raise ValueError(
@@ -269,12 +270,6 @@ async def generate_named_circuit_sensors(
                 if tmp_eid is None:
                     raise ValueError("Failed to build entity_id for circuit sensor")
                 entity_id = tmp_eid
-
-                # Generate unique ID for synthetic sensor following documented pattern
-                sensor_name = f"{circuit_id}_{entity_suffix}"
-                sensor_unique_id = construct_synthetic_unique_id(
-                    device_identifier_for_uniques, sensor_name
-                )
 
             # Generate backing entity ID
             backing_suffix = get_user_friendly_suffix(sensor_def["key"])
