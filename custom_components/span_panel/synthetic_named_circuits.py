@@ -270,6 +270,13 @@ async def generate_named_circuit_sensors(
                 if tmp_eid is None:
                     raise ValueError("Failed to build entity_id for circuit sensor")
                 entity_id = tmp_eid
+                _LOGGER.debug(
+                    "GEN_CKT_DEBUG: migration_mode=%s, circuit_id=%s, unique_id=%s, resolved_entity_id=%s",
+                    migration_mode,
+                    circuit_id,
+                    sensor_unique_id,
+                    entity_id,
+                )
 
             # Generate backing entity ID
             backing_suffix = get_user_friendly_suffix(sensor_def["key"])

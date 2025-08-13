@@ -119,7 +119,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
-    _LOGGER.error("SETUP ENTRY CALLED! Entry ID: %s, Version: %s", entry.entry_id, entry.version)
+    _LOGGER.debug("SETUP ENTRY CALLED! Entry ID: %s, Version: %s", entry.entry_id, entry.version)
 
     async def ha_compatible_delay(seconds: float) -> None:
         """HA-compatible delay function that works well with HA's event loop."""
