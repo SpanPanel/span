@@ -507,6 +507,151 @@ class SpanUnmappedCircuitSensor(
         return span_panel.circuits[self.circuit_id]
 
 
+def _get_migration_mode(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Check if migration mode is enabled for this config entry."""
+    entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
+    return bool(
+        entry_data.get("migration_mode") or config_entry.options.get("migration_mode")
+    )
+
+
+def _create_native_sensors(
+    coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
+) -> list[SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus | SpanPanelBattery]:
+    """Create all native sensors for the platform."""
+    entities: list[
+        SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus | SpanPanelBattery
+    ] = []
+
+    # Add panel data status sensors (DSM State, DSM Grid State, etc.)
+    for description in PANEL_DATA_STATUS_SENSORS:
+        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
+    # Add unmapped circuit sensors (native sensors for synthetic calculations)
+    # These are invisible sensors that provide stable entity IDs for solar synthetics
+    unmapped_circuits = [cid for cid in span_panel.circuits if cid.startswith("unmapped_tab_")]
+    for circuit_id in unmapped_circuits:
+        for unmapped_description in UNMAPPED_SENSORS:
+            # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
+            entities.append(
+                SpanUnmappedCircuitSensor(
+                    coordinator, unmapped_description, span_panel, circuit_id
+                )
+            )
+
+    # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
+    for description_ss in STATUS_SENSORS:
+        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
+
+    # Add battery sensor if enabled
+    battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
+    if battery_enabled:
+        entities.append(SpanPanelBattery(coordinator, BATTERY_SENSOR, span_panel))
+
+    return entities
+
+
+def _enable_unmapped_tab_entities(hass: HomeAssistant, entities: list) -> None:
+    """Enable unmapped tab entities in the entity registry if they were disabled."""
+    entity_registry = er.async_get(hass)
+    for entity in entities:
+        # Check if this is an unmapped tab circuit sensor
+        if (
+            hasattr(entity, "unique_id")
+            and entity.unique_id
+            and "unmapped_tab_" in entity.unique_id
+        ):
+            entity_id = entity.entity_id
+            registry_entry = entity_registry.async_get(entity_id)
+            if registry_entry and registry_entry.disabled:
+                _LOGGER.debug("Enabling previously disabled unmapped tab entity: %s", entity_id)
+                entity_registry.async_update_entity(entity_id, disabled_by=None)
+
+
+async def _handle_initial_solar_setup(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    coordinator: SpanPanelCoordinator,
+    sensor_set: Any,
+    migration_mode: bool,
+) -> None:
+    """Handle initial solar sensor setup if solar is enabled."""
+    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
+    if not solar_enabled or sensor_set is None:
+        return
+
+    # Coerce leg options to integers to handle any legacy string-stored values
+    leg1_raw = config_entry.options.get(INVERTER_LEG1, 0)
+    leg2_raw = config_entry.options.get(INVERTER_LEG2, 0)
+    try:
+        leg1 = int(leg1_raw)
+    except (TypeError, ValueError):
+        leg1 = 0
+    try:
+        leg2 = int(leg2_raw)
+    except (TypeError, ValueError):
+        leg2 = 0
+    # Get device name from config entry like sensors do
+    device_name = config_entry.data.get("device_name", config_entry.title)
+
+    _LOGGER.debug(
+        "Solar enabled during initial setup - setting up solar sensors (leg1: %s, leg2: %s)",
+        leg1,
+        leg2,
+    )
+
+    try:
+        result = await handle_solar_options_change(
+            hass,
+            config_entry,
+            coordinator,
+            sensor_set,
+            solar_enabled,
+            leg1,
+            leg2,
+            device_name,
+            migration_mode=migration_mode,
+        )
+        if result:
+            _LOGGER.debug("Initial solar sensor setup completed successfully")
+        else:
+            _LOGGER.warning("Initial solar sensor setup failed")
+    except Exception as e:
+        _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
+
+
+def _clear_migration_flags(hass: HomeAssistant, config_entry: ConfigEntry, migration_mode: bool) -> None:
+    """Clear migration flags after setup is complete."""
+    if not migration_mode:
+        return
+
+    try:
+        entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
+        # Prefer persisted option, but clear both option and transient flag
+        if entry_data.get("migration_mode") or config_entry.options.get("migration_mode"):
+            entry_data.pop("migration_mode", None)
+            # Clear persisted option flag
+            try:
+                new_options = dict(config_entry.options)
+                if "migration_mode" in new_options:
+                    del new_options["migration_mode"]
+                    hass.config_entries.async_update_entry(
+                        config_entry, options=new_options
+                    )
+            except Exception as opt_err:
+                _LOGGER.debug(
+                    "Failed to clear persisted migration flag for %s: %s",
+                    config_entry.entry_id,
+                    opt_err,
+                )
+            _LOGGER.info(
+                "Migration mode completed for entry %s: cleared per-entry flag",
+                config_entry.entry_id,
+            )
+    except Exception as e:
+        _LOGGER.debug("Failed to clear migration flag for %s: %s", config_entry.entry_id, e)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -518,55 +663,17 @@ async def async_setup_entry(
         coordinator: SpanPanelCoordinator = data[COORDINATOR]
         span_panel: SpanPanel = coordinator.data
 
-        # First, create all the native sensors that synthetic sensors may depend on
-        entities: list[
-            SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus | SpanPanelBattery
-        ] = []
+        # Check migration mode early to pass to all functions that need it
+        migration_mode = _get_migration_mode(hass, config_entry)
 
-        # Add panel data status sensors (DSM State, DSM Grid State, etc.)
-        for description in PANEL_DATA_STATUS_SENSORS:
-            entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+        # Create all native sensors
+        entities = _create_native_sensors(coordinator, span_panel, config_entry)
 
-        # Add unmapped circuit sensors (native sensors for synthetic calculations)
-        # These are invisible sensors that provide stable entity IDs for solar synthetics
-        unmapped_circuits = [cid for cid in span_panel.circuits if cid.startswith("unmapped_tab_")]
-        for circuit_id in unmapped_circuits:
-            for unmapped_description in UNMAPPED_SENSORS:
-                # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
-                entities.append(
-                    SpanUnmappedCircuitSensor(
-                        coordinator, unmapped_description, span_panel, circuit_id
-                    )
-                )
-
-        # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
-        for description_ss in STATUS_SENSORS:
-            entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
-
-        # Add battery sensor if enabled
-        battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
-        if battery_enabled:
-            entities.append(SpanPanelBattery(coordinator, BATTERY_SENSOR, span_panel))
-
-        # Add the status sensor entities FIRST
+        # Add all native sensor entities
         async_add_entities(entities)
 
-        # Ensure unmapped tab entities are enabled in the entity registry
-        # This is necessary because existing disabled entities in the registry
-        # override the entity_registry_enabled_default setting
-        entity_registry = er.async_get(hass)
-        for entity in entities:
-            # Check if this is an unmapped tab circuit sensor
-            if (
-                hasattr(entity, "unique_id")
-                and entity.unique_id
-                and "unmapped_tab_" in entity.unique_id
-            ):
-                entity_id = entity.entity_id
-                registry_entry = entity_registry.async_get(entity_id)
-                if registry_entry and registry_entry.disabled:
-                    _LOGGER.debug("Enabling previously disabled unmapped tab entity: %s", entity_id)
-                    entity_registry.async_update_entity(entity_id, disabled_by=None)
+        # Enable unmapped tab entities if they were disabled
+        _enable_unmapped_tab_entities(hass, entities)
 
         # Delegate synthetic sensor setup to ha-synthetic-sensors package
         try:
@@ -619,10 +726,10 @@ async def async_setup_entry(
                         current_sensor_set_id,
                     )
                     storage_manager = await setup_synthetic_configuration(
-                        hass, config_entry, coordinator
+                        hass, config_entry, coordinator, migration_mode
                     )
                 # Initialize the synthetic coordinator configuration so backing metadata is populated
-                await synthetic_coord.setup_configuration(config_entry)
+                await synthetic_coord.setup_configuration(config_entry, migration_mode)
                 # Prime the coordinator so downstream setup uses the correct set
                 synthetic_coord.sensor_set_id = current_sensor_set_id
                 synthetic_coord.device_identifier = current_identifier
@@ -630,7 +737,7 @@ async def async_setup_entry(
                 # Fresh install - generate new configuration
                 _LOGGER.info("SENSOR SETUP DEBUG: Fresh install - generating new configuration")
                 storage_manager = await setup_synthetic_configuration(
-                    hass, config_entry, coordinator
+                    hass, config_entry, coordinator, migration_mode
                 )
             # Use simplified setup interface that handles everything
             sensor_manager = await setup_synthetic_sensors(
@@ -664,74 +771,13 @@ async def async_setup_entry(
                 "Successfully set up synthetic sensors and cached SensorSet: %s", sensor_set_id
             )
 
-            # Check if solar is enabled in options and set up solar sensors if needed
-            # This handles the case where solar is already enabled during initial setup
-            solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
-            if solar_enabled and sensor_set is not None:
-                # Coerce leg options to integers to handle any legacy string-stored values
-                leg1_raw = config_entry.options.get(INVERTER_LEG1, 0)
-                leg2_raw = config_entry.options.get(INVERTER_LEG2, 0)
-                try:
-                    leg1 = int(leg1_raw)
-                except (TypeError, ValueError):
-                    leg1 = 0
-                try:
-                    leg2 = int(leg2_raw)
-                except (TypeError, ValueError):
-                    leg2 = 0
-                # Get device name from config entry like sensors do
-                device_name = config_entry.data.get("device_name", config_entry.title)
-
-                _LOGGER.debug(
-                    "Solar enabled during initial setup - setting up solar sensors (leg1: %s, leg2: %s)",
-                    leg1,
-                    leg2,
-                )
-
-                try:
-                    result = await handle_solar_options_change(
-                        hass,
-                        config_entry,
-                        coordinator,
-                        sensor_set,
-                        solar_enabled,
-                        leg1,
-                        leg2,
-                        device_name,
-                    )
-                    if result:
-                        _LOGGER.debug("Initial solar sensor setup completed successfully")
-                    else:
-                        _LOGGER.warning("Initial solar sensor setup failed")
-                except Exception as e:
-                    _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
+            # Handle initial solar sensor setup if solar is enabled
+            await _handle_initial_solar_setup(
+                hass, config_entry, coordinator, sensor_set, migration_mode
+            )
 
             # If this was a migration boot for this entry, clear the per-entry migration flag now
-            try:
-                entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-                # Prefer persisted option, but clear both option and transient flag
-                if entry_data.get("migration_mode") or config_entry.options.get("migration_mode"):
-                    entry_data.pop("migration_mode", None)
-                    # Clear persisted option flag
-                    try:
-                        new_options = dict(config_entry.options)
-                        if "migration_mode" in new_options:
-                            del new_options["migration_mode"]
-                            hass.config_entries.async_update_entry(
-                                config_entry, options=new_options
-                            )
-                    except Exception as opt_err:
-                        _LOGGER.debug(
-                            "Failed to clear persisted migration flag for %s: %s",
-                            config_entry.entry_id,
-                            opt_err,
-                        )
-                    _LOGGER.info(
-                        "Migration mode completed for entry %s: cleared per-entry flag",
-                        config_entry.entry_id,
-                    )
-            except Exception as e:
-                _LOGGER.debug("Failed to clear migration flag for %s: %s", config_entry.entry_id, e)
+            _clear_migration_flags(hass, config_entry, migration_mode)
 
         except Exception as e:
             _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)

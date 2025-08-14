@@ -16,6 +16,7 @@ from ha_synthetic_sensors import (
 from ha_synthetic_sensors.sensor_set import SensorSet
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, STORAGE_MANAGER
 from .coordinator import SpanPanelCoordinator
@@ -125,6 +126,8 @@ def _generate_sensor_entity_id(
     sensor_type: str,
     leg1_number: int,
     leg2_number: int,
+    migration_mode: bool = False,
+    hass: HomeAssistant | None = None,
 ) -> str | None:
     """Generate entity ID for a solar sensor.
 
@@ -134,11 +137,38 @@ def _generate_sensor_entity_id(
         sensor_type: Type of sensor (e.g., "power", "energy_produced")
         leg1_number: Circuit number for leg 1
         leg2_number: Circuit number for leg 2
+        migration_mode: Whether we're in migration mode
+        hass: Home Assistant instance (required for migration mode)
 
     Returns:
         Entity ID string or None if generation fails
 
     """
+    # In migration mode, look up existing entity_id from registry
+    if migration_mode and hass:
+        # Generate the unique_id that solar sensors should have
+        device_name = coordinator.config_entry.data.get("device_name", coordinator.config_entry.title)
+        unique_id = construct_synthetic_unique_id_for_entry(
+            coordinator, span_panel, f"solar_{sensor_type}", device_name
+        )
+
+        entity_registry = er.async_get(hass)
+        existing_entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if existing_entity_id:
+            _LOGGER.debug(
+                "MIGRATION: Using existing solar entity %s for unique_id %s",
+                existing_entity_id,
+                unique_id,
+            )
+            return existing_entity_id
+        else:
+            # FATAL ERROR: Migration mode but migrated key not found in registry
+            raise ValueError(
+                f"MIGRATION ERROR: Expected solar unique_id '{unique_id}' not found in registry. "
+                f"This indicates migration failed for solar sensor {sensor_type}."
+            )
+
+    # Normal mode: generate new entity_id
     if leg1_number > 0 and leg2_number > 0:
         # Two tabs - use 240V synthetic helper
         return construct_240v_synthetic_entity_id(
@@ -286,6 +316,8 @@ async def generate_solar_sensors_with_entity_ids(
     leg1_entity_id: str,
     leg2_entity_id: str,
     device_name: str,
+    migration_mode: bool = False,
+    hass: HomeAssistant | None = None,
 ) -> dict[str, Any]:
     """Generate solar sensor configurations using YAML templates with direct entity IDs.
 
@@ -295,6 +327,8 @@ async def generate_solar_sensors_with_entity_ids(
         leg1_entity_id: Entity ID for leg 1 (e.g., "sensor.span_panel_unmapped_tab_30_power")
         leg2_entity_id: Entity ID for leg 2 (e.g., "sensor.span_panel_unmapped_tab_32_power")
         device_name: The name of the device to use for sensor generation
+        migration_mode: Whether we're in migration mode
+        hass: Home Assistant instance (required for migration mode)
 
     Returns:
         Dictionary of sensor configurations
@@ -360,7 +394,13 @@ async def generate_solar_sensors_with_entity_ids(
         try:
             # Generate entity ID for this sensor
             entity_id = _generate_sensor_entity_id(
-                coordinator, span_panel, sensor_def["sensor_type"], leg1_number, leg2_number
+                coordinator,
+                span_panel,
+                sensor_def["sensor_type"],
+                leg1_number,
+                leg2_number,
+                migration_mode,
+                hass,
             )
 
             unique_id = construct_synthetic_unique_id_for_entry(
@@ -402,6 +442,7 @@ async def handle_solar_sensor_crud(
     leg1_circuit: int,
     leg2_circuit: int,
     device_name: str | None = None,
+    migration_mode: bool = False,
 ) -> bool:
     """Handle solar sensor CRUD operations.
 
@@ -414,6 +455,7 @@ async def handle_solar_sensor_crud(
         leg1_circuit: Circuit number for leg 1
         leg2_circuit: Circuit number for leg 2
         device_name: The device name to use for entity ID construction
+        migration_mode: Whether we're in migration mode
 
     Returns:
         True if successful, False otherwise
@@ -467,6 +509,33 @@ async def handle_solar_sensor_crud(
                     coordinator, span_panel, sensor_name, device_name
                 )
 
+                # Generate entity_id with migration mode support
+                sensor_type = template_name.split("_", 1)[
+                    1
+                ]  # "current_power", "produced_energy", etc.
+                if migration_mode:
+                    # Look up existing entity_id from registry
+                    entity_registry = er.async_get(hass)
+                    existing_entity_id = entity_registry.async_get_entity_id(
+                        "sensor", DOMAIN, sensor_unique_id
+                    )
+                    if existing_entity_id:
+                        solar_entity_id = existing_entity_id
+                        _LOGGER.debug(
+                            "MIGRATION: Using existing solar entity %s for unique_id %s",
+                            existing_entity_id,
+                            sensor_unique_id,
+                        )
+                    else:
+                        # FATAL ERROR: Migration mode but migrated key not found in registry
+                        raise ValueError(
+                            f"MIGRATION ERROR: Expected solar unique_id '{sensor_unique_id}' not found in registry. "
+                            f"This indicates migration failed for solar sensor {sensor_type}."
+                        )
+                else:
+                    # Normal mode: generate new entity_id
+                    solar_entity_id = f"sensor.solar_{sensor_type}"
+
                 # Load the template as a string
                 template_content = await load_template(template_name)
 
@@ -480,7 +549,7 @@ async def handle_solar_sensor_crud(
                     template_content,
                     {
                         "sensor_key": sensor_unique_id,
-                        "entity_id": f"sensor.solar_{template_name.split('_', 1)[1]}",
+                        "entity_id": solar_entity_id,
                         # Provide entity IDs for the formulas in the templates
                         # Power
                         "leg1_power_entity": leg_entities["leg1_power_entity"],
@@ -537,6 +606,7 @@ async def handle_solar_options_change(
     leg1_circuit: int,
     leg2_circuit: int,
     device_name: str | None = None,
+    migration_mode: bool = False,
 ) -> bool:
     """Handle solar options change by performing CRUD operations on SensorSet.
 
@@ -549,6 +619,7 @@ async def handle_solar_options_change(
         leg1_circuit: Circuit number for leg 1
         leg2_circuit: Circuit number for leg 2
         device_name: The device name to use for entity ID construction
+        migration_mode: Whether we're in migration mode
 
     Returns:
         True if successful, False otherwise
@@ -596,6 +667,7 @@ async def handle_solar_options_change(
                 leg1_circuit=leg1_circuit,
                 leg2_circuit=leg2_circuit,
                 device_name=device_name,
+                migration_mode=migration_mode,
             )
             if not success:
                 _LOGGER.error("Failed to add solar sensors")

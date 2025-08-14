@@ -15,7 +15,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
-from .helpers import build_circuit_unique_id, build_panel_unique_id
+from .helpers import (
+    build_circuit_unique_id,
+    build_panel_unique_id,
+    construct_synthetic_unique_id,
+    get_panel_entity_suffix,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,9 +35,17 @@ def _normalize_panel_description_key(raw_key: str) -> str:
     """
 
     if "." in raw_key:
-        # Convert dotted to camel-cased without the dot
-        left, right = raw_key.split(".", 1)
-        return f"{left}{right[0].upper()}{right[1:]}"
+        # Convert dotted to camel-cased, removing duplicate parts for energy sensors
+        if raw_key.endswith(".producedEnergyWh"):
+            base = raw_key.replace(".producedEnergyWh", "")
+            return f"{base}ProducedWh"
+        elif raw_key.endswith(".consumedEnergyWh"):
+            base = raw_key.replace(".consumedEnergyWh", "")
+            return f"{base}ConsumedWh"
+        else:
+            # General dot normalization for other cases
+            left, right = raw_key.split(".", 1)
+            return f"{left}{right[0].upper()}{right[1:]}"
     return raw_key
 
 
@@ -49,6 +62,37 @@ def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
             return None
         device_identifier = parts[1]
         remainder = parts[2]
+
+        # Check for solar sensor patterns FIRST (synthetic_XX_YY_solar_inverter_ZZZZ → solar_ZZZZ)
+        if "solar_inverter" in remainder and "synthetic_" in remainder:
+            # Extract the solar sensor type from old format
+            # Pattern: synthetic_30_32_solar_inverter_instant_power → solar_current_power
+            parts = remainder.split("_")
+            if (
+                len(parts) >= 5
+                and parts[0] == "synthetic"
+                and "solar" in parts
+                and "inverter" in parts
+            ):
+                # Find solar_inverter and get the type after it
+                try:
+                    solar_idx = parts.index("solar")
+                    inverter_idx = parts.index("inverter")
+                    if inverter_idx == solar_idx + 1 and len(parts) > inverter_idx + 1:
+                        old_solar_type = "_".join(parts[inverter_idx + 1 :])
+                        # Map old solar types to new types
+                        solar_type_map = {
+                            "instant_power": "current_power",
+                            "energy_produced": "produced_energy",
+                            "energy_consumed": "consumed_energy",
+                        }
+                        new_solar_type = solar_type_map.get(old_solar_type)
+                        if new_solar_type:
+                            return construct_synthetic_unique_id(
+                                device_identifier, f"solar_{new_solar_type}"
+                            )
+                except (ValueError, IndexError):
+                    pass
 
         # If remainder contains an underscore, treat as circuit: {circuit_id}_{api_field}
         last_underscore = remainder.rfind("_")
@@ -68,9 +112,29 @@ def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
                 return None
             return build_circuit_unique_id(device_identifier, circuit_id, canonical_api)
 
-        # Panel case: normalize dotted/camel variants to helper description keys
-        normalized_panel_key = _normalize_panel_description_key(remainder)
-        return build_panel_unique_id(device_identifier, normalized_panel_key)
+        # Check for native sensor keys (camelCase/legacy → snake_case mapping)
+        native_sensor_map = {
+            "currentRunConfig": "current_run_config",
+            "dsmGridState": "dsm_grid_state",
+            "dsmState": "dsm_state",
+            "mainRelayState": "main_relay_state",
+            "softwareVersion": "software_version",
+            "softwareVer": "software_version",  # Legacy mapping
+            "batteryPercentage": "storage_battery_percentage",
+        }
+
+        if remainder in native_sensor_map:
+            # Native sensor: use the snake_case key directly with build_panel_unique_id
+            snake_case_key = native_sensor_map[remainder]
+            return build_panel_unique_id(device_identifier, snake_case_key)
+
+        # Panel case: normalize dotted/camel variants to API keys, then use helper
+        # First normalize dots to camelCase API format
+        normalized_api_key = _normalize_panel_description_key(remainder)
+        # Then get the entity suffix using the helper
+        entity_suffix = get_panel_entity_suffix(normalized_api_key)
+        # Finally construct the unique_id using the same helper as synthetic sensors
+        return construct_synthetic_unique_id(device_identifier, entity_suffix)
 
     except Exception:
         return None

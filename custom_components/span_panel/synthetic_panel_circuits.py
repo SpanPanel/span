@@ -9,8 +9,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
+from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_backing_entity_id_for_entry,
@@ -20,7 +23,6 @@ from .helpers import (
     get_panel_entity_suffix,
     get_panel_voltage_attribute,
 )
-from .migration_utils import classify_sensor_from_unique_id
 from .span_panel import SpanPanel
 from .synthetic_utils import BackingEntity, combine_yaml_templates
 
@@ -94,15 +96,16 @@ def get_panel_data_value(span_panel: SpanPanel, data_path: str) -> float:
 
 
 async def generate_panel_sensors(
+    hass: HomeAssistant,
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
     device_name: str,
-    existing_sensor_mappings: dict[str, str] | None = None,
     migration_mode: bool = False,
 ) -> tuple[dict[str, Any], list[BackingEntity], dict[str, Any], dict[str, str]]:
     """Generate panel-level synthetic sensors and their backing entities.
 
     Args:
+        hass: The HomeAssistant instance
         coordinator: The SpanPanelCoordinator instance
         span_panel: The SpanPanel data
         device_name: The name of the device to use for sensor generation
@@ -192,32 +195,46 @@ async def generate_panel_sensors(
 
         # Generate the sensor key following documented pattern
         # Pattern: span_{identifier}_{sensor_key} where identifier is per-device
-        # For migration mode we already computed sensor_unique_id above
-        if not migration_mode:
-            # In non-migration scenarios, we maintain legacy support for existing mappings
-            if existing_sensor_mappings:
-                for existing_unique_id, existing_entity_id in existing_sensor_mappings.items():
-                    try:
-                        category, sensor_type, api_key = classify_sensor_from_unique_id(
-                            existing_unique_id
-                        )
-                        if category == "generic" and api_key == sensor_def["key"]:
-                            sensor_unique_id = existing_unique_id
-                            entity_id = existing_entity_id
-                            break
-                    except ValueError:
-                        continue
-            # If still not set, build helper-format unique_id (fresh install)
-            if "sensor_unique_id" not in locals() or sensor_unique_id is None:
-                sensor_unique_id = construct_synthetic_unique_id(
-                    device_identifier_for_uniques, entity_suffix
+        # Generate unique_id using helpers (same as migration uses)
+        sensor_unique_id = construct_synthetic_unique_id(
+            device_identifier_for_uniques, entity_suffix
+        )
+
+        # In migration mode, look up existing entity_id directly from registry
+        resolved_entity_id: str | None = None
+        if migration_mode:
+            entity_registry = er.async_get(hass)
+            existing_entity_id = entity_registry.async_get_entity_id(
+                "sensor", DOMAIN, sensor_unique_id
+            )
+            if existing_entity_id:
+                resolved_entity_id = existing_entity_id
+                _LOGGER.debug(
+                    "MIGRATION: Using existing entity %s for unique_id %s",
+                    resolved_entity_id,
+                    sensor_unique_id,
                 )
+            else:
+                # FATAL ERROR: Migration mode but migrated key not found in registry
+                raise ValueError(
+                    f"MIGRATION ERROR: Expected migrated unique_id '{sensor_unique_id}' not found in registry. "
+                    f"This indicates migration failed for panel sensor {sensor_def['key']}."
+                )
+        else:
+            # Non-migration mode: generate new entity_id
+            resolved_entity_id = construct_panel_synthetic_entity_id(
+                coordinator=coordinator,
+                span_panel=span_panel,
+                platform="sensor",
+                suffix=entity_suffix,
+                device_name=device_name,
+            )
 
         # Create placeholders for this specific sensor
         sensor_placeholders = {
             "sensor_key": sensor_unique_id,
             "sensor_name": friendly_name,
-            "entity_id": entity_id,
+            "entity_id": resolved_entity_id,
             "backing_entity_id": backing_entity_id,
         }
 
@@ -251,7 +268,7 @@ async def generate_panel_sensors(
         sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
 
         _LOGGER.debug(
-            "Generated panel sensor: %s -> %s (value: %s)", sensor_def["key"], entity_id, data_value
+            "Generated panel sensor: %s -> %s (value: %s)", sensor_def["key"], resolved_entity_id, data_value
         )
 
     return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
