@@ -103,6 +103,7 @@ async def test_ping_with_auth_failure():
 def test_ensure_client_open_client_none():
     api = SpanPanelApi("host")
     api._client = None
+    api._client_created = True  # Mark as previously created and closed
     with pytest.raises(SpanPanelAPIError, match="API client has been closed"):
         api._ensure_client_open()
 
@@ -262,6 +263,7 @@ async def test_set_priority():
 async def test_api_error_handling():
     api = SpanPanelApi("host")
     api._client = None
+    api._client_created = True  # Mark as previously created and closed
 
     with pytest.raises(SpanPanelAPIError, match="API client has been closed"):
         await api.get_status_data()

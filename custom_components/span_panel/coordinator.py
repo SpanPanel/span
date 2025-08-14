@@ -9,9 +9,17 @@ from time import time as _epoch_time
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelRetriableError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+)
 
 from .const import (
     DEFAULT_SCAN_INTERVAL,
@@ -37,6 +45,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         config_entry: ConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
+        if config_entry is None:
+            raise ValueError("config_entry cannot be None")
         self.span_panel = span_panel
         self.config_entry = config_entry
         self._migration_manager = EntityIdMigrationManager(hass, config_entry.entry_id)
@@ -44,6 +54,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         self.synthetic_sensor_set_id: str | None = None
         # Track last tick for visibility into cadence
         self._last_tick_epoch: float | None = None
+        # Flag to track if a reload was requested
+        self._reload_requested = False
 
         # Get scan interval from options, with fallback to default
         raw_scan_interval = config_entry.options.get(
@@ -92,6 +104,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         """Return the synthetic sensor set id if set during synthetic setup."""
         return self.synthetic_sensor_set_id
 
+    def request_reload(self) -> None:
+        """Request a reload of the integration."""
+        self._reload_requested = True
+
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""
         try:
@@ -110,13 +126,55 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SELECTS)
             async_dispatcher_send(self.hass, SIGNAL_STAGE_NATIVE_SENSORS)
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SYNTHETIC_SENSORS)
+            # Handle reload request if one was made
+            if self._reload_requested:
+                self._reload_requested = False
+                self.hass.async_create_task(self._async_reload_task())
             return self.span_panel
 
         except Exception as err:
             _LOGGER.error("Error communicating with Span Panel API: %s", err)
-            if "401" in str(err) or "Unauthorized" in str(err):
+            # Check for authentication errors
+            if isinstance(err, SpanPanelAuthError):
                 raise ConfigEntryAuthFailed("Authentication failed") from err
+
+            # Handle specific error types with appropriate messages
+            if isinstance(err, SpanPanelRetriableError):
+                raise UpdateFailed(f"Temporary SPAN Panel error: {err}") from err
+            elif isinstance(err, SpanPanelServerError):
+                raise UpdateFailed(f"SPAN Panel server error: {err}") from err
+            elif isinstance(
+                err, SpanPanelConnectionError | SpanPanelTimeoutError | SpanPanelAPIError
+            ):
+                raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+            # Fallback for string-based auth error detection (for backward compatibility)
+            error_message = str(err).lower()
+            if (
+                "401" in str(err)
+                or "Unauthorized" in str(err)
+                or "authentication failed" in error_message
+                or "auth failed" in error_message
+            ):
+                raise ConfigEntryAuthFailed("Authentication failed") from err
+
+            # Generic fallback for any other errors
             raise UpdateFailed(f"Error communicating with API: {err}") from err
+
+    async def _async_reload_task(self) -> None:
+        """Task to handle integration reload with proper error handling."""
+        try:
+            _LOGGER.info("Reloading SPAN Panel integration")
+            await self.hass.async_block_till_done()
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            _LOGGER.info("SPAN Panel integration reload completed successfully")
+
+        except ConfigEntryNotReady as err:
+            _LOGGER.warning("Config entry not ready during reload: %s", err)
+        except HomeAssistantError as err:
+            _LOGGER.error("Home Assistant error during reload: %s", err)
+        except Exception as err:
+            _LOGGER.exception("Unexpected error during reload: %s", err)
 
     async def migrate_synthetic_entities(
         self, old_flags: dict[str, bool], new_flags: dict[str, bool]

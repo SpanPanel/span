@@ -126,11 +126,14 @@ async def generate_single_fixture(pattern_name: str, options: dict) -> str:
 
         print(f"  ⚙️ Generating panel sensors for {pattern_name}...")
 
+        # Create minimal mock hass
+        mock_hass = MagicMock()
+
         # Generate panel sensors
         from custom_components.span_panel.synthetic_panel_circuits import generate_panel_sensors
         device_name = "Span Panel"  # Default device name for testing
         panel_sensor_configs, panel_backing_entities, global_settings, panel_mapping = await generate_panel_sensors(
-            mock_coordinator, mock_span_panel, device_name
+            mock_hass, mock_coordinator, mock_span_panel, device_name
         )
 
         print(f"  ⚙️ Generating circuit sensors for {pattern_name}...")
@@ -163,7 +166,7 @@ async def generate_single_fixture(pattern_name: str, options: dict) -> str:
 
         # Generate circuit sensors
         circuit_sensor_configs, circuit_backing_entities, circuit_global_settings, circuit_mapping = await generate_named_circuit_sensors(
-            mock_coordinator, mock_span_panel, device_name
+            mock_hass, mock_coordinator, mock_span_panel, device_name
         )
 
         print(f"  DEBUG: Panel sensors: {len(panel_sensor_configs)}")

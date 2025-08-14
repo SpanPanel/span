@@ -43,6 +43,7 @@ def create_mock_span_panel(circuits: dict[str, Any]):
     panel = MagicMock()
     panel.circuits = circuits
     panel.status.serial_number = "TEST123"
+    panel.api = MagicMock()  # Add api attribute for mock compatibility
     return panel
 
 
@@ -72,6 +73,11 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
     mock_panel = create_mock_span_panel(circuits)
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
+    # Add proper config entry with title for device name fallback
+    mock_coordinator.config_entry = MagicMock()
+    mock_coordinator.config_entry.title = "SPAN Panel"
+    mock_coordinator.config_entry.data = {}  # Empty data dict
+    mock_coordinator.config_entry.options = {}  # Empty options dict
 
     entities = []
 
@@ -80,6 +86,8 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
 
     mock_config_entry = MagicMock()
     mock_config_entry.entry_id = "test_entry"
+    mock_config_entry.title = "SPAN Panel"  # Provide string title
+    mock_config_entry.data = {}  # Empty data dict for device_name fallback to title
 
     # Mock hass data
     hass.data = {
@@ -94,7 +102,7 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
 
     # Should only create one switch for the controllable circuit
     assert len(entities) == 1
-    assert entities[0].circuit_id == "1"
+    assert entities[0]._circuit_id == "1"  # Access private attribute
 
 
 @pytest.mark.asyncio
@@ -113,9 +121,14 @@ async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: A
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
+    # Add proper config entry with title for device name fallback
+    mock_coordinator.config_entry = MagicMock()
+    mock_coordinator.config_entry.title = "SPAN Panel"
+    mock_coordinator.config_entry.data = {}  # Empty data dict
+    mock_coordinator.config_entry.options = {}  # Empty options dict
     mock_coordinator.async_request_refresh = AsyncMock()
 
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets")
+    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Turn on the switch
     await switch.async_turn_on()
@@ -145,9 +158,14 @@ async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: 
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
+    # Add proper config entry with title for device name fallback
+    mock_coordinator.config_entry = MagicMock()
+    mock_coordinator.config_entry.title = "SPAN Panel"
+    mock_coordinator.config_entry.data = {}  # Empty data dict
+    mock_coordinator.config_entry.options = {}  # Empty options dict
     mock_coordinator.async_request_refresh = AsyncMock()
 
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets")
+    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Turn off the switch
     await switch.async_turn_off()
@@ -177,8 +195,13 @@ async def test_switch_state_reflects_relay_state(hass: Any, enable_custom_integr
 
     mock_coordinator_closed = MagicMock()
     mock_coordinator_closed.data = mock_panel_closed
+    # Add proper config entry with title for device name fallback
+    mock_coordinator_closed.config_entry = MagicMock()
+    mock_coordinator_closed.config_entry.title = "SPAN Panel"
+    mock_coordinator_closed.config_entry.data = {}  # Empty data dict
+    mock_coordinator_closed.config_entry.options = {}  # Empty options dict
 
-    switch_closed = SpanPanelCircuitsSwitch(mock_coordinator_closed, "1", "Kitchen Outlets")
+    switch_closed = SpanPanelCircuitsSwitch(mock_coordinator_closed, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Check that switch is on for CLOSED relay
     assert switch_closed.is_on is True
@@ -195,8 +218,13 @@ async def test_switch_state_reflects_relay_state(hass: Any, enable_custom_integr
 
     mock_coordinator_open = MagicMock()
     mock_coordinator_open.data = mock_panel_open
+    # Add proper config entry with title for device name fallback
+    mock_coordinator_open.config_entry = MagicMock()
+    mock_coordinator_open.config_entry.title = "SPAN Panel"
+    mock_coordinator_open.config_entry.data = {}  # Empty data dict
+    mock_coordinator_open.config_entry.options = {}  # Empty options dict
 
-    switch_open = SpanPanelCircuitsSwitch(mock_coordinator_open, "1", "Kitchen Outlets")
+    switch_open = SpanPanelCircuitsSwitch(mock_coordinator_open, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Check that switch is off for OPEN relay
     assert switch_open.is_on is False
@@ -212,10 +240,15 @@ async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrati
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
+    # Add proper config entry with title for device name fallback
+    mock_coordinator.config_entry = MagicMock()
+    mock_coordinator.config_entry.title = "SPAN Panel"
+    mock_coordinator.config_entry.data = {}  # Empty data dict
+    mock_coordinator.config_entry.options = {}  # Empty options dict
 
     # Should raise ValueError for missing circuit
     with pytest.raises(ValueError, match="Circuit 1 not found"):
-        SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit")
+        SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit", "SPAN Panel")
 
 
 @pytest.mark.asyncio
@@ -233,8 +266,13 @@ async def test_switch_coordinator_update_handling(hass: Any, enable_custom_integ
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
+    # Add proper config entry with title for device name fallback
+    mock_coordinator.config_entry = MagicMock()
+    mock_coordinator.config_entry.title = "SPAN Panel"
+    mock_coordinator.config_entry.data = {}  # Empty data dict
+    mock_coordinator.config_entry.options = {}  # Empty options dict
 
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets")
+    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Add mock hass and entity registry to prevent "hass is None" error
     switch.hass = hass
@@ -276,9 +314,14 @@ async def test_circuit_name_change_triggers_reload_request(
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
+    # Add proper config entry with title for device name fallback
+    mock_coordinator.config_entry = MagicMock()
+    mock_coordinator.config_entry.title = "SPAN Panel"
+    mock_coordinator.config_entry.data = {}  # Empty data dict
+    mock_coordinator.config_entry.options = {}  # Empty options dict
     mock_coordinator.request_reload = MagicMock()
 
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets")
+    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Add mock hass and entity registry to prevent "hass is None" error
     switch.hass = hass

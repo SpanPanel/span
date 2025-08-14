@@ -144,7 +144,9 @@ async def test_solar_configuration_friendly_names(
     enable_custom_integrations: Any,
     mock_ha_storage,
     mock_synthetic_sensor_manager,
-    baseline_serial_number
+    baseline_serial_number,
+    device_registry,
+    async_add_entities
 ):
     """Test solar configuration with friendly names naming convention."""
 
@@ -226,9 +228,6 @@ async def test_solar_configuration_friendly_names(
         coordinator = entry_data.get("coordinator")
         assert coordinator is not None, "Coordinator should exist"
 
-        sensor_manager = entry_data.get("sensor_manager")
-        assert sensor_manager is not None, "Sensor manager should be created"
-
         # Verify unmapped solar circuits exist in coordinator data
         # coordinator.data is the SpanPanel object, not a dictionary
         span_panel = coordinator.data
@@ -237,13 +236,44 @@ async def test_solar_configuration_friendly_names(
         assert "unmapped_tab_30" in span_panel.circuits, "Should have unmapped tab 30 for solar"
         assert "unmapped_tab_32" in span_panel.circuits, "Should have unmapped tab 32 for solar"
 
+        # Set up storage manager properly using the public API pattern
+        from ha_synthetic_sensors import StorageManager, async_setup_synthetic_sensors
+        from unittest.mock import patch, AsyncMock
+
+        with (
+            patch("ha_synthetic_sensors.storage_manager.Store") as MockStore,
+            patch("homeassistant.helpers.device_registry.async_get") as MockDeviceRegistry,
+        ):
+            # Standard mock setup
+            mock_store = AsyncMock()
+            mock_store.async_load.return_value = None
+            MockStore.return_value = mock_store
+            MockDeviceRegistry.return_value = device_registry
+
+            # Create storage manager
+            storage_manager = StorageManager(hass, "span_panel_synthetic", enable_entity_listener=False)
+            storage_manager._store = mock_store
+            await storage_manager.async_load()
+
+            # Create sensor set
+            sensor_set_id = "span_panel_sensors"
+            await storage_manager.async_create_sensor_set(
+                sensor_set_id=sensor_set_id,
+                device_identifier=baseline_serial_number,
+                name="SPAN Panel Sensors"
+            )
+
+            # Set up synthetic sensors using public API
+            sensor_manager = await async_setup_synthetic_sensors(
+                hass=hass,
+                config_entry=entry,
+                async_add_entities=async_add_entities,
+                storage_manager=storage_manager,
+            )
+            assert sensor_manager is not None, "Sensor manager should be created"
+
         # Now enable solar with circuits 30 and 32
         from custom_components.span_panel.synthetic_solar import handle_solar_options_change
-
-        # Create a storage manager for the test
-        from ha_synthetic_sensors import StorageManager
-        storage_manager = StorageManager(hass, "span_panel_synthetic")
-        await storage_manager.async_load()
 
         # Enable solar configuration
         success = await handle_solar_options_change(
@@ -353,7 +383,9 @@ async def test_solar_configuration_circuit_numbers(
     enable_custom_integrations: Any,
     mock_ha_storage,
     mock_synthetic_sensor_manager,
-    baseline_serial_number
+    baseline_serial_number,
+    device_registry,
+    async_add_entities
 ):
     """Test solar configuration with circuit numbers naming convention."""
 
@@ -435,9 +467,6 @@ async def test_solar_configuration_circuit_numbers(
         coordinator = entry_data.get("coordinator")
         assert coordinator is not None, "Coordinator should exist"
 
-        sensor_manager = entry_data.get("sensor_manager")
-        assert sensor_manager is not None, "Sensor manager should be created"
-
         # Verify unmapped solar circuits exist in coordinator data
         # coordinator.data is the SpanPanel object, not a dictionary
         span_panel = coordinator.data
@@ -446,10 +475,41 @@ async def test_solar_configuration_circuit_numbers(
         assert "unmapped_tab_30" in span_panel.circuits, "Should have unmapped tab 30 for solar"
         assert "unmapped_tab_32" in span_panel.circuits, "Should have unmapped tab 32 for solar"
 
-        # Create a storage manager for the test
-        from ha_synthetic_sensors import StorageManager
-        storage_manager = StorageManager(hass, "span_panel_synthetic")
-        await storage_manager.async_load()
+        # Set up storage manager properly using the public API pattern
+        from ha_synthetic_sensors import StorageManager, async_setup_synthetic_sensors
+        from unittest.mock import patch, AsyncMock
+
+        with (
+            patch("ha_synthetic_sensors.storage_manager.Store") as MockStore,
+            patch("homeassistant.helpers.device_registry.async_get") as MockDeviceRegistry,
+        ):
+            # Standard mock setup
+            mock_store = AsyncMock()
+            mock_store.async_load.return_value = None
+            MockStore.return_value = mock_store
+            MockDeviceRegistry.return_value = device_registry
+
+            # Create storage manager
+            storage_manager = StorageManager(hass, "span_panel_synthetic", enable_entity_listener=False)
+            storage_manager._store = mock_store
+            await storage_manager.async_load()
+
+            # Create sensor set
+            sensor_set_id = "span_panel_sensors"
+            await storage_manager.async_create_sensor_set(
+                sensor_set_id=sensor_set_id,
+                device_identifier=baseline_serial_number,
+                name="SPAN Panel Sensors"
+            )
+
+            # Set up synthetic sensors using public API
+            sensor_manager = await async_setup_synthetic_sensors(
+                hass=hass,
+                config_entry=entry,
+                async_add_entities=async_add_entities,
+                storage_manager=storage_manager,
+            )
+            assert sensor_manager is not None, "Sensor manager should be created"
 
         # Now enable solar with circuits 30 and 32
         from custom_components.span_panel.synthetic_solar import handle_solar_options_change

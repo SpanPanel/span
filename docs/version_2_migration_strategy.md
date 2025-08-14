@@ -215,7 +215,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Set up synthetic sensors - this works the same for fresh and migrated installations
     # The migration will have already populated the storage if this was a v1 upgrade
     storage_manager = await setup_synthetic_configuration(hass, entry, coordinator)
-    sensor_manager = await setup_synthetic_sensors(
+    sensor_manager = await async_setup_synthetic_sensors(
         hass=hass,
         config_entry=entry,
         async_add_entities=async_add_entities,
@@ -572,7 +572,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # For migrated installations: finds existing sensor sets in storage
     # For fresh installations: generates new sensor sets
     storage_manager = await setup_synthetic_configuration(hass, entry, coordinator)
-    sensor_manager = await setup_synthetic_sensors(
+    sensor_manager = await async_setup_synthetic_sensors(
         hass=hass,
         config_entry=entry,
         async_add_entities=async_add_entities,

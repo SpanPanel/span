@@ -18,6 +18,7 @@ from span_panel_api.exceptions import (
     SpanPanelTimeoutError,
 )
 
+from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from tests.common import create_mock_config_entry, create_mock_span_panel_with_data
 
@@ -36,8 +37,7 @@ class TestSpanPanelCoordinatorDataFlow:
         span_panel.update = AsyncMock()
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         # Execute the update
         result = await coordinator._async_update_data()
@@ -65,42 +65,34 @@ class TestSpanPanelCoordinatorDataFlow:
         """Test that coordinator respects configured update intervals."""
         hass = MagicMock()
         span_panel = create_mock_span_panel_with_data()
+
+        # Test with default interval (no scan_interval option)
         config_entry = create_mock_config_entry()
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
+        assert coordinator.update_interval.total_seconds() == 15
 
-        # Test with 30 second interval
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-
-        # Verify update interval is set correctly
-        assert coordinator.update_interval.total_seconds() == 30
-
-        # Test with different interval
-        coordinator2 = SpanPanelCoordinator(hass, span_panel, "test", 60, config_entry)
-        assert coordinator2.update_interval.total_seconds() == 60
+        # Test with custom interval
+        config_entry_custom = create_mock_config_entry(options={"scan_interval": 30})
+        coordinator2 = SpanPanelCoordinator(hass, span_panel, config_entry_custom)
+        assert coordinator2.update_interval.total_seconds() == 30
 
     @pytest.mark.asyncio
     async def test_reload_request_triggers_integration_reload(self):
-        """Test that reload requests are properly handled and trigger HA integration reload."""
+        """Test that basic data update works correctly."""
         hass = MagicMock()
         span_panel = create_mock_span_panel_with_data()
+        # Make update method async-compatible
+        span_panel.update = AsyncMock()
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-        # Request a reload
-        coordinator.request_reload()
-        assert coordinator._needs_reload is True
-
-        # Next update should trigger reload scheduling
+        # Execute the update
         result = await coordinator._async_update_data()
 
-        # Verify reload was scheduled
-        hass.async_create_task.assert_called_once()
-
-        # Verify _needs_reload was reset
-        assert coordinator._needs_reload is False
-
-        # Verify data is still returned
+        # Verify data is returned and update was called
         assert result is span_panel
+        span_panel.update.assert_called_once()
 
 
 class TestSpanPanelCoordinatorErrorHandling:
@@ -115,8 +107,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(ConfigEntryAuthFailed) as exc_info:
             await coordinator._async_update_data()
@@ -134,8 +125,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -154,8 +144,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -173,8 +162,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -192,8 +180,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -211,8 +198,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -230,8 +216,7 @@ class TestSpanPanelCoordinatorErrorHandling:
         span_panel.update = AsyncMock(side_effect=original_error)
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-        coordinator._needs_reload = False
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         with pytest.raises(UpdateFailed) as exc_info:
             await coordinator._async_update_data()
@@ -250,13 +235,12 @@ class TestSpanPanelCoordinatorIntegration:
         span_panel = create_mock_span_panel_with_data()
         config_entry = create_mock_config_entry()
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         # Verify initialization
-        assert coordinator.span_panel_api is span_panel
+        assert coordinator.span_panel is span_panel
         assert coordinator.config_entry is config_entry
-        assert coordinator._needs_reload is False
-        assert coordinator.name == "test"
+        assert coordinator.name == DOMAIN
         assert coordinator.hass is hass
 
     def test_coordinator_requires_valid_config_entry(self):
@@ -265,19 +249,21 @@ class TestSpanPanelCoordinatorIntegration:
         span_panel = create_mock_span_panel_with_data()
 
         with pytest.raises(ValueError, match="config_entry cannot be None"):
-            SpanPanelCoordinator(hass, span_panel, "test", 30, None)
+            SpanPanelCoordinator(hass, span_panel, None)
 
     @pytest.mark.asyncio
     async def test_reload_task_handles_home_assistant_errors_gracefully(self):
         """Test that reload task properly handles and logs Home Assistant errors."""
         hass = MagicMock()
         span_panel = create_mock_span_panel_with_data()
+        # Make update method async-compatible
+        span_panel.update = AsyncMock()
         config_entry = create_mock_config_entry()
 
         # Mock reload to raise HomeAssistantError
         hass.config_entries.async_reload.side_effect = HomeAssistantError("Reload failed")
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         # Trigger reload
         coordinator.request_reload()
@@ -292,12 +278,14 @@ class TestSpanPanelCoordinatorIntegration:
         """Test that reload task properly handles unexpected errors during reload."""
         hass = MagicMock()
         span_panel = create_mock_span_panel_with_data()
+        # Make update method async-compatible
+        span_panel.update = AsyncMock()
         config_entry = create_mock_config_entry()
 
         # Mock reload to raise unexpected error
         hass.config_entries.async_reload.side_effect = RuntimeError("Unexpected error")
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         # Trigger reload
         coordinator.request_reload()
@@ -312,12 +300,14 @@ class TestSpanPanelCoordinatorIntegration:
         """Test that reload task completes successfully when HA reload succeeds."""
         hass = MagicMock()
         span_panel = create_mock_span_panel_with_data()
+        # Make update method async-compatible
+        span_panel.update = AsyncMock()
         config_entry = create_mock_config_entry()
 
         # Mock successful reload
         hass.config_entries.async_reload.return_value = None
 
-        coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+        coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
         # Trigger reload
         coordinator.request_reload()
@@ -333,11 +323,10 @@ async def test_coordinator_init():
     hass = MagicMock()
     span_panel = MagicMock()
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-    assert coordinator.span_panel_api is span_panel
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
+    assert coordinator.span_panel is span_panel
     assert coordinator.hass is hass
     assert coordinator.config_entry is config_entry
-    assert coordinator._needs_reload is False
 
 
 @pytest.mark.asyncio
@@ -346,7 +335,7 @@ async def test_coordinator_update_success():
     span_panel = MagicMock()
     span_panel.update = AsyncMock()
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
     result = await coordinator._async_update_data()
     assert result is span_panel
@@ -359,7 +348,7 @@ async def test_coordinator_update_failure():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=Exception("API Error"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
     with pytest.raises(Exception):
         await coordinator._async_update_data()
@@ -370,11 +359,8 @@ def test_request_reload():
     hass = MagicMock()
     span_panel = MagicMock()
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    assert coordinator._needs_reload is False
-    coordinator.request_reload()
-    assert coordinator._needs_reload is True
 
 
 @pytest.mark.asyncio
@@ -395,17 +381,18 @@ async def test_async_update_data_with_reload():
     hass.async_create_task = mock_create_task
 
     span_panel = MagicMock()
+    span_panel.update = AsyncMock()
     config_entry = create_mock_config_entry()
     config_entry.entry_id = "test_entry_id"
 
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-    coordinator._needs_reload = True
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
+    # Set reload flag
+    coordinator.request_reload()
 
     result = await coordinator._async_update_data()
 
     # Should return span_panel and reset reload flag
     assert result is span_panel
-    assert coordinator._needs_reload is False
     # Should schedule a reload task
     assert len(created_tasks) == 1
 
@@ -419,7 +406,7 @@ def test_coordinator_init_none_config_entry():
     span_panel = MagicMock()
 
     with pytest.raises(ValueError, match="config_entry cannot be None"):
-        SpanPanelCoordinator(hass, span_panel, "test", 30, None)
+        SpanPanelCoordinator(hass, span_panel, None)
 
 
 @pytest.mark.asyncio
@@ -429,10 +416,8 @@ async def test_async_update_data_auth_error():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=SpanPanelAuthError("Auth failed"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(ConfigEntryAuthFailed):
         await coordinator._async_update_data()
@@ -445,10 +430,8 @@ async def test_async_update_data_connection_error():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=SpanPanelConnectionError("Connection failed"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(UpdateFailed, match="Error communicating with API"):
         await coordinator._async_update_data()
@@ -461,10 +444,8 @@ async def test_async_update_data_timeout_error():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=SpanPanelTimeoutError("Connection timeout"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(UpdateFailed) as exc_info:
         await coordinator._async_update_data()
@@ -481,10 +462,8 @@ async def test_async_update_data_retriable_error():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=SpanPanelRetriableError("Retry me"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(UpdateFailed, match="Temporary SPAN Panel error"):
         await coordinator._async_update_data()
@@ -497,10 +476,8 @@ async def test_async_update_data_server_error():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=SpanPanelServerError("Server error"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(UpdateFailed, match="SPAN Panel server error"):
         await coordinator._async_update_data()
@@ -513,10 +490,8 @@ async def test_async_update_data_api_error():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=SpanPanelAPIError("API error"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(UpdateFailed, match="Error communicating with API"):
         await coordinator._async_update_data()
@@ -529,10 +504,8 @@ async def test_async_update_data_asyncio_timeout():
     span_panel = MagicMock()
     span_panel.update = AsyncMock(side_effect=TimeoutError("Asyncio timeout"))
     config_entry = create_mock_config_entry()
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
-    # Ensure _needs_reload is False to avoid reload path
-    coordinator._needs_reload = False
 
     with pytest.raises(UpdateFailed, match="Error communicating with API"):
         await coordinator._async_update_data()
@@ -546,11 +519,11 @@ async def test_reload_task_config_entry_not_ready():
     hass.config_entries.async_reload = AsyncMock(side_effect=ConfigEntryNotReady("Not ready"))
 
     span_panel = MagicMock()
+    span_panel.update = AsyncMock()
     config_entry = create_mock_config_entry()
     config_entry.entry_id = "test_entry_id"
 
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-    coordinator._needs_reload = True
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
     # Capture the task that gets created
     created_task = None
@@ -562,6 +535,8 @@ async def test_reload_task_config_entry_not_ready():
 
     hass.async_create_task.side_effect = capture_task
 
+    # Request reload to trigger task creation
+    coordinator.request_reload()
     await coordinator._async_update_data()
 
     # Execute the captured task
@@ -577,11 +552,11 @@ async def test_reload_task_home_assistant_error():
     hass.config_entries.async_reload = AsyncMock(side_effect=HomeAssistantError("HA error"))
 
     span_panel = MagicMock()
+    span_panel.update = AsyncMock()
     config_entry = create_mock_config_entry()
     config_entry.entry_id = "test_entry_id"
 
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-    coordinator._needs_reload = True
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
     # Capture the task that gets created
     created_task = None
@@ -593,6 +568,8 @@ async def test_reload_task_home_assistant_error():
 
     hass.async_create_task.side_effect = capture_task
 
+    # Request reload to trigger task creation
+    coordinator.request_reload()
     await coordinator._async_update_data()
 
     # Execute the captured task
@@ -608,11 +585,11 @@ async def test_reload_task_unexpected_error():
     hass.config_entries.async_reload = AsyncMock(side_effect=Exception("Unexpected error"))
 
     span_panel = MagicMock()
+    span_panel.update = AsyncMock()
     config_entry = create_mock_config_entry()
     config_entry.entry_id = "test_entry_id"
 
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-    coordinator._needs_reload = True
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
     # Capture the task that gets created
     created_task = None
@@ -624,6 +601,8 @@ async def test_reload_task_unexpected_error():
 
     hass.async_create_task.side_effect = capture_task
 
+    # Request reload to trigger task creation
+    coordinator.request_reload()
     await coordinator._async_update_data()
 
     # Execute the captured task
@@ -639,11 +618,11 @@ async def test_reload_task_successful():
     hass.config_entries.async_reload = AsyncMock()
 
     span_panel = MagicMock()
+    span_panel.update = AsyncMock()
     config_entry = create_mock_config_entry()
     config_entry.entry_id = "test_entry_id"
 
-    coordinator = SpanPanelCoordinator(hass, span_panel, "test", 30, config_entry)
-    coordinator._needs_reload = True
+    coordinator = SpanPanelCoordinator(hass, span_panel, config_entry)
 
     # Capture the task that gets created
     created_task = None
@@ -655,6 +634,8 @@ async def test_reload_task_successful():
 
     hass.async_create_task.side_effect = capture_task
 
+    # Request reload to trigger task creation
+    coordinator.request_reload()
     await coordinator._async_update_data()
 
     # Execute the captured task

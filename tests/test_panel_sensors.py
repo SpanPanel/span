@@ -44,6 +44,10 @@ class MockSpanPanel:
         # Add host attribute that the sensors expect
         self.host = "192.168.1.100"
 
+        # Add api attribute that util functions expect
+        self.api = MagicMock()
+        self.api.simulation_mode = False
+
 
 class TestPanelSensors:
     """Test panel-level sensors."""
@@ -198,9 +202,9 @@ class TestPanelSensors:
 
         sensor = SpanPanelPanelStatus(mock_coordinator, main_relay_description, mock_span_panel)
 
-        # Check that unique ID includes the serial number and key
+        # Check that unique ID includes the serial number and key (serial is lowercased)
         expected_unique_id = (
-            f"span_{mock_span_panel.status.serial_number}_{main_relay_description.key}"
+            f"span_{mock_span_panel.status.serial_number.lower()}_{main_relay_description.key}"
         )
         assert sensor.unique_id == expected_unique_id
 

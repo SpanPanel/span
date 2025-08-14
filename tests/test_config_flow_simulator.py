@@ -28,9 +28,24 @@ async def test_simulator_config_flow(hass: HomeAssistant) -> None:
         },
     )
 
-    # Should create entry directly without auth steps
+    # Simulator mode now has an additional config step
+    assert result["type"] == "form"
+    assert result["step_id"] == "simulator_config"
+
+    # Submit the simulator configuration
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={
+            "simulation_config": "simulation_config_32_circuit",  # Choose a valid config
+            "host": "localhost",
+            "simulation_start_time": "",  # Use default
+            "entity_naming_pattern": "friendly_names",
+        },
+    )
+
+    # Now should create entry
     assert result["type"] == "create_entry"
-    assert result["title"] == "SPAN Panel (Simulator)"
+    assert result["title"] == "Span Simulator"
 
     # Verify the config data
     assert result["data"][CONF_HOST] == "localhost"

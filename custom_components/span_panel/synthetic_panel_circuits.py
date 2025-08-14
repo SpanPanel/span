@@ -268,7 +268,10 @@ async def generate_panel_sensors(
         sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
 
         _LOGGER.debug(
-            "Generated panel sensor: %s -> %s (value: %s)", sensor_def["key"], resolved_entity_id, data_value
+            "Generated panel sensor: %s -> %s (value: %s)",
+            sensor_def["key"],
+            resolved_entity_id,
+            data_value,
         )
 
     return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping

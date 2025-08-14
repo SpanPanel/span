@@ -12,8 +12,6 @@ def test_panel_level_entity_detection() -> None:
     coordinator = SpanPanelCoordinator(
         hass=Mock(),
         span_panel=Mock(),
-        name="test",
-        update_interval=30,
         config_entry=Mock(),
     )
 
@@ -53,13 +51,16 @@ def test_panel_level_entity_detection() -> None:
     # Test circuit-based entities (should NOT be identified as panel-level)
     circuit_entities = [
         Mock(
-            unique_id="span_12345_circuits_1",
+            unique_id="span_12345_12ce227695cd44338864b0ef2ec4168b_instantPowerW",
             entity_id="sensor.span_panel_circuit_1_power",
         ),
-        Mock(unique_id="span_12345_circuits_2", entity_id="switch.span_panel_circuit_2"),
         Mock(
-            unique_id="span_12345_circuits_3_power",
-            entity_id="sensor.span_panel_circuit_3_power",
+            unique_id="span_12345_497ae7ebb2844772bf926f2f094c81bc_relayState",
+            entity_id="switch.span_panel_circuit_2"
+        ),
+        Mock(
+            unique_id="span_12345_31b36cde0fc642b39eec515267707a6f_consumedEnergyWh",
+            entity_id="sensor.span_panel_circuit_3_energy",
         ),
     ]
 
