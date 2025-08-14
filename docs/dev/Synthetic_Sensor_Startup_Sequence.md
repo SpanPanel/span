@@ -442,13 +442,13 @@ All result in the same outcome: storage manager contains sensor configurations t
 
 ### Fresh Installation
 
-```
+```text
 Coordinator Data → Config Generation → YAML Creation → Storage Import → Convenience Method → Sensors
 ```
 
 ### Migrated Installation (v1→v2)
 
-```
+```text
 Migration Phase: Entity Registry → YAML Generation → Storage Import
                                                            ↓
 Runtime Phase:   Coordinator Data → Config Generation → Storage (Pre-loaded) → YAML Regeneration → Storage Update → Convenience Method → Sensors
@@ -456,7 +456,7 @@ Runtime Phase:   Coordinator Data → Config Generation → Storage (Pre-loaded)
 
 ### Existing v2 Installation
 
-```
+```text
 Coordinator Data → Config Generation → Storage (Pre-loaded) → Convenience Method → Sensors
                                    ↗
                         Skip YAML Creation/Import
