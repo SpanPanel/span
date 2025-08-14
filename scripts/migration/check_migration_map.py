@@ -24,7 +24,7 @@ from typing import Any
 import sys
 
 # Ensure we can import the integration module directly from repo root
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 INTEGRATION_DIR = REPO_ROOT / "span" / "custom_components" / "span_panel"
 sys.path.insert(0, str(INTEGRATION_DIR))
 
@@ -157,5 +157,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

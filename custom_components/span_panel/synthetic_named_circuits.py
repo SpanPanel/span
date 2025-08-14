@@ -10,8 +10,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
+from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_120v_synthetic_entity_id,
@@ -23,7 +26,6 @@ from .helpers import (
     get_circuit_number,
     get_user_friendly_suffix,
 )
-from .migration_utils import classify_sensor_from_unique_id
 from .span_panel import SpanPanel
 from .synthetic_utils import BackingEntity, combine_yaml_templates
 
@@ -71,48 +73,11 @@ def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
         return 0.0
 
 
-def _match_existing_mapping(
-    mappings: dict[str, str] | None, sensor_key: str, circuit: Any
-) -> tuple[str | None, str | None]:
-    """Try to match an existing mapping for this circuit and sensor key.
-
-    Returns (sensor_unique_id, entity_id) if a match is found, otherwise (None, None).
-    """
-    if not mappings:
-        return None, None
-    for existing_unique_id, existing_entity_id in mappings.items():
-        try:
-            category, sensor_type, api_key = classify_sensor_from_unique_id(existing_unique_id)
-            if category != "generic" or api_key != sensor_key:
-                continue
-            # For circuit sensors, verify circuit number matches
-            if "_circuit_" in existing_entity_id:
-                try:
-                    parts = existing_entity_id.split("_circuit_")
-                    if len(parts) > 1:
-                        number_part = parts[1].split("_")[0]
-                        circuit_number_from_entity = int(number_part)
-                        current_circuit_number = get_circuit_number(circuit)
-                        if circuit_number_from_entity != current_circuit_number:
-                            continue
-                except (ValueError, IndexError):
-                    continue
-            elif "_circuit_" not in existing_entity_id:
-                # Panel-level sensor (no circuit number) - match by API key only
-                pass
-            else:
-                continue
-            return existing_unique_id, existing_entity_id
-        except ValueError:
-            continue
-    return None, None
-
-
 async def generate_named_circuit_sensors(
+    hass: HomeAssistant,
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
     device_name: str,
-    existing_sensor_mappings: dict[str, str] | None = None,
     migration_mode: bool = False,
 ) -> tuple[dict[str, Any], list[BackingEntity], dict[str, Any], dict[str, str]]:
     """Generate named circuit synthetic sensors and their backing entities.
@@ -121,11 +86,10 @@ async def generate_named_circuit_sensors(
     (circuits that are not unmapped tab positions).
 
     Args:
+        hass: Home Assistant instance
         coordinator: The SpanPanelCoordinator instance
         span_panel: The SpanPanel data
         device_name: The device name to use for entity IDs and friendly names
-        existing_sensor_mappings: Optional dict mapping unique_id to entity_id for migration.
-                                 If None, generates new keys using helpers.
         migration_mode: When True, resolve entity_ids by registry lookup using helper-format unique_id
 
     Returns:
@@ -141,7 +105,7 @@ async def generate_named_circuit_sensors(
     # Get display precision from options - coordinator should always be available during YAML generation
     if coordinator is None:
         raise ValueError("Coordinator is required for YAML generation but was None")
-    
+
     power_precision = coordinator.config_entry.options.get("power_display_precision", 0)
     energy_precision = coordinator.config_entry.options.get("energy_display_precision", 2)
     is_simulator: bool = bool(coordinator.config_entry.data.get("simulation_mode", False))
@@ -154,12 +118,12 @@ async def generate_named_circuit_sensors(
         )
     else:
         # This should only happen during migration step (no coordinator), but we shouldn't be generating YAML then
-        raise ValueError("span_panel is None during YAML generation - coordinator should provide live data")
+        raise ValueError(
+            "span_panel is None during YAML generation - coordinator should provide live data"
+        )
 
     # Create common placeholders for header template
-    energy_grace_period = coordinator.config_entry.options.get(
-        "energy_reporting_grace_period", 15
-    )
+    energy_grace_period = coordinator.config_entry.options.get("energy_reporting_grace_period", 15)
 
     common_placeholders = {
         "device_identifier": device_identifier_for_uniques,
@@ -178,7 +142,9 @@ async def generate_named_circuit_sensors(
 
     # For fresh installs or normal boot after migration, we need circuits data
     if not named_circuits:
-        raise ValueError(f"No named circuits found to process (span_panel available: {span_panel is not None}). Cannot generate synthetic sensors without circuit data.")
+        raise ValueError(
+            f"No named circuits found to process (span_panel available: {span_panel is not None}). Cannot generate synthetic sensors without circuit data."
+        )
 
     for circuit_id, circuit_data in named_circuits.items():
         for sensor_def in NAMED_CIRCUIT_SENSOR_DEFINITIONS:
@@ -186,34 +152,37 @@ async def generate_named_circuit_sensors(
             circuit_number = get_circuit_number(circuit_data)
             circuit_name = circuit_data.name or f"Circuit {circuit_number}"
 
-            # Check if this sensor definition matches any existing sensor for this circuit
-            sensor_unique_id: str | None = None
-            entity_id: str | None = None
-
-            match_uid, match_entity = _match_existing_mapping(
-                existing_sensor_mappings, sensor_def["key"], circuit_data
+            # Generate unique_id using helpers (same as migration uses)
+            entity_suffix = get_user_friendly_suffix(sensor_def["key"])
+            sensor_name = f"{circuit_id}_{entity_suffix}"
+            sensor_unique_id = construct_synthetic_unique_id(
+                device_identifier_for_uniques, sensor_name
             )
-            if match_uid and match_entity:
-                _LOGGER.info(
-                    "MIGRATION: Using existing entity %s (unique_id: %s) for sensor key %s",
-                    match_entity,
-                    match_uid,
-                    sensor_def["key"],
-                )
-                sensor_unique_id = match_uid
-                entity_id = match_entity
 
-            # If no existing sensor found, generate new keys (new installation) or lookup by unique_id in migration mode
-            if sensor_unique_id is None:
-                entity_suffix = get_user_friendly_suffix(sensor_def["key"])
-                # Build helper-format unique_id for this circuit sensor
-                sensor_name = f"{circuit_id}_{entity_suffix}"
-                sensor_unique_id = construct_synthetic_unique_id(
-                    device_identifier_for_uniques, sensor_name
+            # In migration mode, look up existing entity_id directly from registry
+            entity_id: str | None = None
+            if migration_mode:
+                entity_registry = er.async_get(hass)
+                existing_entity_id = entity_registry.async_get_entity_id(
+                    "sensor", DOMAIN, sensor_unique_id
                 )
-                # Generate entity ID using appropriate helper; pass unique_id in migration mode to retrieve existing entity_id
+                if existing_entity_id:
+                    entity_id = existing_entity_id
+                    _LOGGER.debug(
+                        "MIGRATION: Using existing entity %s for unique_id %s",
+                        entity_id,
+                        sensor_unique_id,
+                    )
+                else:
+                    # FATAL ERROR: Migration mode but migrated key not found in registry
+                    raise ValueError(
+                        f"MIGRATION ERROR: Expected migrated unique_id '{sensor_unique_id}' not found in registry. "
+                        f"This indicates migration failed for circuit {circuit_id} sensor {sensor_def['key']}."
+                    )
+            else:
+                # Non-migration mode: generate new entity_id
                 if len(circuit_data.tabs) == 2:
-                    tmp_eid = construct_240v_synthetic_entity_id(
+                    entity_id = construct_240v_synthetic_entity_id(
                         coordinator=coordinator,
                         span_panel=span_panel,
                         platform="sensor",
@@ -221,17 +190,15 @@ async def generate_named_circuit_sensors(
                         friendly_name=circuit_name,
                         tab1=circuit_data.tabs[0],
                         tab2=circuit_data.tabs[1],
-                        unique_id=sensor_unique_id if migration_mode else None,
                     )
                 elif len(circuit_data.tabs) == 1:
-                    tmp_eid = construct_120v_synthetic_entity_id(
+                    entity_id = construct_120v_synthetic_entity_id(
                         coordinator=coordinator,
                         span_panel=span_panel,
                         platform="sensor",
                         suffix=entity_suffix,
                         friendly_name=circuit_name,
                         tab=circuit_data.tabs[0],
-                        unique_id=sensor_unique_id if migration_mode else None,
                     )
                 else:
                     raise ValueError(
@@ -239,9 +206,8 @@ async def generate_named_circuit_sensors(
                         f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
                         f"Tabs: {circuit_data.tabs}"
                     )
-                if tmp_eid is None:
+                if entity_id is None:
                     raise ValueError("Failed to build entity_id for circuit sensor")
-                entity_id = tmp_eid
                 _LOGGER.debug(
                     "GEN_CKT_DEBUG: migration_mode=%s, circuit_id=%s, unique_id=%s, resolved_entity_id=%s",
                     migration_mode,

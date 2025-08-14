@@ -243,7 +243,9 @@ class SyntheticSensorCoordinator:
         self.change_notifier = change_notifier
         _LOGGER.debug("Change notifier callback set for synthetic coordinator")
 
-    async def setup_configuration(self, config_entry: ConfigEntry) -> StorageManager:
+    async def setup_configuration(
+        self, config_entry: ConfigEntry, migration_mode: bool = False
+    ) -> StorageManager:
         """Set up synthetic sensor configuration and storage manager.
 
         This method generates sensor configurations, registers backing entities,
@@ -251,6 +253,7 @@ class SyntheticSensorCoordinator:
 
         Args:
             config_entry: The configuration entry
+            migration_mode: Whether we're in migration mode
 
         Returns:
             StorageManager: The configured storage manager
@@ -266,19 +269,14 @@ class SyntheticSensorCoordinator:
 
         # Delegate to the appropriate configuration method
         # Simulation mode handling is now done by the factory
-        return await self._setup_live_configuration(config_entry)
+        return await self._setup_live_configuration(config_entry, migration_mode)
 
-    async def _setup_live_configuration(self, config_entry: ConfigEntry) -> StorageManager:
+    async def _setup_live_configuration(
+        self, config_entry: ConfigEntry, migration_mode: bool = False
+    ) -> StorageManager:
         """Set up configuration for live panel data (existing implementation)."""
         # Generate panel sensors and backing entities with global settings
         span_panel = self.coordinator.data
-        # Determine migration mode (prefer persisted option, fallback to hass.data)
-        migration_mode = bool(
-            self.coordinator.config_entry.options.get("migration_mode", False)
-            or self.hass.data.get(DOMAIN, {})
-            .get(self.coordinator.config_entry.entry_id, {})
-            .get("migration_mode", False)
-        )
         _LOGGER.debug(
             "SYN_SETUP_DEBUG: migration_mode=%s for entry_id=%s",
             migration_mode,
@@ -291,6 +289,7 @@ class SyntheticSensorCoordinator:
             global_settings,
             panel_mappings,
         ) = await generate_panel_sensors(
+            self.hass,
             self.coordinator,
             span_panel,
             self.device_name,
@@ -304,6 +303,7 @@ class SyntheticSensorCoordinator:
             named_global_settings,
             circuit_mappings,
         ) = await generate_named_circuit_sensors(
+            self.hass,
             self.coordinator,
             span_panel,
             self.device_name,
@@ -321,22 +321,20 @@ class SyntheticSensorCoordinator:
             global_settings = named_global_settings
 
         # Debug: check for power sensors specifically
-        power_sensors = [key for key in all_sensor_configs.keys() if "power" in key.lower()]
+        power_sensors = [key for key in all_sensor_configs if "power" in key.lower()]
         circuit_power_sensors = [key for key in power_sensors if "circuit" in key.lower()]
-        
-        # WFF - Change to debug
-        _LOGGER.error(
+
+        _LOGGER.debug(
             "Setting up synthetic sensors: %d panel + %d named circuit = %d total sensors",
             len(panel_sensor_configs),
             len(named_circuit_configs),
             len(all_sensor_configs),
         )
-        # WFF - Change to debug
-        _LOGGER.error(
+        _LOGGER.debug(
             "Power sensor breakdown: %d total power sensors, %d circuit power sensors: %s",
             len(power_sensors),
-            len(circuit_power_sensors), 
-            circuit_power_sensors[:5]  # Show first 5 as examples
+            len(circuit_power_sensors),
+            circuit_power_sensors[:5],  # Show first 5 as examples
         )
 
         # Always populate backing entity metadata for data provider callback
@@ -555,12 +553,22 @@ class SyntheticSensorCoordinator:
 
 
 async def setup_synthetic_configuration(
-    hass: HomeAssistant, config_entry: ConfigEntry, coordinator: SpanPanelCoordinator
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    coordinator: SpanPanelCoordinator,
+    migration_mode: bool = False,
 ) -> StorageManager:
     """Set up synthetic sensor configuration.
 
     This function creates the synthetic sensor coordinator and delegates the configuration
     setup to the coordinator, which owns the storage manager.
+
+    Args:
+        hass: Home Assistant instance
+        config_entry: The config entry
+        coordinator: SPAN Panel coordinator
+        migration_mode: Whether we're in migration mode
+
     """
     # Get device name from config entry
     device_name = config_entry.data.get("device_name", config_entry.title)
@@ -570,7 +578,7 @@ async def setup_synthetic_configuration(
     _synthetic_coordinators[config_entry.entry_id] = synthetic_coord
 
     # Delegate configuration setup to the coordinator
-    storage_manager = await synthetic_coord.setup_configuration(config_entry)
+    storage_manager = await synthetic_coord.setup_configuration(config_entry, migration_mode)
 
     return storage_manager
 
