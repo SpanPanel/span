@@ -1682,7 +1682,7 @@ files = [
 
 [[package]]
 name = "ha-synthetic-sensors"
-version = "1.1.8"
+version = "1.1.9"
 description = "A Home Assistant package for creating synthetic sensors from YAML configuration with mathematical formulas"
 optional = false
 python-versions = ">=3.13.2,<3.14"
