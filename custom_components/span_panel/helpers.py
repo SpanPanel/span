@@ -1181,15 +1181,6 @@ def get_unmapped_circuit_entity_id(
     """
     circuit_id = f"unmapped_tab_{tab_number}"
 
-    # Debug logging to understand what circuits are available
-    _LOGGER.debug(
-        "get_unmapped_circuit_entity_id called for tab_number=%s, suffix=%s", tab_number, suffix
-    )
-    _LOGGER.debug(
-        "Looking for circuit_id: %s in circuits: %s", circuit_id, list(span_panel.circuits.keys())
-    )
-    _LOGGER.debug("FULL CIRCUITS LIST: %s", span_panel.circuits)
-
     # Verify the circuit exists in the panel data
     if circuit_id not in span_panel.circuits:
         _LOGGER.debug("Unmapped circuit %s not found in circuits list", circuit_id)
