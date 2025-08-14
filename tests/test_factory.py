@@ -1,5 +1,7 @@
 """Tests for the factory classes and their use of constants."""
 
+from unittest.mock import patch
+
 from custom_components.span_panel.binary_sensor import BINARY_SENSORS
 from custom_components.span_panel.const import (
     CURRENT_RUN_CONFIG,
