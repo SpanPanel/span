@@ -26,6 +26,10 @@ class TestUnmappedSensorIds:
         mock_status.serial_number = serial_number
         mock_span_panel.status = mock_status
 
+        # Add api attribute that some tests might access
+        mock_api = MagicMock()
+        mock_span_panel.api = mock_api
+
         return mock_span_panel
 
     def _create_mock_coordinator(self, config_options: dict = None):
@@ -34,7 +38,10 @@ class TestUnmappedSensorIds:
             config_options = {}
 
         coordinator = MagicMock()
-        mock_config_entry = create_mock_config_entry({CONF_HOST: "192.168.1.100"}, config_options)
+        mock_config_entry = create_mock_config_entry(
+            {CONF_HOST: "192.168.1.100", "device_name": "SPAN Panel"},
+            config_options
+        )
         coordinator.config_entry = mock_config_entry
         return coordinator
 

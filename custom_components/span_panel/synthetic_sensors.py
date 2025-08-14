@@ -622,7 +622,7 @@ async def _construct_complete_yaml_config(
     return yaml_result
 
 
-async def setup_synthetic_sensors(
+async def async_setup_synthetic_sensors(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,

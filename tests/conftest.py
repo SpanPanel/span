@@ -281,6 +281,39 @@ async def mock_synthetic_sensor_manager(hass, synthetic_storage_manager):
     mock_config_entry.data = {"host": "192.168.1.100"}
     mock_config_entry.options = {}
 
+    # Create a sensor set first with some basic sensors
+    sensor_set_id = f"{mock_config_entry.entry_id}_sensors"
+    device_identifier = "test_device_123"
+
+    # Create sensor set if it doesn't exist
+    if not synthetic_storage_manager.sensor_set_exists(sensor_set_id):
+        await synthetic_storage_manager.async_create_sensor_set(
+            sensor_set_id=sensor_set_id,
+            device_identifier=device_identifier,
+            name="Test SPAN Panel Sensors"
+        )
+
+    # Get the sensor set and add some basic test sensors
+    sensor_set = synthetic_storage_manager.get_sensor_set(sensor_set_id)
+
+    # Create a minimal test sensor configuration
+    test_sensor_yaml = f"""
+version: "1.0"
+global_settings:
+  device_identifier: "{device_identifier}"
+sensors:
+  test_power_sensor:
+    name: "Test Power Sensor"
+    entity_id: "sensor.test_power"
+    formula: "state"
+    metadata:
+      unit_of_measurement: "W"
+      device_class: "power"
+"""
+
+    # Import the test configuration
+    await sensor_set.async_import_yaml(test_sensor_yaml)
+
     # Create data provider that returns test values
     def data_provider_callback(entity_id: str):
         """Test data provider that returns mock values."""
@@ -300,16 +333,22 @@ async def mock_synthetic_sensor_manager(hass, synthetic_storage_manager):
         config_entry=mock_config_entry,
         async_add_entities=mock_add_entities,
         storage_manager=synthetic_storage_manager,
-        device_identifier="test_device_123",
+        sensor_set_id=sensor_set_id,  # Use the created sensor set
         data_provider_callback=data_provider_callback,
     )
 
     return sensor_manager
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 async def baseline_serial_number():
     """Fixture to provide the serial number from the baseline YAML (friendly_names.yaml)."""
     fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
     baseline_path = os.path.join(fixtures_dir, "friendly_names.yaml")
     return await SpanPanelSimulationFactory.extract_serial_number_from_yaml(baseline_path)
+
+
+@pytest.fixture
+def async_add_entities():
+    """Mock async_add_entities callback for testing."""
+    return AsyncMock()

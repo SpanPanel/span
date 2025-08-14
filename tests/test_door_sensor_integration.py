@@ -43,11 +43,14 @@ async def test_door_state_tamper_sensor_closed(hass: Any, enable_custom_integrat
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
 
+        # Ensure all async state updates are complete
+        await hass.async_block_till_done()
+
         # Check that door state tamper sensor is clear (OFF) when door is closed
-        assert_entity_state(hass, "binary_sensor.door_state", "off")
+        assert_entity_state(hass, "binary_sensor.mock_title_doorstate", "off")
 
         # Verify the sensor has the correct device class
-        state = hass.states.get("binary_sensor.door_state")
+        state = hass.states.get("binary_sensor.mock_title_doorstate")
         assert state is not None
         assert state.attributes.get("device_class") == "tamper"
 
@@ -72,11 +75,14 @@ async def test_door_state_tamper_sensor_open(hass: Any, enable_custom_integratio
         coordinator = hass.data["span_panel"][entry.entry_id]["coordinator"]
         await trigger_coordinator_update(coordinator)
 
-        # Check that door state tamper sensor is tampered (ON) when door is open
-        assert_entity_state(hass, "binary_sensor.door_state", "on")
+        # Ensure all async state updates are complete
+        await hass.async_block_till_done()
+
+        # Check that door state tamper sensor is triggered (ON) when door is open
+        assert_entity_state(hass, "binary_sensor.mock_title_doorstate", "on")
 
         # Verify the sensor has the correct device class
-        state = hass.states.get("binary_sensor.door_state")
+        state = hass.states.get("binary_sensor.mock_title_doorstate")
         assert state is not None
         assert state.attributes.get("device_class") == "tamper"
 
@@ -102,7 +108,7 @@ async def test_door_state_tamper_sensor_unknown(hass: Any, enable_custom_integra
         await trigger_coordinator_update(coordinator)
 
         # Check that door state tamper sensor remains unknown when state is unknown
-        state = hass.states.get("binary_sensor.door_state")
+        state = hass.states.get("binary_sensor.mock_title_doorstate")
         assert state is not None
         assert state.state == "unknown"
 

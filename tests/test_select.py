@@ -47,7 +47,7 @@ class DummySpanPanelCircuit:
 def test_select_init_missing_circuit():
     coordinator = DummyCoordinator()
     with pytest.raises(ValueError):
-        SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "name")
+        SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "name", "Test Device")
 
 
 @pytest.mark.asyncio
@@ -61,6 +61,10 @@ async def test_async_select_option_service_not_found(monkeypatch):
         "custom_components.span_panel.select.async_create_span_notification", new_callable=AsyncMock
     ) as mock_notification:
         coordinator = MagicMock()
+        coordinator.config_entry = MagicMock()
+        coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {}
+        coordinator.config_entry.options = {}
         circuit = SpanPanelCircuit(
             circuit_id="id",
             name="name",
@@ -81,7 +85,7 @@ async def test_async_select_option_service_not_found(monkeypatch):
         span_panel.api.set_priority = AsyncMock(
             side_effect=ServiceNotFound("test_domain", "test_service")
         )
-        select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name")
+        select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name", "Test Device")
         select.coordinator = coordinator
         select.hass = MagicMock()
         select._get_circuit = MagicMock(return_value=circuit)
@@ -102,6 +106,10 @@ async def test_async_select_option_server_error(monkeypatch):
         "custom_components.span_panel.select.async_create_span_notification", new_callable=AsyncMock
     ) as mock_notification:
         coordinator = MagicMock()
+        coordinator.config_entry = MagicMock()
+        coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {}
+        coordinator.config_entry.options = {}
         circuit = SpanPanelCircuit(
             circuit_id="id",
             name="name",
@@ -120,7 +128,7 @@ async def test_async_select_option_server_error(monkeypatch):
         coordinator.data.circuits = {"id": circuit}
         span_panel = coordinator.data
         span_panel.api.set_priority = AsyncMock(side_effect=SpanPanelServerError("test error"))
-        select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name")
+        select = SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name", "Test Device")
         select.coordinator = coordinator
         select.hass = MagicMock()
         select._get_circuit = MagicMock(return_value=circuit)

@@ -18,7 +18,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN, STORAGE_MANAGER
+from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_120v_synthetic_entity_id,
@@ -147,7 +147,9 @@ def _generate_sensor_entity_id(
     # In migration mode, look up existing entity_id from registry
     if migration_mode and hass:
         # Generate the unique_id that solar sensors should have
-        device_name = coordinator.config_entry.data.get("device_name", coordinator.config_entry.title)
+        device_name = coordinator.config_entry.data.get(
+            "device_name", coordinator.config_entry.title
+        )
         unique_id = construct_synthetic_unique_id_for_entry(
             coordinator, span_panel, f"solar_{sensor_type}", device_name
         )
@@ -409,7 +411,12 @@ async def generate_solar_sensors_with_entity_ids(
 
             # Process the sensor template
             _LOGGER.debug("Processing template %s for sensor %s", sensor_def["template"], unique_id)
-            final_config = await _process_sensor_template(sensor_def, template_vars, entity_id)
+            # Add sensor_key to template vars for this specific sensor
+            sensor_template_vars = template_vars.copy()
+            sensor_template_vars["sensor_key"] = unique_id
+            final_config = await _process_sensor_template(
+                sensor_def, sensor_template_vars, entity_id
+            )
             if final_config:
                 sensor_configs[unique_id] = final_config
                 _LOGGER.debug("Successfully generated solar sensor: %s -> %s", unique_id, entity_id)
@@ -575,20 +582,9 @@ async def handle_solar_sensor_crud(
 
         _LOGGER.debug("Added %d solar sensors via YAML CRUD", len(solar_templates))
 
-        # Reload configuration in sensor manager to create the new sensors
-        integration_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-        sensor_manager = integration_data.get("sensor_manager")
-        if sensor_manager:
-            # Get the updated configuration from storage and reload
-            storage_manager = integration_data.get(STORAGE_MANAGER)
-            if storage_manager:
-                config = storage_manager.to_config(device_identifier=device_identifier)
-                await sensor_manager.reload_configuration(config)
-                _LOGGER.debug("Reloaded sensor manager configuration with solar sensors")
-            else:
-                _LOGGER.error("Storage manager not found for solar sensor reload")
-        else:
-            _LOGGER.error("Sensor manager not found for solar sensor reload")
+        # YAML CRUD operations are self-contained and automatically update the sensor manager
+        # No additional configuration reload is needed - the sensors are already active
+        _LOGGER.debug("Solar sensors added via YAML CRUD - no additional reload needed")
 
         return True
 

@@ -405,4 +405,4 @@ class SpanPanelSimulationFactory:
         async with aiofiles.open(yaml_path, "r") as f:
             content = await f.read()
         data = yaml.safe_load(content)
-        return str(data["panel_config"]["serial_number"])
+        return str(data["global_settings"]["device_identifier"])

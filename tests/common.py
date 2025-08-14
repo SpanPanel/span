@@ -18,6 +18,7 @@ def create_mock_config_entry(
     mock_entry = MagicMock()
     mock_entry.data = data or {}
     mock_entry.options = options or {}
+    mock_entry.title = "SPAN Panel"  # Default title for device_name fallback
     return mock_entry
 
 

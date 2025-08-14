@@ -45,6 +45,7 @@ def mock_coordinator():
     """Create a mock coordinator."""
     coordinator = MagicMock()
     coordinator.config_entry = None  # Will be set in tests
+    coordinator.hass = MagicMock()  # Mock hass for entity registry access
     return coordinator
 
 
@@ -203,6 +204,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -231,6 +233,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -259,6 +262,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -285,6 +289,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -320,6 +325,7 @@ class TestSyntheticEntityUpgradeScenarios:
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -351,6 +357,7 @@ class TestSyntheticEntityUpgradeScenarios:
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -382,6 +389,7 @@ class TestSyntheticEntityUpgradeScenarios:
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
+        mock_config_entry.title = "Span Panel"  # Provide string title
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -516,15 +524,15 @@ class TestGeneralOptionsPreservesNamingFlags:
             ):
                 await flow.async_step_general_options(user_input)
 
-                # Verify that missing flags get defaults (False for existing installations)
+                # Verify that missing flags get defaults (True for safety, prevents treating as legacy)
                 mock_create_entry.assert_called_once()
                 result_data = mock_create_entry.call_args[1]["data"]
                 assert (
-                    result_data.get(USE_DEVICE_PREFIX) is False
-                )  # Default for existing installations
+                    result_data.get(USE_DEVICE_PREFIX) is True
+                )  # Default to True for safety (prevents accidental legacy treatment)
                 assert (
                     result_data.get(USE_CIRCUIT_NUMBERS) is False
-                )  # Default for existing installations
+                )  # Default for existing installations (circuit numbers off by default)
 
 
 class TestUpgradeDocumentationCompliance:

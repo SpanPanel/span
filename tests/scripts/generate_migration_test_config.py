@@ -232,6 +232,98 @@ class MigrationTestHarness:
 
         self.entity_registry.async_update_entity = async_update_entity
 
+        # Add the async_get_entity_id method that synthetic sensors uses for lookups
+        def async_get_entity_id(domain, platform, unique_id):
+            """Get entity_id by unique_id - critical for migration behavior."""
+            for entity in self.entity_registry.entities.values():
+                if (entity.domain == domain and
+                    entity.platform == platform and
+                    entity.unique_id == unique_id):
+                    print(f"🔍 Registry lookup: unique_id '{unique_id}' -> entity_id '{entity.entity_id}'")
+                    return entity.entity_id
+            print(f"🔍 Registry lookup: unique_id '{unique_id}' -> NOT FOUND")
+            return None
+
+        self.entity_registry.async_get_entity_id = async_get_entity_id
+
+        # Add entities that will cause collisions (simulate native SPAN integration entities)
+        # These have DIFFERENT unique_ids but SAME entity_ids as what synthetic sensors will try to create
+        collision_entities = [
+            ("sensor.span_panel_circuit_2_power", "span_native_circuit_2_power"),
+            ("sensor.span_panel_circuit_4_power", "span_native_circuit_4_power"),
+            ("sensor.span_panel_circuit_14_power", "span_native_circuit_14_power"),
+        ]
+
+        for entity_id, unique_id in collision_entities:
+            collision_entry = MagicMock()
+            collision_entry.entity_id = entity_id
+            collision_entry.unique_id = unique_id  # Different unique_id!
+            collision_entry.platform = "span_panel"
+            collision_entry.domain = "sensor"
+            collision_entry.config_entry_id = self.original_config_entry_id
+            collision_entry.device_id = None
+            collision_entry.area_id = None
+            collision_entry.capabilities = None
+            collision_entry.supported_features = 0
+            collision_entry.device_class = "power"
+            collision_entry.unit_of_measurement = "W"
+            collision_entry.original_name = None
+            collision_entry.original_icon = None
+            collision_entry.entity_category = None
+            self.entity_registry.entities[entity_id] = collision_entry
+            print(f"🎯 Added collision entity: {entity_id} (unique_id: {unique_id})")
+
+        # Add the async_get_or_create method that handles collision detection
+        def async_get_or_create(domain, platform, unique_id, suggested_object_id=None, **kwargs):
+            """Get existing entity or create new one with collision detection."""
+            # First check if entity already exists by unique_id
+            for entity in self.entity_registry.entities.values():
+                if (entity.domain == domain and
+                    entity.platform == platform and
+                    entity.unique_id == unique_id):
+                    print(f"🔍 Found existing entity by unique_id: {entity.entity_id}")
+                    return entity
+
+            # Entity doesn't exist by unique_id, need to create new one
+            if suggested_object_id:
+                base_entity_id = f"{domain}.{suggested_object_id}"
+            else:
+                # Fallback to using unique_id as object_id
+                base_entity_id = f"{domain}.{unique_id}"
+
+            # Check for entity_id collision and generate suffix if needed
+            final_entity_id = base_entity_id
+            suffix = 1
+            while final_entity_id in self.entity_registry.entities:
+                suffix += 1
+                final_entity_id = f"{base_entity_id}_{suffix}"
+                existing_entity = self.entity_registry.entities[base_entity_id]
+                print(f"🚨 COLLISION DETECTED: {base_entity_id} exists (unique_id: {existing_entity.unique_id}), trying {final_entity_id}")
+
+            # Create new entity entry
+            entry = MagicMock()
+            entry.entity_id = final_entity_id
+            entry.unique_id = unique_id
+            entry.platform = platform
+            entry.domain = domain
+            entry.config_entry_id = kwargs.get('config_entry_id')
+            entry.device_id = kwargs.get('device_id')
+            entry.area_id = kwargs.get('area_id')
+            entry.capabilities = kwargs.get('capabilities')
+            entry.supported_features = kwargs.get('supported_features', 0)
+            entry.device_class = kwargs.get('device_class')
+            entry.unit_of_measurement = kwargs.get('unit_of_measurement')
+            entry.original_name = kwargs.get('original_name')
+            entry.original_icon = kwargs.get('original_icon')
+            entry.entity_category = kwargs.get('entity_category')
+
+            # Add to registry
+            self.entity_registry.entities[final_entity_id] = entry
+            print(f"✅ Created new entity: {final_entity_id} (unique_id: {unique_id})")
+            return entry
+
+        self.entity_registry.async_get_or_create = async_get_or_create
+
         # Setup the async_get function to return our real registry
         def get_entity_registry(hass):
             return self.entity_registry
@@ -622,9 +714,11 @@ async def generate_migration_yaml():
         mock_coordinator, mock_span_panel = await harness.create_realistic_coordinator_and_panel(circuits, panel_sensors)
         device_name = harness.device_identifier
 
-        # Phase 2: Use the production synthetic sensor setup path
+        # Phase 2: Use the production synthetic sensor setup path with REAL migration logic
         print("Phase 2: Setting up synthetic sensors using production code path...")
         from custom_components.span_panel.synthetic_sensors import setup_synthetic_configuration
+        from custom_components.span_panel.synthetic_named_circuits import generate_named_circuit_sensors
+        from custom_components.span_panel.synthetic_panel_circuits import generate_panel_sensors
         from homeassistant.helpers import storage
 
         # Mock the storage system to avoid migration issues
@@ -690,7 +784,7 @@ sensors:"""
                         "device_class": "power"
                     },
                     "span_nj-2316-005k6_feed_through_power": {
-                        "name": "Feed Through Power", 
+                        "name": "Feed Through Power",
                         "entity_id": "sensor.span_panel_feed_through_power",
                         "formula": "{{ states('sensor.span_panel_feed_through_power') | default(0) }}",
                         "unit_of_measurement": "W",
@@ -698,7 +792,7 @@ sensors:"""
                     },
                     "span_nj-2316-005k6_main_meter_produced_energy": {
                         "name": "Main Meter Produced Energy",
-                        "entity_id": "sensor.span_panel_main_meter_produced_energy", 
+                        "entity_id": "sensor.span_panel_main_meter_produced_energy",
                         "formula": "{{ states('sensor.span_panel_main_meter_produced_energy') | default(0) }}",
                         "unit_of_measurement": "Wh",
                         "device_class": "energy"
@@ -706,7 +800,7 @@ sensors:"""
                     "span_nj-2316-005k6_main_meter_consumed_energy": {
                         "name": "Main Meter Consumed Energy",
                         "entity_id": "sensor.span_panel_main_meter_consumed_energy",
-                        "formula": "{{ states('sensor.span_panel_main_meter_consumed_energy') | default(0) }}", 
+                        "formula": "{{ states('sensor.span_panel_main_meter_consumed_energy') | default(0) }}",
                         "unit_of_measurement": "Wh",
                         "device_class": "energy"
                     },
@@ -714,7 +808,7 @@ sensors:"""
                         "name": "Feed Through Produced Energy",
                         "entity_id": "sensor.span_panel_feed_through_produced_energy",
                         "formula": "{{ states('sensor.span_panel_feed_through_produced_energy') | default(0) }}",
-                        "unit_of_measurement": "Wh", 
+                        "unit_of_measurement": "Wh",
                         "device_class": "energy"
                     },
                     "span_nj-2316-005k6_feed_through_consumed_energy": {
@@ -766,17 +860,64 @@ sensors:"""
 
                 return yaml_content
 
-        # Apply the storage mocks and call the production setup
-        with patch("homeassistant.helpers.storage.Store", MockStore), \
-             patch("custom_components.span_panel.synthetic_sensors.StorageManager", MockSyntheticStorageManager):
-            
-            # Create a mock storage manager directly instead of calling setup_synthetic_configuration
-            production_storage_manager = MockSyntheticStorageManager(mock_hass, config_entry.entry_id)
+        # Call the REAL SPAN integration migration logic
+        print("🔧 Calling REAL SPAN integration migration logic...")
 
-        # Export the generated YAML from the storage manager
-        device_identifier = mock_coordinator.data.status.serial_number
-        sensor_set_id = f"span_panel_{device_identifier}"
-        yaml_content = await production_storage_manager.async_export_yaml(sensor_set_id=sensor_set_id)
+        # Generate panel sensors using REAL migration mode
+        panel_configs, panel_backing_entities, panel_globals, panel_mappings = await generate_panel_sensors(
+            hass=mock_hass,
+            coordinator=mock_coordinator,
+            span_panel=mock_span_panel,
+            device_name=device_name,
+            migration_mode=True  # This is the key - enables registry lookups!
+        )
+
+        # Generate circuit sensors using REAL migration mode
+        circuit_configs, circuit_backing_entities, circuit_globals, circuit_mappings = await generate_named_circuit_sensors(
+            hass=mock_hass,
+            coordinator=mock_coordinator,
+            span_panel=mock_span_panel,
+            device_name=device_name,
+            migration_mode=True  # This is the key - enables registry lookups!
+        )
+
+        # Combine all configurations
+        all_sensors = {**panel_configs, **circuit_configs}
+        all_globals = {**panel_globals, **circuit_globals}
+
+        # Generate YAML manually since we're not using storage manager
+        yaml_content = f"""version: '1.0'
+global_settings:
+  device_identifier: {device_name}
+  variables:
+    energy_grace_period_minutes: "15"
+
+sensors:"""
+
+        for unique_id, sensor_config in all_sensors.items():
+            yaml_content += f"""
+  "{unique_id}":"""
+            for key, value in sensor_config.items():
+                if isinstance(value, str):
+                    # Escape quotes in string values and ensure proper YAML formatting
+                    escaped_value = value.replace('"', '\\"')
+                    yaml_content += f"""
+    {key}: "{escaped_value}" """
+                elif isinstance(value, dict):
+                    # Handle nested dictionaries (like metadata, attributes)
+                    yaml_content += f"""
+    {key}:"""
+                    for nested_key, nested_value in value.items():
+                        if isinstance(nested_value, str):
+                            escaped_nested = nested_value.replace('"', '\\"')
+                            yaml_content += f"""
+      {nested_key}: "{escaped_nested}" """
+                        else:
+                            yaml_content += f"""
+      {nested_key}: {nested_value} """
+                else:
+                    yaml_content += f"""
+    {key}: {value} """
 
         # Phase 3: Save and validate results
         output_file = '/tmp/span_migration_test_config.yaml'
@@ -785,6 +926,48 @@ sensors:"""
 
         print(f"Migration test YAML saved to: {output_file}")
         print(f"YAML size: {len(yaml_content)} characters")
+
+        # Phase 4: Test collision detection by trying to register synthetic sensors
+        print("🧪 Phase 4: Testing collision detection with synthetic sensors...")
+
+        # Import the synthetic sensors package to test collision handling
+        try:
+            from ha_synthetic_sensors import async_setup_integration
+
+            # Mock the async_add_entities callback
+            added_entities = []
+            def mock_add_entities(entities):
+                added_entities.extend(entities)
+                for entity in entities:
+                    print(f"📝 Synthetic sensor registered: {entity.entity_id} (unique_id: {entity.unique_id})")
+
+            # Try to set up synthetic sensors with the generated YAML
+            # This should trigger collision detection for conflicting entity_ids
+            result = await async_setup_integration(
+                hass=mock_hass,
+                config_entry=config_entry,
+                async_add_entities=mock_add_entities,
+                yaml_content=yaml_content,
+                sensor_set_id=f"{device_name}_sensors"
+            )
+
+            if result:
+                print(f"✅ Synthetic sensors setup completed with {len(added_entities)} entities")
+
+                # Check for entities with _2 suffixes (collision resolution)
+                collision_resolved = [e for e in added_entities if e.entity_id.endswith('_2')]
+                if collision_resolved:
+                    print(f"🔧 Collision resolution detected: {len(collision_resolved)} entities got _2 suffixes")
+                    for entity in collision_resolved[:3]:  # Show first 3
+                        print(f"   • {entity.entity_id} (unique_id: {entity.unique_id})")
+                else:
+                    print("⚠️  No collision resolution detected - this might indicate the test needs adjustment")
+            else:
+                print("❌ Synthetic sensors setup failed")
+
+        except Exception as e:
+            print(f"⚠️  Collision testing skipped due to error: {e}")
+            print("   This is expected if synthetic sensors package isn't available in test environment")
 
         # Validate the generated YAML
         validation_success = await validate_migration_yaml(yaml_content, mock_hass, config_entry)

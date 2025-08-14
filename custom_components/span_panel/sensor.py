@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import asyncio
 from collections.abc import Callable
 import logging
 from typing import Any, Generic, TypeVar
@@ -23,8 +24,8 @@ from homeassistant.util import slugify
 
 from custom_components.span_panel.options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
 from custom_components.span_panel.synthetic_sensors import (
+    async_setup_synthetic_sensors,
     setup_synthetic_configuration,
-    setup_synthetic_sensors,
 )
 from custom_components.span_panel.synthetic_solar import (
     handle_solar_options_change,
@@ -510,9 +511,7 @@ class SpanUnmappedCircuitSensor(
 def _get_migration_mode(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Check if migration mode is enabled for this config entry."""
     entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-    return bool(
-        entry_data.get("migration_mode") or config_entry.options.get("migration_mode")
-    )
+    return bool(entry_data.get("migration_mode") or config_entry.options.get("migration_mode"))
 
 
 def _create_native_sensors(
@@ -534,9 +533,7 @@ def _create_native_sensors(
         for unmapped_description in UNMAPPED_SENSORS:
             # UNMAPPED_SENSORS contains SpanPanelCircuitsSensorEntityDescription
             entities.append(
-                SpanUnmappedCircuitSensor(
-                    coordinator, unmapped_description, span_panel, circuit_id
-                )
+                SpanUnmappedCircuitSensor(coordinator, unmapped_description, span_panel, circuit_id)
             )
 
     # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
@@ -568,17 +565,21 @@ def _enable_unmapped_tab_entities(hass: HomeAssistant, entities: list) -> None:
                 entity_registry.async_update_entity(entity_id, disabled_by=None)
 
 
-async def _handle_initial_solar_setup(
+async def _handle_migration_solar_setup(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     coordinator: SpanPanelCoordinator,
     sensor_set: Any,
-    migration_mode: bool,
-) -> None:
-    """Handle initial solar sensor setup if solar is enabled."""
+) -> bool:
+    """Handle solar sensor setup during migration.
+
+    Returns:
+        True if solar setup was performed successfully, False otherwise.
+
+    """
     solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
     if not solar_enabled or sensor_set is None:
-        return
+        return False
 
     # Coerce leg options to integers to handle any legacy string-stored values
     leg1_raw = config_entry.options.get(INVERTER_LEG1, 0)
@@ -610,17 +611,22 @@ async def _handle_initial_solar_setup(
             leg1,
             leg2,
             device_name,
-            migration_mode=migration_mode,
+            migration_mode=True,
         )
         if result:
             _LOGGER.debug("Initial solar sensor setup completed successfully")
+            return True
         else:
             _LOGGER.warning("Initial solar sensor setup failed")
+            return False
     except Exception as e:
         _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
+        return False
 
 
-def _clear_migration_flags(hass: HomeAssistant, config_entry: ConfigEntry, migration_mode: bool) -> None:
+def _clear_migration_flags(
+    hass: HomeAssistant, config_entry: ConfigEntry, migration_mode: bool
+) -> None:
     """Clear migration flags after setup is complete."""
     if not migration_mode:
         return
@@ -635,9 +641,7 @@ def _clear_migration_flags(hass: HomeAssistant, config_entry: ConfigEntry, migra
                 new_options = dict(config_entry.options)
                 if "migration_mode" in new_options:
                     del new_options["migration_mode"]
-                    hass.config_entries.async_update_entry(
-                        config_entry, options=new_options
-                    )
+                    hass.config_entries.async_update_entry(config_entry, options=new_options)
             except Exception as opt_err:
                 _LOGGER.debug(
                     "Failed to clear persisted migration flag for %s: %s",
@@ -740,7 +744,7 @@ async def async_setup_entry(
                     hass, config_entry, coordinator, migration_mode
                 )
             # Use simplified setup interface that handles everything
-            sensor_manager = await setup_synthetic_sensors(
+            sensor_manager = await async_setup_synthetic_sensors(
                 hass=hass,
                 config_entry=config_entry,
                 async_add_entities=async_add_entities,
@@ -771,13 +775,30 @@ async def async_setup_entry(
                 "Successfully set up synthetic sensors and cached SensorSet: %s", sensor_set_id
             )
 
-            # Handle initial solar sensor setup if solar is enabled
-            await _handle_initial_solar_setup(
-                hass, config_entry, coordinator, sensor_set, migration_mode
-            )
+            # Handle migration completion
+            if migration_mode:
+                # Handle solar sensor setup during migration if solar is enabled
+                solar_setup_result = await _handle_migration_solar_setup(
+                    hass, config_entry, coordinator, sensor_set
+                )
 
-            # If this was a migration boot for this entry, clear the per-entry migration flag now
-            _clear_migration_flags(hass, config_entry, migration_mode)
+                # Always clear migration flags first
+                _clear_migration_flags(hass, config_entry, migration_mode)
+
+                # If solar was set up during migration, schedule a reload to pick up the newly added
+                # solar sensors, but don't block the initial startup
+                if solar_setup_result:
+                    _LOGGER.debug(
+                        "Solar setup completed during migration, scheduling reload to load solar sensors"
+                    )
+
+                    async def _scheduled_reload() -> None:
+                        """Reload the config entry after a brief delay to allow startup to complete."""
+                        await asyncio.sleep(1.0)  # Brief delay to let initial setup finish
+                        _LOGGER.debug("Executing scheduled reload for solar sensors")
+                        await hass.config_entries.async_reload(config_entry.entry_id)
+
+                    hass.async_create_task(_scheduled_reload())
 
         except Exception as e:
             _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)

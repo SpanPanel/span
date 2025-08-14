@@ -411,10 +411,10 @@ class TestUniqueIdGeneration:
 
         # Use ACTUAL integration sensor description (not mocked)
         from custom_components.span_panel.const import CIRCUITS_POWER
-        from custom_components.span_panel.sensor_definitions import CIRCUITS_SENSORS
+        from custom_components.span_panel.sensor_definitions import UNMAPPED_SENSORS
 
         # Get the actual power sensor description used by the integration
-        power_description = next(d for d in CIRCUITS_SENSORS if d.key == CIRCUITS_POWER)
+        power_description = next(d for d in UNMAPPED_SENSORS if d.key == CIRCUITS_POWER)
 
         # Create sensor using actual integration components
         sensor = self._create_circuit_sensor(

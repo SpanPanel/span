@@ -26,10 +26,29 @@ the ability to control user-manageable panel circuits.
 
 ## What's New
 
-### Version 1.2.0 - OpenAPI Specification Integration
+**⚠️ MAJOR UPGRADE WARNING ⚠️**
 
-**OpenAPI Support**: The integration now uses the official OpenAPI specification provided by the SPAN panel. This change provides a reliable foundation for
-future interface changes.
+**Before upgrading to version 1.2.0, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes
+that may affect your installation. While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a
+backup before major upgrades.
+
+**OpenAPI Support**: The integration now uses the OpenAPI specification provided by the SPAN panel. This change provides a reliable foundation for future
+interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides
+additional support we may adapt.
+
+**Synthetic Sensors**: The integration leverages a [synthetic sensor engine](https://github.com/SpanPanel/ha-synthetic-sensors)that allows us to provide
+features beyond basic sensors:
+
+- Every attribute will soon be capable of being mathematically formulated and tweaked by the user - stand by for a new attribute editor soon!
+- The first use case is one where _@sargonas_ researched and developed an algorithm that keeps statistics from reporting wild spikes and gaps during
+  intermittent outages. A global option sets the grace period for outages until the panels actually reports `unknown` states.
+- We added an attribute for voltage and amperage to each power sensor so you'll be able to craft notifications for thresholds on each circuit
+- We added an attribute to see the specific tabs associated with sensor
+- We will likey develop an separate sensor editor to combine or build any combination of sensors and attributes outside of the SpanPanel integration itself.
+
+**Simulation**: The integraiton now supports adding configuration entries for virtual panels based on templates that produce typical power and energy. You can
+import or export the simulation profile and or even clone your existing panel. See the simulation
+[guide](https://github.com/SpanPanel/span-panel-api/blob/main/docs/simulation.md) on how to build your own profile.
 
 **Configurable Timeouts and Retries**: The integration provides connection options for different network environments:
 
@@ -42,13 +61,11 @@ future interface changes.
 - **Local Access**: Standard HTTP connection for panels on your local network (SSL not supported by SPAN)
 - **Remote Access**: HTTPS support for accessing panels through secure proxies
 
-### Version 1.1.0+ - Configurable Entity Naming Patterns
+**Circuit Name Sync with SPAN**: All versions of the integration support automatic friendly name updates when circuits are renamed in the SPAN panel. Names sync
+on the next poll interval. However, if you customize an entity's friendly name in Home Assistant, your customization will be preserved and won't be overwritten
+during sync. To re-enable sync for a customized entity, clear the custom name in Home Assistant.
 
-**Circuit Name Sync with SPAN**: All versions of the integration now support automatic friendly name updates when circuits are renamed in the SPAN panel. Names
-sync on the next poll interval. However, if you customize an entity's friendly name in Home Assistant, your customization will be preserved and won't be
-overwritten during sync. To re-enable sync for a customized entity, clear the custom name in Home Assistant.
-
-**Flexible Entity Naming**: The integration now provides configurable entity naming patterns that can be changed at any time through the configuration options:
+**Setup Configuration Entity Naming**: The integration now provides configurable entity naming patterns upon initial setup only.
 
 - **Friendly Names Pattern**: Entity IDs use descriptive circuit names for the entity ID (e.g., `sensor.span_panel_kitchen_outlets_power`) - ideal for
   installations where your circuits are less likely to change from their original purpose
@@ -57,8 +74,23 @@ overwritten during sync. To re-enable sync for a customized entity, clear the cu
 
 In either pattern, the friendly name provides the circuit meaning for easy identification.
 
-**Migration Support**: Installations can migrate between entity naming patterns without losing entity history. Pre-1.0.4 installations can only migrate forward
-to other patterns that have device name prefixes added to entities.
+**Migration Support**: The latest version changes the underlying schema so it must migrate unique keys but there should be no disruption as your existing entity
+ID's are kept intact. Pre-1.0.4 installations can only migrate forward to friendly names with device prefixes.
+
+### HACS Upgrade Process
+
+When upgrading through HACS, you'll see a notification about the new version. Before clicking "Update":
+
+1. **Create a backup** of your Home Assistant configuration and database
+2. **Review the changes** in this README and the [migration documentation](docs/version_2_migration_strategy.md)
+3. **Check your automations** to ensure they reference the correct entity IDs
+4. **Update during a quiet period** when you can monitor the upgrade process
+
+If you encounter any issues during the upgrade, you can:
+
+- Restore from your backup
+- Check the [troubleshooting section](#troubleshooting) below
+- Open an issue on GitHub with details about your installation
 
 ## Prerequisites
 
@@ -244,7 +276,6 @@ press `UPDATE`.
 1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in
    the SPAN API, so we report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door
    state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal entry door.
-
 2. State Class Warnings - "Feed Through" sensors may produce erroneous data in the sense that logs may complain the sensor data is not constantly increasing
    when the sensor statistics type is set to total/increasing. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are
    getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing, you can opt to
@@ -261,7 +292,6 @@ press `UPDATE`.
 
 3. No Switch - If a circuit is set in the SPAN App as one of the "Always on Circuits", then that circuit will not have a switch because the API does not allow
    the user to control it.
-
 4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this dropdown active because SPAN's browser also shows the
    dropdown. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define critical or other
    must-have circuits. The PowerUp circuits are less clear, but what we know is that those at the top of the PowerUp list tend to be "Non-Essential", but this

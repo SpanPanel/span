@@ -657,12 +657,8 @@ class TestHelperFunctions:
         )
         assert result == "sensor.current_power"
 
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_240v_synthetic_entity_id_circuit_numbers(self, mock_registry):
+    def test_construct_240v_synthetic_entity_id_circuit_numbers(self):
         """Test construct_240v_synthetic_entity_id with circuit numbers pattern."""
-        mock_registry.return_value = MagicMock()
-        mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
@@ -678,7 +674,6 @@ class TestHelperFunctions:
             friendly_name="Solar",
             tab1=30,
             tab2=32,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_circuit_30_32_power"
 
@@ -691,16 +686,11 @@ class TestHelperFunctions:
             friendly_name="Solar",
             tab1=30,
             tab2=32,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_circuit_30_32_energy_produced"
 
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_240v_synthetic_entity_id_friendly_names(self, mock_registry):
+    def test_construct_240v_synthetic_entity_id_friendly_names(self):
         """Test construct_240v_synthetic_entity_id with friendly names pattern."""
-        mock_registry.return_value = MagicMock()
-        mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
@@ -716,7 +706,6 @@ class TestHelperFunctions:
             friendly_name="Solar",
             tab1=30,
             tab2=32,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_solar_power"
 
@@ -729,16 +718,11 @@ class TestHelperFunctions:
             friendly_name="Air Conditioner",
             tab1=15,
             tab2=17,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_air_conditioner_power"
 
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_120v_synthetic_entity_id_circuit_numbers(self, mock_registry):
+    def test_construct_120v_synthetic_entity_id_circuit_numbers(self):
         """Test construct_120v_synthetic_entity_id with circuit numbers pattern."""
-        mock_registry.return_value = MagicMock()
-        mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
@@ -753,7 +737,6 @@ class TestHelperFunctions:
             "power",
             friendly_name="Solar",
             tab=30,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_circuit_30_power"
 
@@ -765,16 +748,11 @@ class TestHelperFunctions:
             "energy_consumed",
             friendly_name="Solar",
             tab=30,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_circuit_30_energy_consumed"
 
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_120v_synthetic_entity_id_friendly_names(self, mock_registry):
+    def test_construct_120v_synthetic_entity_id_friendly_names(self):
         """Test construct_120v_synthetic_entity_id with friendly names pattern."""
-        mock_registry.return_value = MagicMock()
-        mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
@@ -789,7 +767,6 @@ class TestHelperFunctions:
             "power",
             friendly_name="Solar",
             tab=30,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_solar_power"
 
@@ -801,16 +778,11 @@ class TestHelperFunctions:
             "power",
             friendly_name="Kitchen Outlets",
             tab=16,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.span_panel_kitchen_outlets_power"
 
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_synthetic_entity_id_no_device_prefix(self, mock_registry):
+    def test_construct_synthetic_entity_id_no_device_prefix(self):
         """Test synthetic entity ID construction without device prefix."""
-        mock_registry.return_value = MagicMock()
-        mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: False}
         coordinator.config_entry.title = "SPAN Panel"
@@ -826,7 +798,6 @@ class TestHelperFunctions:
             friendly_name="Solar",
             tab1=30,
             tab2=32,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.circuit_30_32_power"
 
@@ -838,7 +809,6 @@ class TestHelperFunctions:
             "power",
             friendly_name="Solar",
             tab=30,
-            unique_id="test_unique_id",
         )
         assert result == "sensor.circuit_30_power"
 

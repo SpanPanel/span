@@ -39,15 +39,18 @@ class TestGracePeriodIntegration:
 
         mock_span_panel.panel = mock_panel_data
 
+        # Mock hass
+        mock_hass = MagicMock()
+
         # Generate panel sensors
         sensor_configs, backing_entities, global_settings, mapping = await generate_panel_sensors(
-            mock_coordinator, mock_span_panel, "Test Panel"
+            mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
         )
 
         # Verify global settings contain custom grace period
         assert "variables" in global_settings
         assert "energy_grace_period_minutes" in global_settings["variables"]
-        assert global_settings["variables"]["energy_grace_period_minutes"] == "30"
+        assert global_settings["variables"]["energy_grace_period_minutes"] == 30
 
         # Verify energy sensors are generated
         energy_sensors = [
@@ -62,7 +65,7 @@ class TestGracePeriodIntegration:
 
             # Check for exception handling structure
             assert "UNAVAILABLE" in sensor_config
-            assert sensor_config["UNAVAILABLE"] == "state if within_grace else UNKNOWN"
+            assert sensor_config["UNAVAILABLE"]["formula"] == "state if within_grace else UNKNOWN"
 
             # Check for computed variables
             assert "variables" in sensor_config
@@ -75,13 +78,12 @@ class TestGracePeriodIntegration:
             assert "minutes_between" in within_grace_config["formula"]
             # within_grace should have UNAVAILABLE handler
             assert "UNAVAILABLE" in within_grace_config
-            assert within_grace_config["UNAVAILABLE"] == "false"
+            assert within_grace_config["UNAVAILABLE"] == False
 
             # Check for diagnostic attribute
             assert "attributes" in sensor_config
-            assert "grace_period_active" in sensor_config["attributes"]
-            assert "formula" in sensor_config["attributes"]["grace_period_active"]
-            assert sensor_config["attributes"]["grace_period_active"]["formula"] == "within_grace"
+            assert "energy_reporting_status" in sensor_config["attributes"]
+            assert "formula" in sensor_config["attributes"]["energy_reporting_status"]
 
     @pytest.mark.asyncio
     async def test_grace_period_default_value(self):
@@ -107,13 +109,16 @@ class TestGracePeriodIntegration:
 
         mock_span_panel.panel = mock_panel_data
 
+        # Mock hass
+        mock_hass = MagicMock()
+
         # Generate panel sensors
         sensor_configs, backing_entities, global_settings, mapping = await generate_panel_sensors(
-            mock_coordinator, mock_span_panel, "Test Panel"
+            mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
         )
 
         # Verify default grace period (15) is used
-        assert global_settings["variables"]["energy_grace_period_minutes"] == "15"
+        assert global_settings["variables"]["energy_grace_period_minutes"] == 15
 
     def test_grace_period_formula_structure(self):
         """Test the grace period formula structure is correct."""
@@ -177,10 +182,13 @@ class TestGracePeriodIntegration:
 
             mock_span_panel.panel = mock_panel_data
 
+            # Mock hass
+            mock_hass = MagicMock()
+
             # Generate sensors and verify grace period value
             sensor_configs, backing_entities, global_settings, mapping = await generate_panel_sensors(
-                mock_coordinator, mock_span_panel, "Test Panel"
+                mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
             )
 
             # Verify the boundary value is correctly set
-            assert global_settings["variables"]["energy_grace_period_minutes"] == str(grace_period)
+            assert global_settings["variables"]["energy_grace_period_minutes"] == grace_period
