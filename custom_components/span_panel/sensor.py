@@ -373,7 +373,7 @@ class SpanPanelStatus(
             result = span_panel.status
             return result
         except Exception as e:
-            _LOGGER.error("HARDWARE_STATUS_DEBUG: Error getting status data: %s", e)
+            _LOGGER.error("HARDWARE_STATUS: Error getting status data: %s", e)
             raise
 
 
@@ -433,10 +433,10 @@ class SpanPanelBattery(
         _LOGGER.debug("BATTERY_DEBUG: get_data_source called for battery sensor")
         try:
             result = span_panel.storage_battery
-            _LOGGER.debug("BATTERY_DEBUG: Successfully got battery data: %s", type(result).__name__)
+            _LOGGER.debug("Successfully got battery data: %s", type(result).__name__)
             return result
         except Exception as e:
-            _LOGGER.error("BATTERY_DEBUG: Error getting battery data: %s", e)
+            _LOGGER.error("Error getting battery data: %s", e)
             raise
 
 

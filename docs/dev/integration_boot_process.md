@@ -33,7 +33,7 @@ Before setup, Home Assistant checks if migration is needed:
 ```python
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate config entry for synthetic sensor YAML generation."""
-    _LOGGER.error(
+    _LOGGER.info(
         "MIGRATION FUNCTION CALLED! Entry ID: %s, Version: %s, Target: %s",
         config_entry.entry_id,
         config_entry.version,
