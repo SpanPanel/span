@@ -20,11 +20,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Simulator Mode"
+          "use_ssl": "Use SSL",
+          "simulator_mode": "Simulator Mode",
+          "power_display_precision": "Power Display Precision",
+          "energy_display_precision": "Energy Display Precision"
         },
         "data_description": {
           "host": "IP address or hostname of SPAN Panel (required for real hardware, optional for simulation mode)",
-          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled."
+          "use_ssl": "Enable secure HTTPS connection to the SPAN Panel",
+          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled.",
+          "power_display_precision": "Number of decimal places for power values (0-3)",
+          "energy_display_precision": "Number of decimal places for energy values (0-3)"
         },
         "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and the host field becomes optional.",
         "title": "Connect to the Span Panel"
@@ -53,12 +59,14 @@
         "data": {
           "simulation_config": "Simulation Configuration",
           "host": "Host (Serial Number)",
-          "simulation_start_time": "Simulation Start Time (Optional)"
+          "simulation_start_time": "Simulation Start Time (Optional)",
+          "entity_naming_pattern": "Entity Naming Pattern"
         },
         "data_description": {
           "simulation_config": "Choose a simulation configuration that defines circuit templates and energy profiles",
           "host": "Custom serial number for the simulated panel (optional, will use config default if empty)",
-          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time."
+          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time.",
+          "entity_naming_pattern": "Choose how circuit entities are named in the simulation"
         }
       }
     }

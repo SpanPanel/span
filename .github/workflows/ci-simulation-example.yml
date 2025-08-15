@@ -56,13 +56,3 @@ jobs:
         env:
           SPAN_USE_REAL_SIMULATION: 1
         run: poetry run pytest tests/test_solar_configuration_with_simulator.py -v
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          slug: SpanPanel/span
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-          # Note: Token not required for public repos with tokenless upload

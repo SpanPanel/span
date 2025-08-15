@@ -11,7 +11,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import aiofiles
 from ha_synthetic_sensors import (
     DataProviderCallback,
     DataProviderChangeNotifier,
@@ -91,6 +90,7 @@ class SyntheticSensorCoordinator:
         self.device_identifier: str | None = None
         # Snapshot of last emitted values per backing entity for selective updates
         self._last_values: dict[str, Any] = {}
+
         # Store sensor manager reference for metrics enrichment
         self._last_sensor_manager: Any | None = None
 
@@ -117,17 +117,60 @@ class SyntheticSensorCoordinator:
             if not span_panel or not span_panel.panel:
                 return
 
-            # Compute changed backing entities only (reduces synthetic work)
+            # Track name changes during backing entity updates
+            name_changes: list[dict[str, Any]] = []
             changed_ids: set[str] = set()
+
             if self.backing_entity_metadata:
-                # Iterate known backing entities and compare with last snapshot
+                # Iterate known backing entities and check for both value and name changes
                 for backing_id, meta in self.backing_entity_metadata.items():
                     current_value = self._extract_value_from_panel(span_panel, meta)
                     previous_value = self._last_values.get(backing_id)
+
+                    # Check for value changes
                     if previous_value != current_value:
                         changed_ids.add(backing_id)
                         self._last_values[backing_id] = current_value
 
+                    # Check for name changes (only for circuit-level data)
+                    circuit_uuid = meta["circuit_id"]
+                    if circuit_uuid != "0":  # Skip panel-level data
+                        current_name = self._extract_name_from_panel(span_panel, circuit_uuid)
+                        stored_name = meta.get("friendly_name")
+
+                        # Initialize friendly name if first time
+                        if stored_name is None:
+                            meta["friendly_name"] = current_name
+                        # Check for name change
+                        elif current_name != stored_name:
+                            _LOGGER.info(
+                                "Detected circuit name change via backing entity %s: '%s' -> '%s' for circuit %s",
+                                backing_id,
+                                stored_name,
+                                current_name,
+                                circuit_uuid,
+                            )
+
+                            # Find affected sensors for this backing entity
+                            affected_sensors = self._find_sensors_for_backing_entity(backing_id)
+                            if affected_sensors:
+                                name_changes.append(
+                                    {
+                                        "sensor_keys": affected_sensors,
+                                        "old_name": stored_name,
+                                        "new_name": current_name,
+                                        "circuit_uuid": circuit_uuid,
+                                    }
+                                )
+
+                            # Update stored name
+                            meta["friendly_name"] = current_name
+
+            # Process name changes asynchronously
+            if name_changes:
+                self.hass.async_create_task(self._process_name_changes(name_changes))
+
+            # Notify synthetic sensors of value changes
             if self.change_notifier and changed_ids:
                 self.change_notifier(changed_ids)
 
@@ -207,6 +250,7 @@ class SyntheticSensorCoordinator:
                 "api_key": api_key,
                 "circuit_id": circuit_id,
                 "data_path": data_path,
+                "friendly_name": None,  # Will be populated during first update
             }
 
         _LOGGER.debug(
@@ -237,6 +281,130 @@ class SyntheticSensorCoordinator:
             return 0.0 if value is None else value
         except Exception:
             return 0.0
+
+    def _extract_name_from_panel(self, span_panel: Any, circuit_uuid: str) -> str:
+        """Get circuit name from panel data."""
+        try:
+            if circuit_uuid == "0":
+                return "Panel"  # Panel-level data
+            circuit = span_panel.circuits.get(circuit_uuid)
+            return circuit.name if circuit else ""
+        except Exception:
+            return ""
+
+    def _find_sensors_for_backing_entity(self, backing_entity_id: str) -> list[str]:
+        """Find sensor keys that use this backing entity."""
+        return [
+            sensor_key
+            for sensor_key, backing_id in self.sensor_to_backing_mapping.items()
+            if backing_id == backing_entity_id
+        ]
+
+    async def _process_name_changes(self, name_changes: list[dict[str, Any]]) -> None:
+        """Process multiple name changes efficiently."""
+        try:
+            if not self.storage_manager or not self.sensor_set_id:
+                _LOGGER.error("No storage manager or sensor set ID available")
+                return
+
+            sensor_set = self.storage_manager.get_sensor_set(self.sensor_set_id)
+            if not sensor_set or not sensor_set.exists:
+                _LOGGER.debug("No sensor set found")
+                return
+
+            _LOGGER.info("Processing %d circuit name changes", len(name_changes))
+
+            # Process each name change
+            for change in name_changes:
+                sensor_keys = change["sensor_keys"]
+                new_name = change["new_name"]
+                circuit_uuid = change["circuit_uuid"]
+
+                _LOGGER.info(
+                    "Updating %d sensors for circuit %s with new name '%s'",
+                    len(sensor_keys),
+                    circuit_uuid,
+                    new_name,
+                )
+
+                # Update each affected sensor
+                for sensor_key in sensor_keys:
+                    try:
+                        # Read existing sensor configuration via YAML export to preserve customizations
+                        complete_yaml = sensor_set.export_yaml()
+                        if not complete_yaml:
+                            _LOGGER.warning(
+                                "No YAML configuration found for sensor set during name change update"
+                            )
+                            continue
+
+                        # Parse YAML and extract the specific sensor
+                        try:
+                            yaml_data = yaml.safe_load(complete_yaml)
+                            if not yaml_data or "sensors" not in yaml_data:
+                                _LOGGER.warning("Invalid YAML structure in sensor set")
+                                continue
+                            if sensor_key not in yaml_data["sensors"]:
+                                _LOGGER.warning(
+                                    "Sensor %s not found in YAML during name change update",
+                                    sensor_key,
+                                )
+                                continue
+
+                            # Get the existing sensor configuration
+                            existing_sensor_config = yaml_data["sensors"][sensor_key]
+                            current_name = existing_sensor_config.get("name", "")
+
+                            # Update only the name, preserving all other configuration
+                            sensor_type = _extract_sensor_type_from_name(current_name)
+                            updated_name = f"{new_name} {sensor_type}"
+                            existing_sensor_config["name"] = updated_name
+
+                            # Generate single-sensor YAML for update
+                            updated_yaml = yaml.dump(
+                                {sensor_key: existing_sensor_config},
+                                default_flow_style=False,
+                                sort_keys=False,
+                            )
+
+                        except yaml.YAMLError as e:
+                            _LOGGER.error("Error parsing YAML during name change update: %s", e)
+                            continue
+                        except Exception as e:
+                            _LOGGER.error(
+                                "Error processing sensor YAML during name change update: %s", e
+                            )
+                            continue
+
+                        # Update using YAML CRUD
+                        updated = await sensor_set.async_update_sensor_from_yaml(updated_yaml)
+                        if updated:
+                            _LOGGER.debug(
+                                "Updated synthetic sensor %s: name '%s' -> '%s'",
+                                sensor_key,
+                                current_name,
+                                updated_name,
+                            )
+                        else:
+                            _LOGGER.warning(
+                                "Failed to update synthetic sensor %s - sensor may not exist",
+                                sensor_key,
+                            )
+
+                    except Exception as e:
+                        _LOGGER.error(
+                            "Error updating synthetic sensor %s for circuit name change: %s",
+                            sensor_key,
+                            e,
+                        )
+                        # Continue with other sensors rather than failing completely
+
+            # Request integration reload after all changes are processed
+            _LOGGER.info("All circuit name changes processed, requesting integration reload")
+            self.coordinator.request_reload()
+
+        except Exception as e:
+            _LOGGER.error("Error processing name changes: %s", e, exc_info=True)
 
     def set_change_notifier(self, change_notifier: DataProviderChangeNotifier) -> None:
         """Set the change notification callback for coordinator updates."""
@@ -891,7 +1059,7 @@ async def generate_circuit_sensor_configs(
     type_config = sensor_type_mapping[sensor_type]
 
     # Load header template and fill it once
-    header_template = await load_template("sensor_set_header")
+    header_template = await load_template(coordinator.hass, "sensor_set_header")
     # Use per-entry identifier for simulators; live panels use serial
     is_simulator = bool(coordinator.config_entry.data.get("simulation_mode", False))
     header_device_identifier = (
@@ -909,7 +1077,7 @@ async def generate_circuit_sensor_configs(
     )
 
     # Load sensor template once
-    sensor_template = await load_template(type_config["template"])
+    sensor_template = await load_template(coordinator.hass, type_config["template"])
 
     # Process each circuit
     all_filled_sensors = []
@@ -1108,9 +1276,11 @@ async def async_export_synthetic_config_service(call: ServiceCall) -> None:
         # Export just this sensor set
         yaml_content = storage_manager.export_yaml(sensor_set_id)
 
-        # Write file asynchronously
-        async with aiofiles.open(output_file, "w", encoding="utf-8") as f:
-            await f.write(yaml_content)
+        # Write file asynchronously using HA's built-in file handling
+        def _write_yaml_file() -> None:
+            output_file.write_text(yaml_content, encoding="utf-8")
+
+        await call.hass.async_add_executor_job(_write_yaml_file)
 
         _LOGGER.info("Successfully exported sensor set '%s' to: %s", sensor_set_id, output_file)
 
@@ -1125,3 +1295,25 @@ async def async_export_synthetic_config_service(call: ServiceCall) -> None:
     except Exception as e:
         _LOGGER.error("Unexpected error exporting synthetic config: %s", e)
         raise ServiceValidationError(f"Failed to export configuration: {e}")
+
+
+def _extract_sensor_type_from_name(sensor_name: str) -> str:
+    """Extract sensor type suffix from sensor name.
+
+    Args:
+        sensor_name: The current sensor name (e.g., "Fountain Power")
+
+    Returns:
+        The sensor type suffix (e.g., "Power")
+
+    """
+    if not sensor_name:
+        return "Sensor"
+
+    # Look for common patterns: "Power", "Produced Energy", "Consumed Energy"
+    for suffix in ["Produced Energy", "Consumed Energy", "Power", "Energy"]:
+        if sensor_name.endswith(suffix):
+            return suffix
+
+    # Default fallback
+    return "Sensor"

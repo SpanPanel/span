@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 import os
 from pathlib import Path
-import aiofiles  # type: ignore[import-untyped]
+
 import asyncio
 
 from span_panel_api import SpanPanelClient
@@ -393,8 +393,8 @@ class SpanPanelSimulationFactory:
         return get_available_simulation_configs()
 
     @staticmethod
-    async def extract_serial_number_from_yaml(yaml_path: str) -> str:
-        """Extract the serial number from a YAML simulation config file asynchronously.
+    def extract_serial_number_from_yaml(yaml_path: str) -> str:
+        """Extract the serial number from a YAML simulation config file.
 
         Args:
             yaml_path: Path to the YAML configuration file
@@ -402,7 +402,6 @@ class SpanPanelSimulationFactory:
         Returns:
             Serial number from the config file
         """
-        async with aiofiles.open(yaml_path, "r") as f:
-            content = await f.read()
+        content = Path(yaml_path).read_text(encoding="utf-8")
         data = yaml.safe_load(content)
         return str(data["global_settings"]["device_identifier"])

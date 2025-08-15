@@ -12,6 +12,173 @@ storage.
 **Important**: With the Version 2 migration strategy, the concept of "existing installations" has changed. After migration, all installations become "existing"
 from the storage perspective, with YAML configurations pre-generated during the migration process.
 
+## Data Path Construction and Usage
+
+### Data Path Purpose
+
+The `data_path` is a **critical bridge** between the SPAN panel integration and the ha-synthetic-sensors package. It serves as a **lookup key** that tells the
+synthetic sensor system where to find the actual data values in the SPAN panel's data structure.
+
+### Data Path Construction Flow
+
+#### 1. Sensor Definition (Hardcoded)
+
+```python
+# In synthetic_named_circuits.py - NAMED_CIRCUIT_SENSOR_DEFINITIONS
+{
+    "key": "instantPowerW",
+    "name": "Power",
+    "template": "circuit_power",
+    "data_path": "instant_power",  # ← HARDCODED attribute name
+},
+{
+    "key": "producedEnergyWh",
+    "name": "Produced Energy",
+    "template": "circuit_energy_produced",
+    "data_path": "produced_energy",  # ← HARDCODED attribute name
+},
+{
+    "key": "consumedEnergyWh",
+    "name": "Consumed Energy",
+    "template": "circuit_energy_consumed",
+    "data_path": "consumed_energy",  # ← HARDCODED attribute name
+}
+```
+
+#### 2. Data Path Construction
+
+```python
+# In synthetic_named_circuits.py - line 283
+backing_entity = BackingEntity(
+    entity_id=backing_entity_id,
+    value=data_value,
+    data_path=f"circuits.{circuit_id}.{sensor_def['data_path']}",
+    #                    ↑              ↑
+    #              UUID from API    Hardcoded attribute
+)
+```
+
+#### 3. Example Data Paths Generated
+
+```python
+# For circuit UUID "795e8eddb4f448af9625130332a41df8":
+data_path = "circuits.795e8eddb4f448af9625130332a41df8.instant_power"
+data_path = "circuits.795e8eddb4f448af9625130332a41df8.produced_energy"
+data_path = "circuits.795e8eddb4f448af9625130332a41df8.consumed_energy"
+```
+
+### Data Path Usage in SPAN Integration
+
+#### 1. Data Path Parsing
+
+```python
+# In synthetic_sensors.py - _populate_backing_entity_metadata()
+data_path = "circuits.795e8eddb4f448af9625130332a41df8.instant_power"
+parts = data_path.split(".", 2)  # ["circuits", "795e8eddb4f448af9625130332a41df8", "instant_power"]
+circuit_id = parts[1]  # "795e8eddb4f448af9625130332a41df8"
+api_key = parts[2]     # "instant_power"
+
+self.backing_entity_metadata[backing_entity_id] = {
+    "api_key": api_key,
+    "circuit_id": circuit_id,
+    "data_path": data_path,
+    "friendly_name": None,  # Will be populated during first update
+}
+```
+
+#### 2. Data Extraction
+
+```python
+# In synthetic_sensors.py - _extract_value_from_panel()
+def _extract_value_from_panel(self, span_panel: Any, meta: dict[str, Any]) -> Any:
+    api_key = meta["api_key"]        # "instant_power"
+    circuit_id = meta["circuit_id"]  # "795e8eddb4f448af9625130332a41df8"
+
+    circuit = span_panel.circuits.get(circuit_id)  # Get circuit by UUID
+    value = getattr(circuit, api_key, None)        # Get attribute by name
+    # e.g., getattr(circuit, "instant_power", None)
+```
+
+### Data Path Connection to SpanPanelCircuit
+
+The data path attributes map directly to the `SpanPanelCircuit` class attributes:
+
+```python
+@dataclass
+class SpanPanelCircuit:
+    circuit_id: str
+    name: str
+    instant_power: float          # ← Matches "instant_power" data_path
+    produced_energy: float        # ← Matches "produced_energy" data_path
+    consumed_energy: float        # ← Matches "consumed_energy" data_path
+    # ... other attributes
+```
+
+### Data Path Usage in ha-synthetic-sensors
+
+#### 1. Data Provider Registration
+
+```python
+# In synthetic_sensors.py - setup_synthetic_sensors()
+sensor_manager.register_data_provider_entities(
+    backing_entity_ids,  # Set of backing entity IDs
+    change_notifier      # Callback for data changes
+)
+```
+
+#### 2. Data Provider Resolution
+
+```python
+# In synthetic_sensors.py - data_provider_callback()
+def data_provider_callback(entity_id: str) -> DataProviderResult:
+    # Get value from virtual backing entity using live coordinator data
+    value = synthetic_coord.get_backing_value(entity_id)
+    exists = entity_id in synthetic_coord.backing_entity_metadata
+
+    return {
+        "value": value,
+        "exists": exists,
+        "attributes": {}
+    }
+```
+
+### Complete Data Flow Example
+
+**For a "Fountain Power" synthetic sensor:**
+
+1. **Data Path:** `"circuits.795e8eddb4f448af9625130332a41df8.instant_power"`
+2. **Backing Entity ID:** `"sensor.span_panel_12345_fountain_power"`
+3. **Synthetic Sensor Formula:** `"{{ backing_entity_id }}"`
+4. **Data Provider Call:** `data_provider_callback("sensor.span_panel_12345_fountain_power")`
+5. **Value Extraction:** `getattr(circuit, "instant_power", None)` → `1250.5`
+6. **Result:** Synthetic sensor displays `1250.5 W`
+
+### Key Functions of Data Path
+
+#### 1. Data Lookup Bridge
+
+- **SPAN Integration** uses `data_path` to extract values from the SPAN panel data structure
+- **ha-synthetic-sensors** uses the backing entity ID to request data via the data provider callback
+- The `data_path` connects these two systems
+
+#### 2. Real-time Data Access
+
+- When synthetic sensors need to evaluate formulas, they call the data provider
+- The data provider uses the `data_path` to get live values from the SPAN panel
+- This enables real-time sensor updates without polling
+
+#### 3. Change Detection
+
+- The `data_path` enables the system to detect when circuit names change
+- By storing the circuit's friendly name in backing entity metadata, the system can compare old vs new names
+- This triggers the YAML update process for synthetic sensors
+
+#### 4. Virtual Entity Management
+
+- Backing entities are **virtual** - they don't exist as real Home Assistant entities
+- The `data_path` allows the system to provide data for these virtual entities
+- This creates a seamless interface between SPAN data and synthetic sensor formulas
+
 ## Component Relationships and Responsibilities
 
 ### SyntheticSensorCoordinator
@@ -113,7 +280,7 @@ The `_setup_live_configuration()` method coordinates YAML generation across mult
 - Iterates through `PANEL_SENSOR_DEFINITIONS` (current power, feedthrough power, energy sensors)
 - For each sensor definition:
   - Generates entity ID using helper functions
-  - Creates backing entity configuration
+  - Creates backing entity configuration with data_path
   - Builds sensor-to-backing mapping
   - Generates YAML configuration using templates
   - Extracts current data values from SPAN panel
@@ -127,7 +294,7 @@ The `_setup_live_configuration()` method coordinates YAML generation across mult
 - Iterates through all named circuits (non-unmapped circuits)
 - For each circuit and sensor type (power, energy):
   - Generates entity ID using helper functions
-  - Creates backing entity configuration
+  - Creates backing entity configuration with data_path
   - Builds sensor-to-backing mapping
   - Generates YAML configuration using templates
   - Extracts current data values from circuit data
@@ -496,3 +663,6 @@ The startup sequence's "fork in the road" optimizes performance by:
 All paths converge at the convenience method, which creates functional synthetic sensors regardless of the configuration source. The migration flag system
 ensures smooth transitions between installation types while preserving user configurations and entity identifiers. The backing entity system ensures that
 synthetic sensors always have access to current SPAN panel data, even as circuit configurations change over time.
+
+The data path system serves as the critical bridge between SPAN panel data and synthetic sensor formulas, enabling real-time data access through virtual backing
+entities while maintaining the flexibility to handle dynamic circuit configurations and name changes.

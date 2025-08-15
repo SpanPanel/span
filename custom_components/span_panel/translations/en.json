@@ -20,11 +20,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Simulator Mode"
+          "use_ssl": "Use SSL",
+          "simulator_mode": "Simulator Mode",
+          "power_display_precision": "Power Display Precision",
+          "energy_display_precision": "Energy Display Precision"
         },
         "data_description": {
           "host": "IP address or hostname of SPAN Panel (required for live panels, optional for simulation)",
-          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host can be left empty for default simulation."
+          "use_ssl": "Enable secure HTTPS connection to the SPAN Panel",
+          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host can be left empty for default simulation.",
+          "power_display_precision": "Number of decimal places for power values (0-3)",
+          "energy_display_precision": "Number of decimal places for energy values (0-3)"
         },
         "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and leave host empty (or enter a custom serial number).",
         "title": "Connect to the Span Panel"
@@ -52,11 +58,15 @@
         "description": "Choose the simulation configuration for your SPAN Panel. This determines the number of circuits and behaviors. {config_count} configurations are available.",
         "data": {
           "simulation_config": "Simulation Configuration",
-          "host": "Custom Serial Number (optional)"
+          "host": "Custom Serial Number (optional)",
+          "simulation_start_time": "Simulation Start Time (Optional)",
+          "entity_naming_pattern": "Entity Naming Pattern"
         },
         "data_description": {
           "simulation_config": "Select the panel configuration to simulate",
-          "host": "Leave empty to use the default serial number from the selected configuration"
+          "host": "Leave empty to use the default serial number from the selected configuration",
+          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time.",
+          "entity_naming_pattern": "Choose how circuit entities are named in the simulation"
         }
       }
     }

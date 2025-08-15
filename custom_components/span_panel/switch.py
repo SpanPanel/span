@@ -98,6 +98,11 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         # Store initial circuit name for change detection in auto-sync
         self._previous_circuit_name = name
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
+        # Call parent cleanup
+        await super().async_will_remove_from_hass()
+
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         # Check for circuit name changes

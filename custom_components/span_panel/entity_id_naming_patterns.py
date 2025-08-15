@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -333,6 +334,9 @@ class EntityIdMigrationManager:
     ) -> None:
         """Update all cross-references to changed entity IDs throughout the YAML document.
 
+        Used when migrating from no device prefix to device prefix friendly entity_id
+        From pre 1.0.4 to 1.0.4+
+
         Args:
             yaml_data: Complete YAML configuration dictionary
             entity_id_changes: Dictionary mapping old entity IDs to new entity IDs
@@ -345,10 +349,11 @@ class EntityIdMigrationManager:
             elif isinstance(obj, list):
                 return [update_recursive(item) for item in obj]
             elif isinstance(obj, str):
-                # Replace any old entity ID references with new ones
+                # Replace any old entity ID references with new ones (exact matches only)
                 for old_id, new_id in entity_id_changes.items():
-                    if old_id in obj:
-                        obj = obj.replace(old_id, new_id)
+                    # Use word boundaries to ensure exact entity ID matches only
+                    pattern = r"\b" + re.escape(old_id) + r"\b"
+                    obj = re.sub(pattern, new_id, obj)
                 return obj
             else:
                 return obj

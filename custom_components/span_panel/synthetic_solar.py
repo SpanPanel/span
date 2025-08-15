@@ -198,6 +198,7 @@ def _generate_sensor_entity_id(
 
 
 async def _process_sensor_template(
+    hass: HomeAssistant,
     sensor_def: dict[str, Any],
     template_vars: dict[str, Any],
     entity_id: str | None,
@@ -205,6 +206,7 @@ async def _process_sensor_template(
     """Process a sensor template and return the configuration.
 
     Args:
+        hass: Home Assistant instance
         sensor_def: Sensor definition dictionary
         template_vars: Template variables
         entity_id: Entity ID for the sensor
@@ -260,7 +262,7 @@ async def _process_sensor_template(
 
     try:
         template_files = [sensor_def["template"]]
-        combined_result = await combine_yaml_templates(template_files, string_template_vars)
+        combined_result = await combine_yaml_templates(hass, template_files, string_template_vars)
         _LOGGER.debug(
             "Template processing result for %s: %r", sensor_def["template"], combined_result
         )
@@ -414,8 +416,11 @@ async def generate_solar_sensors_with_entity_ids(
             # Add sensor_key to template vars for this specific sensor
             sensor_template_vars = template_vars.copy()
             sensor_template_vars["sensor_key"] = unique_id
+            if hass is None:
+                _LOGGER.error("Home Assistant instance is None, cannot process sensor template")
+                continue
             final_config = await _process_sensor_template(
-                sensor_def, sensor_template_vars, entity_id
+                hass, sensor_def, sensor_template_vars, entity_id
             )
             if final_config:
                 sensor_configs[unique_id] = final_config
@@ -470,7 +475,6 @@ async def handle_solar_sensor_crud(
     """
     try:
         span_panel = coordinator.data
-        device_identifier = get_device_identifier_for_entry(coordinator, span_panel, device_name)
 
         # Verify circuits exist by trying to get their entity IDs
         leg1_entity_id = get_unmapped_circuit_entity_id(
@@ -544,7 +548,7 @@ async def handle_solar_sensor_crud(
                     solar_entity_id = f"sensor.solar_{sensor_type}"
 
                 # Load the template as a string
-                template_content = await load_template(template_name)
+                template_content = await load_template(hass, template_name)
 
                 # Get proper voltage attribute using helper function
                 tabs_attribute, voltage_attribute = _get_template_attributes(

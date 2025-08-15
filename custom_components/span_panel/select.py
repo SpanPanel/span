@@ -144,6 +144,11 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
             raise TypeError(f"Expected SpanPanelCircuit, got {type(circuit)}")
         return circuit
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed."""
+        # Call parent cleanup
+        await super().async_will_remove_from_hass()
+
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         _LOGGER.debug("Selecting option: %s", option)

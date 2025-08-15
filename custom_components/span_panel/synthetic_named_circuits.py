@@ -264,7 +264,7 @@ async def generate_named_circuit_sensors(
 
             # Use the combined YAML approach for this single sensor
             combined_result = await combine_yaml_templates(
-                [sensor_def["template"]], string_placeholders
+                hass, [sensor_def["template"]], string_placeholders
             )
 
             # Store global settings from first sensor (they should be the same for all)

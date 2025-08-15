@@ -8,7 +8,8 @@
     "error": {
       "cannot_connect": "Échec de la connexion au Span Panel",
       "invalid_auth": "Authentification invalide",
-      "unknown": "Erreur inattendue"
+      "unknown": "Erreur inattendue",
+      "host_required": "L'hôte est requis pour les connexions de panneau en direct"
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -19,11 +20,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Mode Simulateur"
+          "use_ssl": "Utiliser SSL",
+          "simulator_mode": "Mode Simulateur",
+          "power_display_precision": "Précision d'Affichage de Puissance",
+          "energy_display_precision": "Précision d'Affichage d'Énergie"
         },
         "data_description": {
           "host": "Adresse IP ou nom d'hôte du SPAN Panel (pour la simulation : utilisez un numéro de série comme 'sp3-simulation-001' ou laissez vide pour la valeur par défaut)",
-          "simulator_mode": "Activer le mode simulateur pour les tests (aucun matériel requis). Laissez l'hôte vide pour la simulation par défaut, ou entrez un numéro de série personnalisé."
+          "use_ssl": "Activer la connexion HTTPS sécurisée au SPAN Panel",
+          "simulator_mode": "Activer le mode simulateur pour les tests (aucun matériel requis). Laissez l'hôte vide pour la simulation par défaut, ou entrez un numéro de série personnalisé.",
+          "power_display_precision": "Nombre de décimales pour les valeurs de puissance (0-3)",
+          "energy_display_precision": "Nombre de décimales pour les valeurs d'énergie (0-3)"
         },
         "description": "Entrez les détails de connexion pour votre SPAN Panel. Pour le mode simulateur, cochez la case simulateur et entrez optionnellement un numéro de série personnalisé.",
         "title": "Connectez-vous au Span Panel"
@@ -45,16 +52,38 @@
         "data": {
           "access_token": "Jeton d'accès"
         }
+      },
+      "simulator_config": {
+        "title": "Configuration du Simulateur",
+        "description": "Sélectionnez une configuration de simulation et définissez optionnellement un heure de début personnalisée. {config_count} configurations disponibles.",
+        "data": {
+          "simulation_config": "Configuration de Simulation",
+          "host": "Host (Numéro de Série)",
+          "simulation_start_time": "Heure de Début de Simulation (Optionnel)",
+          "entity_naming_pattern": "Modèle de Nommage des Entités"
+        },
+        "data_description": {
+          "simulation_config": "Choisissez une configuration de simulation qui définit les modèles de circuit et les profils d'énergie",
+          "host": "Numéro de série personnalisé pour le panneau simulé (optionnel, utilisera la valeur par défaut de la configuration si vide)",
+          "simulation_start_time": "Format d'heure : HH:MM (24h), H:MM (12h), ou datetime ISO complet (YYYY-MM-DDTHH:MM:SS). Laissez vide pour utiliser l'heure actuelle.",
+          "entity_naming_pattern": "Choisissez comment les entités de circuit sont nommées dans la simulation"
+        }
       }
     }
   },
   "options": {
+    "error": {
+      "directory": "Le chemin du fichier est requis",
+      "base": "Échec de l'exportation : {error}"
+    },
     "step": {
       "init": {
         "title": "Menu des Options",
         "menu_options": {
           "general_options": "Options Générales",
-          "entity_naming": "Modèle de Nommage des Entités"
+          "entity_naming": "Modèle de Nommage des Entités",
+          "export_config": "Exporter la Configuration des Capteurs Synthétiques",
+          "simulation_options": "Options de Simulation"
         }
       },
       "general_options": {
@@ -83,6 +112,34 @@
         "data": {
           "entity_naming_pattern": "Modèle de Nommage des Entités"
         }
+      },
+      "export_config": {
+        "title": "Exporter la Configuration des Capteurs Synthétiques",
+        "description": "Exporter la configuration actuelle des capteurs synthétiques vers un fichier YAML. Vous pouvez spécifier un répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet. Nom de fichier par défaut : '{filename}'",
+        "data": {
+          "directory": "Chemin du Fichier"
+        },
+        "data_description": {
+          "directory": "Un chemin de répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet se terminant par .yaml où la configuration sera sauvegardée."
+        }
+      },
+      "simulation_options": {
+        "title": "Options de Simulation",
+        "description": "Configurer les paramètres spécifiques à la simulation. Les modifications de l'heure de simulation rechargeront l'intégration pour appliquer la nouvelle heure.",
+        "data": {
+          "simulation_start_time": "Heure de Début de Simulation"
+        },
+        "data_description": {
+          "simulation_start_time": "Format d'heure : HH:MM (24h), H:MM (12h), ou datetime ISO complet (YYYY-MM-DDTHH:MM:SS). Laissez vide pour utiliser l'heure actuelle. L'intégration se rechargera pour appliquer les changements."
+        }
+      }
+    }
+  },
+  "selector": {
+    "entity_naming_pattern": {
+      "options": {
+        "friendly_names": "Noms Conviviaux (ex., span_panel_cuisine_prises_power)",
+        "circuit_numbers": "Numéros de Circuit (ex., span_panel_circuit_15_power)"
       }
     }
   }
