@@ -3,9 +3,9 @@
     entity_id: "{{entity_id}}"
     formula: "state"
     UNAVAILABLE:
-      formula: "state if within_grace else UNKNOWN"
+      formula: "state if within_grace else 'unknown'"
     UNKNOWN:
-      formula: "state if within_grace else UNKNOWN"
+      formula: "state if within_grace else 'unknown'"
     variables:
       within_grace:
         formula: "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes"
@@ -17,9 +17,9 @@
       energy_reporting_status:
         formula: "'Live'"
         UNAVAILABLE:
-          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+          formula: "'Previous (grace)' if within_grace else 'unknown'"
         UNKNOWN:
-          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+          formula: "'Previous (grace)' if within_grace else 'unknown'"
     metadata:
       unit_of_measurement: "Wh"
       device_class: "energy"
