@@ -79,7 +79,7 @@ from .simulation_generator import (
 )  # lazy import to keep CF lean
 from .span_panel_api import SpanPanelApi
 from .synthetic_sensors import find_synthetic_coordinator_for
-from .version import get_version  # lazy import
+from .version import async_get_version  # lazy import
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1169,7 +1169,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         # integration version is >= 1.0.4, always suppress the legacy toggle
         # regardless of options state to avoid confusion on fresh installs.
         try:
-            installed = Version(get_version())
+            installed = Version(await async_get_version(self.hass))
             if installed >= Version("1.0.4"):
                 is_legacy_install = False
         except (ValueError, TypeError, AttributeError):
