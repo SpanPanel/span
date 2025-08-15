@@ -512,6 +512,7 @@ async def handle_solar_sensor_crud(
         # Define the solar sensor templates
         solar_templates = ["solar_current_power", "solar_produced_energy", "solar_consumed_energy"]
 
+        _LOGGER.info("SOLAR_DEBUG: Starting solar sensor addition")
         for template_name in solar_templates:
             try:
                 # Generate unique ID for this solar sensor using the same helper as other sensors
@@ -579,8 +580,10 @@ async def handle_solar_sensor_crud(
                 )
 
                 # Add the filled template directly using YAML CRUD
+                _LOGGER.info("SOLAR_DEBUG: Before adding solar sensor %s", template_name)
                 await sensor_set.async_add_sensor_from_yaml(filled_template)
                 _LOGGER.debug("Added solar sensor via YAML CRUD: %s", template_name)
+                _LOGGER.info("SOLAR_DEBUG: After adding solar sensor %s", template_name)
             except Exception as e:
                 _LOGGER.error("Error adding solar sensor %s: %s", template_name, e)
 
@@ -650,11 +653,24 @@ async def handle_solar_options_change(
             _LOGGER.error("Sensor set does not exist for solar options change")
             return False
 
-        # Remove existing solar sensors using SensorSet CRUD
+        # Get existing solar sensors
         existing_solar_ids = get_stored_solar_sensor_ids_from_set(sensor_set)
-        for solar_id in existing_solar_ids:
-            await sensor_set.async_remove_sensor(solar_id)
-            _LOGGER.debug("Removed existing solar sensor: %s", solar_id)
+        
+        # In migration mode, only add solar sensors if they don't exist
+        # In normal mode (user changing options), remove and recreate
+        if not migration_mode:
+            # User is changing options - remove existing solar sensors
+            for solar_id in existing_solar_ids:
+                await sensor_set.async_remove_sensor(solar_id)
+                _LOGGER.debug("Removed existing solar sensor: %s", solar_id)
+        else:
+            # Migration mode - check if solar sensors already exist
+            if existing_solar_ids:
+                _LOGGER.debug(
+                    "Migration mode: Solar sensors already exist (%d found), skipping creation",
+                    len(existing_solar_ids)
+                )
+                return True
 
         if enable_solar and leg1_circuit > 0 and leg2_circuit > 0:
             # Handle solar sensor creation
@@ -721,6 +737,7 @@ def get_stored_solar_sensor_ids_from_set(sensor_set: SensorSet) -> list[str]:
             # Check for "solar" in names
             if "solar" in unique_id.lower() or "solar" in entity_id.lower():
                 solar_ids.append(sensor_config.unique_id)
+                _LOGGER.debug("Identified solar sensor by name: %s", unique_id)
                 continue
 
             # Check for solar formula patterns
@@ -729,17 +746,35 @@ def get_stored_solar_sensor_ids_from_set(sensor_set: SensorSet) -> list[str]:
                     variables = formula.variables or {}
                     # Solar sensors have leg1_power and leg2_power variables
                     if "leg1_power" in variables and "leg2_power" in variables:
+                        _LOGGER.debug("Identified solar sensor by formula pattern: %s (has leg1_power and leg2_power)", unique_id)
                         solar_ids.append(sensor_config.unique_id)
                         break
 
             # Check for multi-circuit entity ID patterns (circuit_X_Y format)
+            # Solar sensors have patterns like sensor.span_panel_circuit_30_32_power
+            # where two circuit numbers are present (e.g., circuits 30 AND 32)
+            # Single circuit sensors like sensor.span_panel_circuit_2_power should NOT match
             if "_circuit_" in entity_id and "_power" in entity_id:
-                # Patterns like sensor.span_panel_circuit_30_32_power
+                # Extract the part after "_circuit_"
                 parts = entity_id.split("_circuit_")
-                if len(parts) > 1 and "_" in parts[1]:
-                    # This looks like a multi-circuit sensor, likely solar
-                    solar_ids.append(sensor_config.unique_id)
-                    continue
+                if len(parts) > 1:
+                    # Check if it has pattern like "30_32_power" (two numbers)
+                    circuit_part = parts[1]  # e.g., "30_32_power" or just "2_power"
+                    # Split by underscore and check if we have at least 3 parts
+                    # and the first two parts are numbers
+                    subparts = circuit_part.split("_")
+                    if len(subparts) >= 3:
+                        try:
+                            # Try to parse first two parts as integers
+                            int(subparts[0])
+                            int(subparts[1])
+                            # If both are numbers, this is a multi-circuit sensor
+                            solar_ids.append(sensor_config.unique_id)
+                            _LOGGER.debug("Identified solar sensor by multi-circuit pattern: %s", entity_id)
+                            continue
+                        except ValueError:
+                            # Not both numbers, so not a multi-circuit sensor
+                            pass
 
         _LOGGER.debug("Found %d stored solar sensor IDs from set: %s", len(solar_ids), solar_ids)
         return solar_ids

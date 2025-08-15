@@ -116,11 +116,6 @@ async def generate_named_circuit_sensors(
             if is_simulator and isinstance(device_name, str) and device_name
             else span_panel.status.serial_number
         )
-    else:
-        # This should only happen during migration step (no coordinator), but we shouldn't be generating YAML then
-        raise ValueError(
-            "span_panel is None during YAML generation - coordinator should provide live data"
-        )
 
     # Create common placeholders for header template
     energy_grace_period = coordinator.config_entry.options.get("energy_reporting_grace_period", 15)

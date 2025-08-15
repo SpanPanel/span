@@ -301,6 +301,12 @@ def construct_panel_synthetic_entity_id(
         existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
         if existing_entity_id:
             return existing_entity_id
+        else:
+            # FATAL ERROR: Expected unique_id not found in registry
+            raise ValueError(
+                f"REGISTRY LOOKUP ERROR: Expected unique_id '{unique_id}' not found in registry. "
+                f"This indicates a migration or configuration mismatch."
+            )
 
     config_entry = coordinator.config_entry
     if not device_name:
@@ -961,6 +967,12 @@ def construct_single_circuit_entity_id(
 
         if existing_entity_id:
             return existing_entity_id
+        else:
+            # FATAL ERROR: Expected unique_id not found in registry
+            raise ValueError(
+                f"REGISTRY LOOKUP ERROR: Expected unique_id '{unique_id}' not found in registry. "
+                f"This indicates a migration or configuration mismatch."
+            )
 
     # Get device info
     device_info = panel_to_device_info(span_panel)

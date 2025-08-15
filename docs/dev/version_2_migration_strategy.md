@@ -146,3 +146,100 @@ After migration, the normal boot process takes over. The key is that after migra
   - Ensure the above runs independently per config entry; one sensor set per device identifier.
 - Safety & telemetry
   - Log normalization counts, skipped conflicts, and generation outcomes; avoid duplicate unique_ids; ensure idempotent reruns.
+
+## Unique ID Patterns by Version
+
+This section documents the unique ID patterns found in different SPAN Panel integration versions to aid in migration development and testing.
+
+### Version 1.0.4 Unique ID Patterns
+
+**Panel Power Sensors:**
+
+- `span_nj-2316-005k6_instantGridPowerW` → `sensor.span_panel_current_power`
+- `span_nj-2316-005k6_feedthroughPowerW` → `sensor.span_panel_feed_through_power`
+
+**Panel Energy Sensors:**
+
+- `span_nj-2316-005k6_mainMeterEnergy.producedEnergyWh` → `sensor.span_panel_main_meter_produced_energy`
+- `span_nj-2316-005k6_mainMeterEnergy.consumedEnergyWh` → `sensor.span_panel_main_meter_consumed_energy`
+- `span_nj-2316-005k6_feedthroughEnergy.producedEnergyWh` → `sensor.span_panel_feed_through_produced_energy`
+- `span_nj-2316-005k6_feedthroughEnergy.consumedEnergyWh` → `sensor.span_panel_feed_through_consumed_energy`
+
+**Circuit Power Sensors:**
+
+- `span_nj-2316-005k6_{circuit_id}_instantPowerW` → `sensor.span_panel_circuit_{number}_power`
+- Example: `span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_instantPowerW` → `sensor.span_panel_circuit_2_power`
+
+**Circuit Energy Sensors:**
+
+- `span_nj-2316-005k6_{circuit_id}_producedEnergyWh` → `sensor.span_panel_circuit_{number}_energy_produced`
+- `span_nj-2316-005k6_{circuit_id}_consumedEnergyWh` → `sensor.span_panel_circuit_{number}_energy_consumed`
+- Example: `span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_producedEnergyWh` → `sensor.span_panel_circuit_2_energy_produced`
+
+**Status Sensors (unchanged):**
+
+- `span_nj-2316-005k6_doorState` → `binary_sensor.span_panel_door_state`
+- `span_nj-2316-005k6_eth0Link` → `binary_sensor.span_panel_ethernet_link`
+- `span_nj-2316-005k6_wlanLink` → `binary_sensor.span_panel_wi_fi_link`
+- `span_nj-2316-005k6_wwanLink` → `binary_sensor.span_panel_cellular_link`
+
+### Version 1.0.10 Unique ID Patterns
+
+**Panel Power Sensors:**
+
+- `span_nj-2316-005k6_instantGridPowerW` → `sensor.span_panel_current_power`
+- `span_nj-2316-005k6_feedthroughPowerW` → `sensor.span_panel_feed_through_power`
+
+**Panel Energy Sensors:**
+
+- `span_nj-2316-005k6_mainMeterEnergy.producedEnergyWh` → `sensor.span_panel_main_meter_produced_energy`
+- `span_nj-2316-005k6_mainMeterEnergy.consumedEnergyWh` → `sensor.span_panel_main_meter_consumed_energy`
+- `span_nj-2316-005k6_feedthroughEnergy.producedEnergyWh` → `sensor.span_panel_feed_through_produced_energy`
+- `span_nj-2316-005k6_feedthroughEnergy.consumedEnergyWh` → `sensor.span_panel_feed_through_consumed_energy`
+
+**Circuit Power Sensors:**
+
+- `span_nj-2316-005k6_{circuit_id}_instantPowerW` → `sensor.span_panel_circuit_{number}_power`
+- Example: `span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_instantPowerW` → `sensor.span_panel_circuit_2_power`
+
+**Circuit Energy Sensors:**
+
+- `span_nj-2316-005k6_{circuit_id}_producedEnergyWh` → `sensor.span_panel_circuit_{number}_energy_produced`
+- `span_nj-2316-005k6_{circuit_id}_consumedEnergyWh` → `sensor.span_panel_circuit_{number}_energy_consumed`
+- Example: `span_nj-2316-005k6_0dad2f16cd514812ae1807b0457d473e_producedEnergyWh` → `sensor.span_panel_circuit_2_energy_produced`
+
+**Status Sensors (unchanged):**
+
+- `span_nj-2316-005k6_doorState` → `binary_sensor.span_panel_door_state`
+- `span_nj-2316-005k6_eth0Link` → `binary_sensor.span_panel_ethernet_link`
+- `span_nj-2316-005k6_wlanLink` → `binary_sensor.span_panel_wi_fi_link`
+- `span_nj-2316-005k6_wwanLink` → `binary_sensor.span_panel_cellular_link`
+
+### Key Differences Between Versions
+
+**No Differences Found:** The unique ID patterns between v1.0.4 and v1.0.10 are **identical**. Both versions use:
+
+- Old naming conventions (`instantGridPowerW`, `feedthroughPowerW`, `instantPowerW`, `producedEnergyWh`, `consumedEnergyWh`)
+- Same circuit ID patterns with UUIDs
+- Same panel sensor patterns with dot notation for energy sensors
+- Same status sensor patterns
+
+**Migration Implications:**
+
+- The migration logic can be the same for both v1.0.4 and v1.0.10
+- Both versions need normalization to the new helper format:
+  - `instantGridPowerW` → `current_power`
+  - `feedthroughPowerW` → `feed_through_power`
+  - `instantPowerW` → `power`
+  - `producedEnergyWh` → `energy_produced`
+  - `consumedEnergyWh` → `energy_consumed`
+  - `mainMeterEnergy.producedEnergyWh` → `main_meter_produced_energy`
+  - `mainMeterEnergy.consumedEnergyWh` → `main_meter_consumed_energy`
+  - `feedthroughEnergy.producedEnergyWh` → `feed_through_produced_energy`
+  - `feedthroughEnergy.consumedEnergyWh` → `feed_through_consumed_energy`
+
+**Sensor Counts:**
+
+- Both versions have 24 power sensors (2 panel + 22 circuit)
+- Both versions have 48 energy sensors (4 panel + 44 circuit)
+- Total: 72 sensors per version

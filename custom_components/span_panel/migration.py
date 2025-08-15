@@ -49,8 +49,8 @@ def _normalize_panel_description_key(raw_key: str) -> str:
     return raw_key
 
 
-def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
-    """Compute helper-format unique_id from an existing raw unique_id.
+def _compute_normalized_unique_id_with_device(raw_unique_id: str, device_identifier: str) -> str | None:
+    """Compute helper-format unique_id from an existing raw unique_id using provided device identifier.
 
     Handles both panel and circuit sensors. Case-insensitive for legacy circuit
     API suffixes and correctly distinguishes circuit vs panel forms.
@@ -60,7 +60,7 @@ def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
         parts = raw_unique_id.split("_", 2)
         if len(parts) < 3 or parts[0] != "span":
             return None
-        device_identifier = parts[1]
+        # Use the provided device_identifier instead of parsing from the unique_id
         remainder = parts[2]
 
         # Check for solar sensor patterns FIRST (synthetic_XX_YY_solar_inverter_ZZZZ → solar_ZZZZ)
@@ -93,6 +93,23 @@ def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
                             )
                 except (ValueError, IndexError):
                     pass
+
+        # Check for current solar sensor patterns (span_serial_solar_ZZZZ → solar_ZZZZ)
+        if remainder.startswith("solar_"):
+            # Extract the solar sensor type from current format
+            # Pattern: solar_current_power → solar_current_power (already correct)
+            solar_type = remainder[6:]  # Remove "solar_" prefix
+            # Map current solar types to new types (they're already correct)
+            solar_type_map = {
+                "current_power": "current_power",
+                "produced_energy": "produced_energy", 
+                "consumed_energy": "consumed_energy",
+            }
+            new_solar_type = solar_type_map.get(solar_type)
+            if new_solar_type:
+                return construct_synthetic_unique_id(
+                    device_identifier, f"solar_{new_solar_type}"
+                )
 
         # If remainder contains an underscore, treat as circuit: {circuit_id}_{api_field}
         last_underscore = remainder.rfind("_")
@@ -167,11 +184,17 @@ async def migrate_config_entry_to_synthetic_sensors(
 
         updated = 0
         skipped = 0
+        # Get the correct device identifier from config entry
+        device_identifier = config_entry.unique_id
+        if not device_identifier:
+            _LOGGER.error("Config entry %s has no unique_id, cannot migrate", config_entry.entry_id)
+            return False
+
         for entity in entities:
             if entity.domain != "sensor" or entity.platform != DOMAIN:
                 continue
             raw_uid = entity.unique_id
-            new_uid = _compute_normalized_unique_id(raw_uid)
+            new_uid = _compute_normalized_unique_id_with_device(raw_uid, device_identifier)
             if not new_uid:
                 skipped += 1
                 continue
