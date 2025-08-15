@@ -60,7 +60,7 @@ repos:
         args: ['--config-file=pyproject.toml']
         exclude: '^tests/.*|^scripts/.*|docs/.*|\..*_cache/.*|dist/.*|venv/.*'
 
-  # Markdownlint for markdown files
+    # Markdownlint for markdown files
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.18.1
     hooks:
@@ -68,17 +68,18 @@ repos:
         args: ['--config', '.markdownlint-cli2.jsonc']
         exclude: '\..*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*|tests/.*'
 
-  # Markdown formatting using shared script
+  # Markdown formatting using shared script (local only)
   - repo: local
     hooks:
       - id: markdown-format
         name: Format markdown files
-        entry: /Users/bflood/projects/scripts/fix-markdown.sh
+        entry: scripts/fix-markdown.sh
         language: system
         args: [.]
         types: [markdown]
         pass_filenames: false
         always_run: true
+        stages: [manual]
 
   # Check for common security issues
   - repo: https://github.com/PyCQA/bandit
