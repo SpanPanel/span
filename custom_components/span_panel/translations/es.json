@@ -115,7 +115,7 @@
       },
       "export_config": {
         "title": "Exportar Configuración de Sensores Sintéticos",
-        "description": "Exportar la configuración actual de sensores sintéticos a un archivo YAML. Puede especificar un directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa. Nombre de archivo predeterminado: '{filename}'",
+        "description": "Exportar la configuración actual de sensores sintéticos a un archivo YAML. Puede especificar un directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa. Nombre de archivo predeterminado: {filename}",
         "data": {
           "directory": "Ruta del Archivo"
         },

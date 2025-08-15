@@ -115,7 +115,7 @@
       },
       "export_config": {
         "title": "Exporter la Configuration des Capteurs Synthétiques",
-        "description": "Exporter la configuration actuelle des capteurs synthétiques vers un fichier YAML. Vous pouvez spécifier un répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet. Nom de fichier par défaut : '{filename}'",
+        "description": "Exporter la configuration actuelle des capteurs synthétiques vers un fichier YAML. Vous pouvez spécifier un répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet. Nom de fichier par défaut : {filename}",
         "data": {
           "directory": "Chemin du Fichier"
         },
