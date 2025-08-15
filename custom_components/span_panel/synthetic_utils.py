@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any, TypedDict
 
-import aiofiles  # type: ignore[import-untyped]
+from homeassistant.core import HomeAssistant
 import yaml
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,10 +32,11 @@ class CombinedYamlResult(TypedDict):
     filled_template: str  # Add the filled template string
 
 
-async def load_template(template_name: str) -> str:
+async def load_template(hass: HomeAssistant, template_name: str) -> str:
     """Load a YAML template from the yaml_templates directory as text.
 
     Args:
+        hass: Home Assistant instance
         template_name: Name of the template file (with or without .yaml.txt extension)
 
     Returns:
@@ -56,13 +57,12 @@ async def load_template(template_name: str) -> str:
     if not template_path.exists():
         raise FileNotFoundError(f"Template file not found: {template_path}")
 
-    async with aiofiles.open(template_path, encoding="utf-8") as f:
-        content: str = await f.read()
-        return content
+    content: str = await hass.async_add_executor_job(template_path.read_text)
+    return content
 
 
 async def combine_yaml_templates(
-    sensor_template_names: list[str], placeholders: dict[str, str]
+    hass: HomeAssistant, sensor_template_names: list[str], placeholders: dict[str, str]
 ) -> CombinedYamlResult:
     """Combine header template with sensor templates and extract global settings.
 
@@ -73,6 +73,7 @@ async def combine_yaml_templates(
     4. Parses the combined YAML to extract global settings and sensor configs
 
     Args:
+        hass: Home Assistant instance
         sensor_template_names: List of sensor template names to combine
         placeholders: Dictionary of placeholder values to fill in templates
 
@@ -85,12 +86,12 @@ async def combine_yaml_templates(
 
     """
     # Load header template first
-    header_template = await load_template("sensor_set_header")
+    header_template = await load_template(hass, "sensor_set_header")
 
     # Load all sensor templates
     sensor_templates = []
     for template_name in sensor_template_names:
-        template = await load_template(template_name)
+        template = await load_template(hass, template_name)
         sensor_templates.append(template)
 
     # Combine header with sensor templates

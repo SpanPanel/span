@@ -8,7 +8,8 @@
     "error": {
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "invalid_auth": "Autenticación invalida",
-      "unknown": "Error inesperado"
+      "unknown": "Error inesperado",
+      "host_required": "Se requiere host para conexiones de panel en vivo"
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -19,11 +20,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Modo Simulador"
+          "use_ssl": "Usar SSL",
+          "simulator_mode": "Modo Simulador",
+          "power_display_precision": "Precisión de Visualización de Potencia",
+          "energy_display_precision": "Precisión de Visualización de Energía"
         },
         "data_description": {
           "host": "Dirección IP o nombre de host del SPAN Panel (para simulación: use número de serie como 'sp3-simulation-001' o déjelo vacío para el predeterminado)",
-          "simulator_mode": "Habilitar modo simulador para pruebas (no se requiere hardware). Deje el host vacío para simulación predeterminada, o ingrese un número de serie personalizado."
+          "use_ssl": "Habilitar conexión HTTPS segura al SPAN Panel",
+          "simulator_mode": "Habilitar modo simulador para pruebas (no se requiere hardware). Deje el host vacío para simulación predeterminada, o ingrese un número de serie personalizado.",
+          "power_display_precision": "Número de lugares decimales para valores de potencia (0-3)",
+          "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)"
         },
         "description": "Ingrese los detalles de conexión para su SPAN Panel. Para modo simulador, marque la casilla del simulador y opcionalmente ingrese un número de serie personalizado.",
         "title": "Establecer conexión al Span Panel"
@@ -44,6 +51,22 @@
         "description": "Por favor, introduce tu token de acceso (deja en blanco para empezar de nuevo):",
         "data": {
           "access_token": "Token de Acceso"
+        }
+      },
+      "simulator_config": {
+        "title": "Configuración del Simulador",
+        "description": "Seleccione una configuración de simulación y opcionalmente establezca un tiempo de inicio personalizado. {config_count} configuraciones disponibles.",
+        "data": {
+          "simulation_config": "Configuración de Simulación",
+          "host": "Host (Número de Serie)",
+          "simulation_start_time": "Tiempo de Inicio de Simulación (Opcional)",
+          "entity_naming_pattern": "Patrón de Nomenclatura de Entidades"
+        },
+        "data_description": {
+          "simulation_config": "Elija una configuración de simulación que defina plantillas de circuito y perfiles de energía",
+          "host": "Número de serie personalizado para el panel simulado (opcional, usará el predeterminado de la configuración si está vacío)",
+          "simulation_start_time": "Formato de tiempo: HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deje vacío para usar el tiempo actual.",
+          "entity_naming_pattern": "Elija cómo se nombran las entidades de circuito en la simulación"
         }
       }
     }

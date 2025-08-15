@@ -7,7 +7,6 @@ monitoring and control of your home's electrical system.
 [![GitHub Release](https://img.shields.io/github/release/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/releases)
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/commits)
 [![License](https://img.shields.io/github/license/SpanPanel/span.svg?style=flat-square)](LICENSE)
-[![Coverage](https://img.shields.io/codecov/c/github/SpanPanel/span?style=flat-square)](https://codecov.io/gh/SpanPanel/span)
 
 [![Python](https://img.shields.io/badge/python-3.13.2-blue.svg)](https://www.python.org/downloads/release/python-3132/)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
@@ -26,11 +25,10 @@ the ability to control user-manageable panel circuits.
 
 ## What's New
 
-**⚠️ MAJOR UPGRADE WARNING ⚠️**
+⚠️⚠️⚠️ **MAJOR UPGRADE WARNING** ⚠️⚠️⚠️
 
-**Before upgrading to version 1.2.0, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes
-that may affect your installation. While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a
-backup before major upgrades.
+**Before upgrading to version 1.2.0, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
+While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
 
 **OpenAPI Support**: The integration now uses the OpenAPI specification provided by the SPAN panel. This change provides a reliable foundation for future
 interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides

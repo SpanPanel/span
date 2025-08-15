@@ -1,5 +1,8 @@
-[tool.poetry]
+[project]
 name = "span"
+dynamic = ["description", "authors", "license", "readme"]
+
+[tool.poetry]
 # integration version is managed in the manifest.json for HA
 # version = "0.0.0"
 description = "Span Panel Custom Integration for Home Assistant"
@@ -10,10 +13,9 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
-homeassistant = ">=2025.7.0"  # Pin to 2025.7 or higher to avoid slow resolution
+homeassistant = ">=2025.8.1"  # Pin to 2025.7 or higher to avoid slow resolution
 span-panel-api = {path = "../span-panel-api", develop = true}
 ha-synthetic-sensors = {path = "../ha-synthetic-sensors", develop = true}
-aiofiles = "^23.2.0"
 
 [tool.poetry.group.dev.dependencies]
 # Type stubs and dev-only tools that don't conflict with HA runtime

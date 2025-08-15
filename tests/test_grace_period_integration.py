@@ -1,7 +1,7 @@
 """Integration test for grace period functionality with YAML generation."""
 
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from custom_components.span_panel.synthetic_panel_circuits import generate_panel_sensors
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
@@ -11,8 +11,69 @@ class TestGracePeriodIntegration:
     """Test grace period integration with YAML generation."""
 
     @pytest.mark.asyncio
-    async def test_grace_period_in_generated_yaml(self):
+    @patch('custom_components.span_panel.synthetic_panel_circuits.combine_yaml_templates')
+    @patch('custom_components.span_panel.synthetic_panel_circuits.er.async_get')
+    async def test_grace_period_in_generated_yaml(self, mock_async_get, mock_combine_yaml):
         """Test that grace period appears correctly in generated YAML."""
+        # Mock the async dependencies
+        mock_combine_yaml.return_value = {
+            "sensor_configs": {
+                "test_panel_main_meter_energy_consumed": {
+                    "UNAVAILABLE": {"formula": "state if within_grace else UNKNOWN"},
+                    "variables": {
+                        "within_grace": {
+                            "formula": "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes",
+                            "UNAVAILABLE": False
+                        }
+                    },
+                    "attributes": {
+                        "energy_reporting_status": {"formula": "test"}
+                    }
+                },
+                "test_panel_main_meter_energy_produced": {
+                    "UNAVAILABLE": {"formula": "state if within_grace else UNKNOWN"},
+                    "variables": {
+                        "within_grace": {
+                            "formula": "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes",
+                            "UNAVAILABLE": False
+                        }
+                    },
+                    "attributes": {
+                        "energy_reporting_status": {"formula": "test"}
+                    }
+                },
+                "test_panel_feedthrough_energy_consumed": {
+                    "UNAVAILABLE": {"formula": "state if within_grace else UNKNOWN"},
+                    "variables": {
+                        "within_grace": {
+                            "formula": "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes",
+                            "UNAVAILABLE": False
+                        }
+                    },
+                    "attributes": {
+                        "energy_reporting_status": {"formula": "test"}
+                    }
+                },
+                "test_panel_feedthrough_energy_produced": {
+                    "UNAVAILABLE": {"formula": "state if within_grace else UNKNOWN"},
+                    "variables": {
+                        "within_grace": {
+                            "formula": "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes",
+                            "UNAVAILABLE": False
+                        }
+                    },
+                    "attributes": {
+                        "energy_reporting_status": {"formula": "test"}
+                    }
+                }
+            },
+            "global_settings": {"variables": {"energy_grace_period_minutes": 30}}
+        }
+
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_async_get.return_value = mock_entity_registry
+
         # Mock coordinator with custom grace period
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
@@ -86,8 +147,20 @@ class TestGracePeriodIntegration:
             assert "formula" in sensor_config["attributes"]["energy_reporting_status"]
 
     @pytest.mark.asyncio
-    async def test_grace_period_default_value(self):
+    @patch('custom_components.span_panel.synthetic_panel_circuits.combine_yaml_templates')
+    @patch('custom_components.span_panel.synthetic_panel_circuits.er.async_get')
+    async def test_grace_period_default_value(self, mock_async_get, mock_combine_yaml):
         """Test that default grace period (15 minutes) is used when not specified."""
+        # Mock the async dependencies
+        mock_combine_yaml.return_value = {
+            "sensor_configs": {},
+            "global_settings": {"variables": {"energy_grace_period_minutes": 15}}
+        }
+
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_async_get.return_value = mock_entity_registry
+
         # Mock coordinator without grace period option
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
@@ -159,36 +232,49 @@ class TestGracePeriodIntegration:
         test_cases = [0, 60]
 
         for grace_period in test_cases:
-            # Mock coordinator with boundary grace period
-            mock_coordinator = MagicMock()
-            mock_coordinator.config_entry = MagicMock()
-            mock_coordinator.config_entry.options = {
-                ENERGY_REPORTING_GRACE_PERIOD: grace_period
-            }
-            mock_coordinator.config_entry.data = {"device_name": "Test Panel"}
-            mock_coordinator.config_entry.title = "Test Panel"
+            with patch('custom_components.span_panel.synthetic_panel_circuits.combine_yaml_templates') as mock_combine_yaml, \
+                 patch('custom_components.span_panel.synthetic_panel_circuits.er.async_get') as mock_async_get:
 
-            # Mock span panel
-            mock_span_panel = MagicMock()
-            mock_span_panel.status.serial_number = f"test-panel-{grace_period}"
+                # Mock the async dependencies
+                mock_combine_yaml.return_value = {
+                    "sensor_configs": {},
+                    "global_settings": {"variables": {"energy_grace_period_minutes": grace_period}}
+                }
 
-            mock_panel_data = MagicMock()
-            mock_panel_data.instantGridPowerW = 1000.0
-            mock_panel_data.feedthroughPowerW = 100.0
-            mock_panel_data.mainMeterEnergyConsumedWh = 1000.0
-            mock_panel_data.mainMeterEnergyProducedWh = 500.0
-            mock_panel_data.feedthroughEnergyConsumedWh = 375.0
-            mock_panel_data.feedthroughEnergyProducedWh = 250.0
+                mock_entity_registry = MagicMock()
+                mock_entity_registry.async_get_entity_id.return_value = None
+                mock_async_get.return_value = mock_entity_registry
 
-            mock_span_panel.panel = mock_panel_data
+                # Mock coordinator with boundary grace period
+                mock_coordinator = MagicMock()
+                mock_coordinator.config_entry = MagicMock()
+                mock_coordinator.config_entry.options = {
+                    ENERGY_REPORTING_GRACE_PERIOD: grace_period
+                }
+                mock_coordinator.config_entry.data = {"device_name": "Test Panel"}
+                mock_coordinator.config_entry.title = "Test Panel"
 
-            # Mock hass
-            mock_hass = MagicMock()
+                # Mock span panel
+                mock_span_panel = MagicMock()
+                mock_span_panel.status.serial_number = f"test-panel-{grace_period}"
 
-            # Generate sensors and verify grace period value
-            sensor_configs, backing_entities, global_settings, mapping = await generate_panel_sensors(
-                mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
-            )
+                mock_panel_data = MagicMock()
+                mock_panel_data.instantGridPowerW = 1000.0
+                mock_panel_data.feedthroughPowerW = 100.0
+                mock_panel_data.mainMeterEnergyConsumedWh = 1000.0
+                mock_panel_data.mainMeterEnergyProducedWh = 500.0
+                mock_panel_data.feedthroughEnergyConsumedWh = 375.0
+                mock_panel_data.feedthroughEnergyProducedWh = 250.0
 
-            # Verify the boundary value is correctly set
-            assert global_settings["variables"]["energy_grace_period_minutes"] == grace_period
+                mock_span_panel.panel = mock_panel_data
+
+                # Mock hass
+                mock_hass = MagicMock()
+
+                # Generate sensors and verify grace period value
+                sensor_configs, backing_entities, global_settings, mapping = await generate_panel_sensors(
+                    mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
+                )
+
+                # Verify the boundary value is correctly set
+                assert global_settings["variables"]["energy_grace_period_minutes"] == grace_period

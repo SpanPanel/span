@@ -22,7 +22,7 @@ jobs:
         run: |
           # Replace path dependencies with PyPI versions for CI
           sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = "^1.1.6"/' pyproject.toml
-          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.1.9"/' pyproject.toml
+          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.1.10"/' pyproject.toml
           # Regenerate lock file with the modified dependencies
           poetry lock
           poetry install --with dev
@@ -49,13 +49,3 @@ jobs:
 
       - name: Run tests with coverage
         run: poetry run pytest tests/ --cov=custom_components/span_panel --cov-report=xml --cov-report=term-missing
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          slug: SpanPanel/span
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-          # Note: Token not required for public repos with tokenless upload

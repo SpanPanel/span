@@ -248,7 +248,7 @@ async def generate_panel_sensors(
 
         # Use the new combined YAML approach for this single sensor
         combined_result = await combine_yaml_templates(
-            [sensor_def["template"]], string_placeholders
+            hass, [sensor_def["template"]], string_placeholders
         )
 
         # Store global settings from first sensor (they should be the same for all)

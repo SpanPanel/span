@@ -8,7 +8,8 @@
     "error": {
       "cannot_connect": "スパンパネルへの接続に失敗しました",
       "invalid_auth": "認証が無効です",
-      "unknown": "予期しないエラー"
+      "unknown": "予期しないエラー",
+      "host_required": "ライブパネル接続にはホストが必要です"
     },
     "flow_title": "スパンパネル ({host})",
     "step": {
@@ -19,11 +20,17 @@
       "user": {
         "data": {
           "host": "ホスト",
-          "simulator_mode": "シミュレーターモード"
+          "use_ssl": "SSLを使用",
+          "simulator_mode": "シミュレーターモード",
+          "power_display_precision": "電力表示精度",
+          "energy_display_precision": "エネルギー表示精度"
         },
         "data_description": {
           "host": "SPAN PanelのIPアドレスまたはホスト名（シミュレーション用：'sp3-simulation-001'のようなシリアル番号を使用するか、デフォルトの場合は空にしてください）",
-          "simulator_mode": "テスト用のシミュレーターモードを有効にします（ハードウェア不要）。デフォルトシミュレーションの場合はホストを空にするか、カスタムシリアル番号を入力してください。"
+          "use_ssl": "SPAN Panelへの安全なHTTPS接続を有効にします",
+          "simulator_mode": "テスト用のシミュレーターモードを有効にします（ハードウェア不要）。デフォルトシミュレーションの場合はホストを空にするか、カスタムシリアル番号を入力してください。",
+          "power_display_precision": "電力値の小数点以下の桁数（0-3）",
+          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）"
         },
         "description": "SPAN Panelの接続詳細を入力してください。シミュレーターモードの場合は、シミュレーターチェックボックスをチェックし、必要に応じてカスタムシリアル番号を入力してください。",
         "title": "スパンパネルに接続"
@@ -45,16 +52,38 @@
         "data": {
           "access_token": "アクセストークン"
         }
+      },
+      "simulator_config": {
+        "title": "シミュレーター設定",
+        "description": "シミュレーション設定を選択し、必要に応じてカスタム開始時刻を設定します。{config_count}の設定が利用可能です。",
+        "data": {
+          "simulation_config": "シミュレーション設定",
+          "host": "ホスト（シリアル番号）",
+          "simulation_start_time": "シミュレーション開始時刻（オプション）",
+          "entity_naming_pattern": "エンティティ命名パターン"
+        },
+        "data_description": {
+          "simulation_config": "回路テンプレートとエネルギー プロファイルを定義するシミュレーション設定を選択します",
+          "host": "シミュレートされたパネルのカスタムシリアル番号（オプション、空の場合は設定のデフォルトを使用）",
+          "simulation_start_time": "時刻形式：HH:MM（24時間）、H:MM（12時間）、または完全なISO日時（YYYY-MM-DDTHH:MM:SS）。空のままにすると現在時刻を使用します。",
+          "entity_naming_pattern": "シミュレーションで回路エンティティの命名方法を選択します"
+        }
       }
     }
   },
   "options": {
+    "error": {
+      "directory": "ファイルパスが必要です",
+      "base": "エクスポートに失敗しました：{error}"
+    },
     "step": {
       "init": {
         "title": "オプションメニュー",
         "menu_options": {
           "general_options": "一般オプション",
-          "entity_naming": "エンティティ命名パターン"
+          "entity_naming": "エンティティ命名パターン",
+          "export_config": "合成センサー設定をエクスポート",
+          "simulation_options": "シミュレーションオプション"
         }
       },
       "general_options": {
@@ -83,6 +112,34 @@
         "data": {
           "entity_naming_pattern": "エンティティ命名パターン"
         }
+      },
+      "export_config": {
+        "title": "合成センサー設定をエクスポート",
+        "description": "現在の合成センサー設定をYAMLファイルにエクスポートします。ディレクトリ（ファイルは自動的に名前が付けられます）または完全なファイルパスを指定できます。デフォルトファイル名：'{filename}'",
+        "data": {
+          "directory": "ファイルパス"
+        },
+        "data_description": {
+          "directory": "ディレクトリパス（ファイルは自動的に名前が付けられます）または設定が保存される.yamlで終わる完全なファイルパス。"
+        }
+      },
+      "simulation_options": {
+        "title": "シミュレーションオプション",
+        "description": "シミュレーション固有の設定を構成します。シミュレーション時刻の変更により、新しい時刻を適用するために統合が再読み込みされます。",
+        "data": {
+          "simulation_start_time": "シミュレーション開始時刻"
+        },
+        "data_description": {
+          "simulation_start_time": "時刻形式：HH:MM（24時間）、H:MM（12時間）、または完全なISO日時（YYYY-MM-DDTHH:MM:SS）。空のままにすると現在時刻を使用します。統合は変更を適用するために再読み込みされます。"
+        }
+      }
+    }
+  },
+  "selector": {
+    "entity_naming_pattern": {
+      "options": {
+        "friendly_names": "フレンドリ名（例：span_panel_kitchen_outlets_power）",
+        "circuit_numbers": "回路番号（例：span_panel_circuit_15_power）"
       }
     }
   }

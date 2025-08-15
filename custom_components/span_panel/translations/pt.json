@@ -8,7 +8,8 @@
     "error": {
       "cannot_connect": "Falha ao ligar ao Painel Span",
       "invalid_auth": "Autenticação inválida",
-      "unknown": "Erro inesperado"
+      "unknown": "Erro inesperado",
+      "host_required": "O anfitrião é necessário para conexões de painel ao vivo"
     },
     "flow_title": "Painel Span ({host})",
     "step": {
@@ -19,11 +20,17 @@
       "user": {
         "data": {
           "host": "Anfitrião",
-          "simulator_mode": "Modo Simulador"
+          "use_ssl": "Usar SSL",
+          "simulator_mode": "Modo Simulador",
+          "power_display_precision": "Precisão de Exibição de Potência",
+          "energy_display_precision": "Precisão de Exibição de Energia"
         },
         "data_description": {
           "host": "Endereço IP ou nome do host do SPAN Panel (para simulação: use número de série como 'sp3-simulation-001' ou deixe vazio para padrão)",
-          "simulator_mode": "Ativar modo simulador para testes (não requer hardware). Deixe o host vazio para simulação padrão, ou insira um número de série personalizado."
+          "use_ssl": "Ativar conexão HTTPS segura ao SPAN Panel",
+          "simulator_mode": "Ativar modo simulador para testes (não requer hardware). Deixe o host vazio para simulação padrão, ou insira um número de série personalizado.",
+          "power_display_precision": "Número de casas decimais para valores de potência (0-3)",
+          "energy_display_precision": "Número de casas decimais para valores de energia (0-3)"
         },
         "description": "Insira os detalhes de conexão para seu SPAN Panel. Para modo simulador, marque a caixa do simulador e opcionalmente insira um número de série personalizado.",
         "title": "Ligar ao Painel Span"
@@ -45,16 +52,38 @@
         "data": {
           "access_token": "Token de Acesso"
         }
+      },
+      "simulator_config": {
+        "title": "Configuração do Simulador",
+        "description": "Selecione uma configuração de simulação e opcionalmente defina um horário de início personalizado. {config_count} configurações disponíveis.",
+        "data": {
+          "simulation_config": "Configuração de Simulação",
+          "host": "Anfitrião (Número de Série)",
+          "simulation_start_time": "Horário de Início da Simulação (Opcional)",
+          "entity_naming_pattern": "Padrão de Nomenclatura de Entidades"
+        },
+        "data_description": {
+          "simulation_config": "Escolha uma configuração de simulação que define modelos de circuito e perfis de energia",
+          "host": "Número de série personalizado para o painel simulado (opcional, usará o padrão da configuração se vazio)",
+          "simulation_start_time": "Formato de horário: HH:MM (24h), H:MM (12h), ou datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deixe vazio para usar o horário atual.",
+          "entity_naming_pattern": "Escolha como as entidades de circuito são nomeadas na simulação"
+        }
       }
     }
   },
   "options": {
+    "error": {
+      "directory": "O caminho do arquivo é necessário",
+      "base": "Falha na exportação: {error}"
+    },
     "step": {
       "init": {
         "title": "Menu de Opções",
         "menu_options": {
           "general_options": "Opções Gerais",
-          "entity_naming": "Padrão de Nomenclatura de Entidades"
+          "entity_naming": "Padrão de Nomenclatura de Entidades",
+          "export_config": "Exportar Configuração de Sensores Sintéticos",
+          "simulation_options": "Opções de Simulação"
         }
       },
       "general_options": {
@@ -83,6 +112,34 @@
         "data": {
           "entity_naming_pattern": "Padrão de Nomenclatura de Entidades"
         }
+      },
+      "export_config": {
+        "title": "Exportar Configuração de Sensores Sintéticos",
+        "description": "Exportar a configuração atual de sensores sintéticos para um arquivo YAML. Você pode especificar um diretório (o arquivo será nomeado automaticamente) ou um caminho de arquivo completo. Nome do arquivo padrão: '{filename}'",
+        "data": {
+          "directory": "Caminho do Arquivo"
+        },
+        "data_description": {
+          "directory": "Um caminho de diretório (o arquivo será nomeado automaticamente) ou um caminho de arquivo completo terminando em .yaml onde a configuração será salva."
+        }
+      },
+      "simulation_options": {
+        "title": "Opções de Simulação",
+        "description": "Configurar configurações específicas de simulação. Mudanças no horário de simulação recarregarão a integração para aplicar o novo horário.",
+        "data": {
+          "simulation_start_time": "Horário de Início da Simulação"
+        },
+        "data_description": {
+          "simulation_start_time": "Formato de horário: HH:MM (24h), H:MM (12h), ou datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deixe vazio para usar o horário atual. A integração será recarregada para aplicar as mudanças."
+        }
+      }
+    }
+  },
+  "selector": {
+    "entity_naming_pattern": {
+      "options": {
+        "friendly_names": "Nomes Amigáveis (ex., span_panel_cozinha_tomadas_power)",
+        "circuit_numbers": "Números de Circuito (ex., span_panel_circuit_15_power)"
       }
     }
   }
