@@ -6,11 +6,6 @@ from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
 
-try:
-    import aiofiles
-except ImportError:
-    aiofiles = None  # type: ignore[assignment]
-
 
 def get_version() -> str:
     """Return the version from manifest.json."""
