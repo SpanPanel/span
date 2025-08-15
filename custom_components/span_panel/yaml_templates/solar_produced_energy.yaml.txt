@@ -3,9 +3,9 @@
     entity_id: "{{entity_id}}"
     formula: "leg1_produced + leg2_produced"
     UNAVAILABLE:
-      formula: "state if within_grace else UNKNOWN"
+      formula: "state if within_grace else 'unknown'"
     UNKNOWN:
-      formula: "state if within_grace else UNKNOWN"
+      formula: "state if within_grace else 'unknown'"
     variables:
       leg1_produced: "{{leg1_produced_entity}}"
       leg2_produced: "{{leg2_produced_entity}}"
@@ -19,9 +19,9 @@
       energy_reporting_status:
         formula: "'Live'"
         UNAVAILABLE:
-          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+          formula: "'Previous (grace)' if within_grace else 'unknown'"
         UNKNOWN:
-          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+          formula: "'Previous (grace)' if within_grace else 'unknown'"
     metadata:
       unit_of_measurement: "Wh"
       device_class: "energy"

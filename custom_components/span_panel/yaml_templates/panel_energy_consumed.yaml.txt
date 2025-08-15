@@ -3,9 +3,9 @@
     entity_id: "{{entity_id}}"
     formula: "state"
     UNAVAILABLE:
-      formula: "state if within_grace else UNKNOWN"
+      formula: "state if within_grace else 'unknown'"
     UNKNOWN:
-      formula: "state if within_grace else UNKNOWN"
+      formula: "state if within_grace else 'unknown'"
     variables:
       within_grace:
         formula: "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes"
