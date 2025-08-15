@@ -34,14 +34,15 @@ While we've implemented migration logic to preserve your existing entities and a
 interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides
 additional support we may adapt.
 
-**Synthetic Sensors**: The integration leverages a [synthetic sensor engine](https://github.com/SpanPanel/ha-synthetic-sensors)that allows us to provide
+**Synthetic Sensors**: The integration leverages a [synthetic sensor engine](https://github.com/LegoTypes/ha-synthetic-sensors)that allows us to provide
 features beyond basic sensors:
 
-- Every attribute will soon be capable of being mathematically formulated and tweaked by the user - stand by for a new attribute editor soon!
-- The first use case is one where _@sargonas_ researched and developed an algorithm that keeps statistics from reporting wild spikes and gaps during
-  intermittent outages. A global option sets the grace period for outages until the panels actually reports `unknown` states.
-- We added an attribute for voltage and amperage to each power sensor so you'll be able to craft notifications for thresholds on each circuit
-- We added an attribute to see the specific tabs associated with sensor
+- Every attribute will soon be capable of being mathematically formulated and tweaked by the user - stand by for an attribute editor!
+- The first use case for this new engine is one where _@sargonas_ researched and developed an algorithm that keeps statistics from reporting wild spikes and
+  gaps during intermittent outages by providing the previous known good value for a grace period. A global option sets the grace period.
+- We added an attribute for voltage and amperage to each power sensor so you'll be able to craft notifications for thresholds on each circuit. We may add a
+  global alarm in the future.
+- We added an attribute to see the specific panel tabs (spaces) associated with sensor.
 - We will likey develop an separate sensor editor to combine or build any combination of sensors and attributes outside of the SpanPanel integration itself.
 
 **Simulation**: The integraiton now supports adding configuration entries for virtual panels based on templates that produce typical power and energy. You can
@@ -80,7 +81,7 @@ ID's are kept intact. Pre-1.0.4 installations can only migrate forward to friend
 When upgrading through HACS, you'll see a notification about the new version. Before clicking "Update":
 
 1. **Create a backup** of your Home Assistant configuration and database
-2. **Review the changes** in this README and the [migration documentation](docs/version_2_migration_strategy.md)
+2. **Review the changes** in this README
 3. **Check your automations** to ensure they reference the correct entity IDs
 4. **Update during a quiet period** when you can monitor the upgrade process
 
@@ -183,7 +184,7 @@ If you have this auth token, you can enter it in the "Existing Auth Token" flow 
 ### Entity Naming Pattern Options
 
 The integration provides flexible entity naming patterns to suit different preferences and use cases. You can configure these options through the integration's
-configuration menu:
+configuration menu when you first install:
 
 #### Available Naming Patterns
 
@@ -199,26 +200,10 @@ configuration menu:
    - Entity IDs remain stable even when circuits are renamed
    - Friendly names still sync from SPAN panel for display
 
-#### Changing Naming Patterns
-
-You can switch between naming patterns at any time through:
-
-1. Go to **Settings** → **Devices & Services**
-2. Find your SPAN Panel integration
-3. Click **Configure**
-4. Select **Entity Naming Pattern**
-5. Choose your preferred pattern and confirm
-
-**Important Notes:**
-
-- Changing patterns will rename existing entities in your Home Assistant registry
-- Entity history is preserved during renaming
-- Automations and scripts may need manual updates to use new entity IDs
-- Consider backing up your configuration before making changes
-
 ### Solar Configuration
 
-If the inverter sensors are enabled, three sensors are created. The entity naming pattern depends on your configured naming pattern:
+The solar configuration is only for solar that is directly connected to the panel tabs. SPAN does expose data for inverters otherwise. If the inverter sensors
+are enabled, three sensors are created. The entity naming pattern depends on your configured naming pattern:
 
 **Circuit Numbers Pattern**:
 
@@ -266,6 +251,15 @@ precision of 0, for example `39`.
 You can change the display precision for any entity in Home Assistant via `Settings` -> `Devices & Services` -> `Entities` tab. Find the entity you would like
 to change in the list and click on it, then click on the gear wheel in the top right. Select the precision you prefer from the "Display Precision" menu and then
 press `UPDATE`.
+
+## Limitations
+
+The original SPAN Panel MAIN 32 has a standardized OpenAPI endpoint that is leveraged by this integration.
+
+However, the new SPAN Panel MAIN 40 and MLO 48 that were released in Q2 of 2025 leverage a different hardware/software stack, even going so far as to use a
+different mobile app logins. This stack is not yet publicly documented and as such, we have not had a chance to discern how to support this stack at the time of
+writing this. The underlying software may be the same codebase as the MAIN 32, so in theory, SPAN may provide access that we have yet to discover or that they
+will eventually expose.
 
 ## Troubleshooting
 
