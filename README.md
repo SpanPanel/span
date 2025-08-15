@@ -23,7 +23,7 @@ as-is with no warranty or guarantee of performance or suitability to your partic
 What this integration does is provide the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and
 the ability to control user-manageable panel circuits.
 
-## What's New
+## What's New - Beta Release
 
 ⚠️⚠️⚠️ **MAJOR UPGRADE WARNING** ⚠️⚠️⚠️
 
