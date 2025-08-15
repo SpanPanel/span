@@ -122,7 +122,7 @@
       },
       "export_config": {
         "title": "Export Synthetic Sensor Config",
-        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: '{filename}'",
+        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: {filename}",
         "data": {
           "directory": "File Path"
         },
