@@ -15,6 +15,9 @@ env/
 .envrc
 .env
 .deps-installed
+.cursor/*
+.cursorignore
+.cursorindexingignore
 
 # Coverage files
 .coverage
