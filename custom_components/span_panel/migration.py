@@ -81,51 +81,17 @@ def _compute_normalized_unique_id_with_device(
         # Use the provided device_identifier instead of parsing from the unique_id
         remainder = parts[2]
 
-        # Check for solar sensor patterns FIRST (synthetic_XX_YY_solar_inverter_ZZZZ → solar_ZZZZ)
-        if "solar_inverter" in remainder and "synthetic_" in remainder:
-            # Extract the solar sensor type from old format
-            # Pattern: synthetic_30_32_solar_inverter_instant_power → solar_current_power
-            parts = remainder.split("_")
-            if (
-                len(parts) >= 5
-                and parts[0] == "synthetic"
-                and "solar" in parts
-                and "inverter" in parts
-            ):
-                # Find solar_inverter and get the type after it
-                try:
-                    solar_idx = parts.index("solar")
-                    inverter_idx = parts.index("inverter")
-                    if inverter_idx == solar_idx + 1 and len(parts) > inverter_idx + 1:
-                        old_solar_type = "_".join(parts[inverter_idx + 1 :])
-                        # Map old solar types to new types
-                        solar_type_map = {
-                            "instant_power": "current_power",
-                            "energy_produced": "produced_energy",
-                            "energy_consumed": "consumed_energy",
-                        }
-                        new_solar_type = solar_type_map.get(old_solar_type)
-                        if new_solar_type:
-                            return construct_synthetic_unique_id(
-                                device_identifier, f"solar_{new_solar_type}"
-                            )
-                except (ValueError, IndexError):
-                    pass
-
-        # Check for current solar sensor patterns (span_serial_solar_ZZZZ → solar_ZZZZ)
-        if remainder.startswith("solar_"):
-            # Extract the solar sensor type from current format
-            # Pattern: solar_current_power → solar_current_power (already correct)
-            solar_type = remainder[6:]  # Remove "solar_" prefix
-            # Map current solar types to new types (they're already correct)
-            solar_type_map = {
-                "current_power": "current_power",
-                "produced_energy": "produced_energy",
-                "consumed_energy": "consumed_energy",
-            }
-            new_solar_type = solar_type_map.get(solar_type)
-            if new_solar_type:
-                return construct_synthetic_unique_id(device_identifier, f"solar_{new_solar_type}")
+        # Check for solar sensor patterns (any solar sensor → canonical solar format)
+        if "solar" in remainder:
+            # Check for power vs energy
+            if "power" in remainder:
+                return construct_synthetic_unique_id(device_identifier, "solar_current_power")
+            if "energy" in remainder:
+                # Check for produced vs consumed
+                if "produced" in remainder:
+                    return construct_synthetic_unique_id(device_identifier, "solar_produced_energy")
+                if "consumed" in remainder:
+                    return construct_synthetic_unique_id(device_identifier, "solar_consumed_energy")
 
         # If remainder contains an underscore, treat as circuit: {circuit_id}_{api_field}
         last_underscore = remainder.rfind("_")
