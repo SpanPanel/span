@@ -10,14 +10,14 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
-homeassistant = "*"  # This pulls in all HA's pinned dependencies automatically
+homeassistant = "2025.8.1"  # Pin to exact version for custom component compatibility
 span-panel-api = {path = "../span-panel-api", develop = true}
 ha-synthetic-sensors = {path = "../ha-synthetic-sensors", develop = true}
 # Only add dependencies here that HA doesn't provide or where you need different versions
 
 [tool.poetry.group.dev.dependencies]
 # Type stubs and dev-only tools that don't conflict with HA runtime
-homeassistant-stubs = "*"
+homeassistant-stubs = "2025.8.1"
 types-requests = "*"
 types-PyYAML = "*"
 mypy = "*"
@@ -31,8 +31,8 @@ prettier = "*"
 radon = "*"
 pylint = "*"  # For import-outside-toplevel checks
 # Testing dependencies
-pytest = "*"
-pytest-homeassistant-custom-component = "*"
+pytest = "^8.4.1"  # Compatible with Python 3.13
+pytest-homeassistant-custom-component = "^0.13.270"  # Latest version compatible with HA 2025.8.2
 isort = "*"
 
 [build-system]
