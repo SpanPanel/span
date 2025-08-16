@@ -627,14 +627,15 @@ class TestHelperFunctions:
     def test_construct_panel_synthetic_entity_id(self, mock_registry):
         """Test construct_panel_synthetic_entity_id for panel-level synthetic sensors."""
         mock_registry.return_value = MagicMock()
-        mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
+        # Mock the registry to return an existing entity ID for the unique_id
+        mock_registry.return_value.async_get_entity_id = MagicMock(return_value="sensor.existing_entity")
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_DEVICE_PREFIX: True}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 
-        # Test with device prefix enabled
+        # Test with device prefix enabled and existing unique_id
         result = construct_panel_synthetic_entity_id(
             coordinator,
             span_panel,
@@ -643,9 +644,20 @@ class TestHelperFunctions:
             "SPAN Panel",
             unique_id="test_unique_id",
         )
+        assert result == "sensor.existing_entity"
+
+        # Test with device prefix enabled and no unique_id (should construct new entity_id)
+        result = construct_panel_synthetic_entity_id(
+            coordinator,
+            span_panel,
+            "sensor",
+            "current_power",
+            "SPAN Panel",
+            unique_id=None,
+        )
         assert result == "sensor.span_panel_current_power"
 
-        # Test with device prefix disabled
+        # Test with device prefix disabled and no unique_id
         coordinator.config_entry.options = {USE_DEVICE_PREFIX: False}
         result = construct_panel_synthetic_entity_id(
             coordinator,
@@ -653,7 +665,7 @@ class TestHelperFunctions:
             "sensor",
             "current_power",
             "SPAN Panel",
-            unique_id="test_unique_id",
+            unique_id=None,
         )
         assert result == "sensor.current_power"
 

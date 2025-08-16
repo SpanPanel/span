@@ -8,12 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.span_panel.const import CircuitRelayState
-from custom_components.span_panel.switch import (
-    SpanPanelCircuitsSwitch,
-    async_setup_entry,
-)
-
 
 @pytest.fixture(autouse=True)
 def expected_lingering_timers():
@@ -24,7 +18,7 @@ def expected_lingering_timers():
 def create_mock_circuit(
     circuit_id: str = "1",
     name: str = "Test Circuit",
-    relay_state: str = CircuitRelayState.CLOSED.name,
+    relay_state: str = "CLOSED",
     is_user_controllable: bool = True,
 ):
     """Create a mock circuit for testing."""
@@ -50,11 +44,18 @@ def create_mock_span_panel(circuits: dict[str, Any]):
 @pytest.mark.asyncio
 async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom_integrations: Any):
     """Test that switches are created only for user-controllable circuits."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.switch import (
+        SpanPanelCircuitsSwitch,
+        async_setup_entry,
+    )
 
     # Create controllable circuit
     controllable_circuit = create_mock_circuit(
         circuit_id="1",
         name="Kitchen Outlets",
+        relay_state=CircuitRelayState.CLOSED.name,
         is_user_controllable=True,
     )
 
@@ -62,6 +63,7 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
     non_controllable_circuit = create_mock_circuit(
         circuit_id="2",
         name="Main Feed",
+        relay_state=CircuitRelayState.CLOSED.name,
         is_user_controllable=False,
     )
 
@@ -108,6 +110,9 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
 @pytest.mark.asyncio
 async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: Any):
     """Test turning on a circuit switch."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     circuit = create_mock_circuit(
         circuit_id="1",
@@ -145,6 +150,9 @@ async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: A
 @pytest.mark.asyncio
 async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: Any):
     """Test turning off a circuit switch."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     circuit = create_mock_circuit(
         circuit_id="1",
@@ -182,6 +190,9 @@ async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: 
 @pytest.mark.asyncio
 async def test_switch_state_reflects_relay_state(hass: Any, enable_custom_integrations: Any):
     """Test that switch state correctly reflects circuit relay state."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     # Test CLOSED relay -> switch ON
     circuit_closed = create_mock_circuit(
@@ -233,6 +244,8 @@ async def test_switch_state_reflects_relay_state(hass: Any, enable_custom_integr
 @pytest.mark.asyncio
 async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrations: Any):
     """Test that switch handles gracefully when circuit is missing."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     # Empty circuits dict
     circuits = {}
@@ -248,12 +261,15 @@ async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrati
 
     # Should raise ValueError for missing circuit
     with pytest.raises(ValueError, match="Circuit 1 not found"):
-        SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit", "SPAN Panel")
+        switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit", "SPAN Panel")
 
 
 @pytest.mark.asyncio
 async def test_switch_coordinator_update_handling(hass: Any, enable_custom_integrations: Any):
     """Test switch updates correctly when coordinator data changes."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     circuit = create_mock_circuit(
         circuit_id="1",
@@ -302,6 +318,9 @@ async def test_circuit_name_change_triggers_reload_request(
     hass: Any, enable_custom_integrations: Any
 ):
     """Test that changing circuit name triggers integration reload."""
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.const import CircuitRelayState
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     circuit = create_mock_circuit(
         circuit_id="1",

@@ -1,5 +1,7 @@
 """Test solar configuration using simulator mode (without mocking)."""
 
+from typing import Any
+
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntryState
@@ -14,7 +16,7 @@ except ImportError:
     from homeassistant.config_entries import ConfigEntry as MockConfigEntry
 
 
-async def test_solar_configuration_with_simulator_mode(hass: HomeAssistant) -> None:
+async def test_solar_configuration_with_simulator_mode(hass: HomeAssistant, enable_custom_integrations: Any) -> None:
     """Test solar configuration using simulator mode - demonstrates the new approach."""
 
     # This test demonstrates how tests WOULD work with simulator mode

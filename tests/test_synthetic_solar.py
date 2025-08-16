@@ -433,6 +433,14 @@ class TestSolarOptionsChange:
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         coordinator.data = MagicMock(spec=SpanPanel)
         coordinator.data.circuits = {"test_circuit": MagicMock(name="Test Circuit")}
+        coordinator.config_entry = MagicMock(spec=ConfigEntry)
+        coordinator.config_entry.data = {"device_name": "Test Panel"}
+        coordinator.config_entry.title = "Test Panel"
+        coordinator.config_entry.options = {
+            "energy_reporting_grace_period": 15,
+            "power_display_precision": 0,
+            "energy_display_precision": 2,
+        }
         return coordinator
 
     @pytest.fixture
@@ -459,9 +467,17 @@ class TestSolarOptionsChange:
     async def test_handle_solar_options_change_disable(self, mock_hass, mock_config_entry,
                                                       mock_coordinator, mock_sensor_set):
         """Test disabling solar sensors."""
-        existing_solar_ids = ["solar_power", "solar_energy_produced", "solar_energy_consumed"]
+        # Create mock sensors that will be returned by sensor_set.list_sensors()
+        mock_sensor1 = MagicMock()
+        mock_sensor1.unique_id = "solar_power"
+        mock_sensor2 = MagicMock()
+        mock_sensor2.unique_id = "solar_energy_produced"
+        mock_sensor3 = MagicMock()
+        mock_sensor3.unique_id = "solar_energy_consumed"
 
-        with patch('custom_components.span_panel.synthetic_solar.get_stored_solar_sensor_ids_from_set', return_value=existing_solar_ids):
+        mock_sensor_set.list_sensors.return_value = [mock_sensor1, mock_sensor2, mock_sensor3]
+
+        with patch('custom_components.span_panel.synthetic_solar.construct_expected_solar_sensor_ids', return_value=["solar_power", "solar_energy_produced", "solar_energy_consumed"]):
             with patch('custom_components.span_panel.synthetic_solar.find_synthetic_coordinator_for', return_value=None):
                 result = await handle_solar_options_change(
                     mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
@@ -469,7 +485,7 @@ class TestSolarOptionsChange:
                 )
 
                 assert result is True
-                assert mock_sensor_set.async_remove_sensor.call_count == len(existing_solar_ids)
+                assert mock_sensor_set.async_remove_sensor.call_count == 3
 
     async def test_handle_solar_options_change_sensor_set_not_exists(self, mock_hass, mock_config_entry,
                                                                     mock_coordinator, mock_sensor_set):
@@ -516,7 +532,7 @@ class TestStoredSolarSensorIds:
     def test_get_stored_solar_sensor_ids_by_formula(self):
         """Test finding solar sensors by formula patterns."""
         mock_formula = MagicMock()
-        mock_formula.variables = {"leg1_power": "sensor.test_1", "leg2_power": "sensor.test_2"}
+        mock_formula.variables = {"power": "sensor.leg1_power", "energy": "sensor.leg2_energy"}
 
         mock_sensor_config = MagicMock()
         mock_sensor_config.unique_id = "test_sensor"

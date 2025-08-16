@@ -4,11 +4,6 @@ from homeassistant.exceptions import ServiceNotFound
 import pytest
 from span_panel_api.exceptions import SpanPanelServerError
 
-from custom_components.span_panel.select import (
-    CIRCUIT_PRIORITY_DESCRIPTION,
-    SpanPanelCircuitsSelect,
-)
-
 try:
     from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
@@ -45,6 +40,12 @@ class DummySpanPanelCircuit:
 
 
 def test_select_init_missing_circuit():
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.select import (
+        CIRCUIT_PRIORITY_DESCRIPTION,
+        SpanPanelCircuitsSelect,
+    )
+
     coordinator = DummyCoordinator()
     with pytest.raises(ValueError):
         SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "name", "Test Device")
@@ -56,6 +57,12 @@ async def test_async_select_option_service_not_found(monkeypatch):
         import pytest
 
         pytest.skip("SpanPanelCircuit import failed; adjust PYTHONPATH or test runner.")
+
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.select import (
+        CIRCUIT_PRIORITY_DESCRIPTION,
+        SpanPanelCircuitsSelect,
+    )
 
     with patch(
         "custom_components.span_panel.select.async_create_span_notification", new_callable=AsyncMock
@@ -101,6 +108,12 @@ async def test_async_select_option_server_error(monkeypatch):
         import pytest
 
         pytest.skip("SpanPanelCircuit import failed; adjust PYTHONPATH or test runner.")
+
+    # Lazy imports to avoid collection issues
+    from custom_components.span_panel.select import (
+        CIRCUIT_PRIORITY_DESCRIPTION,
+        SpanPanelCircuitsSelect,
+    )
 
     with patch(
         "custom_components.span_panel.select.async_create_span_notification", new_callable=AsyncMock

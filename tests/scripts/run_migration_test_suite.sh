@@ -26,7 +26,7 @@ echo ""
 echo ""
 echo "Testing v1.0.10 → v1.2.0 migration..."
 echo "----------------------------------------"
-if python3 -m pytest tests/test_migration_1_0_10_to_1_2_0.py -v; then
+if python tests/test_migration_1_0_10_to_1_2_0.py; then
     echo ""
     echo "v1.0.10 migration test completed successfully"
     echo ""
@@ -41,7 +41,7 @@ fi
 echo ""
 echo "Testing v1.0.4 → v1.2.0 migration..."
 echo "----------------------------------------"
-if python3 -m pytest tests/test_migration_1_0_4_to_1_2_0.py -v; then
+if python tests/test_migration_1_0_4_to_1_2_0.py; then
     echo ""
     echo "v1.0.4 migration test completed successfully"
     echo ""

@@ -31,6 +31,7 @@ logging.getLogger("custom_components.span_panel").setLevel(logging.INFO)
 logging.getLogger("ha_synthetic_sensors").setLevel(logging.INFO)
 
 # Now we can safely import everything else
+from typing import Any
 import yaml
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
@@ -47,7 +48,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
 
 
-async def test_solar_configuration_with_simulator_friendly_names(hass: HomeAssistant) -> None:
+async def test_solar_configuration_with_simulator_friendly_names(hass: HomeAssistant, enable_custom_integrations: Any) -> None:
     """Test solar configuration with friendly names using simulator mode."""
 
     # Get the consistent simulation serial number from the fixture
@@ -237,7 +238,7 @@ async def test_solar_configuration_with_simulator_friendly_names(hass: HomeAssis
     assert len(solar_entities) > 0, "Solar sensors should be created after options change and reload"
 
 
-async def test_solar_configuration_with_simulator_circuit_numbers(hass: HomeAssistant) -> None:
+async def test_solar_configuration_with_simulator_circuit_numbers(hass: HomeAssistant, enable_custom_integrations: Any) -> None:
     """Test solar configuration with circuit numbers using simulator mode."""
 
     # Create a config entry with simulator mode and circuit numbers (no solar initially)

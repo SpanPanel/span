@@ -4,21 +4,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from custom_components.span_panel.const import (
-    DSM_GRID_UP,
-    DSM_ON_GRID,
-    PANEL_ON_GRID,
-)
-from custom_components.span_panel.sensor import (
-    SpanPanelPanelStatus,
-    SpanPanelStatus,
-)
-from custom_components.span_panel.sensor_definitions import (
-    PANEL_DATA_STATUS_SENSORS,
-    STATUS_SENSORS,
-)
-from custom_components.span_panel.span_panel_data import SpanPanelData
-from custom_components.span_panel.span_panel_hardware_status import SpanPanelHardwareStatus
 from tests.factories import SpanPanelApiResponseFactory
 from tests.helpers import make_span_panel_entry
 
@@ -28,6 +13,10 @@ class MockSpanPanel:
 
     def __init__(self):
         """Initialize mock span panel with test data."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.span_panel_data import SpanPanelData
+        from custom_components.span_panel.span_panel_hardware_status import SpanPanelHardwareStatus
+
         # Create realistic test data
         api_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
 
@@ -67,6 +56,10 @@ class TestPanelSensors:
 
     def test_panel_data_status_sensors_creation(self, mock_coordinator, mock_span_panel):
         """Test that panel data status sensors are created correctly."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.sensor import SpanPanelPanelStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Test each panel data status sensor
         for description in PANEL_DATA_STATUS_SENSORS:
             sensor = SpanPanelPanelStatus(mock_coordinator, description, mock_span_panel)
@@ -81,6 +74,10 @@ class TestPanelSensors:
 
     def test_hardware_status_sensors_creation(self, mock_coordinator, mock_span_panel):
         """Test that hardware status sensors are created correctly."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.sensor import SpanPanelStatus
+        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
+
         # Test each hardware status sensor
         for description in STATUS_SENSORS:
             sensor = SpanPanelStatus(mock_coordinator, description, mock_span_panel)
@@ -95,6 +92,15 @@ class TestPanelSensors:
 
     def test_main_relay_state_sensor(self, mock_coordinator, mock_span_panel):
         """Test the main relay state sensor specifically."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.const import (
+            DSM_GRID_UP,
+            DSM_ON_GRID,
+            PANEL_ON_GRID,
+        )
+        from custom_components.span_panel.sensor import SpanPanelPanelStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Find the main relay state sensor description
         main_relay_description = None
         for description in PANEL_DATA_STATUS_SENSORS:
@@ -127,6 +133,11 @@ class TestPanelSensors:
 
     def test_dsm_state_sensor(self, mock_coordinator, mock_span_panel):
         """Test the DSM state sensor."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.const import DSM_GRID_UP, DSM_ON_GRID
+        from custom_components.span_panel.sensor import SpanPanelPanelStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Find the DSM state sensor description
         dsm_description = None
         for description in PANEL_DATA_STATUS_SENSORS:
@@ -149,6 +160,10 @@ class TestPanelSensors:
 
     def test_software_version_sensor(self, mock_coordinator, mock_span_panel):
         """Test the software version sensor."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.sensor import SpanPanelStatus
+        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
+
         # Find the software version sensor description
         version_description = None
         for description in STATUS_SENSORS:
@@ -171,6 +186,11 @@ class TestPanelSensors:
 
     def test_current_run_config_sensor(self, mock_coordinator, mock_span_panel):
         """Test the current run config sensor."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.const import PANEL_ON_GRID
+        from custom_components.span_panel.sensor import SpanPanelPanelStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Find the current run config sensor description
         config_description = None
         for description in PANEL_DATA_STATUS_SENSORS:
@@ -193,6 +213,10 @@ class TestPanelSensors:
 
     def test_sensor_unique_ids(self, mock_coordinator, mock_span_panel):
         """Test that sensors have correct unique IDs."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.sensor import SpanPanelPanelStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Test panel data status sensor unique ID
         main_relay_description = None
         for description in PANEL_DATA_STATUS_SENSORS:
@@ -210,12 +234,20 @@ class TestPanelSensors:
 
     def test_sensor_names(self, mock_coordinator, mock_span_panel):
         """Test that sensors have correct names."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.sensor import SpanPanelPanelStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Test each panel data status sensor name
         for description in PANEL_DATA_STATUS_SENSORS:
             sensor = SpanPanelPanelStatus(mock_coordinator, description, mock_span_panel)
 
             # Name should include description name
             assert description.name in sensor.name
+
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.sensor import SpanPanelStatus
+        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
 
         # Test each hardware status sensor name
         for description in STATUS_SENSORS:
@@ -226,6 +258,11 @@ class TestPanelSensors:
 
     def test_main_relay_state_with_real_data(self):
         """Test main relay state sensor with real factory data."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.span_panel_data import SpanPanelData
+        from custom_components.span_panel.span_panel_hardware_status import SpanPanelHardwareStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Create test data using the factory
         api_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
 
@@ -254,6 +291,12 @@ class TestPanelSensors:
 
     def test_dsm_states_with_real_data(self):
         """Test DSM state sensors with real factory data."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.const import DSM_GRID_UP, DSM_ON_GRID
+        from custom_components.span_panel.span_panel_data import SpanPanelData
+        from custom_components.span_panel.span_panel_hardware_status import SpanPanelHardwareStatus
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
         # Create test data using the factory
         api_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
 

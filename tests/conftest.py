@@ -11,7 +11,7 @@ import pytest
 import os
 from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# sys.path.insert(0, str(Path(__file__).parent.parent))  # Removed - using pytest pythonpath instead
 
 # Mock span_panel_api before importing custom_components
 # Create mock modules for span_panel_api
@@ -75,12 +75,19 @@ if not os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() in ('1', 'true', '
     sys.modules["span_panel_api.exceptions"] = span_panel_api_exceptions_mock
 
 # This import is required for patching even though it's not directly referenced
-import custom_components.span_panel  # noqa: F401 # pylint: disable=unused-import
+# import custom_components.span_panel  # noqa: F401 # pylint: disable=unused-import  # Moved to fixture
 
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Enable custom integrations defined in the test dir."""
+    yield
+
+
+@pytest.fixture(autouse=True)
+def ensure_custom_components_imported():
+    """Ensure custom_components module is imported before tests run."""
+    import custom_components.span_panel  # noqa: F401 # pylint: disable=unused-import
     yield
 
 

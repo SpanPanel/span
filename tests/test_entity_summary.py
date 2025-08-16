@@ -7,12 +7,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 from homeassistant.config_entries import ConfigEntry
 
-from custom_components.span_panel.entity_summary import log_entity_summary
-from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.span_panel import SpanPanel
-from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
-from custom_components.span_panel.options import BATTERY_ENABLE, INVERTER_ENABLE
-
 
 class TestLogEntitySummary:
     """Test the log_entity_summary function."""
@@ -20,6 +14,11 @@ class TestLogEntitySummary:
     @pytest.fixture
     def mock_coordinator(self):
         """Create a mock coordinator with span panel data."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.coordinator import SpanPanelCoordinator
+        from custom_components.span_panel.span_panel import SpanPanel
+        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
 
@@ -46,6 +45,9 @@ class TestLogEntitySummary:
     @pytest.fixture
     def mock_config_entry_with_options(self):
         """Create a mock config entry with all options enabled."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.options import BATTERY_ENABLE, INVERTER_ENABLE
+
         config_entry = MagicMock(spec=ConfigEntry)
         config_entry.options = {
             BATTERY_ENABLE: True,
@@ -55,6 +57,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_debug_level(self, mock_coordinator, mock_config_entry, caplog):
         """Test entity summary logging at debug level."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry)
 
@@ -67,6 +72,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_info_level(self, mock_coordinator, mock_config_entry, caplog):
         """Test entity summary logging at info level."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.INFO, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry)
 
@@ -76,6 +84,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_no_logging(self, mock_coordinator, mock_config_entry, caplog):
         """Test that nothing is logged when logging is disabled."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         # Set logger to WARNING level (higher than INFO/DEBUG)
         with caplog.at_level(logging.WARNING, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry)
@@ -85,6 +96,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_with_battery_enabled(self, mock_coordinator, mock_config_entry_with_options, caplog):
         """Test entity summary with battery enabled."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry_with_options)
 
@@ -92,6 +106,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_with_battery_disabled(self, mock_coordinator, mock_config_entry, caplog):
         """Test entity summary with battery disabled."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry)
 
@@ -99,6 +116,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_with_solar_enabled(self, mock_coordinator, mock_config_entry_with_options, caplog):
         """Test entity summary with solar enabled."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry_with_options)
 
@@ -106,6 +126,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_with_solar_disabled(self, mock_coordinator, mock_config_entry, caplog):
         """Test entity summary with solar disabled."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry)
 
@@ -113,6 +136,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_non_controllable_circuits(self, mock_coordinator, mock_config_entry, caplog):
         """Test that non-controllable circuits are properly identified and logged."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.INFO, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry)
 
@@ -124,6 +150,11 @@ class TestLogEntitySummary:
     def test_log_entity_summary_all_controllable_circuits(self, mock_config_entry, caplog):
         """Test entity summary when all circuits are controllable."""
         # Create coordinator with all controllable circuits
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.coordinator import SpanPanelCoordinator
+        from custom_components.span_panel.span_panel import SpanPanel
+        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
 
@@ -138,6 +169,9 @@ class TestLogEntitySummary:
         span_panel.circuits = circuits
         coordinator.data = span_panel
 
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.INFO, logger="custom_components.span_panel"):
             log_entity_summary(coordinator, mock_config_entry)
 
@@ -145,10 +179,18 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_no_circuits(self, mock_config_entry, caplog):
         """Test entity summary with no circuits."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.coordinator import SpanPanelCoordinator
+        from custom_components.span_panel.span_panel import SpanPanel
+        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
         span_panel.circuits = {}
         coordinator.data = span_panel
+
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
 
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(coordinator, mock_config_entry)
@@ -158,6 +200,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_sensor_counts(self, mock_coordinator, mock_config_entry_with_options, caplog):
         """Test that sensor counts are calculated correctly."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry_with_options)
 
@@ -185,6 +230,9 @@ class TestLogEntitySummary:
 
     def test_log_entity_summary_total_entity_calculation(self, mock_coordinator, mock_config_entry_with_options, caplog):
         """Test that total entity count is calculated correctly."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
+
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(mock_coordinator, mock_config_entry_with_options)
 
@@ -203,6 +251,9 @@ class TestLogEntitySummary:
             # Test debug level enabled
             mock_logger.isEnabledFor.side_effect = lambda level: level == logging.DEBUG
 
+            # Lazy imports to avoid collection issues
+            from custom_components.span_panel.entity_summary import log_entity_summary
+
             log_entity_summary(mock_coordinator, mock_config_entry)
 
             # Should check for both DEBUG and INFO levels
@@ -217,6 +268,9 @@ class TestLogEntitySummary:
 
             # Test debug level enabled
             mock_logger.isEnabledFor.side_effect = lambda level: level == logging.DEBUG
+
+            # Lazy imports to avoid collection issues
+            from custom_components.span_panel.entity_summary import log_entity_summary
 
             log_entity_summary(mock_coordinator, mock_config_entry)
 
@@ -238,6 +292,11 @@ class TestEntitySummaryEdgeCases:
 
     def test_log_entity_summary_with_none_options(self, caplog):
         """Test entity summary when config entry options is None."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.coordinator import SpanPanelCoordinator
+        from custom_components.span_panel.span_panel import SpanPanel
+        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
         span_panel.circuits = {}
@@ -245,6 +304,9 @@ class TestEntitySummaryEdgeCases:
 
         config_entry = MagicMock(spec=ConfigEntry)
         config_entry.options = {}  # Empty dict instead of None to avoid AttributeError
+
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
 
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             # Should not crash when options is empty
@@ -256,6 +318,11 @@ class TestEntitySummaryEdgeCases:
 
     def test_log_entity_summary_missing_option_keys(self, caplog):
         """Test entity summary when specific option keys are missing."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.coordinator import SpanPanelCoordinator
+        from custom_components.span_panel.span_panel import SpanPanel
+        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
         span_panel.circuits = {}
@@ -263,6 +330,9 @@ class TestEntitySummaryEdgeCases:
 
         config_entry = MagicMock(spec=ConfigEntry)
         config_entry.options = {}  # Empty dict, missing keys
+
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
 
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             log_entity_summary(coordinator, config_entry)
@@ -273,6 +343,11 @@ class TestEntitySummaryEdgeCases:
 
     def test_log_entity_summary_circuit_without_attributes(self, caplog):
         """Test entity summary with circuits missing expected attributes."""
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.coordinator import SpanPanelCoordinator
+        from custom_components.span_panel.span_panel import SpanPanel
+        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
 
@@ -287,6 +362,9 @@ class TestEntitySummaryEdgeCases:
 
         config_entry = MagicMock(spec=ConfigEntry)
         config_entry.options = {}
+
+        # Lazy imports to avoid collection issues
+        from custom_components.span_panel.entity_summary import log_entity_summary
 
         with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel"):
             # Should handle missing attributes gracefully
