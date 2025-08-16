@@ -346,12 +346,14 @@ def construct_240v_synthetic_entity_id(
         Constructed entity ID string or None if device info unavailable
 
     """
+    # Validate that we have exactly 2 tabs for 240V circuits
+    if tab1 <= 0 or tab2 <= 0:
+        raise ValueError(
+            f"240V synthetic entity requires exactly 2 tabs, got tab1={tab1}, tab2={tab2}"
+        )
+
     # Build tab numbers list
-    tab_numbers = []
-    if tab1 > 0:
-        tab_numbers.append(tab1)
-    if tab2 > 0:
-        tab_numbers.append(tab2)
+    tab_numbers = [tab1, tab2]
 
     # Use the multi-circuit helper
     return construct_multi_circuit_entity_id(
@@ -389,15 +391,18 @@ def construct_120v_synthetic_entity_id(
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Use the 240V helper with only one tab
-    return construct_240v_synthetic_entity_id(
+    # Validate that we have exactly 1 tab for 120V circuits
+    if tab <= 0:
+        raise ValueError(f"120V synthetic entity requires exactly 1 tab, got tab={tab}")
+
+    # Use the multi-circuit helper with only one tab
+    return construct_multi_circuit_entity_id(
         coordinator=coordinator,
         span_panel=span_panel,
         platform=platform,
         suffix=suffix,
+        circuit_numbers=[tab],
         friendly_name=friendly_name,
-        tab1=tab,
-        tab2=0,
         unique_id=unique_id,
     )
 

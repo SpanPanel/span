@@ -580,10 +580,10 @@ async def handle_solar_sensor_crud(
                 )
 
                 # Add the filled template directly using YAML CRUD
-                _LOGGER.info("SOLAR_DEBUG: Before adding solar sensor %s", template_name)
+
                 await sensor_set.async_add_sensor_from_yaml(filled_template)
                 _LOGGER.debug("Added solar sensor via YAML CRUD: %s", template_name)
-                _LOGGER.info("SOLAR_DEBUG: After adding solar sensor %s", template_name)
+
             except Exception as e:
                 _LOGGER.error("Error adding solar sensor %s: %s", template_name, e)
 
@@ -653,24 +653,43 @@ async def handle_solar_options_change(
             _LOGGER.error("Sensor set does not exist for solar options change")
             return False
 
-        # Get existing solar sensors
-        existing_solar_ids = get_stored_solar_sensor_ids_from_set(sensor_set)
-        
+        # Check if solar sensors already exist and match current configuration
+        expected_solar_ids = construct_expected_solar_sensor_ids(
+            coordinator, span_panel, device_name
+        )
+        existing_sensors = sensor_set.list_sensors()
+        existing_solar_ids = [
+            s.unique_id for s in existing_sensors if s.unique_id in expected_solar_ids
+        ]
+
         # In migration mode, only add solar sensors if they don't exist
-        # In normal mode (user changing options), remove and recreate
-        if not migration_mode:
-            # User is changing options - remove existing solar sensors
-            for solar_id in existing_solar_ids:
-                await sensor_set.async_remove_sensor(solar_id)
-                _LOGGER.debug("Removed existing solar sensor: %s", solar_id)
-        else:
-            # Migration mode - check if solar sensors already exist
+        if migration_mode:
             if existing_solar_ids:
                 _LOGGER.debug(
                     "Migration mode: Solar sensors already exist (%d found), skipping creation",
-                    len(existing_solar_ids)
+                    len(existing_solar_ids),
                 )
                 return True
+        else:
+            # Normal mode - check if configuration actually changed
+            solar_should_exist = enable_solar and leg1_circuit > 0 and leg2_circuit > 0
+            solar_currently_exists = len(existing_solar_ids) > 0
+
+            if solar_should_exist == solar_currently_exists:
+                # No change needed - solar state matches desired state
+                if solar_should_exist:
+                    _LOGGER.debug(
+                        "Solar sensors already exist with correct configuration, no changes needed"
+                    )
+                else:
+                    _LOGGER.debug("Solar sensors correctly disabled, no changes needed")
+                return True
+
+            # Configuration changed - remove existing solar sensors if any
+            if existing_solar_ids:
+                for solar_id in existing_solar_ids:
+                    await sensor_set.async_remove_sensor(solar_id)
+                    _LOGGER.debug("Removed existing solar sensor: %s", solar_id)
 
         if enable_solar and leg1_circuit > 0 and leg2_circuit > 0:
             # Handle solar sensor creation
@@ -725,69 +744,71 @@ async def handle_solar_options_change(
         return False
 
 
-def get_stored_solar_sensor_ids_from_set(sensor_set: SensorSet) -> list[str]:
-    """Get list of solar sensor IDs currently stored from a SensorSet instance."""
-    try:
-        stored_sensors = sensor_set.list_sensors()
-        solar_ids = []
-        for sensor_config in stored_sensors:
-            unique_id = sensor_config.unique_id or ""
-            entity_id = sensor_config.entity_id or ""
+def get_solar_data_value(
+    sensor_key: str, span_panel: SpanPanel, sensor_map: dict[str, Any]
+) -> float:
+    """Get solar data value for a sensor key.
 
-            # Check for "solar" in names
-            if "solar" in unique_id.lower() or "solar" in entity_id.lower():
-                solar_ids.append(sensor_config.unique_id)
-                _LOGGER.debug("Identified solar sensor by name: %s", unique_id)
+    Args:
+        sensor_key: The sensor key to get data for
+        span_panel: The span panel instance
+        sensor_map: Mapping of sensor keys to values
+
+    Returns:
+        The solar data value (currently always returns 0.0)
+
+    """
+    return 0.0
+
+
+def get_stored_solar_sensor_ids_from_set(sensor_set: SensorSet) -> list[str]:
+    """Extract solar sensor IDs from a SensorSet.
+
+    Args:
+        sensor_set: The SensorSet to search for solar sensors
+
+    Returns:
+        List of unique IDs for solar sensors found in the set
+
+    """
+    try:
+        sensors = sensor_set.list_sensors()
+        solar_sensor_ids = []
+
+        for sensor in sensors:
+            # Check by name patterns
+            if "solar" in sensor.unique_id.lower():
+                solar_sensor_ids.append(sensor.unique_id)
                 continue
 
-            # Check for solar formula patterns
-            if sensor_config.formulas:
-                for formula in sensor_config.formulas:
-                    variables = formula.variables or {}
-                    # Solar sensors have leg1_power and leg2_power variables
-                    if "leg1_power" in variables and "leg2_power" in variables:
-                        _LOGGER.debug("Identified solar sensor by formula pattern: %s (has leg1_power and leg2_power)", unique_id)
-                        solar_ids.append(sensor_config.unique_id)
-                        break
+            # Check by formula patterns (solar sensors often reference leg1/leg2)
+            for formula in sensor.formulas:
+                if hasattr(formula, "variables"):
+                    variables = formula.variables
+                    if isinstance(variables, dict):
+                        # Look for leg1/leg2 patterns in variables
+                        if any("leg1" in str(v) or "leg2" in str(v) for v in variables.values()):
+                            solar_sensor_ids.append(sensor.unique_id)
+                            break
 
-            # Check for multi-circuit entity ID patterns (circuit_X_Y format)
-            # Solar sensors have patterns like sensor.span_panel_circuit_30_32_power
-            # where two circuit numbers are present (e.g., circuits 30 AND 32)
-            # Single circuit sensors like sensor.span_panel_circuit_2_power should NOT match
-            if "_circuit_" in entity_id and "_power" in entity_id:
-                # Extract the part after "_circuit_"
-                parts = entity_id.split("_circuit_")
-                if len(parts) > 1:
-                    # Check if it has pattern like "30_32_power" (two numbers)
-                    circuit_part = parts[1]  # e.g., "30_32_power" or just "2_power"
-                    # Split by underscore and check if we have at least 3 parts
-                    # and the first two parts are numbers
-                    subparts = circuit_part.split("_")
-                    if len(subparts) >= 3:
-                        try:
-                            # Try to parse first two parts as integers
-                            int(subparts[0])
-                            int(subparts[1])
-                            # If both are numbers, this is a multi-circuit sensor
-                            solar_ids.append(sensor_config.unique_id)
-                            _LOGGER.debug("Identified solar sensor by multi-circuit pattern: %s", entity_id)
-                            continue
-                        except ValueError:
-                            # Not both numbers, so not a multi-circuit sensor
-                            pass
+            # Check by entity ID patterns (circuit_XX_YY patterns for 240V solar)
+            if sensor.entity_id and "_" in sensor.entity_id and "circuit_" in sensor.entity_id:
+                parts = sensor.entity_id.split("_")
+                if len(parts) >= 4 and parts[-2].isdigit() and parts[-3].isdigit():
+                    solar_sensor_ids.append(sensor.unique_id)
 
-        _LOGGER.debug("Found %d stored solar sensor IDs from set: %s", len(solar_ids), solar_ids)
-        return solar_ids
+        return solar_sensor_ids
     except Exception as e:
-        _LOGGER.error("Error getting stored solar sensor IDs from set: %s", e)
+        _LOGGER.warning("Error extracting solar sensor IDs from set: %s", e)
         return []
 
 
-def get_solar_data_value(entity_part: str, span_panel: SpanPanel, sensor_map: dict) -> float:
-    """Get solar data value - not used since solar uses formula references.
-
-    This function exists for consistency with the pattern but solar sensors
-    use formulas that reference native HA entities directly.
-    """
-    # Solar sensors don't use this pattern - they use formulas
-    return 0.0
+def construct_expected_solar_sensor_ids(
+    coordinator: SpanPanelCoordinator, span_panel: SpanPanel, device_name: str | None = None
+) -> list[str]:
+    """Construct the expected solar sensor unique IDs directly."""
+    solar_sensor_names = ["solar_current_power", "solar_produced_energy", "solar_consumed_energy"]
+    return [
+        construct_synthetic_unique_id_for_entry(coordinator, span_panel, name, device_name)
+        for name in solar_sensor_names
+    ]

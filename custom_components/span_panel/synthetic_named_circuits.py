@@ -106,12 +106,20 @@ async def generate_named_circuit_sensors(
     if coordinator is None:
         raise ValueError("Coordinator is required for YAML generation but was None")
 
+    if span_panel is None:
+        raise ValueError("span_panel is None")
+
     power_precision = coordinator.config_entry.options.get("power_display_precision", 0)
     energy_precision = coordinator.config_entry.options.get("energy_display_precision", 2)
     is_simulator: bool = bool(coordinator.config_entry.data.get("simulation_mode", False))
 
+    # Initialize device_identifier_for_uniques with a default value
+    device_identifier_for_uniques: str = (
+        slugify(device_name) if isinstance(device_name, str) and device_name else "unknown"
+    )
+
     if span_panel is not None:
-        device_identifier_for_uniques: str = (
+        device_identifier_for_uniques = (
             slugify(device_name)
             if is_simulator and isinstance(device_name, str) and device_name
             else span_panel.status.serial_number

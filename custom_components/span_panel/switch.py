@@ -24,8 +24,8 @@ from .const import (
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_switch_unique_id_for_entry,
-    construct_entity_id,
-    get_circuit_number,
+    construct_120v_synthetic_entity_id,
+    construct_240v_synthetic_entity_id,
 )
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
@@ -48,25 +48,42 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
 
-        # Get the actual circuit number (tab position)
-        circuit_number = get_circuit_number(circuit)
-
         self._circuit_id: str = circuit_id
         self._device_name = device_name
         self._attr_icon = "mdi:toggle-switch"
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, span_panel, circuit_id)
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
-        # Use the common helper for entity_id construction
-        entity_id = construct_entity_id(
-            coordinator,
-            span_panel,
-            "switch",
-            name,
-            circuit_number,
-            "breaker",
-            None,
-        )
+        # Use the same multi-circuit logic as named circuits for consistent entity IDs
+        match len(circuit.tabs):
+            case 2:
+                # 240V circuit - use both tabs
+                entity_id = construct_240v_synthetic_entity_id(
+                    coordinator=coordinator,
+                    span_panel=span_panel,
+                    platform="switch",
+                    suffix="breaker",
+                    friendly_name=name,
+                    tab1=circuit.tabs[0],
+                    tab2=circuit.tabs[1],
+                )
+            case 1:
+                # 120V circuit - use single tab
+                entity_id = construct_120v_synthetic_entity_id(
+                    coordinator=coordinator,
+                    span_panel=span_panel,
+                    platform="switch",
+                    suffix="breaker",
+                    friendly_name=name,
+                    tab=circuit.tabs[0],
+                )
+            case _:
+                raise ValueError(
+                    f"Circuit {circuit_id} ({name}) has {len(circuit.tabs)} tabs. "
+                    f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
+                    f"Tabs: {circuit.tabs}"
+                )
+
         if entity_id is not None:
             self.entity_id = entity_id
 

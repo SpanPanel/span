@@ -61,6 +61,68 @@ async def load_template(hass: HomeAssistant, template_name: str) -> str:
     return content
 
 
+async def process_sensor_templates_only(
+    hass: HomeAssistant, sensor_template_names: list[str], placeholders: dict[str, str]
+) -> dict[str, Any]:
+    """Process sensor templates without header for efficiency.
+
+    Args:
+        hass: Home Assistant instance
+        sensor_template_names: List of sensor template names to process
+        placeholders: Dictionary of placeholder values to fill in templates
+
+    Returns:
+        Dictionary of sensor configurations
+
+    """
+    sensor_configs = {}
+
+    # Load and process each sensor template individually
+    for template_name in sensor_template_names:
+        template = await load_template(hass, template_name)
+        filled_template = fill_template(template, placeholders)
+
+        # Parse just the sensor part (no global settings)
+        try:
+            parsed_yaml = yaml.safe_load(filled_template)
+            if isinstance(parsed_yaml, dict) and "sensors" in parsed_yaml:
+                sensor_configs.update(parsed_yaml["sensors"])
+            elif isinstance(parsed_yaml, dict):
+                # If it's just sensor configs without "sensors" wrapper
+                sensor_configs.update(parsed_yaml)
+        except yaml.YAMLError as e:
+            raise yaml.YAMLError(f"Failed to parse sensor template {template_name}: {e}")
+
+    return sensor_configs
+
+
+async def extract_global_settings_from_header(
+    hass: HomeAssistant, placeholders: dict[str, str]
+) -> dict[str, Any]:
+    """Extract global settings from header template once.
+
+    Args:
+        hass: Home Assistant instance
+        placeholders: Dictionary of placeholder values to fill in template
+
+    Returns:
+        Dictionary of global settings
+
+    """
+    header_template = await load_template(hass, "sensor_set_header")
+    filled_header = fill_template(header_template, placeholders)
+
+    try:
+        parsed_header = yaml.safe_load(filled_header)
+        if isinstance(parsed_header, dict) and "global_settings" in parsed_header:
+            global_settings = parsed_header["global_settings"]
+            if isinstance(global_settings, dict):
+                return global_settings
+        return {}
+    except yaml.YAMLError as e:
+        raise yaml.YAMLError(f"Failed to parse header template: {e}")
+
+
 async def combine_yaml_templates(
     hass: HomeAssistant, sensor_template_names: list[str], placeholders: dict[str, str]
 ) -> CombinedYamlResult:

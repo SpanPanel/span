@@ -26,6 +26,8 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     async_create_span_notification,
     build_select_unique_id_for_entry,
+    construct_120v_synthetic_entity_id,
+    construct_240v_synthetic_entity_id,
     get_user_friendly_suffix,
 )
 from .span_panel import SpanPanel
@@ -92,9 +94,6 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
 
-        # Get the circuit number (tab position)
-        circuit_number = circuit.tabs[0] if circuit.tabs else circuit_id
-
         self.entity_description = description.entity_description
         self.description_wrapper = description  # Keep reference to wrapper for custom functions
         self.id = circuit_id
@@ -104,9 +103,39 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
         entity_suffix = get_user_friendly_suffix(description.entity_description.key)
-        self.entity_id = self._construct_select_entity_id(  # type: ignore[assignment]
-            coordinator, name, circuit_number, entity_suffix
-        )
+
+        # Use the same multi-circuit logic as named circuits for consistent entity IDs
+        match len(circuit.tabs):
+            case 2:
+                # 240V circuit - use both tabs
+                entity_id = construct_240v_synthetic_entity_id(
+                    coordinator=coordinator,
+                    span_panel=span_panel,
+                    platform="select",
+                    suffix=entity_suffix,
+                    friendly_name=name,
+                    tab1=circuit.tabs[0],
+                    tab2=circuit.tabs[1],
+                )
+            case 1:
+                # 120V circuit - use single tab
+                entity_id = construct_120v_synthetic_entity_id(
+                    coordinator=coordinator,
+                    span_panel=span_panel,
+                    platform="select",
+                    suffix=entity_suffix,
+                    friendly_name=name,
+                    tab=circuit.tabs[0],
+                )
+            case _:
+                raise ValueError(
+                    f"Circuit {circuit_id} ({name}) has {len(circuit.tabs)} tabs. "
+                    f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
+                    f"Tabs: {circuit.tabs}"
+                )
+
+        if entity_id is not None:
+            self.entity_id = entity_id  # type: ignore[assignment]
 
         friendly_name = f"{name} {description.entity_description.name}"
 

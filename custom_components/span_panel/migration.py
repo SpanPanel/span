@@ -49,7 +49,25 @@ def _normalize_panel_description_key(raw_key: str) -> str:
     return raw_key
 
 
-def _compute_normalized_unique_id_with_device(raw_unique_id: str, device_identifier: str) -> str | None:
+def _compute_normalized_unique_id(raw_unique_id: str) -> str | None:
+    """Compute helper-format unique_id from an existing raw unique_id.
+
+    This is a simplified version that extracts the device identifier from the unique_id.
+    For more control, use _compute_normalized_unique_id_with_device.
+    """
+    try:
+        parts = raw_unique_id.split("_", 2)
+        if len(parts) < 3 or parts[0] != "span":
+            return None
+        device_identifier = parts[1]
+        return _compute_normalized_unique_id_with_device(raw_unique_id, device_identifier)
+    except Exception:
+        return None
+
+
+def _compute_normalized_unique_id_with_device(
+    raw_unique_id: str, device_identifier: str
+) -> str | None:
     """Compute helper-format unique_id from an existing raw unique_id using provided device identifier.
 
     Handles both panel and circuit sensors. Case-insensitive for legacy circuit
@@ -102,14 +120,12 @@ def _compute_normalized_unique_id_with_device(raw_unique_id: str, device_identif
             # Map current solar types to new types (they're already correct)
             solar_type_map = {
                 "current_power": "current_power",
-                "produced_energy": "produced_energy", 
+                "produced_energy": "produced_energy",
                 "consumed_energy": "consumed_energy",
             }
             new_solar_type = solar_type_map.get(solar_type)
             if new_solar_type:
-                return construct_synthetic_unique_id(
-                    device_identifier, f"solar_{new_solar_type}"
-                )
+                return construct_synthetic_unique_id(device_identifier, f"solar_{new_solar_type}")
 
         # If remainder contains an underscore, treat as circuit: {circuit_id}_{api_field}
         last_underscore = remainder.rfind("_")

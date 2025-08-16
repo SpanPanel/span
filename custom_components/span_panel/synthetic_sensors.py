@@ -434,79 +434,7 @@ class SyntheticSensorCoordinator:
             DOMAIN,
             integration_domain=DOMAIN,
         )
-        
-        # Wrap the save method to track all saves
-        original_save = base_storage_manager.async_save
-        self._save_count = 0
-        last_sensor_count = 0  # Track sensor count between saves
 
-        async def tracked_async_save():
-            import traceback
-            self._save_count += 1
-            sensor_count = len(base_storage_manager.data.get("sensors", {})) if base_storage_manager.data else 0
-            
-            # Get the call stack
-            stack = traceback.extract_stack()
-            # Find the most relevant caller (skip the wrapper and async machinery)
-            caller_info = None
-            for frame in reversed(stack[:-3]):  # Skip the last 3 frames (this function and async wrappers)
-                if 'span_panel' in frame.filename or 'synthetic' in frame.filename:
-                    caller_info = f"{frame.filename.split('/')[-1]}:{frame.lineno} in {frame.name}"
-                    break
-            
-            _LOGGER.warning(
-                "STORAGE_SAVE_TRACKING: Save #%d - Saving %d sensors to storage (called from %s)",
-                self._save_count,
-                sensor_count,
-                caller_info or "unknown"
-            )
-            # Count power sensors being saved
-            if base_storage_manager.data:
-                power_sensors = [k for k in base_storage_manager.data.get("sensors", {}) if k.endswith("_power")]
-                circuit_power_sensors = [k for k in power_sensors if len(k.split('_')) > 3 and len(k.split('_')[3]) == 32]
-                _LOGGER.warning(
-                    "STORAGE_SAVE_TRACKING: Save #%d - Including %d power sensors (%d circuit power)",
-                    self._save_count,
-                    len(power_sensors),
-                    len(circuit_power_sensors)
-                )
-                
-                # If we're losing sensors, log what's being removed
-                nonlocal last_sensor_count
-                if self._save_count > 1 and sensor_count < last_sensor_count:
-                    _LOGGER.error(
-                        "STORAGE_SAVE_TRACKING: REMOVING SENSORS! Was %d, now %d",
-                        last_sensor_count,
-                        sensor_count
-                    )
-
-                last_sensor_count = sensor_count
-            return await original_save()
-        
-        base_storage_manager.async_save = tracked_async_save
-        
-        # Also wrap the delete operations to track them
-        if hasattr(base_storage_manager, 'async_delete_sensor'):
-            original_delete_sensor = base_storage_manager.async_delete_sensor
-            async def tracked_delete_sensor(unique_id):
-                import traceback
-                stack = traceback.extract_stack()
-                caller_info = None
-                for frame in reversed(stack[:-3]):  # Skip the last 3 frames
-                    if 'span_panel' in frame.filename or 'synthetic' in frame.filename:
-                        caller_info = f"{frame.filename.split('/')[-1]}:{frame.lineno} in {frame.name}"
-                        break
-                _LOGGER.error("STORAGE_DELETE_TRACKING: Deleting sensor %s (called from %s)", unique_id, caller_info or "unknown")
-                return await original_delete_sensor(unique_id)
-            base_storage_manager.async_delete_sensor = tracked_delete_sensor
-        
-        if hasattr(base_storage_manager, 'async_delete_sensor_set'):
-            original_delete_sensor_set = base_storage_manager.async_delete_sensor_set
-            async def tracked_delete_sensor_set(sensor_set_id):
-                _LOGGER.error("STORAGE_DELETE_TRACKING: Deleting entire sensor set %s", sensor_set_id)
-                return await original_delete_sensor_set(sensor_set_id)
-            base_storage_manager.async_delete_sensor_set = tracked_delete_sensor_set
-        
         self.storage_manager = base_storage_manager
         await self.storage_manager.async_load()
 
@@ -520,11 +448,6 @@ class SyntheticSensorCoordinator:
         """Set up configuration for live panel data (existing implementation)."""
         # Generate panel sensors and backing entities with global settings
         span_panel = self.coordinator.data
-        _LOGGER.debug(
-            "SYN_SETUP_DEBUG: migration_mode=%s for entry_id=%s",
-            migration_mode,
-            self.coordinator.config_entry.entry_id,
-        )
 
         (
             panel_sensor_configs,
@@ -567,7 +490,7 @@ class SyntheticSensorCoordinator:
         power_sensors = [key for key in all_sensor_configs if "power" in key.lower()]
         # Circuit power sensors have UUID patterns like: span_serial_uuid_power
         # Look for 32-character hex UUID followed by _power suffix
-        uuid_power_pattern = r'_[a-f0-9]{32}_power$'
+        uuid_power_pattern = r"_[a-f0-9]{32}_power$"
         circuit_power_sensors = [key for key in power_sensors if re.search(uuid_power_pattern, key)]
 
         _LOGGER.debug(
@@ -640,66 +563,21 @@ class SyntheticSensorCoordinator:
                         name=f"SPAN Panel {device_identifier}",
                         description="SPAN Panel synthetic sensors for circuit monitoring",
                     )
-                    _LOGGER.debug("Created new sensor set for device %s during migration", device_identifier)
+                    _LOGGER.debug(
+                        "Created new sensor set for device %s during migration", device_identifier
+                    )
 
                 yaml_content = await _construct_complete_yaml_config(
-                    all_sensor_configs, global_settings
-                )
-
-                # Debug: Save YAML to file for analysis
-                debug_yaml_path = "/tmp/span_migration_yaml_debug.yaml"
-                try:
-                    with open(debug_yaml_path, "w") as f:
-                        f.write(yaml_content)
-                    _LOGGER.info("STORAGE_DEBUG: Saved YAML to %s for debugging", debug_yaml_path)
-                except Exception as e:
-                    _LOGGER.error("STORAGE_DEBUG: Failed to save debug YAML: %s", e)
-
-                # Debug: Log what we're about to store
-                yaml_data = yaml.safe_load(yaml_content)
-                sensors_in_yaml = yaml_data.get("sensors", {})
-                power_sensors_in_yaml = [k for k in sensors_in_yaml if k.endswith("_power")]
-                _LOGGER.info(
-                    "STORAGE_DEBUG: About to store %d sensors (%d power sensors): %s",
-                    len(sensors_in_yaml),
-                    len(power_sensors_in_yaml),
-                    power_sensors_in_yaml[:5]  # First 5 power sensors
+                    all_sensor_configs, global_settings, migration_mode=True
                 )
 
                 # Store the YAML
-                _LOGGER.warning("MIGRATION_DEBUG: About to call async_from_yaml with replace_existing=True")
-                result = await self.storage_manager.async_from_yaml(
+                await self.storage_manager.async_from_yaml(
                     yaml_content=yaml_content,
                     sensor_set_id=self.sensor_set_id,
                     device_identifier=device_identifier,
                     replace_existing=True,
                 )
-                _LOGGER.warning("MIGRATION_DEBUG: async_from_yaml completed")
-
-                # Debug: Log what was actually stored
-                _LOGGER.info(
-                    "STORAGE_DEBUG: async_from_yaml result: %s",
-                    result
-                )
-
-                # Debug: Check what's actually in storage now
-                if self.storage_manager.sensor_set_exists(self.sensor_set_id):
-                    stored_sensors = self.storage_manager.list_sensors(self.sensor_set_id)
-                    stored_power_sensors = [s.unique_id for s in stored_sensors if s.unique_id.endswith("_power")]
-                    stored_unique_ids = {s.unique_id for s in stored_sensors}
-                    missing_power_sensors = [k for k in power_sensors_in_yaml if k not in stored_unique_ids and k.endswith("_power")]
-                    _LOGGER.info(
-                        "STORAGE_DEBUG: After storage - %d sensors stored (%d power sensors): %s",
-                        len(stored_sensors),
-                        len(stored_power_sensors),
-                        stored_power_sensors[:5]  # First 5 power sensors
-                    )
-                    if missing_power_sensors:
-                        _LOGGER.warning(
-                            "STORAGE_DEBUG: Missing %d power sensors that were in YAML but not stored: %s",
-                            len(missing_power_sensors),
-                            missing_power_sensors[:5]  # First 5 missing
-                        )
 
                 _LOGGER.info(
                     "Re-imported sensor configuration during migration (existing set updated)"
@@ -721,53 +599,16 @@ class SyntheticSensorCoordinator:
 
                 # Generate and import initial YAML configuration for fresh install
                 yaml_content = await _construct_complete_yaml_config(
-                    all_sensor_configs, global_settings
-                )
-
-                # Debug: Save YAML to file for analysis
-                debug_yaml_path = "/tmp/span_fresh_install_yaml_debug.yaml"
-                try:
-                    with open(debug_yaml_path, "w") as f:
-                        f.write(yaml_content)
-                    _LOGGER.info("STORAGE_DEBUG: Saved fresh install YAML to %s for debugging", debug_yaml_path)
-                except Exception as e:
-                    _LOGGER.error("STORAGE_DEBUG: Failed to save debug YAML: %s", e)
-
-                # Debug: Log what we're about to store
-                yaml_data = yaml.safe_load(yaml_content)
-                sensors_in_yaml = yaml_data.get("sensors", {})
-                power_sensors_in_yaml = [k for k in sensors_in_yaml if k.endswith("_power")]
-                _LOGGER.info(
-                    "STORAGE_DEBUG: Fresh install - About to store %d sensors (%d power sensors): %s",
-                    len(sensors_in_yaml),
-                    len(power_sensors_in_yaml),
-                    power_sensors_in_yaml[:5]  # First 5 power sensors
+                    all_sensor_configs, global_settings, migration_mode=False
                 )
 
                 # Store the YAML
-                result = await self.storage_manager.async_from_yaml(
+                await self.storage_manager.async_from_yaml(
                     yaml_content=yaml_content,
                     sensor_set_id=self.sensor_set_id,
                     device_identifier=device_identifier,
                     replace_existing=False,  # Start with default configuration
                 )
-
-                # Debug: Log what was actually stored
-                _LOGGER.info(
-                    "STORAGE_DEBUG: Fresh install - async_from_yaml result: %s",
-                    result
-                )
-
-                # Debug: Check what's actually in storage now
-                if self.storage_manager.sensor_set_exists(self.sensor_set_id):
-                    stored_sensors = self.storage_manager.list_sensors(self.sensor_set_id)
-                    stored_power_sensors = [s.unique_id for s in stored_sensors if s.unique_id.endswith("_power")]
-                    _LOGGER.info(
-                        "STORAGE_DEBUG: Fresh install - After storage - %d sensors stored (%d power sensors): %s",
-                        len(stored_sensors),
-                        len(stored_power_sensors),
-                        stored_power_sensors[:5]  # First 5 power sensors
-                    )
 
                 _LOGGER.info("Initial sensor configuration imported for fresh installation")
             else:
@@ -930,13 +771,16 @@ async def setup_synthetic_configuration(
 
 
 async def _construct_complete_yaml_config(
-    sensor_configs: dict[str, dict[str, Any]], global_settings: dict[str, Any]
+    sensor_configs: dict[str, dict[str, Any]],
+    global_settings: dict[str, Any],
+    migration_mode: bool = False,
 ) -> str:
     """Construct complete YAML configuration with global settings at the top.
 
     Args:
         sensor_configs: Dictionary of sensor configurations
         global_settings: Global settings to include at the top
+        migration_mode: Whether this is for migration (affects entity ID lookup)
 
     Returns:
         Complete YAML configuration string
@@ -998,10 +842,6 @@ async def async_setup_synthetic_sensors(
     #                synthetic_coord.sensor_to_backing_mapping = sensor_to_backing_mapping
     #            # Clean up the temporary storage
     #            del hass.data[DOMAIN][config_entry.entry_id]["migration_sensor_to_backing_mapping"]
-
-    _LOGGER.debug(
-        "SETUP_SENSORS_DEBUG: Using %d sensor-to-backing mappings", len(sensor_to_backing_mapping)
-    )
 
     # Define change notifier up-front so it can be bound during registration
     # This ensures named circuits receive updates immediately after creation

@@ -195,7 +195,8 @@ def make_span_panel_entry(
     access_token: str = "test_token",
     scan_interval: int = 15,
     options: dict[str, Any] | None = None,
-    version: int = 1,
+    version: int = 2,
+    unique_id: str | None = None,
 ) -> MockConfigEntry:
     """Create a MockConfigEntry for Span Panel with common defaults."""
     return MockConfigEntry(
@@ -208,6 +209,7 @@ def make_span_panel_entry(
         options=options or {},
         entry_id=entry_id,
         version=version,
+        unique_id=unique_id or f"{host}_{entry_id}",
     )
 
 
