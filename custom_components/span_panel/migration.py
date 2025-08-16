@@ -86,11 +86,11 @@ def _compute_normalized_unique_id_with_device(
             # Check for power vs energy
             if "power" in remainder:
                 return construct_synthetic_unique_id(device_identifier, "solar_current_power")
-            elif "energy" in remainder:
+            if "energy" in remainder:
                 # Check for produced vs consumed
                 if "produced" in remainder:
                     return construct_synthetic_unique_id(device_identifier, "solar_produced_energy")
-                elif "consumed" in remainder:
+                if "consumed" in remainder:
                     return construct_synthetic_unique_id(device_identifier, "solar_consumed_energy")
 
         # If remainder contains an underscore, treat as circuit: {circuit_id}_{api_field}
