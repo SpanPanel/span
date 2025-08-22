@@ -456,13 +456,12 @@ class TestSolarOptionsChange:
         """Test enabling solar sensors successfully."""
         with patch('custom_components.span_panel.synthetic_solar.get_stored_solar_sensor_ids_from_set', return_value=[]):
             with patch('custom_components.span_panel.synthetic_solar.handle_solar_sensor_crud', return_value=True):
-                with patch('custom_components.span_panel.synthetic_solar.find_synthetic_coordinator_for', return_value=None):
-                    result = await handle_solar_options_change(
-                        mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
-                        enable_solar=True, leg1_circuit=30, leg2_circuit=32
-                    )
+                result = await handle_solar_options_change(
+                    mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
+                    enable_solar=True, leg1_circuit=30, leg2_circuit=32
+                )
 
-                    assert result is True
+                assert result is True
 
     async def test_handle_solar_options_change_disable(self, mock_hass, mock_config_entry,
                                                       mock_coordinator, mock_sensor_set):
@@ -478,14 +477,13 @@ class TestSolarOptionsChange:
         mock_sensor_set.list_sensors.return_value = [mock_sensor1, mock_sensor2, mock_sensor3]
 
         with patch('custom_components.span_panel.synthetic_solar.construct_expected_solar_sensor_ids', return_value=["solar_power", "solar_energy_produced", "solar_energy_consumed"]):
-            with patch('custom_components.span_panel.synthetic_solar.find_synthetic_coordinator_for', return_value=None):
-                result = await handle_solar_options_change(
-                    mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
-                    enable_solar=False, leg1_circuit=0, leg2_circuit=0
-                )
+            result = await handle_solar_options_change(
+                mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
+                enable_solar=False, leg1_circuit=0, leg2_circuit=0
+            )
 
-                assert result is True
-                assert mock_sensor_set.async_remove_sensor.call_count == 3
+            assert result is True
+            assert mock_sensor_set.async_remove_sensor.call_count == 3
 
     async def test_handle_solar_options_change_sensor_set_not_exists(self, mock_hass, mock_config_entry,
                                                                     mock_coordinator, mock_sensor_set):

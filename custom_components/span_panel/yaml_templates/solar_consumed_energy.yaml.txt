@@ -1,27 +1,28 @@
   {{sensor_key}}:
     name: "Solar Consumed Energy"
     entity_id: "{{entity_id}}"
-    formula: "leg1_consumed + leg2_consumed"
-    UNAVAILABLE:
-      formula: "state if within_grace else 'unknown'"
-    UNKNOWN:
-      formula: "state if within_grace else 'unknown'"
+    formula: leg1_consumed + leg2_consumed
+    alternate_states:
+      FALLBACK:
+        formula: "state if state is not None else (last_valid_state if within_grace else None)"
     variables:
-      leg1_consumed: "{{leg1_consumed_entity}}"
-      leg2_consumed: "{{leg2_consumed_entity}}"
+      leg1_consumed: {{leg1_consumed_entity}}
+      leg2_consumed: {{leg2_consumed_entity}}
+      last_valid_state:
+        formula: "metadata(state, 'last_valid_state')"
+      last_valid_changed:
+        formula: "metadata(state, 'last_valid_changed')"
       within_grace:
-        formula: "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes"
-        UNAVAILABLE: false
-        UNKNOWN: false
+        formula: "last_valid_changed is not None and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes"
+        alternate_states:
+          FALLBACK: false
     attributes:
       tabs: "{{tabs_attribute}}"
       voltage: {{voltage_attribute}}
       energy_reporting_status:
-        formula: "'Live'"
-        UNAVAILABLE:
-          formula: "'Previous (grace)' if within_grace else 'unknown'"
-        UNKNOWN:
-          formula: "'Previous (grace)' if within_grace else 'unknown'"
+        formula: "'Live' if state is not None else ('Off-Line, reporting previous value' if within_grace else None)"
+        alternate_states:
+          FALLBACK: false
     metadata:
       unit_of_measurement: "Wh"
       device_class: "energy"

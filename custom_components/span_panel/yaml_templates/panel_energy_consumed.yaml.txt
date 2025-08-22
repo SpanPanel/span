@@ -1,25 +1,42 @@
   {{sensor_key}}:
     name: "{{sensor_name}}"
     entity_id: "{{entity_id}}"
-    formula: "state"
-    UNAVAILABLE:
-      formula: "state if within_grace else 'unknown'"
-    UNKNOWN:
-      formula: "state if within_grace else 'unknown'"
+    formula: state
+    alternate_states:
+      FALLBACK:
+        formula: "state if state is not None else (last_valid_state if within_grace else None)"
     variables:
+      last_valid_state:
+        formula: "metadata(state, 'last_valid_state')"
+      last_valid_changed:
+        formula: "metadata(state, 'last_valid_changed')"
       within_grace:
-        formula: "minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes"
-        UNAVAILABLE: false
-        UNKNOWN: false
+        formula: "last_valid_changed is not None and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes"
+        alternate_states:
+          FALLBACK: false
     attributes:
       tabs: "{{tabs_attribute}}"
       voltage: {{voltage_attribute}}
       energy_reporting_status:
-        formula: "'Live'"
-        UNAVAILABLE:
-          formula: "'Previous (grace)' if within_grace else 'Unknown'"
-        UNKNOWN:
-          formula: "'Previous (grace)' if within_grace else 'Unknown'"
+        formula: "'Live' if state is not None else ('Off-Line, reporting previous value' if within_grace else None)"
+        alternate_states:
+          FALLBACK: false
+      debug_backing_state_present:
+        formula: state is not None
+        alternate_states:
+          FALLBACK: false
+      debug_within_grace:
+        formula: within_grace
+        alternate_states:
+          FALLBACK: false
+      debug_last_valid_changed_present:
+        formula: state.last_valid_changed is not None
+        alternate_states:
+          FALLBACK: false
+      debug_time_between_last_valid_changed:
+        formula: minutes_between(last_valid_changed, now())
+        alternate_states:
+          FALLBACK: false
     metadata:
       unit_of_measurement: "Wh"
       device_class: "energy"

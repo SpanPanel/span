@@ -1,12 +1,18 @@
   {{sensor_key}}:
     name: "{{sensor_name}}"
     entity_id: "{{entity_id}}"
-    formula: "state"
+    formula: state
+    alternate_states:
+      FALLBACK:
+        formula: 0.0
     attributes:
       tabs: "{{tabs_attribute}}"
       voltage: {{voltage_attribute}}
       amperage:
-        formula: "state / {{voltage_attribute}}"
+        formula: state / {{voltage_attribute}}
+        alternate_states:
+          FALLBACK:
+            formula: 0.0
         metadata:
           unit_of_measurement: "A"
           device_class: "current"

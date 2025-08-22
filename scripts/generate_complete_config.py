@@ -107,12 +107,25 @@ async def generate_complete_yaml():
         mock_coordinator.config_entry.data = {"device_name": device_identifier}
         device_name = device_identifier  # Use device identifier as device name for entity_id generation
 
+        # Create mock hass for the functions that need it
+        mock_hass = MagicMock()
+
+        # Mock the async_add_executor_job method to handle file reading
+        async def mock_async_add_executor_job(func, *args, **kwargs):
+            """Mock async_add_executor_job to handle file reading synchronously."""
+            if func.__name__ == 'read_text':
+                # Handle file reading synchronously
+                return func(*args, **kwargs)
+            return func(*args, **kwargs)
+
+        mock_hass.async_add_executor_job = mock_async_add_executor_job
+
         # Generate panel sensors first
         print("⚙️ Generating panel sensors...")
         try:
             from custom_components.span_panel.synthetic_panel_circuits import generate_panel_sensors
             panel_sensor_configs, panel_backing_entities, global_settings, panel_mapping = await generate_panel_sensors(
-                mock_coordinator, mock_span_panel, device_name
+                mock_hass, mock_coordinator, mock_span_panel, device_name
             )
             print(f"   ✅ Generated {len(panel_sensor_configs)} panel sensors")
         except Exception as e:
@@ -128,7 +141,7 @@ async def generate_complete_yaml():
         try:
             from custom_components.span_panel.synthetic_named_circuits import generate_named_circuit_sensors
             circuit_sensor_configs, circuit_backing_entities, circuit_global_settings, circuit_mapping = await generate_named_circuit_sensors(
-                mock_coordinator, mock_span_panel, device_name
+                mock_hass, mock_coordinator, mock_span_panel, device_name
             )
             print(f"   ✅ Generated {len(circuit_sensor_configs)} circuit sensors")
         except Exception as e:

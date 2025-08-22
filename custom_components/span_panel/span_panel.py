@@ -3,7 +3,7 @@
 from datetime import datetime
 import logging
 
-from .exceptions import SpanPanelReturnedEmptyData
+from .exceptions import SpanPanelReturnedEmptyData, SpanPanelSimulationOfflineError
 from .options import Options
 from .span_panel_api import SpanPanelApi
 from .span_panel_circuit import SpanPanelCircuit
@@ -44,6 +44,7 @@ class SpanPanel:
         simulation_mode: bool = False,
         simulation_config_path: str | None = None,
         simulation_start_time: datetime | None = None,
+        simulation_offline_minutes: int = 0,
     ) -> None:
         """Initialize the Span Panel."""
         self._options = options
@@ -56,6 +57,7 @@ class SpanPanel:
             simulation_mode,
             simulation_config_path,
             simulation_start_time,
+            simulation_offline_minutes,
         )
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None
@@ -132,6 +134,8 @@ class SpanPanel:
             _LOGGER.debug("Panel update completed successfully")
         except SpanPanelReturnedEmptyData:
             _LOGGER.warning("Span Panel returned empty data")
+        except SpanPanelSimulationOfflineError:  # Debug logged in coordinator.py
+            raise
         except Exception as err:
             _LOGGER.error("Error updating panel: %s", err, exc_info=True)
             raise

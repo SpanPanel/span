@@ -26,7 +26,7 @@ from .const import (
     CircuitPriority,
     CircuitRelayState,
 )
-from .exceptions import SpanPanelReturnedEmptyData
+from .exceptions import SpanPanelReturnedEmptyData, SpanPanelSimulationOfflineError
 from .options import Options
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
@@ -49,6 +49,7 @@ class SpanPanelApi:
         simulation_mode: bool = False,
         simulation_config_path: str | None = None,
         simulation_start_time: datetime | None = None,
+        simulation_offline_minutes: int = 0,
     ) -> None:
         """Initialize the Span Panel API."""
         # For simulation mode, keep the original host (which should be the serial number)
@@ -61,6 +62,15 @@ class SpanPanelApi:
         self.simulation_mode: bool = simulation_mode
         self.simulation_config_path: str | None = simulation_config_path
         self.simulation_start_time: datetime | None = simulation_start_time
+        self.simulation_offline_minutes: int = simulation_offline_minutes
+        # Separate timer for offline mode - when the offline period started
+        # Use simulation_start_time as the offline start time when offline mode is enabled
+        # Explicitly declare attribute type for mypy
+        self.offline_start_time: datetime | None = None
+        if simulation_mode and simulation_offline_minutes > 0 and simulation_start_time:
+            self.offline_start_time = simulation_start_time
+
+        # Initialize client as None - will be created in setup()
         self._authenticated = False
 
         # Store client parameters for lazy initialization
@@ -76,6 +86,67 @@ class SpanPanelApi:
 
         # Initialize client as None - will be created in setup()
         self._client: SpanPanelClient | None = None
+
+    def _is_panel_offline(self) -> bool:
+        """Check if the panel should be offline based on simulation settings.
+
+        Returns:
+            True if the panel should appear offline, False otherwise.
+
+        """
+        if not self.simulation_mode or self.simulation_offline_minutes <= 0:
+            _LOGGER.debug(
+                "[SpanPanelApi] Panel not offline: simulation_mode=%s, offline_minutes=%s",
+                self.simulation_mode,
+                self.simulation_offline_minutes,
+            )
+            return False
+
+        if not self.offline_start_time:
+            _LOGGER.debug("[SpanPanelApi] Panel not offline: no offline start time")
+            return False
+
+        # Calculate how many minutes have passed since offline period started
+        now = datetime.now()
+        elapsed_minutes = (now - self.offline_start_time).total_seconds() / 60
+
+        is_offline = elapsed_minutes < self.simulation_offline_minutes
+        _LOGGER.debug(
+            "[SpanPanelApi] Panel offline check: offline_start_time=%s, elapsed_minutes=%.2f, offline_minutes=%s, is_offline=%s",
+            self.offline_start_time,
+            elapsed_minutes,
+            self.simulation_offline_minutes,
+            is_offline,
+        )
+
+        # Panel is offline for the specified number of minutes after offline period starts
+        return is_offline
+
+    def set_simulation_offline_mode(self, offline_minutes: int) -> None:
+        """Set the offline simulation mode for simulators only.
+
+        Args:
+            offline_minutes: Number of minutes the panel should appear offline (0 to disable)
+
+        """
+        if not self.simulation_mode:
+            _LOGGER.warning(
+                "[SpanPanelApi] Cannot set offline mode for live panel - simulation mode is False"
+            )
+            return
+
+        self.simulation_offline_minutes = offline_minutes
+
+        # Set offline start time to "now" if offline mode is enabled, otherwise clear it
+        if offline_minutes > 0:
+            self.offline_start_time = datetime.now()
+            _LOGGER.info(
+                "[SpanPanelApi] Set simulation offline mode: %s minutes starting now",
+                offline_minutes,
+            )
+        else:
+            self.offline_start_time = None
+            _LOGGER.info("[SpanPanelApi] Disabled simulation offline mode")
 
     def _calculate_cache_window(self) -> float:
         """Calculate optimal cache window based on polling interval.
@@ -240,6 +311,10 @@ class SpanPanelApi:
 
     async def ping(self) -> bool:
         """Ping the Span Panel API."""
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             return False
@@ -252,6 +327,10 @@ class SpanPanelApi:
 
     async def ping_with_auth(self) -> bool:
         """Test connection and authentication."""
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             return False
@@ -293,6 +372,10 @@ class SpanPanelApi:
 
     async def get_status_data(self) -> SpanPanelHardwareStatus:
         """Get the status data."""
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             raise SpanPanelAPIError("API client has been closed")
@@ -301,7 +384,7 @@ class SpanPanelApi:
             status_response = await self._client.get_status()
 
             # Convert the attrs model to dict and then to our data class
-            status_dict = status_response.to_dict()  # type: ignore[attr-defined]
+            status_dict = status_response.to_dict()
             status_data = SpanPanelHardwareStatus.from_dict(status_dict)
             return status_data
 
@@ -321,6 +404,10 @@ class SpanPanelApi:
 
     async def get_panel_data(self) -> SpanPanelData:
         """Get the panel data."""
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             raise SpanPanelAPIError("API client has been closed")
@@ -330,7 +417,7 @@ class SpanPanelApi:
             panel_response = await self._client.get_panel_state()
 
             # Convert the attrs model to dict and deep copy before processing
-            raw_data: Any = deepcopy(panel_response.to_dict())  # type: ignore[attr-defined]
+            raw_data: Any = deepcopy(panel_response.to_dict())
             panel_data: SpanPanelData = SpanPanelData.from_dict(raw_data, self.options)
 
             # Span Panel API might return empty result.
@@ -361,6 +448,10 @@ class SpanPanelApi:
 
     async def get_circuits_data(self) -> dict[str, SpanPanelCircuit]:
         """Get the circuits data."""
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             raise SpanPanelAPIError("API client has been closed")
@@ -370,7 +461,7 @@ class SpanPanelApi:
             circuits_response = await self._client.get_circuits()
 
             # Extract circuits from the response
-            raw_circuits_data = circuits_response.circuits.additional_properties  # type: ignore[attr-defined]
+            raw_circuits_data = circuits_response.circuits.additional_properties
 
             if not raw_circuits_data:
                 raise SpanPanelReturnedEmptyData()
@@ -379,7 +470,7 @@ class SpanPanelApi:
             for circuit_id, raw_circuit_data in raw_circuits_data.items():
                 # Convert attrs model to dict
                 try:
-                    circuit_dict = raw_circuit_data.to_dict()  # type: ignore[attr-defined]
+                    circuit_dict = raw_circuit_data.to_dict()
                     circuits_data[circuit_id] = SpanPanelCircuit.from_dict(circuit_dict)
                 except Exception as e:
                     if circuit_id.startswith("unmapped_tab_"):
@@ -409,6 +500,10 @@ class SpanPanelApi:
 
     async def get_storage_battery_data(self) -> SpanPanelStorageBattery:
         """Get the storage battery data."""
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             raise SpanPanelAPIError("API client has been closed")
@@ -418,7 +513,7 @@ class SpanPanelApi:
             storage_response = await self._client.get_storage_soe()
 
             # Extract SOE data from the response
-            storage_battery_data = storage_response.soe.to_dict()  # type: ignore[attr-defined]
+            storage_battery_data = storage_response.soe.to_dict()
 
             # Span Panel API might return empty result.
             if not storage_battery_data:

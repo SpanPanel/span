@@ -4,9 +4,11 @@
 import asyncio
 import sys
 import os
+from pathlib import Path
 
 # Add the span project to the path
-sys.path.insert(0, '/Users/bflood/projects/HA/span')
+project_root = Path(__file__).resolve().parents[1]  # Go up 1 level to project root
+sys.path.insert(0, str(project_root))
 
 async def generate_actual_yaml():
     """Generate the actual YAML using the test's code path."""

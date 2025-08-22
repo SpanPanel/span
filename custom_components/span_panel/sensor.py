@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -70,12 +71,13 @@ from .span_panel_storage_battery import SpanPanelStorageBattery
 from .synthetic_sensors import (
     SyntheticSensorCoordinator,
     _synthetic_coordinators,
-    find_synthetic_coordinator_for,
+    trigger_synthetic_update,
 )
 from .util import panel_to_device_info
 
 ICON = "mdi:flash"
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
 
 T = TypeVar("T", bound=SensorEntityDescription)
 D = TypeVar("D")  # For the type returned by get_data_source
@@ -203,14 +205,31 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         self._update_native_value()
         super()._handle_coordinator_update()
 
+    @property
+    def available(self) -> bool:
+        """Return entity availability.
+
+        Keep entities available during a panel_offline condition so the UI shows
+        the sensor state as UNKNOWN instead of marking the entity as
+        Unavailable (which is driven by the coordinator's update failure).
+        """
+        try:
+            if getattr(self.coordinator, "panel_offline", False):
+                return True
+        except AttributeError as err:
+            # If coordinator is missing expected attribute, log and fall back
+            _LOGGER.debug("Availability check: missing coordinator attribute: %s", err)
+        except Exception as err:  # pragma: no cover - defensive
+            # Any unexpected error shouldn't crash the availability check
+            _LOGGER.debug("Availability check: unexpected error: %s", err)
+        return super().available
+
     def _update_native_value(self) -> None:
         """Update the native value of the sensor."""
 
-        if not self.coordinator.last_update_success:
-            _LOGGER.debug(
-                "STATUS_SENSOR_DEBUG: Coordinator update not successful for %s", self._attr_name
-            )
-            self._attr_native_value = None
+        if self.coordinator.panel_offline:
+            _LOGGER.debug("STATUS_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
+            self._attr_native_value = STATE_UNKNOWN
             return
 
         value_function: Callable[[D], float | int | str | None] | None = getattr(
@@ -218,16 +237,21 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         )
         if value_function is None:
             _LOGGER.debug("STATUS_SENSOR_DEBUG: No value_function for %s", self._attr_name)
-            self._attr_native_value = None
+            self._attr_native_value = STATE_UNKNOWN
             return
 
         try:
             data_source: D = self.get_data_source(self.coordinator.data)
 
-            if hasattr(self, "id") and hasattr(data_source, "instant_power"):
-                circuit_id = getattr(self, "id", "unknown")
+            # Only do debug logging if we have valid data and the panel is online
+            if (
+                not self.coordinator.panel_offline
+                and hasattr(self, "id")
+                and hasattr(data_source, "instant_power")
+            ):
+                circuit_id = getattr(self, "id", STATE_UNKNOWN)
                 instant_power = getattr(data_source, "instant_power", None)
-                description_key = getattr(self.entity_description, "key", "unknown")
+                description_key = getattr(self.entity_description, "key", STATE_UNKNOWN)
                 _LOGGER.debug(
                     "CIRCUIT_POWER_DEBUG: Circuit %s, sensor %s, instant_power=%s, data_source type=%s",
                     circuit_id,
@@ -239,14 +263,14 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             raw_value: float | int | str | None = value_function(data_source)
 
             if raw_value is None:
-                self._attr_native_value = None
+                self._attr_native_value = STATE_UNKNOWN
             elif isinstance(raw_value, float | int):
                 self._attr_native_value = float(raw_value)
             else:
                 # For string values, keep as string - this is valid for Home Assistant sensors
                 self._attr_native_value = str(raw_value)
         except (AttributeError, KeyError, IndexError):
-            self._attr_native_value = None
+            self._attr_native_value = STATE_UNKNOWN
 
     def get_data_source(self, span_panel: SpanPanel) -> D:
         """Get the data source for the sensor."""
@@ -548,7 +572,7 @@ def _create_native_sensors(
     return entities
 
 
-def _enable_unmapped_tab_entities(hass: HomeAssistant, entities: list) -> None:
+def _enable_unmapped_tab_entities(hass: HomeAssistant, entities: list[Any]) -> None:
     """Enable unmapped tab entities in the entity registry if they were disabled."""
     entity_registry = er.async_get(hass)
     for entity in entities:
@@ -702,11 +726,11 @@ async def async_setup_entry(
             # If sensor sets already exist (from migration), use them directly
             sensor_sets = storage_manager.list_sensor_sets()
             _LOGGER.info("SENSOR SETUP DEBUG: Found %d existing sensor sets", len(sensor_sets))
-            for sensor_set in sensor_sets:
+            for sensor_set_meta in sensor_sets:
                 _LOGGER.info(
                     "SENSOR SETUP DEBUG: Sensor set - id=%s, device=%s",
-                    sensor_set.sensor_set_id,
-                    sensor_set.device_identifier,
+                    sensor_set_meta.sensor_set_id,
+                    sensor_set_meta.device_identifier,
                 )
 
             if sensor_sets:
@@ -743,23 +767,34 @@ async def async_setup_entry(
                 storage_manager = await setup_synthetic_configuration(
                     hass, config_entry, coordinator, migration_mode
                 )
+            # Get the synthetic coordinator from the global registry
+            synth_coord = _synthetic_coordinators.get(config_entry.entry_id)
+            if not synth_coord:
+                raise RuntimeError(
+                    f"Synthetic coordinator not found for config entry {config_entry.entry_id}"
+                )
+
             # Use simplified setup interface that handles everything
+            # Pass the synthetic coordinator directly to avoid lookup issues
             sensor_manager = await async_setup_synthetic_sensors(
                 hass=hass,
                 config_entry=config_entry,
                 async_add_entities=async_add_entities,
-                coordinator=coordinator,
+                # coordinator=coordinator,  # Pass coordinator for data access
+                coordinator=None,
                 storage_manager=storage_manager,
+                synthetic_coordinator=synth_coord,
             )
-            # Get and store the SensorSet for this device
-            # Use the per-entry device_identifier chosen during synthetic setup
-            synth_coord = find_synthetic_coordinator_for(coordinator)
             device_identifier = (
                 synth_coord.device_identifier
                 if synth_coord and synth_coord.device_identifier
                 else coordinator.data.status.serial_number
             )
             sensor_set_id = construct_sensor_set_id(device_identifier)
+            # get_sensor_set returns a SensorSet instance. We also expose
+            # metadata via storage_manager.get_sensor_set_metadata when callers
+            # need only the metadata object. Store the SensorSet instance here
+            # for consumers that perform CRUD operations directly on the set.
             sensor_set = storage_manager.get_sensor_set(sensor_set_id)
 
             if sensor_set is None:
@@ -802,6 +837,20 @@ async def async_setup_entry(
 
         except Exception as e:
             _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
+
+        # Manually trigger synthetic sensor updates now that everything is set up
+        # and coordinator has stable data
+        try:
+            if coordinator.last_update_success and coordinator.data:
+                success = await trigger_synthetic_update(hass, config_entry)
+                if success:
+                    _LOGGER.debug("Successfully triggered initial synthetic sensor update")
+                else:
+                    _LOGGER.warning("Failed to trigger initial synthetic sensor update")
+            else:
+                _LOGGER.warning("Coordinator not ready - skipping initial synthetic sensor update")
+        except Exception as e:
+            _LOGGER.error("Error triggering initial synthetic sensor update: %s", e)
 
         # Force immediate coordinator refresh to ensure all sensors (native and synthetic) update right away
         await coordinator.async_request_refresh()

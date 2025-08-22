@@ -5,6 +5,8 @@ panel_config:
   serial_number: "SPAN-32-SIM-001"
   total_tabs: 32
   main_size: 200  # Main breaker size in Amps
+  # Uncomment the line below to simulate panel being offline
+  # offline_mode: true  # Makes panel appear offline for testing connection loss behavior
 
 # Circuit templates define reusable behavior patterns
 circuit_templates:

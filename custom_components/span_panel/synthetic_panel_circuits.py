@@ -69,7 +69,7 @@ PANEL_SENSOR_DEFINITIONS = [
 ]
 
 
-def get_panel_data_value(span_panel: SpanPanel, data_path: str) -> float:
+def get_panel_data_value(span_panel: SpanPanel, data_path: str) -> float | None:
     """Get panel data value using dot notation path.
 
     Args:
@@ -88,11 +88,11 @@ def get_panel_data_value(span_panel: SpanPanel, data_path: str) -> float:
         value = getattr(panel_data, data_path)
 
         # Convert to float for consistency
-        return float(value) if value is not None else 0.0
+        return float(value) if value is not None else None
 
     except (AttributeError, TypeError, ValueError) as e:
         _LOGGER.warning("Failed to get panel data for path '%s': %s", data_path, e)
-        return 0.0
+        return None
 
 
 async def generate_panel_sensors(

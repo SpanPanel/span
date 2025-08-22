@@ -24,6 +24,7 @@ import voluptuous as vol
 from . import config_flow  # noqa: F401  # type: ignore[misc]
 from .const import (
     CONF_SIMULATION_CONFIG,
+    CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
     CONF_USE_SSL,
     COORDINATOR,
@@ -89,17 +90,8 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             data=config_entry.data,
             options=config_entry.options,
             title=config_entry.title,
+            version=CURRENT_CONFIG_VERSION,
         )
-        try:
-            object.__setattr__(config_entry, "version", CURRENT_CONFIG_VERSION)  # type: ignore[attr-defined]
-        except Exception:
-            # Fallback to documented API
-            hass.config_entries._async_update_entry(  # type: ignore[attr-defined]
-                config_entry,
-                {
-                    "version": CURRENT_CONFIG_VERSION,
-                },
-            )
         _LOGGER.debug(
             "Successfully migrated config entry %s to version %s",
             config_entry.entry_id,
@@ -175,6 +167,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     simulation_mode = config.get("simulation_mode", False)
     simulation_config_path = None
     simulation_start_time = None
+    simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
 
     if simulation_mode:
         # Get the selected simulation config from config entry, default to 32-circuit
@@ -217,6 +210,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             simulation_mode=simulation_mode,
             simulation_config_path=simulation_config_path,
             simulation_start_time=simulation_start_time,
+            simulation_offline_minutes=simulation_offline_minutes,
         )
 
         _LOGGER.debug("Created SpanPanel instance: %s", span_panel)
@@ -248,6 +242,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 raise ConnectionError(
                     f"Authentication failed: {e}. Please reconfigure with a new access token."
                 ) from e
+        else:
+            auth_test_success = True
 
         _LOGGER.debug("Successfully set up and tested SPAN Panel API client")
 
@@ -390,8 +386,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update listener."""
-    _LOGGER.debug("Configuration options changed, reloading SPAN Panel integration")
-    _LOGGER.debug("Update listener called with options: %s", entry.options)
+    _LOGGER.info("=== SPAN PANEL UPDATE LISTENER CALLED ===")
+    _LOGGER.info("Configuration options changed, reloading SPAN Panel integration")
+    _LOGGER.info("Update listener called with options: %s", entry.options)
+    _LOGGER.info("Update listener called for entry_id: %s, title: %s", entry.entry_id, entry.title)
     try:
         # Check if Home Assistant is shutting down
         if hass.state in (CoreState.stopping, CoreState.final_write, CoreState.not_running):
@@ -412,6 +410,25 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         )
 
         if coordinator and sensor_set:
+            # Handle simulation options change (offline minutes, start time)
+            simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
+
+            # Update simulation parameters in the existing API instance
+            if hasattr(coordinator, "span_panel") and coordinator.span_panel:
+                span_panel = coordinator.span_panel
+                if hasattr(span_panel, "api") and span_panel.api:
+                    _LOGGER.info(
+                        "Found existing SpanPanel API instance, updating simulation parameters"
+                    )
+
+                    # Update simulation offline mode - this should start the offline timer from "now"
+                    # The simulation_start_time is separate and used for the simulated time of day
+                    span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
+                else:
+                    _LOGGER.warning("SpanPanel API instance not found in coordinator")
+            else:
+                _LOGGER.warning("SpanPanel instance not found in coordinator")
+
             # Handle solar options change
             solar_enabled = entry.options.get(INVERTER_ENABLE, False)
             # Coerce legs to integers to handle legacy string-stored options
@@ -477,6 +494,7 @@ def _requires_full_reload(entry: ConfigEntry) -> bool:
     """Determine if a full integration reload is required based on option changes.
 
     Precision changes are handled in-place by handle_precision_options_change(),
+    simulation options are handled in-place by update_listener(),
     while solar and other configuration changes require a full reload.
 
     Args:
@@ -486,13 +504,31 @@ def _requires_full_reload(entry: ConfigEntry) -> bool:
         True if full reload is required, False if changes can be applied in-place
 
     """
+    # Check if only simulation options changed
+    simulation_options = {CONF_SIMULATION_OFFLINE_MINUTES, CONF_SIMULATION_START_TIME}
+    current_options = set(entry.options.keys())
+
+    _LOGGER.info(
+        "_requires_full_reload check: current_options=%s, simulation_options=%s",
+        current_options,
+        simulation_options,
+    )
+
+    # If only simulation options are present, no reload needed
+    if current_options.issubset(simulation_options):
+        _LOGGER.info("Only simulation options changed - no reload needed")
+        return False
+
+    _LOGGER.info("Other options present - reload needed")
+
     # Since we don't track previous option values, we use a conservative approach:
     # - Precision changes are handled in-place (no reload needed)
+    # - Simulation options are handled in-place (no reload needed)
     # - Solar configuration changes need reload
     # - Other changes (battery, naming, etc.) need reload
 
-    # For now, always reload to handle solar and other configuration changes.
-    # The precision changes are applied in-place before this check.
+    # For now, reload for solar and other configuration changes.
+    # The precision and simulation changes are applied in-place before this check.
     return True
 
 

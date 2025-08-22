@@ -51,7 +51,7 @@ _synthetic_coordinators: dict[str, SyntheticSensorCoordinator] = {}
 
 
 # Custom YAML representer to force quotes on strings that might be misinterpreted
-def force_quotes_representer(dumper, data):
+def force_quotes_representer(dumper: Any, data: Any) -> Any:
     """Force quotes on strings that contain brackets or look like formulas."""
     if isinstance(data, str) and (
         "[" in data or "]" in data or data.startswith("tabs ") or "-" in data
@@ -73,8 +73,22 @@ class SyntheticSensorCoordinator:
     3. Listens to SPAN coordinator updates and ensures virtual backing entities are populated
     """
 
-    def __init__(self, hass: HomeAssistant, coordinator: SpanPanelCoordinator, device_name: str):
-        """Initialize the synthetic sensor coordinator."""
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        coordinator: SpanPanelCoordinator | None,
+        device_name: str,
+        manual_update_mode: bool = False,
+    ):
+        """Initialize the synthetic sensor coordinator.
+
+        Args:
+            hass: Home Assistant instance
+            coordinator: SPAN Panel coordinator. If None, automatic updates disabled.
+            device_name: Device name for the coordinator
+            manual_update_mode: If True, disable automatic updates even if coordinator is provided
+
+        """
         self.hass = hass
         self.coordinator = coordinator
         self.device_name = device_name
@@ -95,10 +109,7 @@ class SyntheticSensorCoordinator:
         # Store sensor manager reference for metrics enrichment
         self._last_sensor_manager: Any | None = None
 
-        # Subscribe synthetic layer to last stage so we update after native
-        # platforms. Schedule on the loop to keep thread-safety guarantees.
-        self._unsub = coordinator.async_add_listener(self._handle_coordinator_update)
-
+        # Always set up signal listener for staged updates, but behavior depends on coordinator availability
         def _on_stage() -> None:
             # Ensure synthetic updates run strictly on the event loop
             self.hass.loop.call_soon_threadsafe(self._handle_coordinator_update)
@@ -106,11 +117,44 @@ class SyntheticSensorCoordinator:
         self._unsub_stage = async_dispatcher_connect(
             hass, SIGNAL_STAGE_SYNTHETIC_SENSORS, _on_stage
         )
+        self._unsub = None  # Don't use direct coordinator listener to avoid double updates
+
+        if coordinator is not None and not manual_update_mode:
+            _LOGGER.debug(
+                "Synthetic sensor coordinator initialized with automatic updates via staged signals"
+            )
+        elif manual_update_mode:
+            _LOGGER.debug(
+                "Synthetic sensor coordinator initialized in manual update mode (manual_update_mode=True) - will respond to staged signals"
+            )
+        else:
+            _LOGGER.debug(
+                "Synthetic sensor coordinator initialized in manual update mode (coordinator=None) - will respond to staged signals"
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle coordinator updates by notifying synthetic sensors of data changes."""
-        if not self.coordinator.last_update_success:
+        # If no coordinator available, trigger manual update for all backing entities
+        if self.coordinator is None:
+            if self.change_notifier and self.backing_entity_metadata:
+                # Trigger update for all known backing entities
+                backing_ids = set(self.backing_entity_metadata.keys())
+                self.change_notifier(backing_ids)
+                _LOGGER.debug(
+                    "Triggered manual update for %d backing entities (coordinator=None)",
+                    len(backing_ids),
+                )
+            return
+        # Use the dedicated offline flag instead of last_update_success
+        if self.coordinator.panel_offline:
+            # Clear all backing values to None when panel is offline
+            if self.backing_entity_metadata:
+                for backing_id in self.backing_entity_metadata:
+                    self._last_values[backing_id] = None
+                # Notify synthetic sensors of the change
+                if self.change_notifier:
+                    self.change_notifier(set(self.backing_entity_metadata.keys()))
             return
 
         try:
@@ -185,14 +229,31 @@ class SyntheticSensorCoordinator:
             _LOGGER.warning("No metadata found for backing entity: %s", entity_id)
             return None
 
-        if not self.coordinator.last_update_success or not self.coordinator.data:
-            _LOGGER.debug("Coordinator not ready for entity %s", entity_id)
-            return 0.0
+        # If no coordinator available, try to find one from the global registry
+        coordinator_to_use = self.coordinator
+        if coordinator_to_use is None:
+            # Try to find a coordinator that has the same device identifier
+            for synthetic_coord in _synthetic_coordinators.values():
+                if (
+                    synthetic_coord.coordinator is not None
+                    and synthetic_coord.device_identifier == self.device_identifier
+                ):
+                    coordinator_to_use = synthetic_coord.coordinator
+                    break
+
+            if coordinator_to_use is None:
+                _LOGGER.debug("No coordinator available for entity %s (manual mode)", entity_id)
+                return None
+
+        # Use the dedicated offline flag instead of last_update_success
+        if coordinator_to_use.panel_offline:
+            _LOGGER.debug("Panel is offline for entity %s", entity_id)
+            return None
 
         try:
-            span_panel = self.coordinator.data
+            span_panel = coordinator_to_use.data
             if not span_panel or not span_panel.panel:
-                return 0.0
+                return None
 
             api_key = metadata["api_key"]
             circuit_id = metadata["circuit_id"]
@@ -205,8 +266,8 @@ class SyntheticSensorCoordinator:
                 circuit = span_panel.circuits.get(circuit_id)
                 value = getattr(circuit, api_key, None) if circuit else None
 
-            # Return 0.0 instead of None to prevent "Variables with None values" errors
-            return value if value is not None else 0.0
+            # Return the actual value (including None) - let synthetic package handle it
+            return value
 
         except AttributeError as e:
             _LOGGER.warning(
@@ -215,7 +276,7 @@ class SyntheticSensorCoordinator:
                 api_key,
                 e,
             )
-            return 0.0
+            return None
 
     def _populate_backing_entity_metadata(self, all_backing_entities: list[dict[str, Any]]) -> None:
         """Populate backing entity metadata for data provider callback.
@@ -260,10 +321,13 @@ class SyntheticSensorCoordinator:
 
         # Initialize last value snapshot using current coordinator data
         try:
-            span_panel = self.coordinator.data
-            if span_panel:
-                for backing_id, meta in self.backing_entity_metadata.items():
-                    self._last_values[backing_id] = self._extract_value_from_panel(span_panel, meta)
+            if self.coordinator is not None:
+                span_panel = self.coordinator.data
+                if span_panel:
+                    for backing_id, meta in self.backing_entity_metadata.items():
+                        self._last_values[backing_id] = self._extract_value_from_panel(
+                            span_panel, meta
+                        )
         except Exception as e:
             # Snapshot is best-effort; proceed without blocking setup
             _LOGGER.debug("Failed to snapshot backing entity values: %s", e)
@@ -279,9 +343,10 @@ class SyntheticSensorCoordinator:
             else:
                 circuit = span_panel.circuits.get(circuit_id)
                 value = getattr(circuit, api_key, None) if circuit is not None else None
-            return 0.0 if value is None else value
+            # Return actual value (including None) - don't force 0.0
+            return value
         except Exception:
-            return 0.0
+            return None
 
     def _extract_name_from_panel(self, span_panel: Any, circuit_uuid: str) -> str:
         """Get circuit name from panel data."""
@@ -402,7 +467,8 @@ class SyntheticSensorCoordinator:
 
             # Request integration reload after all changes are processed
             _LOGGER.info("All circuit name changes processed, requesting integration reload")
-            self.coordinator.request_reload()
+            if self.coordinator is not None:
+                self.coordinator.request_reload()
 
         except Exception as e:
             _LOGGER.error("Error processing name changes: %s", e, exc_info=True)
@@ -411,6 +477,30 @@ class SyntheticSensorCoordinator:
         """Set the change notification callback for coordinator updates."""
         self.change_notifier = change_notifier
         _LOGGER.debug("Change notifier callback set for synthetic coordinator")
+
+    async def trigger_update(self) -> None:
+        """Manually trigger synthetic sensor updates.
+
+        This method should be called by the integration when backing data changes
+        and manual_update_mode is enabled.
+
+        """
+        if self.change_notifier and self.backing_entity_metadata:
+            # Trigger update for all known backing entities
+            backing_ids = set(self.backing_entity_metadata.keys())
+            self.change_notifier(backing_ids)
+            _LOGGER.debug("Manually triggered update for %d backing entities", len(backing_ids))
+
+    async def trigger_selective_update(self, changed_entity_ids: set[str]) -> None:
+        """Manually trigger updates for specific backing entities.
+
+        Args:
+            changed_entity_ids: Set of backing entity IDs that have changed
+
+        """
+        if self.change_notifier and changed_entity_ids:
+            self.change_notifier(changed_entity_ids)
+            _LOGGER.debug("Manually triggered selective update for: %s", changed_entity_ids)
 
     async def setup_configuration(
         self, config_entry: ConfigEntry, migration_mode: bool = False
@@ -447,6 +537,8 @@ class SyntheticSensorCoordinator:
     ) -> StorageManager:
         """Set up configuration for live panel data (existing implementation)."""
         # Generate panel sensors and backing entities with global settings
+        if self.coordinator is None:
+            raise RuntimeError("Coordinator is required for live configuration setup")
         span_panel = self.coordinator.data
 
         (
@@ -519,7 +611,8 @@ class SyntheticSensorCoordinator:
         self.device_identifier = device_identifier
         # Publish a deterministic sensor set id on the main coordinator for others to use
         with suppress(Exception):
-            self.coordinator.synthetic_sensor_set_id = self.sensor_set_id
+            if self.coordinator is not None:
+                self.coordinator.synthetic_sensor_set_id = self.sensor_set_id
 
         # Simple 1:1 mapping - use the mappings provided by generation functions
         _LOGGER.debug("Using direct 1:1 sensor-to-backing mappings from generation functions")
@@ -711,7 +804,11 @@ class SyntheticSensorCoordinator:
         try:
             # Get the current configuration from storage
             # Use the same device_identifier that was used when creating the sensor set
-            target_identifier = self.device_identifier or self.coordinator.data.status.serial_number
+            target_identifier = self.device_identifier or (
+                self.coordinator.data.status.serial_number
+                if self.coordinator is not None
+                else "unknown"
+            )
             config = self.storage_manager.to_config(device_identifier=target_identifier)
 
             # Reload the sensor manager with the updated configuration
@@ -742,7 +839,7 @@ class SyntheticSensorCoordinator:
 async def setup_synthetic_configuration(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
-    coordinator: SpanPanelCoordinator,
+    coordinator: SpanPanelCoordinator | None,
     migration_mode: bool = False,
 ) -> StorageManager:
     """Set up synthetic sensor configuration.
@@ -761,7 +858,10 @@ async def setup_synthetic_configuration(
     device_name = config_entry.data.get("device_name", config_entry.title)
 
     # Create synthetic sensor coordinator for virtual backing entities
-    synthetic_coord = SyntheticSensorCoordinator(hass, coordinator, device_name)
+    # Use manual update mode to prevent automatic updates during startup
+    synthetic_coord = SyntheticSensorCoordinator(
+        hass, coordinator, device_name, manual_update_mode=True
+    )
     _synthetic_coordinators[config_entry.entry_id] = synthetic_coord
 
     # Delegate configuration setup to the coordinator
@@ -816,20 +916,32 @@ async def async_setup_synthetic_sensors(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    coordinator: SpanPanelCoordinator,
+    coordinator: SpanPanelCoordinator | None,
     storage_manager: StorageManager,
+    synthetic_coordinator: SyntheticSensorCoordinator,
 ) -> SensorManager:
     """Set up synthetic sensors using the simplified interface.
 
     This function uses the ha-synthetic-sensors simplified interface to handle
     all the complex setup automatically, including solar sensors if configured.
+
+    Args:
+        hass: Home Assistant instance
+        config_entry: Configuration entry
+        async_add_entities: Callback to add entities
+        coordinator: SPAN Panel coordinator. If None, automatic updates are disabled.
+        storage_manager: Storage manager for sensor configuration
+        synthetic_coordinator: Synthetic coordinator instance (required)
+
     """
     # Create data provider callback
-    data_provider = create_data_provider_callback(coordinator)
+    data_provider = create_data_provider_callback(coordinator, synthetic_coordinator)
 
-    # Get synthetic coordinator and use its sensor-to-backing mapping
-    synthetic_coord = find_synthetic_coordinator_for(coordinator)
-    sensor_to_backing_mapping = synthetic_coord.sensor_to_backing_mapping if synthetic_coord else {}
+    # Use the passed synthetic coordinator (required)
+    if synthetic_coordinator is None:
+        raise ValueError("synthetic_coordinator parameter is required")
+    synthetic_coord = synthetic_coordinator
+    sensor_to_backing_mapping = synthetic_coord.sensor_to_backing_mapping
 
     # Check if this is a migration - retrieve stored mapping if available
     #    if not sensor_to_backing_mapping and DOMAIN in hass.data and config_entry.entry_id in hass.data[DOMAIN]:
@@ -873,7 +985,9 @@ async def async_setup_synthetic_sensors(
                 config_entry.data.get("device_name", config_entry.title)
             )
         else:
-            target_device_identifier = coordinator.data.status.serial_number
+            target_device_identifier = (
+                coordinator.data.status.serial_number if coordinator is not None else "unknown"
+            )
 
     sensor_manager = await async_setup_synthetic_sensors_with_entities(
         hass=hass,
@@ -915,9 +1029,8 @@ async def async_setup_synthetic_sensors(
                     sorted(missing_in_meta),
                 )
 
-        # Trigger an initial update so named circuits compute a first value
-        if backing_ids and change_notifier is not None:
-            change_notifier(backing_ids)
+        # Note: Initial updates will be triggered by coordinator updates when data is available
+        # Removed immediate trigger to prevent premature evaluation before coordinator has data
 
         # Keep a handle for later metrics enrichment
         try:
@@ -935,21 +1048,25 @@ async def async_setup_synthetic_sensors(
     return sensor_manager
 
 
-def create_data_provider_callback(coordinator: SpanPanelCoordinator) -> DataProviderCallback:
+def create_data_provider_callback(
+    coordinator: SpanPanelCoordinator | None,
+    synthetic_coordinator: SyntheticSensorCoordinator,
+) -> DataProviderCallback:
     """Create data provider callback for virtual backing entities."""
 
     def data_provider_callback(entity_id: str) -> DataProviderResult:
         """Provide live data from virtual backing entities."""
         try:
-            # Find the synthetic coordinator for this device
-            synthetic_coord = find_synthetic_coordinator_for(coordinator)
-            if not synthetic_coord:
-                _LOGGER.debug("No synthetic coordinator found for entity_id: %s", entity_id)
-                return {"value": None, "exists": False}
+            # Use the passed synthetic coordinator directly
+            if coordinator is None:
+                _LOGGER.debug(
+                    "Using synthetic coordinator for data access when coordinator=None for entity_id: %s",
+                    entity_id,
+                )
 
             # Get value from virtual backing entity using live coordinator data
-            value = synthetic_coord.get_backing_value(entity_id)
-            exists = entity_id in synthetic_coord.backing_entity_metadata
+            value = synthetic_coordinator.get_backing_value(entity_id)
+            exists = entity_id in synthetic_coordinator.backing_entity_metadata
 
             return {"value": value, "exists": exists}
 
@@ -960,14 +1077,40 @@ def create_data_provider_callback(coordinator: SpanPanelCoordinator) -> DataProv
     return data_provider_callback
 
 
-def find_synthetic_coordinator_for(
-    span_coordinator: SpanPanelCoordinator,
-) -> SyntheticSensorCoordinator | None:
-    """Find the synthetic coordinator for a given SPAN coordinator."""
-    for synthetic_coord in _synthetic_coordinators.values():
-        if synthetic_coord.coordinator == span_coordinator:
-            return synthetic_coord
-    return None
+# find_synthetic_coordinator_for function removed - use direct access to _synthetic_coordinators instead
+
+
+async def trigger_synthetic_update(
+    hass: HomeAssistant, config_entry: ConfigEntry, changed_entity_ids: set[str] | None = None
+) -> bool:
+    """Trigger synthetic sensor updates for a specific config entry.
+
+    Args:
+        hass: Home Assistant instance
+        config_entry: The config entry for the integration
+        changed_entity_ids: Optional set of specific backing entity IDs that changed.
+                          If None, all synthetic sensors will be updated.
+
+    Returns:
+        True if update was triggered, False if no synthetic coordinator found
+
+    """
+    try:
+        # Find the synthetic coordinator for this config entry
+        synthetic_coord = _synthetic_coordinators.get(config_entry.entry_id)
+        if not synthetic_coord:
+            _LOGGER.debug("No synthetic coordinator found for entry: %s", config_entry.entry_id)
+            return False
+
+        if changed_entity_ids:
+            await synthetic_coord.trigger_selective_update(changed_entity_ids)
+        else:
+            await synthetic_coord.trigger_update()
+
+        return True
+    except Exception as e:
+        _LOGGER.error("Failed to trigger synthetic update: %s", e)
+        return False
 
 
 # CRUD Operations for Optional Sensor Management

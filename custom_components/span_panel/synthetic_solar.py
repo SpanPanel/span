@@ -31,7 +31,7 @@ from .helpers import (
 )
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
-from .synthetic_sensors import find_synthetic_coordinator_for
+from .synthetic_sensors import _synthetic_coordinators
 from .synthetic_utils import combine_yaml_templates, fill_template, load_template
 
 _LOGGER = logging.getLogger(__name__)
@@ -716,7 +716,7 @@ async def handle_solar_options_change(
         # After CRUD, re-register backing entities and trigger an initial update so the new
         # solar sensors evaluate immediately. Reuse the existing change notifier.
         try:
-            synthetic_coord = find_synthetic_coordinator_for(coordinator)
+            synthetic_coord = _synthetic_coordinators.get(config_entry.entry_id)
             if synthetic_coord is not None:
                 # Get the active sensor_manager from the integration cache (set during setup)
                 data = hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})

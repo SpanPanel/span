@@ -16,6 +16,7 @@ CONF_USE_SSL = "use_ssl"
 # Simulation configuration
 CONF_SIMULATION_CONFIG = "simulation_config"
 CONF_SIMULATION_START_TIME = "simulation_start_time"
+CONF_SIMULATION_OFFLINE_MINUTES = "simulation_offline_minutes"
 
 # Time format constants for simulation
 TIME_ONLY_FORMATS = ["HH:MM", "H:MM"]  # 24-hour and 12-hour formats

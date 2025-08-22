@@ -145,7 +145,7 @@ class SpanPanelSimulationFactory:
             return dict(circuits) if circuits else {}
 
     @classmethod
-    def get_preset_scenarios(cls) -> dict[str, dict]:
+    def get_preset_scenarios(cls) -> dict[str, dict[str, Any]]:
         """Get predefined simulation scenarios for common test cases.
 
         Returns:

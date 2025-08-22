@@ -39,7 +39,7 @@ class TestCircuitDataValue:
 
         result = get_circuit_data_value(circuit_data, "instant_power")
 
-        assert result == 0.0
+        assert result is None
 
     def test_get_circuit_data_value_missing_attribute(self):
         """Test getting circuit data when attribute doesn't exist."""
@@ -49,7 +49,7 @@ class TestCircuitDataValue:
 
         result = get_circuit_data_value(circuit_data, "nonexistent_attr")
 
-        assert result == 0.0
+        assert result is None
 
     def test_get_circuit_data_value_string_number(self):
         """Test getting circuit data when value is a string number."""
@@ -67,7 +67,7 @@ class TestCircuitDataValue:
 
         result = get_circuit_data_value(circuit_data, "instant_power")
 
-        assert result == 0.0
+        assert result is None
 
     def test_get_circuit_data_value_zero(self):
         """Test getting circuit data when value is zero."""

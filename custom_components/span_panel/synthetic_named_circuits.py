@@ -54,7 +54,7 @@ NAMED_CIRCUIT_SENSOR_DEFINITIONS = [
 ]
 
 
-def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
+def get_circuit_data_value(circuit_data: Any, data_path: str) -> float | None:
     """Get circuit data value using attribute name.
 
     Args:
@@ -67,10 +67,10 @@ def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
     """
     try:
         value = getattr(circuit_data, data_path, None)
-        return float(value) if value is not None else 0.0
+        return float(value) if value is not None else None
     except (AttributeError, TypeError, ValueError) as e:
         _LOGGER.warning("Failed to get circuit data for path '%s': %s", data_path, e)
-        return 0.0
+        return None
 
 
 async def generate_named_circuit_sensors(
