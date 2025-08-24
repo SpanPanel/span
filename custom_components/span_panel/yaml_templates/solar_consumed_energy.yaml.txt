@@ -4,7 +4,7 @@
     formula: leg1_consumed + leg2_consumed
     alternate_states:
       FALLBACK:
-        formula: "state if state is not None else (last_valid_state if within_grace else None)"
+        formula: "last_valid_state if last_valid_state is not None and last_valid_state != 'unknown' and last_valid_changed != 'unknown' and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes else 'unknown'"
     variables:
       leg1_consumed: {{leg1_consumed_entity}}
       leg2_consumed: {{leg2_consumed_entity}}
@@ -12,15 +12,16 @@
         formula: "metadata(state, 'last_valid_state')"
       last_valid_changed:
         formula: "metadata(state, 'last_valid_changed')"
-      within_grace:
-        formula: "last_valid_changed is not None and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes"
-        alternate_states:
-          FALLBACK: false
+
     attributes:
       tabs: "{{tabs_attribute}}"
       voltage: {{voltage_attribute}}
+      grace_period_remaining:
+        formula: "energy_grace_period_minutes - minutes_between(last_valid_changed, now()) if last_valid_changed != 'unknown' and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes else 'N/A'"
+        alternate_states:
+          FALLBACK: 'N/A'
       energy_reporting_status:
-        formula: "'Live' if state is not None else ('Off-Line, reporting previous value' if within_grace else None)"
+        formula: "'Live' if state != 'unknown' else ('Off-Line, reporting previous value' if (last_valid_state is not None and last_valid_state != 'unknown' and last_valid_changed != 'unknown' and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes) else 'unknown')"
         alternate_states:
           FALLBACK: false
     metadata:

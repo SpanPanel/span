@@ -8,6 +8,7 @@ YAML generation pipeline and identify any formatting issues.
 
 import asyncio
 import sys
+import argparse
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -15,7 +16,7 @@ from unittest.mock import MagicMock
 project_root = Path(__file__).resolve().parents[1]  # Go up 1 level to project root
 sys.path.insert(0, str(project_root))
 
-async def generate_complete_yaml():
+async def generate_complete_yaml(simulation_config: str = "simulation_config_32_circuit", output_file: str = "/tmp/span_simulator_complete_config.yaml"):
     """Generate the complete YAML configuration using the integration's code path."""
 
     print("🚀 Starting complete YAML generation...")
@@ -28,8 +29,6 @@ async def generate_complete_yaml():
         print(f"❌ Failed to import SpanPanelSimulationFactory: {e}")
         return None, None
 
-    # Use the same pattern as generate_basic_sensor_fixtures.py
-    simulation_config = "simulation_config_32_circuit"
     print(f"📋 Using simulation config: {simulation_config}")
 
     try:
@@ -172,7 +171,6 @@ async def generate_complete_yaml():
             yaml_content = yaml.dump(complete_yaml_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
         # Write the YAML to disk
-        output_file = '/tmp/span_simulator_complete_config.yaml'
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(yaml_content)
 
@@ -225,7 +223,19 @@ async def generate_complete_yaml():
         return None, None
 
 if __name__ == "__main__":
-    yaml_content, yaml_dict = asyncio.run(generate_complete_yaml())
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Generate complete sensor YAML configuration")
+    parser.add_argument("--simulation-config", default="simulation_config_32_circuit",
+                       help="Simulation config to use (default: simulation_config_32_circuit)")
+    parser.add_argument("--device-name", default="span_simulator",
+                       help="Device name for the configuration (default: span_simulator)")
+    parser.add_argument("--output-file", default="/tmp/span_simulator_complete_config.yaml",
+                       help="Output file path (default: /tmp/span_simulator_complete_config.yaml)")
+
+    args = parser.parse_args()
+
+    # Run the async function
+    yaml_content, yaml_dict = asyncio.run(generate_complete_yaml(args.simulation_config, args.output_file))
     if yaml_content:
         print("\n🎉 Script completed successfully!")
         print("📁 Check /tmp/span_simulator_complete_config.yaml for the full configuration")
