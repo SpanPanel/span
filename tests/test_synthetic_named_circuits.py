@@ -354,8 +354,9 @@ class TestGenerateNamedCircuitSensors:
 
                                     sensor_configs, backing_entities, global_settings, mapping = result
 
-                                    # Check backing entities
-                                    assert len(backing_entities) == 6
+                                    # Check backing entities (3 sensors per circuit: power, produced, consumed)
+                                    # Net energy sensors are synthetic sensors that reference other sensors, so no backing entities
+                                    assert len(backing_entities) == 6  # 2 circuits * 3 sensors
 
                                     # Check first backing entity (TypedDict, so check keys instead of isinstance)
                                     first_entity = backing_entities[0]
@@ -424,10 +425,10 @@ class TestNamedCircuitSensorsIntegration:
 
         # Mock the helper functions and template processing
         with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
-            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * len(circuits) * 2):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(len(circuits) * 6)]):
+            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed', 'energy_net'] * len(circuits) * 2):
+                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(len(circuits) * 8)]):
                     with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.test_power"):
-                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(len(circuits) * 6)]):
+                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(len(circuits) * 8)]):
                             with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
                                 mock_combine.return_value = {
                                     "global_settings": {"device_identifier": "SP3-REAL-001"},
@@ -440,7 +441,9 @@ class TestNamedCircuitSensorsIntegration:
 
                                 sensor_configs, backing_entities, global_settings, mapping = result
 
-                                # Should generate 3 sensors per circuit
-                                expected_count = len(circuits) * 3
-                                assert len(backing_entities) == expected_count
-                                assert len(mapping) == expected_count
+                                # Should generate 3 sensors per circuit (power, produced, consumed) plus net energy sensors
+                                # Net energy sensors are synthetic sensors that reference other sensors, so no backing entities
+                                expected_backing_count = len(circuits) * 3  # 3 sensors per circuit (power, produced, consumed)
+                                expected_mapping_count = len(circuits) * 3  # Only the 3 sensors with backing entities
+                                assert len(backing_entities) == expected_backing_count
+                                assert len(mapping) == expected_mapping_count

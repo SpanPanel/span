@@ -274,4 +274,77 @@ async def generate_panel_sensors(
             data_value,
         )
 
+    # After producing consumed/produced, add Net sensors for main meter and feedthrough
+    try:
+        # Build suffixes and entity_ids using helpers
+        device_name = coordinator.config_entry.data.get(
+            "device_name", coordinator.config_entry.title
+        )
+
+        # Helper to add one net sensor from two existing entity_ids
+        async def _add_panel_net(
+            description_key_consumed: str,
+            description_key_produced: str,
+            net_description_key: str,
+            friendly_name: str,
+        ) -> None:
+            consumed_suffix = get_panel_entity_suffix(description_key_consumed)
+            produced_suffix = get_panel_entity_suffix(description_key_produced)
+            net_suffix = get_panel_entity_suffix(net_description_key)
+
+            consumed_entity_id = construct_panel_synthetic_entity_id(
+                coordinator, span_panel, "sensor", consumed_suffix, device_name
+            )
+            produced_entity_id = construct_panel_synthetic_entity_id(
+                coordinator, span_panel, "sensor", produced_suffix, device_name
+            )
+            net_unique_id = construct_synthetic_unique_id(device_identifier_for_uniques, net_suffix)
+            net_entity_id = construct_panel_synthetic_entity_id(
+                coordinator, span_panel, "sensor", net_suffix, device_name
+            )
+
+            # Create placeholders for this specific sensor (following main loop pattern)
+            sensor_placeholders = {
+                "sensor_key": net_unique_id,
+                "sensor_name": friendly_name,
+                "entity_id": net_entity_id or "",
+                "net_consumed_entity_id": consumed_entity_id or "",
+                "net_produced_entity_id": produced_entity_id or "",
+            }
+
+            # Combine common and sensor-specific placeholders
+            all_placeholders = {**common_placeholders, **sensor_placeholders}
+
+            # Ensure all placeholder values are strings
+            string_placeholders = {
+                key: str(value) if value is not None else ""
+                for key, value in all_placeholders.items()
+            }
+
+            # Use the same pattern as the main loop - combine template and update collection
+            net_result = await combine_yaml_templates(
+                hass, ["panel_energy_net"], string_placeholders
+            )
+
+            # Add this sensor's config to the collection
+            sensor_configs.update(net_result["sensor_configs"])
+
+        # Main meter net
+        await _add_panel_net(
+            "mainMeterEnergyConsumedWh",
+            "mainMeterEnergyProducedWh",
+            "mainMeterNetEnergyWh",
+            construct_panel_friendly_name("Main Meter Net Energy"),
+        )
+
+        # Feedthrough net
+        await _add_panel_net(
+            "feedthroughEnergyConsumedWh",
+            "feedthroughEnergyProducedWh",
+            "feedthroughNetEnergyWh",
+            construct_panel_friendly_name("Feed Through Net Energy"),
+        )
+    except Exception as e:
+        _LOGGER.warning("Failed to generate panel net energy sensors: %s", e)
+
     return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping

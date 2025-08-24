@@ -21,39 +21,49 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Global suffix mappings for API description keys to user-friendly suffixes
-# These are extracted from the helper functions for consistency and reverse mapping
+# Global suffix mappings for API description keys to user-friendly/entity suffixes
+# These mappings drive consistent unique_id/entity_id suffixes across all sensors,
+# including Net Energy and import/export flows, and are used for reverse lookups.
 
 # Circuit sensor API field mappings (used by get_user_friendly_suffix)
+# Includes power, produced/consumed, net energy, and import/export energy
 CIRCUIT_SUFFIX_MAPPING = {
     "instantPowerW": "power",
     "producedEnergyWh": "energy_produced",
     "consumedEnergyWh": "energy_consumed",
+    "netEnergyWh": "energy_net",
     "importedEnergyWh": "energy_imported",
     "exportedEnergyWh": "energy_exported",
     "circuit_priority": "priority",
 }
 
 # Panel sensor API field mappings (used by get_user_friendly_suffix)
+# Includes main meter/feedthrough produced, consumed, and net energy
 PANEL_SUFFIX_MAPPING = {
     "instantGridPowerW": "grid_power",  # Descriptive to differentiate from other power types
     "feedthroughPowerW": "feed_through_power",
     "mainMeterEnergyProducedWh": "main_meter_energy_produced",  # Consistent naming
     "mainMeterEnergyConsumedWh": "main_meter_energy_consumed",  # Consistent naming
+    "mainMeterNetEnergyWh": "main_meter_energy_net",  # Consistent naming
     "feedthroughEnergyProducedWh": "feed_through_energy_produced",  # Consistent naming
     "feedthroughEnergyConsumedWh": "feed_through_energy_consumed",  # Consistent naming
+    "feedthroughNetEnergyWh": "feed_through_energy_net",  # Consistent naming
     "batteryPercentage": "battery_percentage",
     "dsmState": "dsm_state",
 }
 
 # Panel entity suffix mappings (used by get_panel_entity_suffix)
+# These are the actual entity_id/unique_id suffixes used for panel sensors
+# (e.g., "main_meter_net_energy" / "feed_through_net_energy").
 PANEL_ENTITY_SUFFIX_MAPPING = {
     "instantGridPowerW": "current_power",
     "feedthroughPowerW": "feed_through_power",
     "mainMeterEnergyProducedWh": "main_meter_produced_energy",
     "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",
+    "mainMeterNetEnergyWh": "main_meter_net_energy",
     "feedthroughEnergyProducedWh": "feed_through_produced_energy",
     "feedthroughEnergyConsumedWh": "feed_through_consumed_energy",
+    "feedthroughNetEnergyWh": "feed_through_net_energy",
     "batteryPercentage": "battery_level",
     "dsmState": "dsm_state",
 }
@@ -132,6 +142,7 @@ def get_suffix_from_sensor_key(sensor_key: str) -> str:
     established_suffixes = [
         "energy_produced",
         "energy_consumed",
+        "energy_net",
         "current_power",
         "grid_power",
         "total_power",

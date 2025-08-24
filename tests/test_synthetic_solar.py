@@ -383,7 +383,7 @@ class TestSolarSensorCRUD:
                         )
 
                         assert result is True
-                        assert mock_sensor_set.async_add_sensor_from_yaml.call_count == 3  # 3 solar sensor types
+                        assert mock_sensor_set.async_add_sensor_from_yaml.call_count == 4  # 4 solar sensor types (including net energy)
 
     async def test_handle_solar_sensor_crud_missing_circuit(self, mock_hass, mock_config_entry,
                                                            mock_coordinator, mock_sensor_set):
@@ -597,7 +597,7 @@ class TestSolarSensorDefinitions:
 
     def test_solar_sensor_definitions_structure(self):
         """Test that solar sensor definitions have correct structure."""
-        assert len(SOLAR_SENSOR_DEFINITIONS) == 3
+        assert len(SOLAR_SENSOR_DEFINITIONS) == 4
 
         for definition in SOLAR_SENSOR_DEFINITIONS:
             assert "template" in definition
@@ -608,7 +608,7 @@ class TestSolarSensorDefinitions:
     def test_solar_sensor_definitions_types(self):
         """Test that all expected sensor types are defined."""
         sensor_types = {defn["sensor_type"] for defn in SOLAR_SENSOR_DEFINITIONS}
-        expected_types = {"power", "energy_produced", "energy_consumed"}
+        expected_types = {"power", "energy_produced", "energy_consumed", "net_energy"}
 
         assert sensor_types == expected_types
 

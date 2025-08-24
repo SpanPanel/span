@@ -147,13 +147,31 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
             print(f"   ❌ Failed to generate circuit sensors: {e}")
             circuit_sensor_configs = {}
 
+        # Generate solar sensors (tabs 30 and 32 from simulation config)
+        print("☀️ Generating solar sensors...")
+        try:
+            from custom_components.span_panel.synthetic_solar import generate_solar_sensors_with_entity_ids
+            # Construct entity IDs for unmapped tabs 30 and 32
+            leg1_entity_id = f"sensor.{device_name}_unmapped_tab_30_power"
+            leg2_entity_id = f"sensor.{device_name}_unmapped_tab_32_power"
+            solar_sensor_configs = await generate_solar_sensors_with_entity_ids(
+                mock_coordinator, mock_span_panel, leg1_entity_id, leg2_entity_id, device_name, False, mock_hass
+            )
+            print(f"   ✅ Generated {len(solar_sensor_configs)} solar sensors")
+        except Exception as e:
+            print(f"   ❌ Failed to generate solar sensors: {e}")
+            import traceback
+            traceback.print_exc()
+            solar_sensor_configs = {}
+
         # Combine all sensor configs
         print("📊 Combining sensor configurations...")
-        all_sensor_configs = {**panel_sensor_configs, **circuit_sensor_configs}
+        all_sensor_configs = {**panel_sensor_configs, **circuit_sensor_configs, **solar_sensor_configs}
 
         print(f"📈 Total sensors generated: {len(all_sensor_configs)}")
         print(f"   • Panel sensors: {len(panel_sensor_configs)}")
         print(f"   • Circuit sensors: {len(circuit_sensor_configs)}")
+        print(f"   • Solar sensors: {len(solar_sensor_configs)}")
 
         # Generate YAML using the actual integration code
         print("🔨 Generating YAML using integration's code path...")
@@ -190,6 +208,7 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
             f.write(f"Sensor Counts:\n")
             f.write(f"  Panel sensors: {len(panel_sensor_configs)}\n")
             f.write(f"  Circuit sensors: {len(circuit_sensor_configs)}\n")
+            f.write(f"  Solar sensors: {len(solar_sensor_configs)}\n")
             f.write(f"  Total sensors: {len(all_sensor_configs)}\n\n")
 
             f.write("Panel Sensors:\n")
@@ -202,6 +221,10 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
                 f.write(f"  - {key}\n")
             if len(circuit_sensor_configs) > 10:
                 f.write(f"  ... and {len(circuit_sensor_configs) - 10} more\n")
+
+            f.write(f"\nSolar Sensors:\n")
+            for key in solar_sensor_configs.keys():
+                f.write(f"  - {key}\n")
 
         print(f"📋 Configuration summary saved to: {summary_file}")
 

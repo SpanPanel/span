@@ -1,0 +1,39 @@
+  {{sensor_key}}:
+    name: "Solar Net Energy"
+    entity_id: "{{entity_id}}"
+    formula: {{net_consumed_entity_id}} - {{net_produced_entity_id}}
+    alternate_states:
+      FALLBACK:
+        formula: "last_valid_state if is_within_grace_period else 'unknown'"
+    variables:
+      last_valid_state:
+        formula: "metadata(state, 'last_valid_state')"
+      last_valid_changed:
+        formula: "metadata(state, 'last_valid_changed')"
+      is_within_grace_period:
+        formula: "last_valid_state is not None and last_valid_state != 'unknown' and last_valid_changed != 'unknown' and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes"
+      grace_period_minutes_elapsed:
+        formula: "minutes_between(last_valid_changed, now()) if last_valid_changed != 'unknown' else 0"
+      is_live_reporting:
+        formula: "state != 'unknown'"
+      is_offline_with_previous_value:
+        formula: "not is_live_reporting and is_within_grace_period"
+      leg1_consumed: {{leg1_consumed_entity}}
+      leg2_consumed: {{leg2_consumed_entity}}
+
+    attributes:
+      tabs: "{{tabs_attribute}}"
+      voltage: {{voltage_attribute}}
+      grace_period_remaining:
+        formula: "energy_grace_period_minutes - grace_period_minutes_elapsed if is_within_grace_period else 'N/A'"
+        alternate_states:
+          FALLBACK: 'N/A'
+      energy_reporting_status:
+        formula: "'Live' if is_live_reporting else ('Off-Line, reporting previous value' if is_offline_with_previous_value else 'unknown')"
+        alternate_states:
+          FALLBACK: false
+    metadata:
+      unit_of_measurement: "Wh"
+      device_class: "energy"
+      state_class: "total"
+      suggested_display_precision: {{energy_display_precision}}

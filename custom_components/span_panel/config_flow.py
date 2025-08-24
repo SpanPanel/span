@@ -1096,8 +1096,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 return self.async_create_entry(title="", data=filtered_input)
 
         # Get current values for dynamic filtering
-        current_leg1 = self.config_entry.options.get(INVERTER_LEG1, 0)
-        current_leg2 = self.config_entry.options.get(INVERTER_LEG2, 0)
+        try:
+            current_leg1 = int(self.config_entry.options.get(INVERTER_LEG1, 0))
+        except (TypeError, ValueError):
+            current_leg1 = 0
+        try:
+            current_leg2 = int(self.config_entry.options.get(INVERTER_LEG2, 0))
+        except (TypeError, ValueError):
+            current_leg2 = 0
 
         # If user_input exists, use those values for filtering (for dynamic updates)
         if user_input is not None:

@@ -29,7 +29,7 @@ unsafe-load-any-extension=no
 # abstract-method - with intro of async there are always methods missing
 # inconsistent-return-statements - doesn't handle raise
 # unnecessary-pass - readability for functions which only contain pass
-# import-outside-toplevel - TODO
+# import-outside-toplevel -
 # too-many-ancestors - it's too strict.
 # wrong-import-order - isort guards this
 disable=

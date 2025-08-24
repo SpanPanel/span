@@ -53,6 +53,11 @@ SOLAR_SENSOR_DEFINITIONS = [
         "sensor_type": "energy_consumed",
         "description": "Total solar energy consumed",
     },
+    {
+        "template": "solar_energy_net.yaml.txt",
+        "sensor_type": "net_energy",
+        "description": "Solar net energy (consumed - produced)",
+    },
 ]
 
 
@@ -226,6 +231,8 @@ async def _process_sensor_template(
         required_vars = ["leg1_produced_entity", "leg2_produced_entity"]
     elif "consumed" in sensor_def["sensor_type"]:
         required_vars = ["leg1_consumed_entity", "leg2_consumed_entity"]
+    elif "net_energy" in sensor_def["sensor_type"]:
+        required_vars = ["net_consumed_entity_id", "net_produced_entity_id"]
 
     # Check if any required variables are missing or empty
     for var in required_vars:
@@ -387,14 +394,24 @@ async def generate_solar_sensors_with_entity_ids(
         "leg2_consumed": leg_entities.get("leg2_consumed_entity", ""),
         "leg1_power": leg_entities.get("leg1_power_entity", ""),
         "leg2_power": leg_entities.get("leg2_power_entity", ""),
+        # Net energy placeholders for solar net energy template (will be updated after generation)
+        "net_consumed_entity_id": "",
+        "net_produced_entity_id": "",
         # Also include the original entity IDs for backward compatibility
         **leg_entities,
     }
 
     _LOGGER.debug("Complete template_vars for solar sensors: %s", template_vars)
 
-    # Generate each solar sensor
+    # Track consumed/produced entity_ids to build Net Energy after both exist
+    solar_consumed_entity_id: str | None = None
+    solar_produced_entity_id: str | None = None
+
+    # Generate non-net energy sensors first
     for sensor_def in SOLAR_SENSOR_DEFINITIONS:
+        # Skip net energy sensor for now - process it after consumed/produced are available
+        if sensor_def["sensor_type"] == "net_energy":
+            continue
         try:
             # Generate entity ID for this sensor
             entity_id = _generate_sensor_entity_id(
@@ -430,6 +447,12 @@ async def generate_solar_sensors_with_entity_ids(
                     bool(final_config.get("formula")),
                     bool(final_config.get("variables")),
                 )
+
+                # Record consumed/produced entity_ids for Net Energy construction
+                if sensor_def["sensor_type"] == "energy_consumed":
+                    solar_consumed_entity_id = entity_id
+                elif sensor_def["sensor_type"] == "energy_produced":
+                    solar_produced_entity_id = entity_id
             else:
                 _LOGGER.error("Template processing returned None for %s", sensor_def["template"])
 
@@ -441,7 +464,87 @@ async def generate_solar_sensors_with_entity_ids(
                 exc_info=True,
             )
 
+    # Now process the net energy sensor with the consumed/produced entity IDs available
+    if solar_consumed_entity_id and solar_produced_entity_id:
+        # Update template variables with consumed/produced entity IDs
+        template_vars["net_consumed_entity_id"] = solar_consumed_entity_id
+        template_vars["net_produced_entity_id"] = solar_produced_entity_id
+        # Find the net energy sensor definition
+        net_energy_sensor_def = next(
+            (
+                sensor_def
+                for sensor_def in SOLAR_SENSOR_DEFINITIONS
+                if sensor_def["sensor_type"] == "net_energy"
+            ),
+            None,
+        )
+        if net_energy_sensor_def:
+            try:
+                # Generate entity ID for net energy sensor
+                entity_id = _generate_sensor_entity_id(
+                    coordinator,
+                    span_panel,
+                    net_energy_sensor_def["sensor_type"],
+                    leg1_number,
+                    leg2_number,
+                    migration_mode,
+                    hass,
+                )
+
+                unique_id = construct_synthetic_unique_id_for_entry(
+                    coordinator,
+                    span_panel,
+                    f"solar_{net_energy_sensor_def['sensor_type']}",
+                    device_name,
+                )
+
+                # Process the net energy sensor template
+                _LOGGER.debug(
+                    "Processing net energy template %s for sensor %s",
+                    net_energy_sensor_def["template"],
+                    unique_id,
+                )
+                sensor_template_vars = template_vars.copy()
+                sensor_template_vars["sensor_key"] = unique_id
+                if hass is not None:
+                    final_config = await _process_sensor_template(
+                        hass, net_energy_sensor_def, sensor_template_vars, entity_id
+                    )
+                    if final_config:
+                        sensor_configs[unique_id] = final_config
+                        _LOGGER.debug(
+                            "Successfully generated solar net energy sensor: %s -> %s",
+                            unique_id,
+                            entity_id,
+                        )
+                    else:
+                        _LOGGER.error(
+                            "Template processing returned None for %s",
+                            net_energy_sensor_def["template"],
+                        )
+                else:
+                    _LOGGER.error(
+                        "Home Assistant instance is None, cannot process net energy sensor template"
+                    )
+
+            except Exception as e:
+                _LOGGER.error(
+                    "Error generating solar net energy sensor from template %s: %s",
+                    net_energy_sensor_def["template"],
+                    e,
+                    exc_info=True,
+                )
+        else:
+            _LOGGER.error("Net energy sensor definition not found in SOLAR_SENSOR_DEFINITIONS")
+    else:
+        _LOGGER.warning(
+            "Cannot generate solar net energy sensor: missing consumed (%s) or produced (%s) entity IDs",
+            solar_consumed_entity_id,
+            solar_produced_entity_id,
+        )
+
     _LOGGER.debug("Generated %d solar sensor configurations", len(sensor_configs))
+
     return sensor_configs
 
 
@@ -510,7 +613,16 @@ async def handle_solar_sensor_crud(
         }
 
         # Define the solar sensor templates
-        solar_templates = ["solar_current_power", "solar_produced_energy", "solar_consumed_energy"]
+        solar_templates = [
+            "solar_current_power",
+            "solar_produced_energy",
+            "solar_consumed_energy",
+            "solar_energy_net",
+        ]
+
+        # Track solar entity IDs for net energy sensor
+        solar_consumed_entity_id: str | None = None
+        solar_produced_entity_id: str | None = None
 
         _LOGGER.info("SOLAR_DEBUG: Starting solar sensor addition")
         for template_name in solar_templates:
@@ -538,6 +650,31 @@ async def handle_solar_sensor_crud(
                             existing_entity_id,
                             sensor_unique_id,
                         )
+                    elif sensor_type == "energy_net":
+                        # Special case: net energy sensor is new during migration
+                        # During migration: check if solar was configured by looking for consumed/produced sensors
+                        # Check if solar was configured by looking for consumed energy sensor
+                        consumed_exists = entity_registry.async_get_entity_id(
+                            "sensor",
+                            DOMAIN,
+                            construct_synthetic_unique_id_for_entry(
+                                coordinator, span_panel, "solar_consumed_energy", device_name
+                            ),
+                        )
+                        produced_exists = entity_registry.async_get_entity_id(
+                            "sensor",
+                            DOMAIN,
+                            construct_synthetic_unique_id_for_entry(
+                                coordinator, span_panel, "solar_produced_energy", device_name
+                            ),
+                        )
+
+                        if consumed_exists or produced_exists:
+                            solar_entity_id = "sensor.solar_net_energy"
+                            _LOGGER.debug(
+                                "MIGRATION: Creating new net energy sensor %s (solar was configured)",
+                                solar_entity_id,
+                            )
                     else:
                         # FATAL ERROR: Migration mode but migrated key not found in registry
                         raise ValueError(
@@ -548,6 +685,12 @@ async def handle_solar_sensor_crud(
                     # Normal mode: generate new entity_id
                     solar_entity_id = f"sensor.solar_{sensor_type}"
 
+                # Record entity IDs for net energy sensor
+                if sensor_type == "produced_energy":
+                    solar_produced_entity_id = solar_entity_id
+                elif sensor_type == "consumed_energy":
+                    solar_consumed_entity_id = solar_entity_id
+
                 # Load the template as a string
                 template_content = await load_template(hass, template_name)
 
@@ -556,31 +699,39 @@ async def handle_solar_sensor_crud(
                     leg1_circuit, leg2_circuit
                 )
 
+                # Prepare template variables
+                template_vars = {
+                    "sensor_key": sensor_unique_id,
+                    "entity_id": solar_entity_id,
+                    # Provide entity IDs for the formulas in the templates
+                    # Power
+                    "leg1_power_entity": leg_entities["leg1_power_entity"],
+                    "leg2_power_entity": leg_entities["leg2_power_entity"],
+                    # Produced energy
+                    "leg1_produced_entity": leg_entities["leg1_produced_entity"],
+                    "leg2_produced_entity": leg_entities["leg2_produced_entity"],
+                    # Consumed energy
+                    "leg1_consumed_entity": leg_entities["leg1_consumed_entity"],
+                    "leg2_consumed_entity": leg_entities["leg2_consumed_entity"],
+                    "tabs_attribute": tabs_attribute,
+                    "voltage_attribute": str(voltage_attribute),
+                    "power_display_precision": "0",
+                    "energy_display_precision": "2",
+                }
+
+                # Add net energy specific variables if this is the net energy sensor
+                if template_name == "solar_energy_net":
+                    template_vars.update(
+                        {
+                            "net_consumed_entity_id": str(solar_consumed_entity_id),
+                            "net_produced_entity_id": str(solar_produced_entity_id),
+                        }
+                    )
+
                 # Fill the template with the actual values
-                filled_template = fill_template(
-                    template_content,
-                    {
-                        "sensor_key": sensor_unique_id,
-                        "entity_id": solar_entity_id,
-                        # Provide entity IDs for the formulas in the templates
-                        # Power
-                        "leg1_power_entity": leg_entities["leg1_power_entity"],
-                        "leg2_power_entity": leg_entities["leg2_power_entity"],
-                        # Produced energy
-                        "leg1_produced_entity": leg_entities["leg1_produced_entity"],
-                        "leg2_produced_entity": leg_entities["leg2_produced_entity"],
-                        # Consumed energy
-                        "leg1_consumed_entity": leg_entities["leg1_consumed_entity"],
-                        "leg2_consumed_entity": leg_entities["leg2_consumed_entity"],
-                        "tabs_attribute": tabs_attribute,
-                        "voltage_attribute": str(voltage_attribute),
-                        "power_display_precision": "0",
-                        "energy_display_precision": "2",
-                    },
-                )
+                filled_template = fill_template(template_content, template_vars)
 
                 # Add the filled template directly using YAML CRUD
-
                 await sensor_set.async_add_sensor_from_yaml(filled_template)
                 _LOGGER.debug("Added solar sensor via YAML CRUD: %s", template_name)
 
@@ -807,7 +958,12 @@ def construct_expected_solar_sensor_ids(
     coordinator: SpanPanelCoordinator, span_panel: SpanPanel, device_name: str | None = None
 ) -> list[str]:
     """Construct the expected solar sensor unique IDs directly."""
-    solar_sensor_names = ["solar_current_power", "solar_produced_energy", "solar_consumed_energy"]
+    solar_sensor_names = [
+        "solar_current_power",
+        "solar_produced_energy",
+        "solar_consumed_energy",
+        "solar_net_energy",
+    ]
     return [
         construct_synthetic_unique_id_for_entry(coordinator, span_panel, name, device_name)
         for name in solar_sensor_names
