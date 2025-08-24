@@ -473,17 +473,19 @@ class TestSolarOptionsChange:
         mock_sensor2.unique_id = "solar_energy_produced"
         mock_sensor3 = MagicMock()
         mock_sensor3.unique_id = "solar_energy_consumed"
+        mock_sensor4 = MagicMock()
+        mock_sensor4.unique_id = "solar_net_energy"
 
-        mock_sensor_set.list_sensors.return_value = [mock_sensor1, mock_sensor2, mock_sensor3]
+        mock_sensor_set.list_sensors.return_value = [mock_sensor1, mock_sensor2, mock_sensor3, mock_sensor4]
 
-        with patch('custom_components.span_panel.synthetic_solar.construct_expected_solar_sensor_ids', return_value=["solar_power", "solar_energy_produced", "solar_energy_consumed"]):
+        with patch('custom_components.span_panel.synthetic_solar.construct_expected_solar_sensor_ids', return_value=["solar_power", "solar_energy_produced", "solar_energy_consumed", "solar_net_energy"]):
             result = await handle_solar_options_change(
                 mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
                 enable_solar=False, leg1_circuit=0, leg2_circuit=0
             )
 
             assert result is True
-            assert mock_sensor_set.async_remove_sensor.call_count == 3
+            assert mock_sensor_set.async_remove_sensor.call_count == 4  # 4 solar sensors including net energy
 
     async def test_handle_solar_options_change_sensor_set_not_exists(self, mock_hass, mock_config_entry,
                                                                     mock_coordinator, mock_sensor_set):

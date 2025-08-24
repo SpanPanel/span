@@ -54,7 +54,7 @@ SOLAR_SENSOR_DEFINITIONS = [
         "description": "Total solar energy consumed",
     },
     {
-        "template": "solar_energy_net.yaml.txt",
+        "template": "solar_net_energy.yaml.txt",
         "sensor_type": "net_energy",
         "description": "Solar net energy (consumed - produced)",
     },
@@ -617,7 +617,7 @@ async def handle_solar_sensor_crud(
             "solar_current_power",
             "solar_produced_energy",
             "solar_consumed_energy",
-            "solar_energy_net",
+            "solar_net_energy",
         ]
 
         # Track solar entity IDs for net energy sensor
@@ -650,7 +650,7 @@ async def handle_solar_sensor_crud(
                             existing_entity_id,
                             sensor_unique_id,
                         )
-                    elif sensor_type == "energy_net":
+                    elif sensor_type == "net_energy":
                         # Special case: net energy sensor is new during migration
                         # During migration: check if solar was configured by looking for consumed/produced sensors
                         # Check if solar was configured by looking for consumed energy sensor
@@ -720,7 +720,7 @@ async def handle_solar_sensor_crud(
                 }
 
                 # Add net energy specific variables if this is the net energy sensor
-                if template_name == "solar_energy_net":
+                if template_name == "solar_net_energy":
                     template_vars.update(
                         {
                             "net_consumed_entity_id": str(solar_consumed_entity_id),
