@@ -62,6 +62,7 @@ BINARY_SENSORS: tuple[
     SpanPanelBinarySensorEntityDescription,
     SpanPanelBinarySensorEntityDescription,
     SpanPanelBinarySensorEntityDescription,
+    SpanPanelBinarySensorEntityDescription,
 ] = (
     SpanPanelBinarySensorEntityDescription(
         key="doorState",
@@ -90,6 +91,12 @@ BINARY_SENSORS: tuple[
         name="Cellular Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda status_data: status_data.is_cellular_connected,
+    ),
+    SpanPanelBinarySensorEntityDescription(
+        key="panel_status",
+        name="Panel Status",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        value_fn=lambda status_data: True,  # Placeholder - actual logic handled in sensor class
     ),
 )
 
@@ -161,10 +168,41 @@ class SpanPanelBinarySensor(
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # Get the raw status value from the device
-        status_data = self.coordinator.data.status
+        # Special handling for panel_status sensor
+        if (
+            hasattr(self.entity_description, "key")
+            and self.entity_description.key == "panel_status"
+        ):
+            self._attr_is_on = not self.coordinator.panel_offline
+            self._attr_available = True
+            _LOGGER.debug(
+                "PANEL_STATUS_DEBUG: Set is_on=%s, available=%s",
+                self._attr_is_on,
+                self._attr_available,
+            )
+            super()._handle_coordinator_update()
+            _LOGGER.debug(
+                "PANEL_STATUS_DEBUG: After super() is_on=%s, available=%s",
+                self._attr_is_on,
+                self._attr_available,
+            )
+            return
 
-        # Get binary state using the directly stored value_fn reference
+        # Check for panel offline status first to prevent accessing None data
+        if self.coordinator.panel_offline or self.coordinator.data is None:
+            # When panel is offline or data is None, keep hardware status sensors available but show as unknown
+            # This prevents them from showing as 'unavailable' and allows them to show as 'unknown'
+            self._attr_is_on = None  # Show as 'unknown' instead of a specific state
+            self._attr_available = True  # Keep sensor available
+            _LOGGER.debug(
+                "Hardware status sensor %s: panel offline or no data - showing as unknown but keeping available",
+                self.entity_id,
+            )
+            super()._handle_coordinator_update()
+            return
+
+        # Panel is online and data is available - use normal logic
+        status_data = self.coordinator.data.status
         status_value = self._value_fn(status_data)
 
         self._attr_is_on = status_value

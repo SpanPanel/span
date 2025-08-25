@@ -229,7 +229,14 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         if self.coordinator.panel_offline:
             _LOGGER.debug("STATUS_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
-            self._attr_native_value = STATE_UNKNOWN
+
+            # For power sensors, set to 0.0 when offline (instantaneous values)
+            # For energy and other sensors, set to None to make them unavailable
+            device_class = getattr(self.entity_description, "device_class", None)
+            if device_class == "power":
+                self._attr_native_value = 0.0
+            else:
+                self._attr_native_value = None
             return
 
         value_function: Callable[[D], float | int | str | None] | None = getattr(

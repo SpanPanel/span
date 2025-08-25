@@ -586,10 +586,11 @@ class SyntheticSensorCoordinator:
         circuit_power_sensors = [key for key in power_sensors if re.search(uuid_power_pattern, key)]
 
         _LOGGER.debug(
-            "Setting up synthetic sensors: %d panel + %d named circuit = %d total sensors",
+            "Setting up synthetic sensors: %d panel + %d named circuit = %d total sensors (%d with backing entities)",
             len(panel_sensor_configs),
             len(named_circuit_configs),
             len(all_sensor_configs),
+            len(all_backing_entities),
         )
         _LOGGER.debug(
             "Power sensor breakdown: %d total power sensors, %d circuit power sensors: %s",
@@ -628,7 +629,7 @@ class SyntheticSensorCoordinator:
         all_mappings.update(circuit_mappings)
         _LOGGER.debug("Added %d circuit sensor mappings", len(circuit_mappings))
 
-        # Use the combined mappings directly
+        # Use the combined mappings directly (only sensors with backing entities)
         self.sensor_to_backing_mapping = all_mappings
 
         _LOGGER.debug(

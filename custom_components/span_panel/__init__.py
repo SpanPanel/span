@@ -38,7 +38,13 @@ from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_to_synthetic_sensors
 
 # Handle solar options changes before reload (battery is now native sensor)
-from .options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2, Options
+from .options import (
+    ENERGY_REPORTING_GRACE_PERIOD,
+    INVERTER_ENABLE,
+    INVERTER_LEG1,
+    INVERTER_LEG2,
+    Options,
+)
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelAuthError, set_async_delay_func
 from .synthetic_sensors import (
@@ -460,6 +466,25 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
             )
             if not result:
                 _LOGGER.warning("Solar options change failed")
+
+            # Handle grace period global variable update
+            old_grace_period = getattr(coordinator, "_last_grace_period", 15)
+            new_grace_period = entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
+
+            if old_grace_period != new_grace_period:
+                _LOGGER.info(
+                    "Updating global grace period from %s to %s minutes",
+                    old_grace_period,
+                    new_grace_period,
+                )
+                try:
+                    await sensor_set.async_set_global_variable(
+                        "energy_grace_period_minutes", new_grace_period
+                    )
+                    # Store the new value for future comparisons
+                    coordinator._last_grace_period = new_grace_period
+                except Exception as e:
+                    _LOGGER.error("Failed to update global grace period: %s", e)
 
             # Precision options are only set during initial setup
 

@@ -1,0 +1,46 @@
+  {{sensor_key}}:
+    name: "{{sensor_name}}"
+    entity_id: "{{entity_id}}"
+    formula: "1 if panel_power != 'unknown' and panel_power != 'unavailable' else 0"
+    alternate_states:
+      FALLBACK: 0
+    variables:
+      panel_power: "sensor.span_panel_instantaneous_power"
+      panel_last_changed:
+        formula: "metadata(panel_power, 'last_changed')"
+      is_panel_online:
+        formula: "panel_power != 'unknown' and panel_power != 'unavailable'"
+      minutes_since_last_update:
+        formula: "minutes_between(panel_last_changed, now()) if panel_last_changed != 'unknown' else 0"
+      is_within_grace_period:
+        formula: "is_panel_online or (not is_panel_online and minutes_since_last_update < energy_grace_period_minutes)"
+
+    attributes:
+      panel_power_value:
+        formula: "panel_power"
+        alternate_states:
+          FALLBACK: 'unknown'
+      last_online_timestamp:
+        formula: "panel_last_changed if is_panel_online else (panel_last_changed if is_within_grace_period else 'unknown')"
+        alternate_states:
+          FALLBACK: 'unknown'
+      minutes_offline:
+        formula: "minutes_since_last_update if not is_panel_online else 0"
+        alternate_states:
+          FALLBACK: 0
+        metadata:
+          unit_of_measurement: "min"
+          device_class: "duration"
+      grace_period_remaining:
+        formula: "round(max(0, energy_grace_period_minutes - minutes_since_last_update), 1) if not is_panel_online and is_within_grace_period else 'N/A'"
+        alternate_states:
+          FALLBACK: 'N/A'
+      status_message:
+        formula: "'Online' if is_panel_online else ('Offline - Grace Period' if is_within_grace_period else 'Offline')"
+        alternate_states:
+          FALLBACK: 'Unknown'
+    metadata:
+      unit_of_measurement: "binary"
+      device_class: "connectivity"
+      state_class: "measurement"
+      icon: "mdi:power-plug"

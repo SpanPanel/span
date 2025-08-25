@@ -23,6 +23,7 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_120v_synthetic_entity_id,
     construct_240v_synthetic_entity_id,
+    construct_panel_entity_id,
     construct_synthetic_unique_id_for_entry,
     construct_tabs_attribute,
     construct_voltage_attribute,
@@ -371,6 +372,17 @@ async def generate_solar_sensors_with_entity_ids(
     # Get template attributes
     tabs_attribute, voltage_attribute = _get_template_attributes(leg1_number, leg2_number)
 
+    # Construct panel status entity ID
+    use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    panel_status_entity_id = construct_panel_entity_id(
+        coordinator,
+        span_panel,
+        "binary_sensor",
+        "panel_status",
+        device_name,
+        use_device_prefix=use_device_prefix,
+    )
+
     # Template variables for solar sensors
     template_vars = {
         "device_identifier": get_device_identifier_for_entry(coordinator, span_panel, device_name),
@@ -383,6 +395,7 @@ async def generate_solar_sensors_with_entity_ids(
         "energy_display_precision": str(
             coordinator.config_entry.options.get("energy_display_precision", 2)
         ),
+        "panel_status_entity_id": panel_status_entity_id or "binary_sensor.span_panel_panel_status",
         "leg1_circuit": f"unmapped_tab_{leg1_number}",
         "leg2_circuit": f"unmapped_tab_{leg2_number}",
         "tabs_attribute": tabs_attribute,
@@ -699,10 +712,23 @@ async def handle_solar_sensor_crud(
                     leg1_circuit, leg2_circuit
                 )
 
+                # Construct panel status entity ID
+                use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+                panel_status_entity_id = construct_panel_entity_id(
+                    coordinator,
+                    span_panel,
+                    "binary_sensor",
+                    "panel_status",
+                    device_name or "",
+                    use_device_prefix=use_device_prefix,
+                )
+
                 # Prepare template variables
                 template_vars = {
                     "sensor_key": sensor_unique_id,
                     "entity_id": solar_entity_id,
+                    "panel_status_entity_id": panel_status_entity_id
+                    or "binary_sensor.span_panel_panel_status",
                     # Provide entity IDs for the formulas in the templates
                     # Power
                     "leg1_power_entity": leg_entities["leg1_power_entity"],
