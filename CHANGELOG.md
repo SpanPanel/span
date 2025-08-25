@@ -19,7 +19,7 @@ While we've implemented migration logic to preserve your existing entities and a
 - **Synthetic Sensors**: Integration now leverages a [synthetic sensor engine](https://github.com/LegoTypes/ha-synthetic-sensors) that allows features beyond
   basic sensors
 - **Grace Period Algorithm**: Developed by @sargonas, keeps statistics from reporting wild spikes and gaps during intermittent outages by providing the previous
-  known good value for a grace period (developed by @sargonas)
+  known good value for a grace period
 - **Voltage and Amperage Attributes**: Added attributes for voltage and amperage to each power sensor for threshold notifications
 - **Panel Tabs Attributes**: Added attribute to each sensor to see the specific panel tabs (spaces) associated with sensor
 - **Calculation Visibility**: You can see how the sensor is calculated for grace periods and net energy
@@ -100,6 +100,7 @@ While we've implemented migration logic to preserve your existing entities and a
 ### 👥 Acknowledgments
 
 - **@sargonas**: Researched and developed the grace period algorithm that keeps statistics from reporting wild spikes and gaps during intermittent outages
+- **@cayossarian**: Developed the synthetic engine, OpenAPI, simulator
 
 ---
 
