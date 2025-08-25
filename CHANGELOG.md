@@ -17,16 +17,21 @@ While we've implemented migration logic to preserve your existing entities and a
 #### Synthetic Sensors Engine
 
 - **Synthetic Sensors**: Integration now leverages a [synthetic sensor engine](https://github.com/LegoTypes/ha-synthetic-sensors) that allows features beyond
-  basic sensors
+  basic sensors. We will leverage the use of these smart sensors in the future to allow users to modify sensors calculations or create meaning full groups.
 - **Grace Period Algorithm**: Developed by @sargonas, keeps statistics from reporting wild spikes and gaps during intermittent outages by providing the previous
   known good value for a grace period
-- **Voltage and Amperage Attributes**: Added attributes for voltage and amperage to each power sensor for threshold notifications
+- **Voltage and Amperage Attributes**: Added attributes for voltage and amperage to each power sensor for threshold automations
 - **Panel Tabs Attributes**: Added attribute to each sensor to see the specific panel tabs (spaces) associated with sensor
-- **Calculation Visibility**: You can see how the sensor is calculated for grace periods and net energy
+- **Unmapped Tab Sensors**: Added hidden circuits for tabs that are no part of a circuit reported directly by the panel. The user may make these tabs sensors
+  visisble.
+- **Panel Offline Sensor**: Added a sensor that indicates whether the panel is offline (cannot return data to the integration)
+- **State Visibility**: Attributes show you the formula used in the sensor calculation for grace periods and net energy
 - **Net Energy Sensors**: New net energy sensors calculate `consumed energy - produced energy` for circuits, panels, and tab-based solar installations,
   providing real-time net energy consumption/generation data
-- **Future Attribute Editor**: Every attribute will soon be capable of being mathematically formulated and tweaked by the user
-- **Sensor Configuration Export**: You can export the sensor configuration (import not supported yet)
+- **Sensor Configuration Export**: You can export the sensor configuration (import/modification not supported yet)
+- **Panel Simulation**: You can clone your own panel or set up a simulation for energy usage based on predefined patterns. You can also take the panel offline
+  to see how the grace periods for energy respond. We may extend this feature in order to allow modeling of energy usage or integration with other sensors or
+  utilities.
 
 #### OpenAPI Support
 
@@ -85,22 +90,21 @@ While we've implemented migration logic to preserve your existing entities and a
 
 ### 📝 Documentation
 
-- **Updated README**: Comprehensive documentation of new features and migration process
 - **Simulation Guide**: Documentation for building custom simulation profiles
 - **Troubleshooting Section**: Enhanced troubleshooting information
 
 ### 🔄 HACS Upgrade Process
 
-- **Backup Instructions**: Clear backup requirements before upgrade
-- **Change Review**: Instructions to review changes in README
+This integration should handle migrating your entities seamlessly. Any entity ID's or names should be retained. We do migrate all the unique keys by properly
+renaming these in the entity registry so the user should not see any difference.
+
+- **Backup Instructions**: Check backup requirements before upgrade
 - **Automation Verification**: Check automations for correct entity ID references
-- **Quiet Period Updates**: Recommendations for update timing
-- **Issue Recovery**: Instructions for backup restoration and troubleshooting
 
 ### 👥 Acknowledgments
 
+- **@cayossarian**: Developed the synthetic engine, OpenAPI package, simulator
 - **@sargonas**: Researched and developed the grace period algorithm that keeps statistics from reporting wild spikes and gaps during intermittent outages
-- **@cayossarian**: Developed the synthetic engine, OpenAPI, simulator
 
 ---
 
