@@ -23,9 +23,9 @@ as-is with no warranty or guarantee of performance or suitability to your partic
 What this integration does is provide the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and
 the ability to control user-manageable panel circuits.
 
-## What's New - Beta Release
+## What's New
 
-⚠️⚠️⚠️ **MAJOR UPGRADE WARNING** ⚠️⚠️⚠️
+⚠️⚠️ **MAJOR UPGRADE** ⚠️⚠️
 
 **Before upgrading to version 1.2.0, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
 While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
@@ -34,47 +34,8 @@ While we've implemented migration logic to preserve your existing entities and a
 interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides
 additional support we may adapt.
 
-**Synthetic Sensors**: The integration leverages a [synthetic sensor engine](https://github.com/LegoTypes/ha-synthetic-sensors)that allows us to provide
-features beyond basic sensors:
-
-- Every attribute will soon be capable of being mathematically formulated and tweaked by the user - stand by for an attribute editor!
-- The first use case for this new engine is one where _@sargonas_ researched and developed an algorithm that keeps statistics from reporting wild spikes and
-  gaps during intermittent outages by providing the previous known good value for a grace period. A global option sets the grace period.
-- We added an attribute for voltage and amperage to each power sensor so you'll be able to craft notifications for thresholds on each circuit. We may add a
-  global alarm in the future.
-- We added an attribute to see the specific panel tabs (spaces) associated with sensor.
-- We will likey develop an separate sensor editor to combine or build any combination of sensors and attributes outside of the SpanPanel integration itself.
-
-**Simulation**: The integraiton now supports adding configuration entries for virtual panels based on templates that produce typical power and energy. You can
-import or export the simulation profile and or even clone your existing panel. See the simulation
-[guide](https://github.com/SpanPanel/span-panel-api/blob/main/docs/simulation.md) on how to build your own profile.
-
-**Configurable Timeouts and Retries**: The integration provides connection options for different network environments:
-
-- **Timeout Settings**: Customize connection and request timeouts to accommodate slower networks or distant panels. The initial setup still uses a 15 second
-  timeout.
-- **Retry Configuration**: Configure automatic retry attempts for transient network issues or panel connectivity problems
-
-**SSL/TLS Support**: Added SSL support for remote panel access scenarios:
-
-- **Local Access**: Standard HTTP connection for panels on your local network (SSL not supported by SPAN)
-- **Remote Access**: HTTPS support for accessing panels through secure proxies
-
-**Circuit Name Sync with SPAN**: All versions of the integration support automatic friendly name updates when circuits are renamed in the SPAN panel. Names sync
-on the next poll interval. However, if you customize an entity's friendly name in Home Assistant, your customization will be preserved and won't be overwritten
-during sync. To re-enable sync for a customized entity, clear the custom name in Home Assistant.
-
-**Setup Configuration Entity Naming**: The integration now provides configurable entity naming patterns upon initial setup only.
-
-- **Friendly Names Pattern**: Entity IDs use descriptive circuit names for the entity ID (e.g., `sensor.span_panel_kitchen_outlets_power`) - ideal for
-  installations where your circuits are less likely to change from their original purpose
-- **Circuit Numbers Pattern**: Entity IDs use stable circuit numbers (e.g., `sensor.span_panel_circuit_15_power`) - the default for new installations as a
-  generic entity ID is less likely to lose its meaning when repurposing circuits.
-
-In either pattern, the friendly name provides the circuit meaning for easy identification.
-
-**Migration Support**: The latest version changes the underlying schema so it must migrate unique keys but there should be no disruption as your existing entity
-ID's are kept intact. Pre-1.0.4 installations can only migrate forward to friendly names with device prefixes.
+**New Features**: This version introduces synthetic sensors, net energy calculations, simulation support, configurable timeouts, SSL support, circuit name sync,
+and flexible entity naming patterns. See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
 
 ### HACS Upgrade Process
 
@@ -110,6 +71,7 @@ This integration will provide a device for your SPAN panel. This device will hav
 - Power Sensors
   - Power Usage / Generation (Watts)
   - Energy Usage / Generation (Wh)
+  - Net Energy (Wh) - Calculated as consumed energy minus produced energy
 - Panel and Grid Status
   - Main Relay State (e.g., CLOSED)
   - Current Run Config (e.g., PANEL_ON_GRID)
@@ -203,7 +165,8 @@ configuration menu when you first install:
 ### Solar Configuration
 
 The solar configuration is only for solar that is directly connected to the panel tabs. SPAN does expose data for inverters otherwise. If the inverter sensors
-are enabled, three sensors are created. The entity naming pattern depends on your configured naming pattern:
+are enabled, four sensors are created (power, produced energy, consumed energy, and net energy). The entity naming pattern depends on your configured naming
+pattern:
 
 **Circuit Numbers Pattern**:
 
@@ -211,6 +174,7 @@ are enabled, three sensors are created. The entity naming pattern depends on you
 sensor.span_panel_circuit_30_32_instant_power    # (watts) - dual circuit
 sensor.span_panel_circuit_30_32_energy_produced  # (Wh) - dual circuit
 sensor.span_panel_circuit_30_32_energy_consumed  # (Wh) - dual circuit
+sensor.span_panel_circuit_30_32_energy_net       # (Wh) - dual circuit
 ```
 
 **Friendly Names Pattern**:
@@ -219,6 +183,7 @@ sensor.span_panel_circuit_30_32_energy_consumed  # (Wh) - dual circuit
 sensor.span_panel_solar_inverter_instant_power   # (watts)
 sensor.span_panel_solar_inverter_energy_produced # (Wh)
 sensor.span_panel_solar_inverter_energy_consumed # (Wh)
+sensor.span_panel_solar_inverter_energy_net      # (Wh)
 ```
 
 **Note**: For circuit numbers pattern, the numbers in the entity IDs (e.g., `30_32`) correspond to your configured inverter leg circuits. For single-circuit
