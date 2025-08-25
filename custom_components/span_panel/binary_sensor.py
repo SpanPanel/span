@@ -110,17 +110,6 @@ class SpanPanelBinarySensor(
 
     _attr_icon: str | None = "mdi:flash"
 
-    @property
-    def available(self) -> bool:
-        """Return True if entity is available."""
-        # Special handling for panel_status sensor - always available
-        if (
-            hasattr(self.entity_description, "key")
-            and self.entity_description.key == "panel_status"
-        ):
-            return True
-        return super().available
-
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
@@ -199,10 +188,21 @@ class SpanPanelBinarySensor(
             )
             return
 
-        # Get the raw status value from the device
-        status_data = self.coordinator.data.status
+        # Check for panel offline status first to prevent accessing None data
+        if self.coordinator.panel_offline or self.coordinator.data is None:
+            # When panel is offline or data is None, keep hardware status sensors available but show as unknown
+            # This prevents them from showing as 'unavailable' and allows them to show as 'unknown'
+            self._attr_is_on = None  # Show as 'unknown' instead of a specific state
+            self._attr_available = True  # Keep sensor available
+            _LOGGER.debug(
+                "Hardware status sensor %s: panel offline or no data - showing as unknown but keeping available",
+                self.entity_id,
+            )
+            super()._handle_coordinator_update()
+            return
 
-        # Get binary state using the directly stored value_fn reference
+        # Panel is online and data is available - use normal logic
+        status_data = self.coordinator.data.status
         status_value = self._value_fn(status_data)
 
         self._attr_is_on = status_value

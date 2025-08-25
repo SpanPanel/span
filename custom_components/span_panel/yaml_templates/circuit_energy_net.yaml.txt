@@ -1,11 +1,19 @@
   {{sensor_key}}:
     name: "{{sensor_name}}"
     entity_id: "{{entity_id}}"
-    formula: {{net_consumed_entity_id}} - {{net_produced_entity_id}}
+    formula: consumed_energy - produced_energy
     alternate_states:
       FALLBACK:
         formula: "last_valid_state if is_within_grace_period else 'unknown'"
     variables:
+      consumed_energy:
+        formula: "{{net_consumed_entity_id}}"
+        alternate_states:
+          FALLBACK: "metadata('{{net_consumed_entity_id}}', 'last_valid_state')"
+      produced_energy:
+        formula: "{{net_produced_entity_id}}"
+        alternate_states:
+          FALLBACK: "metadata('{{net_produced_entity_id}}', 'last_valid_state')"
       last_valid_state:
         formula: "metadata(state, 'last_valid_state')"
         alternate_states:
