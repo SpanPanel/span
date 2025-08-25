@@ -43,7 +43,7 @@ While we've implemented migration logic to preserve your existing entities and a
 #### Network Configuration
 
 - **Configurable Timeouts and Retries**: Connection options for different network environments
-  - **Timeout Settings**: Customize connection and request timeouts for slower networks or distant panels
+  - **Timeout Settings**: Customize connection and request timeouts for slower networks
   - **Retry Configuration**: Configure automatic retry attempts for transient network issues
 - **SSL/TLS Support**: Added SSL support for remote panel access scenarios
   - **Local Access**: Standard HTTP connection for panels on local network
