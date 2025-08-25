@@ -8,38 +8,43 @@
     variables:
       last_valid_state:
         formula: "metadata(state, 'last_valid_state')"
+        alternate_states:
+          FALLBACK: 'unknown'
       last_valid_changed:
         formula: "metadata(state, 'last_valid_changed')"
+        alternate_states:
+          FALLBACK: 'unknown'
+      panel_status:
+        formula: "{{panel_status_entity_id}}"
+      panel_offline_minutes:
+        formula: "minutes_between(metadata('{{panel_status_entity_id}}', 'last_changed'), utc_now()) if not panel_status else 0"
       is_within_grace_period:
-        formula: "last_valid_state is not None and last_valid_state != 'unknown' and last_valid_changed != 'unknown' and minutes_between(last_valid_changed, now()) < energy_grace_period_minutes"
-      grace_period_minutes_elapsed:
-        formula: "minutes_between(last_valid_changed, now()) if last_valid_changed != 'unknown' else 0"
-      is_live_reporting:
-        formula: "state != 'unknown'"
-      is_offline_with_previous_value:
-        formula: "not is_live_reporting and is_within_grace_period"
+        formula: "last_valid_state is not None and last_valid_state != 'unknown' and last_valid_changed != 'unknown' and not panel_status and panel_offline_minutes < energy_grace_period_minutes"
+        alternate_states:
+          FALLBACK: false
 
     attributes:
       tabs: "{{tabs_attribute}}"
       voltage: {{voltage_attribute}}
+      energy_grace_period_minutes_is:
+        formula: "energy_grace_period_minutes"
+        alternate_states:
+          FALLBACK: 'unknown'
       energy_reporting_status:
-        formula: "'Live' if is_live_reporting else ('Off-Line, reporting previous value' if is_offline_with_previous_value else 'unknown')"
+        formula: "'Live' if state != 'unknown' else ('Off-Line, reporting previous value' if is_within_grace_period else 'unknown')"
         alternate_states:
           FALLBACK: false
-      debug_backing_state_present:
-        formula: state != 'unknown'
+      panel_offline_minutes_is:
+        formula: "panel_offline_minutes"
         alternate_states:
-          FALLBACK: false
-      debug_within_grace:
-        formula: within_grace
+          FALLBACK: 'unknown'
+      is_within_grace_is:
+        formula: "is_within_grace_period"
         alternate_states:
-          FALLBACK: false
-      debug_last_valid_changed_present:
-        formula: state.last_valid_changed is not None
-        alternate_states:
-          FALLBACK: false
+          FALLBACK: 'unknown'
+
       grace_period_remaining:
-        formula: "energy_grace_period_minutes - grace_period_minutes_elapsed if is_within_grace_period else 'N/A'"
+        formula: "round(max(0, energy_grace_period_minutes - panel_offline_minutes), 1) if is_within_grace_period else 0"
         alternate_states:
           FALLBACK: 'N/A'
     metadata:

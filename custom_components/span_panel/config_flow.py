@@ -1031,6 +1031,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             )
             filtered_input.pop("legacy_upgrade_to_friendly", None)
 
+            # Merge with existing options to preserve unchanged values
+            merged_options = dict(self.config_entry.options)
+            merged_options.update(filtered_input)
+            filtered_input = merged_options
+
             # Validate solar tab selection if solar is enabled
             if filtered_input.get(INVERTER_ENABLE, False):
                 # Coerce selector values (strings) back to integers
@@ -1092,6 +1097,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 # Remove any entity naming pattern from input (shouldn't be there anyway)
                 filtered_input.pop(ENTITY_NAMING_PATTERN, None)
+
+                # Update global options in synthetic sensors if they changed
+                await self._update_global_options_if_changed(filtered_input)
 
                 return self.async_create_entry(title="", data=filtered_input)
 
@@ -1355,10 +1363,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         errors={"base": str(e)},
                     )
 
+            # Merge with existing options to preserve general options
+            merged_options = dict(self.config_entry.options)
+            merged_options.update(user_input)
+
             _LOGGER.info("Saving simulation options: %s", user_input)
+            _LOGGER.info("Merged options: %s", merged_options)
             _LOGGER.info("Current config_entry.options before save: %s", self.config_entry.options)
             _LOGGER.info("About to call async_create_entry to save options")
-            result = self.async_create_entry(title="", data=user_input)
+            result = self.async_create_entry(title="", data=merged_options)
             _LOGGER.info("async_create_entry completed, result type: %s", type(result))
             _LOGGER.info("Config_entry.options after save: %s", self.config_entry.options)
 
@@ -1894,6 +1907,73 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         else:  # LEGACY_NAMES
             return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
+
+    async def _update_global_options_if_changed(self, filtered_input: dict[str, Any]) -> None:
+        """Update global variables in sensor set if options changed.
+
+        Args:
+            filtered_input: The new options being saved
+
+        """
+        try:
+            # Get the synthetic coordinator to access storage manager
+            if self.config_entry.entry_id not in _synthetic_coordinators:
+                _LOGGER.debug(
+                    "No synthetic coordinator found for entry %s", self.config_entry.entry_id
+                )
+                return
+
+            synthetic_coord = _synthetic_coordinators[self.config_entry.entry_id]
+            storage_manager = synthetic_coord.get_storage_manager()
+
+            if not storage_manager:
+                _LOGGER.debug("No storage manager found for entry %s", self.config_entry.entry_id)
+                return
+
+            # Get the sensor set ID
+            sensor_set_id = synthetic_coord.get_sensor_set_id()
+            if not sensor_set_id:
+                _LOGGER.debug("No sensor set ID found for entry %s", self.config_entry.entry_id)
+                return
+
+            # Get the sensor set
+            sensor_set = storage_manager.get_sensor_set(sensor_set_id)
+            if not sensor_set or not sensor_set.exists:
+                _LOGGER.debug("Sensor set %s not found or doesn't exist", sensor_set_id)
+                return
+
+            # Check if grace period changed
+            old_grace_period = self.config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
+            new_grace_period = filtered_input.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
+
+            if old_grace_period != new_grace_period:
+                _LOGGER.info(
+                    "Updating global grace period from %s to %s minutes",
+                    old_grace_period,
+                    new_grace_period,
+                )
+                await sensor_set.async_set_global_variable(
+                    "energy_grace_period_minutes", new_grace_period
+                )
+
+            # Check if API retry/timeout settings changed
+            api_settings = [
+                (CONF_API_RETRIES, "api_retries"),
+                (CONF_API_RETRY_TIMEOUT, "api_retry_timeout"),
+                (CONF_API_RETRY_BACKOFF_MULTIPLIER, "api_retry_backoff_multiplier"),
+            ]
+
+            for option_key, global_key in api_settings:
+                old_value = self.config_entry.options.get(option_key)
+                new_value = filtered_input.get(option_key)
+                if old_value != new_value and new_value is not None:
+                    _LOGGER.info(
+                        "Updating global %s from %s to %s", global_key, old_value, new_value
+                    )
+                    await sensor_set.async_set_global_variable(global_key, new_value)
+
+        except Exception as e:
+            _LOGGER.error("Error updating global options: %s", e)
 
 
 # Register the config flow handler

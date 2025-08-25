@@ -62,6 +62,7 @@ BINARY_SENSORS: tuple[
     SpanPanelBinarySensorEntityDescription,
     SpanPanelBinarySensorEntityDescription,
     SpanPanelBinarySensorEntityDescription,
+    SpanPanelBinarySensorEntityDescription,
 ] = (
     SpanPanelBinarySensorEntityDescription(
         key="doorState",
@@ -91,6 +92,12 @@ BINARY_SENSORS: tuple[
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda status_data: status_data.is_cellular_connected,
     ),
+    SpanPanelBinarySensorEntityDescription(
+        key="panel_status",
+        name="Panel Status",
+        device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        value_fn=lambda status_data: True,  # Placeholder - actual logic handled in sensor class
+    ),
 )
 
 T = TypeVar("T", bound=SpanPanelBinarySensorEntityDescription)
@@ -102,6 +109,17 @@ class SpanPanelBinarySensor(
     """Binary Sensor status entity."""
 
     _attr_icon: str | None = "mdi:flash"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        # Special handling for panel_status sensor - always available
+        if (
+            hasattr(self.entity_description, "key")
+            and self.entity_description.key == "panel_status"
+        ):
+            return True
+        return super().available
 
     def __init__(
         self,
@@ -161,6 +179,26 @@ class SpanPanelBinarySensor(
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        # Special handling for panel_status sensor
+        if (
+            hasattr(self.entity_description, "key")
+            and self.entity_description.key == "panel_status"
+        ):
+            self._attr_is_on = not self.coordinator.panel_offline
+            self._attr_available = True
+            _LOGGER.debug(
+                "PANEL_STATUS_DEBUG: Set is_on=%s, available=%s",
+                self._attr_is_on,
+                self._attr_available,
+            )
+            super()._handle_coordinator_update()
+            _LOGGER.debug(
+                "PANEL_STATUS_DEBUG: After super() is_on=%s, available=%s",
+                self._attr_is_on,
+                self._attr_available,
+            )
+            return
+
         # Get the raw status value from the device
         status_data = self.coordinator.data.status
 

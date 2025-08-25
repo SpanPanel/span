@@ -130,9 +130,6 @@ class SpanPanelApi:
 
         """
         if not self.simulation_mode:
-            _LOGGER.warning(
-                "[SpanPanelApi] Cannot set offline mode for live panel - simulation mode is False"
-            )
             return
 
         self.simulation_offline_minutes = offline_minutes

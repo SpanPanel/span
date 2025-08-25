@@ -20,6 +20,7 @@ from .helpers import (
     construct_120v_synthetic_entity_id,
     construct_240v_synthetic_entity_id,
     construct_backing_entity_id_for_entry,
+    construct_panel_entity_id,
     construct_synthetic_unique_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
@@ -128,12 +129,24 @@ async def generate_named_circuit_sensors(
     # Create common placeholders for header template
     energy_grace_period = coordinator.config_entry.options.get("energy_reporting_grace_period", 15)
 
+    # Construct panel status entity ID
+    use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    panel_status_entity_id = construct_panel_entity_id(
+        coordinator,
+        span_panel,
+        "binary_sensor",
+        "panel_status",
+        device_name,
+        use_device_prefix=use_device_prefix,
+    )
+
     common_placeholders = {
         "device_identifier": device_identifier_for_uniques,
         "panel_id": device_identifier_for_uniques,
         "energy_grace_period_minutes": str(energy_grace_period),
         "power_display_precision": str(power_precision),
         "energy_display_precision": str(energy_precision),
+        "panel_status_entity_id": panel_status_entity_id or "binary_sensor.span_panel_panel_status",
     }
 
     # Filter to only normal named circuits (not unmapped)
@@ -283,16 +296,24 @@ async def generate_named_circuit_sensors(
             # Get the current data value
             data_value = get_circuit_data_value(circuit_data, sensor_def["data_path"])
 
-            # Create backing entity
-            backing_entity = BackingEntity(
-                entity_id=backing_entity_id,
-                value=data_value,
-                data_path=f"circuits.{circuit_id}.{sensor_def['data_path']}",
-            )
-            backing_entities.append(backing_entity)
+            # Only create backing entities for non-net energy sensors
+            # Net energy sensors are pure calculations that reference other sensors
+            if not sensor_def["key"].endswith("netEnergyWh"):
+                # Create backing entity
+                backing_entity = BackingEntity(
+                    entity_id=backing_entity_id,
+                    value=data_value,
+                    data_path=f"circuits.{circuit_id}.{sensor_def['data_path']}",
+                )
+                backing_entities.append(backing_entity)
 
-            # Create 1:1 mapping directly - sensor key to backing entity ID
-            sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
+                # Create 1:1 mapping directly - sensor key to backing entity ID
+                sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
+            else:
+                _LOGGER.debug(
+                    "Skipping backing entity creation for net energy sensor: %s",
+                    sensor_unique_id,
+                )
 
             # Record produced/consumed entity_ids for Net Energy construction
             if sensor_def["key"] == "producedEnergyWh":

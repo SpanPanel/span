@@ -17,6 +17,7 @@ from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_backing_entity_id_for_entry,
+    construct_panel_entity_id,
     construct_panel_friendly_name,
     construct_panel_synthetic_entity_id,
     construct_synthetic_unique_id,
@@ -137,6 +138,17 @@ async def generate_panel_sensors(
     power_precision = coordinator.config_entry.options.get("power_display_precision", 0)
     energy_precision = coordinator.config_entry.options.get("energy_display_precision", 2)
 
+    # Construct panel status entity ID
+    use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    panel_status_entity_id = construct_panel_entity_id(
+        coordinator,
+        span_panel,
+        "binary_sensor",
+        "panel_status",
+        device_name,
+        use_device_prefix=use_device_prefix,
+    )
+
     # Create common placeholders for header template
     common_placeholders = {
         "device_identifier": device_identifier_for_uniques,
@@ -150,6 +162,7 @@ async def generate_panel_sensors(
         # Panel sensors don't have circuit data, so use appropriate defaults
         "tabs_attribute": "panel",  # Panel-level identifier
         "voltage_attribute": str(get_panel_voltage_attribute()),  # Standard panel voltage
+        "panel_status_entity_id": panel_status_entity_id or "binary_sensor.span_panel_panel_status",
     }
 
     for sensor_def in PANEL_SENSOR_DEFINITIONS:
@@ -258,14 +271,22 @@ async def generate_panel_sensors(
         # Add this sensor's config to the collection
         sensor_configs.update(combined_result["sensor_configs"])
 
-        # Create backing entity
-        backing_entity = BackingEntity(
-            entity_id=backing_entity_id, value=data_value, data_path=sensor_def["data_path"]
-        )
-        backing_entities.append(backing_entity)
+        # Only create backing entities for non-net energy sensors
+        # Net energy sensors are pure calculations that reference other sensors
+        if not sensor_def["key"].endswith("NetEnergyWh"):
+            # Create backing entity
+            backing_entity = BackingEntity(
+                entity_id=backing_entity_id, value=data_value, data_path=sensor_def["data_path"]
+            )
+            backing_entities.append(backing_entity)
 
-        # Create 1:1 mapping directly - sensor key to backing entity ID
-        sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
+            # Create 1:1 mapping directly - sensor key to backing entity ID
+            sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
+        else:
+            _LOGGER.debug(
+                "Skipping backing entity creation for net energy sensor: %s",
+                sensor_unique_id,
+            )
 
         _LOGGER.debug(
             "Generated panel sensor: %s -> %s (value: %s)",

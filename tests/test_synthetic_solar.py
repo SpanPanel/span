@@ -356,6 +356,13 @@ class TestSolarSensorCRUD:
         """Create a mock coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         coordinator.data = MagicMock(spec=SpanPanel)
+        coordinator.config_entry = MagicMock(spec=ConfigEntry)
+        coordinator.config_entry.options = {
+            "USE_DEVICE_PREFIX": True,
+            "energy_reporting_grace_period": 15,
+            "power_display_precision": 0,
+            "energy_display_precision": 2,
+        }
         return coordinator
 
     @pytest.fixture
@@ -377,13 +384,20 @@ class TestSolarSensorCRUD:
             with patch('custom_components.span_panel.synthetic_solar.load_template', return_value="mock_template"):
                 with patch('custom_components.span_panel.synthetic_solar.fill_template', return_value="filled_template"):
                     with patch('custom_components.span_panel.synthetic_solar.construct_synthetic_unique_id_for_entry', return_value="test_unique_id"):
-                        result = await handle_solar_sensor_crud(
-                            mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
-                            enable_solar=True, leg1_circuit=30, leg2_circuit=32
-                        )
+                        with patch('custom_components.span_panel.synthetic_solar._get_template_attributes', return_value=("tabs_attr", 240)):
+                            with patch('custom_components.span_panel.synthetic_solar.construct_panel_entity_id', return_value="binary_sensor.span_panel_panel_status"):
+                                with patch('homeassistant.helpers.entity_registry.async_get') as mock_er_get:
+                                    mock_entity_registry = MagicMock()
+                                    mock_er_get.return_value = mock_entity_registry
+                                    mock_entity_registry.async_get_entity_id.return_value = None
 
-                        assert result is True
-                        assert mock_sensor_set.async_add_sensor_from_yaml.call_count == 4  # 4 solar sensor types (including net energy)
+                                    result = await handle_solar_sensor_crud(
+                                        mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
+                                        enable_solar=True, leg1_circuit=30, leg2_circuit=32
+                                    )
+
+                                    assert result is True
+                                    assert mock_sensor_set.async_add_sensor_from_yaml.call_count == 4  # 4 solar sensor types (including net energy)
 
     async def test_handle_solar_sensor_crud_missing_circuit(self, mock_hass, mock_config_entry,
                                                            mock_coordinator, mock_sensor_set):

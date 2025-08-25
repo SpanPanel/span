@@ -30,6 +30,7 @@ from .const import (
 )
 from .entity_id_naming_patterns import EntityIdMigrationManager
 from .exceptions import SpanPanelSimulationOfflineError
+from .options import ENERGY_REPORTING_GRACE_PERIOD
 from .span_panel import SpanPanel
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,6 +59,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         self._reload_requested = False
         # Flag to track if panel is offline/unreachable
         self._panel_offline = False
+        # Track last grace period value for comparison
+        self._last_grace_period = config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
 
         # Get scan interval from options, with fallback to default
         raw_scan_interval = config_entry.options.get(
