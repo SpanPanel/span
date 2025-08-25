@@ -14,7 +14,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
-    SpanPanelAuthError,
     SpanPanelConnectionError,
     SpanPanelRetriableError,
     SpanPanelServerError,
@@ -30,6 +29,7 @@ from .const import (
     SIGNAL_STAGE_SYNTHETIC_SENSORS,
 )
 from .entity_id_naming_patterns import EntityIdMigrationManager
+from .exceptions import SpanPanelSimulationOfflineError
 from .span_panel import SpanPanel
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +56,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         self._last_tick_epoch: float | None = None
         # Flag to track if a reload was requested
         self._reload_requested = False
+        # Flag to track if panel is offline/unreachable
+        self._panel_offline = False
 
         # Get scan interval from options, with fallback to default
         raw_scan_interval = config_entry.options.get(
@@ -100,6 +102,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         # Ensure config_entry is properly set after super().__init__
         self.config_entry = config_entry
 
+    @property
+    def panel_offline(self) -> bool:
+        """Return True if the panel is currently offline/unreachable."""
+        return self._panel_offline
+
     def get_synthetic_sensor_set_id(self) -> str | None:
         """Return the synthetic sensor set id if set during synthetic setup."""
         return self.synthetic_sensor_set_id
@@ -111,6 +118,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""
         try:
+            # Reset offline flag on successful update
+            self._panel_offline = False
+
             # INFO log to make cadence visible without debug logging
             now_epoch = _epoch_time()
             # Track cadence locally for debugging purposes
@@ -126,39 +136,42 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SELECTS)
             async_dispatcher_send(self.hass, SIGNAL_STAGE_NATIVE_SENSORS)
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SYNTHETIC_SENSORS)
+
             # Handle reload request if one was made
             if self._reload_requested:
                 self._reload_requested = False
                 self.hass.async_create_task(self._async_reload_task())
+
             return self.span_panel
 
+        except ConfigEntryAuthFailed:
+            # Re-raise auth errors - these should trigger reauth
+            raise
+
         except Exception as err:
-            _LOGGER.error("Error communicating with Span Panel API: %s", err)
-            # Check for authentication errors
-            if isinstance(err, SpanPanelAuthError):
-                raise ConfigEntryAuthFailed("Authentication failed") from err
+            # Check if this is a simulation offline error (expected behavior)
 
-            # Handle specific error types with appropriate messages
-            if isinstance(err, SpanPanelRetriableError):
-                raise UpdateFailed(f"Temporary SPAN Panel error: {err}") from err
+            # Set offline flag for any error
+            self._panel_offline = True
+
+            # Log specific error types for debugging
+            if isinstance(err, SpanPanelSimulationOfflineError):
+                _LOGGER.debug("Span Panel simulation offline mode: %s", err)
+            elif isinstance(err, SpanPanelConnectionError):
+                _LOGGER.warning("Span Panel connection error: %s", err)
+            elif isinstance(err, SpanPanelTimeoutError):
+                _LOGGER.warning("Span Panel timeout: %s", err)
             elif isinstance(err, SpanPanelServerError):
-                raise UpdateFailed(f"SPAN Panel server error: {err}") from err
-            elif isinstance(
-                err, SpanPanelConnectionError | SpanPanelTimeoutError | SpanPanelAPIError
-            ):
-                raise UpdateFailed(f"Error communicating with API: {err}") from err
+                _LOGGER.warning("Span Panel server error: %s", err)
+            elif isinstance(err, SpanPanelRetriableError):
+                _LOGGER.warning("Span Panel retriable error: %s", err)
+            elif isinstance(err, SpanPanelAPIError):
+                _LOGGER.warning("Span Panel API error: %s", err)
+            else:
+                _LOGGER.warning("Unexpected Span Panel error: %s", err)
 
-            # Fallback for string-based auth error detection (for backward compatibility)
-            error_message = str(err).lower()
-            if (
-                "401" in str(err)
-                or "Unauthorized" in str(err)
-                or "authentication failed" in error_message
-                or "auth failed" in error_message
-            ):
-                raise ConfigEntryAuthFailed("Authentication failed") from err
-
-            # Generic fallback for any other errors
+            # Raise UpdateFailed so HA knows the update failed and will retry
+            # This sets last_update_success = False
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
     async def _async_reload_task(self) -> None:

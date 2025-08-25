@@ -383,7 +383,7 @@ class TestSolarSensorCRUD:
                         )
 
                         assert result is True
-                        assert mock_sensor_set.async_add_sensor_from_yaml.call_count == 3  # 3 solar sensor types
+                        assert mock_sensor_set.async_add_sensor_from_yaml.call_count == 4  # 4 solar sensor types (including net energy)
 
     async def test_handle_solar_sensor_crud_missing_circuit(self, mock_hass, mock_config_entry,
                                                            mock_coordinator, mock_sensor_set):
@@ -456,13 +456,12 @@ class TestSolarOptionsChange:
         """Test enabling solar sensors successfully."""
         with patch('custom_components.span_panel.synthetic_solar.get_stored_solar_sensor_ids_from_set', return_value=[]):
             with patch('custom_components.span_panel.synthetic_solar.handle_solar_sensor_crud', return_value=True):
-                with patch('custom_components.span_panel.synthetic_solar.find_synthetic_coordinator_for', return_value=None):
-                    result = await handle_solar_options_change(
-                        mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
-                        enable_solar=True, leg1_circuit=30, leg2_circuit=32
-                    )
+                result = await handle_solar_options_change(
+                    mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
+                    enable_solar=True, leg1_circuit=30, leg2_circuit=32
+                )
 
-                    assert result is True
+                assert result is True
 
     async def test_handle_solar_options_change_disable(self, mock_hass, mock_config_entry,
                                                       mock_coordinator, mock_sensor_set):
@@ -474,18 +473,19 @@ class TestSolarOptionsChange:
         mock_sensor2.unique_id = "solar_energy_produced"
         mock_sensor3 = MagicMock()
         mock_sensor3.unique_id = "solar_energy_consumed"
+        mock_sensor4 = MagicMock()
+        mock_sensor4.unique_id = "solar_net_energy"
 
-        mock_sensor_set.list_sensors.return_value = [mock_sensor1, mock_sensor2, mock_sensor3]
+        mock_sensor_set.list_sensors.return_value = [mock_sensor1, mock_sensor2, mock_sensor3, mock_sensor4]
 
-        with patch('custom_components.span_panel.synthetic_solar.construct_expected_solar_sensor_ids', return_value=["solar_power", "solar_energy_produced", "solar_energy_consumed"]):
-            with patch('custom_components.span_panel.synthetic_solar.find_synthetic_coordinator_for', return_value=None):
-                result = await handle_solar_options_change(
-                    mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
-                    enable_solar=False, leg1_circuit=0, leg2_circuit=0
-                )
+        with patch('custom_components.span_panel.synthetic_solar.construct_expected_solar_sensor_ids', return_value=["solar_power", "solar_energy_produced", "solar_energy_consumed", "solar_net_energy"]):
+            result = await handle_solar_options_change(
+                mock_hass, mock_config_entry, mock_coordinator, mock_sensor_set,
+                enable_solar=False, leg1_circuit=0, leg2_circuit=0
+            )
 
-                assert result is True
-                assert mock_sensor_set.async_remove_sensor.call_count == 3
+            assert result is True
+            assert mock_sensor_set.async_remove_sensor.call_count == 4  # 4 solar sensors including net energy
 
     async def test_handle_solar_options_change_sensor_set_not_exists(self, mock_hass, mock_config_entry,
                                                                     mock_coordinator, mock_sensor_set):
@@ -599,7 +599,7 @@ class TestSolarSensorDefinitions:
 
     def test_solar_sensor_definitions_structure(self):
         """Test that solar sensor definitions have correct structure."""
-        assert len(SOLAR_SENSOR_DEFINITIONS) == 3
+        assert len(SOLAR_SENSOR_DEFINITIONS) == 4
 
         for definition in SOLAR_SENSOR_DEFINITIONS:
             assert "template" in definition
@@ -610,7 +610,7 @@ class TestSolarSensorDefinitions:
     def test_solar_sensor_definitions_types(self):
         """Test that all expected sensor types are defined."""
         sensor_types = {defn["sensor_type"] for defn in SOLAR_SENSOR_DEFINITIONS}
-        expected_types = {"power", "energy_produced", "energy_consumed"}
+        expected_types = {"power", "energy_produced", "energy_consumed", "net_energy"}
 
         assert sensor_types == expected_types
 

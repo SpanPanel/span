@@ -12,7 +12,6 @@ from custom_components.span_panel.synthetic_sensors import (
     SyntheticSensorCoordinator,
     setup_synthetic_configuration,
     async_setup_synthetic_sensors,
-    find_synthetic_coordinator_for,
     extract_circuit_id_from_entity_id,
     get_existing_battery_sensor_ids,
     cleanup_synthetic_sensors,
@@ -100,8 +99,10 @@ class TestSyntheticSensorCoordinator:
         """Create a mock SPAN coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         coordinator.last_update_success = True
+        coordinator.panel_offline = False  # Add the new panel_offline property
         coordinator.data = MagicMock(spec=SpanPanel)
         coordinator.data.panel = MagicMock()
+        coordinator.data.circuits = {}  # Add circuits dict
         coordinator.async_add_listener = MagicMock(return_value=MagicMock())
         return coordinator
 
@@ -129,6 +130,9 @@ class TestSyntheticSensorCoordinator:
 
     def test_handle_coordinator_update_with_changes(self, synthetic_coordinator):
         """Test coordinator update handling with actual changes."""
+        # Ensure panel is online
+        synthetic_coordinator.coordinator.panel_offline = False
+
         # Setup backing entity metadata with complete structure
         synthetic_coordinator.backing_entity_metadata = {
             "test_entity": {
@@ -151,6 +155,9 @@ class TestSyntheticSensorCoordinator:
 
     def test_handle_coordinator_update_no_changes(self, synthetic_coordinator):
         """Test coordinator update handling with no changes."""
+        # Ensure panel is online
+        synthetic_coordinator.coordinator.panel_offline = False
+
         # Setup backing entity metadata with complete structure
         synthetic_coordinator.backing_entity_metadata = {
             "test_entity": {
@@ -186,11 +193,78 @@ class TestSyntheticSensorCoordinator:
                 "friendly_name": None
             }
         }
-        synthetic_coordinator.coordinator.last_update_success = False
+        synthetic_coordinator.coordinator.panel_offline = True  # Use panel_offline instead of last_update_success
 
         result = synthetic_coordinator.get_backing_value("test_entity")
 
-        assert result == 0.0
+        assert result is None  # Changed from 0.0 to None
+
+    def test_handle_coordinator_update_panel_offline(self, synthetic_coordinator):
+        """Test coordinator update handling when panel is offline."""
+        # Set panel as offline
+        synthetic_coordinator.coordinator.panel_offline = True
+
+        # Setup backing entity metadata
+        synthetic_coordinator.backing_entity_metadata = {
+            "test_entity": {
+                "data_path": "circuits.test.instant_power",
+                "api_key": "instant_power",
+                "circuit_id": "test",
+                "friendly_name": None
+            }
+        }
+        synthetic_coordinator.change_notifier = MagicMock()
+        synthetic_coordinator._last_values = {"test_entity": 100.0}
+
+        # Should clear values and notify when panel goes offline
+        synthetic_coordinator._handle_coordinator_update()
+
+        # Should notify of changes (clearing to None)
+        synthetic_coordinator.change_notifier.assert_called_once_with({"test_entity"})
+        assert synthetic_coordinator._last_values["test_entity"] is None
+
+    def test_handle_coordinator_update_with_none_coordinator(self):
+        """Test coordinator update handling when coordinator is None (manual mode)."""
+        mock_hass = MagicMock()
+
+        # Create synthetic coordinator with None coordinator
+        synthetic_coordinator = SyntheticSensorCoordinator(
+            mock_hass, None, "Test Panel", manual_update_mode=False
+        )
+
+        # Set up backing entity metadata and change notifier
+        synthetic_coordinator.backing_entity_metadata = {
+            "sensor.test_entity": {"type": "circuit", "circuit_id": "1", "attribute": "power"}
+        }
+        synthetic_coordinator.change_notifier = MagicMock()
+
+        # Call the update handler
+        synthetic_coordinator._handle_coordinator_update()
+
+        # Should trigger manual update for all backing entities
+        synthetic_coordinator.change_notifier.assert_called_once_with({"sensor.test_entity"})
+
+    def test_synthetic_coordinator_direct_access(self):
+        """Test direct access to synthetic coordinator from global registry."""
+        mock_hass = MagicMock()
+        mock_config_entry = MagicMock()
+        mock_config_entry.entry_id = "test_entry_id"
+
+        # Create synthetic coordinator with None coordinator
+        synthetic_coordinator = SyntheticSensorCoordinator(
+            mock_hass, None, "Test Panel", manual_update_mode=False
+        )
+
+        # Add to global registry
+        _synthetic_coordinators["test_entry_id"] = synthetic_coordinator
+
+        try:
+            # Should find the coordinator by config entry ID directly
+            result = _synthetic_coordinators.get("test_entry_id")
+            assert result is synthetic_coordinator
+        finally:
+            # Clean up
+            _synthetic_coordinators.pop("test_entry_id", None)
 
 
 
@@ -239,12 +313,9 @@ class TestUtilityFunctions:
 
 
 
-    def test_find_synthetic_coordinator_for_not_exists(self):
-        """Test finding non-existent synthetic coordinator."""
-        mock_coordinator = MagicMock()
-        mock_coordinator.config_entry.entry_id = "nonexistent_entry_id"
-
-        result = find_synthetic_coordinator_for(mock_coordinator)
+    def test_synthetic_coordinator_not_exists(self):
+        """Test accessing non-existent synthetic coordinator."""
+        result = _synthetic_coordinators.get("nonexistent_entry_id")
         assert result is None
 
     def test_extract_circuit_id_from_entity_id_backing(self):

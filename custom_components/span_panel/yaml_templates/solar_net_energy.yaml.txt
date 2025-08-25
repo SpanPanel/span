@@ -1,13 +1,11 @@
   {{sensor_key}}:
-    name: "Solar Produced Energy"
+    name: "Solar Net Energy"
     entity_id: "{{entity_id}}"
-    formula: leg1_produced + leg2_produced
+    formula: {{net_consumed_entity_id}} - {{net_produced_entity_id}}
     alternate_states:
       FALLBACK:
         formula: "last_valid_state if is_within_grace_period else 'unknown'"
     variables:
-      leg1_produced: {{leg1_produced_entity}}
-      leg2_produced: {{leg2_produced_entity}}
       last_valid_state:
         formula: "metadata(state, 'last_valid_state')"
       last_valid_changed:
@@ -20,6 +18,8 @@
         formula: "state != 'unknown'"
       is_offline_with_previous_value:
         formula: "not is_live_reporting and is_within_grace_period"
+      leg1_consumed: {{leg1_consumed_entity}}
+      leg2_consumed: {{leg2_consumed_entity}}
 
     attributes:
       tabs: "{{tabs_attribute}}"
@@ -35,5 +35,5 @@
     metadata:
       unit_of_measurement: "Wh"
       device_class: "energy"
-      state_class: "total_increasing"
+      state_class: "total"
       suggested_display_precision: {{energy_display_precision}}

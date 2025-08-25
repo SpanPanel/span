@@ -10,14 +10,14 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.13.2,<3.14"
-homeassistant = "2025.8.1"  # Pin to exact version for custom component compatibility
+homeassistant = "2025.8.2,<2026.0.0"  # Pin to exact version for custom component compatibility
 span-panel-api = {path = "../span-panel-api", develop = true}
 ha-synthetic-sensors = {path = "../ha-synthetic-sensors", develop = true}
 # Only add dependencies here that HA doesn't provide or where you need different versions
 
 [tool.poetry.group.dev.dependencies]
 # Type stubs and dev-only tools that don't conflict with HA runtime
-homeassistant-stubs = "2025.8.1"
+homeassistant-stubs = "2025.8.2"
 types-requests = "*"
 types-PyYAML = "*"
 mypy = "*"
@@ -124,7 +124,6 @@ pythonPlatform = "Darwin"
 pythonVersion = "3.13"
 typeCheckingMode = "basic"
 useLibraryCodeForTypes = true
-autoSearchPaths = true
 autoImportCompletions = true
 reportMissingImports = "warning"
 reportMissingTypeStubs = false

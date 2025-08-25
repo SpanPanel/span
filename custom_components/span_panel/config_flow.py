@@ -45,6 +45,7 @@ from .const import (
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
     CONF_API_RETRY_TIMEOUT,
     CONF_SIMULATION_CONFIG,
+    CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
     CONF_USE_SSL,
     CONFIG_API_RETRIES,
@@ -78,7 +79,7 @@ from .simulation_generator import (
     SimulationYamlGenerator,
 )  # lazy import to keep CF lean
 from .span_panel_api import SpanPanelApi
-from .synthetic_sensors import find_synthetic_coordinator_for
+from .synthetic_sensors import _synthetic_coordinators
 from .version import async_get_version  # lazy import
 
 _LOGGER = logging.getLogger(__name__)
@@ -666,7 +667,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self.async_show_form(
                 step_id="simulator_config",
                 data_schema=schema,
-                description_placeholders={"config_count": str(len(available_configs))},
+                description_placeholders={
+                    "config_count": str(len(available_configs)),
+                },
             )
 
         # Continue with simulator setup using the selected config
@@ -1093,8 +1096,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 return self.async_create_entry(title="", data=filtered_input)
 
         # Get current values for dynamic filtering
-        current_leg1 = self.config_entry.options.get(INVERTER_LEG1, 0)
-        current_leg2 = self.config_entry.options.get(INVERTER_LEG2, 0)
+        try:
+            current_leg1 = int(self.config_entry.options.get(INVERTER_LEG1, 0))
+        except (TypeError, ValueError):
+            current_leg1 = 0
+        try:
+            current_leg2 = int(self.config_entry.options.get(INVERTER_LEG2, 0))
+        except (TypeError, ValueError):
+            current_leg2 = 0
 
         # If user_input exists, use those values for filtering (for dynamic updates)
         if user_input is not None:
@@ -1323,6 +1332,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Edit simulation settings (time and performance)."""
         if user_input is not None:
             simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
+            offline_minutes = user_input.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
+
+            _LOGGER.info("Edit simulation settings - user_input: %s", user_input)
+            _LOGGER.info(
+                "Edit simulation settings - offline_minutes: %s, start_time: %s",
+                offline_minutes,
+                simulation_start_time,
+            )
+
             if simulation_start_time:
                 try:
                     simulation_start_time = validate_simulation_time(simulation_start_time)
@@ -1337,13 +1355,37 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         errors={"base": str(e)},
                     )
 
-            async def reload_after_options_complete() -> None:
-                await self.hass.async_block_till_done()
-                _LOGGER.info("Reloading integration after simulation time change")
-                await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            _LOGGER.info("Saving simulation options: %s", user_input)
+            _LOGGER.info("Current config_entry.options before save: %s", self.config_entry.options)
+            _LOGGER.info("About to call async_create_entry to save options")
+            result = self.async_create_entry(title="", data=user_input)
+            _LOGGER.info("async_create_entry completed, result type: %s", type(result))
+            _LOGGER.info("Config_entry.options after save: %s", self.config_entry.options)
 
-            self.hass.async_create_task(reload_after_options_complete())
-            return self.async_create_entry(title="", data=user_input)
+            # Manually trigger offline mode setting since update listener isn't working
+            try:
+                coordinator_data = self.hass.data.get(DOMAIN, {}).get(
+                    self.config_entry.entry_id, {}
+                )
+                coordinator = coordinator_data.get(COORDINATOR)
+                if coordinator and hasattr(coordinator, "span_panel") and coordinator.span_panel:
+                    span_panel = coordinator.span_panel
+                    if hasattr(span_panel, "api") and span_panel.api:
+                        simulation_offline_minutes = user_input.get("simulation_offline_minutes", 0)
+                        _LOGGER.info(
+                            "Manually setting offline mode: %s minutes", simulation_offline_minutes
+                        )
+                        span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
+                    else:
+                        _LOGGER.warning("SpanPanel API not found for manual offline mode setting")
+                else:
+                    _LOGGER.warning(
+                        "Coordinator or SpanPanel not found for manual offline mode setting"
+                    )
+            except Exception as e:
+                _LOGGER.error("Failed to manually set offline mode: %s", e)
+
+            return result
 
         return self.async_show_form(
             step_id="edit_simulation_settings",
@@ -1533,7 +1575,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         )()
                         if not sensor_set_id:
                             # Second choice: ask the synthetic coordinator for its computed value
-                            synth_coord = find_synthetic_coordinator_for(coordinator)
+                            synth_coord = _synthetic_coordinators.get(self.config_entry.entry_id)
                             if synth_coord:
                                 sensor_set_id = synth_coord.get_sensor_set_id()
 
@@ -1750,6 +1792,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return vol.Schema(
             {
                 vol.Optional(CONF_SIMULATION_START_TIME): str,
+                vol.Optional(CONF_SIMULATION_OFFLINE_MINUTES): int,
             }
         )
 
@@ -1758,6 +1801,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         return {
             CONF_SIMULATION_START_TIME: self.config_entry.options.get(
                 CONF_SIMULATION_START_TIME, ""
+            ),
+            CONF_SIMULATION_OFFLINE_MINUTES: self.config_entry.options.get(
+                CONF_SIMULATION_OFFLINE_MINUTES, 0
             ),
         }
 

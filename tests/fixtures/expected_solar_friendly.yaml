@@ -44,24 +44,35 @@ sensors:
     name: Main Meter Produced Energy
     entity_id: sensor.span_panel_main_meter_produced_energy
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: panel
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -71,24 +82,35 @@ sensors:
     name: Main Meter Consumed Energy
     entity_id: sensor.span_panel_main_meter_consumed_energy
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: panel
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -98,24 +120,35 @@ sensors:
     name: Feed Through Produced Energy
     entity_id: sensor.span_panel_feed_through_produced_energy
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: panel
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -125,24 +158,35 @@ sensors:
     name: Feed Through Consumed Energy
     entity_id: sensor.span_panel_feed_through_consumed_energy
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: panel
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -170,24 +214,35 @@ sensors:
     name: Master Bedroom Lights Produced Energy
     entity_id: sensor.span_panel_master_bedroom_lights_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [1]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -197,24 +252,35 @@ sensors:
     name: Master Bedroom Lights Consumed Energy
     entity_id: sensor.span_panel_master_bedroom_lights_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [1]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -242,24 +308,35 @@ sensors:
     name: Living Room Lights Produced Energy
     entity_id: sensor.span_panel_living_room_lights_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [2]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -269,24 +346,35 @@ sensors:
     name: Living Room Lights Consumed Energy
     entity_id: sensor.span_panel_living_room_lights_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [2]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -314,24 +402,35 @@ sensors:
     name: Kitchen Lights Produced Energy
     entity_id: sensor.span_panel_kitchen_lights_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [3]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -341,24 +440,35 @@ sensors:
     name: Kitchen Lights Consumed Energy
     entity_id: sensor.span_panel_kitchen_lights_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [3]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -386,24 +496,35 @@ sensors:
     name: Bedroom Lights Produced Energy
     entity_id: sensor.span_panel_bedroom_lights_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [4]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -413,24 +534,35 @@ sensors:
     name: Bedroom Lights Consumed Energy
     entity_id: sensor.span_panel_bedroom_lights_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [4]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -458,24 +590,35 @@ sensors:
     name: Bathroom Lights Produced Energy
     entity_id: sensor.span_panel_bathroom_lights_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [5]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -485,24 +628,35 @@ sensors:
     name: Bathroom Lights Consumed Energy
     entity_id: sensor.span_panel_bathroom_lights_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [5]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -530,24 +684,35 @@ sensors:
     name: Exterior Lights Produced Energy
     entity_id: sensor.span_panel_exterior_lights_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [6]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -557,24 +722,35 @@ sensors:
     name: Exterior Lights Consumed Energy
     entity_id: sensor.span_panel_exterior_lights_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [6]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -602,24 +778,35 @@ sensors:
     name: Master Bedroom Outlets Produced Energy
     entity_id: sensor.span_panel_master_bedroom_outlets_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [7]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -629,24 +816,35 @@ sensors:
     name: Master Bedroom Outlets Consumed Energy
     entity_id: sensor.span_panel_master_bedroom_outlets_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [7]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -674,24 +872,35 @@ sensors:
     name: Living Room Outlets Produced Energy
     entity_id: sensor.span_panel_living_room_outlets_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [8]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -701,24 +910,35 @@ sensors:
     name: Living Room Outlets Consumed Energy
     entity_id: sensor.span_panel_living_room_outlets_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [8]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -746,24 +966,35 @@ sensors:
     name: Kitchen Outlets 1 Produced Energy
     entity_id: sensor.span_panel_kitchen_outlets_1_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [9]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -773,24 +1004,35 @@ sensors:
     name: Kitchen Outlets 1 Consumed Energy
     entity_id: sensor.span_panel_kitchen_outlets_1_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [9]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -818,24 +1060,35 @@ sensors:
     name: Kitchen Outlets 2 Produced Energy
     entity_id: sensor.span_panel_kitchen_outlets_2_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [12]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -845,24 +1098,35 @@ sensors:
     name: Kitchen Outlets 2 Consumed Energy
     entity_id: sensor.span_panel_kitchen_outlets_2_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [12]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -890,24 +1154,35 @@ sensors:
     name: Office Outlets Produced Energy
     entity_id: sensor.span_panel_office_outlets_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [11]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -917,24 +1192,35 @@ sensors:
     name: Office Outlets Consumed Energy
     entity_id: sensor.span_panel_office_outlets_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [11]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -962,24 +1248,35 @@ sensors:
     name: Garage Outlets Produced Energy
     entity_id: sensor.span_panel_garage_outlets_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [10]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -989,24 +1286,35 @@ sensors:
     name: Garage Outlets Consumed Energy
     entity_id: sensor.span_panel_garage_outlets_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [10]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1034,24 +1342,35 @@ sensors:
     name: Laundry Room Outlets Produced Energy
     entity_id: sensor.span_panel_laundry_room_outlets_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [13]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1061,24 +1380,35 @@ sensors:
     name: Laundry Room Outlets Consumed Energy
     entity_id: sensor.span_panel_laundry_room_outlets_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [13]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1106,24 +1436,35 @@ sensors:
     name: Guest Room Outlets Produced Energy
     entity_id: sensor.span_panel_guest_room_outlets_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [14]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1133,24 +1474,35 @@ sensors:
     name: Guest Room Outlets Consumed Energy
     entity_id: sensor.span_panel_guest_room_outlets_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [14]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1178,24 +1530,35 @@ sensors:
     name: Refrigerator Produced Energy
     entity_id: sensor.span_panel_refrigerator_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [15]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1205,24 +1568,35 @@ sensors:
     name: Refrigerator Consumed Energy
     entity_id: sensor.span_panel_refrigerator_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [15]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1250,24 +1624,35 @@ sensors:
     name: Dishwasher Produced Energy
     entity_id: sensor.span_panel_dishwasher_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [16]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1277,24 +1662,35 @@ sensors:
     name: Dishwasher Consumed Energy
     entity_id: sensor.span_panel_dishwasher_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [16]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1322,24 +1718,35 @@ sensors:
     name: Washing Machine Produced Energy
     entity_id: sensor.span_panel_washing_machine_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [17]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1349,24 +1756,35 @@ sensors:
     name: Washing Machine Consumed Energy
     entity_id: sensor.span_panel_washing_machine_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [17]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1394,24 +1812,35 @@ sensors:
     name: Electric Dryer Produced Energy
     entity_id: sensor.span_panel_electric_dryer_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [18:20]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1421,24 +1850,35 @@ sensors:
     name: Electric Dryer Consumed Energy
     entity_id: sensor.span_panel_electric_dryer_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [18:20]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1466,24 +1906,35 @@ sensors:
     name: Electric Oven Produced Energy
     entity_id: sensor.span_panel_electric_oven_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [19:21]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1493,24 +1944,35 @@ sensors:
     name: Electric Oven Consumed Energy
     entity_id: sensor.span_panel_electric_oven_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [19:21]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1538,24 +2000,35 @@ sensors:
     name: Microwave Produced Energy
     entity_id: sensor.span_panel_microwave_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [22]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1565,24 +2038,35 @@ sensors:
     name: Microwave Consumed Energy
     entity_id: sensor.span_panel_microwave_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [22]"
       voltage: 120
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1610,24 +2094,35 @@ sensors:
     name: Main HVAC Unit Produced Energy
     entity_id: sensor.span_panel_main_hvac_unit_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [23:25]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1637,24 +2132,35 @@ sensors:
     name: Main HVAC Unit Consumed Energy
     entity_id: sensor.span_panel_main_hvac_unit_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [23:25]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1682,24 +2188,35 @@ sensors:
     name: Heat Pump Backup Produced Energy
     entity_id: sensor.span_panel_heat_pump_backup_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [24:26]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1709,24 +2226,35 @@ sensors:
     name: Heat Pump Backup Consumed Energy
     entity_id: sensor.span_panel_heat_pump_backup_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [24:26]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1754,24 +2282,35 @@ sensors:
     name: Garage EV Charger Produced Energy
     entity_id: sensor.span_panel_garage_ev_charger_energy_produced
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [27:29]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1781,24 +2320,35 @@ sensors:
     name: Garage EV Charger Consumed Energy
     entity_id: sensor.span_panel_garage_ev_charger_energy_consumed
     formula: state
-    UNAVAILABLE:
-      formula: state if within_grace else UNKNOWN
-    UNKNOWN:
-      formula: state if within_grace else UNKNOWN
+    alternate_states:
+
+      UNAVAILABLE:
+
+        formula: state if within_grace else UNKNOWN
+
+      UNKNOWN:
+
+        formula: state if within_grace else UNKNOWN
     variables:
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [27:29]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1834,17 +2384,23 @@ sensors:
       leg2_produced: sensor.span_panel_unmapped_tab_32_energy_produced
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [30:32]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy
@@ -1859,17 +2415,23 @@ sensors:
       leg2_consumed: sensor.span_panel_unmapped_tab_32_energy_consumed
       within_grace:
         formula: minutes_between(metadata(state, 'last_changed'), now()) < energy_grace_period_minutes
-        UNAVAILABLE: false
-        UNKNOWN: false
+        alternate_states:
+          UNAVAILABLE: false
+          UNKNOWN: false
     attributes:
       tabs: "tabs [30:32]"
       voltage: 240
       energy_reporting_status:
         formula: '''Live'''
-        UNAVAILABLE:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
-        UNKNOWN:
-          formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+        alternate_states:
+
+          UNAVAILABLE:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
+
+          UNKNOWN:
+
+            formula: '''Previous (grace)'' if within_grace else ''Unknown'''
     metadata:
       unit_of_measurement: Wh
       device_class: energy

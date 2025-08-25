@@ -1,7 +1,10 @@
   {{sensor_key}}:
     name: "{{sensor_name}}"
     entity_id: "{{entity_id}}"
-    formula: "state"
+    formula: state
+    alternate_states:
+      FALLBACK:
+        formula: 0.0
     attributes:
       voltage: 240
       amperage:

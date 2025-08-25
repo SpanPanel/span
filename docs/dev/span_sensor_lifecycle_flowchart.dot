@@ -1,0 +1,157 @@
+digraph SpanPanelSensorLifecycle {
+    // Graph settings
+    rankdir=TB;
+    node [shape=box, style=filled, fontname="Arial", fontsize=10];
+    edge [fontname="Arial", fontsize=9];
+
+    // Color scheme
+    node [color=lightblue];
+
+    // Title
+    title [label="Span Panel Sensor Creation & Lifecycle Flow", shape=plaintext, fontsize=16, fontweight=bold];
+
+    // Phase 1: Integration Setup
+    subgraph cluster_phase1 {
+        label="PHASE 1: Integration Setup";
+        style=filled;
+        color=lightgrey;
+
+        start [label="Home Assistant\nConfig Entry Setup", color=lightgreen];
+        setup_entry [label="async_setup_entry()\n- Validate config\n- Create SpanPanel instance\n- Test API connection", color=lightblue];
+        coordinator [label="Create SpanPanelCoordinator\n- Set scan interval\n- Initialize API client\n- Setup update cycle", color=cyan];
+        device_reg [label="Register Device\n- Create device info\n- Register in device registry", color=lightblue];
+        platforms [label="Setup Platforms\n- sensor.py\n- binary_sensor.py\n- switch.py\n- select.py", color=lightblue];
+    }
+
+    // Phase 2: Native Sensor Creation
+    subgraph cluster_phase2 {
+        label="PHASE 2: Native Sensor Creation";
+        style=filled;
+        color=lightgrey;
+
+        sensor_setup [label="async_setup_entry()\n- Create native sensors\n- Setup entity descriptions\n- Register entities", color=lightblue];
+        native_sensors [label="Native Sensors\n- Status sensors\n- Circuit sensors\n- Panel sensors\n- Battery sensors", color=pink];
+        entity_reg [label="Register Entities\n- Add to entity registry\n- Setup state updates\n- Configure device info", color=lightblue];
+    }
+
+    // Phase 3: Synthetic Sensor Setup
+    subgraph cluster_phase3 {
+        label="PHASE 3: Synthetic Sensor Setup";
+        style=filled;
+        color=lightgrey;
+
+        migration_decision [label="Migration Mode?", shape=diamond, color=orange];
+        migration_path [label="Migration Mode\n- Load existing config\n- Use existing sensor sets\n- Preserve entity IDs", color=lightblue];
+        fresh_install [label="Fresh Install\n- Generate new config\n- Create sensor sets\n- Setup YAML templates", color=lightblue];
+        synthetic_coord [label="SyntheticSensorCoordinator\n- Manage virtual backing entities\n- Handle data updates\n- Coordinate sensor lifecycle", color=cyan];
+    }
+
+    // Phase 4: Sensor Generation
+    subgraph cluster_phase4 {
+        label="PHASE 4: Sensor Generation";
+        style=filled;
+        color=lightgrey;
+
+        panel_sensors [label="Panel Sensors\n- Current Power\n- Feed Through Power\n- Energy sensors", color=pink];
+        circuit_sensors [label="Circuit Sensors\n- Circuit Power\n- Circuit Energy\n- Named circuits", color=pink];
+        solar_sensors [label="Solar Sensors\n- Solar Power\n- Solar Energy\n- Inverter data", color=pink];
+        yaml_templates [label="YAML Templates\n- Template processing\n- Placeholder filling\n- Config generation", color=purple];
+    }
+
+    // Phase 5: Storage & Configuration
+    subgraph cluster_phase5 {
+        label="PHASE 5: Storage & Configuration";
+        style=filled;
+        color=lightgrey;
+
+        storage_manager [label="StorageManager\n- Manage sensor sets\n- Handle YAML storage\n- CRUD operations", color=lightsteelblue];
+        sensor_manager [label="SensorManager\n- Create synthetic entities\n- Manage data providers\n- Handle updates", color=lightsteelblue];
+        backing_entities [label="Virtual Backing Entities\n- Data provider callbacks\n- Value extraction\n- Change notifications", color=purple];
+    }
+
+    // Phase 6: Data Flow & Updates
+    subgraph cluster_phase6 {
+        label="PHASE 6: Data Flow & Updates";
+        style=filled;
+        color=lightgrey;
+
+        api_fetch [label="API Data Fetch\n- Span Panel API calls\n- Circuit data\n- Panel status", color=sandybrown];
+        coord_update [label="Coordinator Update\n- Process API data\n- Update entities\n- Emit signals", color=cyan];
+        staged_updates [label="Staged Updates\n- Switches\n- Selects\n- Native Sensors\n- Synthetic Sensors", color=lightblue];
+        data_provider [label="Data Provider\n- Extract values\n- Notify changes\n- Update sensors", color=purple];
+    }
+
+    // Phase 7: Sensor Lifecycle
+    subgraph cluster_phase7 {
+        label="PHASE 7: Sensor Lifecycle";
+        style=filled;
+        color=lightgrey;
+
+        state_updates [label="State Updates\n- Native sensor updates\n- Synthetic calculations\n- Formula evaluation", color=lightblue];
+        entity_registry [label="Entity Registry\n- State persistence\n- Entity metadata\n- Device associations", color=lightsteelblue];
+        ui_display [label="User Interface\n- Dashboard display\n- State visualization\n- Historical data", color=lightblue];
+        config_changes [label="Config Changes\n- Options updates\n- Reload handling\n- Migration", color=lightblue];
+    }
+
+    // End state
+    active_sensors [label="Active Sensors Running", color=lightcoral];
+
+    // Phase 1 connections
+    start -> setup_entry [label="Config Entry"];
+    setup_entry -> coordinator [label="Create"];
+    coordinator -> device_reg [label="Register"];
+    setup_entry -> platforms [label="Setup"];
+
+    // Phase 2 connections
+    platforms -> sensor_setup [label="Setup"];
+    sensor_setup -> native_sensors [label="Create"];
+    native_sensors -> entity_reg [label="Register"];
+
+    // Phase 3 connections
+    sensor_setup -> migration_decision [label="Setup Synthetic"];
+    migration_decision -> migration_path [label="Yes"];
+    migration_decision -> fresh_install [label="No"];
+    migration_path -> synthetic_coord [label="Create"];
+    fresh_install -> synthetic_coord [label="Create"];
+
+    // Phase 4 connections
+    synthetic_coord -> panel_sensors [label="Generate"];
+    synthetic_coord -> circuit_sensors [label="Generate"];
+    synthetic_coord -> solar_sensors [label="Generate"];
+    synthetic_coord -> yaml_templates [label="Process"];
+
+    // Phase 5 connections
+    panel_sensors -> storage_manager [label="Store"];
+    circuit_sensors -> sensor_manager [label="Create"];
+    solar_sensors -> sensor_manager [label="Create"];
+    yaml_templates -> backing_entities [label="Setup"];
+
+    // Phase 6 connections
+    storage_manager -> api_fetch [label="Fetch"];
+    api_fetch -> coord_update [label="Update"];
+    coord_update -> staged_updates [label="Stage"];
+    staged_updates -> data_provider [label="Provide"];
+
+    // Phase 7 connections
+    data_provider -> state_updates [label="Update"];
+    state_updates -> entity_registry [label="Persist"];
+    entity_registry -> ui_display [label="Display"];
+    ui_display -> config_changes [label="Handle"];
+
+    // Final connection
+    config_changes -> active_sensors [label="Continuous"];
+
+    // Add notes
+    subgraph cluster_notes {
+        label="Key Concepts";
+        style=filled;
+        color=lightyellow;
+
+        note1 [label="• Native sensors: Direct API data (power, energy, status)", shape=plaintext];
+        note2 [label="• Synthetic sensors: Calculated values using formulas", shape=plaintext];
+        note3 [label="• Virtual backing entities: Data providers for synthetic sensors", shape=plaintext];
+        note4 [label="• Staged updates: Sequential entity updates to prevent conflicts", shape=plaintext];
+        note5 [label="• Migration: Preserves existing sensor configurations", shape=plaintext];
+        note6 [label="• YAML templates: Reusable sensor configurations", shape=plaintext];
+    }
+}

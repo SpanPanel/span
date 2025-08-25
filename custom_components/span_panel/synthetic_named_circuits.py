@@ -54,7 +54,7 @@ NAMED_CIRCUIT_SENSOR_DEFINITIONS = [
 ]
 
 
-def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
+def get_circuit_data_value(circuit_data: Any, data_path: str) -> float | None:
     """Get circuit data value using attribute name.
 
     Args:
@@ -67,10 +67,10 @@ def get_circuit_data_value(circuit_data: Any, data_path: str) -> float:
     """
     try:
         value = getattr(circuit_data, data_path, None)
-        return float(value) if value is not None else 0.0
+        return float(value) if value is not None else None
     except (AttributeError, TypeError, ValueError) as e:
         _LOGGER.warning("Failed to get circuit data for path '%s': %s", data_path, e)
-        return 0.0
+        return None
 
 
 async def generate_named_circuit_sensors(
@@ -150,6 +150,9 @@ async def generate_named_circuit_sensors(
         )
 
     for circuit_id, circuit_data in named_circuits.items():
+        # Track produced/consumed entity_ids to build Net Energy after both exist
+        produced_entity_id_for_circuit: str | None = None
+        consumed_entity_id_for_circuit: str | None = None
         for sensor_def in NAMED_CIRCUIT_SENSOR_DEFINITIONS:
             # Get circuit number for helpers
             circuit_number = get_circuit_number(circuit_data)
@@ -291,6 +294,35 @@ async def generate_named_circuit_sensors(
             # Create 1:1 mapping directly - sensor key to backing entity ID
             sensor_to_backing_mapping[sensor_unique_id] = backing_entity_id
 
+            # Record produced/consumed entity_ids for Net Energy construction
+            if sensor_def["key"] == "producedEnergyWh":
+                produced_entity_id_for_circuit = entity_id
+            elif sensor_def["key"] == "consumedEnergyWh":
+                consumed_entity_id_for_circuit = entity_id
+
+        # After creating produced and consumed, add Net Energy sensor referencing them
+        if produced_entity_id_for_circuit and consumed_entity_id_for_circuit:
+            # Generate tabs and voltage attributes for this circuit (same as main loop)
+            tabs_attribute_full = construct_tabs_attribute(circuit_data)
+            voltage_attribute = construct_voltage_attribute(circuit_data)
+            tabs_attribute = tabs_attribute_full if tabs_attribute_full else ""
+
+            await _add_circuit_net_energy_sensor(
+                hass=hass,
+                coordinator=coordinator,
+                span_panel=span_panel,
+                circuit_id=circuit_id,
+                circuit_data=circuit_data,
+                circuit_name=circuit_name,
+                consumed_entity_id=consumed_entity_id_for_circuit,
+                produced_entity_id=produced_entity_id_for_circuit,
+                device_identifier_for_uniques=device_identifier_for_uniques,
+                common_placeholders=common_placeholders,
+                tabs_attribute=tabs_attribute,
+                voltage_attribute=voltage_attribute,
+                sensor_configs=sensor_configs,
+            )
+
     _LOGGER.debug(
         "Generated %d named circuit sensors with %d backing entities using global settings",
         len(sensor_configs),
@@ -298,3 +330,105 @@ async def generate_named_circuit_sensors(
     )
 
     return sensor_configs, backing_entities, global_settings, sensor_to_backing_mapping
+
+
+""
+
+
+async def _add_circuit_net_energy_sensor(
+    hass: HomeAssistant,
+    coordinator: SpanPanelCoordinator,
+    span_panel: SpanPanel,
+    circuit_id: str,
+    circuit_data: Any,
+    circuit_name: str,
+    consumed_entity_id: str,
+    produced_entity_id: str,
+    device_identifier_for_uniques: str,
+    common_placeholders: dict[str, Any],
+    tabs_attribute: str,
+    voltage_attribute: int | float | None,
+    sensor_configs: dict[str, Any],
+) -> None:
+    """Add a net energy sensor for a circuit that references consumed and produced sensors.
+
+    Args:
+        hass: The HomeAssistant instance
+        coordinator: The SpanPanelCoordinator instance
+        span_panel: The SpanPanel data
+        circuit_id: The circuit ID
+        circuit_data: The circuit data
+        circuit_name: The friendly name for the circuit
+        consumed_entity_id: Entity ID of the consumed energy sensor
+        produced_entity_id: Entity ID of the produced energy sensor
+        device_identifier_for_uniques: Device identifier for unique IDs
+        common_placeholders: Common placeholders for templates
+        tabs_attribute: Tabs attribute string for the circuit
+        voltage_attribute: Voltage attribute value for the circuit
+        sensor_configs: Dictionary to update with new sensor configs
+
+    """
+    # Build net sensor identifiers
+    net_suffix = get_user_friendly_suffix("netEnergyWh")  # -> energy_net
+    net_sensor_name_key = f"{circuit_id}_{net_suffix}"
+    net_unique_id = construct_synthetic_unique_id(
+        device_identifier_for_uniques, net_sensor_name_key
+    )
+
+    # Build entity_id for circuit (respect 120/240V)
+    if len(circuit_data.tabs) == 2:
+        net_entity_id = construct_240v_synthetic_entity_id(
+            coordinator=coordinator,
+            span_panel=span_panel,
+            platform="sensor",
+            suffix=net_suffix,
+            friendly_name=circuit_name,
+            tab1=circuit_data.tabs[0],
+            tab2=circuit_data.tabs[1],
+        )
+    else:
+        net_entity_id = construct_120v_synthetic_entity_id(
+            coordinator=coordinator,
+            span_panel=span_panel,
+            platform="sensor",
+            suffix=net_suffix,
+            friendly_name=circuit_name,
+            tab=circuit_data.tabs[0],
+        )
+
+    if net_entity_id is None:
+        raise ValueError("Failed to build entity_id for circuit net energy sensor")
+
+    # Friendly name for net
+    net_friendly_name = f"{circuit_name} Net Energy"
+
+    # Create placeholders for this specific sensor (following main loop pattern)
+    sensor_placeholders = {
+        "sensor_key": net_unique_id,
+        "sensor_name": net_friendly_name,
+        "entity_id": net_entity_id,
+        "net_consumed_entity_id": consumed_entity_id,
+        "net_produced_entity_id": produced_entity_id,
+        "tabs_attribute": tabs_attribute,
+        "voltage_attribute": voltage_attribute or 0,
+    }
+
+    # Combine common and sensor-specific placeholders
+    all_placeholders = {**common_placeholders, **sensor_placeholders}
+
+    # Ensure all placeholder values are strings, except voltage_attribute
+    string_placeholders = {}
+    for key, value in all_placeholders.items():
+        if key == "voltage_attribute" and isinstance(value, int | float):
+            # Keep voltage as unquoted number for YAML
+            string_placeholders[key] = str(value)
+        elif value is not None:
+            string_placeholders[key] = str(value)
+        else:
+            string_placeholders[key] = ""
+
+    # Use the same pattern as the main loop - combine template and update collection
+    net_result = await combine_yaml_templates(hass, ["circuit_energy_net"], string_placeholders)
+
+    # Add this sensor's config to the collection
+    sensor_configs.update(net_result["sensor_configs"])
