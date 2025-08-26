@@ -164,6 +164,7 @@ def _generate_sensor_entity_id(
         entity_registry = er.async_get(hass)
         existing_entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
         if existing_entity_id:
+            # Use existing entity ID as-is - no sanitization needed during migration
             _LOGGER.debug(
                 "MIGRATION: Using existing solar entity %s for unique_id %s",
                 existing_entity_id,
@@ -663,6 +664,7 @@ async def handle_solar_sensor_crud(
                         "sensor", DOMAIN, sensor_unique_id
                     )
                     if existing_entity_id:
+                        # Use existing entity ID as-is - no sanitization needed during migration
                         solar_entity_id = existing_entity_id
                         _LOGGER.debug(
                             "MIGRATION: Using existing solar entity %s for unique_id %s",

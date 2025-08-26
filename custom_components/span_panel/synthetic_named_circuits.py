@@ -20,8 +20,8 @@ from .helpers import (
     construct_120v_synthetic_entity_id,
     construct_240v_synthetic_entity_id,
     construct_backing_entity_id_for_entry,
+    construct_circuit_unique_id_for_entry,
     construct_panel_entity_id,
-    construct_synthetic_unique_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
     get_circuit_number,
@@ -171,11 +171,10 @@ async def generate_named_circuit_sensors(
             circuit_number = get_circuit_number(circuit_data)
             circuit_name = circuit_data.name or f"Circuit {circuit_number}"
 
-            # Generate unique_id using helpers (same as migration uses)
+            # Generate unique_id using helper (consistent with migration expectations)
             entity_suffix = get_user_friendly_suffix(sensor_def["key"])
-            sensor_name = f"{circuit_id}_{entity_suffix}"
-            sensor_unique_id = construct_synthetic_unique_id(
-                device_identifier_for_uniques, sensor_name
+            sensor_unique_id = construct_circuit_unique_id_for_entry(
+                coordinator, span_panel, circuit_id, sensor_def["key"], device_name
             )
 
             # In migration mode, look up existing entity_id directly from registry
@@ -186,10 +185,11 @@ async def generate_named_circuit_sensors(
                     "sensor", DOMAIN, sensor_unique_id
                 )
                 if existing_entity_id:
+                    # Use existing entity ID as-is - no sanitization needed during migration
                     entity_id = existing_entity_id
                     _LOGGER.debug(
                         "MIGRATION: Using existing entity %s for unique_id %s",
-                        entity_id,
+                        existing_entity_id,
                         sensor_unique_id,
                     )
                 else:
@@ -391,9 +391,9 @@ async def _add_circuit_net_energy_sensor(
     """
     # Build net sensor identifiers
     net_suffix = get_user_friendly_suffix("netEnergyWh")  # -> energy_net
-    net_sensor_name_key = f"{circuit_id}_{net_suffix}"
-    net_unique_id = construct_synthetic_unique_id(
-        device_identifier_for_uniques, net_sensor_name_key
+    # Use proper helper to get device identifier for this entry
+    net_unique_id = construct_circuit_unique_id_for_entry(
+        coordinator, span_panel, circuit_id, "netEnergyWh", circuit_data.name
     )
 
     # Build entity_id for circuit (respect 120/240V)

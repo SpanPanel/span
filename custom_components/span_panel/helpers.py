@@ -325,7 +325,9 @@ def construct_panel_synthetic_entity_id(
     use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
     parts = []
     if use_device_prefix:
-        parts.append(device_name.lower().replace(" ", "_"))
+        # Sanitize device name for entity ID use
+        sanitized_device_name = slugify(device_name)
+        parts.append(sanitized_device_name)
     parts.append(suffix)
     entity_id = f"{platform}.{'_'.join(parts)}"
     return entity_id
@@ -526,12 +528,14 @@ def construct_entity_id(
     parts = []
 
     if use_device_prefix:
-        parts.append(device_name.lower().replace(" ", "_"))
+        # Sanitize device name for entity ID use
+        sanitized_device_name = slugify(device_name)
+        parts.append(sanitized_device_name)
 
     if use_circuit_numbers:
         parts.append(f"circuit_{circuit_number}")
     else:
-        circuit_name_slug = circuit_name.lower().replace(" ", "_")
+        circuit_name_slug = slugify(circuit_name)
         parts.append(circuit_name_slug)
 
     # Only add suffix if it's different from the last word in the circuit name
@@ -943,7 +947,9 @@ def construct_multi_circuit_entity_id(
 
     if use_device_prefix:
         if device_name:
-            parts.append(device_name.lower().replace(" ", "_"))
+            # Sanitize device name for entity ID use
+            sanitized_device_name = slugify(device_name)
+            parts.append(sanitized_device_name)
 
     parts.append(circuit_part)
 
@@ -1018,7 +1024,9 @@ def construct_single_circuit_entity_id(
     if use_device_prefix:
         device_name = device_info.get("name")
         if device_name:
-            parts.append(device_name.lower().replace(" ", "_"))
+            # Sanitize device name for entity ID use
+            sanitized_device_name = slugify(device_name)
+            parts.append(sanitized_device_name)
 
     parts.append(circuit_part)
 
@@ -1078,7 +1086,9 @@ def construct_panel_entity_id(
     parts = []
 
     if use_device_prefix:
-        parts.append(device_name.lower().replace(" ", "_"))
+        # Sanitize device name for entity ID use
+        sanitized_device_name = slugify(device_name)
+        parts.append(sanitized_device_name)
 
     parts.append(suffix)
 
@@ -1170,8 +1180,9 @@ def construct_unmapped_entity_id(
         device_name_raw,
     )
     if device_name_raw:
-        device_name = slugify(device_name_raw)
-        result = f"sensor.{device_name}_{circuit_id}_{suffix}"
+        # Sanitize device name for entity ID use
+        sanitized_device_name = slugify(device_name_raw)
+        result = f"sensor.{sanitized_device_name}_{circuit_id}_{suffix}"
         _LOGGER.debug("construct_unmapped_entity_id result with device: %s", result)
         return result
     else:

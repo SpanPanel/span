@@ -12,7 +12,7 @@ class TestGracePeriodIntegration:
 
     @pytest.mark.asyncio
     @patch('custom_components.span_panel.synthetic_panel_circuits.combine_yaml_templates')
-    @patch('custom_components.span_panel.synthetic_panel_circuits.er.async_get')
+    @patch('homeassistant.helpers.entity_registry.async_get')
     async def test_grace_period_in_generated_yaml(self, mock_async_get, mock_combine_yaml):
         """Test that grace period appears correctly in generated YAML."""
         # Mock the async dependencies
@@ -274,7 +274,7 @@ class TestGracePeriodIntegration:
 
     @pytest.mark.asyncio
     @patch('custom_components.span_panel.synthetic_panel_circuits.combine_yaml_templates')
-    @patch('custom_components.span_panel.synthetic_panel_circuits.er.async_get')
+    @patch('homeassistant.helpers.entity_registry.async_get')
     async def test_grace_period_default_value(self, mock_async_get, mock_combine_yaml):
         """Test that default grace period (15 minutes) is used when not specified."""
         # Mock the async dependencies
@@ -390,7 +390,7 @@ class TestGracePeriodIntegration:
 
         for grace_period in test_cases:
             with patch('custom_components.span_panel.synthetic_panel_circuits.combine_yaml_templates') as mock_combine_yaml, \
-                 patch('custom_components.span_panel.synthetic_panel_circuits.er.async_get') as mock_async_get:
+                 patch('homeassistant.helpers.entity_registry.async_get') as mock_async_get:
 
                 # Mock the async dependencies
                 mock_combine_yaml.return_value = {
