@@ -13,6 +13,7 @@ from ha_synthetic_sensors import (
     SensorManager,
     rebind_backing_entities,
 )
+from ha_synthetic_sensors.config_types import GlobalSettingsDict
 from ha_synthetic_sensors.sensor_set import SensorSet
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -637,6 +638,11 @@ async def handle_solar_sensor_crud(
         solar_consumed_entity_id: str | None = None
         solar_produced_entity_id: str | None = None
 
+        # Set up global settings for solar sensors
+        global_settings: GlobalSettingsDict = {"variables": {"energy_grace_period_minutes": "30"}}
+        await sensor_set.async_set_global_settings(global_settings)
+        _LOGGER.debug("Set global settings for solar sensors: %s", global_settings)
+
         _LOGGER.info("SOLAR_DEBUG: Starting solar sensor addition")
         for template_name in solar_templates:
             try:
@@ -683,7 +689,22 @@ async def handle_solar_sensor_crud(
                         )
 
                         if consumed_exists or produced_exists:
-                            solar_entity_id = "sensor.solar_net_energy"
+                            # Use proper entity ID construction with device prefix
+                            use_device_prefix = coordinator.config_entry.options.get(
+                                "USE_DEVICE_PREFIX", True
+                            )
+                            solar_entity_id = (
+                                construct_panel_entity_id(
+                                    coordinator,
+                                    span_panel,
+                                    "sensor",
+                                    f"solar_{sensor_type}",
+                                    device_name or "",
+                                    sensor_unique_id,
+                                    use_device_prefix=use_device_prefix,
+                                )
+                                or f"sensor.solar_{sensor_type}"
+                            )
                             _LOGGER.debug(
                                 "MIGRATION: Creating new net energy sensor %s (solar was configured)",
                                 solar_entity_id,
@@ -695,8 +716,22 @@ async def handle_solar_sensor_crud(
                             f"This indicates migration failed for solar sensor {sensor_type}."
                         )
                 else:
-                    # Normal mode: generate new entity_id
-                    solar_entity_id = f"sensor.solar_{sensor_type}"
+                    # Normal mode: generate new entity_id with device prefix
+                    use_device_prefix = coordinator.config_entry.options.get(
+                        "USE_DEVICE_PREFIX", True
+                    )
+                    solar_entity_id = (
+                        construct_panel_entity_id(
+                            coordinator,
+                            span_panel,
+                            "sensor",
+                            f"solar_{sensor_type}",
+                            device_name or "",
+                            sensor_unique_id,
+                            use_device_prefix=use_device_prefix,
+                        )
+                        or f"sensor.solar_{sensor_type}"
+                    )
 
                 # Record entity IDs for net energy sensor
                 if sensor_type == "produced_energy":
