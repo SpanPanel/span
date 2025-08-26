@@ -181,7 +181,7 @@ class TestGenerateNamedCircuitSensors:
         """Test successful generation of named circuit sensors."""
         with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(20)]):
+                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
                     with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
                         with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
                             with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
@@ -254,7 +254,7 @@ class TestGenerateNamedCircuitSensors:
         with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
                 with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(20)]):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
                         with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
                             with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
                                 mock_combine.return_value = {
@@ -281,7 +281,7 @@ class TestGenerateNamedCircuitSensors:
         with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=3):
                 with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', return_value='power'):
-                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', return_value="unique_id"):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', return_value="unique_id"):
                         with pytest.raises(ValueError, match="MIGRATION ERROR"):
                             await generate_named_circuit_sensors(
                                 mock_hass, mock_coordinator, mock_span_panel, "Test Panel", migration_mode=True
@@ -303,7 +303,7 @@ class TestGenerateNamedCircuitSensors:
 
         with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', return_value='power'):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', return_value="unique_id"):
+                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', return_value="unique_id"):
                     with pytest.raises(ValueError, match="Circuit invalid_circuit.*has 3 tabs"):
                         await generate_named_circuit_sensors(
                             mock_hass, mock_coordinator, span_panel, "Test Panel"
@@ -315,7 +315,7 @@ class TestGenerateNamedCircuitSensors:
 
         with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(20)]):
+                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
                     with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
                         with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
                             with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
@@ -338,7 +338,7 @@ class TestGenerateNamedCircuitSensors:
         """Test that backing entities are created correctly."""
         with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(20)]):
+                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
                     with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
                         with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
                             with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
@@ -426,7 +426,7 @@ class TestNamedCircuitSensorsIntegration:
         # Mock the helper functions and template processing
         with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
             with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed', 'energy_net'] * len(circuits) * 2):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_synthetic_unique_id', side_effect=[f"unique_{i}" for i in range(len(circuits) * 8)]):
+                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(len(circuits) * 8)]):
                     with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.test_power"):
                         with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(len(circuits) * 8)]):
                             with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:

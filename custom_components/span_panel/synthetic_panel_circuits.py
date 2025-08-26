@@ -10,17 +10,15 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
-from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_backing_entity_id_for_entry,
     construct_panel_entity_id,
     construct_panel_friendly_name,
     construct_panel_synthetic_entity_id,
-    construct_synthetic_unique_id,
+    construct_synthetic_unique_id_for_entry,
     get_panel_entity_suffix,
     get_panel_voltage_attribute,
 )
@@ -110,8 +108,6 @@ async def generate_panel_sensors(
         coordinator: The SpanPanelCoordinator instance
         span_panel: The SpanPanel data
         device_name: The name of the device to use for sensor generation
-        existing_sensor_mappings: Optional dict mapping unique_id to entity_id for migration.
-                                 If None, generates new keys using helpers.
         migration_mode: When True, resolve entity_ids by registry lookup using helper-format unique_id
 
     Returns:
@@ -171,9 +167,9 @@ async def generate_panel_sensors(
         device_name = coordinator.config_entry.data.get(
             "device_name", coordinator.config_entry.title
         )
-        # Build helper-format unique_id (used for registry lookup when migration_mode is True)
-        sensor_unique_id = construct_synthetic_unique_id(
-            device_identifier_for_uniques, entity_suffix
+        # Generate unique_id using helper (consistent with migration expectations)
+        sensor_unique_id = construct_synthetic_unique_id_for_entry(
+            coordinator, span_panel, entity_suffix, device_name
         )
         entity_id = construct_panel_synthetic_entity_id(
             coordinator,
@@ -206,48 +202,11 @@ async def generate_panel_sensors(
         # Get the current data value
         data_value = get_panel_data_value(span_panel, sensor_def["data_path"])
 
-        # Generate the sensor key following documented pattern
-        # Pattern: span_{identifier}_{sensor_key} where identifier is per-device
-        # Generate unique_id using helpers (same as migration uses)
-        sensor_unique_id = construct_synthetic_unique_id(
-            device_identifier_for_uniques, entity_suffix
-        )
-
-        # In migration mode, look up existing entity_id directly from registry
-        resolved_entity_id: str | None = None
-        if migration_mode:
-            entity_registry = er.async_get(hass)
-            existing_entity_id = entity_registry.async_get_entity_id(
-                "sensor", DOMAIN, sensor_unique_id
-            )
-            if existing_entity_id:
-                resolved_entity_id = existing_entity_id
-                _LOGGER.debug(
-                    "MIGRATION: Using existing entity %s for unique_id %s",
-                    resolved_entity_id,
-                    sensor_unique_id,
-                )
-            else:
-                # FATAL ERROR: Migration mode but migrated key not found in registry
-                raise ValueError(
-                    f"MIGRATION ERROR: Expected migrated unique_id '{sensor_unique_id}' not found in registry. "
-                    f"This indicates migration failed for panel sensor {sensor_def['key']}."
-                )
-        else:
-            # Non-migration mode: generate new entity_id
-            resolved_entity_id = construct_panel_synthetic_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform="sensor",
-                suffix=entity_suffix,
-                device_name=device_name,
-            )
-
         # Create placeholders for this specific sensor
         sensor_placeholders = {
             "sensor_key": sensor_unique_id,
             "sensor_name": friendly_name,
-            "entity_id": resolved_entity_id,
+            "entity_id": entity_id,
             "backing_entity_id": backing_entity_id,
         }
 
@@ -291,7 +250,7 @@ async def generate_panel_sensors(
         _LOGGER.debug(
             "Generated panel sensor: %s -> %s (value: %s)",
             sensor_def["key"],
-            resolved_entity_id,
+            entity_id,
             data_value,
         )
 
@@ -319,7 +278,9 @@ async def generate_panel_sensors(
             produced_entity_id = construct_panel_synthetic_entity_id(
                 coordinator, span_panel, "sensor", produced_suffix, device_name
             )
-            net_unique_id = construct_synthetic_unique_id(device_identifier_for_uniques, net_suffix)
+            net_unique_id = construct_synthetic_unique_id_for_entry(
+                coordinator, span_panel, net_suffix, device_name
+            )
             net_entity_id = construct_panel_synthetic_entity_id(
                 coordinator, span_panel, "sensor", net_suffix, device_name
             )

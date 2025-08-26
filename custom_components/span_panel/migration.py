@@ -172,6 +172,12 @@ async def migrate_config_entry_to_synthetic_sensors(
             _LOGGER.error("Config entry %s has no unique_id, cannot migrate", config_entry.entry_id)
             return False
 
+        _LOGGER.debug(
+            "MIGRATION: Using device_identifier=%s for entry %s (from config_entry.unique_id)",
+            device_identifier,
+            config_entry.entry_id,
+        )
+
         for entity in entities:
             if entity.domain != "sensor" or entity.platform != DOMAIN:
                 continue

@@ -5,9 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2025-01-XX
+
+### 🐛 Bug Fixes
+
+- **Migration Entity ID Validation**: Fixed migration errors where entity IDs containing parentheses or hyphens (like panel serial numbers) would fail schema  
+  validation due to erroneous use of the device serial number. The migration process now preserves existing entity IDs exactly as they were originally created
+  instead of attempting to sanitize them.
+
 ## [1.2.2] - 2025-01-XX
 
-⚠️⚠️ **MAJOR UPGRADE WARNING** ⚠️⚠️
+⚠️ **MAJOR UPGRADE WARNING** ⚠️️
 
 **Before upgrading to version 1.2.2, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
 While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
