@@ -137,7 +137,7 @@ UNMAPPED_SENSORS: tuple[
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda circuit: abs(circuit.instant_power),
+        value_fn=lambda circuit: circuit.instant_power,
         entity_registry_enabled_default=True,  # Enabled but invisible
         entity_registry_visible_default=False,  # Hidden from UI
     ),
