@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [1.2.2] - 2025-01-XX
 
-⚠️⚠️ **MAJOR UPGRADE WARNING** ⚠️⚠️
+⚠️ **MAJOR UPGRADE WARNING** ⚠️️
 
 **Before upgrading to version 1.2.2, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
 While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
