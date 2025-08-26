@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2025-01-XX
+## [1.2.2] - 2025-01-XX
 
 ⚠️⚠️ **MAJOR UPGRADE WARNING** ⚠️⚠️
 
-**Before upgrading to version 1.2.0, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
+**Before upgrading to version 1.2.2, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
 While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
 
 ### 🚀 Features
