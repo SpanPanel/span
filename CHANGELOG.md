@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   validation due to erroneous use of the device serial number. The migration process now preserves existing entity IDs exactly as they were originally created
   instead of attempting to sanitize them.
 
+  If you previously migrated and encountered an error, go back to 1.0.10 by restoring your backup. Do NOT attempt to overlay this repository over a corrupted
+  install. If you have a courrpted install and don't want to restore a backup you must first delete the SPAN configuration entry and reboot first.
+
 ## [1.2.2] - 2025-01-XX
 
 ⚠️ **MAJOR UPGRADE WARNING** ⚠️️
