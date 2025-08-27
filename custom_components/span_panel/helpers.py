@@ -1045,7 +1045,7 @@ def construct_multi_circuit_entity_id(
     platform: str,
     suffix: str,
     circuit_numbers: list[int],
-    unique_id: str,
+    unique_id: str | None,
     migration_mode: bool,
     friendly_name: str | None = None,
 ) -> str | None:
@@ -1821,7 +1821,7 @@ def construct_multi_tab_entity_id_from_key(
     platform: str,
     sensor_key: str,
     sensor_config: dict[str, Any],
-    unique_id: str,
+    unique_id: str | None,
     migration_mode: bool,
 ) -> str | None:
     """Construct entity ID for multi-tab (e.g., 240V) or synthetic sensor using sensor key.
