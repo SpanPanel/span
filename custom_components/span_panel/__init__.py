@@ -71,6 +71,7 @@ CURRENT_CONFIG_VERSION = 2
 # Test that module loads
 _LOGGER.debug("SPAN PANEL MODULE LOADED! Version: %s", CURRENT_CONFIG_VERSION)
 
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate config entry for synthetic sensor YAML generation."""
 
@@ -310,9 +311,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # PHASE 1 Ensure device is registered BEFORE synthetic sensors are created
         await ensure_device_registered(hass, entry, span_panel, smart_device_name)
 
-        # Clean up orphaned entities before loading platforms (for fresh installs only)
-        await _cleanup_orphaned_entities_for_fresh_install(hass, entry)
-
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # Register export synthetic config service
@@ -526,12 +524,6 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if hass.state in (CoreState.stopping, CoreState.final_write, CoreState.not_running):
             _LOGGER.debug("Home Assistant is shutting down, skipping reload")
             return
-
-        # Check for naming conflicts that might have been introduced by config changes
-        try:
-            await _cleanup_naming_conflicts_for_config_change(hass, entry)
-        except Exception as e:
-            _LOGGER.warning("Failed to cleanup naming conflicts: %s", e)
 
         # Only reload if solar configuration changed, not for precision-only changes
         if _requires_full_reload(entry):
