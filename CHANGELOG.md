@@ -5,11 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2025-01-XX
+
+### 🐛 Bug Fixes
+
+- **Fresh Install Entity Cleanup**: Fixed issue where orphaned entities from previous installations could interfere with fresh installs, causing the integration
+  to reuse old entity IDs instead of creating clean new ones. The cleanup now runs during integration setup for truly fresh installs (when no other SPAN config
+  entries exist) and removes orphaned entities from all platforms before loading new entities.
+
 ## [1.2.3] - 2025-01-XX
 
 ### 🐛 Bug Fixes
 
-- **Migration Entity ID Validation**: Fixed migration errors where entity IDs containing parentheses or hyphens (like panel serial numbers) would fail schema  
+- **Migration Entity ID Validation**: Fixed migration errors where entity IDs containing parentheses or hyphens (like panel serial numbers) would fail schema
   validation due to erroneous use of the device serial number. The migration process now preserves existing entity IDs exactly as they were originally created
   instead of attempting to sanitize them.
 

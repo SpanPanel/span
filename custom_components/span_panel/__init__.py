@@ -72,6 +72,79 @@ CURRENT_CONFIG_VERSION = 2
 _LOGGER.debug("SPAN PANEL MODULE LOADED! Version: %s", CURRENT_CONFIG_VERSION)
 
 
+async def _cleanup_orphaned_entities_for_fresh_install(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+) -> None:
+    """Clean up orphaned SPAN entities from previous installations.
+
+    During fresh installs, orphaned entities from previous installations
+    can interfere with entity creation, causing the integration to reuse
+    old entity IDs instead of creating clean new ones.
+
+    Only performs cleanup if this is truly a fresh install - no other
+    SPAN config entries exist AND no entities exist for this config entry
+    (which would indicate a migration or existing installation).
+
+    Args:
+        hass: Home Assistant instance
+        config_entry: The config entry being set up
+
+    """
+    entity_registry = er.async_get(hass)
+
+    # Safety check: Only clean up if this is truly a fresh install
+    # (no other SPAN config entries exist)
+    config_entries = hass.config_entries.async_entries(DOMAIN)
+    other_entries = [entry for entry in config_entries if entry.entry_id != config_entry.entry_id]
+
+    if other_entries:
+        _LOGGER.debug(
+            "Skipping orphaned entity cleanup - found %d other SPAN config entries",
+            len(other_entries),
+        )
+        return
+
+    # Additional safety check: If entities already exist for this config entry,
+    # this is likely a migration or reload, not a fresh install
+    existing_entities = [
+        entity_id
+        for entity_id, entry in entity_registry.entities.items()
+        if entry.config_entry_id == config_entry.entry_id and entry.platform == DOMAIN
+    ]
+
+    if existing_entities:
+        _LOGGER.debug(
+            "Skipping orphaned entity cleanup - found %d existing entities for this config entry (likely migration or reload)",
+            len(existing_entities),
+        )
+        return
+
+    _LOGGER.debug("No existing entities found - this appears to be a truly fresh install")
+
+    # For fresh installs, check for any orphaned entities from previous installations
+    # that might have a different config_entry_id but same domain
+    all_span_entities = [
+        entity_id
+        for entity_id, entry in entity_registry.entities.items()
+        if entry.platform == DOMAIN
+    ]
+
+    if all_span_entities:
+        _LOGGER.warning(
+            "Fresh install: Found %d orphaned SPAN entities from previous installations, removing: %s",
+            len(all_span_entities),
+            all_span_entities,
+        )
+
+        for entity_id in all_span_entities:
+            entity_registry.async_remove(entity_id)
+
+        _LOGGER.info("Cleaned up %d orphaned entities for fresh install", len(all_span_entities))
+    else:
+        _LOGGER.debug("No orphaned entities found during fresh install - clean slate")
+
+
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate config entry for synthetic sensor YAML generation."""
 
@@ -310,6 +383,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # PHASE 1 Ensure device is registered BEFORE synthetic sensors are created
         await ensure_device_registered(hass, entry, span_panel, smart_device_name)
+
+        # Clean up orphaned entities before loading platforms (for fresh installs only)
+        await _cleanup_orphaned_entities_for_fresh_install(hass, entry)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
