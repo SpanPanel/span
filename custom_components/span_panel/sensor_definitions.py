@@ -45,6 +45,9 @@ class SpanPanelCircuitsSensorEntityDescription(
 ):
     """Describes a Span Panel circuit sensor entity."""
 
+    entity_registry_enabled_default: bool = True
+    entity_registry_visible_default: bool = True
+
 
 @dataclass(frozen=True)
 class SpanPanelDataRequiredKeysMixin:
@@ -56,6 +59,9 @@ class SpanPanelDataRequiredKeysMixin:
 @dataclass(frozen=True)
 class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDataRequiredKeysMixin):
     """Describes a Span Panel data sensor entity."""
+
+    entity_registry_enabled_default: bool = True
+    entity_registry_visible_default: bool = True
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,9 @@ class SpanPanelStatusSensorEntityDescription(
 ):
     """Describes a Span Panel status sensor entity."""
 
+    entity_registry_enabled_default: bool = True
+    entity_registry_visible_default: bool = True
+
 
 @dataclass(frozen=True)
 class SpanPanelBatteryRequiredKeysMixin:
@@ -84,6 +93,9 @@ class SpanPanelBatterySensorEntityDescription(
     SensorEntityDescription, SpanPanelBatteryRequiredKeysMixin
 ):
     """Describes a Span Panel battery sensor entity."""
+
+    entity_registry_enabled_default: bool = True
+    entity_registry_visible_default: bool = True
 
 
 # Panel data status sensor definitions (native sensors)

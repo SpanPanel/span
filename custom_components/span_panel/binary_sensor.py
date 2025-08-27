@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
@@ -154,17 +155,46 @@ class SpanPanelBinarySensor(
         use_device_prefix = data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
 
         # Use the panel-level helper for entity_id construction (status sensor pattern)
+        # panel_status is a new sensor in this release, so it should always use migration_mode=False
+        # Other sensors should use migration mode based on existing entities
+        if description.key == "panel_status":
+            migration_mode = False  # panel_status is new, always create
+        else:
+            # Determine migration mode by checking if this is a fresh install
+            # If there are existing entities for this config entry, we're in migration mode
+            entity_registry = async_get_entity_registry(data_coordinator.hass)
+            existing_entities = [
+                entity_id
+                for entity_id, entity_entry in entity_registry.entities.items()
+                if entity_entry.config_entry_id == data_coordinator.config_entry.entry_id
+            ]
+            migration_mode = len(existing_entities) > 0
+
         entity_id = construct_panel_entity_id(
             data_coordinator,
             span_panel,
             "binary_sensor",
             description.key.lower(),
             self._device_name,
+            unique_id=self._attr_unique_id,
+            migration_mode=migration_mode,
+            use_device_prefix=use_device_prefix,
+        )
+        _LOGGER.debug(
+            "BINARY_SENSOR_DEBUG: key=%s, migration_mode=%s, unique_id=%s, entity_id=%s",
+            description.key,
+            migration_mode,
             self._attr_unique_id,
-            use_device_prefix,
+            entity_id,
         )
         if entity_id is not None:
             self.entity_id = entity_id
+        else:
+            _LOGGER.error(
+                "BINARY_SENSOR_ERROR: construct_panel_entity_id returned None for key=%s, unique_id=%s",
+                description.key,
+                self._attr_unique_id,
+            )
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

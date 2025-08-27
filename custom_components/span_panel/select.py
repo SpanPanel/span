@@ -84,6 +84,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         circuit_id: str,
         name: str,
         device_name: str,
+        migration_mode: bool = False,
     ) -> None:
         """Initialize the select."""
         super().__init__(coordinator)
@@ -98,6 +99,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self.description_wrapper = description  # Keep reference to wrapper for custom functions
         self.id = circuit_id
         self._device_name = device_name
+        self._migration_mode = migration_mode
 
         self._attr_unique_id = self._construct_select_unique_id(coordinator, span_panel, self.id)
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
@@ -114,6 +116,8 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                     platform="select",
                     suffix=entity_suffix,
                     friendly_name=name,
+                    unique_id=self._attr_unique_id,
+                    migration_mode=self._migration_mode,
                     tab1=circuit.tabs[0],
                     tab2=circuit.tabs[1],
                 )
@@ -125,6 +129,8 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                     platform="select",
                     suffix=entity_suffix,
                     friendly_name=name,
+                    unique_id=self._attr_unique_id,
+                    migration_mode=self._migration_mode,
                     tab=circuit.tabs[0],
                 )
             case _:
@@ -332,6 +338,9 @@ async def async_setup_entry(
     # Get device name from config entry data
     device_name = config_entry.data.get("device_name", config_entry.title)
 
+    # Get migration mode from config entry options
+    migration_mode = config_entry.options.get("migration_mode", False)
+
     entities: list[SpanPanelCircuitsSelect] = []
 
     for circuit_id, circuit_data in span_panel.circuits.items():
@@ -343,6 +352,7 @@ async def async_setup_entry(
                     circuit_id,
                     circuit_data.name,
                     device_name,
+                    migration_mode,
                 )
             )
 

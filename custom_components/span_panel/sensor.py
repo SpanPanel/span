@@ -5,6 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import asyncio
 from collections.abc import Callable
+
+# Override the description key to use the circuit_id for data lookup
+from dataclasses import replace
 import logging
 from typing import Any, Generic, TypeVar
 
@@ -197,8 +200,8 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if self._device_name:
             device_name_slug = slugify(self._device_name)
             return f"sensor.{device_name_slug}_{circuit_id}_{suffix}"
-        else:
-            return f"sensor.{circuit_id}_{suffix}"
+
+        return f"sensor.{circuit_id}_{suffix}"
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -337,8 +340,9 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
                 "sensor",
                 entity_suffix,
                 self._device_name,
-                self._attr_unique_id,
-                use_device_prefix,
+                unique_id=self._attr_unique_id,
+                migration_mode=False,  # TODO: Pass migration_mode from caller
+                use_device_prefix=use_device_prefix,
             )
         return None
 
@@ -393,8 +397,9 @@ class SpanPanelStatus(
                 "sensor",
                 entity_suffix,
                 self._device_name,
-                self._attr_unique_id,
-                use_device_prefix,
+                unique_id=self._attr_unique_id,
+                migration_mode=False,  # TODO: Pass migration_mode from caller
+                use_device_prefix=use_device_prefix,
             )
         return None
 
@@ -454,8 +459,9 @@ class SpanPanelBattery(
                 "sensor",
                 entity_suffix,
                 self._device_name,
-                self._attr_unique_id,
-                use_device_prefix,
+                unique_id=self._attr_unique_id,
+                migration_mode=False,  # TODO: Pass migration_mode from caller
+                use_device_prefix=use_device_prefix,
             )
         return None
 
@@ -488,15 +494,9 @@ class SpanUnmappedCircuitSensor(
         # Store the original description key for unique ID and entity ID generation
         self.original_key = description.key
 
-        # Override the description key to use the circuit_id for data lookup
-        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+        description_with_circuit = replace(
+            description,
             key=circuit_id,
-            name=description.name,
-            native_unit_of_measurement=description.native_unit_of_measurement,
-            state_class=description.state_class,
-            suggested_display_precision=description.suggested_display_precision,
-            device_class=description.device_class,
-            value_fn=description.value_fn,
             entity_registry_enabled_default=True,
             entity_registry_visible_default=False,
         )
@@ -647,9 +647,9 @@ async def _handle_migration_solar_setup(
         if result:
             _LOGGER.debug("Initial solar sensor setup completed successfully")
             return True
-        else:
-            _LOGGER.warning("Initial solar sensor setup failed")
-            return False
+
+        _LOGGER.warning("Initial solar sensor setup failed")
+        return False
     except Exception as e:
         _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
         return False

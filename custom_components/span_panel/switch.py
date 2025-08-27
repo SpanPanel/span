@@ -39,7 +39,12 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
     """Represent a switch entity."""
 
     def __init__(
-        self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str, device_name: str
+        self,
+        coordinator: SpanPanelCoordinator,
+        circuit_id: str,
+        name: str,
+        device_name: str,
+        migration_mode: bool = False,
     ) -> None:
         """Initialize the values."""
         span_panel: SpanPanel = coordinator.data
@@ -64,6 +69,8 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
                     platform="switch",
                     suffix="breaker",
                     friendly_name=name,
+                    unique_id=self._attr_unique_id,
+                    migration_mode=migration_mode,
                     tab1=circuit.tabs[0],
                     tab2=circuit.tabs[1],
                 )
@@ -75,6 +82,8 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
                     platform="switch",
                     suffix="breaker",
                     friendly_name=name,
+                    unique_id=self._attr_unique_id,
+                    migration_mode=migration_mode,
                     tab=circuit.tabs[0],
                 )
             case _:
@@ -292,12 +301,17 @@ async def async_setup_entry(
     # Get device name from config entry data
     _device_name = config_entry.data.get("device_name", config_entry.title)
 
+    # Get migration mode from config entry options
+    migration_mode = config_entry.options.get("migration_mode", False)
+
     entities: list[SpanPanelCircuitsSwitch] = []
 
     for circuit_id, circuit_data in span_panel.circuits.items():
         if circuit_data.is_user_controllable:
             entities.append(
-                SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name, _device_name)
+                SpanPanelCircuitsSwitch(
+                    coordinator, circuit_id, circuit_data.name, _device_name, migration_mode
+                )
             )
 
     async_add_entities(entities)

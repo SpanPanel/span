@@ -73,14 +73,19 @@ _LOGGER.debug("SPAN PANEL MODULE LOADED! Version: %s", CURRENT_CONFIG_VERSION)
 
 
 async def _cleanup_orphaned_entities_for_fresh_install(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    hass: HomeAssistant, config_entry: ConfigEntry
 ) -> None:
-    """Clean up orphaned SPAN entities from previous installations.
+    """Clean up orphaned entities from previous installations during fresh installs.
 
     During fresh installs, orphaned entities from previous installations
     can interfere with entity creation, causing the integration to reuse
     old entity IDs instead of creating clean new ones.
+
+    This enhanced cleanup handles:
+    1. Orphaned entities from previous installations
+    2. Entities with mismatched naming strategies
+    3. Entities from different device configurations
+    4. Entities that would conflict with current configuration
 
     Only performs cleanup if this is truly a fresh install - no other
     SPAN config entries exist AND no entities exist for this config entry
@@ -122,27 +127,186 @@ async def _cleanup_orphaned_entities_for_fresh_install(
 
     _LOGGER.debug("No existing entities found - this appears to be a truly fresh install")
 
-    # For fresh installs, check for any orphaned entities from previous installations
-    # that might have a different config_entry_id but same domain
+    # Enhanced cleanup: Check for orphaned entities and potential conflicts
     all_span_entities = [
-        entity_id
+        (entity_id, entry)
         for entity_id, entry in entity_registry.entities.items()
         if entry.platform == DOMAIN
     ]
 
-    if all_span_entities:
-        _LOGGER.warning(
-            "Fresh install: Found %d orphaned SPAN entities from previous installations, removing: %s",
-            len(all_span_entities),
-            all_span_entities,
+    if not all_span_entities:
+        _LOGGER.debug("No orphaned entities found during fresh install - clean slate")
+        return
+
+    # Analyze entities for potential conflicts
+    entities_to_remove = []
+    entities_to_analyze = []
+
+    for entity_id, entry in all_span_entities:
+        # Always remove orphaned entities (no config_entry_id)
+        if entry.config_entry_id is None:
+            entities_to_remove.append(entity_id)
+            _LOGGER.debug("Marking orphaned entity for removal: %s", entity_id)
+            continue
+
+        # Analyze entities that might have naming conflicts
+        entities_to_analyze.append((entity_id, entry))
+
+    # Analyze potential naming conflicts based on current configuration
+    if entities_to_analyze:
+        _LOGGER.debug(
+            "Analyzing %d entities for potential naming conflicts", len(entities_to_analyze)
         )
 
-        for entity_id in all_span_entities:
+        # Check if current config would generate different entity IDs
+        # This is a heuristic based on device name changes or naming strategy changes
+        current_device_name = config_entry.data.get("device_name") or config_entry.title
+        current_use_device_prefix = config_entry.options.get("use_device_prefix", True)
+
+        for entity_id, entry in entities_to_analyze:
+            should_remove = False
+
+            # Check if entity ID structure doesn't match current naming strategy
+            if current_use_device_prefix:
+                # Current config uses device prefix, but entity doesn't have it
+                if current_device_name and slugify(current_device_name) not in entity_id:
+                    should_remove = True
+                    _LOGGER.debug(
+                        "Entity %s doesn't match current device prefix naming strategy", entity_id
+                    )
+            else:
+                # Current config doesn't use device prefix, but entity has device prefix
+                # This is harder to detect reliably, so we'll be more conservative
+                pass
+
+            # Check for simulator vs real panel conflicts
+            is_current_simulator = config_entry.data.get("simulation_mode", False)
+            if is_current_simulator:
+                # Current config is simulator - remove entities that look like real panel entities
+                if "span_" in entity_id and not any(
+                    slugify_part in entity_id
+                    for slugify_part in [slugify(current_device_name), slugify(config_entry.title)]
+                ):
+                    should_remove = True
+                    _LOGGER.debug(
+                        "Entity %s appears to be from real panel but current config is simulator",
+                        entity_id,
+                    )
+
+            if should_remove:
+                entities_to_remove.append(entity_id)
+
+    # Perform the cleanup
+    if entities_to_remove:
+        _LOGGER.warning(
+            "Fresh install: Found %d orphaned/conflicting SPAN entities, removing: %s",
+            len(entities_to_remove),
+            entities_to_remove,
+        )
+
+        for entity_id in entities_to_remove:
             entity_registry.async_remove(entity_id)
 
-        _LOGGER.info("Cleaned up %d orphaned entities for fresh install", len(all_span_entities))
+        _LOGGER.info(
+            "Cleaned up %d orphaned/conflicting entities for fresh install", len(entities_to_remove)
+        )
     else:
-        _LOGGER.debug("No orphaned entities found during fresh install - clean slate")
+        _LOGGER.debug("No orphaned or conflicting entities found during fresh install")
+
+
+async def _cleanup_naming_conflicts_for_config_change(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
+    """Clean up entities that would conflict with current naming strategy.
+
+    This function is called when configuration changes might affect entity naming,
+    such as changes to device name, device prefix settings, or simulation mode.
+
+    Args:
+        hass: Home Assistant instance
+        config_entry: The config entry being updated
+
+    """
+    entity_registry = er.async_get(hass)
+
+    # Get entities for this config entry
+    config_entities = [
+        (entity_id, entry)
+        for entity_id, entry in entity_registry.entities.items()
+        if entry.config_entry_id == config_entry.entry_id and entry.platform == DOMAIN
+    ]
+
+    if not config_entities:
+        _LOGGER.debug("No entities found for config entry %s", config_entry.entry_id)
+        return
+
+    _LOGGER.debug(
+        "Analyzing %d entities for naming conflicts after config change", len(config_entities)
+    )
+
+    # Analyze current configuration
+    current_device_name = config_entry.data.get("device_name") or config_entry.title
+    current_use_device_prefix = config_entry.options.get("use_device_prefix", True)
+    is_current_simulator = config_entry.data.get("simulation_mode", False)
+
+    entities_to_remove = []
+
+    for entity_id, entry in config_entities:
+        should_remove = False
+
+        # Check device prefix naming strategy conflicts
+        if current_use_device_prefix:
+            # Current config uses device prefix
+            if current_device_name and slugify(current_device_name) not in entity_id:
+                should_remove = True
+                _LOGGER.debug(
+                    "Entity %s doesn't match current device prefix naming strategy", entity_id
+                )
+        else:
+            # Current config doesn't use device prefix
+            # Check if entity has a device prefix that shouldn't be there
+            # This is more conservative - only remove if we're confident it's wrong
+            if current_device_name and slugify(current_device_name) in entity_id:
+                # Entity has device prefix but config says not to use it
+                should_remove = True
+                _LOGGER.debug(
+                    "Entity %s has device prefix but current config doesn't use device prefix",
+                    entity_id,
+                )
+
+        # Check simulator vs real panel conflicts
+        if is_current_simulator:
+            # Current config is simulator
+            if "span_" in entity_id and not any(
+                slugify_part in entity_id
+                for slugify_part in [slugify(current_device_name), slugify(config_entry.title)]
+            ):
+                should_remove = True
+                _LOGGER.debug(
+                    "Entity %s appears to be from real panel but current config is simulator",
+                    entity_id,
+                )
+
+        if should_remove:
+            entities_to_remove.append(entity_id)
+
+    # Perform the cleanup
+    if entities_to_remove:
+        _LOGGER.warning(
+            "Config change: Found %d entities with naming conflicts, removing: %s",
+            len(entities_to_remove),
+            entities_to_remove,
+        )
+
+        for entity_id in entities_to_remove:
+            entity_registry.async_remove(entity_id)
+
+        _LOGGER.info(
+            "Cleaned up %d entities with naming conflicts after config change",
+            len(entities_to_remove),
+        )
+    else:
+        _LOGGER.debug("No naming conflicts found after config change")
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -458,6 +622,30 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
+        # Clean up any remaining orphaned entities for this config entry
+        try:
+            entity_registry = er.async_get(hass)
+            orphaned_entities = [
+                entity_id
+                for entity_id, entity_entry in entity_registry.entities.items()
+                if entity_entry.config_entry_id == entry.entry_id
+                and entity_entry.platform == DOMAIN
+            ]
+
+            if orphaned_entities:
+                _LOGGER.debug(
+                    "Cleaning up %d orphaned entities during unload: %s",
+                    len(orphaned_entities),
+                    orphaned_entities,
+                )
+                for entity_id in orphaned_entities:
+                    entity_registry.async_remove(entity_id)
+                _LOGGER.info(
+                    "Cleaned up %d orphaned entities during unload", len(orphaned_entities)
+                )
+        except Exception as e:
+            _LOGGER.warning("Failed to cleanup orphaned entities during unload: %s", e)
+
         hass.data[DOMAIN].pop(entry.entry_id)
         _LOGGER.debug("Successfully unloaded SPAN Panel integration")
     else:
@@ -576,6 +764,12 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if hass.state in (CoreState.stopping, CoreState.final_write, CoreState.not_running):
             _LOGGER.debug("Home Assistant is shutting down, skipping reload")
             return
+
+        # Check for naming conflicts that might have been introduced by config changes
+        try:
+            await _cleanup_naming_conflicts_for_config_change(hass, entry)
+        except Exception as e:
+            _LOGGER.warning("Failed to cleanup naming conflicts: %s", e)
 
         # Only reload if solar configuration changed, not for precision-only changes
         if _requires_full_reload(entry):

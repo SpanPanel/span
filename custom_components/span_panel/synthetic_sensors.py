@@ -1250,16 +1250,6 @@ async def generate_circuit_sensor_configs(
             _LOGGER.warning("Circuit %s not found in panel data", circuit_id)
             continue
 
-        # Generate entity ID using the single circuit helper
-        entity_id = construct_single_circuit_entity_id(
-            coordinator=coordinator,
-            span_panel=span_panel,
-            platform="sensor",
-            suffix=type_config["suffix"],
-            circuit_data=circuit_data,
-            unique_id=None,  # Let it generate the entity ID
-        )
-
         # Generate unique ID for this circuit sensor using per-entry identifier
         sensor_name = f"{circuit_id}_{type_config['suffix']}"
         device_name = coordinator.config_entry.data.get(
@@ -1267,6 +1257,17 @@ async def generate_circuit_sensor_configs(
         )
         sensor_unique_id = construct_synthetic_unique_id_for_entry(
             coordinator, span_panel, sensor_name, device_name
+        )
+
+        # Generate entity ID using the single circuit helper
+        entity_id = construct_single_circuit_entity_id(
+            coordinator=coordinator,
+            span_panel=span_panel,
+            platform="sensor",
+            suffix=type_config["suffix"],
+            circuit_data=circuit_data,
+            unique_id=sensor_unique_id,
+            migration_mode=False,  # TODO: Pass migration_mode from caller
         )
 
         # Generate backing entity ID

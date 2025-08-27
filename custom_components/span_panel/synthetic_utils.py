@@ -165,7 +165,7 @@ async def combine_yaml_templates(
 
     if combined_template is None:
         _LOGGER.error("Combined template is None!")
-        return {"global_settings": {}, "sensor_configs": {}}
+        return {"global_settings": {}, "sensor_configs": {}, "filled_template": ""}
 
     # Fill all placeholders in the combined template
     filled_template = fill_template(combined_template, placeholders)

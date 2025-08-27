@@ -22,6 +22,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    build_binary_sensor_unique_id_for_entry,
     construct_120v_synthetic_entity_id,
     construct_240v_synthetic_entity_id,
     construct_panel_entity_id,
@@ -171,14 +172,15 @@ def _generate_sensor_entity_id(
                 unique_id,
             )
             return existing_entity_id
-        else:
-            # FATAL ERROR: Migration mode but migrated key not found in registry
-            raise ValueError(
-                f"MIGRATION ERROR: Expected solar unique_id '{unique_id}' not found in registry. "
-                f"This indicates migration failed for solar sensor {sensor_type}."
-            )
+
+        # FATAL ERROR: Migration mode but migrated key not found in registry
+        raise ValueError(
+            f"MIGRATION ERROR: Expected solar unique_id '{unique_id}' not found in registry. "
+            f"This indicates migration failed for solar sensor {sensor_type}."
+        )
 
     # Normal mode: generate new entity_id
+    device_name = coordinator.config_entry.data.get("device_name", coordinator.config_entry.title)
     if leg1_number > 0 and leg2_number > 0:
         # Two tabs - use 240V synthetic helper
         return construct_240v_synthetic_entity_id(
@@ -187,22 +189,28 @@ def _generate_sensor_entity_id(
             "sensor",
             sensor_type,
             friendly_name="Solar",
+            unique_id=construct_synthetic_unique_id_for_entry(
+                coordinator, span_panel, f"solar_{sensor_type}", device_name
+            ),
+            migration_mode=migration_mode,
             tab1=leg1_number,
             tab2=leg2_number,
-            unique_id=None,
         )
-    else:
-        # Single tab - use 120V synthetic helper
-        active_tab = leg1_number if leg1_number > 0 else leg2_number
-        return construct_120v_synthetic_entity_id(
-            coordinator,
-            span_panel,
-            "sensor",
-            sensor_type,
-            friendly_name="Solar",
-            tab=active_tab,
-            unique_id=None,
-        )
+
+    # Single tab - use 120V synthetic helper
+    active_tab = leg1_number if leg1_number > 0 else leg2_number
+    return construct_120v_synthetic_entity_id(
+        coordinator,
+        span_panel,
+        "sensor",
+        sensor_type,
+        friendly_name="Solar",
+        unique_id=construct_synthetic_unique_id_for_entry(
+            coordinator, span_panel, f"solar_{sensor_type}", device_name
+        ),
+        migration_mode=migration_mode,
+        tab=active_tab,
+    )
 
 
 async def _process_sensor_template(
@@ -376,12 +384,17 @@ async def generate_solar_sensors_with_entity_ids(
 
     # Construct panel status entity ID
     use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
     panel_status_entity_id = construct_panel_entity_id(
         coordinator,
         span_panel,
         "binary_sensor",
         "panel_status",
         device_name,
+        unique_id=build_binary_sensor_unique_id_for_entry(
+            coordinator, span_panel, "panel_status", device_name
+        ),
+        migration_mode=False,  # panel_status is new, always create
         use_device_prefix=use_device_prefix,
     )
 
@@ -397,7 +410,7 @@ async def generate_solar_sensors_with_entity_ids(
         "energy_display_precision": str(
             coordinator.config_entry.options.get("energy_display_precision", 2)
         ),
-        "panel_status_entity_id": panel_status_entity_id or "binary_sensor.span_panel_panel_status",
+        "panel_status_entity_id": panel_status_entity_id,
         "leg1_circuit": f"unmapped_tab_{leg1_number}",
         "leg2_circuit": f"unmapped_tab_{leg2_number}",
         "tabs_attribute": tabs_attribute,
@@ -702,7 +715,8 @@ async def handle_solar_sensor_crud(
                                     "sensor",
                                     f"solar_{sensor_type}",
                                     device_name or "",
-                                    sensor_unique_id,
+                                    unique_id=sensor_unique_id,
+                                    migration_mode=migration_mode,
                                     use_device_prefix=use_device_prefix,
                                 )
                                 or f"sensor.solar_{sensor_type}"
@@ -729,7 +743,8 @@ async def handle_solar_sensor_crud(
                             "sensor",
                             f"solar_{sensor_type}",
                             device_name or "",
-                            sensor_unique_id,
+                            unique_id=sensor_unique_id,
+                            migration_mode=migration_mode,
                             use_device_prefix=use_device_prefix,
                         )
                         or f"sensor.solar_{sensor_type}"
@@ -750,6 +765,7 @@ async def handle_solar_sensor_crud(
                 )
 
                 # Construct panel status entity ID
+                # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
                 use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
                 panel_status_entity_id = construct_panel_entity_id(
                     coordinator,
@@ -757,6 +773,10 @@ async def handle_solar_sensor_crud(
                     "binary_sensor",
                     "panel_status",
                     device_name or "",
+                    unique_id=build_binary_sensor_unique_id_for_entry(
+                        coordinator, span_panel, "panel_status", device_name or ""
+                    ),
+                    migration_mode=False,  # panel_status is new, always create
                     use_device_prefix=use_device_prefix,
                 )
 

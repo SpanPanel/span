@@ -259,6 +259,7 @@ class EntityIdMigrationManager:
                     sensor_key=sensor_key,
                     sensor_config=sensor_config,
                     unique_id=None,  # Don't check registry during migration
+                    migration_mode=True,
                 )
 
         # Temporarily update coordinator flags for helper functions
@@ -281,6 +282,7 @@ class EntityIdMigrationManager:
                 sensor_key=sensor_key,
                 sensor_config=sensor_config,
                 unique_id=None,  # Don't check registry during migration
+                migration_mode=True,
             )
 
             return new_entity_id

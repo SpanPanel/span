@@ -14,6 +14,7 @@ from homeassistant.util import slugify
 
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    build_binary_sensor_unique_id_for_entry,
     construct_backing_entity_id_for_entry,
     construct_panel_entity_id,
     construct_panel_friendly_name,
@@ -135,15 +136,32 @@ async def generate_panel_sensors(
     energy_precision = coordinator.config_entry.options.get("energy_display_precision", 2)
 
     # Construct panel status entity ID
+    # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
     use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    panel_status_unique_id = build_binary_sensor_unique_id_for_entry(
+        coordinator, span_panel, "panel_status", device_name
+    )
     panel_status_entity_id = construct_panel_entity_id(
         coordinator,
         span_panel,
         "binary_sensor",
         "panel_status",
         device_name,
+        unique_id=panel_status_unique_id,
+        migration_mode=False,  # panel_status is new, always create
         use_device_prefix=use_device_prefix,
     )
+    _LOGGER.debug(
+        "SYNTHETIC_PANEL_DEBUG: panel_status lookup - unique_id=%s, entity_id=%s",
+        panel_status_unique_id,
+        panel_status_entity_id,
+    )
+    if panel_status_entity_id is None:
+        _LOGGER.error(
+            "SYNTHETIC_PANEL_ERROR: panel_status_entity_id is None! unique_id=%s, device_name=%s",
+            panel_status_unique_id,
+            device_name,
+        )
 
     # Create common placeholders for header template
     common_placeholders = {
@@ -158,7 +176,7 @@ async def generate_panel_sensors(
         # Panel sensors don't have circuit data, so use appropriate defaults
         "tabs_attribute": "panel",  # Panel-level identifier
         "voltage_attribute": str(get_panel_voltage_attribute()),  # Standard panel voltage
-        "panel_status_entity_id": panel_status_entity_id or "binary_sensor.span_panel_panel_status",
+        "panel_status_entity_id": panel_status_entity_id,
     }
 
     for sensor_def in PANEL_SENSOR_DEFINITIONS:
@@ -177,7 +195,8 @@ async def generate_panel_sensors(
             "sensor",
             entity_suffix,
             device_name,
-            unique_id=sensor_unique_id if migration_mode else None,
+            unique_id=sensor_unique_id,
+            migration_mode=migration_mode,
         )
         _LOGGER.debug(
             "GEN_PANEL_DEBUG: migration_mode=%s, unique_id=%s, resolved_entity_id=%s",
@@ -273,16 +292,38 @@ async def generate_panel_sensors(
             net_suffix = get_panel_entity_suffix(net_description_key)
 
             consumed_entity_id = construct_panel_synthetic_entity_id(
-                coordinator, span_panel, "sensor", consumed_suffix, device_name
+                coordinator,
+                span_panel,
+                "sensor",
+                consumed_suffix,
+                device_name,
+                unique_id=construct_synthetic_unique_id_for_entry(
+                    coordinator, span_panel, consumed_suffix, device_name
+                ),
+                migration_mode=migration_mode,
             )
             produced_entity_id = construct_panel_synthetic_entity_id(
-                coordinator, span_panel, "sensor", produced_suffix, device_name
+                coordinator,
+                span_panel,
+                "sensor",
+                produced_suffix,
+                device_name,
+                unique_id=construct_synthetic_unique_id_for_entry(
+                    coordinator, span_panel, produced_suffix, device_name
+                ),
+                migration_mode=migration_mode,
             )
             net_unique_id = construct_synthetic_unique_id_for_entry(
                 coordinator, span_panel, net_suffix, device_name
             )
             net_entity_id = construct_panel_synthetic_entity_id(
-                coordinator, span_panel, "sensor", net_suffix, device_name
+                coordinator,
+                span_panel,
+                "sensor",
+                net_suffix,
+                device_name,
+                unique_id=net_unique_id,
+                migration_mode=migration_mode,
             )
 
             # Create placeholders for this specific sensor (following main loop pattern)
