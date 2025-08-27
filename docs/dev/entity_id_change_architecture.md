@@ -115,7 +115,7 @@ class EntityIdMigrationManager:
     async def migrate_synthetic_entities(self, old_flags, new_flags):
         # Only handles legacy migration (no device prefix -> device prefix)
         # Non-legacy migrations not supported - users choose pattern during setup
-        
+
         if not old_flags.get(USE_DEVICE_PREFIX, False):
             return await self._migrate_legacy_to_prefix(old_flags, new_flags)
         else:
