@@ -2,11 +2,23 @@
 
 ## Overview
 
-The synthetic sensors system handles entity ID changes through a coordinated approach involving per-SensorSet entity indexes, bulk modification operations, and
-registry event storm protection. The primary goal is to prevent event thrashing when we initiate entity ID changes that would otherwise trigger cascading update
-cycles.
+The SPAN Panel integration handles entity ID changes by leveraging the ha-synthetic-sensors package's sophisticated entity management system. This includes per-SensorSet entity indexes, bulk modification operations, and registry event storm protection. The primary goal is to prevent event thrashing when we initiate entity ID changes that would otherwise trigger cascading update cycles.
 
-## Core Components
+## Architecture Relationship
+
+### SPAN Panel Integration
+- **Role**: Consumer of ha-synthetic-sensors package
+- **Entity Management**: Delegates to ha-synthetic-sensors StorageManager and SensorSet classes
+- **Migration**: Implements custom migration logic for legacy naming patterns
+- **Configuration**: Uses ha-synthetic-sensors for sensor storage and entity tracking
+
+### ha-synthetic-sensors Package
+- **Role**: Provider of entity management infrastructure
+- **Components**: EntityIndex, EntityRegistryListener, StorageManager, SensorSet
+- **Storm Protection**: Handles registry event filtering and self-change detection
+- **Bulk Operations**: Provides atomic modification capabilities
+
+## Core Components (ha-synthetic-sensors)
 
 ### Per-SensorSet Entity Index
 
@@ -79,11 +91,57 @@ cycles.
 - **Always Rebuild**: Never incremental updates - always rebuild entire index from final SensorSet state
 - **Self-References Included**: ConfigManager may inject self-references (e.g., for attribute formulas) - these are tracked too
 
-## Architecture Details
+## SPAN Panel Integration Details
+
+### Entity Management Flow
+
+```python
+# SPAN Panel uses ha-synthetic-sensors StorageManager
+storage_manager = hass.data["ha_synthetic_sensors"]["storage_managers"][config_entry_id]
+sensor_set = storage_manager.get_sensor_set(sensor_set_id)
+
+# Bulk modifications use ha-synthetic-sensors infrastructure
+await sensor_set.async_modify(modification)
+
+# Entity tracking handled by ha-synthetic-sensors EntityIndex
+# SPAN Panel doesn't directly interact with EntityIndex
+```
+
+### Migration System
+
+```python
+# SPAN Panel implements custom migration for legacy naming patterns
+class EntityIdMigrationManager:
+    async def migrate_synthetic_entities(self, old_flags, new_flags):
+        # Only handles legacy migration (no device prefix -> device prefix)
+        # Non-legacy migrations not supported - users choose pattern during setup
+        
+        if not old_flags.get(USE_DEVICE_PREFIX, False):
+            return await self._migrate_legacy_to_prefix(old_flags, new_flags)
+        else:
+            # Skip migration - pattern already chosen during setup
+            return True
+```
+
+### Sensor Manager Integration
+
+```python
+# SPAN Panel uses ha-synthetic-sensors sensor manager
+sensor_manager = hass.data["ha_synthetic_sensors"]["sensor_managers"][config_entry_id]
+
+# Export current configuration
+current_sensors = await sensor_manager.export()
+
+# Modify with new entity IDs
+await sensor_manager.modify(migrated_sensors)
+```
+
+## Architecture Details (ha-synthetic-sensors)
 
 ### SensorSet Structure
 
 ```python
+# This is implemented in ha-synthetic-sensors package
 class SensorSet:
     def __init__(self, storage_manager, sensor_set_id):
         self.storage_manager = storage_manager
@@ -126,6 +184,7 @@ class SensorSet:
 ### Event Listener Flow
 
 ```python
+# This is implemented in ha-synthetic-sensors package
 class EntityRegistryListener:
     def handle_entity_change(self, old_entity_id, new_entity_id):
         affected_sensor_sets = []
@@ -207,9 +266,9 @@ class EntityRegistryListener:
 
 ### For SpanPanel Integration
 
-- SpanPanel creates/manages its own SensorSet(s)
+- SpanPanel creates/manages its own SensorSet(s) through ha-synthetic-sensors
 - Uses `SensorSet.async_modify()` for bulk entity ID changes
-- Registry event storms automatically prevented
+- Registry event storms automatically prevented by ha-synthetic-sensors
 - Isolated from other integrations' entity changes
 
 ### For Event Handling
@@ -260,3 +319,10 @@ class EntityRegistryListener:
 - No `update_sensor_entities` method - always rebuild entire index
 - No incremental entity tracking - full rebuild is simpler and more reliable
 - No shared entity reference logic - per-SensorSet design eliminates this complexity
+
+### SPAN Panel Specific Notes
+
+- **Legacy Migration Only**: SPAN Panel only supports legacy migration (no device prefix → device prefix)
+- **Setup-Time Pattern Choice**: Users choose naming pattern during initial setup, no runtime changes
+- **ha-synthetic-sensors Dependency**: All entity management delegated to ha-synthetic-sensors package
+- **No Custom EntityIndex**: SPAN Panel uses ha-synthetic-sensors EntityIndex through StorageManager
