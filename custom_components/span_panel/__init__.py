@@ -35,7 +35,9 @@ from .const import (
     STORAGE_MANAGER,
 )
 from .coordinator import SpanPanelCoordinator
-from .migration import migrate_config_entry_to_synthetic_sensors
+from .migration import (
+    migrate_config_entry_to_synthetic_sensors,
+)
 
 # Handle solar options changes before reload (battery is now native sensor)
 from .options import (
@@ -46,7 +48,7 @@ from .options import (
     Options,
 )
 from .span_panel import SpanPanel
-from .span_panel_api import SpanPanelAuthError, set_async_delay_func
+from .span_panel_api import SpanPanelAuthError
 from .synthetic_sensors import (
     async_export_synthetic_config_service,
     cleanup_synthetic_sensors,
@@ -90,16 +92,20 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             _LOGGER.error("Failed to migrate config entry %s", config_entry.entry_id)
             return False
 
-        # Update config entry version using HA API
+        # Set the post-migration stable flag to prevent future entity renames
+        updated_options = dict(config_entry.options)
+        updated_options["POST_MIGRATION_STABLE"] = True
+
+        # Update config entry version and options using HA API
         hass.config_entries.async_update_entry(
             config_entry,
             data=config_entry.data,
-            options=config_entry.options,
+            options=updated_options,
             title=config_entry.title,
             version=CURRENT_CONFIG_VERSION,
         )
         _LOGGER.debug(
-            "Successfully migrated config entry %s to version %s",
+            "Successfully migrated config entry %s to version %s and set POST_MIGRATION_STABLE flag",
             config_entry.entry_id,
             CURRENT_CONFIG_VERSION,
         )
@@ -110,14 +116,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("SETUP ENTRY CALLED! Entry ID: %s, Version: %s", entry.entry_id, entry.version)
-
-    async def ha_compatible_delay(seconds: float) -> None:
-        """HA-compatible delay function that works well with HA's event loop."""
-        await asyncio.sleep(seconds)
-
-    # Register the HA-compatible delay function for retry logic
-    set_async_delay_func(ha_compatible_delay)
-    _LOGGER.debug("Configured span-panel-api with HA-compatible delay function")
 
     # Configure ha-synthetic-sensors logging to match this integration's level
     try:
@@ -347,10 +345,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.debug("Unloading SPAN Panel integration")
-
-    # Reset span-panel-api delay function to default
-    set_async_delay_func(None)  # Reset to default asyncio.sleep
-    _LOGGER.debug("Reset span-panel-api delay function to default")
 
     # Clean up synthetic sensor coordinator
     try:

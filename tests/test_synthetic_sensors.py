@@ -13,7 +13,6 @@ from custom_components.span_panel.synthetic_sensors import (
     setup_synthetic_configuration,
     async_setup_synthetic_sensors,
     extract_circuit_id_from_entity_id,
-    get_existing_battery_sensor_ids,
     cleanup_synthetic_sensors,
     handle_battery_options_change,
     async_export_synthetic_config_service,
@@ -342,27 +341,7 @@ class TestUtilityFunctions:
 
         assert result == "0"
 
-    def test_get_existing_battery_sensor_ids(self):
-        """Test getting existing battery sensor IDs - deprecated function always returns empty."""
-        mock_sensor_manager = MagicMock(spec=SensorManager)
 
-        result = get_existing_battery_sensor_ids(mock_sensor_manager)
-
-        assert result == []  # Function is deprecated and always returns empty list
-
-    def test_get_existing_battery_sensor_ids_no_battery(self):
-        """Test getting battery sensor IDs when none exist."""
-        mock_sensor_manager = MagicMock(spec=SensorManager)
-        mock_sensor_manager.list_sensors = MagicMock()
-        mock_sensor_config = MagicMock()
-        mock_sensor_config.unique_id = "regular_sensor"
-        mock_sensor_config.entity_id = "sensor.span_panel_power"
-
-        mock_sensor_manager.list_sensors.return_value = [mock_sensor_config]
-
-        result = get_existing_battery_sensor_ids(mock_sensor_manager)
-
-        assert result == []
 
 
 

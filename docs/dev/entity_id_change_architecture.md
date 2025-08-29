@@ -2,17 +2,21 @@
 
 ## Overview
 
-The SPAN Panel integration handles entity ID changes by leveraging the ha-synthetic-sensors package's sophisticated entity management system. This includes per-SensorSet entity indexes, bulk modification operations, and registry event storm protection. The primary goal is to prevent event thrashing when we initiate entity ID changes that would otherwise trigger cascading update cycles.
+The SPAN Panel integration handles entity ID changes by leveraging the ha-synthetic-sensors package's sophisticated entity management system. This includes
+per-SensorSet entity indexes, bulk modification operations, and registry event storm protection. The primary goal is to prevent event thrashing when we initiate
+entity ID changes that would otherwise trigger cascading update cycles.
 
 ## Architecture Relationship
 
 ### SPAN Panel Integration
+
 - **Role**: Consumer of ha-synthetic-sensors package
 - **Entity Management**: Delegates to ha-synthetic-sensors StorageManager and SensorSet classes
 - **Migration**: Implements custom migration logic for legacy naming patterns
 - **Configuration**: Uses ha-synthetic-sensors for sensor storage and entity tracking
 
 ### ha-synthetic-sensors Package
+
 - **Role**: Provider of entity management infrastructure
 - **Components**: EntityIndex, EntityRegistryListener, StorageManager, SensorSet
 - **Storm Protection**: Handles registry event filtering and self-change detection

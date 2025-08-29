@@ -12,8 +12,10 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import slugify
 
+from .const import USE_DEVICE_PREFIX
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    NEW_SENSOR,
     build_binary_sensor_unique_id_for_entry,
     construct_backing_entity_id_for_entry,
     construct_panel_entity_id,
@@ -137,7 +139,14 @@ async def generate_panel_sensors(
 
     # Construct panel status entity ID
     # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
-    use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+    _LOGGER.debug(
+        "SYNTHETIC_PANEL_DEBUG: USE_DEVICE_PREFIX lookup - key=%s, value=%s, migration_mode=%s",
+        USE_DEVICE_PREFIX,
+        use_device_prefix,
+        migration_mode,
+    )
+    # WFF Again, the panel_status is a new sensor, so it is a one time effort to build the YAML.
     panel_status_unique_id = build_binary_sensor_unique_id_for_entry(
         coordinator, span_panel, "panel_status", device_name
     )
@@ -147,8 +156,8 @@ async def generate_panel_sensors(
         "binary_sensor",
         "panel_status",
         device_name,
-        unique_id=panel_status_unique_id,
-        migration_mode=False,  # panel_status is new, always create
+        unique_id=NEW_SENSOR if migration_mode else panel_status_unique_id,
+        migration_mode=migration_mode,
         use_device_prefix=use_device_prefix,
     )
     _LOGGER.debug(
@@ -158,9 +167,10 @@ async def generate_panel_sensors(
     )
     if panel_status_entity_id is None:
         _LOGGER.error(
-            "SYNTHETIC_PANEL_ERROR: panel_status_entity_id is None! unique_id=%s, device_name=%s",
+            "SYNTHETIC_PANEL_ERROR: panel_status_entity_id is None! unique_id=%s, device_name=%s, use_device_prefix=%s",
             panel_status_unique_id,
             device_name,
+            use_device_prefix,
         )
 
     # Create common placeholders for header template
@@ -176,8 +186,23 @@ async def generate_panel_sensors(
         # Panel sensors don't have circuit data, so use appropriate defaults
         "tabs_attribute": "panel",  # Panel-level identifier
         "voltage_attribute": str(get_panel_voltage_attribute()),  # Standard panel voltage
-        "panel_status_entity_id": panel_status_entity_id,
+        "panel_status_entity_id": panel_status_entity_id
+        or construct_panel_entity_id(
+            coordinator,
+            span_panel,
+            "binary_sensor",
+            "panel_status",
+            device_name,
+            unique_id=NEW_SENSOR,
+            migration_mode=False,
+            use_device_prefix=use_device_prefix,
+        ),
     }
+
+    _LOGGER.debug(
+        "SYNTHETIC_PANEL_DEBUG: final panel_status_entity_id=%s",
+        common_placeholders["panel_status_entity_id"],
+    )
 
     for sensor_def in PANEL_SENSOR_DEFINITIONS:
         # Generate entity ID using new helper for synthetic sensors
@@ -195,7 +220,7 @@ async def generate_panel_sensors(
             "sensor",
             entity_suffix,
             device_name,
-            unique_id=sensor_unique_id,
+            unique_id=NEW_SENSOR if migration_mode else sensor_unique_id,
             migration_mode=migration_mode,
         )
         _LOGGER.debug(
@@ -300,7 +325,7 @@ async def generate_panel_sensors(
                 unique_id=construct_synthetic_unique_id_for_entry(
                     coordinator, span_panel, consumed_suffix, device_name
                 ),
-                migration_mode=migration_mode,
+                migration_mode=False,  # Synthetic sensors are new, not subject to migration
             )
             produced_entity_id = construct_panel_synthetic_entity_id(
                 coordinator,
@@ -311,7 +336,7 @@ async def generate_panel_sensors(
                 unique_id=construct_synthetic_unique_id_for_entry(
                     coordinator, span_panel, produced_suffix, device_name
                 ),
-                migration_mode=migration_mode,
+                migration_mode=False,  # Synthetic sensors are new, not subject to migration
             )
             net_unique_id = construct_synthetic_unique_id_for_entry(
                 coordinator, span_panel, net_suffix, device_name
@@ -323,7 +348,7 @@ async def generate_panel_sensors(
                 net_suffix,
                 device_name,
                 unique_id=net_unique_id,
-                migration_mode=migration_mode,
+                migration_mode=False,  # Synthetic sensors are new, not subject to migration
             )
 
             # Create placeholders for this specific sensor (following main loop pattern)

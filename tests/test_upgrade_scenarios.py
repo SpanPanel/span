@@ -13,6 +13,7 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.helpers import (
     construct_entity_id,
     construct_multi_circuit_entity_id,
+    NO_REGISTRY_LOOKUP,
 )
 
 
@@ -218,6 +219,8 @@ class TestEntityIdConstructionUpgradeScenarios:
                 "Kitchen Outlets",
                 15,
                 "power",
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
             )
 
             # Legacy format: no device prefix, use circuit name
@@ -247,6 +250,8 @@ class TestEntityIdConstructionUpgradeScenarios:
                 "Kitchen Outlets",
                 15,
                 "power",
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
             )
 
             # Post-1.0.4 format: device prefix + circuit name
@@ -276,6 +281,8 @@ class TestEntityIdConstructionUpgradeScenarios:
                 "Kitchen Outlets",
                 15,
                 "power",
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
             )
 
             # Modern format: device prefix + circuit number
@@ -303,6 +310,8 @@ class TestEntityIdConstructionUpgradeScenarios:
                 "Kitchen Outlets",
                 15,
                 "power",
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
             )
 
             # New installation defaults: device prefix + circuit numbers
@@ -317,7 +326,10 @@ class TestSyntheticEntityUpgradeScenarios:
         self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that legacy synthetic entity construction is preserved."""
-        mock_registry.return_value = None
+        # Create a mock entity registry instead of None
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_registry.return_value = mock_entity_registry
 
         # Legacy installation
         mock_config_entry = MagicMock()
@@ -338,6 +350,8 @@ class TestSyntheticEntityUpgradeScenarios:
                 "sensor",
                 "power",
                 circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
                 friendly_name="Solar Inverter",
             )
 
@@ -349,7 +363,10 @@ class TestSyntheticEntityUpgradeScenarios:
         self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that post-1.0.4 synthetic entity construction is preserved."""
-        mock_registry.return_value = None
+        # Create a mock entity registry instead of None
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_registry.return_value = mock_entity_registry
 
         # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
@@ -370,6 +387,8 @@ class TestSyntheticEntityUpgradeScenarios:
                 "sensor",
                 "power",
                 circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
                 friendly_name="Solar Inverter",
             )
 
@@ -381,7 +400,10 @@ class TestSyntheticEntityUpgradeScenarios:
         self, mock_registry, mock_coordinator, mock_span_panel
     ):
         """Test that modern synthetic entity construction is preserved."""
-        mock_registry.return_value = None
+        # Create a mock entity registry instead of None
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_registry.return_value = mock_entity_registry
 
         # Modern circuit numbers installation
         mock_config_entry = MagicMock()
@@ -402,6 +424,8 @@ class TestSyntheticEntityUpgradeScenarios:
                 "sensor",
                 "power",
                 circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
+                unique_id=NO_REGISTRY_LOOKUP,
+                migration_mode=False,
                 friendly_name="Solar Inverter",
             )
 

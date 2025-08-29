@@ -3,19 +3,20 @@
 Revised approach:
 - Normalize unique_ids in the entity registry to helper-format per config entry
 - Set a per-entry migration flag for first normal boot to generate YAML and perform registry lookups
+- Fix entity registry naming inconsistencies caused by the old 240V circuit bug
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any  # noqa: F401 (retained for future type hints)
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN
+from .const import DOMAIN, USE_DEVICE_PREFIX
 from .helpers import (
+    build_binary_sensor_unique_id,
     build_circuit_unique_id,
     build_panel_unique_id,
     construct_synthetic_unique_id,
@@ -127,6 +128,18 @@ def _compute_normalized_unique_id_with_device(
             snake_case_key = native_sensor_map[remainder]
             return build_panel_unique_id(device_identifier, snake_case_key)
 
+        # Check for binary sensor keys that should be preserved as-is
+        binary_sensor_keys = {
+            "doorState",
+            "eth0Link",
+            "wlanLink",
+            "wwanLink",
+        }
+
+        if remainder in binary_sensor_keys:
+            # Binary sensors: preserve the original description key
+            return build_binary_sensor_unique_id(device_identifier, remainder)
+
         # Panel case: normalize dotted/camel variants to API keys, then use helper
         # First normalize dots to camelCase API format
         normalized_api_key = _normalize_panel_description_key(remainder)
@@ -147,6 +160,7 @@ async def migrate_config_entry_to_synthetic_sensors(
 
     - Normalize unique_ids for span_panel sensor entities to helper-format
     - Set a per-entry migration flag for first normal boot YAML generation
+    - Detect legacy config entries and set USE_DEVICE_PREFIX flag appropriately
     """
 
     # Only migrate if version is less than 2
@@ -179,7 +193,10 @@ async def migrate_config_entry_to_synthetic_sensors(
         )
 
         for entity in entities:
-            if entity.domain != "sensor" or entity.platform != DOMAIN:
+            if entity.platform != DOMAIN:
+                continue
+            # Process both sensor and binary_sensor domains
+            if entity.domain not in ["sensor", "binary_sensor"]:
                 continue
             raw_uid = entity.unique_id
             new_uid = _compute_normalized_unique_id_with_device(raw_uid, device_identifier)
@@ -200,14 +217,36 @@ async def migrate_config_entry_to_synthetic_sensors(
             config_entry.entry_id,
         )
 
+        # Detect legacy config entry and set USE_DEVICE_PREFIX flag appropriately
+        is_legacy_config = _detect_legacy_config_entry(entities)
+        if is_legacy_config:
+            _LOGGER.info(
+                "MIGRATION: Detected legacy config entry %s (pre-1.0.4), setting USE_DEVICE_PREFIX=False",
+                config_entry.entry_id,
+            )
+        else:
+            _LOGGER.info(
+                "MIGRATION: Detected modern config entry %s (1.0.4+), using USE_DEVICE_PREFIX=True (default)",
+                config_entry.entry_id,
+            )
+
         # Set per-entry migration flag for first normal boot (transient and persisted)
         hass.data.setdefault(DOMAIN, {}).setdefault(config_entry.entry_id, {})["migration_mode"] = (
             True
         )
         try:
-            # Persist flag in options so it survives reboots
+            # Persist flags in options so they survive reboots
             new_options = dict(config_entry.options)
             new_options["migration_mode"] = True
+
+            # Set USE_DEVICE_PREFIX flag based on legacy detection
+            if is_legacy_config:
+                new_options[USE_DEVICE_PREFIX] = False
+                _LOGGER.info(
+                    "MIGRATION: Set USE_DEVICE_PREFIX=False for legacy config entry %s",
+                    config_entry.entry_id,
+                )
+
             hass.config_entries.async_update_entry(config_entry, options=new_options)
             _LOGGER.info(
                 "MIGRATION: Set per-entry migration_mode option for entry %s",
@@ -229,4 +268,60 @@ async def migrate_config_entry_to_synthetic_sensors(
             e,
             exc_info=True,
         )
+        return False
+
+
+def _detect_legacy_config_entry(entities: list[er.RegistryEntry]) -> bool:
+    """Detect if a config entry is legacy based on entity IDs.
+
+    Legacy config entries (pre-1.0.4) have entity IDs without the span_panel_ prefix.
+    Modern config entries (1.0.4+) have entity IDs with the span_panel_ prefix.
+
+    Args:
+        entities: List of entity registry entries for this config entry
+
+    Returns:
+        True if this is a legacy config entry, False otherwise
+
+    """
+    # Check if any entity IDs have the span_panel_ prefix
+    has_prefix = False
+    no_prefix = False
+
+    for entity in entities:
+        if entity.platform != DOMAIN:
+            continue
+
+        entity_id = entity.entity_id
+        if entity_id.startswith("sensor.span_panel_") or entity_id.startswith(
+            "binary_sensor.span_panel_"
+        ):
+            has_prefix = True
+        elif entity_id.startswith("sensor.") or entity_id.startswith("binary_sensor."):
+            # Check if it's a SPAN Panel entity without the prefix
+            # Look for SPAN Panel unique_id patterns (span_serial_*)
+            if entity.unique_id.startswith("span_") and "_" in entity.unique_id:
+                # Check for specific SPAN Panel patterns
+                if any(
+                    key in entity.unique_id
+                    for key in [
+                        "instantGridPowerW",
+                        "feedthroughPowerW",
+                        "doorState",
+                        "eth0Link",
+                        "wlanLink",
+                        "wwanLink",
+                    ]
+                ):
+                    no_prefix = True
+
+    if has_prefix and no_prefix:
+        _LOGGER.warning("Mixed entity ID patterns found, treating as modern config")
+        return False
+    elif has_prefix:
+        return False  # Modern config
+    elif no_prefix:
+        return True  # Legacy config
+    else:
+        _LOGGER.warning("Cannot determine config type, treating as modern config")
         return False

@@ -38,6 +38,7 @@ from .helpers import (
     construct_synthetic_unique_id_for_entry,
     construct_tabs_attribute,
     construct_voltage_attribute,
+    get_device_identifier_for_entry,
     get_user_friendly_suffix,
 )
 from .synthetic_named_circuits import generate_named_circuit_sensors
@@ -135,6 +136,11 @@ class SyntheticSensorCoordinator:
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle coordinator updates by notifying synthetic sensors of data changes."""
+        _LOGGER.debug(
+            "COORDINATOR_UPDATE_DEBUG: Coordinator update received, change_notifier=%s, backing_entities=%d",
+            self.change_notifier is not None,
+            len(self.backing_entity_metadata),
+        )
         # If no coordinator available, trigger manual update for all backing entities
         if self.coordinator is None:
             if self.change_notifier and self.backing_entity_metadata:
@@ -476,6 +482,10 @@ class SyntheticSensorCoordinator:
     def set_change_notifier(self, change_notifier: DataProviderChangeNotifier) -> None:
         """Set the change notification callback for coordinator updates."""
         self.change_notifier = change_notifier
+        _LOGGER.info(
+            "CHANGE_NOTIFIER_DEBUG: Set change notifier, backing entities count: %d",
+            len(self.backing_entity_metadata),
+        )
         _LOGGER.debug("Change notifier callback set for synthetic coordinator")
 
     async def trigger_update(self) -> None:
@@ -503,7 +513,7 @@ class SyntheticSensorCoordinator:
             _LOGGER.debug("Manually triggered selective update for: %s", changed_entity_ids)
 
     async def setup_configuration(
-        self, config_entry: ConfigEntry, migration_mode: bool = False
+        self, config_entry: ConfigEntry, migration_mode: bool = False, skip_generation: bool = False
     ) -> StorageManager:
         """Set up synthetic sensor configuration and storage manager.
 
@@ -513,6 +523,7 @@ class SyntheticSensorCoordinator:
         Args:
             config_entry: The configuration entry
             migration_mode: Whether we're in migration mode
+            skip_generation: If True, skip YAML generation and just initialize storage
 
         Returns:
             StorageManager: The configured storage manager
@@ -530,7 +541,89 @@ class SyntheticSensorCoordinator:
 
         # Delegate to the appropriate configuration method
         # Simulation mode handling is now done by the factory
+        if skip_generation:
+            # Skip YAML generation - just initialize storage and metadata
+            _LOGGER.info("SYNTHETIC_SETUP_DEBUG: Skipping generation, using storage-only setup")
+            return await self._setup_storage_only(config_entry, migration_mode)
+        _LOGGER.info("SYNTHETIC_SETUP_DEBUG: Performing live configuration setup with generation")
         return await self._setup_live_configuration(config_entry, migration_mode)
+
+    async def _setup_storage_only(
+        self, config_entry: ConfigEntry, migration_mode: bool = False
+    ) -> StorageManager:
+        """Set up storage manager without generating new YAML configuration.
+
+        This method is called on reboot when YAML configuration already exists.
+        This is used when configuration already exists and we just need to
+        initialize the storage manager and populate backing entity metadata.
+
+        Args:
+            config_entry: The configuration entry
+            migration_mode: Whether we're in migration mode
+
+        Returns:
+            StorageManager: The configured storage manager
+
+        """
+        _LOGGER.error(
+            "STORAGE_DEBUG: _setup_storage_only called for entry %s", config_entry.entry_id
+        )
+        # Just initialize storage - no YAML generation needed
+        if self.coordinator is None:
+            raise RuntimeError("Coordinator is required for storage setup")
+
+        # Extract device identifier for sensor set lookup
+        device_identifier = get_device_identifier_for_entry(
+            self.coordinator, self.coordinator.data, self.device_name
+        )
+        sensor_set_id = construct_sensor_set_id(device_identifier)
+
+        # Set up the coordinator with existing sensor set
+        self.sensor_set_id = sensor_set_id
+        self.device_identifier = device_identifier
+
+        # Publish sensor set id on main coordinator
+        with suppress(Exception):
+            if self.coordinator is not None:
+                self.coordinator.synthetic_sensor_set_id = self.sensor_set_id
+
+        # Get existing sensor set and populate backing entity metadata
+        if self.storage_manager is None:
+            raise RuntimeError("Storage manager not initialized")
+
+        # Get backing entities and mapping from config entry options (persistent across reboots)
+        config_options = self.coordinator.config_entry.options
+        all_backing_entities = config_options.get("synthetic_backing_entities", [])
+        sensor_to_backing_mapping = config_options.get("synthetic_sensor_to_backing_mapping", {})
+        _LOGGER.error(
+            "STORAGE_DEBUG: Retrieved %d backing entities and %d mappings from config entry options",
+            len(all_backing_entities),
+            len(sensor_to_backing_mapping),
+        )
+        _LOGGER.error(
+            "STORAGE_DEBUG: Available keys in config_options: %s", list(config_options.keys())
+        )
+
+        # Also store in hass.data for current session access (fallback compatibility)
+        if all_backing_entities or sensor_to_backing_mapping:
+            self.hass.data.setdefault(DOMAIN, {}).setdefault(
+                self.coordinator.config_entry.entry_id, {}
+            ).update(
+                {
+                    "backing_entities": all_backing_entities,
+                    "sensor_to_backing_mapping": sensor_to_backing_mapping,
+                }
+            )
+
+        # Populate backing entity metadata for data provider callback
+        self._populate_backing_entity_metadata(all_backing_entities)
+        self.all_backing_entities = all_backing_entities
+        self.sensor_to_backing_mapping = sensor_to_backing_mapping
+
+        if self.storage_manager is None:
+            raise RuntimeError("Storage manager not initialized")
+
+        return self.storage_manager
 
     async def _setup_live_configuration(
         self, config_entry: ConfigEntry, migration_mode: bool = False
@@ -555,6 +648,7 @@ class SyntheticSensorCoordinator:
         )
 
         # Generate named circuit sensors and backing entities
+        _LOGGER.info("SYNTHETIC_SETUP_DEBUG: Calling generate_named_circuit_sensors")
         (
             named_circuit_configs,
             named_circuit_backing_entities,
@@ -566,6 +660,11 @@ class SyntheticSensorCoordinator:
             span_panel,
             self.device_name,
             migration_mode=migration_mode,
+        )
+        _LOGGER.info(
+            "SYNTHETIC_SETUP_DEBUG: generate_named_circuit_sensors returned %d configs, %d backing entities",
+            len(named_circuit_configs),
+            len(named_circuit_backing_entities),
         )
 
         # Combine all sensor configs and backing entities
@@ -631,6 +730,41 @@ class SyntheticSensorCoordinator:
 
         # Use the combined mappings directly (only sensors with backing entities)
         self.sensor_to_backing_mapping = all_mappings
+
+        # Store backing entities and mapping for future startups in config entry options (persistent)
+        if self.coordinator and hasattr(self.coordinator, "config_entry"):
+            _LOGGER.info(
+                "SYNTHETIC_SETUP_DEBUG: Storing %d backing entities and %d mappings in config entry options",
+                len(all_backing_entities),
+                len(all_mappings),
+            )
+
+            # Store in config entry options for persistence across reboots
+            updated_options = dict(self.coordinator.config_entry.options)
+            updated_options.update(
+                {
+                    "synthetic_backing_entities": all_backing_entities,
+                    "synthetic_sensor_to_backing_mapping": all_mappings,
+                }
+            )
+
+            self.hass.config_entries.async_update_entry(
+                self.coordinator.config_entry, options=updated_options
+            )
+
+            # Also store in hass.data for current session access
+            self.hass.data.setdefault(DOMAIN, {}).setdefault(
+                self.coordinator.config_entry.entry_id, {}
+            ).update(
+                {
+                    "backing_entities": all_backing_entities,
+                    "sensor_to_backing_mapping": all_mappings,
+                }
+            )
+        else:
+            _LOGGER.warning(
+                "SYNTHETIC_SETUP_DEBUG: Cannot store backing entities - coordinator or config_entry missing"
+            )
 
         _LOGGER.debug(
             "Using direct mapping for %d sensors with %d backing entities",
@@ -842,6 +976,7 @@ async def setup_synthetic_configuration(
     config_entry: ConfigEntry,
     coordinator: SpanPanelCoordinator | None,
     migration_mode: bool = False,
+    skip_generation: bool = False,
 ) -> StorageManager:
     """Set up synthetic sensor configuration.
 
@@ -853,6 +988,7 @@ async def setup_synthetic_configuration(
         config_entry: The config entry
         coordinator: SPAN Panel coordinator
         migration_mode: Whether we're in migration mode
+        skip_generation: If True, skip YAML generation and just initialize storage
 
     """
     # Get device name from config entry
@@ -866,7 +1002,9 @@ async def setup_synthetic_configuration(
     _synthetic_coordinators[config_entry.entry_id] = synthetic_coord
 
     # Delegate configuration setup to the coordinator
-    storage_manager = await synthetic_coord.setup_configuration(config_entry, migration_mode)
+    storage_manager = await synthetic_coord.setup_configuration(
+        config_entry, migration_mode, skip_generation
+    )
 
     return storage_manager
 
@@ -943,6 +1081,10 @@ async def async_setup_synthetic_sensors(
         raise ValueError("synthetic_coordinator parameter is required")
     synthetic_coord = synthetic_coordinator
     sensor_to_backing_mapping = synthetic_coord.sensor_to_backing_mapping
+    _LOGGER.info(
+        "SENSOR_MAPPING_DEBUG: Passing %d sensor-to-backing mappings to ha-synthetic-sensors",
+        len(sensor_to_backing_mapping),
+    )
 
     # Check if this is a migration - retrieve stored mapping if available
     #    if not sensor_to_backing_mapping and DOMAIN in hass.data and config_entry.entry_id in hass.data[DOMAIN]:
@@ -990,6 +1132,20 @@ async def async_setup_synthetic_sensors(
                 coordinator.data.status.serial_number if coordinator is not None else "unknown"
             )
 
+    # Extract backing entity IDs from the mapping for registration
+    # Only pass backing_entity_ids if we have mappings, otherwise pass None for HA-only mode
+    backing_entity_ids = None
+    if sensor_to_backing_mapping:
+        backing_entity_ids = set(sensor_to_backing_mapping.values())
+        _LOGGER.info(
+            "BACKING_ENTITIES_DEBUG: Extracted %d backing entity IDs for registration",
+            len(backing_entity_ids),
+        )
+    else:
+        _LOGGER.warning(
+            "BACKING_ENTITIES_DEBUG: No sensor-to-backing mapping available, using HA-only mode"
+        )
+
     sensor_manager = await async_setup_synthetic_sensors_with_entities(
         hass=hass,
         config_entry=config_entry,
@@ -999,6 +1155,7 @@ async def async_setup_synthetic_sensors(
         data_provider_callback=data_provider,
         sensor_to_backing_mapping=sensor_to_backing_mapping,
         change_notifier=change_notifier,
+        backing_entity_ids=backing_entity_ids,
     )
 
     # Connect the change notifier to the synthetic coordinator for coordinator updates
@@ -1159,12 +1316,7 @@ def extract_circuit_id_from_entity_id(entity_id: str) -> str:
     return "0"  # Default to panel
 
 
-def get_existing_battery_sensor_ids(sensor_manager: SensorManager) -> list[str]:
-    """Get existing battery sensor IDs - DEPRECATED: Battery is now a native sensor."""
-    # Battery is now a native sensor, so no synthetic battery sensors exist
-    return []
-
-
+# WFF Is this called?
 async def generate_circuit_sensor_configs(
     coordinator: SpanPanelCoordinator, circuit_ids: list[str], sensor_type: str = "power"
 ) -> tuple[dict[str, dict[str, Any]], list[BackingEntity], dict[str, Any]]:

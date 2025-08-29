@@ -6,10 +6,10 @@ integration, including all panel sensors and circuit sensors. This helps test th
 YAML generation pipeline and identify any formatting issues.
 """
 
-import asyncio
-import sys
 import argparse
+import asyncio
 from pathlib import Path
+import sys
 from unittest.mock import MagicMock
 
 # Add the span project to the path
@@ -19,21 +19,16 @@ sys.path.insert(0, str(project_root))
 async def generate_complete_yaml(simulation_config: str = "simulation_config_32_circuit", output_file: str = "/tmp/span_simulator_complete_config.yaml"):
     """Generate the complete YAML configuration using the integration's code path."""
 
-    print("🚀 Starting complete YAML generation...")
 
     # Import what we need step by step to avoid import errors
     try:
         from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
-        print("✅ Imported SpanPanelSimulationFactory")
-    except ImportError as e:
-        print(f"❌ Failed to import SpanPanelSimulationFactory: {e}")
+    except ImportError:
         return None, None
 
-    print(f"📋 Using simulation config: {simulation_config}")
 
     try:
         # Create mock responses using the simulation factory (like generate_basic_sensor_fixtures.py)
-        print("🏗️ Creating mock panel data...")
         simulation_factory = SpanPanelSimulationFactory()
         mock_responses = await simulation_factory.get_realistic_panel_data(config_name=simulation_config)
 
@@ -81,15 +76,13 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
             circuit_mock.relayState = circuit.relay_state.value
             circuit_mock.priority = circuit.priority.value
             circuit_mock.isUserControllable = circuit.is_user_controllable
-            circuit_mock.tabs = [tab for tab in circuit.tabs] if circuit.tabs else []
+            circuit_mock.tabs = list(circuit.tabs) if circuit.tabs else []
 
             circuit_dict[circuit_id] = circuit_mock
 
         # Set the circuits as a dict on the mock span panel
         mock_span_panel.circuits = circuit_dict
 
-        print(f"📡 Panel serial: {mock_span_panel.status.serial_number}")
-        print(f"🔌 Found {len(circuit_dict)} circuits")
 
         # Create minimal mock coordinator
         mock_coordinator = MagicMock()
@@ -120,15 +113,12 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
         mock_hass.async_add_executor_job = mock_async_add_executor_job
 
         # Generate panel sensors first
-        print("⚙️ Generating panel sensors...")
         try:
             from custom_components.span_panel.synthetic_panel_circuits import generate_panel_sensors
             panel_sensor_configs, panel_backing_entities, global_settings, panel_mapping = await generate_panel_sensors(
                 mock_hass, mock_coordinator, mock_span_panel, device_name
             )
-            print(f"   ✅ Generated {len(panel_sensor_configs)} panel sensors")
-        except Exception as e:
-            print(f"   ❌ Failed to generate panel sensors: {e}")
+        except Exception:
             panel_sensor_configs = {}
             global_settings = {
                 "device_identifier": mock_span_panel.status.serial_number,
@@ -136,50 +126,43 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
             }
 
         # Generate circuit sensors
-        print("🔌 Generating circuit sensors...")
         try:
-            from custom_components.span_panel.synthetic_named_circuits import generate_named_circuit_sensors
+            from custom_components.span_panel.synthetic_named_circuits import (
+                generate_named_circuit_sensors,
+            )
             circuit_sensor_configs, circuit_backing_entities, circuit_global_settings, circuit_mapping = await generate_named_circuit_sensors(
                 mock_hass, mock_coordinator, mock_span_panel, device_name
             )
-            print(f"   ✅ Generated {len(circuit_sensor_configs)} circuit sensors")
-        except Exception as e:
-            print(f"   ❌ Failed to generate circuit sensors: {e}")
+        except Exception:
             circuit_sensor_configs = {}
 
         # Generate solar sensors (tabs 30 and 32 from simulation config)
-        print("☀️ Generating solar sensors...")
         try:
-            from custom_components.span_panel.synthetic_solar import generate_solar_sensors_with_entity_ids
+            from custom_components.span_panel.synthetic_solar import (
+                generate_solar_sensors_with_entity_ids,
+            )
             # Construct entity IDs for unmapped tabs 30 and 32
             leg1_entity_id = f"sensor.{device_name}_unmapped_tab_30_power"
             leg2_entity_id = f"sensor.{device_name}_unmapped_tab_32_power"
             solar_sensor_configs = await generate_solar_sensors_with_entity_ids(
                 mock_coordinator, mock_span_panel, leg1_entity_id, leg2_entity_id, device_name, False, mock_hass
             )
-            print(f"   ✅ Generated {len(solar_sensor_configs)} solar sensors")
-        except Exception as e:
-            print(f"   ❌ Failed to generate solar sensors: {e}")
+        except Exception:
             import traceback
             traceback.print_exc()
             solar_sensor_configs = {}
 
         # Combine all sensor configs
-        print("📊 Combining sensor configurations...")
         all_sensor_configs = {**panel_sensor_configs, **circuit_sensor_configs, **solar_sensor_configs}
 
-        print(f"📈 Total sensors generated: {len(all_sensor_configs)}")
-        print(f"   • Panel sensors: {len(panel_sensor_configs)}")
-        print(f"   • Circuit sensors: {len(circuit_sensor_configs)}")
-        print(f"   • Solar sensors: {len(solar_sensor_configs)}")
 
         # Generate YAML using the actual integration code
-        print("🔨 Generating YAML using integration's code path...")
         try:
-            from custom_components.span_panel.synthetic_sensors import _construct_complete_yaml_config
+            from custom_components.span_panel.synthetic_sensors import (
+                _construct_complete_yaml_config,
+            )
             yaml_content = await _construct_complete_yaml_config(all_sensor_configs, global_settings)
-        except Exception as e:
-            print(f"   ❌ Failed to use integration YAML generation, falling back to simple dump: {e}")
+        except Exception:
             import yaml
             complete_yaml_dict = {
                 "version": "1.0",
@@ -192,27 +175,25 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(yaml_content)
 
-        print(f"✅ Complete YAML configuration saved to: {output_file}")
-        print(f"📏 YAML size: {len(yaml_content)} characters")
 
         # Also save a summary
         summary_file = '/tmp/span_simulator_config_summary.txt'
         with open(summary_file, 'w', encoding='utf-8') as f:
-            f.write(f"SPAN Panel Synthetic Sensor Configuration Summary\n")
-            f.write(f"=" * 50 + "\n\n")
+            f.write("SPAN Panel Synthetic Sensor Configuration Summary\n")
+            f.write("=" * 50 + "\n\n")
             f.write(f"Simulation Config: {simulation_config}\n")
             f.write(f"Device Name: {device_name}\n")
             f.write(f"Serial Number: {mock_span_panel.status.serial_number}\n")
             f.write(f"Grace Period: {global_settings.get('variables', {}).get('energy_grace_period_minutes', 'N/A')} minutes\n\n")
 
-            f.write(f"Sensor Counts:\n")
+            f.write("Sensor Counts:\n")
             f.write(f"  Panel sensors: {len(panel_sensor_configs)}\n")
             f.write(f"  Circuit sensors: {len(circuit_sensor_configs)}\n")
             f.write(f"  Solar sensors: {len(solar_sensor_configs)}\n")
             f.write(f"  Total sensors: {len(all_sensor_configs)}\n\n")
 
             f.write("Panel Sensors:\n")
-            for key in panel_sensor_configs.keys():
+            for key in panel_sensor_configs:
                 f.write(f"  - {key}\n")
 
             f.write(f"\nCircuit Sensors ({len(circuit_sensor_configs)} total):\n")
@@ -222,25 +203,18 @@ async def generate_complete_yaml(simulation_config: str = "simulation_config_32_
             if len(circuit_sensor_configs) > 10:
                 f.write(f"  ... and {len(circuit_sensor_configs) - 10} more\n")
 
-            f.write(f"\nSolar Sensors:\n")
-            for key in solar_sensor_configs.keys():
+            f.write("\nSolar Sensors:\n")
+            for key in solar_sensor_configs:
                 f.write(f"  - {key}\n")
 
-        print(f"📋 Configuration summary saved to: {summary_file}")
 
         # Show first part of generated YAML
-        print("\n" + "=" * 60)
-        print("GENERATED YAML (first 1000 characters):")
-        print("=" * 60)
-        print(yaml_content[:1000])
         if len(yaml_content) > 1000:
-            print("...")
-        print("=" * 60)
+            pass
 
         return yaml_content, all_sensor_configs
 
-    except Exception as e:
-        print(f"❌ Error generating YAML: {e}")
+    except Exception:
         import traceback
         traceback.print_exc()
         return None, None
@@ -260,9 +234,6 @@ if __name__ == "__main__":
     # Run the async function
     yaml_content, yaml_dict = asyncio.run(generate_complete_yaml(args.simulation_config, args.output_file))
     if yaml_content:
-        print("\n🎉 Script completed successfully!")
-        print("📁 Check /tmp/span_simulator_complete_config.yaml for the full configuration")
-        print("📄 Check /tmp/span_simulator_config_summary.txt for a summary")
+        pass
     else:
-        print("\n💥 Script failed!")
         sys.exit(1)

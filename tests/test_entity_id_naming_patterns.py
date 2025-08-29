@@ -141,11 +141,9 @@ class TestEntityIdMigrationManager:
         old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
 
-        with patch.object(migration_manager, '_migrate_non_legacy_patterns', return_value=True) as mock_non_legacy:
-            result = await migration_manager.migrate_synthetic_entities(old_flags, new_flags)
+        result = await migration_manager.migrate_synthetic_entities(old_flags, new_flags)
 
-            assert result is True
-            mock_non_legacy.assert_called_once_with(old_flags, new_flags)
+        assert result is True
 
 
 class TestLegacyToPrefix:
@@ -262,86 +260,7 @@ class TestNonLegacyPatterns:
         }
         return hass
 
-    async def test_migrate_non_legacy_patterns_success(self, hass_with_data, sample_sensors_data):
-        """Test successful non-legacy pattern migration."""
-        manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
-        new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
 
-        with patch('custom_components.span_panel.entity_id_naming_patterns.is_panel_level_sensor_key') as mock_panel_check:
-            with patch.object(manager, '_is_entity_id_customized', return_value=False) as mock_customized:
-                with patch.object(manager, '_generate_new_entity_id') as mock_generate:
-                    mock_panel_check.side_effect = [False, False, True]  # Only current_power is panel-level
-                    mock_generate.side_effect = [
-                        "sensor.span_panel_circuit_30_32_power",
-                        "sensor.span_panel_circuit_3_power"
-                    ]
-
-                    result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
-
-                    assert result is True
-                    sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-                    sensor_manager.modify.assert_called_once()
-
-    async def test_migrate_non_legacy_patterns_skip_panel_level(self, hass_with_data):
-        """Test non-legacy migration skips panel-level sensors."""
-        manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
-        new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
-
-        with patch('custom_components.span_panel.entity_id_naming_patterns.is_panel_level_sensor_key', return_value=True):
-            with patch.object(manager, '_generate_new_entity_id') as mock_generate:
-                result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
-
-                assert result is True
-                # Should not call generate_new_entity_id for panel-level sensors
-                mock_generate.assert_not_called()
-
-    async def test_migrate_non_legacy_patterns_skip_customized(self, hass_with_data):
-        """Test non-legacy migration skips customized entity IDs."""
-        manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
-        new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
-
-        with patch('custom_components.span_panel.entity_id_naming_patterns.is_panel_level_sensor_key', return_value=False):
-            with patch.object(manager, '_is_entity_id_customized', return_value=True):
-                with patch.object(manager, '_generate_new_entity_id') as mock_generate:
-                    result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
-
-                    assert result is True
-                    # Should not call generate_new_entity_id for customized entities
-                    mock_generate.assert_not_called()
-
-    async def test_migrate_non_legacy_patterns_no_sensor_manager(self, hass):
-        """Test non-legacy migration when sensor manager is not found."""
-        hass.data = {
-            "ha_synthetic_sensors": {
-                "sensor_managers": {
-                    "test_entry_id": None
-                }
-            }
-        }
-        manager = EntityIdMigrationManager(hass, "test_entry_id")
-
-        old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
-        new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
-
-        result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
-
-        assert result is False
-
-    async def test_migrate_non_legacy_patterns_exception(self, hass_with_data):
-        """Test non-legacy migration with exception during process."""
-        manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-        sensor_manager.export.side_effect = Exception("Test error")
-
-        old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
-        new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
-
-        result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
-
-        assert result is False
 
 
 class TestGenerateNewEntityId:

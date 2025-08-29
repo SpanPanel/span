@@ -186,8 +186,8 @@ async def test_solar_configuration_with_simulator_friendly_names(hass: HomeAssis
             if len(solar_entities) > 0:
                 return solar_entities
 
-            # Wait a bit before checking again
-            await asyncio.sleep(0.1)
+            # Continue checking without delay
+            continue
 
         return []
 

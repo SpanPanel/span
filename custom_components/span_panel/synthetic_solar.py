@@ -19,13 +19,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN
+from .const import DOMAIN, USE_DEVICE_PREFIX
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    NEW_SENSOR,
     build_binary_sensor_unique_id_for_entry,
     construct_120v_synthetic_entity_id,
     construct_240v_synthetic_entity_id,
     construct_panel_entity_id,
+    construct_syn_calc_entity_id,
     construct_synthetic_unique_id_for_entry,
     construct_tabs_attribute,
     construct_voltage_attribute,
@@ -383,7 +385,8 @@ async def generate_solar_sensors_with_entity_ids(
     tabs_attribute, voltage_attribute = _get_template_attributes(leg1_number, leg2_number)
 
     # Construct panel status entity ID
-    use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
     # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
     panel_status_entity_id = construct_panel_entity_id(
         coordinator,
@@ -391,10 +394,12 @@ async def generate_solar_sensors_with_entity_ids(
         "binary_sensor",
         "panel_status",
         device_name,
-        unique_id=build_binary_sensor_unique_id_for_entry(
+        unique_id=NEW_SENSOR
+        if migration_mode
+        else build_binary_sensor_unique_id_for_entry(
             coordinator, span_panel, "panel_status", device_name
         ),
-        migration_mode=False,  # panel_status is new, always create
+        migration_mode=migration_mode,
         use_device_prefix=use_device_prefix,
     )
 
@@ -410,7 +415,17 @@ async def generate_solar_sensors_with_entity_ids(
         "energy_display_precision": str(
             coordinator.config_entry.options.get("energy_display_precision", 2)
         ),
-        "panel_status_entity_id": panel_status_entity_id,
+        "panel_status_entity_id": panel_status_entity_id
+        or construct_panel_entity_id(
+            coordinator,
+            span_panel,
+            "binary_sensor",
+            "panel_status",
+            device_name,
+            unique_id=NEW_SENSOR,
+            migration_mode=False,
+            use_device_prefix=use_device_prefix,
+        ),
         "leg1_circuit": f"unmapped_tab_{leg1_number}",
         "leg2_circuit": f"unmapped_tab_{leg2_number}",
         "tabs_attribute": tabs_attribute,
@@ -706,10 +721,10 @@ async def handle_solar_sensor_crud(
                         if consumed_exists or produced_exists:
                             # Use proper entity ID construction with device prefix
                             use_device_prefix = coordinator.config_entry.options.get(
-                                "USE_DEVICE_PREFIX", True
+                                USE_DEVICE_PREFIX, True
                             )
                             solar_entity_id = (
-                                construct_panel_entity_id(
+                                construct_syn_calc_entity_id(
                                     coordinator,
                                     span_panel,
                                     "sensor",
@@ -734,7 +749,7 @@ async def handle_solar_sensor_crud(
                 else:
                     # Normal mode: generate new entity_id with device prefix
                     use_device_prefix = coordinator.config_entry.options.get(
-                        "USE_DEVICE_PREFIX", True
+                        USE_DEVICE_PREFIX, True
                     )
                     solar_entity_id = (
                         construct_panel_entity_id(
@@ -766,26 +781,38 @@ async def handle_solar_sensor_crud(
 
                 # Construct panel status entity ID
                 # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
-                use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+                use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
                 panel_status_entity_id = construct_panel_entity_id(
                     coordinator,
                     span_panel,
                     "binary_sensor",
                     "panel_status",
                     device_name or "",
-                    unique_id=build_binary_sensor_unique_id_for_entry(
+                    unique_id=NEW_SENSOR
+                    if migration_mode
+                    else build_binary_sensor_unique_id_for_entry(
                         coordinator, span_panel, "panel_status", device_name or ""
                     ),
-                    migration_mode=False,  # panel_status is new, always create
+                    migration_mode=migration_mode,
                     use_device_prefix=use_device_prefix,
                 )
 
                 # Prepare template variables
+                panel_status_id = panel_status_entity_id or construct_panel_entity_id(
+                    coordinator,
+                    span_panel,
+                    "binary_sensor",
+                    "panel_status",
+                    device_name or "",
+                    unique_id=NEW_SENSOR,
+                    migration_mode=False,
+                    use_device_prefix=use_device_prefix,
+                )
+
                 template_vars = {
                     "sensor_key": sensor_unique_id,
                     "entity_id": solar_entity_id,
-                    "panel_status_entity_id": panel_status_entity_id
-                    or "binary_sensor.span_panel_panel_status",
+                    "panel_status_entity_id": panel_status_id or "",
                     # Provide entity IDs for the formulas in the templates
                     # Power
                     "leg1_power_entity": leg_entities["leg1_power_entity"],
@@ -806,8 +833,12 @@ async def handle_solar_sensor_crud(
                 if template_name == "solar_net_energy":
                     template_vars.update(
                         {
-                            "net_consumed_entity_id": str(solar_consumed_entity_id),
-                            "net_produced_entity_id": str(solar_produced_entity_id),
+                            "net_consumed_entity_id": str(solar_consumed_entity_id)
+                            if solar_consumed_entity_id
+                            else "",
+                            "net_produced_entity_id": str(solar_produced_entity_id)
+                            if solar_produced_entity_id
+                            else "",
                         }
                     )
 

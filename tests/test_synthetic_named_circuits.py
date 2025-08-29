@@ -122,12 +122,17 @@ class TestGenerateNamedCircuitSensors:
     @pytest.fixture
     def mock_hass(self):
         """Create a mock Home Assistant instance."""
-        return MagicMock(spec=HomeAssistant)
+        hass = MagicMock(spec=HomeAssistant)
+        hass.data = {}
+        hass.config = MagicMock()
+        hass.config.config_dir = "/test/config"
+        return hass
 
     @pytest.fixture
-    def mock_coordinator(self):
+    def mock_coordinator(self, mock_hass):
         """Create a mock coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
         coordinator.config_entry.options = {
             "power_display_precision": 0,
@@ -179,28 +184,33 @@ class TestGenerateNamedCircuitSensors:
 
     async def test_generate_named_circuit_sensors_success(self, mock_hass, mock_coordinator, mock_span_panel):
         """Test successful generation of named circuit sensors."""
-        with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
-            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
-                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
-                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
-                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
-                                with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
-                                    mock_combine.return_value = {
-                                        "global_settings": {"device_identifier": "SP3-001"},
-                                        "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
-                                    }
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
 
-                                    result = await generate_named_circuit_sensors(
-                                        mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
-                                    )
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
+                with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
+                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
+                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
+                                with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
+                                    with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
+                                        mock_combine.return_value = {
+                                            "global_settings": {"device_identifier": "SP3-001"},
+                                            "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
+                                        }
 
-                                    sensor_configs, backing_entities, global_settings, mapping = result
+                                        result = await generate_named_circuit_sensors(
+                                            mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
+                                        )
 
-                                    # Should generate 6 sensors (2 circuits * 3 sensor types each)
-                                    assert len(backing_entities) == 6
-                                    assert len(mapping) == 6
-                                    assert global_settings["device_identifier"] == "SP3-001"
+                                        sensor_configs, backing_entities, global_settings, mapping = result
+
+                                        # Should generate 6 sensors (2 circuits * 3 sensor types each)
+                                        assert len(backing_entities) == 6
+                                        assert len(mapping) == 6
+                                        assert global_settings["device_identifier"] == "SP3-001"
 
     async def test_generate_named_circuit_sensors_no_coordinator(self, mock_hass, mock_span_panel):
         """Test generation fails when coordinator is None."""
@@ -222,10 +232,15 @@ class TestGenerateNamedCircuitSensors:
         span_panel.status.serial_number = "SP3-001"
         span_panel.circuits = {}  # No circuits
 
-        with pytest.raises(ValueError, match="No named circuits found"):
-            await generate_named_circuit_sensors(
-                mock_hass, mock_coordinator, span_panel, "Test Panel"
-            )
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
+
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with pytest.raises(ValueError, match="No named circuits found"):
+                await generate_named_circuit_sensors(
+                    mock_hass, mock_coordinator, span_panel, "Test Panel"
+                )
 
     async def test_generate_named_circuit_sensors_only_unmapped_circuits(self, mock_hass, mock_coordinator):
         """Test generation fails when only unmapped circuits exist."""
@@ -240,10 +255,15 @@ class TestGenerateNamedCircuitSensors:
 
         span_panel.circuits = circuits
 
-        with pytest.raises(ValueError, match="No named circuits found"):
-            await generate_named_circuit_sensors(
-                mock_hass, mock_coordinator, span_panel, "Test Panel"
-            )
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
+
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with pytest.raises(ValueError, match="No named circuits found"):
+                await generate_named_circuit_sensors(
+                    mock_hass, mock_coordinator, span_panel, "Test Panel"
+                )
 
     async def test_generate_named_circuit_sensors_migration_mode(self, mock_hass, mock_coordinator, mock_span_panel):
         """Test generation in migration mode."""
@@ -301,71 +321,86 @@ class TestGenerateNamedCircuitSensors:
 
         span_panel.circuits = {"invalid_circuit": circuit}
 
-        with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
-            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', return_value='power'):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', return_value="unique_id"):
-                    with pytest.raises(ValueError, match="Circuit invalid_circuit.*has 3 tabs"):
-                        await generate_named_circuit_sensors(
-                            mock_hass, mock_coordinator, span_panel, "Test Panel"
-                        )
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
+
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
+                with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', return_value='power'):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', return_value="unique_id"):
+                        with pytest.raises(ValueError, match="Circuit invalid_circuit.*has 3 tabs"):
+                            await generate_named_circuit_sensors(
+                                mock_hass, mock_coordinator, span_panel, "Test Panel"
+                            )
 
     async def test_generate_named_circuit_sensors_simulator_mode(self, mock_hass, mock_coordinator, mock_span_panel):
         """Test generation in simulator mode."""
         mock_coordinator.config_entry.data = {"simulation_mode": True}
 
-        with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
-            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
-                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
-                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
-                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
-                                with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
-                                    mock_combine.return_value = {
-                                        "global_settings": {"device_identifier": "test-panel"},
-                                        "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
-                                    }
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
 
-                                    result = await generate_named_circuit_sensors(
-                                        mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
-                                    )
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
+                with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
+                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
+                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
+                                with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
+                                    with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
+                                        mock_combine.return_value = {
+                                            "global_settings": {"device_identifier": "test-panel"},
+                                            "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
+                                        }
 
-                                    sensor_configs, backing_entities, global_settings, mapping = result
+                                        result = await generate_named_circuit_sensors(
+                                            mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
+                                        )
 
-                                    # Should use slugified device name as identifier
-                                    assert global_settings["device_identifier"] == "test-panel"
+                                        sensor_configs, backing_entities, global_settings, mapping = result
+
+                                        # Should use slugified device name as identifier
+                                        assert global_settings["device_identifier"] == "test-panel"
 
     async def test_generate_named_circuit_sensors_backing_entities(self, mock_hass, mock_coordinator, mock_span_panel):
         """Test that backing entities are created correctly."""
-        with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
-            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
-                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
-                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
-                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
-                                with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
-                                    mock_combine.return_value = {
-                                        "global_settings": {"device_identifier": "SP3-001"},
-                                        "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
-                                    }
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
 
-                                    result = await generate_named_circuit_sensors(
-                                        mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
-                                    )
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', side_effect=[3] * 10 + [18] * 10):
+                with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed'] * 10):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(20)]):
+                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.kitchen_lights_power"):
+                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_240v_synthetic_entity_id', return_value="sensor.electric_dryer_power"):
+                                with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(20)]):
+                                    with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
+                                        mock_combine.return_value = {
+                                            "global_settings": {"device_identifier": "SP3-001"},
+                                            "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
+                                        }
 
-                                    sensor_configs, backing_entities, global_settings, mapping = result
+                                        result = await generate_named_circuit_sensors(
+                                            mock_hass, mock_coordinator, mock_span_panel, "Test Panel"
+                                        )
 
-                                    # Check backing entities (3 sensors per circuit: power, produced, consumed)
-                                    # Net energy sensors are synthetic sensors that reference other sensors, so no backing entities
-                                    assert len(backing_entities) == 6  # 2 circuits * 3 sensors
+                                        sensor_configs, backing_entities, global_settings, mapping = result
 
-                                    # Check first backing entity (TypedDict, so check keys instead of isinstance)
-                                    first_entity = backing_entities[0]
-                                    assert "entity_id" in first_entity
-                                    assert "value" in first_entity
-                                    assert "data_path" in first_entity
-                                    assert first_entity["entity_id"] == "backing_0"
-                                    assert first_entity["value"] == 150.0  # Kitchen lights power
-                                    assert "circuits.kitchen_lights.instant_power" in first_entity["data_path"]
+                                        # Check backing entities (3 sensors per circuit: power, produced, consumed)
+                                        # Net energy sensors are synthetic sensors that reference other sensors, so no backing entities
+                                        assert len(backing_entities) == 6  # 2 circuits * 3 sensors
+
+                                        # Check first backing entity (TypedDict, so check keys instead of isinstance)
+                                        first_entity = backing_entities[0]
+                                        assert "entity_id" in first_entity
+                                        assert "value" in first_entity
+                                        assert "data_path" in first_entity
+                                        assert first_entity["entity_id"] == "backing_0"
+                                        assert first_entity["value"] == 150.0  # Kitchen lights power
+                                        assert "circuits.kitchen_lights.instant_power" in first_entity["data_path"]
 
 
 class TestNamedCircuitSensorsIntegration:
@@ -382,8 +417,14 @@ class TestNamedCircuitSensorsIntegration:
     async def test_generate_with_realistic_data(self, realistic_panel_data):
         """Test sensor generation with realistic panel data."""
         mock_hass = MagicMock(spec=HomeAssistant)
+        mock_hass.data = {}
+        mock_hass.config = MagicMock()
+        mock_hass.config.config_dir = "/test/config"
+
         mock_coordinator = MagicMock(spec=SpanPanelCoordinator)
+        mock_coordinator.hass = mock_hass
         mock_coordinator.config_entry = MagicMock(spec=ConfigEntry)
+        mock_coordinator.config_entry.title = "Real Panel"
         mock_coordinator.config_entry.options = {
             "power_display_precision": 0,
             "energy_display_precision": 2,
@@ -423,27 +464,32 @@ class TestNamedCircuitSensorsIntegration:
         if len(circuits) == 0:
             pytest.skip("No named circuits found in realistic data")
 
+        # Mock entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_get_entity_id.return_value = None
+
         # Mock the helper functions and template processing
-        with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
-            with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed', 'energy_net'] * len(circuits) * 2):
-                with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(len(circuits) * 8)]):
-                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.test_power"):
-                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(len(circuits) * 8)]):
-                            with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
-                                mock_combine.return_value = {
-                                    "global_settings": {"device_identifier": "SP3-REAL-001"},
-                                    "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
-                                }
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_registry):
+            with patch('custom_components.span_panel.synthetic_named_circuits.get_circuit_number', return_value=1):
+                with patch('custom_components.span_panel.synthetic_named_circuits.get_user_friendly_suffix', side_effect=['power', 'energy_produced', 'energy_consumed', 'energy_net'] * len(circuits) * 2):
+                    with patch('custom_components.span_panel.synthetic_named_circuits.construct_circuit_unique_id_for_entry', side_effect=[f"unique_{i}" for i in range(len(circuits) * 8)]):
+                        with patch('custom_components.span_panel.synthetic_named_circuits.construct_120v_synthetic_entity_id', return_value="sensor.test_power"):
+                            with patch('custom_components.span_panel.synthetic_named_circuits.construct_backing_entity_id_for_entry', side_effect=[f"backing_{i}" for i in range(len(circuits) * 8)]):
+                                with patch('custom_components.span_panel.synthetic_named_circuits.combine_yaml_templates') as mock_combine:
+                                    mock_combine.return_value = {
+                                        "global_settings": {"device_identifier": "SP3-REAL-001"},
+                                        "sensor_configs": {"test_sensor": {"entity_id": "sensor.test"}}
+                                    }
 
-                                result = await generate_named_circuit_sensors(
-                                    mock_hass, mock_coordinator, span_panel, "Real Panel"
-                                )
+                                    result = await generate_named_circuit_sensors(
+                                        mock_hass, mock_coordinator, span_panel, "Real Panel"
+                                    )
 
-                                sensor_configs, backing_entities, global_settings, mapping = result
+                                    sensor_configs, backing_entities, global_settings, mapping = result
 
-                                # Should generate 3 sensors per circuit (power, produced, consumed) plus net energy sensors
-                                # Net energy sensors are synthetic sensors that reference other sensors, so no backing entities
-                                expected_backing_count = len(circuits) * 3  # 3 sensors per circuit (power, produced, consumed)
-                                expected_mapping_count = len(circuits) * 3  # Only the 3 sensors with backing entities
-                                assert len(backing_entities) == expected_backing_count
-                                assert len(mapping) == expected_mapping_count
+                                    # Should generate 3 sensors per circuit (power, produced, consumed) plus net energy sensors
+                                    # Net energy sensors are synthetic sensors that reference other sensors, so no backing entities
+                                    expected_backing_count = len(circuits) * 3  # 3 sensors per circuit (power, produced, consumed)
+                                    expected_mapping_count = len(circuits) * 3  # Only the 3 sensors with backing entities
+                                    assert len(backing_entities) == expected_backing_count
+                                    assert len(mapping) == expected_mapping_count

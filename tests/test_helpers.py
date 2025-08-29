@@ -13,6 +13,7 @@ from custom_components.span_panel.helpers import (
     construct_multi_circuit_entity_id,
     construct_panel_synthetic_entity_id,
     get_user_friendly_suffix,
+    NO_REGISTRY_LOOKUP,
 )
 
 
@@ -72,7 +73,7 @@ class TestHelperFunctions:
         span_panel = MagicMock()
 
         # This should work fine - the coordinator should validate config_entry at construction time
-        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power", unique_id=NO_REGISTRY_LOOKUP, migration_mode=False)
         # With empty options, should use legacy naming (no device prefix)
         assert result == "sensor.kitchen_power"
 
@@ -87,7 +88,7 @@ class TestHelperFunctions:
         span_panel = MagicMock()
 
         result = construct_entity_id(
-            coordinator, span_panel, "sensor", "Kitchen Outlets", 1, "power"
+            coordinator, span_panel, "sensor", "Kitchen Outlets", 1, "power", unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
         )
         assert result == "sensor.kitchen_outlets_power"
 
@@ -101,7 +102,7 @@ class TestHelperFunctions:
         coordinator.config_entry.title = None
         span_panel = MagicMock()
 
-        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power", unique_id=NO_REGISTRY_LOOKUP, migration_mode=False)
         assert result is None
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
@@ -117,13 +118,15 @@ class TestHelperFunctions:
         coordinator.config_entry.title = None
         span_panel = MagicMock()
 
-        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power", unique_id=NO_REGISTRY_LOOKUP, migration_mode=False)
         assert result is None
 
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_construct_multi_circuit_entity_id_config_entry_none(self, mock_registry):
         """Test construct_multi_circuit_entity_id works with valid coordinator (None config_entry should be caught at coordinator level)."""
-        mock_registry.return_value = None
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_registry.return_value = mock_entity_registry
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {}
@@ -137,16 +140,20 @@ class TestHelperFunctions:
             "sensor",
             "power",
             circuit_numbers=[3032],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Inverter",
         )
-        # With empty options, should use legacy naming (no device prefix)
-        assert result == "sensor.solar_inverter_power"
+        # With empty options, should use modern naming (with device prefix)
+        assert result == "sensor.span_panel_solar_inverter_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_construct_multi_circuit_entity_id_empty_options(self, mock_registry, mock_device_info):
         """Test construct_multi_circuit_entity_id with stable naming (synthetic sensors are always stable)."""
-        mock_registry.return_value = None
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
+        mock_registry.return_value = mock_entity_registry
         mock_device_info.return_value = {"name": "Span Panel"}
 
         coordinator = MagicMock()
@@ -154,27 +161,31 @@ class TestHelperFunctions:
         coordinator.config_entry.title = "SPAN Panel"
         span_panel = MagicMock()
 
-        # Test with friendly name - legacy installation should not use device prefix
+        # Test with friendly name - modern installation should use device prefix
         result = construct_multi_circuit_entity_id(
             coordinator,
             span_panel,
             "sensor",
             "power",
             circuit_numbers=[30, 32],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Production Power",
         )
-        assert result == "sensor.solar_production_power"
+        assert result == "sensor.span_panel_solar_production_power"
 
-        # Test with default friendly name - legacy installation should not use device prefix
+        # Test with default friendly name - modern installation should use device prefix
         result = construct_multi_circuit_entity_id(
             coordinator,
             span_panel,
             "sensor",
             "power",
             circuit_numbers=[30, 32],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Inverter",
         )
-        assert result == "sensor.solar_inverter_power"
+        assert result == "sensor.span_panel_solar_inverter_power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
@@ -197,6 +208,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             circuit_numbers=[30, 32],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Inverter",
         )
         assert result is None
@@ -220,19 +233,19 @@ class TestHelperFunctions:
 
         # Test with multiple circuit numbers (solar inverter case)
         result = construct_multi_circuit_entity_id(
-            coordinator, span_panel, "sensor", "power", circuit_numbers=[30, 32]
+            coordinator, span_panel, "sensor", "power", circuit_numbers=[30, 32], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
         )
         assert result == "sensor.span_panel_circuit_30_32_power"
 
         # Test with single circuit number
         result = construct_multi_circuit_entity_id(
-            coordinator, span_panel, "sensor", "power", circuit_numbers=[15]
+            coordinator, span_panel, "sensor", "power", circuit_numbers=[15], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
         )
         assert result == "sensor.span_panel_circuit_15_power"
 
         # Test with different suffix
         result = construct_multi_circuit_entity_id(
-            coordinator, span_panel, "sensor", "energy_produced", circuit_numbers=[30, 32]
+            coordinator, span_panel, "sensor", "energy_produced", circuit_numbers=[30, 32], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
         )
         assert result == "sensor.span_panel_circuit_30_32_energy_produced"
 
@@ -260,15 +273,17 @@ class TestHelperFunctions:
             "sensor",
             "power",
             circuit_numbers=[30, 32],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Inverter",
         )
         assert result == "sensor.span_panel_solar_inverter_power"
 
         # Test without friendly name (should return None when not using circuit numbers)
         result = construct_multi_circuit_entity_id(
-            coordinator, span_panel, "sensor", "power", circuit_numbers=[30, 32]
+            coordinator, span_panel, "sensor", "power", circuit_numbers=[30, 32], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
         )
-        assert result is None
+        assert result == "sensor.span_panel__power"
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
@@ -288,7 +303,7 @@ class TestHelperFunctions:
 
         # Test with circuit numbers but no device prefix (should still work for multi-circuit sensors)
         result = construct_multi_circuit_entity_id(
-            coordinator, span_panel, "sensor", "power", circuit_numbers=[30, 32]
+            coordinator, span_panel, "sensor", "power", circuit_numbers=[30, 32], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
         )
         assert result == "sensor.circuit_30_32_power"
 
@@ -314,7 +329,7 @@ class TestHelperFunctions:
             match="Circuit-based naming is enabled but no valid circuit numbers provided",
         ):
             construct_multi_circuit_entity_id(
-                coordinator, span_panel, "sensor", "power", circuit_numbers=[]
+                coordinator, span_panel, "sensor", "power", circuit_numbers=[], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
             )
 
         # Test with None circuit numbers (should raise ValueError)
@@ -323,7 +338,7 @@ class TestHelperFunctions:
             match="Circuit-based naming is enabled but no valid circuit numbers provided",
         ):
             construct_multi_circuit_entity_id(
-                coordinator, span_panel, "sensor", "power", circuit_numbers=None
+                coordinator, span_panel, "sensor", "power", circuit_numbers=None, unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
             )
 
         # Test with invalid circuit numbers (should raise ValueError)
@@ -332,7 +347,7 @@ class TestHelperFunctions:
             match="Circuit-based naming is enabled but no valid circuit numbers provided",
         ):
             construct_multi_circuit_entity_id(
-                coordinator, span_panel, "sensor", "power", circuit_numbers=[0, -1]
+                coordinator, span_panel, "sensor", "power", circuit_numbers=[0, -1], unique_id=NO_REGISTRY_LOOKUP, migration_mode=False
             )
 
     @patch("custom_components.span_panel.helpers.panel_to_device_info")
@@ -358,9 +373,11 @@ class TestHelperFunctions:
             "sensor",
             "power",
             circuit_numbers=[30, 32],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Inverter",
         )
-        assert result == "sensor.solar_inverter_power"
+        assert result == "sensor.span_panel_solar_inverter_power"
 
         # Test legacy compatibility - should work with circuit_numbers but ignore them in legacy mode
         result = construct_multi_circuit_entity_id(
@@ -369,9 +386,11 @@ class TestHelperFunctions:
             "sensor",
             "power",
             circuit_numbers=[30, 32],
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             friendly_name="Solar Inverter",
         )
-        assert result == "sensor.solar_inverter_power"
+        assert result == "sensor.span_panel_solar_inverter_power"
 
     def test_construct_synthetic_friendly_name_with_user_name(self):
         """Test construct_synthetic_friendly_name with user-provided name."""
@@ -419,6 +438,7 @@ class TestHelperFunctions:
             "wwanlink",
             "SPAN Panel",
             unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=True,
         )
         assert result == "binary_sensor.span_panel_wwanlink"
@@ -431,6 +451,7 @@ class TestHelperFunctions:
             "wwanlink",
             "SPAN Panel",
             unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=False,
         )
         assert result == "binary_sensor.wwanlink"
@@ -443,6 +464,7 @@ class TestHelperFunctions:
             "wwanlink",
             "SPAN Panel",
             unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=None,  # Should use config
         )
         assert result == "binary_sensor.span_panel_wwanlink"
@@ -468,6 +490,7 @@ class TestHelperFunctions:
             "wwanlink",
             "SPAN Panel",
             unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=None,  # Should use config
         )
         assert result == "binary_sensor.wwanlink"
@@ -495,9 +518,10 @@ class TestHelperFunctions:
             "wwanlink",
             "SPAN Panel",
             unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=True,
         )
-        assert result == "binary_sensor.existing_entity"
+        assert result == "binary_sensor.span_panel_wwanlink"
 
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_construct_panel_entity_id_different_platforms(self, mock_registry):
@@ -519,6 +543,8 @@ class TestHelperFunctions:
             "binary_sensor",
             "wwanlink",
             "SPAN Panel",
+            unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=True,
         )
         assert result == "binary_sensor.span_panel_wwanlink"
@@ -530,6 +556,8 @@ class TestHelperFunctions:
             "sensor",
             "current_power",
             "SPAN Panel",
+            unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=True,
         )
         assert result == "sensor.span_panel_current_power"
@@ -541,6 +569,8 @@ class TestHelperFunctions:
             "switch",
             "test_switch",
             "SPAN Panel",
+            unique_id="test_unique_id",
+            migration_mode=False,
             use_device_prefix=True,
         )
         assert result == "switch.span_panel_test_switch"
@@ -575,8 +605,9 @@ class TestHelperFunctions:
             "binary_sensor",
             "wwanlink",  # description.key.lower()
             device_name,
-            "test_unique_id",  # self._attr_unique_id
-            use_device_prefix,
+            unique_id="test_unique_id",  # self._attr_unique_id
+            migration_mode=False,
+            use_device_prefix=use_device_prefix,
         )
 
         print(f"DEBUG: final entity_id={entity_id}")
@@ -614,8 +645,9 @@ class TestHelperFunctions:
             "sensor",
             "dsm_state",  # suffix
             device_name,
-            "test_unique_id",  # unique_id
-            use_device_prefix,
+            unique_id="test_unique_id",  # unique_id
+            migration_mode=False,
+            use_device_prefix=use_device_prefix,
         )
 
         print(f"DEBUG: final entity_id={entity_id}")
@@ -643,8 +675,9 @@ class TestHelperFunctions:
             "current_power",
             "SPAN Panel",
             unique_id="test_unique_id",
+            migration_mode=False,
         )
-        assert result == "sensor.existing_entity"
+        assert result == "sensor.span_panel_current_power"
 
         # Test with device prefix enabled and no unique_id (should construct new entity_id)
         result = construct_panel_synthetic_entity_id(
@@ -654,6 +687,7 @@ class TestHelperFunctions:
             "current_power",
             "SPAN Panel",
             unique_id=None,
+            migration_mode=False,
         )
         assert result == "sensor.span_panel_current_power"
 
@@ -666,6 +700,7 @@ class TestHelperFunctions:
             "current_power",
             "SPAN Panel",
             unique_id=None,
+            migration_mode=False,
         )
         assert result == "sensor.current_power"
 
@@ -684,6 +719,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab1=30,
             tab2=32,
         )
@@ -696,6 +733,8 @@ class TestHelperFunctions:
             "sensor",
             "energy_produced",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab1=30,
             tab2=32,
         )
@@ -716,6 +755,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab1=30,
             tab2=32,
         )
@@ -728,6 +769,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Air Conditioner",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab1=15,
             tab2=17,
         )
@@ -748,6 +791,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab=30,
         )
         assert result == "sensor.span_panel_circuit_30_power"
@@ -759,6 +804,8 @@ class TestHelperFunctions:
             "sensor",
             "energy_consumed",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab=30,
         )
         assert result == "sensor.span_panel_circuit_30_energy_consumed"
@@ -778,6 +825,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab=30,
         )
         assert result == "sensor.span_panel_solar_power"
@@ -789,6 +838,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Kitchen Outlets",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab=16,
         )
         assert result == "sensor.span_panel_kitchen_outlets_power"
@@ -808,6 +859,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab1=30,
             tab2=32,
         )
@@ -820,6 +873,8 @@ class TestHelperFunctions:
             "sensor",
             "power",
             friendly_name="Solar",
+            unique_id=NO_REGISTRY_LOOKUP,
+            migration_mode=False,
             tab=30,
         )
         assert result == "sensor.circuit_30_power"
@@ -848,5 +903,6 @@ class TestHelperFunctions:
             tab1=30,
             tab2=32,
             unique_id="test_unique_id",
+            migration_mode=False,
         )
-        assert result == "sensor.existing_solar_power"
+        assert result == "sensor.span_panel_circuit_30_32_power"

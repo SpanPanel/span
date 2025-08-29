@@ -3,28 +3,29 @@
 This module tests the solar synthetic sensor generation functionality
 using YAML fixtures and the simulation factory.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers import entity_registry as er
 
-from custom_components.span_panel.synthetic_solar import (
-    _extract_leg_numbers,
-    _get_template_attributes,
-    _generate_sensor_entity_id,
-    _process_sensor_template,
-    generate_solar_sensors_with_entity_ids,
-    handle_solar_sensor_crud,
-    handle_solar_options_change,
-    get_stored_solar_sensor_ids_from_set,
-    get_solar_data_value,
-    SOLAR_SENSOR_DEFINITIONS,
-)
-from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+from ha_synthetic_sensors.sensor_set import SensorSet
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+import pytest
+
+from custom_components.span_panel.const import USE_DEVICE_PREFIX
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.span_panel import SpanPanel
-from ha_synthetic_sensors.sensor_set import SensorSet
+from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
+from custom_components.span_panel.synthetic_solar import (
+    SOLAR_SENSOR_DEFINITIONS,
+    _extract_leg_numbers,
+    _generate_sensor_entity_id,
+    _get_template_attributes,
+    _process_sensor_template,
+    generate_solar_sensors_with_entity_ids,
+    get_solar_data_value,
+    get_stored_solar_sensor_ids_from_set,
+    handle_solar_options_change,
+    handle_solar_sensor_crud,
+)
 from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
 
 
@@ -88,9 +89,15 @@ class TestSensorEntityIdGeneration:
     """Test solar sensor entity ID generation."""
 
     @pytest.fixture
-    def mock_coordinator(self):
+    def mock_hass(self):
+        """Create a mock Home Assistant instance."""
+        return MagicMock(spec=HomeAssistant)
+
+    @pytest.fixture
+    def mock_coordinator(self, mock_hass):
         """Create a mock coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
         coordinator.config_entry.data = {"device_name": "Test Panel"}
         coordinator.config_entry.title = "Test Panel"
@@ -166,7 +173,12 @@ class TestSensorTemplateProcessing:
     @pytest.fixture
     def mock_hass(self):
         """Create a mock Home Assistant instance."""
-        return MagicMock(spec=HomeAssistant)
+        hass = MagicMock(spec=HomeAssistant)
+        hass.data = {}
+        hass.config = MagicMock()
+        hass.config.config_dir = "/test/config"
+        hass.bus = MagicMock()
+        return hass
 
     @pytest.fixture
     def sensor_definition(self):
@@ -244,9 +256,10 @@ class TestSolarSensorGeneration:
     """Test solar sensor generation with entity IDs."""
 
     @pytest.fixture
-    def mock_coordinator(self):
+    def mock_coordinator(self, mock_hass):
         """Create a mock coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
         coordinator.config_entry.data = {"device_name": "Test Panel"}
         coordinator.config_entry.options = {
@@ -264,7 +277,12 @@ class TestSolarSensorGeneration:
     @pytest.fixture
     def mock_hass(self):
         """Create a mock Home Assistant instance."""
-        return MagicMock(spec=HomeAssistant)
+        hass = MagicMock(spec=HomeAssistant)
+        hass.data = {}
+        hass.config = MagicMock()
+        hass.config.config_dir = "/test/config"
+        hass.bus = MagicMock()
+        return hass
 
     async def test_generate_solar_sensors_success(self, mock_coordinator, mock_span_panel, mock_hass):
         """Test successful generation of solar sensors."""
@@ -280,18 +298,22 @@ class TestSolarSensorGeneration:
             "metadata": {},
         }
 
-        with patch('custom_components.span_panel.synthetic_solar._process_sensor_template', return_value=mock_template_result):
-            with patch('custom_components.span_panel.synthetic_solar._generate_sensor_entity_id', return_value="sensor.solar_power"):
-                with patch('custom_components.span_panel.synthetic_solar.construct_synthetic_unique_id_for_entry', side_effect=lambda coord, panel, name, device: f"test_unique_id_{name}"):
-                    result = await generate_solar_sensors_with_entity_ids(
-                        mock_coordinator, mock_span_panel, leg1_entity, leg2_entity, "Test Panel", hass=mock_hass
-                    )
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
 
-                    assert len(result) == len(SOLAR_SENSOR_DEFINITIONS)
-                    # Check that all three sensors were created with unique IDs
-                    assert any("power" in key for key in result.keys())
-                    assert any("energy_produced" in key for key in result.keys())
-                    assert any("energy_consumed" in key for key in result.keys())
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_entity_registry):
+            with patch('custom_components.span_panel.synthetic_solar._process_sensor_template', return_value=mock_template_result):
+                with patch('custom_components.span_panel.synthetic_solar._generate_sensor_entity_id', return_value="sensor.solar_power"):
+                    with patch('custom_components.span_panel.synthetic_solar.construct_synthetic_unique_id_for_entry', side_effect=lambda coord, panel, name, device: f"test_unique_id_{name}"):
+                        result = await generate_solar_sensors_with_entity_ids(
+                            mock_coordinator, mock_span_panel, leg1_entity, leg2_entity, "Test Panel", hass=mock_hass
+                        )
+
+                        assert len(result) == len(SOLAR_SENSOR_DEFINITIONS)
+                        # Check that all three sensors were created with unique IDs
+                        assert any("power" in key for key in result.keys())
+                        assert any("energy_produced" in key for key in result.keys())
+                        assert any("energy_consumed" in key for key in result.keys())
 
     async def test_generate_solar_sensors_no_valid_tabs(self, mock_coordinator, mock_span_panel, mock_hass):
         """Test solar sensor generation with no valid tabs."""
@@ -299,11 +321,15 @@ class TestSolarSensorGeneration:
         leg1_entity = "sensor.span_panel_invalid_123_power"
         leg2_entity = "sensor.span_panel_also_invalid_456_power"
 
-        result = await generate_solar_sensors_with_entity_ids(
-            mock_coordinator, mock_span_panel, leg1_entity, leg2_entity, "Test Panel", hass=mock_hass
-        )
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.async_get_entity_id.return_value = None
 
-        assert len(result) == 0
+        with patch('homeassistant.helpers.entity_registry.async_get', return_value=mock_entity_registry):
+            result = await generate_solar_sensors_with_entity_ids(
+                mock_coordinator, mock_span_panel, leg1_entity, leg2_entity, "Test Panel", hass=mock_hass
+            )
+
+            assert len(result) == 0
 
     async def test_generate_solar_sensors_migration_mode(self, mock_coordinator, mock_span_panel, mock_hass):
         """Test solar sensor generation in migration mode."""
@@ -352,13 +378,21 @@ class TestSolarSensorCRUD:
         return MagicMock(spec=ConfigEntry)
 
     @pytest.fixture
-    def mock_coordinator(self):
+    def mock_coordinator(self, mock_hass):
         """Create a mock coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
         coordinator.data = MagicMock(spec=SpanPanel)
+        coordinator.data.circuits = {}
+        # Add the required data attribute to the span panel mock
+        coordinator.data.data = MagicMock()
+        # Add status with serial_number for unique ID generation
+        coordinator.data.status = MagicMock()
+        coordinator.data.status.serial_number = "TEST123456"
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
+        coordinator.config_entry.data = {"simulation_mode": False}
         coordinator.config_entry.options = {
-            "USE_DEVICE_PREFIX": True,
+            USE_DEVICE_PREFIX: True,
             "energy_reporting_grace_period": 15,
             "power_display_precision": 0,
             "energy_display_precision": 2,
@@ -370,6 +404,7 @@ class TestSolarSensorCRUD:
         """Create a mock sensor set."""
         sensor_set = MagicMock(spec=SensorSet)
         sensor_set.async_add_sensor_from_yaml = AsyncMock()
+        sensor_set.data = {}
         return sensor_set
 
     async def test_handle_solar_sensor_crud_success(self, mock_hass, mock_config_entry,
@@ -432,6 +467,9 @@ class TestSolarOptionsChange:
         """Create a mock Home Assistant instance."""
         hass = MagicMock(spec=HomeAssistant)
         hass.data = {}
+        hass.config = MagicMock()
+        hass.config.config_dir = "/test/config"
+        hass.bus = MagicMock()
         return hass
 
     @pytest.fixture
@@ -442,9 +480,10 @@ class TestSolarOptionsChange:
         return entry
 
     @pytest.fixture
-    def mock_coordinator(self):
+    def mock_coordinator(self, mock_hass):
         """Create a mock coordinator."""
         coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
         coordinator.data = MagicMock(spec=SpanPanel)
         coordinator.data.circuits = {"test_circuit": MagicMock(name="Test Circuit")}
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
@@ -689,3 +728,94 @@ class TestIntegrationWithFactory:
         # The test validates the structure is compatible with our functions
         # without actually calling them with mock data
         assert len(circuits) > 0
+
+
+class TestPanelStatusEntityIdFallback:
+    """Test that panel_status_entity_id fallback respects USE_DEVICE_PREFIX flag."""
+
+    @pytest.fixture
+    def mock_hass(self):
+        """Create a mock Home Assistant instance."""
+        return MagicMock(spec=HomeAssistant)
+
+    @pytest.fixture
+    def coordinator_with_device_prefix(self, mock_hass):
+        """Create a mock coordinator with USE_DEVICE_PREFIX=True."""
+        coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
+        coordinator.config_entry = MagicMock(spec=ConfigEntry)
+        coordinator.config_entry.data = {"device_name": "Test Panel"}
+        coordinator.config_entry.title = "Test Panel"
+        coordinator.config_entry.options = {
+            "use_device_prefix": True,
+            "energy_reporting_grace_period": 15,
+            "power_display_precision": 0,
+            "energy_display_precision": 2,
+        }
+        coordinator.data = MagicMock(spec=SpanPanel)
+        coordinator.data.status.serial_number = "test123"
+        return coordinator
+
+    @pytest.fixture
+    def coordinator_without_device_prefix(self, mock_hass):
+        """Create a mock coordinator with USE_DEVICE_PREFIX=False."""
+        coordinator = MagicMock(spec=SpanPanelCoordinator)
+        coordinator.hass = mock_hass
+        coordinator.config_entry = MagicMock(spec=ConfigEntry)
+        coordinator.config_entry.data = {"device_name": "Test Panel"}
+        coordinator.config_entry.title = "Test Panel"
+        coordinator.config_entry.options = {
+            "use_device_prefix": False,
+            "energy_reporting_grace_period": 15,
+            "power_display_precision": 0,
+            "energy_display_precision": 2,
+        }
+        coordinator.data = MagicMock(spec=SpanPanel)
+        coordinator.data.status.serial_number = "test123"
+        return coordinator
+
+    def test_panel_status_entity_id_fallback_with_device_prefix(self, coordinator_with_device_prefix):
+        """Test panel_status_entity_id fallback when USE_DEVICE_PREFIX=True."""
+        from custom_components.span_panel.helpers import construct_panel_entity_id, NEW_SENSOR
+
+        coordinator = coordinator_with_device_prefix
+        span_panel = coordinator.data
+        device_name = "Test Panel"
+
+        # Simulate the fallback case where panel_status_entity_id is None
+        fallback_entity_id = construct_panel_entity_id(
+            coordinator,
+            span_panel,
+            "binary_sensor",
+            "panel_status",
+            device_name,
+            unique_id=NEW_SENSOR,
+            migration_mode=False,
+            use_device_prefix=True,
+        )
+
+        # Should include device prefix
+        assert fallback_entity_id == "binary_sensor.test_panel_panel_status"
+
+    def test_panel_status_entity_id_fallback_without_device_prefix(self, coordinator_without_device_prefix):
+        """Test panel_status_entity_id fallback when USE_DEVICE_PREFIX=False."""
+        from custom_components.span_panel.helpers import construct_panel_entity_id, NEW_SENSOR
+
+        coordinator = coordinator_without_device_prefix
+        span_panel = coordinator.data
+        device_name = "Test Panel"
+
+        # Simulate the fallback case where panel_status_entity_id is None
+        fallback_entity_id = construct_panel_entity_id(
+            coordinator,
+            span_panel,
+            "binary_sensor",
+            "panel_status",
+            device_name,
+            unique_id=NEW_SENSOR,
+            migration_mode=False,
+            use_device_prefix=False,
+        )
+
+        # Should not include device prefix
+        assert fallback_entity_id == "binary_sensor.panel_status"

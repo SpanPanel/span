@@ -14,15 +14,17 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
-from .const import DOMAIN
+from .const import DOMAIN, USE_DEVICE_PREFIX
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    NEW_SENSOR,
     build_binary_sensor_unique_id_for_entry,
     construct_120v_synthetic_entity_id,
     construct_240v_synthetic_entity_id,
     construct_backing_entity_id_for_entry,
     construct_circuit_unique_id_for_entry,
     construct_panel_entity_id,
+    construct_syn_calc_entity_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
     get_circuit_number,
@@ -131,18 +133,24 @@ async def generate_named_circuit_sensors(
     energy_grace_period = coordinator.config_entry.options.get("energy_reporting_grace_period", 15)
 
     # Construct panel status entity ID
-    use_device_prefix = coordinator.config_entry.options.get("USE_DEVICE_PREFIX", True)
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
     # panel_status is a new sensor, so always use migration_mode=False when looking up its entity ID
+    # WFF Do we ever need to look up the panel_status entity ID?
+    # If you didn't have a backup you wouldn't have sensors to look up so you would have to create them in their default settings.
+    # Building YAML is a one time effort.
     panel_status_entity_id = construct_panel_entity_id(
         coordinator,
         span_panel,
         "binary_sensor",
         "panel_status",
         device_name,
-        unique_id=build_binary_sensor_unique_id_for_entry(
+        unique_id=NEW_SENSOR
+        if migration_mode
+        else build_binary_sensor_unique_id_for_entry(
             coordinator, span_panel, "panel_status", device_name
         ),
-        migration_mode=False,  # panel_status is new, always create
+        migration_mode=migration_mode,
         use_device_prefix=use_device_prefix,
     )
 
@@ -152,7 +160,17 @@ async def generate_named_circuit_sensors(
         "energy_grace_period_minutes": str(energy_grace_period),
         "power_display_precision": str(power_precision),
         "energy_display_precision": str(energy_precision),
-        "panel_status_entity_id": panel_status_entity_id,
+        "panel_status_entity_id": panel_status_entity_id
+        or construct_panel_entity_id(
+            coordinator,
+            span_panel,
+            "binary_sensor",
+            "panel_status",
+            device_name,
+            unique_id=NEW_SENSOR,
+            migration_mode=False,
+            use_device_prefix=use_device_prefix,
+        ),
     }
 
     # Filter to only normal named circuits (not unmapped)
@@ -213,7 +231,7 @@ async def generate_named_circuit_sensors(
                         platform="sensor",
                         suffix=entity_suffix,
                         friendly_name=circuit_name,
-                        unique_id=sensor_unique_id,
+                        unique_id=NEW_SENSOR if migration_mode else sensor_unique_id,
                         migration_mode=migration_mode,
                         tab1=circuit_data.tabs[0],
                         tab2=circuit_data.tabs[1],
@@ -225,7 +243,7 @@ async def generate_named_circuit_sensors(
                         platform="sensor",
                         suffix=entity_suffix,
                         friendly_name=circuit_name,
-                        unique_id=sensor_unique_id,
+                        unique_id=NEW_SENSOR if migration_mode else sensor_unique_id,
                         migration_mode=migration_mode,
                         tab=circuit_data.tabs[0],
                     )
@@ -402,84 +420,26 @@ async def _add_circuit_net_energy_sensor(
         migration_mode: Whether we are in migration mode to resolve entity_ids by registry lookup using helper-format unique_id
 
     """
-    # Build net sensor identifiers
-    net_suffix = get_user_friendly_suffix("netEnergyWh")  # -> energy_net
     # Use proper helper to get device identifier for this entry
     net_unique_id: str = construct_circuit_unique_id_for_entry(
-        coordinator, span_panel, circuit_id, "netEnergyWh", circuit_data.name
+        coordinator, span_panel, circuit_id, "netEnergyWh", device_identifier_for_uniques
     )
 
-    # For net energy sensors, check if they exist in migration mode
-    # Net energy sensors are synthetic and might not exist in previous versions
-    net_entity_id: str | None = None
-    if migration_mode:
-        entity_registry = er.async_get(hass)
-        existing_net_entity_id: str | None = entity_registry.async_get_entity_id(
-            "sensor", DOMAIN, net_unique_id
-        )
-        if existing_net_entity_id:
-            # Net energy sensor exists - use it
-            net_entity_id = existing_net_entity_id
-            _LOGGER.debug(
-                "MIGRATION: Using existing net energy entity %s for unique_id %s",
-                existing_net_entity_id,
-                net_unique_id,
-            )
-        else:
-            # Net energy sensor doesn't exist - create it (this is OK for synthetic sensors)
-            _LOGGER.debug(
-                "MIGRATION: Net energy sensor not found in registry, creating new one for unique_id %s",
-                net_unique_id,
-            )
-            # Use migration_mode=False to create new entity ID
-            if len(circuit_data.tabs) == 2:
-                net_entity_id = construct_240v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="sensor",
-                    suffix=net_suffix,
-                    friendly_name=circuit_name,
-                    unique_id=net_unique_id,
-                    migration_mode=False,  # Create new entity ID
-                    tab1=circuit_data.tabs[0],
-                    tab2=circuit_data.tabs[1],
-                )
-            else:
-                net_entity_id = construct_120v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="sensor",
-                    suffix=net_suffix,
-                    friendly_name=circuit_name,
-                    unique_id=net_unique_id,
-                    migration_mode=False,  # Create new entity ID
-                    tab=circuit_data.tabs[0],
-                )
-    else:
-        # Not in migration mode - build entity_id for circuit (respect 120/240V)
-        if len(circuit_data.tabs) == 2:
-            net_entity_id = construct_240v_synthetic_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform="sensor",
-                suffix=net_suffix,
-                friendly_name=circuit_name,
-                unique_id=net_unique_id,
-                migration_mode=migration_mode,
-                tab1=circuit_data.tabs[0],
-                tab2=circuit_data.tabs[1],
-            )
-        else:
-            net_entity_id = construct_120v_synthetic_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform="sensor",
-                suffix=net_suffix,
-                friendly_name=circuit_name,
-                unique_id=net_unique_id,
-                migration_mode=migration_mode,
-                tab=circuit_data.tabs[0],
-            )
+    # Net energy sensors are calculated sensors like solar - use friendly names only
+    # They don't correspond to physical circuits, so don't use circuit ID naming
+    net_friendly_suffix = f"{slugify(circuit_name)}_net_energy"
+    device_name = coordinator.config_entry.title
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+    net_entity_id = construct_syn_calc_entity_id(
+        coordinator=coordinator,
+        span_panel=span_panel,
+        platform="sensor",
+        suffix=net_friendly_suffix,
+        device_name=device_name,
+        unique_id=NEW_SENSOR,
+        migration_mode=migration_mode,
+        use_device_prefix=use_device_prefix,
+    )
 
     if net_entity_id is None:
         raise ValueError("Failed to build entity_id for circuit net energy sensor")

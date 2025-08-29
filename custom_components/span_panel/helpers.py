@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+__all__ = ["NO_REGISTRY_LOOKUP", "NEW_SENSOR"]
+
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -20,6 +22,9 @@ if TYPE_CHECKING:
     from .span_panel_circuit import SpanPanelCircuit
 
 _LOGGER = logging.getLogger(__name__)
+# Special constants for unique_id parameter to control registry lookup behavior
+NO_REGISTRY_LOOKUP = "__no_registry_lookup__"
+NEW_SENSOR = "__new_sensor__"
 
 
 def _construct_new_entity_id_for_multi_circuit(
@@ -50,7 +55,7 @@ def _construct_new_entity_id_for_multi_circuit(
     """
     # Get device info
     config_entry = coordinator.config_entry
-    device_name = config_entry.data.get("device_name", config_entry.title)
+    device_name = config_entry.title
 
     if not device_name:
         return None
@@ -61,8 +66,15 @@ def _construct_new_entity_id_for_multi_circuit(
         # Use circuit number pattern: sensor.span_panel_circuit_30_32_power
         if circuit_numbers:
             # Sort circuit numbers for consistent naming
-            sorted_numbers = sorted(circuit_numbers)
-            circuit_part = "_".join([f"circuit_{num}" for num in sorted_numbers])
+            sorted_numbers = sorted([num for num in circuit_numbers if num > 0])
+            if sorted_numbers:
+                if len(sorted_numbers) == 1:
+                    circuit_part = f"circuit_{sorted_numbers[0]}"
+                else:
+                    circuit_list = "_".join(str(num) for num in sorted_numbers)
+                    circuit_part = f"circuit_{circuit_list}"
+            else:
+                return None
         else:
             return None
     else:
@@ -72,7 +84,12 @@ def _construct_new_entity_id_for_multi_circuit(
         circuit_part = slugify(friendly_name)
 
     # Build the entity ID
-    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+    _LOGGER.debug(
+        "ENTITY_ID_DEBUG: USE_DEVICE_PREFIX=%s for entry %s",
+        use_device_prefix,
+        coordinator.config_entry.entry_id,
+    )
     parts = []
 
     if use_device_prefix:
@@ -439,22 +456,24 @@ def construct_panel_synthetic_entity_id(
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Always check registry since unique_id is always provided
-    entity_registry = er.async_get(coordinator.hass)
-    existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
-    if existing_entity_id:
-        if migration_mode:
-            # During migration, preserve the existing entity ID
-            return existing_entity_id
-        # Not in migration mode - delete existing entity and recreate with correct naming
-        _LOGGER.info(
-            "Deleting existing entity %s to recreate with correct naming",
-            existing_entity_id,
-        )
-        entity_registry.async_remove(existing_entity_id)
-        # Fall through to create new entity ID
+    # Calculate intended entity ID
+    config_entry = coordinator.config_entry
+    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
+    intended_entity_id = (
+        f"{platform}.{slugify(device_name)}_{suffix}"
+        if (use_device_prefix and device_name)
+        else f"{platform}.{suffix}"
+    )
 
-    # Entity not found in registry - construct new entity ID
+    # Use centralized helper for registry lookup and renaming
+    result = _handle_entity_registry_lookup_and_renaming(
+        coordinator, platform, unique_id, intended_entity_id, migration_mode
+    )
+
+    if result is not None:
+        return result
+
+    # No existing entity found and no orphaned entity renamed - construct new entity ID
     config_entry = coordinator.config_entry
     if not device_name:
         return None
@@ -503,10 +522,8 @@ def construct_240v_synthetic_entity_id(
             f"240V synthetic entity requires exactly 2 tabs, got tab1={tab1}, tab2={tab2}"
         )
 
-    # Build tab numbers list
+    # For 240V circuits, use multi-circuit helper with both tabs
     tab_numbers = [tab1, tab2]
-
-    # Use the multi-circuit helper
     return construct_multi_circuit_entity_id(
         coordinator=coordinator,
         span_panel=span_panel,
@@ -549,7 +566,7 @@ def construct_120v_synthetic_entity_id(
     if tab <= 0:
         raise ValueError(f"120V synthetic entity requires exactly 1 tab, got tab={tab}")
 
-    # Use the multi-circuit helper with only one tab
+    # For 120V circuits, use multi-circuit helper with single tab
     return construct_multi_circuit_entity_id(
         coordinator=coordinator,
         span_panel=span_panel,
@@ -576,7 +593,7 @@ def get_circuit_number(circuit: SpanPanelCircuit) -> int | str:
 
 
 def get_friendly_name_from_registry(
-    hass: HomeAssistant, unique_id: str | None, default_name: str, platform: str = "sensor"
+    hass: HomeAssistant, unique_id: str, default_name: str, platform: str = "sensor"
 ) -> str:
     """Check entity registry for user's customized friendly name.
 
@@ -586,7 +603,7 @@ def get_friendly_name_from_registry(
 
     Args:
         hass: Home Assistant instance
-        unique_id: The unique ID to look up in the registry (None to skip registry check)
+        unique_id: The unique ID to look up in the registry (use NO_REGISTRY_LOOKUP or NEW_SENSOR to skip)
         default_name: The default friendly name to use if not found in registry
         platform: Platform name ("sensor", "switch", "binary_sensor", "select")
 
@@ -594,8 +611,8 @@ def get_friendly_name_from_registry(
         The user's custom friendly name from registry if found, otherwise the default name
 
     """
-    # If no unique_id provided, return default name immediately
-    if unique_id is None:
+    # If special constant provided, return default name immediately
+    if unique_id in (NO_REGISTRY_LOOKUP, NEW_SENSOR):
         return default_name
 
     entity_registry = er.async_get(hass)
@@ -616,6 +633,107 @@ def get_friendly_name_from_registry(
             return entity_entry.name
 
     return default_name
+
+
+def _safe_rename_entity(
+    coordinator: SpanPanelCoordinator,
+    entity_registry: er.EntityRegistry,
+    existing_entity_id: str,
+    intended_entity_id: str,
+    context: str,
+) -> str:
+    """Safely rename an entity, handling conflicts gracefully.
+
+    Args:
+        coordinator: The coordinator instance (needed for stable guard check)
+        entity_registry: The entity registry
+        existing_entity_id: Current entity ID
+        intended_entity_id: Desired entity ID
+        context: Context for logging (e.g., "single circuit", "multi circuit")
+
+    Returns:
+        The entity ID to use (either renamed or original)
+
+    """
+    if existing_entity_id == intended_entity_id:
+        return existing_entity_id
+
+    # Check if this is a stable, existing installation (post-migration)
+    is_stable_installation = coordinator.config_entry.options.get("POST_MIGRATION_STABLE", False)
+    if is_stable_installation:
+        # Stable installation - preserve existing entity ID
+        _LOGGER.debug(
+            "Stable installation detected - preserving %s entity ID %s", context, existing_entity_id
+        )
+        return existing_entity_id
+
+    try:
+        entity_registry.async_update_entity(existing_entity_id, new_entity_id=intended_entity_id)
+        _LOGGER.debug(
+            "Renamed %s entity %s to %s to match current naming strategy",
+            context,
+            existing_entity_id,
+            intended_entity_id,
+        )
+        return intended_entity_id
+    except Exception as e:
+        _LOGGER.warning(
+            "Failed to rename %s entity %s to %s: %s - using existing entity ID",
+            context,
+            existing_entity_id,
+            intended_entity_id,
+            e,
+        )
+        return existing_entity_id
+
+
+def _find_and_rename_orphaned_entity(
+    coordinator: SpanPanelCoordinator,
+    entity_registry: er.EntityRegistry,
+    unique_id: str,
+    intended_entity_id: str,
+    platform: str,
+) -> bool:
+    """Find and rename orphaned entities with the same unique_id.
+
+    This function searches for any entity in the registry with the given unique_id
+    and renames it to the intended entity ID if it's different. This prevents
+    orphaned entities from overriding our intended entity IDs when they get
+    "attached" to our new entities.
+
+    Args:
+        coordinator: The coordinator instance
+        entity_registry: The entity registry
+        unique_id: The unique ID to search for
+        intended_entity_id: The entity ID we want the entity to have
+        platform: The platform we're creating the entity for
+
+    Returns:
+        True if an orphaned entity was found and renamed, False otherwise
+
+    """
+    # Search all entities in the registry for our unique_id
+    for entity_id, entity_entry in entity_registry.entities.items():
+        if entity_entry.unique_id == unique_id:
+            if entity_id != intended_entity_id:
+                # Found an orphaned entity with wrong entity ID - rename it
+                _LOGGER.info(
+                    "Found orphaned entity %s with unique_id %s, renaming to %s",
+                    entity_id,
+                    unique_id,
+                    intended_entity_id,
+                )
+                # Use centralized rename logic for consistency
+                renamed_entity_id = _safe_rename_entity(
+                    coordinator, entity_registry, entity_id, intended_entity_id, "orphaned"
+                )
+                return renamed_entity_id == intended_entity_id
+            else:
+                # Entity already has correct entity ID
+                return False
+
+    # No orphaned entity found
+    return False
 
 
 def construct_entity_id(
@@ -642,48 +760,28 @@ def construct_entity_id(
         circuit_name: Human-readable circuit name
         circuit_number: Circuit number/identifier
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
-        unique_id: The unique ID for this entity (None to skip registry lookup)
+        unique_id: The unique ID for this entity (use NO_REGISTRY_LOOKUP or NEW_SENSOR to skip registry lookup)
         migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Always check registry since unique_id is always provided
-    entity_registry = er.async_get(coordinator.hass)
-    existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+    # Calculate intended entity ID
+    intended_entity_id = _construct_new_entity_id_for_single_circuit(
+        coordinator, span_panel, platform, circuit_name, circuit_number, suffix
+    )
 
-    if existing_entity_id:
-        if migration_mode:
-            # During migration, preserve the existing entity ID
-            return existing_entity_id
-        # Not in migration mode - rename existing entity to use correct naming pattern
-        # Calculate what the new entity ID should be
-        new_entity_id = _construct_new_entity_id_for_single_circuit(
-            coordinator, span_panel, platform, circuit_name, circuit_number, suffix
+    # Use centralized helper for registry lookup and renaming
+    if intended_entity_id:
+        result = _handle_entity_registry_lookup_and_renaming(
+            coordinator, platform, unique_id, intended_entity_id, migration_mode
         )
 
-        if new_entity_id and new_entity_id != existing_entity_id:
-            _LOGGER.info(
-                "Renaming existing entity %s to %s to match current naming pattern",
-                existing_entity_id,
-                new_entity_id,
-            )
-            try:
-                entity_registry.async_update_entity(existing_entity_id, new_entity_id=new_entity_id)
-                return new_entity_id
-            except Exception as e:
-                _LOGGER.warning(
-                    "Failed to rename entity %s to %s: %s - using existing entity",
-                    existing_entity_id,
-                    new_entity_id,
-                    e,
-                )
-                return existing_entity_id
-        # Entity already has correct name or couldn't determine new name
-        return existing_entity_id
+        if result is not None:
+            return result
 
-    # Entity not found in registry - construct new entity ID
+    # No existing entity found and no orphaned entity renamed - construct new entity ID
     config_entry = coordinator.config_entry
 
     # Use the config entry title as the device name for entity ID construction
@@ -1045,7 +1143,7 @@ def construct_multi_circuit_entity_id(
     platform: str,
     suffix: str,
     circuit_numbers: list[int],
-    unique_id: str | None,
+    unique_id: str,
     migration_mode: bool,
     friendly_name: str | None = None,
 ) -> str | None:
@@ -1057,59 +1155,29 @@ def construct_multi_circuit_entity_id(
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_numbers: List of circuit numbers this sensor combines
-        friendly_name: Descriptive name for this sensor (required if unique_id is None)
-        unique_id: The unique ID for this entity (None to skip registry lookup)
-        migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
+        friendly_name: Descriptive name for this sensor (required if unique_id is a special constant)
+        unique_id: The unique ID for this entity (use NO_REGISTRY_LOOKUP or NEW_SENSOR to skip registry lookup)
+        migration_mode: If True, preserve existing entity ID during migration
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Check registry first only if unique_id is provided
-    if unique_id is not None:
-        entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+    # Calculate intended entity ID
+    intended_entity_id = _construct_new_entity_id_for_multi_circuit(
+        coordinator, span_panel, platform, suffix, circuit_numbers, friendly_name
+    )
 
-        if existing_entity_id:
-            if migration_mode:
-                # During migration, preserve the existing entity ID
-                return existing_entity_id
-            else:
-                # Not in migration mode - rename existing entity to use correct naming pattern
-                # Calculate what the new entity ID should be
-                new_entity_id = _construct_new_entity_id_for_multi_circuit(
-                    coordinator, span_panel, platform, suffix, circuit_numbers, friendly_name
-                )
+    # Use centralized helper for registry lookup and renaming
+    if intended_entity_id:
+        result = _handle_entity_registry_lookup_and_renaming(
+            coordinator, platform, unique_id, intended_entity_id, migration_mode
+        )
 
-                if new_entity_id and new_entity_id != existing_entity_id:
-                    _LOGGER.info(
-                        "Renaming existing entity %s to %s to match current naming pattern",
-                        existing_entity_id,
-                        new_entity_id,
-                    )
-                    try:
-                        entity_registry.async_update_entity(
-                            existing_entity_id, new_entity_id=new_entity_id
-                        )
-                        return new_entity_id
-                    except Exception as e:
-                        _LOGGER.warning(
-                            "Failed to rename entity %s to %s: %s - using existing entity",
-                            existing_entity_id,
-                            new_entity_id,
-                            e,
-                        )
-                        return existing_entity_id
-                # Entity already has correct name or couldn't determine new name
-                return existing_entity_id
-        else:
-            # Entity not found in registry
-            if migration_mode:
-                # During migration, unique_id lookup should always succeed
-                raise ValueError(
-                    f"Registry lookup failed for unique_id '{unique_id}' during migration. Entity should exist in registry."
-                )
-            # Not in migration mode - proceed to construct new entity ID
+        if result is not None:
+            return result
+
+    # No existing entity found and no orphaned entity renamed - construct new entity ID
 
     # Use the existing logic to construct what the entity ID should be
     device_name = coordinator.config_entry.title
@@ -1141,7 +1209,12 @@ def construct_multi_circuit_entity_id(
         circuit_part = slugify(friendly_name)
 
     # Build the entity ID
-    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+    _LOGGER.debug(
+        "ENTITY_ID_DEBUG: USE_DEVICE_PREFIX=%s for entry %s",
+        use_device_prefix,
+        coordinator.config_entry.entry_id,
+    )
     parts = []
 
     if use_device_prefix:
@@ -1176,103 +1249,19 @@ def construct_single_circuit_entity_id(
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_data: Circuit data object
-        unique_id: The unique ID for this entity (None to skip registry lookup)
+        unique_id: The unique ID for this entity (use NO_REGISTRY_LOOKUP or NEW_SENSOR to skip registry lookup)
         migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Always check registry since unique_id is always provided
-    entity_registry = er.async_get(coordinator.hass)
-    existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
-
-    if existing_entity_id:
-        if migration_mode:
-            # During migration, preserve the existing entity ID
-            return existing_entity_id
-        else:
-            # Not in migration mode - check if entity ID needs renaming
-            # Get device info
-            device_info = panel_to_device_info(span_panel)
-            if not device_info or not device_info.get("name"):
-                return existing_entity_id
-
-            use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-
-            if use_circuit_numbers:
-                # Use circuit number pattern: sensor.span_panel_circuit_30_power
-                circuit_number = get_circuit_number(circuit_data)
-                if circuit_number:
-                    circuit_part = f"circuit_{circuit_number}"
-                else:
-                    circuit_part = "circuit_unknown"
-            else:
-                # Use friendly name pattern: sensor.span_panel_solar_east_power
-                if circuit_data.name:
-                    circuit_part = slugify(circuit_data.name)
-                else:
-                    circuit_part = "single_circuit"
-
-            # Build the entity ID
-            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            parts = []
-
-            if use_device_prefix:
-                device_name = device_info.get("name")
-                if device_name:
-                    # Sanitize device name for entity ID use
-                    sanitized_device_name = slugify(device_name)
-                    parts.append(sanitized_device_name)
-
-            parts.append(circuit_part)
-
-            # Add suffix if not already in circuit_part
-            if suffix and not circuit_part.endswith(f"_{suffix}"):
-                parts.append(suffix)
-
-            new_entity_id = f"{platform}.{'_'.join(parts)}"
-
-            if new_entity_id != existing_entity_id:
-                # Check if target entity ID already exists
-                target_entity = entity_registry.async_get(new_entity_id)
-                if target_entity:
-                    # Not in migration mode - delete conflicting entity and recreate
-                    _LOGGER.info(
-                        "Deleting conflicting entity %s to allow rename of %s to %s",
-                        new_entity_id,
-                        existing_entity_id,
-                        new_entity_id,
-                    )
-                    entity_registry.async_remove(new_entity_id)
-
-                # Rename the entity to match current naming strategy
-                try:
-                    entity_registry.async_update_entity(
-                        existing_entity_id, new_entity_id=new_entity_id
-                    )
-                    _LOGGER.debug(
-                        "Renamed single circuit entity %s to %s to match current naming strategy",
-                        existing_entity_id,
-                        new_entity_id,
-                    )
-                    return new_entity_id
-                except Exception as e:
-                    _LOGGER.warning(
-                        "Failed to rename single circuit entity %s to %s: %s",
-                        existing_entity_id,
-                        new_entity_id,
-                        e,
-                    )
-                    return existing_entity_id
-            return existing_entity_id
-
-    # Entity not found in registry - construct new entity ID
-    # Get device info
+    # Get device info for entity ID construction
     device_info = panel_to_device_info(span_panel)
     if not device_info or not device_info.get("name"):
         return None
 
+    # Construct the intended entity ID
     use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
     if use_circuit_numbers:
@@ -1290,7 +1279,12 @@ def construct_single_circuit_entity_id(
             circuit_part = "single_circuit"
 
     # Build the entity ID
-    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
+    use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+    _LOGGER.debug(
+        "ENTITY_ID_DEBUG: USE_DEVICE_PREFIX=%s for entry %s",
+        use_device_prefix,
+        coordinator.config_entry.entry_id,
+    )
     parts = []
 
     if use_device_prefix:
@@ -1306,7 +1300,63 @@ def construct_single_circuit_entity_id(
     if suffix and not circuit_part.endswith(f"_{suffix}"):
         parts.append(suffix)
 
-    return f"{platform}.{'_'.join(parts)}"
+    intended_entity_id = f"{platform}.{'_'.join(parts)}"
+
+    # Check registry unless special constant is used
+    if unique_id in (NO_REGISTRY_LOOKUP, NEW_SENSOR):
+        return intended_entity_id
+
+    # Use centralized helper for registry lookup and renaming
+    result = _handle_entity_registry_lookup_and_renaming(
+        coordinator, platform, unique_id, intended_entity_id, migration_mode
+    )
+
+    if result is not None:
+        return result
+
+    # No existing entity found and no orphaned entity renamed - return intended entity ID
+    return intended_entity_id
+
+
+def construct_syn_calc_entity_id(
+    coordinator: SpanPanelCoordinator,
+    span_panel: SpanPanel,
+    platform: str,
+    suffix: str,
+    device_name: str,
+    unique_id: str,
+    migration_mode: bool,
+    use_device_prefix: bool | None = None,
+) -> str | None:
+    """Construct entity ID for synthetic calculated sensors using friendly names only.
+
+    This wrapper is for calculated sensors like solar and net energy that don't correspond
+    to physical circuits and should always use friendly names, never circuit numbers.
+
+    Args:
+        coordinator: The coordinator instance
+        span_panel: The span panel data
+        platform: Platform name ("sensor", etc.)
+        suffix: Entity-specific suffix (e.g., "solar_produced", "outlets_kitchen_net_energy")
+        device_name: Device name for the panel
+        unique_id: The unique ID for this entity
+        migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
+        use_device_prefix: Whether to include device name prefix in entity ID (None to use config option)
+
+    Returns:
+        Constructed entity ID string or None if device info unavailable
+
+    """
+    return construct_panel_entity_id(
+        coordinator=coordinator,
+        _span_panel=span_panel,
+        platform=platform,
+        suffix=suffix,
+        device_name=device_name,
+        unique_id=unique_id,
+        migration_mode=migration_mode,
+        use_device_prefix=use_device_prefix,
+    )
 
 
 def construct_panel_entity_id(
@@ -1331,7 +1381,7 @@ def construct_panel_entity_id(
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("current_power", "feed_through_power", etc.)
         device_name: Device name for the panel
-        unique_id: The unique ID for this entity (None to skip registry lookup)
+        unique_id: The unique ID for this entity (use NO_REGISTRY_LOOKUP or NEW_SENSOR to skip registry lookup)
         migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
         use_device_prefix: Whether to include device name prefix in entity ID (None to use config option)
 
@@ -1339,31 +1389,28 @@ def construct_panel_entity_id(
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Always check registry since unique_id is always provided
-    entity_registry = er.async_get(coordinator.hass)
-    existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+    # Calculate intended entity ID
+    config_entry = coordinator.config_entry
+    effective_use_device_prefix = (
+        use_device_prefix
+        if use_device_prefix is not None
+        else config_entry.options.get(USE_DEVICE_PREFIX, True)
+    )
+    intended_entity_id = (
+        f"{platform}.{slugify(device_name)}_{suffix}"
+        if (effective_use_device_prefix and device_name)
+        else f"{platform}.{suffix}"
+    )
 
-    if existing_entity_id:
-        if migration_mode:
-            # During migration, preserve the existing entity ID
-            return existing_entity_id
-        # Not in migration mode - for panel_status, always reuse existing entity
-        # For other entities, we could delete and recreate, but panel_status should be preserved
-        if suffix == "panel_status":
-            _LOGGER.debug(
-                "Found existing panel_status entity %s - reusing it",
-                existing_entity_id,
-            )
-            return existing_entity_id
-        # For other entities, delete existing entity and recreate with correct naming
-        _LOGGER.info(
-            "Deleting existing entity %s to recreate with correct naming",
-            existing_entity_id,
-        )
-        entity_registry.async_remove(existing_entity_id)
-        # Fall through to create new entity ID
+    # Use centralized helper for registry lookup and renaming
+    result = _handle_entity_registry_lookup_and_renaming(
+        coordinator, platform, unique_id, intended_entity_id, migration_mode
+    )
 
-    # Entity not found in registry - construct new entity ID
+    if result is not None:
+        return result
+
+    # No existing entity found and no orphaned entity renamed - construct new entity ID
     config_entry = coordinator.config_entry
 
     if not device_name:
@@ -1812,16 +1859,13 @@ def construct_voltage_attribute(circuit: SpanPanelCircuit) -> int | None:
     return None
 
 
-# Rename the dispatcher and update docstring
-
-
 def construct_multi_tab_entity_id_from_key(
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
     platform: str,
     sensor_key: str,
     sensor_config: dict[str, Any],
-    unique_id: str | None,
+    unique_id: str,
     migration_mode: bool,
 ) -> str | None:
     """Construct entity ID for multi-tab (e.g., 240V) or synthetic sensor using sensor key.
@@ -1835,7 +1879,7 @@ def construct_multi_tab_entity_id_from_key(
         platform: Platform name ("sensor", "switch", "select")
         sensor_key: Sensor key like "span_abc123_solar_inverter_instant_power"
         sensor_config: Sensor configuration dictionary
-        unique_id: The unique ID for this entity (None to skip registry lookup)
+        unique_id: The unique ID for this entity (use NO_REGISTRY_LOOKUP or NEW_SENSOR to skip registry lookup)
         migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
 
     Returns:
@@ -1922,3 +1966,68 @@ def construct_multi_tab_entity_id_from_key(
             )
 
     return None
+
+
+def _handle_entity_registry_lookup_and_renaming(
+    coordinator: SpanPanelCoordinator,
+    platform: str,
+    unique_id: str,
+    intended_entity_id: str,
+    migration_mode: bool,
+) -> str | None:
+    """Centralized helper for registry lookup and orphan renaming logic.
+
+    This function handles the common pattern used across all entity ID construction functions:
+    1. Skip lookup for NEW_SENSOR
+    2. Look up existing entity by unique_id
+    3. During migration: preserve existing entity ID
+    4. During new installation: check for orphaned entities and rename them
+    5. Return appropriate entity ID based on the scenario
+
+    Args:
+        coordinator: The coordinator instance
+        platform: Platform name ("sensor", "switch", "select")
+        unique_id: The unique ID for this entity
+        intended_entity_id: The entity ID we want the entity to have
+        migration_mode: If True, preserve existing entity ID; if False, rename to new pattern
+
+    Returns:
+        The entity ID to use, or None if entity not found and should be created
+
+    """
+    # Skip lookup for new sensors
+    if unique_id == NEW_SENSOR:
+        return None
+
+    entity_registry = er.async_get(coordinator.hass)
+    existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+
+    if existing_entity_id:
+        if migration_mode:
+            # During migration, preserve existing entity ID
+            return existing_entity_id
+        # New installation: rename orphaned entity to new naming strategy
+        if intended_entity_id != existing_entity_id:
+            return _safe_rename_entity(
+                coordinator,
+                entity_registry,
+                existing_entity_id,
+                intended_entity_id,
+                "existing entity",
+            )
+        return existing_entity_id
+    else:
+        # Entity not found in registry
+        if migration_mode:
+            # During migration, registry lookup should succeed for existing entities
+            raise ValueError(
+                f"Registry lookup failed for unique_id '{unique_id}' during migration. Entity should exist in registry."
+            )
+        # New installation: check for orphaned entities with this unique_id
+        if _find_and_rename_orphaned_entity(
+            coordinator, entity_registry, unique_id, intended_entity_id, platform
+        ):
+            # Orphaned entity was found and renamed - return the intended entity ID
+            return intended_entity_id
+        # No orphaned entity found - return None to indicate new entity should be created
+        return None

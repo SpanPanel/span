@@ -1,6 +1,7 @@
 """Configure test framework."""
 
 import logging
+import os
 from pathlib import Path
 import sys
 import types
@@ -8,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from ha_synthetic_sensors import StorageManager, async_setup_synthetic_sensors
 import pytest
-import os
+
 from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
 
 # sys.path.insert(0, str(Path(__file__).parent.parent))  # Removed - using pytest pythonpath instead
@@ -70,7 +71,7 @@ span_panel_api_exceptions_mock.SpanPanelServerError = MockSpanPanelServerError
 span_panel_api_exceptions_mock.SpanPanelAPIError = MockSpanPanelAPIError
 
 # Only mock span_panel_api if not using real simulation mode
-if not os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() in ('1', 'true', 'yes'):
+if os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() not in ('1', 'true', 'yes'):
     sys.modules["span_panel_api"] = span_panel_api_mock
     sys.modules["span_panel_api.exceptions"] = span_panel_api_exceptions_mock
 
@@ -278,8 +279,9 @@ async def mock_synthetic_sensor_manager(hass, synthetic_storage_manager):
     mock_add_entities = AsyncMock()
 
     # Create a basic mock config entry for testing
-    from homeassistant.config_entries import ConfigEntry
     from unittest.mock import Mock
+
+    from homeassistant.config_entries import ConfigEntry
 
     mock_config_entry = Mock(spec=ConfigEntry)
     mock_config_entry.entry_id = "test_span_panel"
@@ -359,3 +361,9 @@ async def baseline_serial_number():
 def async_add_entities():
     """Mock async_add_entities callback for testing."""
     return AsyncMock()
+
+
+@pytest.fixture(params=["legacy", "1_0_4", "1_0_10"])
+def version(request):
+    """Fixture to provide migration test versions."""
+    return request.param

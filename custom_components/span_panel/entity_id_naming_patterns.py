@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from .helpers import (
+    NO_REGISTRY_LOOKUP,
     construct_multi_tab_entity_id_from_key,
     parse_tabs_attribute,
 )
@@ -170,7 +171,7 @@ class EntityIdMigrationManager:
                     platform="sensor",
                     sensor_key=sensor_key,
                     sensor_config=sensor_config,
-                    unique_id=None,  # Don't check registry during migration
+                    unique_id=NO_REGISTRY_LOOKUP,  # Don't check registry during migration
                     migration_mode=True,
                 )
 
@@ -193,7 +194,7 @@ class EntityIdMigrationManager:
                 platform="sensor",
                 sensor_key=sensor_key,
                 sensor_config=sensor_config,
-                unique_id=None,  # Don't check registry during migration
+                unique_id=NO_REGISTRY_LOOKUP,  # Don't check registry during migration
                 migration_mode=True,
             )
 

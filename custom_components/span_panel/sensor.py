@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import asyncio
 from collections.abc import Callable
 
 # Override the description key to use the circuit_id for data lookup
@@ -334,6 +333,10 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             # Get the device prefix setting from config entry options
             use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
 
+            # Ensure we have a valid unique_id
+            if not self._attr_unique_id:
+                return None
+
             return construct_panel_entity_id(
                 coordinator,
                 span_panel,
@@ -390,6 +393,10 @@ class SpanPanelStatus(
             entity_suffix = slugify(str(description.name))
             # Get the device prefix setting from config entry options
             use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            # Ensure we have a valid unique_id
+            if not self._attr_unique_id:
+                return None
 
             return construct_panel_entity_id(
                 coordinator,
@@ -452,6 +459,10 @@ class SpanPanelBattery(
             entity_suffix = slugify(str(description.name))
             # Get the device prefix setting from config entry options
             use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            # Ensure we have a valid unique_id
+            if not self._attr_unique_id:
+                return None
 
             return construct_panel_entity_id(
                 coordinator,
@@ -764,7 +775,10 @@ async def async_setup_entry(
                         hass, config_entry, coordinator, migration_mode
                     )
                 # Initialize the synthetic coordinator configuration so backing metadata is populated
-                await synthetic_coord.setup_configuration(config_entry, migration_mode)
+                # Skip YAML generation since configuration already exists from setup_synthetic_configuration
+                await synthetic_coord.setup_configuration(
+                    config_entry, migration_mode, skip_generation=True
+                )
                 # Prime the coordinator so downstream setup uses the correct set
                 synthetic_coord.sensor_set_id = current_sensor_set_id
                 synthetic_coord.device_identifier = current_identifier
@@ -774,6 +788,8 @@ async def async_setup_entry(
                 storage_manager = await setup_synthetic_configuration(
                     hass, config_entry, coordinator, migration_mode
                 )
+                # Configuration was already generated and backing metadata populated in setup_synthetic_configuration
+                # No need to call setup_configuration again
             # Get the synthetic coordinator from the global registry
             synth_coord = _synthetic_coordinators.get(config_entry.entry_id)
             if not synth_coord:
@@ -834,13 +850,9 @@ async def async_setup_entry(
                         "Solar setup completed during migration, scheduling reload to load solar sensors"
                     )
 
-                    async def _scheduled_reload() -> None:
-                        """Reload the config entry after a brief delay to allow startup to complete."""
-                        await asyncio.sleep(1.0)  # Brief delay to let initial setup finish
-                        _LOGGER.debug("Executing scheduled reload for solar sensors")
-                        await hass.config_entries.async_reload(config_entry.entry_id)
-
-                    hass.async_create_task(_scheduled_reload())
+                    # Schedule immediate reload for solar sensors
+                    _LOGGER.debug("Scheduling immediate reload for solar sensors")
+                    hass.async_create_task(hass.config_entries.async_reload(config_entry.entry_id))
 
         except Exception as e:
             _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
