@@ -991,7 +991,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is None:
             menu_options = {
                 "general_options": "General Options",
-                "export_config": "Export Synthetic Sensor Config",
             }
 
             # Add simulation options if this is a simulation mode integration
