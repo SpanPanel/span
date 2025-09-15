@@ -11,7 +11,7 @@ from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelConnectionError,
@@ -26,7 +26,6 @@ from .const import (
     SIGNAL_STAGE_NATIVE_SENSORS,
     SIGNAL_STAGE_SELECTS,
     SIGNAL_STAGE_SWITCHES,
-    SIGNAL_STAGE_SYNTHETIC_SENSORS,
 )
 from .entity_id_naming_patterns import EntityIdMigrationManager
 from .exceptions import SpanPanelSimulationOfflineError
@@ -138,7 +137,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SWITCHES)
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SELECTS)
             async_dispatcher_send(self.hass, SIGNAL_STAGE_NATIVE_SENSORS)
-            async_dispatcher_send(self.hass, SIGNAL_STAGE_SYNTHETIC_SENSORS)
 
             # Handle reload request if one was made
             if self._reload_requested:
@@ -152,8 +150,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             raise
 
         except Exception as err:
-            # Check if this is a simulation offline error (expected behavior)
-
             # Set offline flag for any error
             self._panel_offline = True
 
@@ -173,9 +169,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             else:
                 _LOGGER.warning("Unexpected Span Panel error: %s", err)
 
-            # Raise UpdateFailed so HA knows the update failed and will retry
-            # This sets last_update_success = False
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+            # Continue updating even when offline to allow grace period expiration checks
+            # Emit staged update signals so sensors can check grace period status
+            async_dispatcher_send(self.hass, SIGNAL_STAGE_SWITCHES)
+            async_dispatcher_send(self.hass, SIGNAL_STAGE_SELECTS)
+            async_dispatcher_send(self.hass, SIGNAL_STAGE_NATIVE_SENSORS)
+
+            # Return the last known data instead of raising UpdateFailed
+            # This keeps the coordinator updating so grace period logic can work
+            return self.span_panel
 
     async def _async_reload_task(self) -> None:
         """Task to handle integration reload with proper error handling."""

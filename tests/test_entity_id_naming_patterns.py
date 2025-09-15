@@ -29,7 +29,8 @@ def mock_coordinator():
     coordinator = MagicMock(spec=SpanPanelCoordinator)
     coordinator.config_entry = MagicMock(spec=ConfigEntry)
     coordinator.config_entry.options = {}
-    coordinator.config_entry.data = {}
+    coordinator.config_entry.data = {"device_name": "SPAN Panel"}
+    coordinator.config_entry.title = "SPAN Panel"
     coordinator.data = MagicMock()  # Add missing data attribute
     return coordinator
 
@@ -66,6 +67,8 @@ class TestEntityIdMigrationManager:
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
         coordinator.config_entry.options = {}
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
+        coordinator.config_entry.title = "SPAN Panel"
         coordinator.data = MagicMock(spec=SpanPanel)
         return coordinator
 
@@ -179,18 +182,25 @@ class TestLegacyToPrefix:
         old_flags = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 
-        with patch.object(manager, '_generate_new_entity_id') as mock_generate:
-            mock_generate.side_effect = [
-                "sensor.span_panel_solar_power",
-                "sensor.span_panel_kitchen_lights_power",
-                "sensor.span_panel_current_power"
-            ]
+        # Mock entity registry with legacy entities
+        mock_entity_registry = MagicMock()
+        mock_entity1 = MagicMock()
+        mock_entity1.config_entry_id = "test_entry_id"
+        mock_entity1.entity_id = "sensor.air_conditioner_energy_consumed"
+        mock_entity2 = MagicMock()
+        mock_entity2.config_entry_id = "test_entry_id"
+        mock_entity2.entity_id = "sensor.kitchen_lights_power"
+        mock_entity_registry.entities = {
+            "sensor.air_conditioner_energy_consumed": mock_entity1,
+            "sensor.kitchen_lights_power": mock_entity2
+        }
 
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_entity_registry):
             result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
 
             assert result is True
-            sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-            sensor_manager.modify.assert_called_once()
+            # Verify that entities were updated
+            assert mock_entity_registry.async_update_entity.call_count == 2
 
     async def test_migrate_legacy_to_prefix_no_sensor_manager(self, hass):
         """Test legacy migration when sensor manager is not found."""
@@ -213,28 +223,31 @@ class TestLegacyToPrefix:
     async def test_migrate_legacy_to_prefix_no_sensors(self, hass_with_data):
         """Test legacy migration with no sensors to migrate."""
         manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-        sensor_manager.export.return_value = {}
-
         old_flags = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 
-        result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+        # Mock entity registry with no entities
+        mock_entity_registry = MagicMock()
+        mock_entity_registry.entities = {}
 
-        assert result is True
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_entity_registry):
+            result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+
+            assert result is True
+            # Verify that no entities were updated
+            mock_entity_registry.async_update_entity.assert_not_called()
 
     async def test_migrate_legacy_to_prefix_exception(self, hass_with_data):
         """Test legacy migration with exception during process."""
         manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-        sensor_manager.export.side_effect = Exception("Test error")
-
         old_flags = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 
-        result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+        # Mock entity registry to raise an exception
+        with patch("homeassistant.helpers.entity_registry.async_get", side_effect=Exception("Test error")):
+            result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
 
-        assert result is False
+            assert result is False
 
 
 class TestNonLegacyPatterns:

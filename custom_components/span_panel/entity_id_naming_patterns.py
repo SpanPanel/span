@@ -7,6 +7,8 @@ import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import slugify
 
 from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from .helpers import (
@@ -32,7 +34,8 @@ class EntityIdMigrationManager:
         """Migrate synthetic sensor entity IDs when naming patterns change.
 
         Args:
-            old_flags: Previous configuration flags {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
+            old_flags: Previous configuration flags
+                {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
             new_flags: New configuration flags {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
 
         Returns:
@@ -74,57 +77,61 @@ class EntityIdMigrationManager:
         _LOGGER.info("Performing legacy to device prefix migration")
 
         try:
-            # Get sensor manager from hass data
-            sensor_manager = (
-                self.hass.data.get("ha_synthetic_sensors", {})
-                .get("sensor_managers", {})
-                .get(self.config_entry_id)
+            # Get entity registry
+            registry = er.async_get(self.hass)
+
+            # Get device name for prefix
+            coordinator = self.hass.data["span_panel"][self.config_entry_id]
+            device_name = coordinator.config_entry.data.get(
+                "device_name", coordinator.config_entry.title
             )
-            if not sensor_manager:
-                _LOGGER.error("Sensor manager not found for config entry %s", self.config_entry_id)
+            if not device_name:
+                _LOGGER.error("No device name found for migration")
                 return False
 
-            # Export current sensor configurations
-            current_sensors = await sensor_manager.export()
-            if not current_sensors or "sensors" not in current_sensors:
-                _LOGGER.warning("No sensors found to migrate")
+            sanitized_device_name = slugify(device_name)
+
+            # Get all entities owned by this config entry
+            entities_to_migrate = []
+            for entity in registry.entities.values():
+                if entity.config_entry_id == self.config_entry_id:
+                    entities_to_migrate.append(entity)
+
+            if not entities_to_migrate:
+                _LOGGER.debug("No entities found to migrate")
                 return True
 
-            # Get coordinator and span panel data
-            coordinator = self.hass.data["span_panel"][self.config_entry_id]
-            span_panel = coordinator.data
+            _LOGGER.info("Found %d entities to migrate", len(entities_to_migrate))
 
-            # Migrate each sensor
-            migrated_sensors = current_sensors.copy()
-            entity_id_changes = {}
+            # Migrate each entity
+            migrated_count = 0
+            for entity in entities_to_migrate:
+                current_entity_id = entity.entity_id
+                platform, object_id = current_entity_id.split(".", 1)
 
-            for sensor_key, sensor_config in current_sensors["sensors"].items():
-                current_entity_id = sensor_config.get("entity_id")
-                if not current_entity_id:
+                # Check if this entity already has the device prefix
+                if object_id.startswith(f"{sanitized_device_name}_"):
+                    # Already has device prefix, no migration needed
                     continue
 
-                # Generate new entity ID using helpers with new flags
-                new_entity_id = await self._generate_new_entity_id(
-                    sensor_key, sensor_config, coordinator, span_panel, new_flags
+                # Generate new entity ID with device prefix
+                new_object_id = f"{sanitized_device_name}_{object_id}"
+                new_entity_id = f"{platform}.{new_object_id}"
+
+                _LOGGER.info(
+                    "Entity migration: %s -> %s",
+                    current_entity_id,
+                    new_entity_id,
                 )
 
-                if new_entity_id and new_entity_id != current_entity_id:
-                    _LOGGER.info(
-                        "Legacy migration: %s -> %s",
-                        current_entity_id,
-                        new_entity_id,
-                    )
-                    migrated_sensors["sensors"][sensor_key]["entity_id"] = new_entity_id
-                    entity_id_changes[current_entity_id] = new_entity_id
+                # Update the entity registry
+                registry.async_update_entity(current_entity_id, new_entity_id=new_entity_id)
+                migrated_count += 1
 
-            # Update cross-references throughout the YAML
-            if entity_id_changes:
-                self._update_cross_references(migrated_sensors, entity_id_changes)
+            _LOGGER.info("Migrated %d entities", migrated_count)
 
-            # Store the updated configuration
-            await sensor_manager.modify(migrated_sensors)
+            # Migration completed - reload will be handled by integration startup
 
-            _LOGGER.info("Legacy migration completed successfully")
             return True
 
         except Exception as e:

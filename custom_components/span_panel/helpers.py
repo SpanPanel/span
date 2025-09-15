@@ -1070,6 +1070,11 @@ def construct_panel_entity_id(
         entity_registry = er.async_get(coordinator.hass)
         existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
 
+        # Debug logging for panel entity registry lookup
+        _LOGGER.debug(
+            f"Panel helper registry lookup - unique_id={unique_id}, found_entity_id={existing_entity_id}"
+        )
+
         if existing_entity_id:
             return existing_entity_id
 
@@ -1094,54 +1099,6 @@ def construct_panel_entity_id(
 
     entity_id = f"{platform}.{'_'.join(parts)}"
     return entity_id
-
-
-def construct_backing_entity_id(
-    span_panel: SpanPanel,
-    circuit_id: str | None = None,
-    suffix: str = "",
-) -> str:
-    """Construct backing entity ID following document pattern for synthetic sensor references.
-
-    These are internal references used only within synthetic sensor YAML configuration
-    and are never registered in Home Assistant. They follow the document pattern:
-    sensor.span_{serial}_{circuit_id}_backing_{description_key}
-
-    Args:
-        span_panel: The span panel data
-        circuit_id: Circuit ID from panel API (UUID for circuits, "0" for panel-level)
-        suffix: Sensor type suffix ("power", "energy_produced", etc.)
-
-    Returns:
-        Backing entity ID following document pattern with sensor prefix
-
-    Examples:
-        Circuit: "sensor.span_abc123_0dad2f16cd514812ae1807b0457d473e_backing_power"
-        Panel: "sensor.span_abc123_0_backing_current_power"
-
-    """
-    serial = span_panel.status.serial_number.lower()
-
-    # Use circuit_id directly, defaulting to "0" for panel-level sensors
-    circuit_part = circuit_id if circuit_id is not None else "0"
-
-    return f"sensor.span_{serial}_{circuit_part}_backing_{suffix}"
-
-
-def construct_backing_entity_id_for_entry(
-    coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
-    circuit_id: str | None,
-    suffix: str,
-    device_name: str | None = None,
-) -> str:
-    """Construct backing entity ID using per-entry device identifier.
-
-    Pattern remains: sensor.span_{identifier}_{circuit_id}_backing_{suffix}
-    """
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
-    circuit_part = circuit_id if circuit_id is not None else "0"
-    return f"sensor.span_{identifier.lower()}_{circuit_part}_backing_{suffix}"
 
 
 def construct_unmapped_unique_id(

@@ -146,6 +146,16 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         self._update_is_on()
         super()._handle_coordinator_update()
 
+    @property
+    def available(self) -> bool:
+        """Return entity availability.
+
+        Switches become unavailable when panel is offline since they can't control circuits.
+        """
+        if getattr(self.coordinator, "panel_offline", False):
+            return False
+        return super().available
+
     def _update_is_on(self) -> None:
         """Update the is_on state based on the circuit state."""
         span_panel: SpanPanel = self.coordinator.data

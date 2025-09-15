@@ -216,6 +216,16 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         _LOGGER.debug("Selecting option synchronously: %s", option)
         self.hass.async_add_executor_job(self.async_select_option, option)
 
+    @property
+    def available(self) -> bool:
+        """Return entity availability.
+
+        Selects become unavailable when panel is offline since they can't change settings.
+        """
+        if getattr(self.coordinator, "panel_offline", False):
+            return False
+        return super().available
+
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
 

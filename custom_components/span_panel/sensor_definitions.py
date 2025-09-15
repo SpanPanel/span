@@ -175,3 +175,189 @@ BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensor
     device_class=SensorDeviceClass.BATTERY,
     value_fn=lambda battery: battery.storage_battery_percentage,
 )
+
+# Panel power and energy sensor definitions (native sensors to replace synthetic ones)
+PANEL_POWER_SENSORS: tuple[
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+] = (
+    SpanPanelDataSensorEntityDescription(
+        key="instantGridPowerW",
+        name="Current Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        device_class=SensorDeviceClass.POWER,
+        value_fn=lambda panel_data: panel_data.instant_grid_power,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="feedthroughPowerW",
+        name="Feed Through Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        device_class=SensorDeviceClass.POWER,
+        value_fn=lambda panel_data: panel_data.feedthrough_power,
+    ),
+)
+
+PANEL_ENERGY_SENSORS: tuple[
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+] = (
+    SpanPanelDataSensorEntityDescription(
+        key="mainMeterEnergyProducedWh",
+        name="Main Meter Produced Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.main_meter_energy_produced,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="mainMeterEnergyConsumedWh",
+        name="Main Meter Consumed Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.main_meter_energy_consumed,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="feedthroughEnergyProducedWh",
+        name="Feed Through Produced Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.feedthrough_energy_produced,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="feedthroughEnergyConsumedWh",
+        name="Feed Through Consumed Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: panel_data.feedthrough_energy_consumed,
+    ),
+)
+
+# Circuit sensor definitions (native sensors to replace synthetic ones)
+CIRCUIT_SENSORS: tuple[
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+] = (
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_power",
+        name="Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        device_class=SensorDeviceClass.POWER,
+        value_fn=lambda circuit: circuit.instant_power,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_energy_produced",
+        name="Produced Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda circuit: circuit.produced_energy,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_energy_consumed",
+        name="Consumed Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda circuit: circuit.consumed_energy,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_energy_net",
+        name="Net Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda circuit: (circuit.produced_energy or 0) - (circuit.consumed_energy or 0),
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+)
+
+
+# Solar sensor definitions (native sensors to replace synthetic ones)
+# These are template sensors that will be created when solar is enabled
+@dataclass(frozen=True)
+class SpanSolarSensorEntityDescription(SensorEntityDescription):
+    """Describes a solar sensor entity that combines leg1 and leg2 circuits."""
+
+    leg1_circuit_suffix: str = ""
+    leg2_circuit_suffix: str = ""
+    calculation_type: str = "sum"  # "sum" for power, "sum" for energy
+
+
+SOLAR_SENSORS: tuple[
+    SpanSolarSensorEntityDescription,
+    SpanSolarSensorEntityDescription,
+    SpanSolarSensorEntityDescription,
+    SpanSolarSensorEntityDescription,
+] = (
+    SpanSolarSensorEntityDescription(
+        key="solar_current_power",
+        name="Solar Current Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        device_class=SensorDeviceClass.POWER,
+        leg1_circuit_suffix="power",
+        leg2_circuit_suffix="power",
+        calculation_type="sum",
+    ),
+    SpanSolarSensorEntityDescription(
+        key="solar_produced_energy",
+        name="Solar Produced Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        leg1_circuit_suffix="produced_energy",
+        leg2_circuit_suffix="produced_energy",
+        calculation_type="sum",
+    ),
+    SpanSolarSensorEntityDescription(
+        key="solar_consumed_energy",
+        name="Solar Consumed Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        leg1_circuit_suffix="consumed_energy",
+        leg2_circuit_suffix="consumed_energy",
+        calculation_type="sum",
+    ),
+    SpanSolarSensorEntityDescription(
+        key="solar_net_energy",
+        name="Solar Net Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        leg1_circuit_suffix="net_energy",
+        leg2_circuit_suffix="net_energy",
+        calculation_type="sum",
+    ),
+)

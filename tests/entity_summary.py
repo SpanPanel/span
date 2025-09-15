@@ -60,7 +60,8 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
     # Circuit sensors are created for all circuits in the circuits collection
     # Solar legs are NOT in this collection - they're accessed via raw branch data
     circuit_sensors = total_circuits * len(CIRCUITS_SENSORS)
-    synthetic_sensors = len(SYNTHETIC_SENSOR_TEMPLATES) if solar_enabled else 0
+    # Synthetic sensors package removed - no longer needed
+    synthetic_sensors = 0  # len(SYNTHETIC_SENSOR_TEMPLATES) if solar_enabled else 0
     panel_sensor_count = len(PANEL_SENSORS) + len(PANEL_DATA_STATUS_SENSORS)
     status_sensors = len(STATUS_SENSORS)
     battery_sensors = len(STORAGE_BATTERY_SENSORS) if battery_enabled else 0
