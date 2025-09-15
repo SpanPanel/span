@@ -1115,8 +1115,18 @@ class SpanSolarSensor(SpanSensorBase[SpanSolarSensorEntityDescription, SpanPanel
                 tab_list = ", ".join(str(tab) for tab in sorted_unique_tabs)
                 attributes["tabs"] = f"tabs [{tab_list}]"
 
-        # Add voltage attribute (use leg1 voltage, they should be the same)
-        voltage = construct_voltage_attribute(leg1_circuit) or 240
+        # Add voltage attribute based on total number of unique tabs
+        if all_tabs:
+            unique_tab_count = len(sorted_unique_tabs)
+            if unique_tab_count == 1:
+                voltage = 120
+            elif unique_tab_count == 2:
+                voltage = 240
+            else:
+                # More than 2 tabs is not valid for US electrical system
+                voltage = 240  # Default to 240V for invalid configurations
+        else:
+            voltage = 240  # Default to 240V if no tabs information
         attributes["voltage"] = str(voltage)
 
         # Calculate amperage for power sensors
@@ -1363,9 +1373,19 @@ class SpanSolarEnergySensor(SpanEnergySensorBase[SpanSolarSensorEntityDescriptio
                         tab_list = ", ".join(str(tab) for tab in sorted_unique_tabs)
                         attributes["tabs"] = f"tabs [{tab_list}]"
 
-                # Add voltage attribute (use leg1 voltage, they should be the same)
-                voltage = construct_voltage_attribute(leg1_circuit) or 240
-                attributes["voltage"] = voltage
+                # Add voltage attribute based on total number of unique tabs
+                if all_tabs:
+                    unique_tab_count = len(sorted_unique_tabs)
+                    if unique_tab_count == 1:
+                        voltage = 120
+                    elif unique_tab_count == 2:
+                        voltage = 240
+                    else:
+                        # More than 2 tabs is not valid for US electrical system
+                        voltage = 240  # Default to 240V for invalid configurations
+                else:
+                    voltage = 240  # Default to 240V if no tabs information
+                attributes["voltage"] = str(voltage)
 
         return attributes if attributes else None
 
