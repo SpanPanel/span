@@ -166,6 +166,41 @@ class SpanPanelBinarySensor(
         if entity_id is not None:
             self.entity_id = entity_id
 
+    @property
+    def available(self) -> bool:
+        """Return entity availability.
+
+        - Panel status sensor: always available to show online/offline state
+        - Hardware status sensors: remain available when offline to show Unknown state
+        - Other binary sensors (switches): become unavailable when panel is offline
+        """
+        # Panel status sensor should always be available to show online/offline state
+        if (
+            hasattr(self.entity_description, "key")
+            and self.entity_description.key == "panel_status"
+        ):
+            return True
+
+        # Hardware status sensors should remain available when offline to show Unknown
+        hardware_status_sensors = {
+            "doorState",  # Door State
+            "eth0Link",  # Ethernet Link
+            "wlanLink",  # Wi-Fi Link
+            "wwanLink",  # Cellular Link
+        }
+
+        if (
+            hasattr(self.entity_description, "key")
+            and self.entity_description.key in hardware_status_sensors
+        ):
+            # Keep hardware status sensors available when offline so they can show Unknown
+            if getattr(self.coordinator, "panel_offline", False):
+                return True
+
+        # All other binary sensors (switches) use default coordinator availability logic
+        # This makes them unavailable when panel is offline
+        return super().available
+
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         # Special handling for panel_status sensor
@@ -190,14 +225,31 @@ class SpanPanelBinarySensor(
 
         # Check for panel offline status first to prevent accessing None data
         if self.coordinator.panel_offline or self.coordinator.data is None:
-            # When panel is offline or data is None, keep hardware status sensors available but show as unknown
-            # This prevents them from showing as 'unavailable' and allows them to show as 'unknown'
-            self._attr_is_on = None  # Show as 'unknown' instead of a specific state
-            self._attr_available = True  # Keep sensor available
-            _LOGGER.debug(
-                "Hardware status sensor %s: panel offline or no data - showing as unknown but keeping available",
-                self.entity_id,
-            )
+            # Hardware status sensors show as unknown when offline
+            # Other sensors (switches) will become unavailable via availability property
+            hardware_status_sensors = {
+                "doorState",  # Door State
+                "eth0Link",  # Ethernet Link
+                "wlanLink",  # Wi-Fi Link
+                "wwanLink",  # Cellular Link
+            }
+
+            if (
+                hasattr(self.entity_description, "key")
+                and self.entity_description.key in hardware_status_sensors
+            ):
+                self._attr_is_on = None  # Show as 'unknown' for hardware status sensors
+                _LOGGER.debug(
+                    "Hardware status sensor %s: panel offline or no data - showing as unknown",
+                    self.entity_id,
+                )
+            else:
+                # For switches and other sensors, let availability property handle unavailable state
+                _LOGGER.debug(
+                    "Binary sensor %s: panel offline or no data - will be unavailable",
+                    self.entity_id,
+                )
+
             super()._handle_coordinator_update()
             return
 

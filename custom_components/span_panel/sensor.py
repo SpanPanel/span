@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import asyncio
 from collections.abc import Callable
+from datetime import datetime, timedelta
 import logging
 from typing import Any, Generic, TypeVar
 
-from ha_synthetic_sensors import StorageManager
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
@@ -23,21 +22,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
-from custom_components.span_panel.options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
-from custom_components.span_panel.synthetic_sensors import (
-    async_setup_synthetic_sensors,
-    setup_synthetic_configuration,
-)
-from custom_components.span_panel.synthetic_solar import (
-    handle_solar_options_change,
+from custom_components.span_panel.options import (
+    ENERGY_REPORTING_GRACE_PERIOD,
+    INVERTER_ENABLE,
+    INVERTER_LEG1,
+    INVERTER_LEG2,
 )
 
 from .const import (
     COORDINATOR,
     DOMAIN,
-    SENSOR_SET,
     SIGNAL_STAGE_NATIVE_SENSORS,
-    STORAGE_MANAGER,
     USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
@@ -46,33 +41,36 @@ from .helpers import (
     construct_panel_entity_id,
     construct_panel_friendly_name,
     construct_panel_unique_id_for_entry,
-    construct_sensor_set_id,
+    construct_single_circuit_entity_id,
     construct_status_friendly_name,
+    construct_synthetic_unique_id_for_entry,
+    construct_tabs_attribute,
     construct_unmapped_friendly_name,
-    get_device_identifier_for_entry,
+    construct_voltage_attribute,
+    get_panel_entity_suffix,
     get_user_friendly_suffix,
 )
 from .options import BATTERY_ENABLE
 from .sensor_definitions import (
     BATTERY_SENSOR,
+    CIRCUIT_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
+    PANEL_ENERGY_SENSORS,
+    PANEL_POWER_SENSORS,
+    SOLAR_SENSORS,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
     SpanPanelBatterySensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelStatusSensorEntityDescription,
+    SpanSolarSensorEntityDescription,
 )
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
 from .span_panel_data import SpanPanelData
 from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
-from .synthetic_sensors import (
-    SyntheticSensorCoordinator,
-    _synthetic_coordinators,
-    trigger_synthetic_update,
-)
 from .util import panel_to_device_info
 
 ICON = "mdi:flash"
@@ -209,9 +207,8 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     def available(self) -> bool:
         """Return entity availability.
 
-        Keep entities available during a panel_offline condition so the UI shows
-        the sensor state as UNKNOWN instead of marking the entity as
-        Unavailable (which is driven by the coordinator's update failure).
+        Keep entities available during a panel_offline condition so sensors can show
+        their grace period state (last_valid_state) or None when grace period expires.
         """
         try:
             if getattr(self.coordinator, "panel_offline", False):
@@ -231,12 +228,12 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             _LOGGER.debug("STATUS_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
 
             # For power sensors, set to 0.0 when offline (instantaneous values)
-            # For energy and other sensors, set to None to make them unavailable
+            # For energy and other sensors, set to Unknown when offline
             device_class = getattr(self.entity_description, "device_class", None)
             if device_class == "power":
                 self._attr_native_value = 0.0
             else:
-                self._attr_native_value = None
+                self._attr_native_value = STATE_UNKNOWN
             return
 
         value_function: Callable[[D], float | int | str | None] | None = getattr(
@@ -293,6 +290,96 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             _LOGGER.debug("Failed to cleanup dispatcher subscription: %s", e)
 
 
+class SpanEnergySensorBase(SpanSensorBase[T, D], ABC):
+    """Base class for energy sensors that includes grace period tracking."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: T,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize the energy sensor with grace period tracking."""
+        super().__init__(data_coordinator, description, span_panel)
+        self._last_valid_state: float | None = None
+        self._last_valid_changed: datetime | None = None
+        self._grace_period_minutes = data_coordinator.config_entry.options.get(
+            ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
+
+    def _update_native_value(self) -> None:
+        """Update the native value with grace period logic for energy sensors."""
+        if self.coordinator.panel_offline:
+            # Use grace period logic when offline
+            self._handle_offline_grace_period()
+            return
+
+        # Panel is online - use normal update logic from parent class
+        super()._update_native_value()
+
+        # Track valid state for grace period (only when we have a valid value)
+        if self._attr_native_value is not None and isinstance(self._attr_native_value, int | float):
+            self._last_valid_state = float(self._attr_native_value)
+            self._last_valid_changed = datetime.now()
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator with grace period tracking."""
+        # Update grace period from options in case it changed
+        self._grace_period_minutes = self.coordinator.config_entry.options.get(
+            ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
+
+        # Use the overridden _update_native_value method which handles grace period
+        self._update_native_value()
+
+        # Call the parent's parent class coordinator update to avoid the intermediate parent's logic
+        super(SpanSensorBase, self)._handle_coordinator_update()
+
+    def _handle_offline_grace_period(self) -> None:
+        """Handle grace period logic when panel is offline."""
+        if self._last_valid_changed is None or self._last_valid_state is None:
+            # No previous valid state, set to None (HA reports unknonwn)
+            self._attr_native_value = None
+            return
+
+        # Check if we're still within the grace period
+        time_since_last_valid = datetime.now() - self._last_valid_changed
+        grace_period_duration = timedelta(minutes=self._grace_period_minutes)
+
+        if time_since_last_valid <= grace_period_duration:
+            # Still within grace period - use last valid state
+            self._attr_native_value = self._last_valid_state
+        else:
+            # Grace period expired - set to None (makes sensor unknown)
+            self._attr_native_value = None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including grace period info."""
+        attributes = {}
+
+        # Always show grace period information if we have valid tracking data
+        if self._last_valid_changed is not None:
+            if self._last_valid_state is not None:
+                attributes["last_valid_state"] = str(self._last_valid_state)
+            attributes["last_valid_changed"] = self._last_valid_changed.isoformat()
+
+            # Calculate grace period remaining
+            if self._grace_period_minutes > 0:
+                time_since_last_valid = datetime.now() - self._last_valid_changed
+                grace_period_duration = timedelta(minutes=self._grace_period_minutes)
+                remaining_seconds = (grace_period_duration - time_since_last_valid).total_seconds()
+                remaining_minutes = max(0, int(remaining_seconds / 60))
+                attributes["grace_period_remaining"] = str(remaining_minutes)
+
+                # Indicate if we're currently using grace period
+                panel_offline = getattr(self.coordinator, "panel_offline", False)
+                if panel_offline and remaining_seconds > 0:
+                    attributes["using_grace_period"] = "True"
+
+        return attributes if attributes else None
+
+
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
     """Span Panel data status sensor entity."""
 
@@ -331,13 +418,17 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             # Get the device prefix setting from config entry options
             use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
 
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
             return construct_panel_entity_id(
                 coordinator,
                 span_panel,
                 "sensor",
                 entity_suffix,
                 self._device_name,
-                self._attr_unique_id,
+                unique_id_for_lookup,
                 use_device_prefix,
             )
         return None
@@ -387,13 +478,17 @@ class SpanPanelStatus(
             # Get the device prefix setting from config entry options
             use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
 
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
             return construct_panel_entity_id(
                 coordinator,
                 span_panel,
                 "sensor",
                 entity_suffix,
                 self._device_name,
-                self._attr_unique_id,
+                unique_id_for_lookup,
                 use_device_prefix,
             )
         return None
@@ -448,13 +543,17 @@ class SpanPanelBattery(
             # Get the device prefix setting from config entry options
             use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
 
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
             return construct_panel_entity_id(
                 coordinator,
                 span_panel,
                 "sensor",
                 entity_suffix,
                 self._device_name,
-                self._attr_unique_id,
+                unique_id_for_lookup,
                 use_device_prefix,
             )
         return None
@@ -469,6 +568,580 @@ class SpanPanelBattery(
         except Exception as e:
             _LOGGER.error("Error getting battery data: %s", e)
             raise
+
+
+class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]):
+    """Enhanced panel power sensor with amperage attribute calculation."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelDataSensorEntityDescription,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize the enhanced panel power sensor."""
+        super().__init__(data_coordinator, description, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for panel power sensors."""
+        # Use the same logic as migration: get entity suffix and use synthetic unique_id
+
+        entity_suffix = get_panel_entity_suffix(description.key)
+        unique_id = construct_synthetic_unique_id_for_entry(
+            self.coordinator, span_panel, entity_suffix, self._device_name
+        )
+
+        return unique_id
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for panel power sensors."""
+        return construct_panel_friendly_name(description.name)
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelDataSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for panel power sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                unique_id_for_lookup,
+                use_device_prefix,
+            )
+        return None
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
+        """Get the data source for the panel power sensor."""
+        return span_panel.panel
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including amperage calculation."""
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            return None
+
+        attributes = {}
+
+        # Add voltage attribute (standard panel voltage)
+        attributes["voltage"] = "240"
+
+        # Calculate amperage from power (P = V * I, so I = P / V)
+        if self.native_value is not None and isinstance(self.native_value, int | float):
+            try:
+                amperage = float(self.native_value) / 240.0
+                attributes["amperage"] = str(round(amperage, 2))
+            except (ValueError, ZeroDivisionError):
+                attributes["amperage"] = "0.0"
+        else:
+            attributes["amperage"] = "0.0"
+
+        return attributes
+
+
+class SpanPanelEnergySensor(
+    SpanEnergySensorBase[SpanPanelDataSensorEntityDescription, SpanPanelData]
+):
+    """Panel energy sensor with grace period tracking."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelDataSensorEntityDescription,
+        span_panel: SpanPanel,
+    ) -> None:
+        """Initialize the panel energy sensor."""
+        super().__init__(data_coordinator, description, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for panel energy sensors."""
+        # Use the same logic as migration: get entity suffix and use synthetic unique_id
+
+        entity_suffix = get_panel_entity_suffix(description.key)
+        return construct_synthetic_unique_id_for_entry(
+            self.coordinator, span_panel, entity_suffix, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelDataSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for panel energy sensors."""
+        return str(description.name or "Panel Energy Sensor")
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelDataSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for panel energy sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                unique_id_for_lookup,
+                use_device_prefix,
+            )
+        return None
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelData:
+        """Get the data source for the panel energy sensor."""
+        return span_panel.panel
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including grace period and voltage."""
+        # Get base grace period attributes
+        base_attributes = super().extra_state_attributes or {}
+        attributes = dict(base_attributes)
+
+        # Add voltage attribute (standard panel voltage)
+        attributes["voltage"] = "240"
+
+        return attributes if attributes else None
+
+
+class SpanCircuitPowerSensor(
+    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
+    """Enhanced circuit power sensor with amperage and tabs attributes."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        span_panel: SpanPanel,
+        circuit_id: str,
+    ) -> None:
+        """Initialize the enhanced circuit power sensor."""
+        self.circuit_id = circuit_id
+        self.original_key = description.key
+
+        # Override the description key to use the circuit_id for data lookup
+        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+            key=circuit_id,
+            name=description.name,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            device_class=description.device_class,
+            value_fn=description.value_fn,
+            entity_registry_enabled_default=description.entity_registry_enabled_default,
+            entity_registry_visible_default=description.entity_registry_visible_default,
+        )
+
+        super().__init__(data_coordinator, description_with_circuit, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for circuit power sensors."""
+        # Use the original API key that migration normalized from
+        api_key = "instantPowerW"  # This maps to "power" suffix
+        return construct_circuit_unique_id_for_entry(
+            self.coordinator, span_panel, self.circuit_id, api_key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for circuit power sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit and circuit.name:
+            return f"{circuit.name} {description.name or 'Sensor'}"
+        return construct_unmapped_friendly_name(self.circuit_id, str(description.name or "Sensor"))
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelCircuitsSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for circuit power sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit:
+            # Use the helper functions for entity ID generation
+
+            # Only pass unique_id during migration - during initial setup, skip registry lookup
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
+            return construct_single_circuit_entity_id(
+                coordinator=coordinator,
+                span_panel=span_panel,
+                platform="sensor",
+                suffix=slugify(str(description.name or "sensor")),
+                circuit_data=circuit,
+                unique_id=unique_id_for_lookup,
+            )
+        return None
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the circuit power sensor."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit is None:
+            raise ValueError(f"Circuit {self.circuit_id} not found in panel data")
+        return circuit
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including amperage and tabs."""
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            return None
+
+        circuit = self.coordinator.data.circuits.get(self.circuit_id)
+        if not circuit:
+            return None
+
+        attributes = {}
+
+        # Add tabs attribute
+
+        tabs_result = construct_tabs_attribute(circuit)
+        if tabs_result is not None:
+            attributes["tabs"] = str(tabs_result)
+
+        # Add voltage attribute
+        voltage = construct_voltage_attribute(circuit) or 240
+        attributes["voltage"] = str(voltage)
+
+        # Calculate amperage from power (P = V * I, so I = P / V)
+        if self.native_value is not None and isinstance(self.native_value, int | float):
+            try:
+                amperage = float(self.native_value) / float(voltage)
+                attributes["amperage"] = str(round(amperage, 2))
+            except (ValueError, ZeroDivisionError):
+                attributes["amperage"] = "0.0"
+        else:
+            attributes["amperage"] = "0.0"
+
+        return attributes
+
+
+class SpanCircuitEnergySensor(
+    SpanEnergySensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
+    """Circuit energy sensor with grace period tracking."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        span_panel: SpanPanel,
+        circuit_id: str,
+    ) -> None:
+        """Initialize the circuit energy sensor."""
+        self.circuit_id = circuit_id
+        self.original_key = description.key
+
+        # Override the description key to use the circuit_id for data lookup
+        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+            key=circuit_id,
+            name=description.name,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            device_class=description.device_class,
+            value_fn=description.value_fn,
+            entity_registry_enabled_default=description.entity_registry_enabled_default,
+            entity_registry_visible_default=description.entity_registry_visible_default,
+        )
+
+        super().__init__(data_coordinator, description_with_circuit, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for circuit energy sensors."""
+        # Map new description keys to original API keys that migration normalized from
+        api_key_mapping = {
+            "circuit_energy_produced": "producedEnergyWh",
+            "circuit_energy_consumed": "consumedEnergyWh",
+            "circuit_energy_net": "netEnergyWh",
+        }
+        api_key = api_key_mapping.get(self.original_key, self.original_key)
+        return construct_circuit_unique_id_for_entry(
+            self.coordinator, span_panel, self.circuit_id, api_key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for circuit energy sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit and circuit.name:
+            return f"{circuit.name} {description.name}"
+        return f"Circuit {self.circuit_id} {description.name}"
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanPanelCircuitsSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for circuit energy sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return None
+
+        # Use the helper functions for entity ID generation
+
+        # Only pass unique_id during migration - during initial setup, skip registry lookup
+        # Exception: Never pass unique_id for net energy sensors since they are completely new
+        migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+        is_net_energy_sensor = self.original_key == "circuit_energy_net"
+        unique_id_for_lookup = (
+            None if is_net_energy_sensor else (self._attr_unique_id if migration_mode else None)
+        )
+
+        return construct_single_circuit_entity_id(
+            coordinator=coordinator,
+            span_panel=span_panel,
+            platform="sensor",
+            suffix=slugify(str(description.name or "sensor")),
+            circuit_data=circuit,
+            unique_id=unique_id_for_lookup,
+        )
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the circuit energy sensor."""
+        return span_panel.circuits[self.circuit_id]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including grace period and circuit info."""
+        # Get base grace period attributes
+        base_attributes = super().extra_state_attributes or {}
+        attributes = dict(base_attributes)
+
+        # Add circuit-specific attributes if we have data
+        if self.coordinator.data:
+            span_panel = self.coordinator.data
+            circuit = span_panel.circuits.get(self.circuit_id)
+
+            if circuit:
+                # Add tabs and voltage attributes
+
+                tabs = construct_tabs_attribute(circuit)
+                if tabs is not None:
+                    attributes["tabs"] = tabs
+
+                voltage = construct_voltage_attribute(circuit) or 240
+                attributes["voltage"] = voltage
+
+        return attributes if attributes else None
+
+
+class SpanSolarSensor(SpanSensorBase[SpanSolarSensorEntityDescription, SpanPanel]):
+    """Solar sensor that combines values from leg1 and leg2 circuits."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanSolarSensorEntityDescription,
+        span_panel: SpanPanel,
+        leg1_circuit_id: str,
+        leg2_circuit_id: str,
+    ) -> None:
+        """Initialize the solar sensor."""
+        self.leg1_circuit_id = leg1_circuit_id
+        self.leg2_circuit_id = leg2_circuit_id
+        super().__init__(data_coordinator, description, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanSolarSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for solar sensors."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, span_panel, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanSolarSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for solar sensors."""
+        return str(description.name or "Solar Sensor")
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanSolarSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for solar sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                unique_id_for_lookup,
+                use_device_prefix,
+            )
+        return None
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanel:
+        """Get the data source for the solar sensor."""
+        return span_panel
+
+    def _update_native_value(self) -> None:
+        """Update the native value by combining leg1 and leg2 circuit values."""
+        if self.coordinator.panel_offline:
+            _LOGGER.debug("SOLAR_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
+            # For solar power sensors, set to 0.0 when offline (instantaneous values)
+            device_class = getattr(self.entity_description, "device_class", None)
+            if device_class == "power":
+                self._attr_native_value = 0.0
+            else:
+                self._attr_native_value = STATE_UNKNOWN
+            return
+
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            self._attr_native_value = STATE_UNKNOWN
+            return
+
+        span_panel = self.coordinator.data
+        leg1_circuit = span_panel.circuits.get(self.leg1_circuit_id)
+        leg2_circuit = span_panel.circuits.get(self.leg2_circuit_id)
+
+        if not leg1_circuit or not leg2_circuit:
+            self._attr_native_value = STATE_UNKNOWN
+            return
+
+        try:
+            # Get the appropriate attribute based on the sensor type
+            description = self.entity_description
+            assert isinstance(description, SpanSolarSensorEntityDescription)
+            if description.key == "solar_current_power":
+                leg1_value = getattr(leg1_circuit, "instant_power", 0) or 0
+                leg2_value = getattr(leg2_circuit, "instant_power", 0) or 0
+            elif description.key == "solar_produced_energy":
+                leg1_value = getattr(leg1_circuit, "produced_energy", 0) or 0
+                leg2_value = getattr(leg2_circuit, "produced_energy", 0) or 0
+            elif description.key == "solar_consumed_energy":
+                leg1_value = getattr(leg1_circuit, "consumed_energy", 0) or 0
+                leg2_value = getattr(leg2_circuit, "consumed_energy", 0) or 0
+            elif description.key == "solar_net_energy":
+                # Net energy = produced - consumed for each leg, then sum
+                leg1_produced = getattr(leg1_circuit, "produced_energy", 0) or 0
+                leg1_consumed = getattr(leg1_circuit, "consumed_energy", 0) or 0
+                leg2_produced = getattr(leg2_circuit, "produced_energy", 0) or 0
+                leg2_consumed = getattr(leg2_circuit, "consumed_energy", 0) or 0
+                leg1_value = leg1_produced - leg1_consumed
+                leg2_value = leg2_produced - leg2_consumed
+            else:
+                leg1_value = 0
+                leg2_value = 0
+
+            # Combine the values
+            if hasattr(description, "calculation_type") and description.calculation_type == "sum":
+                self._attr_native_value = float(leg1_value) + float(leg2_value)
+            else:
+                self._attr_native_value = float(leg1_value) + float(leg2_value)
+
+        except (ValueError, TypeError, AttributeError) as e:
+            _LOGGER.warning("Error calculating solar sensor value for %s: %s", description.key, e)
+            self._attr_native_value = STATE_UNKNOWN
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including tabs and voltage."""
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            return None
+
+        span_panel = self.coordinator.data
+        leg1_circuit = span_panel.circuits.get(self.leg1_circuit_id)
+        leg2_circuit = span_panel.circuits.get(self.leg2_circuit_id)
+
+        if not leg1_circuit or not leg2_circuit:
+            return None
+
+        attributes = {}
+
+        # Add tabs attribute combining both legs
+
+        # Combine tabs from both circuits into a single tabs attribute
+        all_tabs = []
+        if leg1_circuit.tabs:
+            all_tabs.extend(leg1_circuit.tabs)
+        if leg2_circuit.tabs:
+            all_tabs.extend(leg2_circuit.tabs)
+
+        if all_tabs:
+            # Sort tabs for consistent ordering and remove duplicates
+            sorted_unique_tabs = sorted(set(all_tabs))
+            if len(sorted_unique_tabs) == 1:
+                attributes["tabs"] = f"tabs [{sorted_unique_tabs[0]}]"
+            elif len(sorted_unique_tabs) == 2:
+                attributes["tabs"] = f"tabs [{sorted_unique_tabs[0]}:{sorted_unique_tabs[1]}]"
+            else:
+                # Multiple non-contiguous tabs - list them
+                tab_list = ", ".join(str(tab) for tab in sorted_unique_tabs)
+                attributes["tabs"] = f"tabs [{tab_list}]"
+
+        # Add voltage attribute based on total number of unique tabs
+        if all_tabs:
+            unique_tab_count = len(sorted_unique_tabs)
+            if unique_tab_count == 1:
+                voltage = 120
+            elif unique_tab_count == 2:
+                voltage = 240
+            else:
+                # More than 2 tabs is not valid for US electrical system
+                voltage = 240  # Default to 240V for invalid configurations
+        else:
+            voltage = 240  # Default to 240V if no tabs information
+        attributes["voltage"] = str(voltage)
+
+        # Calculate amperage for power sensors
+        if (
+            self.entity_description.key == "solar_current_power"
+            and self.native_value is not None
+            and isinstance(self.native_value, int | float)
+        ):
+            try:
+                amperage = float(self.native_value) / float(voltage)
+                attributes["amperage"] = str(round(amperage, 2))
+            except (ValueError, ZeroDivisionError):
+                attributes["amperage"] = "0.0"
+
+        return attributes
 
 
 class SpanUnmappedCircuitSensor(
@@ -539,23 +1212,240 @@ class SpanUnmappedCircuitSensor(
         return span_panel.circuits[self.circuit_id]
 
 
-def _get_migration_mode(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Check if migration mode is enabled for this config entry."""
-    entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-    return bool(entry_data.get("migration_mode") or config_entry.options.get("migration_mode"))
+class SpanSolarEnergySensor(SpanEnergySensorBase[SpanSolarSensorEntityDescription, SpanPanel]):
+    """Solar energy sensor that combines values from leg1 and leg2 circuits with grace period tracking."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanSolarSensorEntityDescription,
+        span_panel: SpanPanel,
+        leg1_circuit_id: str,
+        leg2_circuit_id: str,
+    ) -> None:
+        """Initialize the solar energy sensor."""
+        self.leg1_circuit_id = leg1_circuit_id
+        self.leg2_circuit_id = leg2_circuit_id
+        super().__init__(data_coordinator, description, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanSolarSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for solar energy sensors."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, span_panel, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanSolarSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for solar energy sensors."""
+        return str(description.name or "Solar Energy Sensor")
+
+    def _generate_entity_id(
+        self,
+        coordinator: SpanPanelCoordinator,
+        span_panel: SpanPanel,
+        description: SpanSolarSensorEntityDescription,
+    ) -> str | None:
+        """Generate entity ID for solar energy sensors."""
+        if hasattr(description, "name") and description.name:
+            entity_suffix = slugify(str(description.name))
+            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+
+            # Only pass unique_id during migration - during normal operation, respect current flags
+            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
+            return construct_panel_entity_id(
+                coordinator,
+                span_panel,
+                "sensor",
+                entity_suffix,
+                self._device_name,
+                unique_id_for_lookup,
+                use_device_prefix,
+            )
+        return None
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanel:
+        """Get the data source for the solar energy sensor."""
+        return span_panel
+
+    def _update_native_value(self) -> None:
+        """Update the native value by combining leg1 and leg2 circuit values."""
+        if self.coordinator.panel_offline:
+            _LOGGER.debug(
+                "SOLAR_ENERGY_SENSOR_DEBUG: Panel is offline for %s, using grace period logic",
+                self._attr_name,
+            )
+            # Use grace period logic when offline
+            self._handle_offline_grace_period()
+            return
+
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            self._attr_native_value = STATE_UNKNOWN
+            return
+
+        span_panel = self.coordinator.data
+        leg1_circuit = span_panel.circuits.get(self.leg1_circuit_id)
+        leg2_circuit = span_panel.circuits.get(self.leg2_circuit_id)
+
+        if not leg1_circuit or not leg2_circuit:
+            self._attr_native_value = STATE_UNKNOWN
+            return
+
+        try:
+            # Get the appropriate attribute based on the sensor type
+            description = self.entity_description
+            assert isinstance(description, SpanSolarSensorEntityDescription)
+            if description.key == "solar_produced_energy":
+                leg1_value = getattr(leg1_circuit, "produced_energy", 0) or 0
+                leg2_value = getattr(leg2_circuit, "produced_energy", 0) or 0
+            elif description.key == "solar_consumed_energy":
+                leg1_value = getattr(leg1_circuit, "consumed_energy", 0) or 0
+                leg2_value = getattr(leg2_circuit, "consumed_energy", 0) or 0
+            elif description.key == "solar_net_energy":
+                # Net energy = produced - consumed for each leg, then sum
+                leg1_produced = getattr(leg1_circuit, "produced_energy", 0) or 0
+                leg1_consumed = getattr(leg1_circuit, "consumed_energy", 0) or 0
+                leg2_produced = getattr(leg2_circuit, "produced_energy", 0) or 0
+                leg2_consumed = getattr(leg2_circuit, "consumed_energy", 0) or 0
+                leg1_value = leg1_produced - leg1_consumed
+                leg2_value = leg2_produced - leg2_consumed
+            else:
+                leg1_value = 0
+                leg2_value = 0
+
+            # Combine the values
+            if hasattr(description, "calculation_type") and description.calculation_type == "sum":
+                self._attr_native_value = float(leg1_value) + float(leg2_value)
+            else:
+                self._attr_native_value = float(leg1_value) + float(leg2_value)
+
+            # Track valid state for grace period (only when we have a valid value)
+            if self._attr_native_value is not None and isinstance(
+                self._attr_native_value, int | float
+            ):
+                self._last_valid_state = float(self._attr_native_value)
+                self._last_valid_changed = datetime.now()
+
+        except (ValueError, TypeError, AttributeError) as e:
+            _LOGGER.warning(
+                "Error calculating solar energy sensor value for %s: %s", description.key, e
+            )
+            self._attr_native_value = STATE_UNKNOWN
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes including grace period and solar info."""
+        # Get base grace period attributes
+        base_attributes = super().extra_state_attributes or {}
+        attributes = dict(base_attributes)
+
+        # Add solar-specific attributes if we have data
+        if self.coordinator.data:
+            span_panel = self.coordinator.data
+            leg1_circuit = span_panel.circuits.get(self.leg1_circuit_id)
+            leg2_circuit = span_panel.circuits.get(self.leg2_circuit_id)
+
+            if leg1_circuit and leg2_circuit:
+                # Add tabs attribute combining both legs
+
+                # Combine tabs from both circuits into a single tabs attribute
+                all_tabs = []
+                if leg1_circuit.tabs:
+                    all_tabs.extend(leg1_circuit.tabs)
+                if leg2_circuit.tabs:
+                    all_tabs.extend(leg2_circuit.tabs)
+
+                if all_tabs:
+                    # Sort tabs for consistent ordering and remove duplicates
+                    sorted_unique_tabs = sorted(set(all_tabs))
+                    if len(sorted_unique_tabs) == 1:
+                        attributes["tabs"] = f"tabs [{sorted_unique_tabs[0]}]"
+                    elif len(sorted_unique_tabs) == 2:
+                        attributes["tabs"] = (
+                            f"tabs [{sorted_unique_tabs[0]}:{sorted_unique_tabs[1]}]"
+                        )
+                    else:
+                        # Multiple non-contiguous tabs - list them
+                        tab_list = ", ".join(str(tab) for tab in sorted_unique_tabs)
+                        attributes["tabs"] = f"tabs [{tab_list}]"
+
+                # Add voltage attribute based on total number of unique tabs
+                if all_tabs:
+                    unique_tab_count = len(sorted_unique_tabs)
+                    if unique_tab_count == 1:
+                        voltage = 120
+                    elif unique_tab_count == 2:
+                        voltage = 240
+                    else:
+                        # More than 2 tabs is not valid for US electrical system
+                        voltage = 240  # Default to 240V for invalid configurations
+                else:
+                    voltage = 240  # Default to 240V if no tabs information
+                attributes["voltage"] = str(voltage)
+
+        return attributes if attributes else None
 
 
 def _create_native_sensors(
     coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
-) -> list[SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus | SpanPanelBattery]:
+) -> list[
+    SpanPanelPanelStatus
+    | SpanUnmappedCircuitSensor
+    | SpanPanelStatus
+    | SpanPanelBattery
+    | SpanPanelPowerSensor
+    | SpanPanelEnergySensor
+    | SpanCircuitPowerSensor
+    | SpanCircuitEnergySensor
+    | SpanSolarSensor
+    | SpanSolarEnergySensor
+]:
     """Create all native sensors for the platform."""
     entities: list[
-        SpanPanelPanelStatus | SpanUnmappedCircuitSensor | SpanPanelStatus | SpanPanelBattery
+        SpanPanelPanelStatus
+        | SpanUnmappedCircuitSensor
+        | SpanPanelStatus
+        | SpanPanelBattery
+        | SpanPanelPowerSensor
+        | SpanPanelEnergySensor
+        | SpanCircuitPowerSensor
+        | SpanCircuitEnergySensor
+        | SpanSolarSensor
+        | SpanSolarEnergySensor
     ] = []
 
     # Add panel data status sensors (DSM State, DSM Grid State, etc.)
     for description in PANEL_DATA_STATUS_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
+    # Add panel power sensors (replacing synthetic ones)
+    for description in PANEL_POWER_SENSORS:
+        entities.append(SpanPanelPowerSensor(coordinator, description, span_panel))
+
+    # Add panel energy sensors (replacing synthetic ones)
+    for description in PANEL_ENERGY_SENSORS:
+        entities.append(SpanPanelEnergySensor(coordinator, description, span_panel))
+
+    # Add circuit sensors for all named circuits (replacing synthetic ones)
+    named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
+    for circuit_id in named_circuits:
+        for circuit_description in CIRCUIT_SENSORS:
+            if circuit_description.key == "circuit_power":
+                # Use enhanced power sensor for power measurements
+                entities.append(
+                    SpanCircuitPowerSensor(coordinator, circuit_description, span_panel, circuit_id)
+                )
+            else:
+                # Use energy sensor with grace period tracking for energy measurements
+                entities.append(
+                    SpanCircuitEnergySensor(
+                        coordinator, circuit_description, span_panel, circuit_id
+                    )
+                )
 
     # Add unmapped circuit sensors (native sensors for synthetic calculations)
     # These are invisible sensors that provide stable entity IDs for solar synthetics
@@ -575,6 +1465,58 @@ def _create_native_sensors(
     battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
     if battery_enabled:
         entities.append(SpanPanelBattery(coordinator, BATTERY_SENSOR, span_panel))
+
+    # Add solar sensors if enabled
+    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
+    if solar_enabled:
+        # Get leg circuit IDs from options
+        leg1_raw = config_entry.options.get(INVERTER_LEG1, 0)
+        leg2_raw = config_entry.options.get(INVERTER_LEG2, 0)
+
+        try:
+            leg1_tab = int(leg1_raw)
+            leg2_tab = int(leg2_raw)
+        except (TypeError, ValueError):
+            leg1_tab = 0
+            leg2_tab = 0
+
+        if leg1_tab > 0 and leg2_tab > 0:
+            # Find the circuit IDs for the specified tabs
+            leg1_circuit_id = None
+            leg2_circuit_id = None
+
+            for circuit_id, circuit in span_panel.circuits.items():
+                if hasattr(circuit, "tabs") and circuit.tabs:
+                    if leg1_tab in circuit.tabs:
+                        leg1_circuit_id = circuit_id
+                    if leg2_tab in circuit.tabs:
+                        leg2_circuit_id = circuit_id
+
+            # Create solar sensors if both legs found
+            if leg1_circuit_id and leg2_circuit_id:
+                for solar_description in SOLAR_SENSORS:
+                    if solar_description.key == "solar_current_power":
+                        # Use regular solar sensor for power measurements
+                        entities.append(
+                            SpanSolarSensor(
+                                coordinator,
+                                solar_description,
+                                span_panel,
+                                leg1_circuit_id,
+                                leg2_circuit_id,
+                            )
+                        )
+                    else:
+                        # Use energy sensor with grace period tracking for energy measurements
+                        entities.append(
+                            SpanSolarEnergySensor(
+                                coordinator,
+                                solar_description,
+                                span_panel,
+                                leg1_circuit_id,
+                                leg2_circuit_id,
+                            )
+                        )
 
     return entities
 
@@ -596,97 +1538,6 @@ def _enable_unmapped_tab_entities(hass: HomeAssistant, entities: list[Any]) -> N
                 entity_registry.async_update_entity(entity_id, disabled_by=None)
 
 
-async def _handle_migration_solar_setup(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    coordinator: SpanPanelCoordinator,
-    sensor_set: Any,
-) -> bool:
-    """Handle solar sensor setup during migration.
-
-    Returns:
-        True if solar setup was performed successfully, False otherwise.
-
-    """
-    solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)
-    if not solar_enabled or sensor_set is None:
-        return False
-
-    # Coerce leg options to integers to handle any legacy string-stored values
-    leg1_raw = config_entry.options.get(INVERTER_LEG1, 0)
-    leg2_raw = config_entry.options.get(INVERTER_LEG2, 0)
-    try:
-        leg1 = int(leg1_raw)
-    except (TypeError, ValueError):
-        leg1 = 0
-    try:
-        leg2 = int(leg2_raw)
-    except (TypeError, ValueError):
-        leg2 = 0
-    # Get device name from config entry like sensors do
-    device_name = config_entry.data.get("device_name", config_entry.title)
-
-    _LOGGER.debug(
-        "Solar enabled during initial setup - setting up solar sensors (leg1: %s, leg2: %s)",
-        leg1,
-        leg2,
-    )
-
-    try:
-        result = await handle_solar_options_change(
-            hass,
-            config_entry,
-            coordinator,
-            sensor_set,
-            solar_enabled,
-            leg1,
-            leg2,
-            device_name,
-            migration_mode=True,
-        )
-        if result:
-            _LOGGER.debug("Initial solar sensor setup completed successfully")
-            return True
-        else:
-            _LOGGER.warning("Initial solar sensor setup failed")
-            return False
-    except Exception as e:
-        _LOGGER.error("Failed to set up initial solar sensors: %s", e, exc_info=True)
-        return False
-
-
-def _clear_migration_flags(
-    hass: HomeAssistant, config_entry: ConfigEntry, migration_mode: bool
-) -> None:
-    """Clear migration flags after setup is complete."""
-    if not migration_mode:
-        return
-
-    try:
-        entry_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-        # Prefer persisted option, but clear both option and transient flag
-        if entry_data.get("migration_mode") or config_entry.options.get("migration_mode"):
-            entry_data.pop("migration_mode", None)
-            # Clear persisted option flag
-            try:
-                new_options = dict(config_entry.options)
-                if "migration_mode" in new_options:
-                    del new_options["migration_mode"]
-                    hass.config_entries.async_update_entry(config_entry, options=new_options)
-            except Exception as opt_err:
-                _LOGGER.debug(
-                    "Failed to clear persisted migration flag for %s: %s",
-                    config_entry.entry_id,
-                    opt_err,
-                )
-            _LOGGER.info(
-                "Migration mode completed for entry %s: cleared per-entry flag",
-                config_entry.entry_id,
-            )
-    except Exception as e:
-        _LOGGER.debug("Failed to clear migration flag for %s: %s", config_entry.entry_id, e)
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -698,10 +1549,7 @@ async def async_setup_entry(
         coordinator: SpanPanelCoordinator = data[COORDINATOR]
         span_panel: SpanPanel = coordinator.data
 
-        # Check migration mode early to pass to all functions that need it
-        migration_mode = _get_migration_mode(hass, config_entry)
-
-        # Create all native sensors
+        # Create all native sensors (now includes panel, circuit, and solar sensors)
         entities = _create_native_sensors(coordinator, span_panel, config_entry)
 
         # Add all native sensor entities
@@ -710,159 +1558,10 @@ async def async_setup_entry(
         # Enable unmapped tab entities if they were disabled
         _enable_unmapped_tab_entities(hass, entities)
 
-        # Delegate synthetic sensor setup to ha-synthetic-sensors package
-        try:
-            # Ensure coordinator has valid data before setting up synthetic sensors
-            if not coordinator.last_update_success or not coordinator.data:
-                _LOGGER.warning(
-                    "Coordinator not ready for synthetic sensor setup - "
-                    "attempting refresh before proceeding"
-                )
-                await coordinator.async_refresh()
-
-                if not coordinator.last_update_success or not coordinator.data:
-                    _LOGGER.error(
-                        "Failed to get valid coordinator data - synthetic sensors may not have initial values"
-                    )
-
-            # Set up synthetic sensor configuration
-            # Check if migration just occurred - if so, use existing YAML instead of regenerating
-            storage_manager = StorageManager(hass, DOMAIN, integration_domain=DOMAIN)
-            await storage_manager.async_load()
-
-            # If sensor sets already exist (from migration), use them directly
-            sensor_sets = storage_manager.list_sensor_sets()
-            _LOGGER.info("SENSOR SETUP DEBUG: Found %d existing sensor sets", len(sensor_sets))
-            for sensor_set_meta in sensor_sets:
-                _LOGGER.info(
-                    "SENSOR SETUP DEBUG: Sensor set - id=%s, device=%s",
-                    sensor_set_meta.sensor_set_id,
-                    sensor_set_meta.device_identifier,
-                )
-
-            if sensor_sets:
-                _LOGGER.info(
-                    "SENSOR SETUP DEBUG: Using existing sensor configuration from migration"
-                )
-                # For migration, we still need to create the SyntheticSensorCoordinator
-                # even though we're not generating new configuration
-                device_name = config_entry.data.get("device_name", config_entry.title)
-                synthetic_coord = SyntheticSensorCoordinator(hass, coordinator, device_name)
-                _synthetic_coordinators[config_entry.entry_id] = synthetic_coord
-
-                # Determine the correct sensor_set_id for THIS entry and ensure it exists
-                current_identifier = get_device_identifier_for_entry(
-                    coordinator, coordinator.data, device_name
-                )
-                current_sensor_set_id = construct_sensor_set_id(current_identifier)
-                if not storage_manager.sensor_set_exists(current_sensor_set_id):
-                    _LOGGER.info(
-                        "SENSOR SETUP DEBUG: Sensor set %s not found; generating configuration for this entry",
-                        current_sensor_set_id,
-                    )
-                    storage_manager = await setup_synthetic_configuration(
-                        hass, config_entry, coordinator, migration_mode
-                    )
-                # Initialize the synthetic coordinator configuration so backing metadata is populated
-                await synthetic_coord.setup_configuration(config_entry, migration_mode)
-                # Prime the coordinator so downstream setup uses the correct set
-                synthetic_coord.sensor_set_id = current_sensor_set_id
-                synthetic_coord.device_identifier = current_identifier
-            else:
-                # Fresh install - generate new configuration
-                _LOGGER.info("SENSOR SETUP DEBUG: Fresh install - generating new configuration")
-                storage_manager = await setup_synthetic_configuration(
-                    hass, config_entry, coordinator, migration_mode
-                )
-            # Get the synthetic coordinator from the global registry
-            synth_coord = _synthetic_coordinators.get(config_entry.entry_id)
-            if not synth_coord:
-                raise RuntimeError(
-                    f"Synthetic coordinator not found for config entry {config_entry.entry_id}"
-                )
-
-            # Use simplified setup interface that handles everything
-            # Pass the synthetic coordinator directly to avoid lookup issues
-            sensor_manager = await async_setup_synthetic_sensors(
-                hass=hass,
-                config_entry=config_entry,
-                async_add_entities=async_add_entities,
-                # coordinator=coordinator,  # Pass coordinator for data access
-                coordinator=None,
-                storage_manager=storage_manager,
-                synthetic_coordinator=synth_coord,
-            )
-            device_identifier = (
-                synth_coord.device_identifier
-                if synth_coord and synth_coord.device_identifier
-                else coordinator.data.status.serial_number
-            )
-            sensor_set_id = construct_sensor_set_id(device_identifier)
-            # get_sensor_set returns a SensorSet instance. We also expose
-            # metadata via storage_manager.get_sensor_set_metadata when callers
-            # need only the metadata object. Store the SensorSet instance here
-            # for consumers that perform CRUD operations directly on the set.
-            sensor_set = storage_manager.get_sensor_set(sensor_set_id)
-
-            if sensor_set is None:
-                _LOGGER.error("Sensor set not found: %s", sensor_set_id)
-                _LOGGER.debug("Available sensor sets: %s", storage_manager.list_sensor_sets())
-
-            # Store managers and sensor set for potential reload functionality
-            data["sensor_manager"] = sensor_manager
-            data[STORAGE_MANAGER] = storage_manager
-            data[SENSOR_SET] = sensor_set
-
-            _LOGGER.debug(
-                "Successfully set up synthetic sensors and cached SensorSet: %s", sensor_set_id
-            )
-
-            # Handle migration completion
-            if migration_mode:
-                # Handle solar sensor setup during migration if solar is enabled
-                solar_setup_result = await _handle_migration_solar_setup(
-                    hass, config_entry, coordinator, sensor_set
-                )
-
-                # Always clear migration flags first
-                _clear_migration_flags(hass, config_entry, migration_mode)
-
-                # If solar was set up during migration, schedule a reload to pick up the newly added
-                # solar sensors, but don't block the initial startup
-                if solar_setup_result:
-                    _LOGGER.debug(
-                        "Solar setup completed during migration, scheduling reload to load solar sensors"
-                    )
-
-                    async def _scheduled_reload() -> None:
-                        """Reload the config entry after a brief delay to allow startup to complete."""
-                        await asyncio.sleep(1.0)  # Brief delay to let initial setup finish
-                        _LOGGER.debug("Executing scheduled reload for solar sensors")
-                        await hass.config_entries.async_reload(config_entry.entry_id)
-
-                    hass.async_create_task(_scheduled_reload())
-
-        except Exception as e:
-            _LOGGER.error("Failed to set up synthetic sensors: %s", e, exc_info=True)
-
-        # Manually trigger synthetic sensor updates now that everything is set up
-        # and coordinator has stable data
-        try:
-            if coordinator.last_update_success and coordinator.data:
-                success = await trigger_synthetic_update(hass, config_entry)
-                if success:
-                    _LOGGER.debug("Successfully triggered initial synthetic sensor update")
-                else:
-                    _LOGGER.warning("Failed to trigger initial synthetic sensor update")
-            else:
-                _LOGGER.warning("Coordinator not ready - skipping initial synthetic sensor update")
-        except Exception as e:
-            _LOGGER.error("Error triggering initial synthetic sensor update: %s", e)
-
-        # Force immediate coordinator refresh to ensure all sensors (native and synthetic) update right away
+        # Force immediate coordinator refresh to ensure all sensors update right away
         await coordinator.async_request_refresh()
 
-        _LOGGER.debug("Sensor platform setup completed")
+        _LOGGER.debug("Native sensor platform setup completed with %d entities", len(entities))
     except Exception as e:
-        _LOGGER.error("SENSOR_ENTRY_DEBUG: Error in async_setup_entry: %s", e, exc_info=True)
+        _LOGGER.error("Error in async_setup_entry: %s", e, exc_info=True)
         raise

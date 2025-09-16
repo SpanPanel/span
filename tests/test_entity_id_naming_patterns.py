@@ -29,7 +29,8 @@ def mock_coordinator():
     coordinator = MagicMock(spec=SpanPanelCoordinator)
     coordinator.config_entry = MagicMock(spec=ConfigEntry)
     coordinator.config_entry.options = {}
-    coordinator.config_entry.data = {}
+    coordinator.config_entry.data = {"device_name": "SPAN Panel"}
+    coordinator.config_entry.title = "SPAN Panel"
     coordinator.data = MagicMock()  # Add missing data attribute
     return coordinator
 
@@ -66,6 +67,8 @@ class TestEntityIdMigrationManager:
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         coordinator.config_entry = MagicMock(spec=ConfigEntry)
         coordinator.config_entry.options = {}
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
+        coordinator.config_entry.title = "SPAN Panel"
         coordinator.data = MagicMock(spec=SpanPanel)
         return coordinator
 
@@ -160,6 +163,7 @@ class TestLegacyToPrefix:
     def hass_with_data(self, hass, mock_sensor_manager, mock_coordinator, sample_sensors_data):
         """Create hass with complete data setup."""
         mock_sensor_manager.export.return_value = {"sensors": sample_sensors_data}
+        mock_sensor_manager.sensors = sample_sensors_data
 
         hass.data = {
             "ha_synthetic_sensors": {
@@ -168,7 +172,9 @@ class TestLegacyToPrefix:
                 }
             },
             "span_panel": {
-                "test_entry_id": mock_coordinator
+                "test_entry_id": {
+                    "coordinator": mock_coordinator
+                }
             }
         }
         return hass
@@ -179,18 +185,27 @@ class TestLegacyToPrefix:
         old_flags = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 
-        with patch.object(manager, '_generate_new_entity_id') as mock_generate:
-            mock_generate.side_effect = [
-                "sensor.span_panel_solar_power",
-                "sensor.span_panel_kitchen_lights_power",
-                "sensor.span_panel_current_power"
-            ]
+        # Mock entity registry with legacy entities
+        mock_entity1 = MagicMock()
+        mock_entity1.config_entry_id = "test_entry_id"
+        mock_entity1.entity_id = "sensor.air_conditioner_energy_consumed"
+        mock_entity2 = MagicMock()
+        mock_entity2.config_entry_id = "test_entry_id"
+        mock_entity2.entity_id = "sensor.kitchen_lights_power"
 
-            result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+        mock_entities = [mock_entity1, mock_entity2]
 
-            assert result is True
-            sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-            sensor_manager.modify.assert_called_once()
+        # Mock the entity registry
+        mock_registry = MagicMock()
+        mock_registry.async_update_entity = MagicMock()
+
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_registry):
+            with patch("homeassistant.helpers.entity_registry.async_entries_for_config_entry", return_value=mock_entities):
+                result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+
+                assert result is True
+                # Verify that entities were updated
+                assert mock_registry.async_update_entity.call_count == 2
 
     async def test_migrate_legacy_to_prefix_no_sensor_manager(self, hass):
         """Test legacy migration when sensor manager is not found."""
@@ -213,28 +228,32 @@ class TestLegacyToPrefix:
     async def test_migrate_legacy_to_prefix_no_sensors(self, hass_with_data):
         """Test legacy migration with no sensors to migrate."""
         manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-        sensor_manager.export.return_value = {}
-
         old_flags = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 
-        result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+        # Mock entity registry with no entities
+        mock_registry = MagicMock()
+        mock_registry.async_update_entity = MagicMock()
 
-        assert result is True
+        with patch("homeassistant.helpers.entity_registry.async_get", return_value=mock_registry):
+            with patch("homeassistant.helpers.entity_registry.async_entries_for_config_entry", return_value=[]):
+                result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+
+                assert result is True
+                # Verify that no entities were updated
+                mock_registry.async_update_entity.assert_not_called()
 
     async def test_migrate_legacy_to_prefix_exception(self, hass_with_data):
         """Test legacy migration with exception during process."""
         manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
-        sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-        sensor_manager.export.side_effect = Exception("Test error")
-
         old_flags = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
 
-        result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
+        # Mock entity registry to raise an exception
+        with patch("homeassistant.helpers.entity_registry.async_get", side_effect=Exception("Test error")):
+            result = await manager._migrate_legacy_to_prefix(old_flags, new_flags)
 
-        assert result is False
+            assert result is False
 
 
 class TestNonLegacyPatterns:
@@ -249,6 +268,7 @@ class TestNonLegacyPatterns:
     def hass_with_data(self, hass, mock_sensor_manager, mock_coordinator, sample_sensors_data):
         """Create hass with complete data setup."""
         mock_sensor_manager.export.return_value = {"sensors": sample_sensors_data}
+        mock_sensor_manager.sensors = sample_sensors_data
 
         hass.data = {
             "ha_synthetic_sensors": {
@@ -257,7 +277,9 @@ class TestNonLegacyPatterns:
                 }
             },
             "span_panel": {
-                "test_entry_id": mock_coordinator
+                "test_entry_id": {
+                    "coordinator": mock_coordinator
+                }
             }
         }
         return hass
@@ -269,7 +291,7 @@ class TestNonLegacyPatterns:
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
 
         with patch('custom_components.span_panel.entity_id_naming_patterns.is_panel_level_sensor_key') as mock_panel_check:
-            with patch.object(manager, '_is_entity_id_customized', return_value=False) as mock_customized:
+            with patch.object(manager, '_is_entity_id_customized', new_callable=AsyncMock, return_value=False) as mock_customized:
                 with patch.object(manager, '_generate_new_entity_id') as mock_generate:
                     mock_panel_check.side_effect = [False, False, True]  # Only current_power is panel-level
                     mock_generate.side_effect = [
@@ -334,14 +356,18 @@ class TestNonLegacyPatterns:
         """Test non-legacy migration with exception during process."""
         manager = EntityIdMigrationManager(hass_with_data, "test_entry_id")
         sensor_manager = hass_with_data.data["ha_synthetic_sensors"]["sensor_managers"]["test_entry_id"]
-        sensor_manager.export.side_effect = Exception("Test error")
+        # Provide valid sensor data but cause an exception during processing
+        sensor_manager.sensors = {"test_sensor": {"entity_id": "sensor.test"}}
 
         old_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
         new_flags = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
 
-        result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
+        # Mock the helper functions to cause an exception during processing
+        with patch('custom_components.span_panel.entity_id_naming_patterns.is_panel_level_sensor_key', return_value=False):
+            with patch.object(manager, '_is_entity_id_customized', side_effect=Exception("Test error")):
+                result = await manager._migrate_non_legacy_patterns(old_flags, new_flags)
 
-        assert result is False
+                assert result is False
 
 
 class TestGenerateNewEntityId:
@@ -519,170 +545,3 @@ class TestEntityIdCustomization:
             )
 
             assert result is False
-
-
-class TestCrossReferencesUpdate:
-    """Test cross-references update functionality."""
-
-    @pytest.fixture
-    def migration_manager(self, hass):
-        """Create a migration manager instance."""
-        return EntityIdMigrationManager(hass, "test_entry_id")
-
-    @pytest.fixture
-    def yaml_data_with_references(self):
-        """Create YAML data with cross-references."""
-        return {
-            "version": "1.0",
-            "global_settings": {"device_identifier": "test_panel"},
-            "sensors": {
-                "calculated_sensor": {
-                    "entity_id": "sensor.calculated_power",
-                    "name": "Calculated Power",
-                    "formula": "sensor1 + sensor2",
-                    "variables": {
-                        "sensor1": "sensor.old_entity_1",
-                        "sensor2": "sensor.old_entity_2"
-                    }
-                },
-                "formula_sensor": {
-                    "entity_id": "sensor.formula_result",
-                    "name": "Formula Result",
-                    "formula": "state(sensor.old_entity_1) * 2"
-                }
-            }
-        }
-
-    def test_update_cross_references_variables(self, migration_manager, yaml_data_with_references):
-        """Test updating cross-references in variables."""
-        entity_id_changes = {
-            "sensor.old_entity_1": "sensor.new_entity_1",
-            "sensor.old_entity_2": "sensor.new_entity_2"
-        }
-
-        migration_manager._update_cross_references(yaml_data_with_references, entity_id_changes)
-
-        # Check variables were updated
-        variables = yaml_data_with_references["sensors"]["calculated_sensor"]["variables"]
-        assert variables["sensor1"] == "sensor.new_entity_1"
-        assert variables["sensor2"] == "sensor.new_entity_2"
-
-    def test_update_cross_references_formulas(self, migration_manager, yaml_data_with_references):
-        """Test updating cross-references in formulas."""
-        entity_id_changes = {
-            "sensor.old_entity_1": "sensor.new_entity_1"
-        }
-
-        migration_manager._update_cross_references(yaml_data_with_references, entity_id_changes)
-
-        # Check formula was updated
-        formula = yaml_data_with_references["sensors"]["formula_sensor"]["formula"]
-        assert "sensor.new_entity_1" in formula
-        assert "sensor.old_entity_1" not in formula
-
-    def test_update_cross_references_nested_structures(self, migration_manager):
-        """Test updating cross-references in deeply nested structures."""
-        yaml_data = {
-            "sensors": {
-                "complex_sensor": {
-                    "attributes": {
-                        "custom_attr": {
-                            "formula": "state(sensor.old_entity)",
-                            "metadata": {
-                                "description": "Uses sensor.old_entity for calculation"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        entity_id_changes = {"sensor.old_entity": "sensor.new_entity"}
-
-        migration_manager._update_cross_references(yaml_data, entity_id_changes)
-
-        # Check nested references were updated
-        custom_attr = yaml_data["sensors"]["complex_sensor"]["attributes"]["custom_attr"]
-        assert "sensor.new_entity" in custom_attr["formula"]
-        assert "sensor.new_entity" in custom_attr["metadata"]["description"]
-
-    def test_update_cross_references_list_structures(self, migration_manager):
-        """Test updating cross-references in list structures."""
-        yaml_data = {
-            "sensors": {
-                "list_sensor": {
-                    "entity_references": [
-                        "sensor.old_entity_1",
-                        "sensor.old_entity_2",
-                        "sensor.unchanged_entity"
-                    ]
-                }
-            }
-        }
-
-        entity_id_changes = {
-            "sensor.old_entity_1": "sensor.new_entity_1",
-            "sensor.old_entity_2": "sensor.new_entity_2"
-        }
-
-        migration_manager._update_cross_references(yaml_data, entity_id_changes)
-
-        # Check list references were updated
-        entity_refs = yaml_data["sensors"]["list_sensor"]["entity_references"]
-        assert "sensor.new_entity_1" in entity_refs
-        assert "sensor.new_entity_2" in entity_refs
-        assert "sensor.unchanged_entity" in entity_refs
-        assert "sensor.old_entity_1" not in entity_refs
-        assert "sensor.old_entity_2" not in entity_refs
-
-    def test_update_cross_references_partial_matches(self, migration_manager):
-        """Test that partial entity ID matches are handled correctly."""
-        yaml_data = {
-            "sensors": {
-                "test_sensor": {
-                    "formula": "sensor.test_entity + sensor.test_entity_2"
-                }
-            }
-        }
-
-        entity_id_changes = {"sensor.test_entity": "sensor.new_entity"}
-
-        migration_manager._update_cross_references(yaml_data, entity_id_changes)
-
-        # Check that only exact matches were replaced
-        formula = yaml_data["sensors"]["test_sensor"]["formula"]
-        assert "sensor.new_entity + sensor.test_entity_2" == formula
-
-    def test_update_cross_references_empty_changes(self, migration_manager, yaml_data_with_references):
-        """Test updating with no entity ID changes."""
-        original_data = yaml_data_with_references.copy()
-        entity_id_changes = {}
-
-        migration_manager._update_cross_references(yaml_data_with_references, entity_id_changes)
-
-        # Data should remain unchanged
-        assert yaml_data_with_references == original_data
-
-    def test_update_cross_references_non_string_values(self, migration_manager):
-        """Test updating with non-string values in data."""
-        yaml_data = {
-            "sensors": {
-                "mixed_sensor": {
-                    "numeric_value": 42,
-                    "boolean_value": True,
-                    "null_value": None,
-                    "string_with_entity": "sensor.old_entity"
-                }
-            }
-        }
-
-        entity_id_changes = {"sensor.old_entity": "sensor.new_entity"}
-
-        migration_manager._update_cross_references(yaml_data, entity_id_changes)
-
-        # Check that non-string values remain unchanged and string was updated
-        sensor_data = yaml_data["sensors"]["mixed_sensor"]
-        assert sensor_data["numeric_value"] == 42
-        assert sensor_data["boolean_value"] is True
-        assert sensor_data["null_value"] is None
-        assert sensor_data["string_with_entity"] == "sensor.new_entity"

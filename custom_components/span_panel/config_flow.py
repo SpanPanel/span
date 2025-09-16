@@ -24,7 +24,6 @@ from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util import slugify
 from homeassistant.util.network import is_ipv4_address
-from packaging.version import Version
 from span_panel_api import SpanPanelClient
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 from span_panel_api.phase_validation import (
@@ -32,7 +31,7 @@ from span_panel_api.phase_validation import (
     get_tab_phase,
     validate_solar_tabs,
 )
-from span_panel_api.simulation import DynamicSimulationEngine
+from span_panel_api.simulation import DynamicSimulationEngine, SimulationConfig
 import voluptuous as vol
 import yaml
 
@@ -65,7 +64,6 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from .helpers import construct_sensor_set_id
 from .options import (
     BATTERY_ENABLE,
     ENERGY_DISPLAY_PRECISION,
@@ -79,8 +77,6 @@ from .simulation_generator import (
     SimulationYamlGenerator,
 )  # lazy import to keep CF lean
 from .span_panel_api import SpanPanelApi
-from .synthetic_sensors import _synthetic_coordinators
-from .version import async_get_version  # lazy import
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -553,7 +549,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                     Path(__file__).parent / "simulation_configs" / f"{simulation_config}.yaml"
                 )
                 if config_path.exists():
-                    host = await SpanPanelSimulationFactory.extract_serial_number_from_yaml(
+                    host = SpanPanelSimulationFactory.extract_serial_number_from_yaml(
                         str(config_path)
                     )
                 else:
@@ -992,10 +988,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the main options menu."""
+        _LOGGER.info("=== MAIN OPTIONS FLOW ENTRY ===")
+        _LOGGER.info("async_step_init called with user_input: %s", user_input)
         if user_input is None:
             menu_options = {
                 "general_options": "General Options",
-                "export_config": "Export Synthetic Sensor Config",
             }
 
             # Add simulation options if this is a simulation mode integration
@@ -1017,6 +1014,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
+        _LOGGER.info("=== OPTIONS FLOW ENTRY ===")
+        _LOGGER.info("async_step_general_options called with user_input: %s", user_input)
         errors: dict[str, str] = {}
 
         # Get available unmapped tabs for dropdown
@@ -1074,32 +1073,41 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     USE_CIRCUIT_NUMBERS, False
                 )
 
-                # If legacy upgrade requested and device prefix is absent, migrate to Friendly Names
-                if legacy_upgrade_requested and not bool(use_prefix):
-                    # Safety guard: if entities already appear to use the device prefix,
-                    # skip migration to avoid double-prefixing and just persist flags.
-                    if self._entities_have_device_prefix(self.hass, self.config_entry):
-                        _LOGGER.info(
-                            "Skipping migration: entities already use device prefix; persisting flags only"
-                        )
-                        use_prefix = True
-                        use_circuit_numbers = False
-                    else:
-                        await self._migrate_entity_ids(
-                            EntityNamingPattern.LEGACY_NAMES.value,
-                            EntityNamingPattern.FRIENDLY_NAMES.value,
-                        )
-                        use_prefix = True
-                        use_circuit_numbers = False
+                # If legacy upgrade requested, check if entities need renaming
+                needs_prefix_upgrade = False
+                _LOGGER.info("=== LEGACY UPGRADE DEBUG ===")
+                _LOGGER.info("legacy_upgrade_requested: %s", legacy_upgrade_requested)
+                _LOGGER.info("use_prefix (before): %s", use_prefix)
+
+                if legacy_upgrade_requested:
+                    # Mark this config entry for legacy prefix upgrade after reload
+                    # The migration code will check which entities actually need renaming
+                    self._mark_for_legacy_migration()
+                    use_prefix = True
+                    use_circuit_numbers = False
+                    needs_prefix_upgrade = True
 
                 filtered_input[USE_DEVICE_PREFIX] = use_prefix
                 filtered_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
 
+                # Set the prefix upgrade flag directly in filtered_input if upgrade is needed
+                if needs_prefix_upgrade:
+                    filtered_input["pending_legacy_migration"] = True
+                    _LOGGER.info("=== OPTIONS FLOW DEBUG ===")
+                    _LOGGER.info("Setting pending_legacy_migration flag directly in filtered_input")
+                    _LOGGER.info("Full filtered_input: %s", filtered_input)
+                    _LOGGER.info("Flag value: %s", filtered_input.get("pending_legacy_migration"))
+                    _LOGGER.info(
+                        "Flag type: %s", type(filtered_input.get("pending_legacy_migration"))
+                    )
+                    _LOGGER.info("=== OPTIONS FLOW DEBUG END ===")
+                else:
+                    _LOGGER.info("No prefix upgrade needed - needs_prefix_upgrade was False")
+
                 # Remove any entity naming pattern from input (shouldn't be there anyway)
                 filtered_input.pop(ENTITY_NAMING_PATTERN, None)
 
-                # Update global options in synthetic sensors if they changed
-                await self._update_global_options_if_changed(filtered_input)
+                # Global options are now handled natively during reload
 
                 return self.async_create_entry(title="", data=filtered_input)
 
@@ -1177,21 +1185,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         }
 
         # If legacy (no device prefix), show upgrade toggle in general options.
-        # Option 1: Detect by option presence/flag
+        # Check USE_DEVICE_PREFIX flag to determine if this is a legacy installation.
         is_legacy_install = not self.config_entry.options.get(USE_DEVICE_PREFIX, False)
-
-        # Option 2 (safety): Also guard by integration version.
-        # Legacy upgrade UI only applies to versions prior to 1.0.4 where
-        # non-prefixed entities were originally created. If the installed
-        # integration version is >= 1.0.4, always suppress the legacy toggle
-        # regardless of options state to avoid confusion on fresh installs.
-        try:
-            installed = Version(await async_get_version(self.hass))
-            if installed >= Version("1.0.4"):
-                is_legacy_install = False
-        except (ValueError, TypeError, AttributeError):
-            # On version parsing or attribute errors, fall back to option-based detection
-            pass
         if is_legacy_install:
             schema_fields[vol.Optional("legacy_upgrade_to_friendly", default=False)] = bool
             defaults["legacy_upgrade_to_friendly"] = False
@@ -1245,8 +1240,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     naming_options.get(USE_DEVICE_PREFIX),
                 )
 
-                # Migrate entity IDs in the entity registry
-                await self._migrate_entity_ids(current_pattern, new_pattern)
+                # Entity ID migration will be handled after reload via pending_legacy_migration flag
 
                 # Update only the naming-related options, preserve ALL other options
                 current_options = dict(self.config_entry.options)
@@ -1506,7 +1500,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                     loaded_yaml = await self.hass.async_add_executor_job(load_yaml_file)
                     # Use DynamicSimulationEngine internal validation
-                    engine = DynamicSimulationEngine(config_data=loaded_yaml)
+                    config = SimulationConfig(**loaded_yaml)
+                    engine = DynamicSimulationEngine(config_data=config)
                     await engine.initialize_async()
 
                     # Copy to simulation_configs directory
@@ -1558,93 +1553,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="simulation_import",
             data_schema=import_schema,
             errors=errors,
-        )
-
-    async def async_step_export_config(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle export synthetic sensor config."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            export_directory = user_input.get("directory", "").strip()
-
-            if not export_directory:
-                errors["directory"] = "Directory path is required"
-            else:
-                try:
-                    # Determine the correct sensor_set_id for this config entry
-                    # Prefer the deterministic id stored on the SpanPanel coordinator
-                    coordinator_data = self.hass.data.get(DOMAIN, {}).get(
-                        self.config_entry.entry_id, {}
-                    )
-                    coordinator = coordinator_data.get(COORDINATOR)
-
-                    sensor_set_id: str | None = None
-                    if coordinator is not None:
-                        # First choice: explicit value set during synthetic setup
-                        sensor_set_id = getattr(
-                            coordinator, "get_synthetic_sensor_set_id", lambda: None
-                        )()
-                        if not sensor_set_id:
-                            # Second choice: ask the synthetic coordinator for its computed value
-                            synth_coord = _synthetic_coordinators.get(self.config_entry.entry_id)
-                            if synth_coord:
-                                sensor_set_id = synth_coord.get_sensor_set_id()
-
-                    # Final fallback for simulator-mode entries when coordinator isn't available
-                    if sensor_set_id is None and self.config_entry.data.get(
-                        "simulation_mode", False
-                    ):
-                        device_identifier = slugify(
-                            self.config_entry.data.get("device_name", self.config_entry.title)
-                        )
-                        sensor_set_id = construct_sensor_set_id(device_identifier)
-
-                    if not sensor_set_id:
-                        raise RuntimeError("Unable to determine sensor_set_id for export")
-
-                    # Call the export service
-                    await self.hass.services.async_call(
-                        DOMAIN,
-                        "export_synthetic_config",
-                        {"directory": export_directory, "sensor_set_id": sensor_set_id},
-                        blocking=True,
-                    )
-
-                    # Return success message
-                    return self.async_create_entry(
-                        title="",
-                        data={},
-                        description="Synthetic sensor configuration exported successfully!",
-                    )
-
-                except Exception as e:
-                    _LOGGER.error("Failed to export config: %s", e)
-                    errors["base"] = f"Export failed: {str(e)}"
-
-        # Generate default filename with device name
-        device_name = self.config_entry.data.get("device_name", self.config_entry.title)
-        # Use slugify to make device name filesystem-safe (consistent with entity IDs)
-        if device_name and isinstance(device_name, str):
-            safe_device_name = slugify(device_name)
-        else:
-            safe_device_name = "span_panel"
-        default_filename = f"{safe_device_name}_sensor_config.yaml"
-        default_path = f"/tmp/{default_filename}"  # nosec
-
-        # Show export form with default file path
-        export_schema = vol.Schema(
-            {
-                vol.Required("directory", default=default_path): str,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="export_config",
-            data_schema=export_schema,
-            errors=errors,
-            description_placeholders={"filename": default_filename},
         )
 
     async def async_step_clone_panel_to_simulation(
@@ -1884,16 +1792,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Best-effort detection if entities already use the device prefix.
 
         Checks the entity registry for any entity belonging to this config entry where
-        the object_id starts with 'span_panel_'. Both FRIENDLY_NAMES and CIRCUIT_NUMBERS
-        patterns include the prefix; only LEGACY lacks it.
+        the object_id starts with the device name prefix. Both FRIENDLY_NAMES and CIRCUIT_NUMBERS
+        patterns include the device name prefix; only LEGACY lacks it.
         """
         registry = er.async_get(hass)
+
+        # Get the device name from config entry and sanitize it
+        device_name = config_entry.data.get("device_name", config_entry.title)
+        if not device_name:
+            return False
+
+        sanitized_device_name = slugify(device_name)
         for entry in registry.entities.values():
             try:
                 if entry.config_entry_id != config_entry.entry_id:
                     continue
                 object_id = entry.entity_id.split(".", 1)[1]
-                if object_id.startswith("span_panel_"):
+                # Check if the object_id starts with the device name followed by underscore
+                if object_id.startswith(f"{sanitized_device_name}_"):
                     return True
             except (IndexError, AttributeError):
                 continue
@@ -1908,72 +1824,23 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         else:  # LEGACY_NAMES
             return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
 
-    async def _update_global_options_if_changed(self, filtered_input: dict[str, Any]) -> None:
-        """Update global variables in sensor set if options changed.
+    def _mark_for_legacy_migration(self) -> None:
+        """Mark the config entry for legacy migration after reload.
 
-        Args:
-            filtered_input: The new options being saved
-
+        This method stores a flag in the config entry data that indicates a legacy
+        migration is needed. The integration will check for this flag after startup
+        but before the first update.
         """
-        try:
-            # Get the synthetic coordinator to access storage manager
-            if self.config_entry.entry_id not in _synthetic_coordinators:
-                _LOGGER.debug(
-                    "No synthetic coordinator found for entry %s", self.config_entry.entry_id
-                )
-                return
+        _LOGGER.info("Marking config entry for legacy migration after reload")
 
-            synthetic_coord = _synthetic_coordinators[self.config_entry.entry_id]
-            storage_manager = synthetic_coord.get_storage_manager()
+        # Update the config entry data to include the migration flag
+        current_data = dict(self.config_entry.data)
+        current_data["pending_legacy_migration"] = True
 
-            if not storage_manager:
-                _LOGGER.debug("No storage manager found for entry %s", self.config_entry.entry_id)
-                return
+        _LOGGER.info("Setting pending_legacy_migration flag in config entry data: %s", current_data)
 
-            # Get the sensor set ID
-            sensor_set_id = synthetic_coord.get_sensor_set_id()
-            if not sensor_set_id:
-                _LOGGER.debug("No sensor set ID found for entry %s", self.config_entry.entry_id)
-                return
-
-            # Get the sensor set
-            sensor_set = storage_manager.get_sensor_set(sensor_set_id)
-            if not sensor_set or not sensor_set.exists:
-                _LOGGER.debug("Sensor set %s not found or doesn't exist", sensor_set_id)
-                return
-
-            # Check if grace period changed
-            old_grace_period = self.config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
-            new_grace_period = filtered_input.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
-
-            if old_grace_period != new_grace_period:
-                _LOGGER.info(
-                    "Updating global grace period from %s to %s minutes",
-                    old_grace_period,
-                    new_grace_period,
-                )
-                await sensor_set.async_set_global_variable(
-                    "energy_grace_period_minutes", new_grace_period
-                )
-
-            # Check if API retry/timeout settings changed
-            api_settings = [
-                (CONF_API_RETRIES, "api_retries"),
-                (CONF_API_RETRY_TIMEOUT, "api_retry_timeout"),
-                (CONF_API_RETRY_BACKOFF_MULTIPLIER, "api_retry_backoff_multiplier"),
-            ]
-
-            for option_key, global_key in api_settings:
-                old_value = self.config_entry.options.get(option_key)
-                new_value = filtered_input.get(option_key)
-                if old_value != new_value and new_value is not None:
-                    _LOGGER.info(
-                        "Updating global %s from %s to %s", global_key, old_value, new_value
-                    )
-                    await sensor_set.async_set_global_variable(global_key, new_value)
-
-        except Exception as e:
-            _LOGGER.error("Error updating global options: %s", e)
+        # Update the config entry with the migration flag
+        self.hass.config_entries.async_update_entry(self.config_entry, data=current_data)
 
 
 # Register the config flow handler

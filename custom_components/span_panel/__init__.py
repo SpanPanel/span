@@ -7,7 +7,6 @@ from datetime import datetime
 import logging
 import os
 
-import ha_synthetic_sensors
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
@@ -18,7 +17,6 @@ from homeassistant.const import (
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
-import voluptuous as vol
 
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401  # type: ignore[misc]
@@ -31,15 +29,14 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     NAME,
-    SENSOR_SET,
-    STORAGE_MANAGER,
+    USE_CIRCUIT_NUMBERS,
+    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_to_synthetic_sensors
 
 # Handle solar options changes before reload (battery is now native sensor)
 from .options import (
-    ENERGY_REPORTING_GRACE_PERIOD,
     INVERTER_ENABLE,
     INVERTER_LEG1,
     INVERTER_LEG2,
@@ -47,13 +44,6 @@ from .options import (
 )
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelAuthError, set_async_delay_func
-from .synthetic_sensors import (
-    async_export_synthetic_config_service,
-    cleanup_synthetic_sensors,
-)
-from .synthetic_solar import (
-    handle_solar_options_change,
-)
 from .util import panel_to_device_info
 
 PLATFORMS: list[Platform] = [
@@ -73,21 +63,20 @@ _LOGGER.debug("SPAN PANEL MODULE LOADED! Version: %s", CURRENT_CONFIG_VERSION)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Migrate config entry for synthetic sensor YAML generation."""
+    """Migrate config entry - normalize unique_ids and set migration flag."""
 
     if config_entry.version < CURRENT_CONFIG_VERSION:
         _LOGGER.debug(
-            "Migrating config entry %s from version %s to %s for synthetic sensor setup",
+            "Migrating config entry %s from version %s to %s",
             config_entry.entry_id,
             config_entry.version,
             CURRENT_CONFIG_VERSION,
         )
 
-        # Migrate this config entry to synthetic sensors
-        success = await migrate_config_entry_to_synthetic_sensors(hass, config_entry)
-
-        if not success:
-            _LOGGER.error("Failed to migrate config entry %s", config_entry.entry_id)
+        # Call the actual migration logic
+        migration_success = await migrate_config_entry_to_synthetic_sensors(hass, config_entry)
+        if not migration_success:
+            _LOGGER.error("Migration failed for config entry %s", config_entry.entry_id)
             return False
 
         # Update config entry version using HA API
@@ -118,20 +107,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register the HA-compatible delay function for retry logic
     set_async_delay_func(ha_compatible_delay)
     _LOGGER.debug("Configured span-panel-api with HA-compatible delay function")
-
-    # Configure ha-synthetic-sensors logging to match this integration's level
-    try:
-        # Use the same logging level as this integration
-        integration_level = _LOGGER.getEffectiveLevel()
-        ha_synthetic_sensors.configure_logging(integration_level)
-
-        _LOGGER.debug(
-            "Synthetic sensors logging configured to level %s",
-            logging.getLevelName(integration_level),
-        )
-
-    except Exception as e:
-        _LOGGER.warning("Failed to configure ha-synthetic-sensors logging: %s", e)
 
     config = entry.data
     host = config[CONF_HOST]
@@ -224,16 +199,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Initialize the API client using Long-Lived Pattern
         await span_panel.api.setup()
 
-        # Verify the connection is working by doing a test call
-        _LOGGER.debug("Testing API connection...")
-        test_success = await span_panel.api.ping()
-        if not test_success:
-            _LOGGER.error("API ping test failed during setup")
-            raise ConnectionError("Failed to establish connection to SPAN Panel")
+        async def _test_connection() -> None:
+            """Test API connection and raise ConnectionError if it fails."""
+            ping_result = await span_panel.api.ping()
+            if not ping_result:
+                _LOGGER.error("API ping test failed during setup")
+                raise ConnectionError("Failed to establish connection to SPAN Panel")
 
-        # If we have a token, also test authenticated endpoints
-        if span_panel.api.access_token:
-            _LOGGER.debug("Testing authenticated API connection...")
+        async def _test_authenticated_connection() -> None:
+            """Test authenticated API connection and raise ConnectionError if it fails."""
             try:
                 auth_test_success = await span_panel.api.ping_with_auth()
                 if not auth_test_success:
@@ -243,13 +217,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except SpanPanelAuthError as e:
                 _LOGGER.error("Authentication error during setup: %s", e)
                 _LOGGER.error(
-                    "The stored access token may be invalid. Please reconfigure the integration with a new token."
+                    "The stored access token may be invalid. "
+                    "Please reconfigure the integration with a new token."
                 )
                 raise ConnectionError(
                     f"Authentication failed: {e}. Please reconfigure with a new access token."
                 ) from e
-        else:
-            auth_test_success = True
+
+        # Verify the connection is working by doing a test call
+        _LOGGER.debug("Testing API connection...")
+        await _test_connection()
+
+        # If we have a token, also test authenticated endpoints
+        if span_panel.api.access_token:
+            _LOGGER.debug("Testing authenticated API connection...")
+            await _test_authenticated_connection()
 
         _LOGGER.debug("Successfully set up and tested SPAN Panel API client")
 
@@ -308,40 +290,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if entry.title == serial_number:
             hass.config_entries.async_update_entry(entry, title=smart_device_name)
 
-        # PHASE 1 Ensure device is registered BEFORE synthetic sensors are created
+        # PHASE 1 Ensure device is registered BEFORE sensors are created
         await ensure_device_registered(hass, entry, span_panel, smart_device_name)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-        # Register export synthetic config service
-        if not hass.services.has_service(DOMAIN, "export_synthetic_config"):
-            export_service_schema = vol.Schema(
-                {
-                    vol.Required("directory"): str,
-                    vol.Required("sensor_set_id"): str,
-                }
-            )
+        # Check for pending legacy migration after full setup is complete
+        if config.get("pending_legacy_migration", False):
+            _LOGGER.info("Found pending legacy migration flag, performing migration")
+            hass.async_create_task(_handle_pending_legacy_migration(hass, entry, coordinator))
+        else:
+            _LOGGER.info("No pending legacy migration flag found")
 
-            hass.services.async_register(
-                DOMAIN,
-                "export_synthetic_config",
-                async_export_synthetic_config_service,
-                schema=export_service_schema,
-            )
-
-        return True
-
-    except Exception as e:
-        _LOGGER.error("Failed to setup SPAN Panel integration: %s", e, exc_info=True)
+    except Exception:
         # Clean up on failure
         try:
             if "span_panel" in locals():
                 span_panel_instance = locals().get("span_panel")
                 if isinstance(span_panel_instance, SpanPanel):
                     await span_panel_instance.close()
-        except Exception as cleanup_error:
+        except (ConnectionError, OSError, TimeoutError, AttributeError) as cleanup_error:
             _LOGGER.debug("Error during cleanup: %s", cleanup_error)
         raise
+    else:
+        return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -351,12 +323,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Reset span-panel-api delay function to default
     set_async_delay_func(None)  # Reset to default asyncio.sleep
     _LOGGER.debug("Reset span-panel-api delay function to default")
-
-    # Clean up synthetic sensor coordinator
-    try:
-        await cleanup_synthetic_sensors(entry)
-    except Exception as e:
-        _LOGGER.error("Error cleaning up synthetic sensors: %s", e)
 
     # Get the coordinator and clean up resources
     coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
@@ -390,32 +356,41 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return bool(unload_ok)
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove a config entry and clean up all associated data."""
+    _LOGGER.debug("Removing SPAN Panel integration entry: %s", entry.entry_id)
+
+    # Ensure the entry is unloaded first
+    if entry.state.recoverable:
+        await async_unload_entry(hass, entry)
+
+    # Additional cleanup for any remaining data
+    # This is called when the entry is permanently removed from Home Assistant
+    _LOGGER.debug("SPAN Panel integration entry removed: %s", entry.entry_id)
+
+
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Update listener."""
-    _LOGGER.info("=== SPAN PANEL UPDATE LISTENER CALLED ===")
-    _LOGGER.info("Configuration options changed, reloading SPAN Panel integration")
-    _LOGGER.info("Update listener called with options: %s", entry.options)
-    _LOGGER.info("Update listener called for entry_id: %s, title: %s", entry.entry_id, entry.title)
+    _LOGGER.debug("=== SPAN PANEL UPDATE LISTENER CALLED ===")
+    _LOGGER.debug("Configuration options changed, reloading SPAN Panel integration")
+    _LOGGER.debug("Update listener called with options: %s", entry.options)
+    _LOGGER.debug("Update listener called for entry_id: %s, title: %s", entry.entry_id, entry.title)
     try:
         # Check if Home Assistant is shutting down
-        if hass.state in (CoreState.stopping, CoreState.final_write, CoreState.not_running):
+        if hass.state is not CoreState.running:
             _LOGGER.debug("Home Assistant is shutting down, skipping update listener")
             return
 
         # Get the coordinator from hass data
         coordinator_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
         coordinator = coordinator_data.get(COORDINATOR)
-        storage_manager = coordinator_data.get(STORAGE_MANAGER)
-        sensor_set = coordinator_data.get(SENSOR_SET)
 
         _LOGGER.debug(
-            "Update listener - coordinator: %s, storage_manager: %s, sensor_set: %s",
+            "Update listener - coordinator: %s",
             coordinator is not None,
-            storage_manager is not None,
-            sensor_set is not None,
         )
 
-        if coordinator and sensor_set:
+        if coordinator:
             # Handle simulation options change (offline minutes, start time)
             simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
 
@@ -427,7 +402,8 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
                         "Found existing SpanPanel API instance, updating simulation parameters"
                     )
 
-                    # Update simulation offline mode - this should start the offline timer from "now"
+                    # Update simulation offline mode - this should start the offline timer
+                    # from "now"
                     # The simulation_start_time is separate and used for the simulated time of day
                     span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
                 else:
@@ -435,11 +411,12 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
             else:
                 _LOGGER.warning("SpanPanel instance not found in coordinator")
 
-            # Handle solar options change
+            # Handle solar options change - native sensors are created/removed via reload
             solar_enabled = entry.options.get(INVERTER_ENABLE, False)
-            # Coerce legs to integers to handle legacy string-stored options
             leg1_raw = entry.options.get(INVERTER_LEG1, 0)
             leg2_raw = entry.options.get(INVERTER_LEG2, 0)
+
+            # Coerce legs to integers to handle legacy string-stored options
             try:
                 leg1 = int(leg1_raw)
             except (TypeError, ValueError):
@@ -452,52 +429,23 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
             _LOGGER.debug(
                 "Solar options change - enabled: %s, leg1: %s, leg2: %s", solar_enabled, leg1, leg2
             )
-            _LOGGER.debug("Entry options: %s", entry.options)
 
-            # Check if we're still running before handling solar options
-            if hass.state in (CoreState.stopping, CoreState.final_write, CoreState.not_running):
-                _LOGGER.debug("Home Assistant is shutting down, skipping solar options change")
-                return
-
-            # Get device name from config entry
-            device_name = entry.data.get("device_name", entry.title)
-            result = await handle_solar_options_change(
-                hass, entry, coordinator, sensor_set, solar_enabled, leg1, leg2, device_name
-            )
-            if not result:
-                _LOGGER.warning("Solar options change failed")
-
-            # Handle grace period global variable update
-            old_grace_period = getattr(coordinator, "_last_grace_period", 15)
-            new_grace_period = entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
-
-            if old_grace_period != new_grace_period:
-                _LOGGER.info(
-                    "Updating global grace period from %s to %s minutes",
-                    old_grace_period,
-                    new_grace_period,
+            # With native sensors, solar configuration changes require integration reload
+            # to recreate sensors with the new configuration
+            if solar_enabled and (leg1 <= 0 or leg2 <= 0):
+                _LOGGER.warning(
+                    "Solar enabled but invalid leg configuration: leg1=%s, leg2=%s", leg1, leg2
                 )
-                try:
-                    await sensor_set.async_set_global_variable(
-                        "energy_grace_period_minutes", new_grace_period
-                    )
-                    # Store the new value for future comparisons
-                    coordinator._last_grace_period = new_grace_period
-                except Exception as e:
-                    _LOGGER.error("Failed to update global grace period: %s", e)
 
-            # Precision options are only set during initial setup
-
-            # Battery is now handled as a native sensor during reload
-            # No need for separate battery options handling
+            _LOGGER.debug("Solar options changed - integration will reload to apply changes")
 
             # Start/refresh performance instrumentation immediately if enabled
 
         else:
-            _LOGGER.warning("No coordinator or storage manager found for options change handling")
+            _LOGGER.warning("No coordinator found for options change handling")
 
         # Check again if Home Assistant is shutting down before reload
-        if hass.state in (CoreState.stopping, CoreState.final_write, CoreState.not_running):
+        if hass.state is not CoreState.running:
             _LOGGER.debug("Home Assistant is shutting down, skipping reload")
             return
 
@@ -554,6 +502,7 @@ def _requires_full_reload(entry: ConfigEntry) -> bool:
 
     # For now, reload for solar and other configuration changes.
     # The precision and simulation changes are applied in-place before this check.
+    _LOGGER.info("_requires_full_reload returning True - will trigger reload")
     return True
 
 
@@ -614,9 +563,7 @@ async def ensure_device_registered(
     # Use per-entry identifier for simulators to avoid collisions
     is_simulator = bool(entry.data.get("simulation_mode", False))
     desired_identifier = (
-        slugify(device_name)
-        if is_simulator and isinstance(device_name, str) and device_name
-        else serial_number
+        slugify(device_name) if is_simulator and device_name and device_name else serial_number
     )
     existing_device = device_registry.async_get_device(identifiers={(DOMAIN, desired_identifier)})
 
@@ -650,7 +597,7 @@ async def ensure_device_registered(
     # entities to the new target device. Fresh simulator entries register the device first
     # and won't need reassignment (no-op in that case).
     try:
-        if is_simulator and target_device is not None:
+        if is_simulator:
             entity_registry = er.async_get(hass)
             entries = er.async_entries_for_config_entry(entity_registry, entry.entry_id)
             for ent in entries:
@@ -662,7 +609,41 @@ async def ensure_device_registered(
                         target_device.id,
                     )
                     entity_registry.async_update_entity(ent.entity_id, device_id=target_device.id)
-    except Exception as mig_err:
+    except (KeyError, ValueError, AttributeError) as mig_err:
         _LOGGER.warning(
             "DEVICE_REASSIGN: Failed to reassign entities to target device: %s", mig_err
         )
+
+
+async def _handle_pending_legacy_migration(
+    hass: HomeAssistant, entry: ConfigEntry, coordinator: SpanPanelCoordinator
+) -> None:
+    """Handle pending legacy migration after integration startup.
+
+    This function is called when a pending_legacy_migration flag is found in the
+    config entry data. It performs the migration and then cleans up the flag.
+    The migration happens after the coordinator is ready but before normal operation.
+    """
+    # Always remove the flag first to prevent infinite loops
+    _LOGGER.info("Removing pending_legacy_migration flag to prevent loops")
+    current_data = dict(entry.data)
+    current_data.pop("pending_legacy_migration", None)
+    hass.config_entries.async_update_entry(entry, data=current_data)
+
+    try:
+        _LOGGER.info("Starting pending legacy migration")
+
+        # Perform the migration from legacy to device prefix
+        old_flags = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
+        new_flags = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
+
+        success = await coordinator.migrate_synthetic_entities(old_flags, new_flags)
+
+        if success:
+            _LOGGER.info("Pending legacy migration completed successfully")
+            _LOGGER.info("Migration completed - no reload needed, entities updated in registry")
+        else:
+            _LOGGER.error("Pending legacy migration failed")
+
+    except Exception as e:
+        _LOGGER.error("Pending legacy migration task failed: %s", e, exc_info=True)

@@ -6,8 +6,6 @@ from typing import Final
 
 DOMAIN: Final = "span_panel"
 COORDINATOR = "coordinator"
-STORAGE_MANAGER = "storage_manager"
-SENSOR_SET = "sensor_set"
 NAME = "name"
 
 CONF_SERIAL_NUMBER = "serial_number"
@@ -113,7 +111,6 @@ CONFIG_API_RETRY_BACKOFF_MULTIPLIER = 2.0
 SIGNAL_STAGE_SWITCHES: Final = f"{DOMAIN}_stage_switches"
 SIGNAL_STAGE_SELECTS: Final = f"{DOMAIN}_stage_selects"
 SIGNAL_STAGE_NATIVE_SENSORS: Final = f"{DOMAIN}_stage_native_sensors"
-SIGNAL_STAGE_SYNTHETIC_SENSORS: Final = f"{DOMAIN}_stage_synthetic_sensors"
 
 
 class CircuitRelayState(enum.Enum):

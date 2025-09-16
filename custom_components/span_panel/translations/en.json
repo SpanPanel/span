@@ -103,12 +103,12 @@
           "api_retry_timeout": "API Retry Timeout (seconds)",
           "api_retry_backoff_multiplier": "API Retry Backoff Multiplier",
           "energy_reporting_grace_period": "Energy Sensor Grace Period (minutes)",
-          "legacy_upgrade_to_friendly": "Upgrade to Friendly Names"
+          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's"
         },
         "data_description": {
           "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
           "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
-          "legacy_upgrade_to_friendly": "Upgrade your entity naming from legacy format to friendly names. This will rename your existing entities to use descriptive names instead of circuit numbers."
+          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
         }
       },
       "entity_naming": {
