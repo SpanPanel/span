@@ -14,18 +14,17 @@ monitoring and control of your home's electrical system.
 [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-This integration relies on the OpenAPI document sourced from the SPAN Panel. The integration may break as your panel is updated if SPAN changes the API in an
-incompatible way.
+This integration relies on the OpenAPI interface contract sourced from the SPAN Panel. The integration may break if SPAN changes the API in an incompatible way.
 
-We will try to keep this integration working, but cannot provide technical support for either SPAN or your home's electrical system. The software is provided
-as-is with no warranty or guarantee of performance or suitability to your particular setting.
+We cannot provide technical support for either SPAN or your home's electrical system. The software is provided as-is with no warranty or guarantee of
+performance or suitability to your particular setting.
 
-What this integration does is provide the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and
-the ability to control user-manageable panel circuits.
+This integration provides the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and the ability
+to control user-manageable panel circuits.
 
 ## What's New
 
-**MAJOR UPGRADE**
+### Major Upgrade
 
 **Before upgrading to version 1.2.x, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
 While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
@@ -34,8 +33,8 @@ While we've implemented migration logic to preserve your existing entities and a
 interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides
 additional support we may adapt.
 
-**New Features**: This version introduces net energy calculations, simulation support, configurable timeouts, SSL support, circuit name sync,
-and flexible entity naming patterns. See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
+**New Features**: This version introduces net energy calculations, simulation support, configurable timeouts, SSL support, circuit name sync, and flexible
+entity naming patterns. See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
 
 ### HACS Upgrade Process
 
@@ -63,7 +62,7 @@ If you encounter any issues during the upgrade, you can:
 
 ### Available Devices & Entities
 
-This integration will provide a device for your SPAN panel. This device will have entities for:
+This integration provides a Home Assistant device for your SPAN panel with entities for:
 
 - User Managed Circuits
   - On/Off Switch (user managed circuits)

@@ -9,17 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### 🔧 Technical Improvements
 
--**Improve Performance**: Revert to native sensors (non-synthetic) to avoid heavyweight calculation engine
--**Fix Legacy Migration**: For installations that migrated through versions prior to 1.0.4 support panel
-  prefix migration/keys
--**Fix sensor circuit-based naming**: For new installations with circuit
-  naming provide consistent behavior where all circuits, other than panel have circuit name for tabs
+-**Improve Performance**: Revert to native sensors (non-synthetic) to avoid heavyweight calculation engine -**Fix Legacy Migration**: For installations that
+migrated through versions prior to 1.0.4 support panel prefix migration/keys -**Fix sensor circuit-based naming**: For new installations with circuit naming
+provide consistent behavior where all circuits, other than panel have circuit name for tabs
 
-## [1.2.3] - 2025-08-XX  Rescinded for performance regression
+## [1.2.3] - 2025-08-XX Rescinded for performance regression
 
 ## [1.2.2] - 2025-06-XX
 
-⚠️ **MAJOR UPGRADE WARNING** ⚠️️
+### Major Upgrade
 
 **Before upgrading to version 1.2.3, please backup your Home Assistant configuration and database.** This version introduces some architectural changes. While
 we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
