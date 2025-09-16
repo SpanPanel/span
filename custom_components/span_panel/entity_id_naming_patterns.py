@@ -349,7 +349,7 @@ class EntityIdMigrationManager:
 
             # Save the changes
             if migrated_count > 0:
-                sensor_manager.modify()
+                await sensor_manager.modify()
                 _LOGGER.info(
                     "Non-legacy migration completed: %d migrated, %d skipped",
                     migrated_count,
