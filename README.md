@@ -34,7 +34,7 @@ While we've implemented migration logic to preserve your existing entities and a
 interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides
 additional support we may adapt.
 
-**New Features**: This version introduces synthetic sensors, net energy calculations, simulation support, configurable timeouts, SSL support, circuit name sync,
+**New Features**: This version introduces net energy calculations, simulation support, configurable timeouts, SSL support, circuit name sync,
 and flexible entity naming patterns. See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
 
 ### HACS Upgrade Process
