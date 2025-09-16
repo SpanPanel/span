@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # Python dependencies managed by Poetry
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 1
+    assignees:
+      - "cayossarian"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
+    ignore:
+      # Ignore major version updates for Home Assistant to prevent breaking changes
+      - dependency-name: "homeassistant"
+        update-types: ["version-update:semver-major"]
+      # Ignore major version updates for span-panel-api since it's a local dependency
+      - dependency-name: "span-panel-api"
+        update-types: ["version-update:semver-major"]
+      # Ignore pytest-homeassistant-custom-component major updates to maintain compatibility
+      - dependency-name: "pytest-homeassistant-custom-component"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 1
+    assignees:
+      - "cayossarian"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
