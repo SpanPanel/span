@@ -5,12 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.3] - 2025-01-XX
+## [1.2.3] - 2025-09-XX
+
+### 🔧 Technical Improvements
+
+-**Improve Performance**: Revert to native sensors (non-synthetic) to avoid heavyweight calculation engine
+-**Fix Legacy Migration**: For installations that migrated through versions prior to 1.0.4 support panel
+  prefix migration/keys
+-**Fix sensor circuit-based naming**: For new installations with circuit
+  naming provide consistent behavior where all circuits, other than panel have circuit name for tabs
+
+## [1.2.2] - 2025-06-XX
 
 ⚠️ **MAJOR UPGRADE WARNING** ⚠️️
 
-**Before upgrading to version 1.2.3, please backup your Home Assistant configuration and database.** This version introduces some architectural changes.
-While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
+**Before upgrading to version 1.2.3, please backup your Home Assistant configuration and database.** This version introduces some architectural changes. While
+we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
 
 ### 🚀 Features
 
