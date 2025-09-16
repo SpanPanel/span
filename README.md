@@ -25,9 +25,9 @@ the ability to control user-manageable panel circuits.
 
 ## What's New
 
-⚠️⚠️ **MAJOR UPGRADE** ⚠️⚠️
+**MAJOR UPGRADE**
 
-**Before upgrading to version 1.2.3, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
+**Before upgrading to version 1.2.x, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
 While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
 
 **OpenAPI Support**: The integration now uses the OpenAPI specification provided by the SPAN panel. This change provides a reliable foundation for future
