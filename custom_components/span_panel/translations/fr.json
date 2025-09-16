@@ -98,12 +98,12 @@
           "api_retry_timeout": "Délai de tentative API (secondes)",
           "api_retry_backoff_multiplier": "Multiplicateur de délai de tentative API",
           "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)",
-          "legacy_upgrade_to_friendly": "Mettre à niveau vers des noms conviviaux"
+          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's"
         },
         "data_description": {
           "enable_solar_circuit": "Activer les capteurs synthétiques pour la surveillance de l'onduleur solaire. Nécessite la sélection de deux onglets non mappés sur des phases électriques opposées.",
           "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
-          "legacy_upgrade_to_friendly": "Mettez à niveau la nomenclature des entités du format hérité vers des noms conviviaux. Cela renommera vos entités existantes pour utiliser des noms descriptifs au lieu de numéros de circuit."
+          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
         }
       },
       "entity_naming": {

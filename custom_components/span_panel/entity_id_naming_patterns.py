@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
-from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
+from .const import COORDINATOR, DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from .helpers import (
     construct_multi_tab_entity_id_from_key,
     is_panel_level_sensor_key,
@@ -21,42 +20,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class EntityIdMigrationManager:
-    """Manages entity ID migrations for synthetic sensors when naming patterns change."""
+    """Manages entity ID migrations for sensors when naming patterns change."""
 
     def __init__(self, hass: HomeAssistant, config_entry_id: str) -> None:
         """Initialize the migration manager."""
         self.hass = hass
         self.config_entry_id = config_entry_id
-
-    async def migrate_synthetic_entities(
-        self, old_flags: dict[str, bool], new_flags: dict[str, bool]
-    ) -> bool:
-        """Migrate synthetic sensor entity IDs when naming patterns change.
-
-        Args:
-            old_flags: Previous configuration flags
-                {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
-            new_flags: New configuration flags {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
-
-        Returns:
-            True if migration was successful, False otherwise
-
-        """
-        _LOGGER.info(
-            "Starting synthetic entity migration: old_flags=%s, new_flags=%s",
-            old_flags,
-            new_flags,
-        )
-
-        # Determine migration type based on old flags
-        old_use_device_prefix = old_flags.get(USE_DEVICE_PREFIX, False)
-
-        if not old_use_device_prefix:
-            # Legacy migration: no device prefix -> device prefix + friendly names
-            return await self._migrate_legacy_to_prefix(old_flags, new_flags)
-        else:
-            # Non-legacy migration: device prefix friendly <-> device prefix circuit numbers
-            return await self._migrate_non_legacy_patterns(old_flags, new_flags)
 
     async def _migrate_legacy_to_prefix(
         self, old_flags: dict[str, bool], new_flags: dict[str, bool]
@@ -77,11 +46,14 @@ class EntityIdMigrationManager:
         _LOGGER.info("Performing legacy to device prefix migration")
 
         try:
+            _LOGGER.info("Starting legacy migration for config entry: %s", self.config_entry_id)
+
             # Get entity registry
             registry = er.async_get(self.hass)
 
             # Get device name for prefix
-            coordinator = self.hass.data["span_panel"][self.config_entry_id]
+            coordinator_data = self.hass.data[DOMAIN][self.config_entry_id]
+            coordinator = coordinator_data[COORDINATOR]
             device_name = coordinator.config_entry.data.get(
                 "device_name", coordinator.config_entry.title
             )
@@ -90,28 +62,74 @@ class EntityIdMigrationManager:
                 return False
 
             sanitized_device_name = slugify(device_name)
+            _LOGGER.info(
+                "Using device name for migration: %s (sanitized: %s)",
+                device_name,
+                sanitized_device_name,
+            )
 
-            # Get all entities owned by this config entry
+            # Get entities for this config entry using HA helper
+            config_entry_entities = er.async_entries_for_config_entry(
+                registry, self.config_entry_id
+            )
+
+            _LOGGER.info(
+                "Found %d entities for config_entry_id: %s",
+                len(config_entry_entities),
+                self.config_entry_id,
+            )
+
+            # Filter entities that need renaming (don't already have device prefix)
             entities_to_migrate = []
-            for entity in registry.entities.values():
-                if entity.config_entry_id == self.config_entry_id:
+            for entity in config_entry_entities:
+                object_id = entity.entity_id.split(".", 1)[1]
+                _LOGGER.debug(
+                    "Checking entity %s: object_id='%s', prefix='%s_', starts_with=%s",
+                    entity.entity_id,
+                    object_id,
+                    sanitized_device_name,
+                    object_id.startswith(f"{sanitized_device_name}_"),
+                )
+                if not object_id.startswith(f"{sanitized_device_name}_"):
                     entities_to_migrate.append(entity)
+                    _LOGGER.debug("Found entity to migrate: %s", entity.entity_id)
+                else:
+                    _LOGGER.debug("Skipping entity (already has prefix): %s", entity.entity_id)
 
             if not entities_to_migrate:
-                _LOGGER.debug("No entities found to migrate")
+                _LOGGER.warning(
+                    "No entities found to migrate for config entry: %s", self.config_entry_id
+                )
                 return True
 
             _LOGGER.info("Found %d entities to migrate", len(entities_to_migrate))
 
-            # Migrate each entity
-            migrated_count = 0
+            # Remove duplicates from the migration list
+            seen_entity_ids = set()
+            unique_entities_to_migrate = []
             for entity in entities_to_migrate:
+                if entity.entity_id not in seen_entity_ids:
+                    seen_entity_ids.add(entity.entity_id)
+                    unique_entities_to_migrate.append(entity)
+                else:
+                    _LOGGER.debug("Removing duplicate entity: %s", entity.entity_id)
+
+            entities_to_migrate = unique_entities_to_migrate
+            _LOGGER.info(
+                "After deduplication: %d unique entities to migrate", len(entities_to_migrate)
+            )
+
+            # Migrate each entity (remove from list after processing to avoid duplicates)
+            migrated_count = 0
+
+            while entities_to_migrate:
+                entity = entities_to_migrate.pop(0)  # Take first entity and remove it from list
                 current_entity_id = entity.entity_id
                 platform, object_id = current_entity_id.split(".", 1)
 
-                # Check if this entity already has the device prefix
+                # Safety check: skip if entity already has the device prefix
                 if object_id.startswith(f"{sanitized_device_name}_"):
-                    # Already has device prefix, no migration needed
+                    _LOGGER.debug("Skipping entity (already has prefix): %s", current_entity_id)
                     continue
 
                 # Generate new entity ID with device prefix
@@ -124,7 +142,7 @@ class EntityIdMigrationManager:
                     new_entity_id,
                 )
 
-                # Update the entity registry
+                # Update the entity registry (statistics should be transferred automatically in HA 2023.4+)
                 registry.async_update_entity(current_entity_id, new_entity_id=new_entity_id)
                 migrated_count += 1
 
@@ -136,94 +154,6 @@ class EntityIdMigrationManager:
 
         except Exception as e:
             _LOGGER.error("Legacy migration failed: %s", e)
-            return False
-
-    async def _migrate_non_legacy_patterns(
-        self, old_flags: dict[str, bool], new_flags: dict[str, bool]
-    ) -> bool:
-        """Migrate between non-legacy patterns (friendly names <-> circuit numbers).
-
-        This migration excludes:
-        - Panel-level sensors (they don't change between friendly/circuit patterns)
-        - User-customized entity IDs (preserve user customizations)
-
-        Args:
-            old_flags: Previous flags with USE_DEVICE_PREFIX=True
-            new_flags: New flags with USE_DEVICE_PREFIX=True
-
-        Returns:
-            True if migration was successful, False otherwise
-
-        """
-        _LOGGER.info("Performing non-legacy pattern migration")
-
-        try:
-            # Get sensor manager from hass data
-            sensor_manager = (
-                self.hass.data.get("ha_synthetic_sensors", {})
-                .get("sensor_managers", {})
-                .get(self.config_entry_id)
-            )
-            if not sensor_manager:
-                _LOGGER.error("Sensor manager not found for config entry %s", self.config_entry_id)
-                return False
-
-            # Export current sensor configurations
-            current_sensors = await sensor_manager.export()
-            if not current_sensors or "sensors" not in current_sensors:
-                _LOGGER.warning("No sensors found to migrate")
-                return True
-
-            # Get coordinator and span panel data
-            coordinator = self.hass.data["span_panel"][self.config_entry_id]
-            span_panel = coordinator.data
-
-            # Migrate each sensor
-            migrated_sensors = current_sensors.copy()
-            entity_id_changes = {}
-
-            for sensor_key, sensor_config in current_sensors["sensors"].items():
-                current_entity_id = sensor_config.get("entity_id")
-                if not current_entity_id:
-                    continue
-
-                # Skip panel-level sensors (they don't change between friendly/circuit patterns)
-                if is_panel_level_sensor_key(sensor_key):
-                    continue
-
-                # Check if user has customized this entity ID
-                if await self._is_entity_id_customized(
-                    sensor_key, sensor_config, coordinator, span_panel, old_flags
-                ):
-                    _LOGGER.debug("Skipping customized entity: %s", current_entity_id)
-                    continue
-
-                # Generate new entity ID using helpers with new flags
-                new_entity_id = await self._generate_new_entity_id(
-                    sensor_key, sensor_config, coordinator, span_panel, new_flags
-                )
-
-                if new_entity_id and new_entity_id != current_entity_id:
-                    _LOGGER.info(
-                        "Non-legacy migration: %s -> %s",
-                        current_entity_id,
-                        new_entity_id,
-                    )
-                    migrated_sensors["sensors"][sensor_key]["entity_id"] = new_entity_id
-                    entity_id_changes[current_entity_id] = new_entity_id
-
-            # Update cross-references throughout the YAML
-            if entity_id_changes:
-                self._update_cross_references(migrated_sensors, entity_id_changes)
-
-            # Store the updated configuration
-            await sensor_manager.modify(migrated_sensors)
-
-            _LOGGER.info("Non-legacy migration completed successfully")
-            return True
-
-        except Exception as e:
-            _LOGGER.error("Non-legacy migration failed: %s", e)
             return False
 
     async def _generate_new_entity_id(
@@ -336,37 +266,143 @@ class EntityIdMigrationManager:
         expected_id_str = str(expected_entity_id)
         return current_id_str != expected_id_str
 
-    def _update_cross_references(
-        self, yaml_data: dict[str, Any], entity_id_changes: dict[str, str]
-    ) -> None:
-        """Update all cross-references to changed entity IDs throughout the YAML document.
+    async def _migrate_non_legacy_patterns(
+        self, old_flags: dict[str, bool], new_flags: dict[str, bool]
+    ) -> bool:
+        """Migrate between non-legacy naming patterns.
 
-        Used when migrating from no device prefix to device prefix friendly entity_id
-        From pre 1.0.4 to 1.0.4+
+        This handles migrations between different non-legacy patterns, such as:
+        - Device prefix without circuit numbers -> Device prefix with circuit numbers
+        - Device prefix with circuit numbers -> Device prefix without circuit numbers
 
         Args:
-            yaml_data: Complete YAML configuration dictionary
-            entity_id_changes: Dictionary mapping old entity IDs to new entity IDs
+            old_flags: Configuration flags before the change
+            new_flags: Configuration flags after the change
+
+        Returns:
+            True if migration was successful, False otherwise
 
         """
+        _LOGGER.info("Performing non-legacy pattern migration")
 
-        def update_recursive(obj: Any) -> Any:
-            if isinstance(obj, dict):
-                return {key: update_recursive(value) for key, value in obj.items()}
-            elif isinstance(obj, list):
-                return [update_recursive(item) for item in obj]
-            elif isinstance(obj, str):
-                # Replace any old entity ID references with new ones (exact matches only)
-                for old_id, new_id in entity_id_changes.items():
-                    # Use word boundaries to ensure exact entity ID matches only
-                    pattern = r"\b" + re.escape(old_id) + r"\b"
-                    obj = re.sub(pattern, new_id, obj)
-                return obj
+        try:
+            # Get the synthetic sensor manager for this config entry
+            if "ha_synthetic_sensors" not in self.hass.data:
+                _LOGGER.warning("No synthetic sensors integration found")
+                return True
+
+            sensor_managers = self.hass.data["ha_synthetic_sensors"].get("sensor_managers", {})
+            sensor_manager = sensor_managers.get(self.config_entry_id)
+
+            if not sensor_manager:
+                _LOGGER.warning(
+                    "No sensor manager found for config entry: %s", self.config_entry_id
+                )
+                return False
+
+            # Get coordinator and span_panel data
+            coordinator_data = self.hass.data[DOMAIN][self.config_entry_id]
+            coordinator = coordinator_data[COORDINATOR]
+            span_panel = coordinator.data
+
+            # Get all sensors from the manager
+            sensors_data = sensor_manager.sensors
+            if not sensors_data:
+                _LOGGER.info("No sensors found to migrate")
+                return True
+
+            migrated_count = 0
+            skipped_count = 0
+
+            for sensor_key, sensor_config in sensors_data.items():
+                # Skip panel-level sensors (they don't change with circuit number patterns)
+                if is_panel_level_sensor_key(sensor_key):
+                    _LOGGER.debug("Skipping panel-level sensor: %s", sensor_key)
+                    skipped_count += 1
+                    continue
+
+                # Check if entity ID is customized (user has manually changed it)
+                current_entity_id = sensor_config.get("entity_id")
+                if not current_entity_id:
+                    _LOGGER.debug("No entity_id found for sensor: %s", sensor_key)
+                    continue
+
+                if await self._is_entity_id_customized(
+                    sensor_key, sensor_config, coordinator, span_panel, old_flags
+                ):
+                    _LOGGER.debug("Skipping customized entity ID: %s", current_entity_id)
+                    skipped_count += 1
+                    continue
+
+                # Generate new entity ID based on new flags
+                new_entity_id = await self._generate_new_entity_id(
+                    sensor_key, sensor_config, coordinator, span_panel, new_flags
+                )
+                if not new_entity_id or new_entity_id == current_entity_id:
+                    _LOGGER.debug("No change needed for sensor: %s", sensor_key)
+                    continue
+
+                # Update the sensor configuration
+                _LOGGER.info("Migrating sensor: %s -> %s", current_entity_id, new_entity_id)
+                sensor_config["entity_id"] = new_entity_id
+                migrated_count += 1
+
+            # Save the changes
+            if migrated_count > 0:
+                sensor_manager.modify()
+                _LOGGER.info(
+                    "Non-legacy migration completed: %d migrated, %d skipped",
+                    migrated_count,
+                    skipped_count,
+                )
             else:
-                return obj
+                _LOGGER.info("Non-legacy migration completed: no changes needed")
 
-        # Update the entire YAML structure
-        for key, value in yaml_data.items():
-            yaml_data[key] = update_recursive(value)
+            return True
 
-        _LOGGER.debug("Updated cross-references for %d entity ID changes", len(entity_id_changes))
+        except Exception as e:
+            _LOGGER.error("Non-legacy migration failed: %s", e, exc_info=True)
+            return False
+
+    async def migrate_synthetic_entities(
+        self, old_flags: dict[str, bool], new_flags: dict[str, bool]
+    ) -> bool:
+        """Migrate synthetic sensor entity IDs based on old and new configuration flags.
+
+        This method determines the appropriate migration strategy based on the flag changes
+        and delegates to the specific migration method.
+
+        Args:
+            old_flags: Configuration flags before the change
+            new_flags: Configuration flags after the change
+
+        Returns:
+            bool: True if migration succeeded, False otherwise
+
+        """
+        _LOGGER.info("Starting entity migration with flags: %s -> %s", old_flags, new_flags)
+
+        # Check if this is a legacy to device prefix migration
+        old_use_device_prefix = old_flags.get(USE_DEVICE_PREFIX, False)
+        new_use_device_prefix = new_flags.get(USE_DEVICE_PREFIX, False)
+
+        _LOGGER.info(
+            "Migration check: old_use_device_prefix=%s, new_use_device_prefix=%s",
+            old_use_device_prefix,
+            new_use_device_prefix,
+        )
+
+        if not old_use_device_prefix and new_use_device_prefix:
+            # This is a legacy to device prefix migration
+            _LOGGER.info("Performing legacy to device prefix migration")
+            return await self._migrate_legacy_to_prefix(old_flags, new_flags)
+        elif old_use_device_prefix and new_use_device_prefix:
+            # This is a non-legacy pattern migration (e.g., changing circuit number usage)
+            _LOGGER.info("Performing non-legacy pattern migration")
+            return await self._migrate_non_legacy_patterns(old_flags, new_flags)
+        else:
+            # For other migration types, we would add additional methods here
+            _LOGGER.info(
+                "No specific migration needed for flag change: %s -> %s", old_flags, new_flags
+            )
+            return True

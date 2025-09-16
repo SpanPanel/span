@@ -98,12 +98,12 @@
           "api_retry_timeout": "Tiempo de espera de reintento de API (segundos)",
           "api_retry_backoff_multiplier": "Multiplicador de retraso de reintento de API",
           "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
-          "legacy_upgrade_to_friendly": "Actualizar a Nombres Amigables"
+          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's"
         },
         "data_description": {
           "enable_solar_circuit": "Habilitar sensores sintéticos para monitoreo de inversor solar. Requiere selección de dos pestañas no mapeadas en fases eléctricas opuestas.",
           "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
-          "legacy_upgrade_to_friendly": "Actualice la nomenclatura de entidades del formato heredado a nombres amigables. Esto renombrará sus entidades existentes para usar nombres descriptivos en lugar de números de circuito."
+          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
         }
       },
       "entity_naming": {

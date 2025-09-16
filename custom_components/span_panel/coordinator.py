@@ -45,8 +45,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         config_entry: ConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
-        if config_entry is None:
-            raise ValueError("config_entry cannot be None")
         self.span_panel = span_panel
         self.config_entry = config_entry
         self._migration_manager = EntityIdMigrationManager(hass, config_entry.entry_id)

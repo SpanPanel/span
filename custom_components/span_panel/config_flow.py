@@ -988,6 +988,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the main options menu."""
+        _LOGGER.info("=== MAIN OPTIONS FLOW ENTRY ===")
+        _LOGGER.info("async_step_init called with user_input: %s", user_input)
         if user_input is None:
             menu_options = {
                 "general_options": "General Options",
@@ -1012,6 +1014,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
+        _LOGGER.info("=== OPTIONS FLOW ENTRY ===")
+        _LOGGER.info("async_step_general_options called with user_input: %s", user_input)
         errors: dict[str, str] = {}
 
         # Get available unmapped tabs for dropdown
@@ -1069,26 +1073,36 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     USE_CIRCUIT_NUMBERS, False
                 )
 
-                # If legacy upgrade requested and device prefix is absent, migrate to Friendly Names
-                if legacy_upgrade_requested and not bool(use_prefix):
-                    # Safety guard: if entities already appear to use the device prefix,
-                    # skip migration to avoid double-prefixing and just persist flags.
-                    if self._entities_have_device_prefix(self.hass, self.config_entry):
-                        _LOGGER.info(
-                            "Skipping migration: entities already use device prefix; persisting flags only"
-                        )
-                        use_prefix = True
-                        use_circuit_numbers = False
-                    else:
-                        await self._migrate_entity_ids(
-                            EntityNamingPattern.LEGACY_NAMES.value,
-                            EntityNamingPattern.FRIENDLY_NAMES.value,
-                        )
-                        use_prefix = True
-                        use_circuit_numbers = False
+                # If legacy upgrade requested, check if entities need renaming
+                needs_prefix_upgrade = False
+                _LOGGER.info("=== LEGACY UPGRADE DEBUG ===")
+                _LOGGER.info("legacy_upgrade_requested: %s", legacy_upgrade_requested)
+                _LOGGER.info("use_prefix (before): %s", use_prefix)
+
+                if legacy_upgrade_requested:
+                    # Mark this config entry for legacy prefix upgrade after reload
+                    # The migration code will check which entities actually need renaming
+                    self._mark_for_legacy_migration()
+                    use_prefix = True
+                    use_circuit_numbers = False
+                    needs_prefix_upgrade = True
 
                 filtered_input[USE_DEVICE_PREFIX] = use_prefix
                 filtered_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
+
+                # Set the prefix upgrade flag directly in filtered_input if upgrade is needed
+                if needs_prefix_upgrade:
+                    filtered_input["pending_legacy_migration"] = True
+                    _LOGGER.info("=== OPTIONS FLOW DEBUG ===")
+                    _LOGGER.info("Setting pending_legacy_migration flag directly in filtered_input")
+                    _LOGGER.info("Full filtered_input: %s", filtered_input)
+                    _LOGGER.info("Flag value: %s", filtered_input.get("pending_legacy_migration"))
+                    _LOGGER.info(
+                        "Flag type: %s", type(filtered_input.get("pending_legacy_migration"))
+                    )
+                    _LOGGER.info("=== OPTIONS FLOW DEBUG END ===")
+                else:
+                    _LOGGER.info("No prefix upgrade needed - needs_prefix_upgrade was False")
 
                 # Remove any entity naming pattern from input (shouldn't be there anyway)
                 filtered_input.pop(ENTITY_NAMING_PATTERN, None)
@@ -1226,8 +1240,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     naming_options.get(USE_DEVICE_PREFIX),
                 )
 
-                # Migrate entity IDs in the entity registry
-                await self._migrate_entity_ids(current_pattern, new_pattern)
+                # Entity ID migration will be handled after reload via pending_legacy_migration flag
 
                 # Update only the naming-related options, preserve ALL other options
                 current_options = dict(self.config_entry.options)
@@ -1810,6 +1823,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         else:  # LEGACY_NAMES
             return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
+
+    def _mark_for_legacy_migration(self) -> None:
+        """Mark the config entry for legacy migration after reload.
+
+        This method stores a flag in the config entry data that indicates a legacy
+        migration is needed. The integration will check for this flag after startup
+        but before the first update.
+        """
+        _LOGGER.info("Marking config entry for legacy migration after reload")
+
+        # Update the config entry data to include the migration flag
+        current_data = dict(self.config_entry.data)
+        current_data["pending_legacy_migration"] = True
+
+        _LOGGER.info("Setting pending_legacy_migration flag in config entry data: %s", current_data)
+
+        # Update the config entry with the migration flag
+        self.hass.config_entries.async_update_entry(self.config_entry, data=current_data)
 
 
 # Register the config flow handler
