@@ -27,6 +27,7 @@ jobs:
   hacs:
     name: HACS Action
     runs-on: "ubuntu-latest"
+    if: "github.head_ref == 'main' || github.ref == 'refs/heads/main'"
     steps:
       - name: HACS Action
         uses: "hacs/action@main"
