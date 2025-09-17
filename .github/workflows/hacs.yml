@@ -27,6 +27,7 @@ jobs:
   hacs:
     name: HACS Action
     runs-on: "ubuntu-latest"
+    if: "!contains(github.head_ref, 'dependabot')"
     steps:
       - name: HACS Action
         uses: "hacs/action@main"
