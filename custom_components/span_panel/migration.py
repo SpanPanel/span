@@ -25,6 +25,52 @@ from .helpers import (
 _LOGGER = logging.getLogger(__name__)
 
 
+async def _reconstruct_unique_id_from_entities(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    config_entry: ConfigEntry,
+) -> str | None:
+    """Reconstruct missing unique_id from existing entity unique_ids."""
+    entities = er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
+
+    device_candidates = set()
+
+    for entity in entities:
+        if entity.domain == "sensor" and entity.platform == DOMAIN:
+            # Parse existing entity unique_id: span_{device_identifier}_{remainder}
+            parts = entity.unique_id.split("_", 2)
+            if len(parts) >= 2 and parts[0] == "span":
+                device_id = parts[1]
+                if device_id and len(device_id) >= 8:  # Basic validation
+                    device_candidates.add(device_id)
+
+    if len(device_candidates) == 1:
+        device_id = device_candidates.pop()
+
+        # Check if this device is already configured in another entry
+        existing_entry = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, device_id)
+        if existing_entry and existing_entry.entry_id != config_entry.entry_id:
+            _LOGGER.warning(
+                "Device '%s' already configured in entry %s. "
+                "Reconstructing unique_id for entry %s anyway - user can clean up duplicates manually.",
+                device_id,
+                existing_entry.entry_id,
+                config_entry.entry_id,
+            )
+            # Continue with reconstruction anyway - safer than trying to remove
+
+        return device_id
+    elif len(device_candidates) > 1:
+        _LOGGER.warning(
+            "Multiple device candidates found for config entry %s: %s",
+            config_entry.entry_id,
+            device_candidates,
+        )
+        return None
+
+    return None
+
+
 def _normalize_panel_description_key(raw_key: str) -> str:
     """Normalize legacy/dotted panel keys to helper description keys.
 
@@ -139,7 +185,7 @@ def _compute_normalized_unique_id_with_device(
         return None
 
 
-async def migrate_config_entry_to_synthetic_sensors(
+async def migrate_config_entry_sensors(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
 ) -> bool:
@@ -169,8 +215,24 @@ async def migrate_config_entry_to_synthetic_sensors(
         # Get the correct device identifier from config entry
         device_identifier = config_entry.unique_id
         if not device_identifier:
-            _LOGGER.error("Config entry %s has no unique_id, cannot migrate", config_entry.entry_id)
-            return False
+            # Try to reconstruct unique_id from existing entities
+            device_identifier = await _reconstruct_unique_id_from_entities(
+                hass, entity_registry, config_entry
+            )
+            if device_identifier:
+                _LOGGER.info(
+                    "Reconstructed missing unique_id for config entry %s: %s",
+                    config_entry.entry_id,
+                    device_identifier,
+                )
+                # Update the config entry with reconstructed unique_id
+                hass.config_entries.async_update_entry(config_entry, unique_id=device_identifier)
+            else:
+                _LOGGER.warning(
+                    "Config entry %s has no unique_id and cannot reconstruct - cleaning up invalid configuration",
+                    config_entry.entry_id,
+                )
+                return False
 
         _LOGGER.debug(
             "MIGRATION: Using device_identifier=%s for entry %s (from config_entry.unique_id)",

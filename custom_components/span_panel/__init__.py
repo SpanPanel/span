@@ -33,7 +33,7 @@ from .const import (
     USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
-from .migration import migrate_config_entry_to_synthetic_sensors
+from .migration import migrate_config_entry_sensors
 
 # Handle solar options changes before reload (battery is now native sensor)
 from .options import (
@@ -74,24 +74,27 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         )
 
         # Call the actual migration logic
-        migration_success = await migrate_config_entry_to_synthetic_sensors(hass, config_entry)
+        migration_success = await migrate_config_entry_sensors(hass, config_entry)
         if not migration_success:
-            _LOGGER.error("Migration failed for config entry %s", config_entry.entry_id)
+            _LOGGER.warning(
+                "Migration failed for config entry %s - cannot reconstruct unique_id",
+                config_entry.entry_id,
+            )
             return False
-
-        # Update config entry version using HA API
-        hass.config_entries.async_update_entry(
-            config_entry,
-            data=config_entry.data,
-            options=config_entry.options,
-            title=config_entry.title,
-            version=CURRENT_CONFIG_VERSION,
-        )
-        _LOGGER.debug(
-            "Successfully migrated config entry %s to version %s",
-            config_entry.entry_id,
-            CURRENT_CONFIG_VERSION,
-        )
+        else:
+            # Normal successful migration
+            hass.config_entries.async_update_entry(
+                config_entry,
+                data=config_entry.data,
+                options=config_entry.options,
+                title=config_entry.title,
+                version=CURRENT_CONFIG_VERSION,
+            )
+            _LOGGER.debug(
+                "Successfully migrated config entry %s to version %s",
+                config_entry.entry_id,
+                CURRENT_CONFIG_VERSION,
+            )
 
     return True
 
