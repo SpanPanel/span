@@ -10,6 +10,7 @@ NAME = "name"
 
 CONF_SERIAL_NUMBER = "serial_number"
 CONF_USE_SSL = "use_ssl"
+CONF_DEVICE_NAME = "device_name"
 
 # Simulation configuration
 CONF_SIMULATION_CONFIG = "simulation_config"
@@ -50,6 +51,7 @@ SYSTEM_DOOR_STATE_OPEN = "OPEN"
 SYSTEM_ETHERNET_LINK = "eth0Link"
 SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
+PANEL_STATUS = "panel_status"
 
 STATUS_SOFTWARE_VER = "softwareVer"
 DSM_GRID_STATE = "dsmGridState"
