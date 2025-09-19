@@ -228,10 +228,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             _LOGGER.debug("STATUS_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
 
             # For power sensors, set to 0.0 when offline (instantaneous values)
-            # For energy and other sensors, set to Unknown when offline
+            # For energy sensors, set to None when offline (HA will report as unknown)
+            # For other sensors, set to STATE_UNKNOWN when offline
             device_class = getattr(self.entity_description, "device_class", None)
             if device_class == "power":
                 self._attr_native_value = 0.0
+            elif device_class == "energy":
+                self._attr_native_value = None
             else:
                 self._attr_native_value = STATE_UNKNOWN
             return
@@ -1025,9 +1028,13 @@ class SpanSolarSensor(SpanSensorBase[SpanSolarSensorEntityDescription, SpanPanel
         if self.coordinator.panel_offline:
             _LOGGER.debug("SOLAR_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
             # For solar power sensors, set to 0.0 when offline (instantaneous values)
+            # For energy sensors, set to None when offline (HA will report as unknown)
+            # For other sensors, set to STATE_UNKNOWN when offline
             device_class = getattr(self.entity_description, "device_class", None)
             if device_class == "power":
                 self._attr_native_value = 0.0
+            elif device_class == "energy":
+                self._attr_native_value = None
             else:
                 self._attr_native_value = STATE_UNKNOWN
             return
