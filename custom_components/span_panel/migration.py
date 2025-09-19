@@ -1,6 +1,7 @@
 """Migration logic for SPAN Panel integration.
 
 Revised approach:
+- Migration can be removed after 1.2.x releases since all keys will be normalized
 - Normalize unique_ids in the entity registry to helper-format per config entry
 - Set a per-entry migration flag for first normal boot to generate YAML and perform registry lookups
 """
@@ -41,9 +42,11 @@ async def _reconstruct_unique_id_from_entities(
             parts = entity.unique_id.split("_", 2)
             if len(parts) >= 2 and parts[0] == "span":
                 device_id = parts[1]
-                if device_id and len(device_id) >= 8:  # Basic validation
+                if device_id and len(device_id) >= 8:  # Basic validation for a serial number
                     device_candidates.add(device_id)
 
+    # If there is only one device candidate, use it
+    # Multiple devices/panels cannot be recovered because we don't know which one to use
     if len(device_candidates) == 1:
         device_id = device_candidates.pop()
 
@@ -57,12 +60,11 @@ async def _reconstruct_unique_id_from_entities(
                 existing_entry.entry_id,
                 config_entry.entry_id,
             )
-            # Continue with reconstruction anyway - safer than trying to remove
-
+            # Continue with reconstruction anyway - safer than trying to remove which could remove entities for both entries
         return device_id
     elif len(device_candidates) > 1:
         _LOGGER.warning(
-            "Multiple device candidates found for config entry %s: %s",
+            "Multiple device candidates found for config entry %s: %s - cannot reconstruct unique_id",
             config_entry.entry_id,
             device_candidates,
         )
