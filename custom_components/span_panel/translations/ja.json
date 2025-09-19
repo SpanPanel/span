@@ -83,7 +83,8 @@
           "general_options": "一般オプション",
           "entity_naming": "エンティティ命名パターン",
           "export_config": "合成センサー設定をエクスポート",
-          "simulation_options": "シミュレーションオプション"
+          "simulation_start_time": "シミュレーション開始時刻",
+          "simulation_offline_minutes": "シミュレーションオフラインミニッツ"
         }
       },
       "general_options": {
@@ -123,14 +124,24 @@
           "directory": "ディレクトリパス（ファイルは自動的に名前が付けられます）または設定が保存される.yamlで終わる完全なファイルパス。"
         }
       },
-      "simulation_options": {
-        "title": "シミュレーションオプション",
-        "description": "シミュレーション固有の設定を構成します。シミュレーション時刻の変更により、新しい時刻を適用するために統合が再読み込みされます。",
+      "simulation_start_time": {
+        "title": "シミュレーション開始時刻",
+        "description": "シミュレーション開始時刻を構成します。シミュレーション時刻の変更により、新しい時刻を適用するために統合が再読み込みされます。",
         "data": {
           "simulation_start_time": "シミュレーション開始時刻"
         },
         "data_description": {
           "simulation_start_time": "時刻形式：HH:MM（24時間）、H:MM（12時間）、または完全なISO日時（YYYY-MM-DDTHH:MM:SS）。空のままにすると現在時刻を使用します。統合は変更を適用するために再読み込みされます。"
+        }
+      },
+      "simulation_offline_minutes": {
+        "title": "シミュレーションオフラインミニッツ",
+        "description": "シミュレーション中にパネルがオフラインに表示される時間を構成します。",
+        "data": {
+          "simulation_offline_minutes": "オフラインミニッツ"
+        },
+        "data_description": {
+          "simulation_offline_minutes": "シミュレーション中にパネルがオフラインに表示される分数。オフラインシミュレーションを無効にするには0に設定します。"
         }
       }
     }

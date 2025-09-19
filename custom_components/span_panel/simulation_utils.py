@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import slugify
 import yaml
@@ -27,23 +27,21 @@ _LOGGER = logging.getLogger(__name__)
 
 def infer_template_for(name: str, tabs: list[int]) -> str:
     """Infer circuit template based on circuit name and tab configuration.
-    
+
     Args:
         name: Circuit name to analyze
         tabs: List of tab numbers for this circuit
-        
+
     Returns:
         Template string identifier for the circuit type
+
     """
     lname = str(name).lower()
     if any(k in lname for k in ["light", "lights"]):
         return "lighting"
     if "kitchen" in lname and "outlet" in lname:
         return "kitchen_outlets"
-    if any(
-        k in lname
-        for k in ["hvac", "furnace", "air conditioner", "ac", "heat pump"]
-    ):
+    if any(k in lname for k in ["hvac", "furnace", "air conditioner", "ac", "heat pump"]):
         return "hvac"
     if any(k in lname for k in ["fridge", "refrigerator", "wine fridge"]):
         return "refrigerator"
@@ -66,45 +64,41 @@ async def clone_panel_to_simulation(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     user_input: dict[str, Any] | None = None,
-) -> Union[ConfigFlowResult, tuple[Path, dict[str, str]]]:
+) -> tuple[Path, dict[str, str]]:
     """Clone the live panel into a simulation YAML stored in simulation_configs.
-    
+
     Args:
         hass: Home Assistant instance
         config_entry: Configuration entry for the SPAN panel
         user_input: User input from the config flow form
-        
+
     Returns:
-        ConfigFlowResult indicating success or failure
+        Tuple of (destination_path, errors_dict)
+
     """
     errors: dict[str, str] = {}
+
+    # Compute default filename first
+    device_name = config_entry.data.get("device_name", config_entry.title)
+    safe_device = slugify(device_name) if isinstance(device_name, str) else "span_panel"
+
+    config_dir = Path(__file__).parent / "simulation_configs"
+    base_name = f"simulation_config_{safe_device}.yaml"
+    dest_path = config_dir / base_name
 
     # Resolve coordinator (live)
     coordinator_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
     coordinator = coordinator_data.get(COORDINATOR)
     if coordinator is None:
-        from homeassistant.config_entries import ConfigFlowResult
-        return ConfigFlowResult(type="abort", reason="coordinator_unavailable")
-
-    # Compute default filename
-    device_name = config_entry.data.get("device_name", config_entry.title)
-    safe_device = slugify(device_name) if isinstance(device_name, str) else "span_panel"
-
-    # We no longer need to compute num_tabs upfront since filename is device-based
-
-    config_dir = Path(__file__).parent / "simulation_configs"
-    base_name = f"simulation_config_{safe_device}.yaml"
-    dest_path = config_dir / base_name
+        errors["base"] = "coordinator_unavailable"
+        return dest_path, errors
 
     # Suffix if exists: _2, _3, ...
     suffix_index = 1
     if await hass.async_add_executor_job(dest_path.exists):
         suffix_index = 2
         while True:
-            candidate = (
-                config_dir
-                / f"simulation_config_{safe_device}_{suffix_index}.yaml"
-            )
+            candidate = config_dir / f"simulation_config_{safe_device}_{suffix_index}.yaml"
             if not await hass.async_add_executor_job(candidate.exists):
                 dest_path = candidate
                 break
@@ -157,13 +151,8 @@ async def clone_panel_to_simulation(
                     update_err,
                 )
 
-            from homeassistant.config_entries import ConfigFlowResult
-            return ConfigFlowResult(
-                type="create_entry",
-                title="",
-                data={},
-                description=f"Cloned panel to {dest_path.name} in simulation_configs",
-            )
+            # Return success with no errors
+            return dest_path, {}
 
         except Exception as e:
             _LOGGER.error("Clone to simulation failed: %s", e)

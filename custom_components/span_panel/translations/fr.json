@@ -83,7 +83,8 @@
           "general_options": "Options Générales",
           "entity_naming": "Modèle de Nommage des Entités",
           "export_config": "Exporter la Configuration des Capteurs Synthétiques",
-          "simulation_options": "Options de Simulation"
+          "simulation_start_time": "Heure de Début de Simulation",
+          "simulation_offline_minutes": "Minutes Hors Ligne de Simulation"
         }
       },
       "general_options": {
@@ -123,14 +124,24 @@
           "directory": "Un chemin de répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet se terminant par .yaml où la configuration sera sauvegardée."
         }
       },
-      "simulation_options": {
-        "title": "Options de Simulation",
-        "description": "Configurer les paramètres spécifiques à la simulation. Les modifications de l'heure de simulation rechargeront l'intégration pour appliquer la nouvelle heure.",
+      "simulation_start_time": {
+        "title": "Heure de Début de Simulation",
+        "description": "Configurer l'heure de début de simulation. Les modifications de l'heure de simulation rechargeront l'intégration pour appliquer la nouvelle heure.",
         "data": {
           "simulation_start_time": "Heure de Début de Simulation"
         },
         "data_description": {
           "simulation_start_time": "Format d'heure : HH:MM (24h), H:MM (12h), ou datetime ISO complet (YYYY-MM-DDTHH:MM:SS). Laissez vide pour utiliser l'heure actuelle. L'intégration se rechargera pour appliquer les changements."
+        }
+      },
+      "simulation_offline_minutes": {
+        "title": "Minutes Hors Ligne de Simulation",
+        "description": "Configurer combien de temps le panneau doit apparaître hors ligne pendant la simulation.",
+        "data": {
+          "simulation_offline_minutes": "Minutes Hors Ligne"
+        },
+        "data_description": {
+          "simulation_offline_minutes": "Nombre de minutes pendant lesquelles le panneau doit apparaître hors ligne pendant la simulation. Définissez sur 0 pour désactiver la simulation hors ligne."
         }
       }
     }

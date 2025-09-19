@@ -83,7 +83,8 @@
           "general_options": "Opções Gerais",
           "entity_naming": "Padrão de Nomenclatura de Entidades",
           "export_config": "Exportar Configuração de Sensores Sintéticos",
-          "simulation_options": "Opções de Simulação"
+          "simulation_start_time": "Horário de Início da Simulação",
+          "simulation_offline_minutes": "Minutos Offline da Simulação"
         }
       },
       "general_options": {
@@ -123,14 +124,24 @@
           "directory": "Um caminho de diretório (o arquivo será nomeado automaticamente) ou um caminho de arquivo completo terminando em .yaml onde a configuração será salva."
         }
       },
-      "simulation_options": {
-        "title": "Opções de Simulação",
-        "description": "Configurar configurações específicas de simulação. Mudanças no horário de simulação recarregarão a integração para aplicar o novo horário.",
+      "simulation_start_time": {
+        "title": "Horário de Início da Simulação",
+        "description": "Configurar o horário de início da simulação. Mudanças no horário de simulação recarregarão a integração para aplicar o novo horário.",
         "data": {
           "simulation_start_time": "Horário de Início da Simulação"
         },
         "data_description": {
           "simulation_start_time": "Formato de horário: HH:MM (24h), H:MM (12h), ou datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deixe vazio para usar o horário atual. A integração será recarregada para aplicar as mudanças."
+        }
+      },
+      "simulation_offline_minutes": {
+        "title": "Minutos Offline da Simulação",
+        "description": "Configurar por quanto tempo o painel deve aparecer offline durante a simulação.",
+        "data": {
+          "simulation_offline_minutes": "Minutos Offline"
+        },
+        "data_description": {
+          "simulation_offline_minutes": "Número de minutos que o painel deve aparecer offline durante a simulação. Defina como 0 para desabilitar a simulação offline."
         }
       }
     }

@@ -51,6 +51,10 @@ class SimulationYamlGenerator:
             )
             mapped_tabs.update(tabs)
 
+            # Skip unmapped tab circuits - they should be handled as unmapped tabs, not circuits
+            if str(cid).startswith("unmapped_tab_"):
+                continue
+
             template_key = self._infer_template_key(name, power_w, tabs)
             if template_key not in circuit_templates:
                 circuit_templates[template_key] = self._make_template(template_key, power_w, name)
