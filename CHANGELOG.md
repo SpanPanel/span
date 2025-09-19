@@ -9,9 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### 🔧 Technical Improvements
 
--**Improve Performance**: Revert to native sensors (non-synthetic) to avoid heavyweight calculation engine -**Fix Legacy Migration**: For installations that
-migrated through versions prior to 1.0.4 support panel prefix migration/keys -**Fix sensor circuit-based naming**: For new installations with circuit naming
-provide consistent behavior where all circuits, other than panel have circuit name for tabs
+- **Performance**: Revert to native sensors (non-synthetic) to avoid calculation engine for simple math. Features like net energy, OpenAPI, simulation
+  are still present. We may reintroduce the synthetic engine later in a modified form to allow users to add attributes, etc.
+- **Fix sensor circuit-based naming**: For new installations with circuit naming provide consistent behavior where all circuits, other than panel have
+ circuit names related to the tab (120V) or tabs (240V).  We do not modify entity ID's so if an installation had faulty names from a previous release those
+ must be renamed manually
+- **Fix Faulty Legacy Single Panel Config**: Provided a repair for a pre-1.0.4 upgraded release where the config entry was missing the device unique ID (serial
+  number) causing the new migration for normalized unique keys to fail. This repair only works for single panel installs because we derive the serial number
+  from the entities and if more than one serial number is found we cannot determine which config the serial number would match.
+- **Fixed Unmapped Tab Behavior for Offline Panel**: Unmapped tab sensors reported erroneous values when the panel was offline
 
 ## [1.2.3] - 2025-08-XX Rescinded for performance regression
 
