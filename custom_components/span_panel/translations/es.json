@@ -83,7 +83,8 @@
           "general_options": "Opciones Generales",
           "entity_naming": "Patrón de Nomenclatura de Entidades",
           "export_config": "Exportar Configuración de Sensores Sintéticos",
-          "simulation_options": "Opciones de Simulación"
+          "simulation_start_time": "Tiempo de Inicio de Simulación",
+          "simulation_offline_minutes": "Minutos Sin Conexión de Simulación"
         }
       },
       "general_options": {
@@ -123,14 +124,24 @@
           "directory": "Una ruta de directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa que termine en .yaml donde se guardará la configuración."
         }
       },
-      "simulation_options": {
-        "title": "Opciones de Simulación",
-        "description": "Configurar ajustes específicos de simulación. Los cambios en el tiempo de simulación recargarán la integración para aplicar el nuevo tiempo.",
+      "simulation_start_time": {
+        "title": "Tiempo de Inicio de Simulación",
+        "description": "Configurar el tiempo de inicio de simulación. Los cambios en el tiempo de simulación recargarán la integración para aplicar el nuevo tiempo.",
         "data": {
           "simulation_start_time": "Tiempo de Inicio de Simulación"
         },
         "data_description": {
           "simulation_start_time": "Formato de tiempo: HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deje vacío para usar el tiempo actual. La integración se recargará para aplicar los cambios."
+        }
+      },
+      "simulation_offline_minutes": {
+        "title": "Minutos Sin Conexión de Simulación",
+        "description": "Configurar cuánto tiempo debe aparecer sin conexión el panel durante la simulación.",
+        "data": {
+          "simulation_offline_minutes": "Minutos Sin Conexión"
+        },
+        "data_description": {
+          "simulation_offline_minutes": "Número de minutos que el panel debe aparecer sin conexión durante la simulación. Establezca en 0 para deshabilitar la simulación sin conexión."
         }
       }
     }

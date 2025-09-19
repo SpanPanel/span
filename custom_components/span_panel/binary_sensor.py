@@ -19,10 +19,16 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_DEVICE_NAME,
     COORDINATOR,
     DOMAIN,
+    PANEL_STATUS,
+    SYSTEM_CELLULAR_LINK,
+    SYSTEM_DOOR_STATE,
     SYSTEM_DOOR_STATE_CLOSED,
     SYSTEM_DOOR_STATE_OPEN,
+    SYSTEM_ETHERNET_LINK,
+    SYSTEM_WIFI_LINK,
     USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
@@ -65,7 +71,7 @@ BINARY_SENSORS: tuple[
     SpanPanelBinarySensorEntityDescription,
 ] = (
     SpanPanelBinarySensorEntityDescription(
-        key="doorState",
+        key=SYSTEM_DOOR_STATE,
         name="Door State",
         device_class=BinarySensorDeviceClass.TAMPER,
         value_fn=lambda status_data: (
@@ -75,25 +81,25 @@ BINARY_SENSORS: tuple[
         ),
     ),
     SpanPanelBinarySensorEntityDescription(
-        key="eth0Link",
+        key=SYSTEM_ETHERNET_LINK,
         name="Ethernet Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda status_data: status_data.is_ethernet_connected,
     ),
     SpanPanelBinarySensorEntityDescription(
-        key="wlanLink",
+        key=SYSTEM_WIFI_LINK,
         name="Wi-Fi Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda status_data: status_data.is_wifi_connected,
     ),
     SpanPanelBinarySensorEntityDescription(
-        key="wwanLink",
+        key=SYSTEM_CELLULAR_LINK,
         name="Cellular Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda status_data: status_data.is_cellular_connected,
     ),
     SpanPanelBinarySensorEntityDescription(
-        key="panel_status",
+        key=PANEL_STATUS,
         name="Panel Status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda status_data: True,  # Placeholder - actual logic handled in sensor class
@@ -130,7 +136,7 @@ class SpanPanelBinarySensor(
 
         # Consistent device name logic (matches switch)
         self._device_name = data_coordinator.config_entry.data.get(
-            "device_name", data_coordinator.config_entry.title
+            CONF_DEVICE_NAME, data_coordinator.config_entry.title
         )
 
         device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
@@ -175,18 +181,15 @@ class SpanPanelBinarySensor(
         - Other binary sensors (switches): become unavailable when panel is offline
         """
         # Panel status sensor should always be available to show online/offline state
-        if (
-            hasattr(self.entity_description, "key")
-            and self.entity_description.key == "panel_status"
-        ):
+        if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
             return True
 
         # Hardware status sensors should remain available when offline to show Unknown
         hardware_status_sensors = {
-            "doorState",  # Door State
-            "eth0Link",  # Ethernet Link
-            "wlanLink",  # Wi-Fi Link
-            "wwanLink",  # Cellular Link
+            SYSTEM_DOOR_STATE,  # Door State
+            SYSTEM_ETHERNET_LINK,  # Ethernet Link
+            SYSTEM_WIFI_LINK,  # Wi-Fi Link
+            SYSTEM_CELLULAR_LINK,  # Cellular Link
         }
 
         if (
@@ -204,10 +207,7 @@ class SpanPanelBinarySensor(
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         # Special handling for panel_status sensor
-        if (
-            hasattr(self.entity_description, "key")
-            and self.entity_description.key == "panel_status"
-        ):
+        if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
             self._attr_is_on = not self.coordinator.panel_offline
             self._attr_available = True
             _LOGGER.debug(
@@ -228,10 +228,10 @@ class SpanPanelBinarySensor(
             # Hardware status sensors show as unknown when offline
             # Other sensors (switches) will become unavailable via availability property
             hardware_status_sensors = {
-                "doorState",  # Door State
-                "eth0Link",  # Ethernet Link
-                "wlanLink",  # Wi-Fi Link
-                "wwanLink",  # Cellular Link
+                SYSTEM_DOOR_STATE,  # Door State
+                SYSTEM_ETHERNET_LINK,  # Ethernet Link
+                SYSTEM_WIFI_LINK,  # Wi-Fi Link
+                SYSTEM_CELLULAR_LINK,  # Cellular Link
             }
 
             if (

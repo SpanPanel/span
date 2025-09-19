@@ -88,7 +88,8 @@
           "general_options": "General Options",
           "entity_naming": "Entity Naming Pattern",
           "export_config": "Export Synthetic Sensor Config",
-          "simulation_options": "Simulation Options"
+          "simulation_start_time": "Simulation Start Time",
+          "simulation_offline_minutes": "Simulation Offline Minutes"
         }
       },
       "general_options": {
@@ -110,14 +111,24 @@
           "leg2": "Select the second solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 1 for proper 240V measurement."
         }
       },
-      "simulation_options": {
-        "title": "Simulation Options",
-        "description": "Configure simulation-specific settings. Changes to simulation time will reload the integration to apply the new time.",
+      "simulation_start_time": {
+        "title": "Simulation Start Time",
+        "description": "Configure the simulation start time. Changes to simulation time will reload the integration to apply the new time.",
         "data": {
           "simulation_start_time": "Simulation Start Time"
         },
         "data_description": {
           "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time. Integration will reload to apply changes."
+        }
+      },
+      "simulation_offline_minutes": {
+        "title": "Simulation Offline Minutes",
+        "description": "Configure how long the panel should appear offline during simulation.",
+        "data": {
+          "simulation_offline_minutes": "Offline Minutes"
+        },
+        "data_description": {
+          "simulation_offline_minutes": "Number of minutes the panel should appear offline during simulation. Set to 0 to disable offline simulation."
         }
       },
       "export_config": {

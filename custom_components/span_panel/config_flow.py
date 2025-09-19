@@ -73,9 +73,7 @@ from .options import (
     INVERTER_LEG2,
     POWER_DISPLAY_PRECISION,
 )
-from .simulation_generator import (
-    SimulationYamlGenerator,
-)  # lazy import to keep CF lean
+from .simulation_utils import clone_panel_to_simulation
 from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -988,8 +986,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the main options menu."""
-        _LOGGER.info("=== MAIN OPTIONS FLOW ENTRY ===")
-        _LOGGER.info("async_step_init called with user_input: %s", user_input)
         if user_input is None:
             menu_options = {
                 "general_options": "General Options",
@@ -997,7 +993,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
             # Add simulation options if this is a simulation mode integration
             if self.config_entry.data.get("simulation_mode", False):
-                menu_options["simulation_options"] = "Simulation Options"
+                menu_options["simulation_start_time"] = "Simulation Start Time"
+                menu_options["simulation_offline_minutes"] = "Simulation Offline Minutes"
             else:
                 # Live panel: offer cloning into a simulation config
                 menu_options["clone_panel_to_simulation"] = "Clone Panel To Simulation"
@@ -1014,8 +1011,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
-        _LOGGER.info("=== OPTIONS FLOW ENTRY ===")
-        _LOGGER.info("async_step_general_options called with user_input: %s", user_input)
         errors: dict[str, str] = {}
 
         # Get available unmapped tabs for dropdown
@@ -1075,9 +1070,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 # If legacy upgrade requested, check if entities need renaming
                 needs_prefix_upgrade = False
-                _LOGGER.info("=== LEGACY UPGRADE DEBUG ===")
-                _LOGGER.info("legacy_upgrade_requested: %s", legacy_upgrade_requested)
-                _LOGGER.info("use_prefix (before): %s", use_prefix)
 
                 if legacy_upgrade_requested:
                     # Mark this config entry for legacy prefix upgrade after reload
@@ -1093,19 +1085,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # Set the prefix upgrade flag directly in filtered_input if upgrade is needed
                 if needs_prefix_upgrade:
                     filtered_input["pending_legacy_migration"] = True
-                    _LOGGER.info("=== OPTIONS FLOW DEBUG ===")
-                    _LOGGER.info("Setting pending_legacy_migration flag directly in filtered_input")
-                    _LOGGER.info("Full filtered_input: %s", filtered_input)
-                    _LOGGER.info("Flag value: %s", filtered_input.get("pending_legacy_migration"))
-                    _LOGGER.info(
-                        "Flag type: %s", type(filtered_input.get("pending_legacy_migration"))
-                    )
-                    _LOGGER.info("=== OPTIONS FLOW DEBUG END ===")
-                else:
-                    _LOGGER.info("No prefix upgrade needed - needs_prefix_upgrade was False")
 
                 # Remove any entity naming pattern from input (shouldn't be there anyway)
                 filtered_input.pop(ENTITY_NAMING_PATTERN, None)
+
+                # Clean up any simulation-only change flag since this will trigger a reload
+                filtered_input.pop("_simulation_only_change", None)
 
                 # Global options are now handled natively during reload
 
@@ -1314,34 +1299,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             description_placeholders=description_placeholders,
         )
 
-    async def async_step_simulation_options(
+    async def async_step_simulation_start_time(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Show simulation-related actions."""
-        if user_input is None:
-            return self.async_show_menu(
-                step_id="simulation_options",
-                menu_options={
-                    "edit_simulation_settings": "Edit Simulation Settings",
-                    "manage_simulation_configs": "Manage Simulation Configurations",
-                },
-            )
-        return self.async_abort(reason="unknown")
-
-    async def async_step_edit_simulation_settings(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit simulation settings (time and performance)."""
+        """Edit simulation start time settings."""
         if user_input is not None:
             simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
-            offline_minutes = user_input.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
 
-            _LOGGER.info("Edit simulation settings - user_input: %s", user_input)
-            _LOGGER.info(
-                "Edit simulation settings - offline_minutes: %s, start_time: %s",
-                offline_minutes,
-                simulation_start_time,
-            )
+            _LOGGER.info("Edit simulation start time - start_time: %s", simulation_start_time)
 
             if simulation_start_time:
                 try:
@@ -1349,56 +1314,57 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     user_input[CONF_SIMULATION_START_TIME] = simulation_start_time
                 except ValueError as e:
                     return self.async_show_form(
-                        step_id="edit_simulation_settings",
+                        step_id="simulation_start_time",
                         data_schema=self.add_suggested_values_to_schema(
-                            self._get_simulation_schema(),
-                            self._get_simulation_defaults(),
+                            self._get_simulation_start_time_schema(),
+                            self._get_simulation_start_time_defaults(),
                         ),
                         errors={"base": str(e)},
                     )
 
-            # Merge with existing options to preserve general options
+            # Merge with existing options to preserve other settings
             merged_options = dict(self.config_entry.options)
             merged_options.update(user_input)
 
-            _LOGGER.info("Saving simulation options: %s", user_input)
+            # Clean up any simulation-only change flag since this will trigger a reload
+            merged_options.pop("_simulation_only_change", None)
+
+            _LOGGER.info("Saving simulation start time: %s", user_input)
             _LOGGER.info("Merged options: %s", merged_options)
-            _LOGGER.info("Current config_entry.options before save: %s", self.config_entry.options)
-            _LOGGER.info("About to call async_create_entry to save options")
-            result = self.async_create_entry(title="", data=merged_options)
-            _LOGGER.info("async_create_entry completed, result type: %s", type(result))
-            _LOGGER.info("Config_entry.options after save: %s", self.config_entry.options)
 
-            # Manually trigger offline mode setting since update listener isn't working
-            try:
-                coordinator_data = self.hass.data.get(DOMAIN, {}).get(
-                    self.config_entry.entry_id, {}
-                )
-                coordinator = coordinator_data.get(COORDINATOR)
-                if coordinator and hasattr(coordinator, "span_panel") and coordinator.span_panel:
-                    span_panel = coordinator.span_panel
-                    if hasattr(span_panel, "api") and span_panel.api:
-                        simulation_offline_minutes = user_input.get("simulation_offline_minutes", 0)
-                        _LOGGER.info(
-                            "Manually setting offline mode: %s minutes", simulation_offline_minutes
-                        )
-                        span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
-                    else:
-                        _LOGGER.warning("SpanPanel API not found for manual offline mode setting")
-                else:
-                    _LOGGER.warning(
-                        "Coordinator or SpanPanel not found for manual offline mode setting"
-                    )
-            except Exception as e:
-                _LOGGER.error("Failed to manually set offline mode: %s", e)
-
-            return result
+            return self.async_create_entry(title="", data=merged_options)
 
         return self.async_show_form(
-            step_id="edit_simulation_settings",
+            step_id="simulation_start_time",
             data_schema=self.add_suggested_values_to_schema(
-                self._get_simulation_schema(),
-                self._get_simulation_defaults(),
+                self._get_simulation_start_time_schema(),
+                self._get_simulation_start_time_defaults(),
+            ),
+        )
+
+    async def async_step_simulation_offline_minutes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Edit simulation offline minutes settings."""
+        if user_input is not None:
+            offline_minutes = user_input.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
+
+            _LOGGER.info("Edit simulation offline minutes - offline_minutes: %s", offline_minutes)
+
+            # Merge with existing options to preserve other settings
+            merged_options = dict(self.config_entry.options)
+            merged_options.update(user_input)
+
+            # Add a flag to indicate this is a simulation-only change
+            merged_options["_simulation_only_change"] = True
+
+            return self.async_create_entry(title="", data=merged_options)
+
+        return self.async_show_form(
+            step_id="simulation_offline_minutes",
+            data_schema=self.add_suggested_values_to_schema(
+                self._get_simulation_offline_minutes_schema(),
+                self._get_simulation_offline_minutes_defaults(),
             ),
         )
 
@@ -1559,122 +1525,34 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Clone the live panel into a simulation YAML stored in simulation_configs."""
-        errors: dict[str, str] = {}
+        result = await clone_panel_to_simulation(self.hass, self.config_entry, user_input)
 
-        # Resolve coordinator (live)
-        coordinator_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
-        coordinator = coordinator_data.get(COORDINATOR)
-        if coordinator is None:
-            return self.async_abort(reason="coordinator_unavailable")
+        # If result is a ConfigFlowResult, return it directly
+        if hasattr(result, "type"):
+            return result  # type: ignore[return-value]
 
-        # Compute default filename
+        # Otherwise, result is (dest_path, errors) for the form
+        if isinstance(result, tuple) and len(result) == 2:
+            dest_path, errors = result
+            if not isinstance(errors, dict):
+                errors = {}
+        else:
+            # Fallback if result format is unexpected
+            _LOGGER.error(
+                "Unexpected result format from clone_panel_to_simulation: %s", type(result)
+            )
+            return self.async_abort(reason="unknown")
+
+        # If user_input was provided and there are no errors, the operation succeeded
+        if user_input is not None and not errors:
+            return self.async_create_entry(
+                title="Simulation Created",
+                data={},
+                description=f"Cloned panel to {dest_path.name} in simulation_configs",
+            )
+
+        # Compute device name for form display
         device_name = self.config_entry.data.get("device_name", self.config_entry.title)
-        safe_device = slugify(device_name) if isinstance(device_name, str) else "span_panel"
-
-        # Default assumption when we can't infer (recomputed later from tabs)
-        num_tabs = 32
-        config_dir = Path(__file__).parent / "simulation_configs"
-        base_name = f"simulation_config_{safe_device}_{num_tabs}_circuit.yaml"
-        dest_path = config_dir / base_name
-
-        # Suffix if exists: _2, _3, ...
-        suffix_index = 1
-        if await self.hass.async_add_executor_job(dest_path.exists):
-            suffix_index = 2
-            while True:
-                candidate = (
-                    config_dir
-                    / f"simulation_config_{safe_device}_{num_tabs}_circuit_{suffix_index}.yaml"
-                )
-                if not await self.hass.async_add_executor_job(candidate.exists):
-                    dest_path = candidate
-                    break
-                suffix_index += 1
-
-        if user_input is not None:
-            try:
-                # Use a separate generator to build YAML purely from live data
-                # Pass solar leg selections from options if present
-                leg1_opt = self.config_entry.options.get(INVERTER_LEG1, 0)
-                leg2_opt = self.config_entry.options.get(INVERTER_LEG2, 0)
-                generator = SimulationYamlGenerator(
-                    hass=self.hass,
-                    coordinator=coordinator,
-                    solar_leg1=int(leg1_opt) if leg1_opt else None,
-                    solar_leg2=int(leg2_opt) if leg2_opt else None,
-                )
-                snapshot_yaml, num_tabs = await generator.build_yaml_from_live_panel()
-
-                def infer_template_for(name: str, tabs: list[int]) -> str:
-                    lname = str(name).lower()
-                    if any(k in lname for k in ["light", "lights"]):
-                        return "lighting"
-                    if "kitchen" in lname and "outlet" in lname:
-                        return "kitchen_outlets"
-                    if any(
-                        k in lname
-                        for k in ["hvac", "furnace", "air conditioner", "ac", "heat pump"]
-                    ):
-                        return "hvac"
-                    if any(k in lname for k in ["fridge", "refrigerator", "wine fridge"]):
-                        return "refrigerator"
-                    if any(k in lname for k in ["ev", "charger"]):
-                        return "ev_charger"
-                    if any(k in lname for k in ["pool", "spa", "fountain"]):
-                        return "pool_equipment"
-                    if any(k in lname for k in ["internet", "router", "network", "modem"]):
-                        return "always_on"
-                    # Heuristics: 240V multi-tab loads as major appliances
-                    if len(tabs) >= 2:
-                        return "major_appliance"
-                    # Fallbacks
-                    if "outlet" in lname:
-                        return "outlets"
-                    return "major_appliance"
-
-                # snapshot_yaml and num_tabs returned by generator
-                snapshot_yaml["panel_config"]["serial_number"] = f"{safe_device}_simulation" + (
-                    "" if suffix_index == 1 else f"_{suffix_index}"
-                )
-
-                # Ensure correct filename reflects computed num_tabs
-                base_name = f"simulation_config_{safe_device}_{num_tabs}_circuit.yaml"
-                dest_path = config_dir / base_name
-
-                # Ensure directory exists and write file
-                await self.hass.async_add_executor_job(
-                    lambda: dest_path.parent.mkdir(parents=True, exist_ok=True)
-                )
-
-                def _write_yaml() -> None:
-                    with dest_path.open("w", encoding="utf-8") as f:
-                        yaml.safe_dump(snapshot_yaml, f, sort_keys=False)
-
-                await self.hass.async_add_executor_job(_write_yaml)
-                _LOGGER.info("Cloned live panel to simulation YAML at %s", dest_path)
-
-                # Update config entry to point to the new simulation config
-                try:
-                    new_data = dict(self.config_entry.data)
-                    new_data[CONF_SIMULATION_CONFIG] = dest_path.stem
-                    self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
-                    _LOGGER.debug("Set CONF_SIMULATION_CONFIG to %s", dest_path.stem)
-                except Exception as update_err:
-                    _LOGGER.warning(
-                        "Failed to set CONF_SIMULATION_CONFIG to %s: %s",
-                        dest_path.stem,
-                        update_err,
-                    )
-
-                return self.async_create_entry(
-                    title="",
-                    data={},
-                    description=f"Cloned panel to {dest_path.name} in simulation_configs",
-                )
-
-            except Exception as e:
-                _LOGGER.error("Clone to simulation failed: %s", e)
-                errors["base"] = f"Clone failed: {e}"
 
         # Confirm form with destination field
         schema = vol.Schema(
@@ -1689,7 +1567,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=schema,
             description_placeholders={
                 "panel": device_name or "Span Panel",
-                "tabs": str(num_tabs),
             },
             errors=errors,
         )
@@ -1708,21 +1585,33 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             )
         return self.async_abort(reason="unknown")
 
-    def _get_simulation_schema(self) -> vol.Schema:
-        """Get the simulation options schema."""
+    def _get_simulation_start_time_schema(self) -> vol.Schema:
+        """Get the simulation start time schema."""
         return vol.Schema(
             {
                 vol.Optional(CONF_SIMULATION_START_TIME): str,
-                vol.Optional(CONF_SIMULATION_OFFLINE_MINUTES): int,
             }
         )
 
-    def _get_simulation_defaults(self) -> dict[str, Any]:
-        """Get the simulation options defaults."""
+    def _get_simulation_start_time_defaults(self) -> dict[str, Any]:
+        """Get the simulation start time defaults."""
         return {
             CONF_SIMULATION_START_TIME: self.config_entry.options.get(
                 CONF_SIMULATION_START_TIME, ""
             ),
+        }
+
+    def _get_simulation_offline_minutes_schema(self) -> vol.Schema:
+        """Get the simulation offline minutes schema."""
+        return vol.Schema(
+            {
+                vol.Optional(CONF_SIMULATION_OFFLINE_MINUTES): int,
+            }
+        )
+
+    def _get_simulation_offline_minutes_defaults(self) -> dict[str, Any]:
+        """Get the simulation offline minutes defaults."""
+        return {
             CONF_SIMULATION_OFFLINE_MINUTES: self.config_entry.options.get(
                 CONF_SIMULATION_OFFLINE_MINUTES, 0
             ),
