@@ -396,6 +396,10 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if coordinator:
             # Handle simulation options change (offline minutes, start time)
             simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
+            _LOGGER.info(
+                "Update listener: processing simulation_offline_minutes = %s",
+                simulation_offline_minutes,
+            )
 
             # Update simulation parameters in the existing API instance
             if hasattr(coordinator, "span_panel") and coordinator.span_panel:
@@ -408,7 +412,12 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
                     # Update simulation offline mode - this should start the offline timer
                     # from "now"
                     # The simulation_start_time is separate and used for the simulated time of day
+                    _LOGGER.info(
+                        "Calling span_panel.api.set_simulation_offline_mode(%s)",
+                        simulation_offline_minutes,
+                    )
                     span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
+                    _LOGGER.info("Successfully called set_simulation_offline_mode")
                 else:
                     _LOGGER.warning("SpanPanel API instance not found in coordinator")
             else:
@@ -458,6 +467,10 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
             _LOGGER.debug("Successfully reloaded SPAN Panel integration")
         else:
             _LOGGER.debug("No full reload needed - changes applied in place")
+
+        # Clean up the simulation-only change flag if present (after reload check)
+        # Note: We don't clean up the flag here to avoid triggering another update listener call
+        # The flag will be cleaned up on the next options save
     except asyncio.CancelledError:
         _LOGGER.debug("Update listener was cancelled during shutdown")
         # Re-raise the CancelledError to properly handle the cancellation
@@ -480,22 +493,19 @@ def _requires_full_reload(entry: ConfigEntry) -> bool:
         True if full reload is required, False if changes can be applied in-place
 
     """
-    # Check if only simulation options changed
-    simulation_options = {CONF_SIMULATION_OFFLINE_MINUTES, CONF_SIMULATION_START_TIME}
-    current_options = set(entry.options.keys())
-
+    # Check if this is a simulation-only change (indicated by a flag)
+    has_simulation_flag = entry.options.get("_simulation_only_change", False)
     _LOGGER.info(
-        "_requires_full_reload check: current_options=%s, simulation_options=%s",
-        current_options,
-        simulation_options,
+        "_requires_full_reload check: simulation_flag=%s, options=%s",
+        has_simulation_flag,
+        list(entry.options.keys()),
     )
 
-    # If only simulation options are present, no reload needed
-    if current_options.issubset(simulation_options):
-        _LOGGER.info("Only simulation options changed - no reload needed")
+    if has_simulation_flag:
+        _LOGGER.info("Simulation-only change detected - no reload needed")
         return False
 
-    _LOGGER.info("Other options present - reload needed")
+    _LOGGER.info("Full reload required")
 
     # Since we don't track previous option values, we use a conservative approach:
     # - Precision changes are handled in-place (no reload needed)
