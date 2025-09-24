@@ -38,6 +38,7 @@ class IntegrationDataProvider:
 
         Returns:
             SpanPanelCoordinator with realistic simulation data
+
         """
         # Get simulation data
         if scenario_name:
@@ -69,6 +70,7 @@ class IntegrationDataProvider:
 
         Returns:
             MagicMock configured to match SpanPanel client interface
+
         """
         mock_panel = MagicMock()
 
@@ -148,6 +150,7 @@ class IntegrationDataProvider:
 
         Returns:
             ConfigEntry configured with the specified flags
+
         """
         # Import here to avoid circular imports
         from tests.common import create_mock_config_entry
@@ -178,6 +181,7 @@ class IntegrationDataProvider:
 
         Returns:
             Tuple of (coordinator, config_entry) ready for testing
+
         """
         # Create config entry with naming flags
         config_entry = await self.create_config_entry_with_flags(naming_flags)
@@ -203,6 +207,7 @@ class IntegrationDataProvider:
 
         Returns:
             Dictionary with circuit data formatted for naming tests
+
         """
         # Get all circuit details
         circuit_details = await self._simulation_factory.get_circuit_details()

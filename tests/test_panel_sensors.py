@@ -93,11 +93,6 @@ class TestPanelSensors:
     def test_main_relay_state_sensor(self, mock_coordinator, mock_span_panel):
         """Test the main relay state sensor specifically."""
         # Lazy imports to avoid collection issues
-        from custom_components.span_panel.const import (
-            DSM_GRID_UP,
-            DSM_ON_GRID,
-            PANEL_ON_GRID,
-        )
         from custom_components.span_panel.sensor import SpanPanelPanelStatus
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
 
@@ -259,9 +254,8 @@ class TestPanelSensors:
     def test_main_relay_state_with_real_data(self):
         """Test main relay state sensor with real factory data."""
         # Lazy imports to avoid collection issues
-        from custom_components.span_panel.span_panel_data import SpanPanelData
-        from custom_components.span_panel.span_panel_hardware_status import SpanPanelHardwareStatus
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+        from custom_components.span_panel.span_panel_data import SpanPanelData
 
         # Create test data using the factory
         api_responses = SpanPanelApiResponseFactory.create_complete_panel_response()
@@ -293,9 +287,8 @@ class TestPanelSensors:
         """Test DSM state sensors with real factory data."""
         # Lazy imports to avoid collection issues
         from custom_components.span_panel.const import DSM_GRID_UP, DSM_ON_GRID
-        from custom_components.span_panel.span_panel_data import SpanPanelData
-        from custom_components.span_panel.span_panel_hardware_status import SpanPanelHardwareStatus
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+        from custom_components.span_panel.span_panel_data import SpanPanelData
 
         # Create test data using the factory
         api_responses = SpanPanelApiResponseFactory.create_complete_panel_response()

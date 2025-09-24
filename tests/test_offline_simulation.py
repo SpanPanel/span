@@ -1,8 +1,6 @@
 """Test offline simulation functionality."""
 
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock
 
 from custom_components.span_panel.span_panel_api import SpanPanelApi
 

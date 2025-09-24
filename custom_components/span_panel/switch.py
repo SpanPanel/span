@@ -55,6 +55,11 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
         # Use the same multi-circuit logic as named circuits for consistent entity IDs
+
+        # Only pass unique_id during migration - during normal operation, respect current flags
+        migration_mode = coordinator.config_entry.options.get("migration_mode", False)
+        unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+
         match len(circuit.tabs):
             case 2:
                 # 240V circuit - use both tabs
@@ -66,6 +71,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
                     friendly_name=name,
                     tab1=circuit.tabs[0],
                     tab2=circuit.tabs[1],
+                    unique_id=unique_id_for_lookup,
                 )
             case 1:
                 # 120V circuit - use single tab
@@ -76,6 +82,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
                     suffix="breaker",
                     friendly_name=name,
                     tab=circuit.tabs[0],
+                    unique_id=unique_id_for_lookup,
                 )
             case _:
                 raise ValueError(
@@ -238,9 +245,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         # Check registry first only if unique_id is provided
         if unique_id is not None:
             entity_registry = er.async_get(coordinator.hass)
-            existing_entity_id = entity_registry.async_get_entity_id(
-                "switch", "span_panel", unique_id
-            )
+            existing_entity_id = entity_registry.async_get_entity_id("switch", DOMAIN, unique_id)
 
             if existing_entity_id:
                 return existing_entity_id

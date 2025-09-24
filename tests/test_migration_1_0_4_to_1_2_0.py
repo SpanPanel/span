@@ -14,11 +14,11 @@ This test validates the complete migration process:
 
 import asyncio
 import json
-import tempfile
+from pathlib import Path
 import shutil
 import sys
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+import tempfile
+
 import yaml
 
 # Add the project root to Python path
@@ -28,7 +28,8 @@ sys.path.insert(0, str(project_root))
 # Import the real migration module
 from custom_components.span_panel.migration import _compute_normalized_unique_id
 
-async def test_migration_1_0_4_to_1_2_0():
+
+async def test_migration_1_0_4_to_1_2_0():  # noqa: C901
     """Test complete migration from v1.0.4 to v1.2.0."""
 
     print("🧪 SPAN Panel Migration Test: v1.0.4 → v1.2.0")
@@ -62,7 +63,7 @@ async def test_migration_1_0_4_to_1_2_0():
 
         print(f"📁 Loading v1.0.4 registry from temp location: {registry_source}")
 
-        with open(registry_source, 'r') as f:
+        with open(registry_source) as f:
             registry_data = json.load(f)
 
     # Extract SPAN Panel entities
@@ -117,15 +118,14 @@ async def test_migration_1_0_4_to_1_2_0():
                 elif "EnergyWh" in unique_id:
                     circuit_energy_sensors.append(entity)
 
-    expected_circuits = sorted(list(circuit_ids))
+    expected_circuits = sorted(circuit_ids)
     print(f"   • Unique circuits: {len(expected_circuits)}")
     print(f"   • Circuit power sensors: {len(circuit_power_sensors)}")
     print(f"   • Circuit energy sensors: {len(circuit_energy_sensors)}")
 
     # Phase 1: Test migration normalization
-    print(f"\n🔄 Phase 1: Testing unique_id normalization...")
+    print("\n🔄 Phase 1: Testing unique_id normalization...")
 
-    from custom_components.span_panel.migration import _compute_normalized_unique_id
 
     normalization_tests = 0
     normalization_passed = 0
@@ -177,11 +177,13 @@ async def test_migration_1_0_4_to_1_2_0():
     print(f"   📊 Normalization: {normalization_passed}/{normalization_tests} passed")
 
     # Phase 2: Validate expected YAML structure based on migration
-    print(f"\n🔍 Phase 2: Validating expected post-migration YAML structure...")
+    print("\n🔍 Phase 2: Validating expected post-migration YAML structure...")
 
     # After migration, we expect these normalized unique_ids to exist
     # and they should match what synthetic generation would produce
-    from custom_components.span_panel.helpers import get_panel_entity_suffix, construct_synthetic_unique_id
+    from custom_components.span_panel.helpers import (
+        construct_synthetic_unique_id,
+    )
 
     expected_sensors = {}
 
@@ -220,12 +222,12 @@ async def test_migration_1_0_4_to_1_2_0():
                 "circuit_id": circuit_id
             }
 
-    print(f"   📊 Expected sensors after migration:")
+    print("   📊 Expected sensors after migration:")
     print(f"      • Panel sensors: {len([s for s in expected_sensors.values() if s['type'] == 'panel'])}")
     print(f"      • Circuit power sensors: {len([s for s in expected_sensors.values() if s['type'] == 'circuit_power'])}")
     print(f"      • Circuit energy sensors: {len([s for s in expected_sensors.values() if 'circuit_energy' in s['type']])}")
 
-    yaml_content = f"""version: '1.0'
+    yaml_content = """version: '1.0'
 global_settings:
   device_identifier: nj-2316-005k6
   variables:
@@ -234,17 +236,17 @@ global_settings:
 sensors:"""
 
     # Add a few example sensors to show structure
-    for unique_id, sensor_info in list(expected_sensors.items())[:5]:
+    for unique_id, _sensor_info in list(expected_sensors.items())[:5]:
         yaml_content += f"""
   "{unique_id}":
     name: "Test Sensor
     entity_id: sensor.test_entity
     formula: state"""
 
-    print(f"   ✅ Expected YAML structure validated")
+    print("   ✅ Expected YAML structure validated")
 
     # Phase 3: Validate that live YAML would have the correct structure
-    print(f"\n🔍 Phase 3: Comparing with live YAML (v1.0.10 → v1.2.0)...")
+    print("\n🔍 Phase 3: Comparing with live YAML (v1.0.10 → v1.2.0)...")
 
     # Read the test YAML if it exists (generated from fixed implementation)
     test_yaml_path = "/tmp/span_migration_test_config.yaml"
@@ -252,15 +254,15 @@ sensors:"""
 
     # Try test YAML if it exists
     try:
-        with open(test_yaml_path, 'r') as f:
+        with open(test_yaml_path) as f:
             live_yaml_content = f.read()
         print(f"   ✅ Loaded test YAML: {test_yaml_path}")
     except Exception as e:
         print(f"   ℹ️  No test YAML found at {test_yaml_path}: {e}")
-        print(f"   ℹ️  Continuing with validation based on expected structure...")
+        print("   ℹ️  Continuing with validation based on expected structure...")
 
     if not live_yaml_content:
-        print(f"   ℹ️  Continuing with validation based on expected structure...")
+        print("   ℹ️  Continuing with validation based on expected structure...")
 
     validation_results = {
         "panel_sensors": 0,
@@ -282,7 +284,7 @@ sensors:"""
             collision_count = 0
 
             # Check panel sensors for collisions
-            expected_panel_keys = [s for s in expected_sensors.keys() if expected_sensors[s]["type"] == "panel"]
+            expected_panel_keys = [s for s in expected_sensors if expected_sensors[s]["type"] == "panel"]
             for sensor_key in expected_panel_keys:
                 if sensor_key in live_sensors:
                     panel_sensor_count += 1
@@ -296,7 +298,7 @@ sensors:"""
                     print(f"   Missing panel sensor: {sensor_key}")
 
             # Check circuit power sensors - THE KEY ISSUE
-            expected_circuit_power_keys = [s for s in expected_sensors.keys() if expected_sensors[s]["type"] == "circuit_power"]
+            expected_circuit_power_keys = [s for s in expected_sensors if expected_sensors[s]["type"] == "circuit_power"]
             for sensor_key in expected_circuit_power_keys:
                 if sensor_key in live_sensors:
                     circuit_power_count += 1
@@ -308,7 +310,7 @@ sensors:"""
             validation_results["circuit_power_sensors"] = circuit_power_count
             validation_results["collisions"] = collision_count
 
-            print(f"   Live YAML analysis:")
+            print("   Live YAML analysis:")
             print(f"      • Panel sensors found: {panel_sensor_count}/{len(expected_panel_keys)}")
             print(f"      • Circuit power sensors found: {circuit_power_count}/{len(expected_circuit_power_keys)}")
             print(f"      • Collisions detected: {collision_count}")
@@ -323,8 +325,8 @@ sensors:"""
         validation_results["collisions"] = 0  # Assume our fix works
 
     # Final Results
-    print(f"\n" + "=" * 60)
-    print(f"MIGRATION TEST RESULTS:")
+    print("\n" + "=" * 60)
+    print("MIGRATION TEST RESULTS:")
     print(f"   Panel sensors: {validation_results['panel_sensors']}/6")
     print(f"   Circuit power sensors: {validation_results['circuit_power_sensors']}/{len(expected_circuits)}")
     print(f"   Circuit energy sensors: {validation_results['circuit_energy_sensors']}/{len(expected_circuits) * 2}")
@@ -332,7 +334,7 @@ sensors:"""
 
     # Check for missing circuit power sensors
     if validation_results["missing_power_sensors"]:
-        print(f"\nMISSING CIRCUIT POWER SENSORS:")
+        print("\nMISSING CIRCUIT POWER SENSORS:")
         for circuit_id in validation_results["missing_power_sensors"]:
             print(f"   • {circuit_id[:8]}... (span_nj-2316-005k6_{circuit_id}_power)")
 
@@ -344,15 +346,15 @@ sensors:"""
         normalization_passed == normalization_tests
     )
 
-    print(f"\n" + "=" * 60)
+    print("\n" + "=" * 60)
     if success:
-        print(f"MIGRATION TEST PASSED!")
-        print(f"   All panel sensors created without collisions")
+        print("MIGRATION TEST PASSED!")
+        print("   All panel sensors created without collisions")
         print(f"   All {len(expected_circuits)} named circuit power sensors created")
-        print(f"   Unique_id normalization working correctly")
-        print(f"   Ready for v1.0.4 → v1.2.0 migration!")
+        print("   Unique_id normalization working correctly")
+        print("   Ready for v1.0.4 → v1.2.0 migration!")
     else:
-        print(f"MIGRATION TEST FAILED!")
+        print("MIGRATION TEST FAILED!")
         if validation_results["collisions"] > 0:
             print(f"   • {validation_results['collisions']} entity ID collisions detected")
         if validation_results["circuit_power_sensors"] < len(expected_circuits):

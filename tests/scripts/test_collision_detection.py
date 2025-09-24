@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Simple test to verify collision detection in entity registry mock."""
 
-import sys
 from pathlib import Path
+import sys
 from unittest.mock import MagicMock
 
 # Add project root to path

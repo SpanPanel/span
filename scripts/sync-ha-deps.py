@@ -22,8 +22,7 @@ def get_ha_dependencies():
         )
         ha_info = json.loads(result.stdout)
         return {dep["name"]: dep["version"] for dep in ha_info.get("dependencies", [])}
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as e:
-        print(f"Error getting HA dependencies: {e}")
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
         return {}
 
 
@@ -32,7 +31,6 @@ def update_pyproject_constraints(ha_deps):
     pyproject_path = Path("pyproject.toml")
 
     if not pyproject_path.exists():
-        print("pyproject.toml not found")
         return False
 
     try:
@@ -69,31 +67,25 @@ def update_pyproject_constraints(ha_deps):
         if updated:
             with open(pyproject_path, "w") as f:
                 toml.dump(pyproject, f)
-            print("Updated constraints:")
-            for update in updated:
-                print(f"  {update}")
+            for _update in updated:
+                pass
             return True
         else:
-            print("No updates needed")
             return False
 
-    except Exception as e:
-        print(f"Error updating pyproject.toml: {e}")
+    except Exception:
         return False
 
 
 def main():
-    print("Fetching HomeAssistant dependency pins...")
     ha_deps = get_ha_dependencies()
 
     if not ha_deps:
-        print("Could not fetch HA dependencies")
         sys.exit(1)
 
-    print(f"Found {len(ha_deps)} HA dependencies")
 
     if update_pyproject_constraints(ha_deps):
-        print("\nRun 'poetry lock --no-update' to update the lock file")
+        pass
 
 
 if __name__ == "__main__":

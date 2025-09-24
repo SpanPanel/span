@@ -3,9 +3,10 @@
 This module tests the entity summary logging functionality.
 """
 import logging
-import pytest
 from unittest.mock import MagicMock, patch
+
 from homeassistant.config_entries import ConfigEntry
+import pytest
 
 
 class TestLogEntitySummary:
@@ -182,7 +183,6 @@ class TestLogEntitySummary:
         # Lazy imports to avoid collection issues
         from custom_components.span_panel.coordinator import SpanPanelCoordinator
         from custom_components.span_panel.span_panel import SpanPanel
-        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
@@ -295,7 +295,6 @@ class TestEntitySummaryEdgeCases:
         # Lazy imports to avoid collection issues
         from custom_components.span_panel.coordinator import SpanPanelCoordinator
         from custom_components.span_panel.span_panel import SpanPanel
-        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
@@ -321,7 +320,6 @@ class TestEntitySummaryEdgeCases:
         # Lazy imports to avoid collection issues
         from custom_components.span_panel.coordinator import SpanPanelCoordinator
         from custom_components.span_panel.span_panel import SpanPanel
-        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)
@@ -346,7 +344,6 @@ class TestEntitySummaryEdgeCases:
         # Lazy imports to avoid collection issues
         from custom_components.span_panel.coordinator import SpanPanelCoordinator
         from custom_components.span_panel.span_panel import SpanPanel
-        from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 
         coordinator = MagicMock(spec=SpanPanelCoordinator)
         span_panel = MagicMock(spec=SpanPanel)

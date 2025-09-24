@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Test script for tabs attribute functionality."""
 
-import sys
 import os
+import sys
 
 # Add the custom_components directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "custom_components"))
@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "custom_components"))
 from custom_components.span_panel.helpers import (
     construct_tabs_attribute,
     construct_voltage_attribute,
-    parse_tabs_attribute,
     get_circuit_voltage_type,
+    parse_tabs_attribute,
 )
 from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 

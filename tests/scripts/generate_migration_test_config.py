@@ -13,42 +13,41 @@ the v2 migration will work correctly with real user data.
 
 import asyncio
 import json
+from pathlib import Path
 import shutil
 import sys
 import tempfile
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
 import yaml
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # Add the span project to the path
 project_root = Path(__file__).resolve().parents[2]  # Go up 2 levels to project root
 sys.path.insert(0, str(project_root))
 
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.storage import Store
 
 # Import span integration components
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.migration import migrate_config_entry_to_synthetic_sensors
-from custom_components.span_panel.helpers import build_circuit_unique_id, build_panel_unique_id
 
 
 class MigrationTestHarness:
     """Test harness for migration testing with real registry data."""
 
     def __init__(self):
-        self.test_storage_dir: Optional[Path] = None
+        """Initialize the migration test harness."""
+        self.test_storage_dir: Path | None = None
         self.original_config_entry_id = "01K2JBCXNSB9Q489RMG3XTMTJE"
         self.device_identifier = "nj-2316-005k6"
-        self.entity_registry: Optional[er.EntityRegistry] = None
-        self.mock_hass: Optional[HomeAssistant] = None
+        self.entity_registry: er.EntityRegistry | None = None
+        self.mock_hass: HomeAssistant | None = None
 
-    async def setup_test_environment(self) -> Tuple[HomeAssistant, ConfigEntry]:
-        """Setup isolated test environment with real registry data."""
+    async def setup_test_environment(self) -> tuple[HomeAssistant, ConfigEntry]:
+        """Set up isolated test environment with real registry data."""
         print("🔧 Setting up migration test environment...")
 
         # Create temporary storage
@@ -101,7 +100,7 @@ class MigrationTestHarness:
     def _load_test_config_entry(self) -> ConfigEntry:
         """Load the test config entry from migration storage."""
         config_entries_file = self.test_storage_dir / "core.config_entries"
-        with open(config_entries_file, 'r') as f:
+        with open(config_entries_file) as f:
             config_data = json.load(f)
 
         # Find the SPAN Panel config entry
@@ -127,13 +126,13 @@ class MigrationTestHarness:
         return config_entry
 
     async def _setup_registries(self, mock_hass: HomeAssistant) -> None:
-        """Setup real entity registry from copied data that can be modified."""
+        """Set up real entity registry from copied data that can be modified."""
 
         # Create a real EntityRegistry instance that operates on our test storage
         entity_registry_file = self.test_storage_dir / "core.entity_registry"
 
         # Load the registry data (pre-cleaned to prevent unique_id collisions)
-        with open(entity_registry_file, 'r') as f:
+        with open(entity_registry_file) as f:
             registry_data = json.load(f)
 
         # Create a mock EntityRegistry that behaves like the real one
@@ -343,7 +342,7 @@ class MigrationTestHarness:
         print(f"📊 Loaded {len(span_entities)} SPAN Panel entities into real EntityRegistry")
         print(f"🔧 Registry can now be modified and saved back to: {entity_registry_file}")
 
-    def extract_circuits_from_registry(self, mock_hass: HomeAssistant, config_entry_id: str) -> Dict[str, Dict[str, Any]]:
+    def extract_circuits_from_registry(self, mock_hass: HomeAssistant, config_entry_id: str) -> dict[str, dict[str, Any]]:
         """Extract circuit information from the entity registry."""
         entity_registry = mock_hass.data["entity_registry"]
         circuits = {}
@@ -377,7 +376,7 @@ class MigrationTestHarness:
         print(f"🔌 Extracted {len(circuits)} circuits from registry")
         return circuits
 
-    def extract_panel_sensors_from_registry(self, mock_hass: HomeAssistant, config_entry_id: str) -> Dict[str, Dict[str, Any]]:
+    def extract_panel_sensors_from_registry(self, mock_hass: HomeAssistant, config_entry_id: str) -> dict[str, dict[str, Any]]:
         """Extract panel sensor information from the entity registry."""
         entity_registry = mock_hass.data["entity_registry"]
         panel_sensors = {}
@@ -412,8 +411,8 @@ class MigrationTestHarness:
         print(f"⚡ Extracted {len(panel_sensors)} panel sensors from registry")
         return panel_sensors
 
-    async def create_realistic_coordinator_and_panel(self, circuits: Dict[str, Dict[str, Any]],
-                                                    panel_sensors: Dict[str, Dict[str, Any]]) -> Tuple[Any, Any]:
+    async def create_realistic_coordinator_and_panel(self, circuits: dict[str, dict[str, Any]],
+                                                    panel_sensors: dict[str, dict[str, Any]]) -> tuple[Any, Any]:
         """Create realistic coordinator and panel data using simulation factory."""
 
         print("🏭 Creating realistic panel data using simulation factory...")
@@ -478,7 +477,7 @@ class MigrationTestHarness:
                 circuit_mock.relayState = circuit.relay_state.value if hasattr(circuit.relay_state, 'value') else circuit.relay_state
                 circuit_mock.priority = circuit.priority.value if hasattr(circuit.priority, 'value') else circuit.priority
                 circuit_mock.isUserControllable = circuit.is_user_controllable
-                circuit_mock.tabs = [tab for tab in circuit.tabs] if circuit.tabs else []
+                circuit_mock.tabs = list(circuit.tabs) if circuit.tabs else []
 
                 circuit_dict[circuit_id] = circuit_mock
 
@@ -511,8 +510,8 @@ class MigrationTestHarness:
         print(f"🏗️ Created realistic coordinator with {len(circuit_dict)} circuits")
         return mock_coordinator, mock_span_panel
 
-    async def create_basic_mock_coordinator_and_panel(self, circuits: Dict[str, Dict[str, Any]],
-                                                     panel_sensors: Dict[str, Dict[str, Any]]) -> Tuple[Any, Any]:
+    async def create_basic_mock_coordinator_and_panel(self, circuits: dict[str, dict[str, Any]],
+                                                     panel_sensors: dict[str, dict[str, Any]]) -> tuple[Any, Any]:
         """Create basic mock coordinator and panel data as fallback."""
 
         # Create mock span panel
@@ -640,7 +639,7 @@ async def validate_migration_yaml(yaml_content: str, mock_hass: HomeAssistant,
     circuit_sensors = {k: v for k, v in sensors.items() if "circuit" in k and "_power" in k}
     energy_sensors = {k: v for k, v in sensors.items() if "energy" in k}
 
-    print(f"📊 Validation results:")
+    print("📊 Validation results:")
     print(f"   Panel sensors: {len(panel_sensors)}")
     print(f"   Circuit power sensors: {len(circuit_sensors)}")
     print(f"   Energy sensors: {len(energy_sensors)}")
@@ -662,7 +661,7 @@ async def validate_migration_yaml(yaml_content: str, mock_hass: HomeAssistant,
 
     # Validate entity ID preservation
     preserved_entity_ids = 0
-    for sensor_key, sensor_config in sensors.items():
+    for _sensor_key, sensor_config in sensors.items():
         if "entity_id" in sensor_config:
             entity_id = sensor_config["entity_id"]
             # Check if this entity_id exists in the original registry
@@ -674,7 +673,7 @@ async def validate_migration_yaml(yaml_content: str, mock_hass: HomeAssistant,
     return True
 
 
-async def generate_migration_yaml():
+async def generate_migration_yaml():  # noqa: C901
     """Generate YAML using migration registry data."""
 
     print("🚀 Starting migration YAML generation test...")
@@ -716,10 +715,11 @@ async def generate_migration_yaml():
 
         # Phase 2: Use the production synthetic sensor setup path with REAL migration logic
         print("Phase 2: Setting up synthetic sensors using production code path...")
-        from custom_components.span_panel.synthetic_sensors import setup_synthetic_configuration
-        from custom_components.span_panel.synthetic_named_circuits import generate_named_circuit_sensors
+
+        from custom_components.span_panel.synthetic_named_circuits import (
+            generate_named_circuit_sensors,
+        )
         from custom_components.span_panel.synthetic_panel_circuits import generate_panel_sensors
-        from homeassistant.helpers import storage
 
         # Mock the storage system to avoid migration issues
         storage_data = {}
@@ -883,7 +883,6 @@ sensors:"""
 
         # Combine all configurations
         all_sensors = {**panel_configs, **circuit_configs}
-        all_globals = {**panel_globals, **circuit_globals}
 
         # Generate YAML manually since we're not using storage manager
         yaml_content = f"""version: '1.0'
@@ -976,8 +975,8 @@ sensors:"""
         try:
             yaml_data = yaml.safe_load(yaml_content)
             all_sensors = yaml_data.get("sensors", {})
-            panel_sensor_count = len([k for k in all_sensors.keys() if "circuit" not in k])
-            circuit_sensor_count = len([k for k in all_sensors.keys() if "circuit" in k and "_power" in k])
+            panel_sensor_count = len([k for k in all_sensors if "circuit" not in k])
+            circuit_sensor_count = len([k for k in all_sensors if "circuit" in k and "_power" in k])
             total_sensor_count = len(all_sensors)
         except Exception:
             # Fallback counts if YAML parsing fails
@@ -988,31 +987,31 @@ sensors:"""
         # Save summary
         summary_file = '/tmp/span_migration_test_summary.txt'
         with open(summary_file, 'w', encoding='utf-8') as f:
-            f.write(f"SPAN Panel Migration Test Summary\n")
-            f.write(f"=" * 40 + "\n\n")
+            f.write("SPAN Panel Migration Test Summary\n")
+            f.write("=" * 40 + "\n\n")
             f.write(f"Test Config Entry: {config_entry.entry_id}\n")
             f.write(f"Device Identifier: {harness.device_identifier}\n")
-            f.write(f"Migration Mode: True\n")
+            f.write("Migration Mode: True\n")
             f.write(f"Normalization Success: {normalization_success}\n")
             f.write(f"Validation Success: {validation_success}\n\n")
 
-            f.write(f"Migration Results:\n")
-            f.write(f"  ✅ Registry copied to test environment\n")
-            f.write(f"  ✅ Unique_id normalization performed\n")
-            f.write(f"  ✅ Registry changes saved back to test file\n")
-            f.write(f"  ✅ YAML generation completed\n\n")
+            f.write("Migration Results:\n")
+            f.write("  ✅ Registry copied to test environment\n")
+            f.write("  ✅ Unique_id normalization performed\n")
+            f.write("  ✅ Registry changes saved back to test file\n")
+            f.write("  ✅ YAML generation completed\n\n")
 
-            f.write(f"Sensor Counts:\n")
+            f.write("Sensor Counts:\n")
             f.write(f"  Panel sensors: {panel_sensor_count}\n")
             f.write(f"  Circuit sensors: {circuit_sensor_count}\n")
             f.write(f"  Total sensors: {total_sensor_count}\n\n")
 
-            f.write(f"Registry Analysis:\n")
+            f.write("Registry Analysis:\n")
             f.write(f"  Circuits extracted: {len(circuits)}\n")
             f.write(f"  Panel sensors extracted: {len(panel_sensors)}\n\n")
 
             f.write("Generated Circuit Sensors:\n")
-            circuit_names = [k for k in all_sensors.keys() if "circuit" in k and "_power" in k][:10]
+            circuit_names = [k for k in all_sensors if "circuit" in k and "_power" in k][:10]
             for key in circuit_names:
                 f.write(f"  - {key}\n")
             if circuit_sensor_count > 10:

@@ -207,4 +207,4 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             bool: True if migration succeeded, False otherwise
 
         """
-        return await self._migration_manager.migrate_synthetic_entities(old_flags, new_flags)
+        return await self._migration_manager._migrate_legacy_to_prefix(old_flags, new_flags)

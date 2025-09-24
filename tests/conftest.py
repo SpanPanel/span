@@ -1,6 +1,7 @@
 """Configure test framework."""
 
 import logging
+import os
 from pathlib import Path
 import sys
 import types
@@ -8,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 # Synthetic sensors package removed - no longer needed
 import pytest
-import os
+
 from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
 
 # sys.path.insert(0, str(Path(__file__).parent.parent))  # Removed - using pytest pythonpath instead
@@ -70,7 +71,7 @@ span_panel_api_exceptions_mock.SpanPanelServerError = MockSpanPanelServerError
 span_panel_api_exceptions_mock.SpanPanelAPIError = MockSpanPanelAPIError
 
 # Only mock span_panel_api if not using real simulation mode
-if not os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() in ('1', 'true', 'yes'):
+if os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() not in ('1', 'true', 'yes'):
     sys.modules["span_panel_api"] = span_panel_api_mock
     sys.modules["span_panel_api.exceptions"] = span_panel_api_exceptions_mock
 

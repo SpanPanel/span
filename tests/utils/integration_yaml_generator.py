@@ -1,6 +1,6 @@
 """Integration YAML Generator for testing purposes."""
 
-from typing import Any, Dict
+from typing import Any
 
 
 class IntegrationYAMLGenerator:
@@ -13,13 +13,13 @@ class IntegrationYAMLGenerator:
     async def generate_yaml_for_naming_pattern(
         self,
         hass: Any,
-        naming_flags: Dict[str, Any]
+        naming_flags: dict[str, Any]
     ) -> str:
         """Generate YAML for a specific naming pattern."""
         # Placeholder implementation
         return "# Placeholder YAML content"
 
-    async def generate_yaml_for_all_patterns(self, hass: Any) -> Dict[str, str]:
+    async def generate_yaml_for_all_patterns(self, hass: Any) -> dict[str, str]:
         """Generate YAML for all naming patterns."""
         # Placeholder implementation
         return {
@@ -32,7 +32,7 @@ class IntegrationYAMLGenerator:
     async def generate_yaml_with_solar_enabled(
         self,
         hass: Any,
-        naming_flags: Dict[str, Any],
+        naming_flags: dict[str, Any],
         leg1_circuit: int,
         leg2_circuit: int
     ) -> str:

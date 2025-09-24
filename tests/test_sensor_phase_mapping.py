@@ -2,7 +2,7 @@
 """Test sensor mapping functionality."""
 
 import pytest
-from span_panel_api.phase_validation import get_tab_phase, are_tabs_opposite_phase
+from span_panel_api.phase_validation import are_tabs_opposite_phase, get_tab_phase
 
 
 def test_tab_phase_determination():
@@ -33,7 +33,7 @@ def test_opposite_phase_validation():
 
 def test_filtered_tab_options():
     """Test the filtered tab options function."""
-    from custom_components.span_panel.config_flow import get_filtered_tab_options
+    from custom_components.span_panel.config_flow_utils.validation import get_filtered_tab_options
 
     available_tabs = [1, 2, 3, 4, 5, 6, 7, 8]
 

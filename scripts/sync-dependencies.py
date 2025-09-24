@@ -18,7 +18,6 @@ def get_manifest_versions():
     manifest_path = Path("custom_components/span_panel/manifest.json")
 
     if not manifest_path.exists():
-        print(f"Error: {manifest_path} not found")
         return None
 
     try:
@@ -42,8 +41,7 @@ def get_manifest_versions():
 
         return versions
 
-    except Exception as e:
-        print(f"Error reading manifest.json: {e}")
+    except Exception:
         return None
 
 
@@ -52,7 +50,6 @@ def update_ci_workflow(versions):
     ci_path = Path(".github/workflows/ci.yml")
 
     if not ci_path.exists():
-        print(f"Error: {ci_path} not found")
         return False
 
     try:
@@ -87,32 +84,25 @@ def update_ci_workflow(versions):
 
         return False
 
-    except Exception as e:
-        print(f"Error updating CI workflow: {e}")
+    except Exception:
         return False
 
 
 def main():
     """Main function."""
-    print("Checking dependency version sync between manifest.json and CI workflow...")
 
     # Get versions from manifest
     versions = get_manifest_versions()
     if not versions:
-        print("Failed to read versions from manifest.json")
         sys.exit(1)
 
-    print(f"Manifest versions: {versions}")
 
     # Update CI workflow
     changes_made = update_ci_workflow(versions)
 
     if changes_made:
-        print("✅ CI workflow updated to match manifest.json versions")
-        print("Please review the changes and commit them.")
         sys.exit(1)  # Exit with error to fail pre-commit
     else:
-        print("✅ CI workflow already in sync with manifest.json")
         sys.exit(0)
 
 
