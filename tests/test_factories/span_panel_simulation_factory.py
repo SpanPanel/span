@@ -5,14 +5,12 @@ to generate realistic SPAN panel data that exactly matches what the integration 
 using actual SPAN panel response structures.
 """
 
-from typing import Any
-import yaml
-import os
-from pathlib import Path
-
 import asyncio
+from pathlib import Path
+from typing import Any
 
 from span_panel_api import SpanPanelClient
+import yaml
 
 
 class SpanPanelSimulationFactory:
@@ -27,6 +25,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Full path to the configuration file
+
         """
         # Look for config in the integration's simulation_configs directory
         current_file = Path(__file__)
@@ -61,6 +60,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             SpanPanelClient configured for simulation mode with YAML config
+
         """
         config_path = await cls._get_config_path(config_name)
 
@@ -90,6 +90,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Dictionary containing all panel data types the integration needs
+
         """
         client = await cls.create_simulation_client(host=host, config_name=config_name)
         async with client:
@@ -131,6 +132,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             CircuitsOut object from simulation
+
         """
         client = await cls.create_simulation_client(host=host, config_name=config_name)
         async with client:
@@ -150,6 +152,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Dictionary of scenario names to simulation parameters
+
         """
         return {
             "normal_operation": {
@@ -208,6 +211,7 @@ class SpanPanelSimulationFactory:
 
         Raises:
             ValueError: If scenario_name is not found
+
         """
         scenarios = cls.get_preset_scenarios()
         if scenario_name not in scenarios:
@@ -226,6 +230,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Dictionary mapping circuit IDs to their friendly names
+
         """
         client = await cls.create_simulation_client(config_name=config_name)
         async with client:
@@ -244,6 +249,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Dictionary mapping appliance types to lists of circuit IDs
+
         """
         # Get all circuits dynamically from the YAML config
         circuit_ids = await cls.get_real_circuit_ids(config_name)
@@ -300,6 +306,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             List of circuit IDs matching the patterns
+
         """
         if isinstance(name_patterns, str):
             name_patterns = [name_patterns]
@@ -323,6 +330,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Dictionary mapping circuit IDs to their full circuit data
+
         """
         client = await cls.create_simulation_client(config_name=config_name)
         async with client:
@@ -350,6 +358,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             List of config names (without .yaml extension)
+
         """
         configs = []
 
@@ -387,6 +396,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Dictionary mapping config keys to display names
+
         """
         # Use the same logic as the config flow
         from custom_components.span_panel.config_flow import get_available_simulation_configs
@@ -401,6 +411,7 @@ class SpanPanelSimulationFactory:
 
         Returns:
             Serial number from the config file
+
         """
         content = Path(yaml_path).read_text(encoding="utf-8")
         data = yaml.safe_load(content)

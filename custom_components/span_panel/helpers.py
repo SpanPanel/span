@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
-from .const import USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
+from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
 
@@ -309,7 +309,7 @@ def construct_panel_synthetic_entity_id(
     # Check registry first only if unique_id is provided
     if unique_id is not None:
         entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
         if existing_entity_id:
             return existing_entity_id
         else:
@@ -459,7 +459,7 @@ def get_friendly_name_from_registry(
     entity_registry = er.async_get(hass)
 
     # First get the entity_id using the unique_id
-    existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+    existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
 
     if existing_entity_id:
         # Now get the full entity entry using the entity_id
@@ -508,7 +508,7 @@ def construct_entity_id(
     # Check registry first only if unique_id is provided
     if unique_id is not None:
         entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
 
         if existing_entity_id:
             return existing_entity_id
@@ -516,8 +516,8 @@ def construct_entity_id(
     # Construct default entity_id
     config_entry = coordinator.config_entry
 
-    # Use the config entry title as the device name for entity ID construction
-    device_name = config_entry.title
+    # Get device name from config entry data
+    device_name = config_entry.data.get("device_name", config_entry.title)
     if not device_name:
         return None
 
@@ -896,7 +896,13 @@ def construct_multi_circuit_entity_id(
     # Check registry first only if unique_id is provided
     if unique_id is not None:
         entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
+
+        _LOGGER.debug(
+            "Multi-circuit helper registry lookup (switches/selects) - unique_id=%s, found_entity_id=%s",
+            unique_id,
+            existing_entity_id,
+        )
 
         if existing_entity_id:
             return existing_entity_id
@@ -905,9 +911,13 @@ def construct_multi_circuit_entity_id(
             raise ValueError(
                 f"Registry lookup failed for unique_id '{unique_id}' during migration. Entity should exist in registry."
             )
+    else:
+        _LOGGER.debug(
+            "Multi-circuit helper (switches/selects) - no unique_id provided, skipping registry lookup"
+        )
 
-    # Get device name from config entry title
-    device_name = coordinator.config_entry.title
+    # Get device name from config entry data
+    device_name = coordinator.config_entry.data.get("device_name", coordinator.config_entry.title)
     if not device_name:
         return None
 
@@ -967,6 +977,7 @@ def construct_single_circuit_entity_id(
     suffix: str,
     circuit_data: SpanPanelCircuit,
     unique_id: str | None = None,
+    device_name: str | None = None,
 ) -> str | None:
     """Construct entity ID for single-circuit sensors.
 
@@ -977,6 +988,7 @@ def construct_single_circuit_entity_id(
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_data: Circuit data object
         unique_id: The unique ID for this entity (None to skip registry lookup)
+        device_name: Device name for entity ID construction (None to use from config entry)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
@@ -985,7 +997,13 @@ def construct_single_circuit_entity_id(
     # Check registry first only if unique_id is provided
     if unique_id is not None:
         entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
+
+        _LOGGER.debug(
+            "Circuit helper registry lookup - unique_id=%s, found_entity_id=%s",
+            unique_id,
+            existing_entity_id,
+        )
 
         if existing_entity_id:
             return existing_entity_id
@@ -995,21 +1013,32 @@ def construct_single_circuit_entity_id(
                 f"REGISTRY LOOKUP ERROR: Expected unique_id '{unique_id}' not found in registry. "
                 f"This indicates a migration or configuration mismatch."
             )
+    else:
+        _LOGGER.debug("Circuit helper - no unique_id provided, skipping registry lookup")
 
     # Get device info
-    device_info = panel_to_device_info(span_panel)
+    device_info = panel_to_device_info(span_panel, device_name)
     if not device_info or not device_info.get("name"):
         return None
 
     use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
     if use_circuit_numbers:
-        # Use circuit number pattern: sensor.span_panel_circuit_30_power
-        circuit_number = get_circuit_number(circuit_data)
-        if circuit_number:
-            circuit_part = f"circuit_{circuit_number}"
+        # Check if this is a 240V circuit (2 tabs) or 120V circuit (1 tab)
+        if circuit_data.tabs and len(circuit_data.tabs) == 2:
+            # 240V circuit - use both tab numbers
+            sorted_tabs = sorted(circuit_data.tabs)
+            circuit_part = f"circuit_{sorted_tabs[0]}_{sorted_tabs[1]}"
+        elif circuit_data.tabs and len(circuit_data.tabs) == 1:
+            # 120V circuit - use single tab number
+            circuit_part = f"circuit_{circuit_data.tabs[0]}"
         else:
-            circuit_part = "circuit_unknown"
+            # Fallback to original logic for circuits without tabs or with invalid tab count
+            circuit_number = get_circuit_number(circuit_data)
+            if circuit_number:
+                circuit_part = f"circuit_{circuit_number}"
+            else:
+                circuit_part = "circuit_unknown"
     else:
         # Use friendly name pattern: sensor.span_panel_solar_east_power
         if circuit_data.name:
@@ -1017,7 +1046,7 @@ def construct_single_circuit_entity_id(
         else:
             circuit_part = "single_circuit"
 
-    # Build the entity ID
+    # Build the entity ID (only for non-voltage-specific cases)
     use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
     parts = []
 
@@ -1068,7 +1097,7 @@ def construct_panel_entity_id(
     # Check registry first only if unique_id is provided
     if unique_id is not None:
         entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, "span_panel", unique_id)
+        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
 
         # Debug logging for panel entity registry lookup
         _LOGGER.debug(
@@ -1274,62 +1303,6 @@ def construct_unmapped_circuit_id(circuit_number: int | str) -> str:
     return f"unmapped_tab_{circuit_number}"
 
 
-def sanitize_device_name_for_yaml(device_name: str) -> str:
-    """Sanitize device name for use in YAML keys.
-
-    Removes or replaces characters that would create invalid YAML keys.
-
-    Args:
-        device_name: The device name to sanitize
-
-    Returns:
-        Sanitized device name safe for YAML keys
-
-    """
-    # Replace problematic characters with underscores
-    sanitized = device_name.lower()
-    sanitized = sanitized.replace(" ", "_")
-    sanitized = sanitized.replace("(", "")
-    sanitized = sanitized.replace(")", "")
-    sanitized = sanitized.replace(":", "")
-    sanitized = sanitized.replace("-", "_")
-    sanitized = sanitized.replace(".", "_")
-    sanitized = sanitized.replace(",", "_")
-    sanitized = sanitized.replace("'", "")
-    sanitized = sanitized.replace('"', "")
-    sanitized = sanitized.replace("&", "_and_")
-    sanitized = sanitized.replace("+", "_plus_")
-    sanitized = sanitized.replace("=", "_equals_")
-    sanitized = sanitized.replace("!", "")
-    sanitized = sanitized.replace("?", "")
-    sanitized = sanitized.replace("@", "_at_")
-    sanitized = sanitized.replace("#", "_hash_")
-    sanitized = sanitized.replace("$", "_dollar_")
-    sanitized = sanitized.replace("%", "_percent_")
-    sanitized = sanitized.replace("^", "")
-    sanitized = sanitized.replace("*", "_star_")
-    sanitized = sanitized.replace("[", "")
-    sanitized = sanitized.replace("]", "")
-    sanitized = sanitized.replace("{", "")
-    sanitized = sanitized.replace("}", "")
-    sanitized = sanitized.replace("|", "_or_")
-    sanitized = sanitized.replace("\\", "_")
-    sanitized = sanitized.replace("/", "_")
-    sanitized = sanitized.replace("<", "_lt_")
-    sanitized = sanitized.replace(">", "_gt_")
-    sanitized = sanitized.replace("~", "_tilde_")
-    sanitized = sanitized.replace("`", "")
-
-    # Remove multiple consecutive underscores
-    while "__" in sanitized:
-        sanitized = sanitized.replace("__", "_")
-
-    # Remove leading/trailing underscores
-    sanitized = sanitized.strip("_")
-
-    return sanitized
-
-
 def construct_tabs_attribute(circuit: SpanPanelCircuit) -> str | None:
     """Construct tabs attribute string from circuit data.
 
@@ -1481,109 +1454,3 @@ def construct_voltage_attribute(circuit: SpanPanelCircuit) -> int | None:
             len(circuit.tabs),
         )
         return None
-
-
-# Rename the dispatcher and update docstring
-
-
-def construct_multi_tab_entity_id_from_key(
-    coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
-    platform: str,
-    sensor_key: str,
-    sensor_config: dict[str, Any],
-    unique_id: str | None = None,
-) -> str | None:
-    """Construct entity ID for multi-tab (e.g., 240V) or synthetic sensor using sensor key.
-
-    This is a convenience helper that determines the appropriate entity ID construction
-    method based on the sensor key and calls the right helper function.
-
-    Args:
-        coordinator: The coordinator instance
-        span_panel: The span panel data
-        platform: Platform name ("sensor", "switch", "select")
-        sensor_key: Sensor key like "span_abc123_solar_inverter_instant_power"
-        sensor_config: Sensor configuration dictionary
-        unique_id: The unique ID for this entity (None to skip registry lookup)
-
-    Returns:
-        Constructed entity ID string or None if unable to construct
-
-    """
-    # Extract suffix from sensor key
-    suffix = get_suffix_from_sensor_key(sensor_key)
-
-    # Check if sensor has tabs attribute that we can use for circuit-based naming
-    tabs_attr = sensor_config.get("attributes", {}).get("tabs")
-    if tabs_attr:
-        tab_numbers = parse_tabs_attribute(tabs_attr)
-        if tab_numbers:
-            _LOGGER.debug(
-                "Using tabs attribute '%s' for entity ID construction: %s",
-                tabs_attr,
-                tab_numbers,
-            )
-            # Use multi-circuit helper with tab numbers from attribute
-            return construct_multi_circuit_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform=platform,
-                suffix=suffix,
-                circuit_numbers=tab_numbers,
-                friendly_name=sensor_config.get("name"),
-                unique_id=unique_id,
-            )
-
-    # Determine sensor type and use appropriate helper
-    if is_solar_sensor_key(sensor_key):
-        # Multi-tab (e.g., 240V) synthetic sensor
-        solar_info = extract_solar_info_from_sensor_key(sensor_key, sensor_config)
-        if solar_info:
-            friendly_name = solar_info.get("friendly_name", "Solar")
-            if not isinstance(friendly_name, str):
-                friendly_name = "Solar"
-            return construct_240v_synthetic_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform=platform,
-                suffix=suffix,
-                friendly_name=friendly_name,
-                unique_id=unique_id,
-                tab1=solar_info.get("leg1", 0),
-                tab2=solar_info.get("leg2", 0),
-            )
-
-    elif is_panel_level_sensor_key(sensor_key):
-        # Panel-level sensor
-        device_name = coordinator.config_entry.title
-        return construct_panel_entity_id(
-            coordinator=coordinator,
-            span_panel=span_panel,
-            platform=platform,
-            suffix=suffix,
-            device_name=device_name,
-            unique_id=unique_id,
-        )
-
-    else:
-        # Other synthetic sensors - use multi-circuit helper with friendly name from config
-        name = sensor_config.get("name", "")
-        if name:
-            # Remove suffix from name to get base friendly name
-            for suffix_pattern in [" Power", " Energy", " Consumption", " Production"]:
-                if name.endswith(suffix_pattern):
-                    name = name[: -len(suffix_pattern)]
-                    break
-
-            return construct_multi_circuit_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform=platform,
-                suffix=suffix,
-                circuit_numbers=[],  # Non-solar synthetics don't necessarily map to specific circuits
-                friendly_name=name,
-                unique_id=unique_id,
-            )
-
-    return None

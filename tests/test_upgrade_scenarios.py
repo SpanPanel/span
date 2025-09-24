@@ -234,6 +234,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_CIRCUIT_NUMBERS: False,
         }
         mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -263,6 +264,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_CIRCUIT_NUMBERS: True,
         }
         mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -290,6 +292,7 @@ class TestEntityIdConstructionUpgradeScenarios:
             USE_CIRCUIT_NUMBERS: True,
         }
         mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -358,6 +361,7 @@ class TestSyntheticEntityUpgradeScenarios:
             USE_CIRCUIT_NUMBERS: False,
         }
         mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info
@@ -390,6 +394,7 @@ class TestSyntheticEntityUpgradeScenarios:
             USE_CIRCUIT_NUMBERS: True,
         }
         mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
         # Mock device info

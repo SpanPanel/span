@@ -17,11 +17,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
-from typing import Any
-
+import re
 import sys
+from typing import Any
 
 # Ensure we can import the integration module directly from repo root
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -115,7 +114,7 @@ def main() -> int:
         if e.get("platform") == "span_panel" and (e.get("entity_id", "").startswith("sensor."))
     ]
 
-    total = len(span_sensors)
+    len(span_sensors)
     mismatches: list[tuple[str, str]] = []
     circuits: set[str] = set()
 
@@ -132,11 +131,10 @@ def main() -> int:
             if lu > 0:
                 circuits.add(remainder[:lu])
 
-    print(f"SPAN sensors: {total}; normalizable mismatches: {len(mismatches)}")
-    for old, new in mismatches[:10]:
-        print(f"  {old} -> {new}")
+    for _old, _new in mismatches[:10]:
+        pass
     if len(mismatches) > 10:
-        print(f"  ... {len(mismatches) - 10} more")
+        pass
 
     # If YAML provided, check for power keys presence per circuit
     if args.yaml and args.yaml.exists():
@@ -147,10 +145,8 @@ def main() -> int:
             key = rf'"span_[^"]*_{re.escape(circuit)}_power"\s*:\s*\n'
             if not re.search(key, yaml_text):
                 missing_power.append(circuit)
-        print(f"Circuits total (from registry): {len(circuits)}")
-        print(f"Circuits missing power in YAML: {len(missing_power)}")
         if missing_power[:10]:
-            print("  examples:", ", ".join(missing_power[:10]))
+            pass
 
     return 0
 

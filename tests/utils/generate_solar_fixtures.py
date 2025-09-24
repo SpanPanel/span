@@ -6,9 +6,10 @@ solar sensors for specific leg configurations to create expected test outputs.
 """
 
 import asyncio
-import sys
 from pathlib import Path
+import sys
 from unittest.mock import MagicMock
+
 import yaml
 
 # Add the project root to Python path so imports work
@@ -37,6 +38,7 @@ async def generate_solar_fixture_with_legs(
 
     Returns:
         Generated YAML content as string
+
     """
     try:
         # Load the base fixture
@@ -47,7 +49,7 @@ async def generate_solar_fixture_with_legs(
             raise FileNotFoundError(f"Base fixture not found: {base_fixture_path}")
 
         print(f"📝 Loading base fixture: {base_fixture_path}")
-        with open(base_fixture_path, 'r') as f:
+        with open(base_fixture_path) as f:
             base_yaml_data = yaml.safe_load(f)
 
         print(f"🔍 Base fixture has {len(base_yaml_data.get('sensors', {}))} sensors")
@@ -105,7 +107,9 @@ async def generate_solar_fixture_with_legs(
         print(f"⚙️ Generating solar sensors for legs {leg1_circuit} and {leg2_circuit}...")
 
         # Prefer using the integration's solar generator to ensure consistency
-        from custom_components.span_panel.synthetic_solar import generate_solar_sensors_with_entity_ids
+        from custom_components.span_panel.synthetic_solar import (
+            generate_solar_sensors_with_entity_ids,
+        )
 
         # Build mock coordinator/span_panel similarly to other generators
         mock_coordinator = MagicMock()
@@ -205,7 +209,7 @@ async def generate_all_solar_fixtures():
         else:
             print(f"❌ Failed to generate {config['output']}")
 
-    print(f"\n🎉 Solar fixture generation complete!")
+    print("\n🎉 Solar fixture generation complete!")
     print(f"📊 Generated {success_count}/{len(solar_configs)} solar fixtures")
     print(f"📁 Fixtures saved to: {fixtures_dir}")
 

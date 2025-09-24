@@ -2,9 +2,8 @@
 """Generate actual sensor YAML using the same code path as the test."""
 
 import asyncio
-import sys
-import os
 from pathlib import Path
+import sys
 
 # Add the span project to the path
 project_root = Path(__file__).resolve().parents[1]  # Go up 1 level to project root
@@ -26,12 +25,6 @@ async def generate_actual_yaml():
     with open('/tmp/actual_sensor_from_test.yaml', 'w') as f:
         f.write(sensor_yaml)
 
-    print("Generated YAML saved to /tmp/actual_sensor_from_test.yaml")
-    print("\nGenerated YAML content:")
-    print("=" * 50)
-    print(sensor_yaml)
-    print("=" * 50)
-    print(f"\nSensor mapping: {sensor_mapping}")
 
 if __name__ == "__main__":
     asyncio.run(generate_actual_yaml())

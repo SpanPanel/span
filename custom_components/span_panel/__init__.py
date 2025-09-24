@@ -298,12 +298,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-        # Check for pending legacy migration after full setup is complete
-        if config.get("pending_legacy_migration", False):
+        # Check for pending legacy migration after all platforms are set up
+        if entry.options.get("pending_legacy_migration", False):
             _LOGGER.info("Found pending legacy migration flag, performing migration")
-            hass.async_create_task(_handle_pending_legacy_migration(hass, entry, coordinator))
-        else:
-            _LOGGER.info("No pending legacy migration flag found")
+            await _handle_pending_legacy_migration(hass, entry, coordinator)
 
     except Exception:
         # Clean up on failure
@@ -639,9 +637,9 @@ async def _handle_pending_legacy_migration(
     """
     # Always remove the flag first to prevent infinite loops
     _LOGGER.info("Removing pending_legacy_migration flag to prevent loops")
-    current_data = dict(entry.data)
-    current_data.pop("pending_legacy_migration", None)
-    hass.config_entries.async_update_entry(entry, data=current_data)
+    current_options = dict(entry.options)
+    current_options.pop("pending_legacy_migration", None)
+    hass.config_entries.async_update_entry(entry, options=current_options)
 
     try:
         _LOGGER.info("Starting pending legacy migration")
@@ -650,7 +648,7 @@ async def _handle_pending_legacy_migration(
         old_flags = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
         new_flags = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
 
-        success = await coordinator.migrate_synthetic_entities(old_flags, new_flags)
+        success = await coordinator.migrate_entity_ids(old_flags, new_flags)
 
         if success:
             _LOGGER.info("Pending legacy migration completed successfully")

@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""
-Quick test to verify phase validation implementation.
-"""
+"""Quick test to verify phase validation implementation."""
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "span-panel-api/src"))
 
 from span_panel_api.phase_validation import (
-    validate_solar_tabs,
     are_tabs_opposite_phase,
     get_tab_phase,
+    validate_solar_tabs,
 )
 
 

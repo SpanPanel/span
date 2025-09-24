@@ -4,7 +4,6 @@ from typing import Any
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntryState
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2

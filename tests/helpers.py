@@ -3,6 +3,11 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 import datetime
+
+# Import from factories.py (the module file, not the package directory)
+# Force direct file import to avoid the factories/ directory conflict
+import importlib.util
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,9 +18,6 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.const import (
-    CURRENT_RUN_CONFIG,
-    DSM_GRID_STATE,
-    DSM_STATE,
     DSM_GRID_UP,
     DSM_ON_GRID,
     PANEL_ON_GRID,
@@ -25,11 +27,6 @@ from custom_components.span_panel.span_panel_data import SpanPanelData
 from custom_components.span_panel.span_panel_hardware_status import (
     SpanPanelHardwareStatus,
 )
-
-# Import from factories.py (the module file, not the package directory)
-# Force direct file import to avoid the factories/ directory conflict
-import importlib.util
-import os
 
 factories_path = os.path.join(os.path.dirname(__file__), "factories.py")
 spec = importlib.util.spec_from_file_location("factories_direct", factories_path)

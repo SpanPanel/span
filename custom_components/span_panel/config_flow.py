@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
 import enum
 import logging
 from pathlib import Path
@@ -25,12 +24,6 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util import slugify
 from homeassistant.util.network import is_ipv4_address
 from span_panel_api import SpanPanelClient
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
-from span_panel_api.phase_validation import (
-    are_tabs_opposite_phase,
-    get_tab_phase,
-    validate_solar_tabs,
-)
 from span_panel_api.simulation import DynamicSimulationEngine, SimulationConfig
 import voluptuous as vol
 import yaml
@@ -39,6 +32,18 @@ from custom_components.span_panel.span_panel_hardware_status import (
     SpanPanelHardwareStatus,
 )
 
+from .config_flow_utils import (
+    build_general_options_schema,
+    get_available_simulation_configs,
+    get_available_unmapped_tabs,
+    get_current_naming_pattern,
+    get_general_options_defaults,
+    pattern_to_flags,
+    process_general_options_input,
+    validate_auth_token,
+    validate_host,
+    validate_simulation_time,
+)
 from .const import (
     CONF_API_RETRIES,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
@@ -52,14 +57,8 @@ from .const import (
     CONFIG_API_RETRY_TIMEOUT,
     CONFIG_TIMEOUT,
     COORDINATOR,
-    DEFAULT_API_RETRIES,
-    DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
-    DEFAULT_API_RETRY_TIMEOUT,
-    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     ENTITY_NAMING_PATTERN,
-    ISO_DATETIME_FORMAT,
-    TIME_ONLY_FORMATS,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
@@ -83,169 +82,6 @@ _LOGGER = logging.getLogger(__name__)
 SIM_FILE_KEY = "simulation_config_file"
 SIM_EXPORT_PATH = "simulation_export_path"
 SIM_IMPORT_PATH = "simulation_import_path"
-
-
-def get_available_simulation_configs() -> dict[str, str]:
-    """Get available simulation configuration files.
-
-    Returns:
-        Dictionary mapping config keys to display names
-
-    """
-    configs = {}
-
-    # Get the integration's simulation_configs directory
-    current_file = Path(__file__)
-    config_dir = current_file.parent / "simulation_configs"
-
-    if config_dir.exists():
-        for yaml_file in config_dir.glob("*.yaml"):
-            config_key = yaml_file.stem
-
-            # Create user-friendly display names from filename
-            display_name = config_key.replace("simulation_config_", "").replace("_", " ").title()
-
-            configs[config_key] = display_name
-
-    # If no configs found, provide a default
-    if not configs:
-        configs["simulation_config_32_circuit"] = "32-Circuit Residential Panel (Default)"
-
-    return configs
-
-
-async def get_available_unmapped_tabs(hass: HomeAssistant, config_entry: ConfigEntry) -> list[int]:
-    """Get list of available unmapped tab numbers from panel data.
-
-    Args:
-        hass: Home Assistant instance
-        config_entry: Configuration entry for this integration
-
-    Returns:
-        List of unmapped tab numbers available for solar configuration
-
-    """
-    try:
-        # Get the coordinator from the integration's data
-        coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
-        panel_data = coordinator.data
-
-        if not panel_data or not hasattr(panel_data, "circuits"):
-            return []
-
-        # Get all tab numbers from circuits that start with "unmapped_tab_"
-        unmapped_tabs = []
-        for circuit_id in panel_data.circuits:
-            if circuit_id.startswith("unmapped_tab_"):
-                try:
-                    tab_number = int(circuit_id.replace("unmapped_tab_", ""))
-                    unmapped_tabs.append(tab_number)
-                except ValueError:
-                    continue
-
-        return sorted(unmapped_tabs)
-
-    except (KeyError, AttributeError) as e:
-        _LOGGER.warning("Could not get unmapped tabs from panel data: %s", e)
-        return []
-
-
-def validate_solar_tab_selection(
-    tab1: int, tab2: int, available_tabs: list[int]
-) -> tuple[bool, str]:
-    """Validate solar tab selection for proper 240V configuration.
-
-    Args:
-        tab1: First selected tab number
-        tab2: Second selected tab number
-        available_tabs: List of available unmapped tab numbers
-
-    Returns:
-        tuple of (is_valid, error_message) where:
-        - is_valid: True if selection is valid for 240V solar
-        - error_message: Description of validation result or error
-
-    """
-    # Check if both tabs are provided
-    if tab1 == 0 or tab2 == 0:
-        return (
-            False,
-            "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.",
-        )
-
-    # Check if tabs are the same
-    if tab1 == tab2:
-        return (
-            False,
-            f"Solar legs cannot use the same tab ({tab1}). Two different tabs are required for 240V measurement.",
-        )
-
-    # Check if both tabs are available (unmapped)
-    if tab1 not in available_tabs:
-        return False, f"Tab {tab1} is not available or is already mapped to a circuit."
-
-    if tab2 not in available_tabs:
-        return False, f"Tab {tab2} is not available or is already mapped to a circuit."
-
-    # Use phase validation from the API package
-    is_valid, message = validate_solar_tabs(tab1, tab2, available_tabs)
-
-    # If validation failed due to same phase, provide more detailed error
-    if not is_valid and "both on" in message:
-        try:
-            phase1 = get_tab_phase(tab1)
-            phase2 = get_tab_phase(tab2)
-            return False, (
-                f"Invalid selection: Tab {tab1} ({phase1}) and Tab {tab2} ({phase2}) are both on the same phase. "
-                f"For proper 240V measurement, tabs must be on opposite phases (L1 + L2)."
-            )
-        except ValueError:
-            pass
-
-    return is_valid, message
-
-
-def get_filtered_tab_options(
-    selected_tab: int, available_tabs: list[int], include_none: bool = True
-) -> dict[int, str]:
-    """Get filtered tab options based on opposite phase requirement.
-
-    Args:
-        selected_tab: Currently selected tab (0 for none)
-        available_tabs: List of all available unmapped tabs
-        include_none: Whether to include "None (Disabled)" option
-
-    Returns:
-        Dictionary mapping tab numbers to display names, filtered to show only
-        tabs on the opposite phase of the selected tab (or all if no tab selected)
-
-    """
-    tab_options = {}
-
-    # Always include "None (Disabled)" option if requested
-    if include_none:
-        tab_options[0] = "None (Disabled)"
-
-    # If no tab is selected (0), show all available tabs with phase info
-    if selected_tab == 0:
-        for tab in available_tabs:
-            try:
-                phase = get_tab_phase(tab)
-                tab_options[tab] = f"Tab {tab} ({phase})"
-            except ValueError:
-                tab_options[tab] = f"Tab {tab}"
-        return tab_options
-
-    # Filter to show only tabs on the opposite phase using the API function
-    for tab in available_tabs:
-        if are_tabs_opposite_phase(selected_tab, tab, available_tabs):
-            try:
-                phase = get_tab_phase(tab)
-                tab_options[tab] = f"Tab {tab} ({phase})"
-            except ValueError:
-                tab_options[tab] = f"Tab {tab}"
-
-    return tab_options
 
 
 class ConfigFlowError(Exception):
@@ -287,7 +123,6 @@ class TriggerFlowType(enum.Enum):
 
 def create_config_client(host: str, use_ssl: bool = False) -> SpanPanelClient:
     """Create a SpanPanelClient with config settings for quick feedback."""
-
     return SpanPanelClient(
         host=host,
         timeout=CONFIG_TIMEOUT,
@@ -308,72 +143,6 @@ def create_api_controller(
     if access_token is not None:
         params["access_token"] = access_token
     return SpanPanelApi(**params)
-
-
-async def validate_host(
-    hass: HomeAssistant,
-    host: str,
-    access_token: str | None = None,  # nosec
-    use_ssl: bool = False,
-) -> bool:
-    """Validate the host connection."""
-
-    # Use context manager for short-lived validation (recommended pattern)
-    # Use config settings for quick feedback - no retries and shorter timeout
-    async with SpanPanelClient(
-        host=host,
-        timeout=CONFIG_TIMEOUT,
-        use_ssl=use_ssl,
-        retries=CONFIG_API_RETRIES,
-        retry_timeout=CONFIG_API_RETRY_TIMEOUT,
-        retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-    ) as client:
-        if access_token:
-            client.set_access_token(access_token)
-            try:
-                # Test authenticated endpoint
-                await client.get_panel_state()
-                return True
-            except Exception:
-                return False
-        else:
-            try:
-                # Test unauthenticated endpoint
-                await client.get_status()
-                return True
-            except Exception:
-                return False
-
-
-async def validate_auth_token(
-    hass: HomeAssistant, host: str, access_token: str, use_ssl: bool = False
-) -> bool:
-    """Perform an authenticated call to confirm validity of provided token."""
-
-    # Use context manager for short-lived validation (recommended pattern)
-    # Use config settings for quick feedback - no retries and shorter timeout
-    async with SpanPanelClient(
-        host=host,
-        timeout=CONFIG_TIMEOUT,
-        use_ssl=use_ssl,
-        retries=CONFIG_API_RETRIES,
-        retry_timeout=CONFIG_API_RETRY_TIMEOUT,
-        retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-    ) as client:
-        client.set_access_token(access_token)
-        try:
-            # Test authenticated endpoint
-            await client.get_panel_state()
-            return True
-        except SpanPanelAuthError as e:
-            _LOGGER.warning("Auth token validation failed - invalid token: %s", e)
-            return False
-        except SpanPanelConnectionError as e:
-            _LOGGER.warning("Auth token validation failed - connection error: %s", e)
-            return False
-        except Exception as e:
-            _LOGGER.warning("Auth token validation failed - unexpected error: %s", e)
-            return False
 
 
 class SpanPanelConfigFlow(config_entries.ConfigFlow):
@@ -1011,90 +780,20 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
-        errors: dict[str, str] = {}
-
         # Get available unmapped tabs for dropdown
         available_tabs = await get_available_unmapped_tabs(self.hass, self.config_entry)
 
         if user_input is not None:
-            # Filter out separator fields from user input
-            filtered_input = {k: v for k, v in user_input.items() if not k.startswith("_separator")}
-            # Handle legacy upgrade flag if present
-            legacy_upgrade_requested: bool = bool(
-                user_input.get("legacy_upgrade_to_friendly", False)
+            # Process the user input using the utility function
+            filtered_input, errors = process_general_options_input(
+                self.config_entry, user_input, available_tabs
             )
-            filtered_input.pop("legacy_upgrade_to_friendly", None)
-
-            # Merge with existing options to preserve unchanged values
-            merged_options = dict(self.config_entry.options)
-            merged_options.update(filtered_input)
-            filtered_input = merged_options
-
-            # Validate solar tab selection if solar is enabled
-            if filtered_input.get(INVERTER_ENABLE, False):
-                # Coerce selector values (strings) back to integers
-                leg1_raw = filtered_input.get(INVERTER_LEG1, 0)
-                leg2_raw = filtered_input.get(INVERTER_LEG2, 0)
-                try:
-                    leg1 = int(leg1_raw)
-                except (TypeError, ValueError):
-                    leg1 = 0
-                try:
-                    leg2 = int(leg2_raw)
-                except (TypeError, ValueError):
-                    leg2 = 0
-
-                # Only validate when we actually have available tabs information
-                if available_tabs:
-                    is_valid, error_message = validate_solar_tab_selection(
-                        leg1, leg2, available_tabs
-                    )
-                    if not is_valid:
-                        errors["base"] = error_message
-                        _LOGGER.warning("Solar tab validation failed: %s", error_message)
-
-                # Persist coerced integer values
-                filtered_input[INVERTER_LEG1] = leg1
-                filtered_input[INVERTER_LEG2] = leg2
 
             # If no errors, proceed with saving options
             if not errors:
-                # Preserve existing naming flags by default.
-                # Important: default use_device_prefix to True for new installs
-                # so we do not accidentally treat them as legacy when the option
-                # was not yet persisted.
-                use_prefix: Any | bool = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
-                use_circuit_numbers: Any | bool = self.config_entry.options.get(
-                    USE_CIRCUIT_NUMBERS, False
-                )
-
-                # If legacy upgrade requested, check if entities need renaming
-                needs_prefix_upgrade = False
-
-                if legacy_upgrade_requested:
-                    # Mark this config entry for legacy prefix upgrade after reload
-                    # The migration code will check which entities actually need renaming
-                    self._mark_for_legacy_migration()
-                    use_prefix = True
-                    use_circuit_numbers = False
-                    needs_prefix_upgrade = True
-
-                filtered_input[USE_DEVICE_PREFIX] = use_prefix
-                filtered_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
-
-                # Set the prefix upgrade flag directly in filtered_input if upgrade is needed
-                if needs_prefix_upgrade:
-                    filtered_input["pending_legacy_migration"] = True
-
-                # Remove any entity naming pattern from input (shouldn't be there anyway)
-                filtered_input.pop(ENTITY_NAMING_PATTERN, None)
-
-                # Clean up any simulation-only change flag since this will trigger a reload
-                filtered_input.pop("_simulation_only_change", None)
-
-                # Global options are now handled natively during reload
-
                 return self.async_create_entry(title="", data=filtered_input)
+        else:
+            errors = {}
 
         # Get current values for dynamic filtering
         try:
@@ -1106,77 +805,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         except (TypeError, ValueError):
             current_leg2 = 0
 
-        # If user_input exists, use those values for filtering (for dynamic updates)
-        if user_input is not None:
-            leg1_raw_dyn = user_input.get(INVERTER_LEG1, current_leg1)
-            leg2_raw_dyn = user_input.get(INVERTER_LEG2, current_leg2)
-            try:
-                current_leg1 = int(leg1_raw_dyn)
-            except (TypeError, ValueError):
-                current_leg1 = 0
-            try:
-                current_leg2 = int(leg2_raw_dyn)
-            except (TypeError, ValueError):
-                current_leg2 = 0
-
-        # Create filtered tab options for each dropdown
-        leg1_options = get_filtered_tab_options(current_leg2, available_tabs)
-        leg2_options = get_filtered_tab_options(current_leg1, available_tabs)
-        # Convert to selector options lists (value/label) to force dropdowns
-        leg1_select_options = [{"value": str(k), "label": v} for k, v in leg1_options.items()]
-        leg2_select_options = [{"value": str(k), "label": v} for k, v in leg2_options.items()]
-
-        # Show general options form (without entity naming)
-        defaults: dict[str, Any] = {
-            CONF_SCAN_INTERVAL: self.config_entry.options.get(
-                CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
-            ),
-            BATTERY_ENABLE: self.config_entry.options.get("enable_battery_percentage", False),
-            INVERTER_ENABLE: self.config_entry.options.get("enable_solar_circuit", False),
-            # Defaults for selector values must be strings
-            INVERTER_LEG1: str(current_leg1),
-            INVERTER_LEG2: str(current_leg2),
-            CONF_API_RETRIES: self.config_entry.options.get(CONF_API_RETRIES, DEFAULT_API_RETRIES),
-            CONF_API_RETRY_TIMEOUT: self.config_entry.options.get(
-                CONF_API_RETRY_TIMEOUT, DEFAULT_API_RETRY_TIMEOUT
-            ),
-            CONF_API_RETRY_BACKOFF_MULTIPLIER: self.config_entry.options.get(
-                CONF_API_RETRY_BACKOFF_MULTIPLIER, DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
-            ),
-            ENERGY_REPORTING_GRACE_PERIOD: self.config_entry.options.get(
-                ENERGY_REPORTING_GRACE_PERIOD, 15
-            ),
-        }
-
-        # Create schema with filtered dropdown selections for solar tabs
-        schema_fields = {
-            vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
-            vol.Optional(BATTERY_ENABLE): bool,
-            vol.Optional(INVERTER_ENABLE): bool,
-            vol.Optional(INVERTER_LEG1, default=str(current_leg1)): selector(
-                {"select": {"options": leg1_select_options, "mode": "dropdown"}}
-            ),
-            vol.Optional(INVERTER_LEG2, default=str(current_leg2)): selector(
-                {"select": {"options": leg2_select_options, "mode": "dropdown"}}
-            ),
-            vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
-            vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
-                vol.Coerce(float), vol.Range(min=0.1, max=10.0)
-            ),
-            vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
-                vol.Coerce(float), vol.Range(min=1.0, max=5.0)
-            ),
-            vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
-        }
-
-        # If legacy (no device prefix), show upgrade toggle in general options.
-        # Check USE_DEVICE_PREFIX flag to determine if this is a legacy installation.
-        is_legacy_install = not self.config_entry.options.get(USE_DEVICE_PREFIX, False)
-        if is_legacy_install:
-            schema_fields[vol.Optional("legacy_upgrade_to_friendly", default=False)] = bool
-            defaults["legacy_upgrade_to_friendly"] = False
-
-        schema = vol.Schema(schema_fields)
+        # Build schema and defaults using utility functions
+        schema = build_general_options_schema(
+            self.config_entry, available_tabs, current_leg1, current_leg2, user_input
+        )
+        defaults = get_general_options_defaults(self.config_entry, current_leg1, current_leg2)
 
         return self.async_show_form(
             step_id="general_options",
@@ -1641,16 +1274,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def _get_current_naming_pattern(self) -> str:
         """Determine the current entity naming pattern from configuration flags."""
-        use_circuit_numbers = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        use_device_prefix = self.config_entry.options.get(USE_DEVICE_PREFIX, False)
-
-        if use_circuit_numbers:
-            return EntityNamingPattern.CIRCUIT_NUMBERS.value
-        elif use_device_prefix:
-            return EntityNamingPattern.FRIENDLY_NAMES.value
-        else:
-            # Pre-1.0.4 installation - no device prefix
-            return EntityNamingPattern.LEGACY_NAMES.value
+        return get_current_naming_pattern(self.config_entry)
 
     async def _migrate_entity_ids(self, old_pattern: str, new_pattern: str) -> None:
         """Migrate entity IDs when naming pattern changes."""
@@ -1669,7 +1293,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         new_flags = self._pattern_to_flags(new_pattern)
 
         # Perform the migration using the coordinator with old and new flags
-        success = await coordinator.migrate_synthetic_entities(old_flags, new_flags)
+        success = await coordinator.migrate_entity_ids(old_flags, new_flags)
 
         if success:
             _LOGGER.debug("Entity migration completed successfully")
@@ -1706,12 +1330,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def _pattern_to_flags(self, pattern: str) -> dict[str, bool]:
         """Convert entity naming pattern to configuration flags."""
-        if pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value:
-            return {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
-        elif pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
-            return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
-        else:  # LEGACY_NAMES
-            return {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
+        return pattern_to_flags(pattern)
 
     def _mark_for_legacy_migration(self) -> None:
         """Mark the config entry for legacy migration after reload.
@@ -1732,56 +1351,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self.hass.config_entries.async_update_entry(self.config_entry, data=current_data)
 
 
+# Export commonly used items for backward compatibility
+
 # Register the config flow handler
 config_entries.HANDLERS.register(DOMAIN)(SpanPanelConfigFlow)
-
-
-def validate_simulation_time(time_input: str) -> str:
-    """Validate and convert simulation time input.
-
-    Supports:
-    - Time-only formats: "17:30", "5:30" (24-hour and 12-hour)
-    - Full ISO datetime: "2024-06-15T17:30:00"
-
-    Returns:
-        ISO datetime string with current date if time-only, or original if full datetime
-
-    Raises:
-        ValueError: If the time format is invalid
-
-    """
-    if not time_input.strip():
-        return ""
-
-    time_input = time_input.strip()
-
-    # Check if it's a full ISO datetime first
-    try:
-        datetime.fromisoformat(time_input)
-        return time_input  # Valid ISO datetime, return as-is
-    except ValueError:
-        pass  # Not a full datetime, try time-only formats
-
-    # Try time-only formats (HH:MM or H:MM)
-    try:
-        # Parse the time
-        if ":" in time_input:
-            parts = time_input.split(":")
-            if len(parts) == 2:
-                hour = int(parts[0])
-                minute = int(parts[1])
-
-                # Validate hour and minute ranges
-                if 0 <= hour <= 23 and 0 <= minute <= 59:
-                    # Convert to current date with the specified time
-                    now = datetime.now()
-                    time_only = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                    return time_only.isoformat()
-
-        raise ValueError(
-            f"Invalid time format. Use {', '.join(TIME_ONLY_FORMATS)} or {ISO_DATETIME_FORMAT}"
-        )
-    except (ValueError, IndexError) as e:
-        raise ValueError(
-            f"Invalid time format. Use {', '.join(TIME_ONLY_FORMATS)} or {ISO_DATETIME_FORMAT}"
-        ) from e

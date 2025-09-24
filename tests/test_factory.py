@@ -1,14 +1,13 @@
 """Tests for the factory classes and their use of constants."""
 
-from unittest.mock import patch
 
 from custom_components.span_panel.binary_sensor import BINARY_SENSORS
 from custom_components.span_panel.const import (
     CURRENT_RUN_CONFIG,
     DSM_GRID_STATE,
-    DSM_STATE,
     DSM_GRID_UP,
     DSM_ON_GRID,
+    DSM_STATE,
     MAIN_RELAY_STATE,
     PANEL_ON_GRID,
     SYSTEM_CELLULAR_LINK,

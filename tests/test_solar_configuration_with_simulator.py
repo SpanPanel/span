@@ -6,16 +6,18 @@ SPAN_USE_REAL_SIMULATION environment variable to be set externally.
 
 # Critical: Set simulation mode BEFORE any imports
 import os
+
 import pytest
 
 # Skip this test if SPAN_USE_REAL_SIMULATION is not set externally
-if not os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() in ('1', 'true', 'yes'):
+if os.environ.get('SPAN_USE_REAL_SIMULATION', '').lower() not in ('1', 'true', 'yes'):
     pytest.skip("Simulation tests require SPAN_USE_REAL_SIMULATION=1", allow_module_level=True)
 
 os.environ['SPAN_USE_REAL_SIMULATION'] = '1'
 
 # Configure logging to reduce noise BEFORE other imports
 import logging
+
 logging.getLogger("homeassistant.core").setLevel(logging.WARNING)
 logging.getLogger("homeassistant.loader").setLevel(logging.WARNING)
 logging.getLogger("homeassistant.setup").setLevel(logging.WARNING)
@@ -32,28 +34,27 @@ logging.getLogger("ha_synthetic_sensors").setLevel(logging.INFO)
 
 # Now we can safely import everything else
 from typing import Any
-import yaml
+
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntryState
-
-from custom_components.span_panel.const import DOMAIN, COORDINATOR, STORAGE_MANAGER, SENSOR_SET
-from custom_components.span_panel.options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
-from custom_components.span_panel.synthetic_solar import handle_solar_options_change
 
 # Import MockConfigEntry from pytest-homeassistant-custom-component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+import yaml
+
+from custom_components.span_panel.const import COORDINATOR, DOMAIN, SENSOR_SET
+from custom_components.span_panel.options import INVERTER_ENABLE, INVERTER_LEG1, INVERTER_LEG2
+from custom_components.span_panel.synthetic_solar import handle_solar_options_change
 
 # Import simulation factory for consistent serial number validation
-from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
 
 
 async def test_solar_configuration_with_simulator_friendly_names(hass: HomeAssistant, enable_custom_integrations: Any) -> None:
     """Test solar configuration with friendly names using simulator mode."""
 
     # Get the consistent simulation serial number from the fixture
-    import yaml
-    with open("tests/fixtures/friendly_names.yaml", "r") as f:
+    with open("tests/fixtures/friendly_names.yaml") as f:
         fixture_data = yaml.safe_load(f)
     simulation_serial = fixture_data["global_settings"]["device_identifier"]
 
@@ -223,7 +224,7 @@ async def test_solar_configuration_with_simulator_friendly_names(hass: HomeAssis
         try:
             metadata = storage_manager.get_sensor_set_metadata("span_panel_sensors")
             if metadata:
-                print(f"\nSensor Set Metadata:")
+                print("\nSensor Set Metadata:")
                 print(f"  ID: {metadata.sensor_set_id}")
                 print(f"  Name: {metadata.name}")
                 print(f"  Device ID: {metadata.device_identifier}")

@@ -47,7 +47,6 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
     # Lazy imports to avoid collection issues
     from custom_components.span_panel.const import CircuitRelayState
     from custom_components.span_panel.switch import (
-        SpanPanelCircuitsSwitch,
         async_setup_entry,
     )
 
@@ -261,7 +260,7 @@ async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrati
 
     # Should raise ValueError for missing circuit
     with pytest.raises(ValueError, match="Circuit 1 not found"):
-        switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit", "SPAN Panel")
+        SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit", "SPAN Panel")
 
 
 @pytest.mark.asyncio

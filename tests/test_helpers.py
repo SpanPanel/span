@@ -99,6 +99,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
         coordinator.config_entry.title = None
+        coordinator.config_entry.data = {"device_name": None}
         span_panel = MagicMock()
 
         result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
@@ -115,6 +116,7 @@ class TestHelperFunctions:
             USE_DEVICE_PREFIX: True,
         }
         coordinator.config_entry.title = None
+        coordinator.config_entry.data = {"device_name": None}
         span_panel = MagicMock()
 
         result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
@@ -188,6 +190,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
         coordinator.config_entry.title = None
+        coordinator.config_entry.data = {"device_name": None}
         span_panel = MagicMock()
 
         # Multi-circuit sensors should return None if no device name available
@@ -214,6 +217,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
         span_panel.status.serial_number = "TEST123456"
@@ -249,6 +253,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
         span_panel.status.serial_number = "TEST123456"
@@ -674,6 +679,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 
@@ -706,6 +712,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 
@@ -738,6 +745,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 
@@ -768,6 +776,7 @@ class TestHelperFunctions:
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 

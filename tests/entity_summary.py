@@ -14,7 +14,6 @@ from custom_components.span_panel.sensor import (
     PANEL_SENSORS,
     STATUS_SENSORS,
     STORAGE_BATTERY_SENSORS,
-    SYNTHETIC_SENSOR_TEMPLATES,
 )
 
 _LOGGER = logging.getLogger(__name__)

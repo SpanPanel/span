@@ -7,8 +7,8 @@ configuration generation.
 """
 
 import asyncio
-import sys
 from pathlib import Path
+import sys
 from unittest.mock import MagicMock
 
 # Add the project root to Python path so imports work
@@ -19,6 +19,7 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
+
 
 def post_process_yaml_for_legacy(yaml_content: str, pattern_name: str, options: dict) -> str:
     """Post-process YAML to strip device prefixes for legacy naming patterns.
@@ -36,7 +37,6 @@ def post_process_yaml_for_legacy(yaml_content: str, pattern_name: str, options: 
 
         # Get the device identifier to strip
         device_identifier = yaml_data.get("global_settings", {}).get("device_identifier", "")
-        device_prefix = f"span_{device_identifier}_"
 
         # Process each sensor
         new_sensors = {}
@@ -138,7 +138,9 @@ async def generate_single_fixture(pattern_name: str, options: dict) -> str:
 
         print(f"  ⚙️ Generating circuit sensors for {pattern_name}...")
 
-        from custom_components.span_panel.synthetic_named_circuits import generate_named_circuit_sensors
+        from custom_components.span_panel.synthetic_named_circuits import (
+            generate_named_circuit_sensors,
+        )
 
         # Convert simulation circuits to the format expected by circuit sensor generator
         circuits_data = mock_responses["circuits"]
@@ -155,7 +157,7 @@ async def generate_single_fixture(pattern_name: str, options: dict) -> str:
             circuit_mock.relayState = circuit.relay_state.value
             circuit_mock.priority = circuit.priority.value
             circuit_mock.isUserControllable = circuit.is_user_controllable
-            circuit_mock.tabs = [tab for tab in circuit.tabs] if circuit.tabs else []
+            circuit_mock.tabs = list(circuit.tabs) if circuit.tabs else []
 
             circuit_dict[circuit_id] = circuit_mock
 
@@ -234,7 +236,7 @@ async def generate_all_fixtures():
         else:
             print(f"  ❌ Failed to generate {pattern_name}")
 
-    print(f"\n🎉 YAML fixture generation complete!")
+    print("\n🎉 YAML fixture generation complete!")
     print(f"📊 Generated {success_count}/{len(patterns)} fixtures")
     print(f"📁 Fixtures saved to: {fixtures_dir}")
 
