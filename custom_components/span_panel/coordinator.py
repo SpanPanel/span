@@ -192,10 +192,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         except Exception as err:
             _LOGGER.exception("Unexpected error during reload: %s", err)
 
-    async def migrate_synthetic_entities(
+    async def migrate_entity_ids(
         self, old_flags: dict[str, bool], new_flags: dict[str, bool]
     ) -> bool:
-        """Migrate synthetic sensor entity IDs based on old and new configuration flags.
+        """Migrate entity IDs based on old and new configuration flags.
 
         This method delegates to the EntityIdMigrationManager to handle the actual migration logic.
 
@@ -207,4 +207,4 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             bool: True if migration succeeded, False otherwise
 
         """
-        return await self._migration_manager._migrate_legacy_to_prefix(old_flags, new_flags)
+        return await self._migration_manager.migrate_entity_ids(old_flags, new_flags)

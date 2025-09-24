@@ -1293,7 +1293,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         new_flags = self._pattern_to_flags(new_pattern)
 
         # Perform the migration using the coordinator with old and new flags
-        success = await coordinator.migrate_synthetic_entities(old_flags, new_flags)
+        success = await coordinator.migrate_entity_ids(old_flags, new_flags)
 
         if success:
             _LOGGER.debug("Entity migration completed successfully")

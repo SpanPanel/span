@@ -8,18 +8,53 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
-from .const import COORDINATOR, DOMAIN
+from .const import COORDINATOR, DOMAIN, USE_DEVICE_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class EntityIdMigrationManager:
-    """Manages entity ID migrations for sensors when naming patterns change."""
+    """Manages entity ID migrations when naming patterns change."""
 
     def __init__(self, hass: HomeAssistant, config_entry_id: str) -> None:
         """Initialize the migration manager."""
         self.hass = hass
         self.config_entry_id = config_entry_id
+
+    async def migrate_entity_ids(
+        self, old_flags: dict[str, bool], new_flags: dict[str, bool]
+    ) -> bool:
+        """Migrate entity IDs when naming patterns change.
+
+        Currently only supports legacy migration from no device prefix to device prefix.
+        This handles renaming existing entities to include the device prefix.
+
+        Args:
+            old_flags: Previous configuration flags
+                {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
+            new_flags: New configuration flags {USE_CIRCUIT_NUMBERS: bool, USE_DEVICE_PREFIX: bool}
+
+        Returns:
+            True if migration was successful, False otherwise
+
+        """
+        _LOGGER.info(
+            "Starting entity ID migration: old_flags=%s, new_flags=%s",
+            old_flags,
+            new_flags,
+        )
+
+        # Only perform legacy migration (no device prefix -> device prefix)
+        old_use_device_prefix = old_flags.get(USE_DEVICE_PREFIX, False)
+        new_use_device_prefix = new_flags.get(USE_DEVICE_PREFIX, False)
+
+        if not old_use_device_prefix and new_use_device_prefix:
+            # Legacy migration: no device prefix -> device prefix
+            return await self._migrate_legacy_to_prefix(old_flags, new_flags)
+        else:
+            # No migration needed - only legacy prefix migration is supported
+            _LOGGER.info("No migration needed - only legacy prefix migration is supported")
+            return True
 
     async def _migrate_legacy_to_prefix(
         self, old_flags: dict[str, bool], new_flags: dict[str, bool]
