@@ -29,12 +29,10 @@ from .const import (
     SYSTEM_DOOR_STATE_OPEN,
     SYSTEM_ETHERNET_LINK,
     SYSTEM_WIFI_LINK,
-    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
-    construct_panel_entity_id,
 )
 from .span_panel import SpanPanel
 from .span_panel_hardware_status import SpanPanelHardwareStatus
@@ -114,6 +112,7 @@ class SpanPanelBinarySensor(
 ):
     """Binary Sensor status entity."""
 
+    _attr_has_entity_name = True
     _attr_icon: str | None = "mdi:flash"
 
     def __init__(
@@ -143,34 +142,12 @@ class SpanPanelBinarySensor(
         self._attr_device_info = device_info
         base_name: str | None = f"{description.name}"
 
-        if (
-            data_coordinator.config_entry is not None
-            and data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
-            and self._device_name
-        ):
-            self._attr_name = f"{self._device_name} {base_name or ''}"
-        else:
-            self._attr_name = base_name or ""
+        # Set entity name for HA automatic naming
+        self._attr_name = base_name or ""
 
         self._attr_unique_id = self._construct_binary_sensor_unique_id(
             data_coordinator, span_panel, description.key
         )
-
-        # Get the device prefix setting
-        use_device_prefix = data_coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-        # Use the panel-level helper for entity_id construction (status sensor pattern)
-        entity_id = construct_panel_entity_id(
-            data_coordinator,
-            span_panel,
-            "binary_sensor",
-            description.key.lower(),
-            self._device_name,
-            self._attr_unique_id,
-            use_device_prefix,
-        )
-        if entity_id is not None:
-            self.entity_id = entity_id
 
     @property
     def available(self) -> bool:

@@ -6,7 +6,6 @@ from typing import Any, Literal
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -18,14 +17,11 @@ from .const import (
     DOMAIN,
     SIGNAL_STAGE_SWITCHES,
     USE_CIRCUIT_NUMBERS,
-    USE_DEVICE_PREFIX,
     CircuitRelayState,
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_switch_unique_id_for_entry,
-    construct_120v_synthetic_entity_id,
-    construct_240v_synthetic_entity_id,
 )
 from .span_panel import SpanPanel
 from .util import panel_to_device_info
@@ -37,6 +33,8 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEntity):
     """Represent a switch entity."""
+
+    _attr_has_entity_name = True
 
     def __init__(
         self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str, device_name: str
@@ -54,49 +52,26 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, span_panel, circuit_id)
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
-        # Use the same multi-circuit logic as named circuits for consistent entity IDs
+        # Set entity name for HA automatic naming based on user preferences
+        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        # Only pass unique_id during migration - during normal operation, respect current flags
-        migration_mode = coordinator.config_entry.options.get("migration_mode", False)
-        unique_id_for_lookup = self._attr_unique_id if migration_mode else None
+        if use_circuit_numbers:
+            # Use circuit number format: "Circuit 15 Breaker"
+            if circuit.tabs and len(circuit.tabs) == 2:
+                # 240V circuit - use both tab numbers
+                sorted_tabs = sorted(circuit.tabs)
+                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+            elif circuit.tabs and len(circuit.tabs) == 1:
+                # 120V circuit - use single tab number
+                circuit_identifier = f"Circuit {circuit.tabs[0]}"
+            else:
+                # Fallback
+                circuit_identifier = f"Circuit {circuit_id}"
+        else:
+            # Use friendly name format: "Kitchen Outlets Breaker"
+            circuit_identifier = name
 
-        match len(circuit.tabs):
-            case 2:
-                # 240V circuit - use both tabs
-                entity_id = construct_240v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="switch",
-                    suffix="breaker",
-                    friendly_name=name,
-                    tab1=circuit.tabs[0],
-                    tab2=circuit.tabs[1],
-                    unique_id=unique_id_for_lookup,
-                )
-            case 1:
-                # 120V circuit - use single tab
-                entity_id = construct_120v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="switch",
-                    suffix="breaker",
-                    friendly_name=name,
-                    tab=circuit.tabs[0],
-                    unique_id=unique_id_for_lookup,
-                )
-            case _:
-                raise ValueError(
-                    f"Circuit {circuit_id} ({name}) has {len(circuit.tabs)} tabs. "
-                    f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
-                    f"Tabs: {circuit.tabs}"
-                )
-
-        if entity_id is not None:
-            self.entity_id = entity_id
-
-        friendly_name = f"{name} Breaker"
-
-        self._attr_name = friendly_name
+        self._attr_name = f"{circuit_identifier} Breaker"
 
         super().__init__(coordinator)
 
@@ -232,56 +207,6 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         return build_switch_unique_id_for_entry(
             coordinator, span_panel, circuit_id, self._device_name
         )
-
-    def _construct_switch_entity_id(
-        self,
-        coordinator: SpanPanelCoordinator,
-        circuit_name: str,
-        circuit_number: int | str,
-        suffix: str,
-        unique_id: str | None = None,
-    ) -> str | None:
-        """Construct entity ID for switch entities."""
-        # Check registry first only if unique_id is provided
-        if unique_id is not None:
-            entity_registry = er.async_get(coordinator.hass)
-            existing_entity_id = entity_registry.async_get_entity_id("switch", DOMAIN, unique_id)
-
-            if existing_entity_id:
-                return existing_entity_id
-
-        # Construct default entity_id
-        config_entry = coordinator.config_entry
-
-        if not self._device_name:
-            return None
-
-        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-        # Build entity ID components
-        parts = []
-
-        if use_device_prefix:
-            parts.append(self._device_name.lower().replace(" ", "_"))
-
-        if use_circuit_numbers:
-            parts.append(f"circuit_{circuit_number}")
-        else:
-            circuit_name_slug = circuit_name.lower().replace(" ", "_")
-            parts.append(circuit_name_slug)
-
-        # Only add suffix if it's different from the last word in the circuit name
-        if suffix:
-            circuit_name_words = circuit_name.lower().split()
-            last_word = circuit_name_words[-1] if circuit_name_words else ""
-            last_word_normalized = last_word.replace(" ", "_")
-
-            if suffix != last_word_normalized:
-                parts.append(suffix)
-
-        entity_id = f"switch.{'_'.join(parts)}"
-        return entity_id
 
     def __del__(self) -> None:
         """Ensure dispatcher subscription is released at GC time."""

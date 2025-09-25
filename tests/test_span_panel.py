@@ -168,16 +168,17 @@ class TestSpanPanelUpdate:
         panel = SpanPanel("192.168.1.100")
 
         # Mock API methods
-        panel.api.get_status_data = AsyncMock(return_value=mock_status)
-        panel.api.get_panel_data = AsyncMock(return_value=mock_panel_data)
-        panel.api.get_circuits_data = AsyncMock(return_value=mock_circuits)
+        panel.api.get_all_data = AsyncMock(return_value={
+            "status": mock_status,
+            "panel": mock_panel_data,
+            "circuits": mock_circuits,
+            "battery": None
+        })
 
         await panel.update()
 
         # Verify API calls
-        panel.api.get_status_data.assert_called_once()
-        panel.api.get_panel_data.assert_called_once()
-        panel.api.get_circuits_data.assert_called_once()
+        panel.api.get_all_data.assert_called_once_with(include_battery=False)
 
         # Verify data is updated
         assert panel._status is mock_status
@@ -193,18 +194,17 @@ class TestSpanPanelUpdate:
         panel = SpanPanel("192.168.1.100", options=mock_options)
 
         # Mock API methods
-        panel.api.get_status_data = AsyncMock(return_value=mock_status)
-        panel.api.get_panel_data = AsyncMock(return_value=mock_panel_data)
-        panel.api.get_circuits_data = AsyncMock(return_value=mock_circuits)
-        panel.api.get_storage_battery_data = AsyncMock(return_value=mock_battery)
+        panel.api.get_all_data = AsyncMock(return_value={
+            "status": mock_status,
+            "panel": mock_panel_data,
+            "circuits": mock_circuits,
+            "battery": mock_battery
+        })
 
         await panel.update()
 
         # Verify API calls
-        panel.api.get_status_data.assert_called_once()
-        panel.api.get_panel_data.assert_called_once()
-        panel.api.get_circuits_data.assert_called_once()
-        panel.api.get_storage_battery_data.assert_called_once()
+        panel.api.get_all_data.assert_called_once_with(include_battery=True)
 
         # Verify data is updated
         assert panel._status is mock_status
@@ -226,15 +226,17 @@ class TestSpanPanelUpdate:
         panel = SpanPanel("192.168.1.100", options=options)
 
         # Mock API methods
-        panel.api.get_status_data = AsyncMock(return_value=mock_status)
-        panel.api.get_panel_data = AsyncMock(return_value=mock_panel_data)
-        panel.api.get_circuits_data = AsyncMock(return_value=mock_circuits)
-        panel.api.get_storage_battery_data = AsyncMock()
+        panel.api.get_all_data = AsyncMock(return_value={
+            "status": mock_status,
+            "panel": mock_panel_data,
+            "circuits": mock_circuits,
+            "battery": None
+        })
 
         await panel.update()
 
-        # Verify battery API is not called
-        panel.api.get_storage_battery_data.assert_not_called()
+        # Verify API calls
+        panel.api.get_all_data.assert_called_once_with(include_battery=False)
         assert panel._storage_battery is None
 
     @pytest.mark.asyncio
@@ -244,10 +246,8 @@ class TestSpanPanelUpdate:
         """Test update handles SpanPanelReturnedEmptyData exception."""
         panel = SpanPanel("192.168.1.100")
 
-        # Mock API methods - one raises empty data exception
-        panel.api.get_status_data = AsyncMock(side_effect=SpanPanelReturnedEmptyData("Empty data"))
-        panel.api.get_panel_data = AsyncMock(return_value=mock_panel_data)
-        panel.api.get_circuits_data = AsyncMock(return_value=mock_circuits)
+        # Mock API methods - raises empty data exception
+        panel.api.get_all_data = AsyncMock(side_effect=SpanPanelReturnedEmptyData("Empty data"))
 
         # Should not raise exception, just log warning
         await panel.update()
@@ -263,7 +263,7 @@ class TestSpanPanelUpdate:
         panel = SpanPanel("192.168.1.100")
 
         # Mock API method to raise generic exception
-        panel.api.get_status_data = AsyncMock(side_effect=Exception("API error"))
+        panel.api.get_all_data = AsyncMock(side_effect=Exception("API error"))
 
         with pytest.raises(Exception, match="API error"):
             await panel.update()

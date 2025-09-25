@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import logging
+from time import time as _epoch_time
 
 from .exceptions import SpanPanelReturnedEmptyData, SpanPanelSimulationOfflineError
 from .options import Options
@@ -114,22 +115,37 @@ class SpanPanel:
     async def update(self) -> None:
         """Update all panel data atomically."""
         try:
-            # Get new data
-            new_status = await self.api.get_status_data()
-            new_panel = await self.api.get_panel_data()
-            new_circuits = await self.api.get_circuits_data()
-
-            # Atomic updates
-            self._update_status(new_status)
-            self._update_panel(new_panel)
-            self._update_circuits(new_circuits)
+            # Start timing for API calls
+            api_start = _epoch_time()
 
             # Debug battery option status
             battery_option_enabled = self._options and self._options.enable_battery_percentage
 
-            if battery_option_enabled:
-                new_battery = await self.api.get_storage_battery_data()
+            # Use batch API call for true parallelization at the client level
+            # This makes concurrent HTTP requests when cache misses occur
+            all_data = await self.api.get_all_data(include_battery=bool(battery_option_enabled))
+
+            # Extract processed data from batch response
+            new_status = all_data.get("status")
+            new_panel = all_data.get("panel")
+            new_circuits = all_data.get("circuits")
+            new_battery = all_data.get("battery") if battery_option_enabled else None
+
+            # Atomic updates - ensure we have the required data
+            if new_status is not None:
+                self._update_status(new_status)
+            if new_panel is not None:
+                self._update_panel(new_panel)
+            if new_circuits is not None:
+                self._update_circuits(new_circuits)
+
+            if new_battery is not None:
                 self._update_storage_battery(new_battery)
+
+            api_duration = _epoch_time() - api_start
+
+            # INFO level logging for API call performance
+            _LOGGER.info("Panel API calls completed (CLIENT-PARALLEL) - Total: %.3fs", api_duration)
 
             _LOGGER.debug("Panel update completed successfully")
         except SpanPanelReturnedEmptyData:

@@ -26,9 +26,6 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     async_create_span_notification,
     build_select_unique_id_for_entry,
-    construct_120v_synthetic_entity_id,
-    construct_240v_synthetic_entity_id,
-    get_user_friendly_suffix,
 )
 from .span_panel import SpanPanel
 from .span_panel_circuit import SpanPanelCircuit
@@ -102,51 +99,26 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_unique_id = self._construct_select_unique_id(coordinator, span_panel, self.id)
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
-        entity_suffix = get_user_friendly_suffix(description.entity_description.key)
+        # Set entity name for HA automatic naming based on user preferences
+        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        # Use the same multi-circuit logic as named circuits for consistent entity IDs
+        if use_circuit_numbers:
+            # Use circuit number format: "Circuit 15 Priority"
+            if circuit.tabs and len(circuit.tabs) == 2:
+                # 240V circuit - use both tab numbers
+                sorted_tabs = sorted(circuit.tabs)
+                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+            elif circuit.tabs and len(circuit.tabs) == 1:
+                # 120V circuit - use single tab number
+                circuit_identifier = f"Circuit {circuit.tabs[0]}"
+            else:
+                # Fallback
+                circuit_identifier = f"Circuit {circuit_id}"
+        else:
+            # Use friendly name format: "Kitchen Outlets Priority"
+            circuit_identifier = name
 
-        # Only pass unique_id during migration - during normal operation, respect current flags
-        migration_mode = coordinator.config_entry.options.get("migration_mode", False)
-        unique_id_for_lookup = self._attr_unique_id if migration_mode else None
-
-        match len(circuit.tabs):
-            case 2:
-                # 240V circuit - use both tabs
-                entity_id = construct_240v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="select",
-                    suffix=entity_suffix,
-                    friendly_name=name,
-                    tab1=circuit.tabs[0],
-                    tab2=circuit.tabs[1],
-                    unique_id=unique_id_for_lookup,
-                )
-            case 1:
-                # 120V circuit - use single tab
-                entity_id = construct_120v_synthetic_entity_id(
-                    coordinator=coordinator,
-                    span_panel=span_panel,
-                    platform="select",
-                    suffix=entity_suffix,
-                    friendly_name=name,
-                    tab=circuit.tabs[0],
-                    unique_id=unique_id_for_lookup,
-                )
-            case _:
-                raise ValueError(
-                    f"Circuit {circuit_id} ({name}) has {len(circuit.tabs)} tabs. "
-                    f"US electrical systems require exactly 1 tab (120V) or 2 tabs (240V). "
-                    f"Tabs: {circuit.tabs}"
-                )
-
-        if entity_id is not None:
-            self.entity_id = entity_id  # type: ignore[assignment]
-
-        friendly_name = f"{name} {description.entity_description.name}"
-
-        self._attr_name = friendly_name
+        self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
 
         circuit = self._get_circuit()
         self._attr_options = description.options_fn(circuit)

@@ -7,12 +7,10 @@ import logging
 from typing import Any
 
 from homeassistant.const import STATE_UNKNOWN
-from homeassistant.util import slugify
+from homeassistant.helpers.typing import UNDEFINED
 
-from custom_components.span_panel.const import USE_DEVICE_PREFIX
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.helpers import (
-    construct_panel_entity_id,
     construct_panel_unique_id_for_entry,
 )
 from custom_components.span_panel.sensor_definitions import SpanSolarSensorEntityDescription
@@ -51,33 +49,9 @@ class SpanSolarSensor(SpanSensorBase[SpanSolarSensorEntityDescription, SpanPanel
         self, span_panel: SpanPanel, description: SpanSolarSensorEntityDescription
     ) -> str:
         """Generate friendly name for solar sensors."""
-        return str(description.name or "Solar Sensor")
-
-    def _generate_entity_id(
-        self,
-        coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
-        description: SpanSolarSensorEntityDescription,
-    ) -> str | None:
-        """Generate entity ID for solar sensors."""
-        if hasattr(description, "name") and description.name:
-            entity_suffix = slugify(str(description.name))
-            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-            # Only pass unique_id during migration - during normal operation, respect current flags
-            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
-            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
-
-            return construct_panel_entity_id(
-                coordinator,
-                span_panel,
-                "sensor",
-                entity_suffix,
-                self._device_name,
-                unique_id_for_lookup,
-                use_device_prefix,
-            )
-        return None
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "Solar"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanel:
         """Get the data source for the solar sensor."""
@@ -281,33 +255,9 @@ class SpanSolarEnergySensor(SpanEnergySensorBase[SpanSolarSensorEntityDescriptio
         self, span_panel: SpanPanel, description: SpanSolarSensorEntityDescription
     ) -> str:
         """Generate friendly name for solar energy sensors."""
-        return str(description.name or "Solar Energy Sensor")
-
-    def _generate_entity_id(
-        self,
-        coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
-        description: SpanSolarSensorEntityDescription,
-    ) -> str | None:
-        """Generate entity ID for solar energy sensors."""
-        if hasattr(description, "name") and description.name:
-            entity_suffix = slugify(str(description.name))
-            use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-            # Only pass unique_id during migration - during normal operation, respect current flags
-            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
-            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
-
-            return construct_panel_entity_id(
-                coordinator,
-                span_panel,
-                "sensor",
-                entity_suffix,
-                self._device_name,
-                unique_id_for_lookup,
-                use_device_prefix,
-            )
-        return None
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "Solar Energy"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanel:
         """Get the data source for the solar energy sensor."""

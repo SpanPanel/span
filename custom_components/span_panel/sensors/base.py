@@ -16,7 +16,6 @@ from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import slugify
 
 from custom_components.span_panel.const import SIGNAL_STAGE_NATIVE_SENSORS
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
@@ -32,6 +31,8 @@ D = TypeVar("D")  # For the type returned by get_data_source
 
 class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D], ABC):
     """Abstract base class for Span Panel Sensors with overrideable methods."""
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -60,10 +61,6 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = self._generate_unique_id(span_panel, description)
-
-        entity_id = self._generate_entity_id(data_coordinator, span_panel, description)
-        if entity_id:
-            self.entity_id = entity_id
 
         self._attr_icon = "mdi:flash"
 
@@ -119,33 +116,6 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             Friendly name string
 
         """
-
-    @abstractmethod
-    def _generate_entity_id(
-        self, coordinator: SpanPanelCoordinator, span_panel: SpanPanel, description: T
-    ) -> str | None:
-        """Generate entity ID for the sensor.
-
-        Subclasses must implement this to define their entity ID strategy.
-
-        Args:
-            coordinator: The coordinator instance
-            span_panel: The span panel data
-            description: The sensor description
-
-        Returns:
-            Entity ID string or None
-
-        """
-
-    def _construct_sensor_unmapped_entity_id(self, circuit_id: str, suffix: str) -> str:
-        """Construct entity ID for unmapped tab sensors in sensor platform."""
-        # Always use device prefix for unmapped entities
-        if self._device_name:
-            device_name_slug = slugify(self._device_name)
-            return f"sensor.{device_name_slug}_{circuit_id}_{suffix}"
-        else:
-            return f"sensor.{circuit_id}_{suffix}"
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
