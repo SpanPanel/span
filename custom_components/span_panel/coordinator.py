@@ -9,7 +9,11 @@ from time import time as _epoch_time
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api.exceptions import (
@@ -121,20 +125,51 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             # Reset offline flag on successful update
             self._panel_offline = False
 
-            # INFO log to make cadence visible without debug logging
-            now_epoch = _epoch_time()
-            # Track cadence locally for debugging purposes
-            self._last_tick_epoch = now_epoch
+            # Performance timing - start of update cycle
+            cycle_start = _epoch_time()
 
+            # Track cadence locally for debugging purposes
+            self._last_tick_epoch = cycle_start
+
+            # Time the panel data fetch
+            panel_fetch_start = _epoch_time()
             await self.span_panel.update()
+            panel_fetch_duration = _epoch_time() - panel_fetch_start
+
+            # Time the signal-based entity updates
+            signals_start = _epoch_time()
 
             # Emit staged update signals in deterministic order so platforms
             # update sequentially instead of all entities at once. Entities
             # subscribe to their stage via dispatcher and perform their normal
             # state update when their stage signal fires.
+            stage1_start = _epoch_time()
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SWITCHES)
+            stage1_duration = _epoch_time() - stage1_start
+
+            stage2_start = _epoch_time()
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SELECTS)
+            stage2_duration = _epoch_time() - stage2_start
+
+            stage3_start = _epoch_time()
             async_dispatcher_send(self.hass, SIGNAL_STAGE_NATIVE_SENSORS)
+            stage3_duration = _epoch_time() - stage3_start
+
+            signals_total_duration = _epoch_time() - signals_start
+            cycle_total_duration = _epoch_time() - cycle_start
+
+            # INFO level performance logging
+            _LOGGER.info(
+                "SPAN Panel update cycle completed - Total: %.3fs | "
+                "Panel fetch: %.3fs | Signals total: %.3fs | "
+                "Stage1(switches): %.3fs | Stage2(selects): %.3fs | Stage3(sensors): %.3fs",
+                cycle_total_duration,
+                panel_fetch_duration,
+                signals_total_duration,
+                stage1_duration,
+                stage2_duration,
+                stage3_duration,
+            )
 
             # Handle reload request if one was made
             if self._reload_requested:
@@ -150,6 +185,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         except Exception as err:
             # Set offline flag for any error
             self._panel_offline = True
+
+            # Performance timing for error path
+            error_cycle_start = _epoch_time()
 
             # Log specific error types for debugging
             if isinstance(err, SpanPanelSimulationOfflineError):
@@ -169,9 +207,22 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
 
             # Continue updating even when offline to allow grace period expiration checks
             # Emit staged update signals so sensors can check grace period status
+            signals_start = _epoch_time()
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SWITCHES)
+
             async_dispatcher_send(self.hass, SIGNAL_STAGE_SELECTS)
+
             async_dispatcher_send(self.hass, SIGNAL_STAGE_NATIVE_SENSORS)
+
+            signals_duration = _epoch_time() - signals_start
+            error_cycle_duration = _epoch_time() - error_cycle_start
+
+            # INFO level performance logging for error path
+            _LOGGER.info(
+                "SPAN Panel update cycle (ERROR PATH) completed - Total: %.3fs | Signals: %.3fs",
+                error_cycle_duration,
+                signals_duration,
+            )
 
             # Return the last known data instead of raising UpdateFailed
             # This keeps the coordinator updating so grace period logic can work

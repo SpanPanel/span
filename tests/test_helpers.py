@@ -838,7 +838,7 @@ class TestHelperFunctions:
         """Test synthetic entity ID construction with existing entity in registry."""
         mock_registry.return_value = MagicMock()
         mock_registry.return_value.async_get_entity_id = MagicMock(
-            return_value="sensor.existing_solar_power"
+            return_value="sensor.existing_solar_current_power"
         )
 
         coordinator = MagicMock()
@@ -858,4 +858,4 @@ class TestHelperFunctions:
             tab2=32,
             unique_id="test_unique_id",
         )
-        assert result == "sensor.existing_solar_power"
+        assert result == "sensor.existing_solar_current_power"

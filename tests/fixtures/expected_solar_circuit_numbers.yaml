@@ -2354,8 +2354,8 @@ sensors:
       device_class: energy
       state_class: total_increasing
       suggested_display_precision: 2
-  "span_sp3-simulation-001_solar_power":
-    entity_id: sensor.solar_power
+  "span_sp3-simulation-001_solar_current_power":
+    entity_id: sensor.solar_current_power
     name: Solar Current Power
     formula: leg1_power + leg2_power
     variables:

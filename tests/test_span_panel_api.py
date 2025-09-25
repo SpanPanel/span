@@ -285,16 +285,12 @@ async def test_ensure_client_open_with_closed_client():
     mock_client._client = mock_httpx_client
     api._client = mock_client
 
-    # Mock SpanPanelClient constructor
-    with patch("custom_components.span_panel.span_panel_api.SpanPanelClient") as mock_span_client:
-        mock_new_client = MagicMock()
-        mock_span_client.return_value = mock_new_client
+    # The method should not create a new client when underlying httpx is closed
+    # It just logs a message and lets SpanPanelClient handle it internally
+    api._ensure_client_open()
 
-        api._ensure_client_open()
-
-        # Should create new client
-        mock_span_client.assert_called_once()
-        assert api._client == mock_new_client
+    # Should not create new client, just log the message
+    assert api._client == mock_client
 
 
 @pytest.mark.asyncio
@@ -318,23 +314,12 @@ async def test_ensure_client_open_with_options():
     mock_client._client = mock_httpx_client
     api._client = mock_client
 
-    # Mock SpanPanelClient constructor
-    with patch("custom_components.span_panel.span_panel_api.SpanPanelClient") as mock_span_client:
-        mock_new_client = MagicMock()
-        mock_span_client.return_value = mock_new_client
+    # The method should not create a new client when underlying httpx is closed
+    # It just logs a message and lets SpanPanelClient handle it internally
+    api._ensure_client_open()
 
-        api._ensure_client_open()
-
-        # Should create new client with custom options
-        mock_span_client.assert_called_once_with(
-            host="host",
-            timeout=30,  # API_TIMEOUT
-            use_ssl=False,
-            retries=5,
-            retry_timeout=10,
-            retry_backoff_multiplier=2.5,
-            cache_window=9.0,  # 60% of default 15-second scan interval
-        )
+    # Should not create new client, just log the message
+    assert api._client == mock_client
 
 
 @pytest.mark.asyncio
@@ -347,15 +332,12 @@ async def test_ensure_client_open_with_access_token():
     mock_client._client = mock_httpx_client
     api._client = mock_client
 
-    # Mock SpanPanelClient constructor
-    with patch("custom_components.span_panel.span_panel_api.SpanPanelClient") as mock_span_client:
-        mock_new_client = MagicMock()
-        mock_span_client.return_value = mock_new_client
+    # The method should not create a new client when underlying httpx is closed
+    # It just logs a message and lets SpanPanelClient handle it internally
+    api._ensure_client_open()
 
-        api._ensure_client_open()
-
-        # Should set access token on new client
-        mock_new_client.set_access_token.assert_called_once_with("test_token")
+    # Should not create new client, just log the message
+    assert api._client == mock_client
 
 
 @pytest.mark.asyncio

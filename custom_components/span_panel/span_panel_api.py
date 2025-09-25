@@ -145,23 +145,6 @@ class SpanPanelApi:
             self.offline_start_time = None
             _LOGGER.info("[SpanPanelApi] Disabled simulation offline mode")
 
-    def _calculate_cache_window(self) -> float:
-        """Calculate optimal cache window based on polling interval.
-
-        The cache window should be shorter than the polling interval to ensure
-        fresh data on each coordinator update, while protecting against rapid
-        successive API calls within the same update cycle.
-
-        Returns:
-            Cache window in seconds (60% of polling interval, minimum 1 second).
-
-        """
-        # Use 60% of the polling interval as cache window
-        # This ensures fresh data on each poll while providing protection
-        cache_window = self.scan_interval * 0.6
-        # Ensure minimum 1 second cache window
-        return max(cache_window, 1.0)
-
     def _create_client(self) -> None:
         """Create the SpanPanelClient with stored parameters."""
         _LOGGER.debug("[SpanPanelApi] Creating SpanPanelClient for host=%s", self.host)
@@ -193,7 +176,6 @@ class SpanPanelApi:
                 retries=self._retries,
                 retry_timeout=self._retry_timeout,
                 retry_backoff_multiplier=self._retry_backoff_multiplier,
-                cache_window=self._calculate_cache_window(),
                 simulation_mode=self.simulation_mode,
                 simulation_config_path=config_path,
                 simulation_start_time=simulation_start_time_str,
@@ -207,7 +189,6 @@ class SpanPanelApi:
                 retries=self._retries,
                 retry_timeout=self._retry_timeout,
                 retry_backoff_multiplier=self._retry_backoff_multiplier,
-                cache_window=self._calculate_cache_window(),
             )
         if self.access_token:
             self._client.set_access_token(self.access_token)
@@ -231,12 +212,13 @@ class SpanPanelApi:
 
         client_obj = getattr(self._client, "_client", None)
         if client_obj is not None and getattr(client_obj, "is_closed", False):
-            _LOGGER.warning(
-                "[SpanPanelApi] Underlying httpx client is closed, recreating SpanPanelClient for host=%s (SSL=%s)",
+            _LOGGER.debug(
+                "[SpanPanelApi] Underlying httpx client is closed for host=%s (SSL=%s), will be recreated on next use",
                 self.host,
                 self.use_ssl,
             )
-            self._create_client()
+            # Let the SpanPanelClient handle closed connections internally
+            # Don't interfere with its connection management - it will create new connections as needed
 
     def _debug_check_client(self, method_name: str) -> None:
         # Check if the client is in a closed or invalid state
@@ -593,6 +575,71 @@ class SpanPanelApi:
             SpanPanelAPIError,
         ) as e:
             _LOGGER.error("Failed to set priority: %s", e)
+            raise
+
+    async def get_all_data(self, include_battery: bool = False) -> dict[str, Any]:
+        """Get all panel data in parallel for maximum performance.
+
+        Args:
+            include_battery: Whether to include battery/storage data
+
+        Returns:
+            Dictionary containing all panel data with proper processing applied
+
+        """
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+
+        try:
+            # Use the client's parallel batch method
+            raw_data = await self._client.get_all_data(include_battery=include_battery)
+
+            # Process data using the same logic as individual methods
+            result: dict[str, Any] = {}
+
+            if raw_data.get("status"):
+                # Process status data (same as get_status_data)
+                status_out = raw_data["status"]
+                status_dict = status_out.to_dict()
+                result["status"] = SpanPanelHardwareStatus.from_dict(status_dict)
+
+            if raw_data.get("panel_state"):
+                # Process panel data (same as get_panel_data)
+                panel_state = raw_data["panel_state"]
+                panel_dict = deepcopy(panel_state.to_dict())
+                result["panel"] = SpanPanelData.from_dict(panel_dict, self.options)
+
+            if raw_data.get("circuits"):
+                # Process circuits data (same as get_circuits_data)
+                circuits_out = raw_data["circuits"]
+                circuits_dict: dict[str, SpanPanelCircuit] = {}
+                if hasattr(circuits_out, "circuits") and hasattr(
+                    circuits_out.circuits, "additional_properties"
+                ):
+                    for (
+                        circuit_id,
+                        raw_circuit_data,
+                    ) in circuits_out.circuits.additional_properties.items():
+                        # Convert attrs model to dict (same as get_circuits_data)
+                        circuit_dict = raw_circuit_data.to_dict()
+                        circuits_dict[circuit_id] = SpanPanelCircuit.from_dict(circuit_dict)
+                result["circuits"] = circuits_dict
+
+            if include_battery and raw_data.get("storage"):
+                # Process battery data (same as get_storage_battery_data)
+                battery_storage = raw_data["storage"]
+                storage_battery_data = battery_storage.soe.to_dict()
+                result["battery"] = SpanPanelStorageBattery.from_dict(storage_battery_data)
+
+            return result
+
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to get all panel data: %s", e)
             raise
 
     async def close(self) -> None:

@@ -5,16 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.util import slugify
-
+from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.helpers import (
     construct_circuit_unique_id_for_entry,
-    construct_single_circuit_entity_id,
     construct_tabs_attribute,
     construct_unmapped_friendly_name,
     construct_voltage_attribute,
-    get_user_friendly_suffix,
 )
 from custom_components.span_panel.sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 from custom_components.span_panel.span_panel import SpanPanel
@@ -69,37 +66,33 @@ class SpanCircuitPowerSensor(
     def _generate_friendly_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
-        """Generate friendly name for circuit power sensors."""
+        """Generate friendly name for circuit power sensors based on user preferences."""
         circuit = span_panel.circuits.get(self.circuit_id)
-        if circuit and circuit.name:
-            return f"{circuit.name} {description.name or 'Sensor'}"
-        return construct_unmapped_friendly_name(self.circuit_id, str(description.name or "Sensor"))
-
-    def _generate_entity_id(
-        self,
-        coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str | None:
-        """Generate entity ID for circuit power sensors."""
-        circuit = span_panel.circuits.get(self.circuit_id)
-        if circuit:
-            # Use the helper functions for entity ID generation
-
-            # Only pass unique_id during migration - during initial setup, skip registry lookup
-            migration_mode = coordinator.config_entry.options.get("migration_mode", False)
-            unique_id_for_lookup = self._attr_unique_id if migration_mode else None
-
-            return construct_single_circuit_entity_id(
-                coordinator=coordinator,
-                span_panel=span_panel,
-                platform="sensor",
-                suffix=slugify(str(description.name or "sensor")),
-                circuit_data=circuit,
-                unique_id=unique_id_for_lookup,
-                device_name=self._device_name,
+        if not circuit:
+            return construct_unmapped_friendly_name(
+                self.circuit_id, str(description.name or "Sensor")
             )
-        return None
+
+        # Respect user's naming preference
+        use_circuit_numbers = self.coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+
+        if use_circuit_numbers:
+            # Use circuit number format: "Circuit 15 Power"
+            if circuit.tabs and len(circuit.tabs) == 2:
+                # 240V circuit - use both tab numbers
+                sorted_tabs = sorted(circuit.tabs)
+                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+            elif circuit.tabs and len(circuit.tabs) == 1:
+                # 120V circuit - use single tab number
+                circuit_identifier = f"Circuit {circuit.tabs[0]}"
+            else:
+                # Fallback
+                circuit_identifier = f"Circuit {self.circuit_id}"
+        else:
+            # Use friendly name format: "Kitchen Outlets Power"
+            circuit_identifier = circuit.name
+
+        return f"{circuit_identifier} {description.name or 'Sensor'}"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the circuit power sensor."""
@@ -191,42 +184,31 @@ class SpanCircuitEnergySensor(
     def _generate_friendly_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
-        """Generate friendly name for circuit energy sensors."""
-        circuit = span_panel.circuits.get(self.circuit_id)
-        if circuit and circuit.name:
-            return f"{circuit.name} {description.name}"
-        return f"Circuit {self.circuit_id} {description.name}"
-
-    def _generate_entity_id(
-        self,
-        coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str | None:
-        """Generate entity ID for circuit energy sensors."""
+        """Generate friendly name for circuit energy sensors based on user preferences."""
         circuit = span_panel.circuits.get(self.circuit_id)
         if not circuit:
-            return None
+            return f"Circuit {self.circuit_id} {description.name}"
 
-        # Use the helper functions for entity ID generation
+        # Respect user's naming preference
+        use_circuit_numbers = self.coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        # Only pass unique_id during migration - during initial setup, skip registry lookup
-        # Exception: Never pass unique_id for net energy sensors since they are completely new
-        migration_mode = coordinator.config_entry.options.get("migration_mode", False)
-        is_net_energy_sensor = self.original_key == "circuit_energy_net"
-        unique_id_for_lookup = (
-            None if is_net_energy_sensor else (self._attr_unique_id if migration_mode else None)
-        )
+        if use_circuit_numbers:
+            # Use circuit number format: "Circuit 15 Power"
+            if circuit.tabs and len(circuit.tabs) == 2:
+                # 240V circuit - use both tab numbers
+                sorted_tabs = sorted(circuit.tabs)
+                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+            elif circuit.tabs and len(circuit.tabs) == 1:
+                # 120V circuit - use single tab number
+                circuit_identifier = f"Circuit {circuit.tabs[0]}"
+            else:
+                # Fallback
+                circuit_identifier = f"Circuit {self.circuit_id}"
+        else:
+            # Use friendly name format: "Kitchen Outlets Power"
+            circuit_identifier = circuit.name
 
-        return construct_single_circuit_entity_id(
-            coordinator=coordinator,
-            span_panel=span_panel,
-            platform="sensor",
-            suffix=slugify(str(description.name or "sensor")),
-            circuit_data=circuit,
-            unique_id=unique_id_for_lookup,
-            device_name=self._device_name,
-        )
+        return f"{circuit_identifier} {description.name}"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the circuit energy sensor."""
@@ -306,18 +288,6 @@ class SpanUnmappedCircuitSensor(
         tab_number = self.circuit_id.replace("unmapped_tab_", "")
         description_name = str(description.name) if description.name else "Sensor"
         return construct_unmapped_friendly_name(tab_number, description_name)
-
-    def _generate_entity_id(
-        self,
-        coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str | None:
-        """Generate entity ID for unmapped circuit sensors."""
-        # Pass the full circuit_id to the helper (e.g., "unmapped_tab_32")
-        # Use the original key instead of the modified description.key
-        sensor_suffix = get_user_friendly_suffix(self.original_key)
-        return self._construct_sensor_unmapped_entity_id(self.circuit_id, sensor_suffix)
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the unmapped circuit sensor."""

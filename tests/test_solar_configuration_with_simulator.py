@@ -325,8 +325,8 @@ async def test_solar_configuration_with_simulator_circuit_numbers(hass: HomeAssi
         # Verify solar sensors were created in storage
         assert len(solar_sensors_in_storage) > 0, "Solar sensors should be created in SensorSet after options change"
 
-        # Look for specific solar sensor keys (should include solar_power, etc.)
-        expected_solar_types = ['solar_power', 'solar_energy_produced', 'solar_energy_consumed']
+        # Look for specific solar sensor keys (should include solar_current_power, etc.)
+        expected_solar_types = ['solar_current_power', 'solar_energy_produced', 'solar_energy_consumed']
         found_solar_types = []
         for sensor in solar_sensors_in_storage:
             for solar_type in expected_solar_types:

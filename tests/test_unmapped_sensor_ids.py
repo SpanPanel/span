@@ -83,42 +83,22 @@ class TestUnmappedSensorIds:
             )
 
     def test_unmapped_sensor_entity_id_generation(self):
-        """Test that unmapped circuit sensors generate correct entity IDs."""
+        """Test that unmapped circuit sensors have proper unique IDs (entity_id is set by HA framework)."""
         span_panel = self._create_mock_span_panel()
         coordinator = self._create_mock_coordinator()
         circuit_id = "unmapped_tab_32"
-
-        expected_patterns = {
-            "instantPowerW": "sensor.span_panel_unmapped_tab_32_power",
-            "producedEnergyWh": "sensor.span_panel_unmapped_tab_32_energy_produced",
-            "consumedEnergyWh": "sensor.span_panel_unmapped_tab_32_energy_consumed",
-        }
 
         for description in UNMAPPED_SENSORS:
             # Test the full sensor initialization process (this is what actually happens at runtime)
             sensor = SpanUnmappedCircuitSensor(coordinator, description, span_panel, circuit_id)
 
-            # Check the entity ID that gets set during initialization
-            actual_entity_id = getattr(sensor, "entity_id", None)
-            expected_entity_id = expected_patterns[description.key]
+            # Test that the sensor has a unique_id (this is what the sensor actually sets)
+            assert sensor.unique_id is not None, f"Unique ID should be set for {description.key}"
 
-            assert actual_entity_id == expected_entity_id, (
-                f"Entity ID mismatch for {description.key}: "
-                f"expected {expected_entity_id}, got {actual_entity_id}"
-            )
-
-            # Verify no duplication in entity ID (this is the critical test)
-            if actual_entity_id:
-                assert "unmapped_tab_32_unmapped_tab_32" not in actual_entity_id, (
-                    f"Duplicate unmapped_tab in entity_id: {actual_entity_id}"
-                )
-
-            # Also test the method directly for completeness
-            method_entity_id = sensor._generate_entity_id(coordinator, span_panel, description)
-            assert method_entity_id == expected_entity_id, (
-                f"Method entity ID mismatch for {description.key}: "
-                f"expected {expected_entity_id}, got {method_entity_id}"
-            )
+            # Test that the unique_id follows the expected pattern
+            assert "unmapped_tab_32" in sensor.unique_id, f"Unique ID should contain circuit ID: {sensor.unique_id}"
+            # The unique_id contains a transformed version of the key, not the original key
+            assert "power" in sensor.unique_id or "energy" in sensor.unique_id, f"Unique ID should contain transformed key: {sensor.unique_id}"
 
     def test_unmapped_sensor_always_uses_device_prefix(self):
         """Test that unmapped sensors always use device prefix regardless of config."""
@@ -140,23 +120,15 @@ class TestUnmappedSensorIds:
                 coordinator_with_prefix, description, span_panel, circuit_id
             )
 
-            # Generate entity IDs
-            entity_id_no_prefix = sensor_no_prefix._generate_entity_id(
-                coordinator_no_prefix, span_panel, description
-            )
-            entity_id_with_prefix = sensor_with_prefix._generate_entity_id(
-                coordinator_with_prefix, span_panel, description
+            # Both should have the same unique_id (unmapped sensors always use device prefix)
+            assert sensor_no_prefix.unique_id == sensor_with_prefix.unique_id, (
+                f"Unmapped sensors should always use device prefix in unique_id: "
+                f"no_prefix={sensor_no_prefix.unique_id}, with_prefix={sensor_with_prefix.unique_id}"
             )
 
-            # Both should use device prefix (unmapped sensors always use device prefix)
-            assert entity_id_no_prefix == entity_id_with_prefix, (
-                f"Unmapped sensors should always use device prefix: "
-                f"no_prefix={entity_id_no_prefix}, with_prefix={entity_id_with_prefix}"
-            )
-
-            # Both should start with "sensor.span_panel_"
-            assert entity_id_no_prefix.startswith("sensor.span_panel_"), (
-                f"Unmapped sensor should use device prefix: {entity_id_no_prefix}"
+            # Both should contain the device name in unique_id (actual device name, not "span_panel")
+            assert "span_" in sensor_no_prefix.unique_id, (
+                f"Unmapped sensor unique_id should contain device prefix: {sensor_no_prefix.unique_id}"
             )
 
     def test_unmapped_sensor_different_circuit_numbers(self):
@@ -178,15 +150,8 @@ class TestUnmappedSensorIds:
                     f"Circuit ID {circuit_id} not found in unique_id: {unique_id}"
                 )
 
-                # Test entity ID
-                entity_id = sensor._generate_entity_id(coordinator, span_panel, description)
-                assert circuit_id in entity_id, (
-                    f"Circuit ID {circuit_id} not found in entity_id: {entity_id}"
-                )
-
-                # Verify no duplication
+                # Verify no duplication in unique_id
                 assert f"{circuit_id}_{circuit_id}" not in unique_id
-                assert f"{circuit_id}_{circuit_id}" not in entity_id
 
     def test_unmapped_sensor_different_serial_numbers(self):
         """Test unmapped sensors with different panel serial numbers."""
@@ -228,16 +193,12 @@ class TestUnmappedSensorIds:
         for description in UNMAPPED_SENSORS:
             sensor = SpanUnmappedCircuitSensor(coordinator, description, span_panel, circuit_id)
 
-            # Test that the expected suffix appears in both unique ID and entity ID
+            # Test that the expected suffix appears in unique ID
             unique_id = sensor._generate_unique_id(span_panel, description)
-            entity_id = sensor._generate_entity_id(coordinator, span_panel, description)
             expected_suffix = key_to_suffix_mapping[description.key]
 
             assert expected_suffix in unique_id, (
                 f"Expected suffix '{expected_suffix}' not found in unique_id for {description.key}: {unique_id}"
-            )
-            assert expected_suffix in entity_id, (
-                f"Expected suffix '{expected_suffix}' not found in entity_id for {description.key}: {entity_id}"
             )
 
     def test_unmapped_sensor_entity_registry_defaults(self):
@@ -279,17 +240,11 @@ class TestUnmappedSensorIds:
 
             # Verify no duplication in the actual attributes set during initialization
             unique_id = sensor._attr_unique_id
-            entity_id = getattr(sensor, "entity_id", None)
 
             # The bug would create IDs like: span_serial_unmapped_tab_32_unmapped_tab_32
             assert "unmapped_tab_32_unmapped_tab_32" not in unique_id, (
                 f"Bug detected: duplicate circuit_id in unique_id: {unique_id}"
             )
-
-            if entity_id:
-                assert "unmapped_tab_32_unmapped_tab_32" not in entity_id, (
-                    f"Bug detected: duplicate circuit_id in entity_id: {entity_id}"
-                )
 
             # Verify the IDs contain the expected suffix based on original key
             expected_suffix = {
@@ -302,7 +257,4 @@ class TestUnmappedSensorIds:
                 f"Expected suffix '{expected_suffix}' not found in unique_id: {unique_id}"
             )
 
-            if entity_id:
-                assert expected_suffix in entity_id, (
-                    f"Expected suffix '{expected_suffix}' not found in entity_id: {entity_id}"
-                )
+            # Only test unique_id since entity_id is not set by the sensor

@@ -55,9 +55,9 @@ async def test_solar_configuration_with_simulator_mode(hass: HomeAssistant, enab
     # await hass.async_block_till_done()
     #
     # # Test actual HA entities created by simulation
-    # solar_power = hass.states.get("sensor.span_sp3_simulation_001_solar_power")
-    # assert solar_power is not None
-    # assert float(solar_power.state) > 0
+    # solar_current_power = hass.states.get("sensor.span_sp3_simulation_001_solar_current_power")
+    # assert solar_current_power is not None
+    # assert float(solar_current_power.state) > 0
     #
     # # Test configuration changes
     # await hass.config_entries.async_update_entry(
