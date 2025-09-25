@@ -521,7 +521,8 @@ def construct_entity_id(
     if not device_name:
         return None
 
-    use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, True)
+    # Default to False so legacy entries without the flag use friendly names
+    use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
     use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
 
     # Build entity ID components
