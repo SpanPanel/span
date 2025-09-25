@@ -68,7 +68,6 @@ class SpanPanelSimulationFactory:
             host=host,
             simulation_mode=True,
             simulation_config_path=config_path,
-            cache_window=0,  # Disable caching for tests
             **kwargs
         )
 

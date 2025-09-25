@@ -145,25 +145,6 @@ class SpanPanelApi:
             self.offline_start_time = None
             _LOGGER.info("[SpanPanelApi] Disabled simulation offline mode")
 
-    def _calculate_cache_window(self) -> float:
-        """Calculate optimal cache window based on polling interval.
-
-        The cache window should be longer than the polling interval to prevent
-        nested API calls in circuits, while still providing reasonable freshness.
-
-        Uses 150% of scan interval to account for Home Assistant scheduling jitter
-        and processing delays that can cause calls to drift beyond the exact interval.
-
-        Returns:
-            Cache window in seconds (150% of polling interval, minimum 3 seconds).
-
-        """
-        # Cache is essential - sequential API calls take ~1.5s total
-        # Individual endpoints: status(0.4s) + panel(0.5s) + circuits(0.5s) + storage(0.1s) = 1.5s
-        # Use cache window longer than scan interval to maximize cache hits
-        cache_window = self.scan_interval * 2.0  # 30 seconds for 15s scan interval
-        return max(cache_window, 20.0)  # Minimum 20 seconds
-
     def _create_client(self) -> None:
         """Create the SpanPanelClient with stored parameters."""
         _LOGGER.debug("[SpanPanelApi] Creating SpanPanelClient for host=%s", self.host)

@@ -54,7 +54,6 @@ class SpanPanelSimulationFactory:
         return SpanPanelClient(
             host="localhost",  # Ignored in simulation
             simulation_mode=True,
-            cache_window=0,  # Disable caching for tests
             **kwargs
         )
 
