@@ -105,15 +105,6 @@ CONFIG_API_RETRIES = 0
 CONFIG_API_RETRY_TIMEOUT = 0.5
 CONFIG_API_RETRY_BACKOFF_MULTIPLIER = 2.0
 
-# Dispatcher signal names used to stage platform updates deterministically
-# The coordinator emits these signals in this strict order each tick so that
-# entity updates are applied without creating a single large burst to the
-# EntityPlatform. Subscribers should perform their state write when their
-# stage signal fires.
-SIGNAL_STAGE_SWITCHES: Final = f"{DOMAIN}_stage_switches"
-SIGNAL_STAGE_SELECTS: Final = f"{DOMAIN}_stage_selects"
-SIGNAL_STAGE_NATIVE_SENSORS: Final = f"{DOMAIN}_stage_native_sensors"
-
 
 class CircuitRelayState(enum.Enum):
     """Enumeration representing the possible relay states for a circuit."""

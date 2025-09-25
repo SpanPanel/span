@@ -9,7 +9,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api.exceptions import SpanPanelServerError
@@ -17,7 +16,6 @@ from span_panel_api.exceptions import SpanPanelServerError
 from .const import (
     COORDINATOR,
     DOMAIN,
-    SIGNAL_STAGE_SELECTS,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     CircuitPriority,
@@ -127,23 +125,8 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         # Store initial circuit name for change detection in auto-sync of names
         self._previous_circuit_name = name
 
-        # Subscribe to staged updates so selects run after switches. We schedule
-        # the update on the event loop to satisfy HA's thread-safety checks.
-        def _on_stage() -> None:
-            if self.hass is None:
-                return
-
-            def _run_on_loop() -> None:
-                circuit = self._get_circuit()
-                self._attr_options = self.description_wrapper.options_fn(circuit)
-                self._attr_current_option = self.description_wrapper.current_option_fn(circuit)
-                self.async_write_ha_state()
-
-            self.hass.loop.call_soon_threadsafe(_run_on_loop)
-
-        self._unsub_stage = async_dispatcher_connect(
-            coordinator.hass, SIGNAL_STAGE_SELECTS, _on_stage
-        )
+        # Use standard coordinator pattern - entities will update automatically
+        # when coordinator data changes
 
     def _get_circuit(self) -> SpanPanelCircuit:
         """Get the circuit for this entity."""
@@ -294,14 +277,6 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
 
         entity_id = f"select.{'_'.join(parts)}"
         return entity_id
-
-    def __del__(self) -> None:
-        """Ensure dispatcher subscription is released at GC time."""
-        try:
-            if hasattr(self, "_unsub_stage") and self._unsub_stage is not None:
-                self._unsub_stage()
-        except Exception as e:  # pragma: no cover – defensive
-            _LOGGER.debug("Failed to cleanup dispatcher subscription: %s", e)
 
 
 async def async_setup_entry(

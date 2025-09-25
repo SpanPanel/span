@@ -6,7 +6,6 @@ from typing import Any, Literal
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -15,7 +14,6 @@ from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
 from .const import (
     COORDINATOR,
     DOMAIN,
-    SIGNAL_STAGE_SWITCHES,
     USE_CIRCUIT_NUMBERS,
     CircuitRelayState,
 )
@@ -77,22 +75,8 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
 
         self._update_is_on()
 
-        # Subscribe to staged updates so switches run first each tick. Schedule
-        # on the event loop to satisfy HA's thread-safety constraints.
-        def _on_stage() -> None:
-            # Schedule work onto the HA event loop thread explicitly.
-            if self.hass is None:
-                return
-
-            def _run_on_loop() -> None:
-                self._update_is_on()
-                self.async_write_ha_state()
-
-            self.hass.loop.call_soon_threadsafe(_run_on_loop)
-
-        self._unsub_stage = async_dispatcher_connect(
-            coordinator.hass, SIGNAL_STAGE_SWITCHES, _on_stage
-        )
+        # Use standard coordinator pattern - entities will update automatically
+        # when coordinator data changes
 
         # Store initial circuit name for change detection in auto-sync
         self._previous_circuit_name = name
@@ -207,14 +191,6 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         return build_switch_unique_id_for_entry(
             coordinator, span_panel, circuit_id, self._device_name
         )
-
-    def __del__(self) -> None:
-        """Ensure dispatcher subscription is released at GC time."""
-        try:
-            if hasattr(self, "_unsub_stage") and self._unsub_stage is not None:
-                self._unsub_stage()
-        except Exception as e:  # pragma: no cover – defensive
-            _LOGGER.debug("Failed to cleanup dispatcher subscription: %s", e)
 
 
 async def async_setup_entry(
