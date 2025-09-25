@@ -14,10 +14,8 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from custom_components.span_panel.const import SIGNAL_STAGE_NATIVE_SENSORS
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.span_panel import SpanPanel
@@ -70,22 +68,8 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if hasattr(description, "entity_registry_visible_default"):
             self._attr_entity_registry_visible_default = description.entity_registry_visible_default
 
-        # Subscribe native sensors to the third stage. Schedule on the event
-        # loop to keep async_write_ha_state on the loop thread. Synthetic
-        # sensors subscribe in synthetic_sensors.py for the fourth stage.
-        def _on_stage() -> None:
-            if self.hass is None:
-                return
-
-            def _run_on_loop() -> None:
-                self._update_native_value()
-                self.async_write_ha_state()
-
-            self.hass.loop.call_soon_threadsafe(_run_on_loop)
-
-        self._unsub_stage = async_dispatcher_connect(
-            data_coordinator.hass, SIGNAL_STAGE_NATIVE_SENSORS, _on_stage
-        )
+        # Use standard coordinator pattern - entities will update automatically
+        # when coordinator data changes
 
     @abstractmethod
     def _generate_unique_id(self, span_panel: SpanPanel, description: T) -> str:
@@ -227,15 +211,6 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     def get_data_source(self, span_panel: SpanPanel) -> D:
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
-
-    def __del__(self) -> None:
-        """Clean up dispatcher subscription on object destruction."""
-        # Best-effort disconnect of dispatcher subscription
-        try:
-            if hasattr(self, "_unsub_stage") and self._unsub_stage is not None:
-                self._unsub_stage()
-        except Exception as e:  # pragma: no cover – defensive
-            _LOGGER.debug("Failed to cleanup dispatcher subscription: %s", e)
 
 
 class SpanEnergySensorBase(SpanSensorBase[T, D], ABC):
