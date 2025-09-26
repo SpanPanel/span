@@ -5,22 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.6] - 2025-09-XX
+
+### 🔧 Technical Improvements
+
+- **Circuit Naming Logic**: Fixed logic for circuit naming patterns to ensure proper entity ID generation and panel prefixes (fresh installs only)
+- **Panel Friendly Name Sync**: Fixed regression in panel circuit name synchronization
+- **API Optimization**: Removed unnecessary signal updates to improve performance and reduce overhead
+- **API Dependencies**: Updated span-panel-api to version 1.1.13 for improved stability
+
 ## [1.2.5] - 2025-09-XX
 
 ### 🔧 Technical Improvements
 
-- **Circuit Based Naming**: Circuit based entity_id naming was not using both tabs in the name.  Existing entity_id's are unchnaged except fresh installs.
+- **Circuit Based Naming**: Circuit based entity_id naming was not using both tabs in the name. Existing entity_id's are unchnaged except fresh installs.
 - **Switches and Selects Naming**: were creating proper ID's but not looking up migration names in 1.2.4
 
 ## [1.2.4] - 2025-09-XX
 
 ### 🔧 Technical Improvements
 
-- **Performance**: Revert to native sensors (non-synthetic) to avoid calculation engine for simple math. Features like net energy, OpenAPI, simulation
-  are still present. We may reintroduce the synthetic engine later in a modified form to allow users to add attributes, etc.
-- **Fix sensor circuit-based naming**: For new installations with circuit naming provide consistent behavior where all circuits, other than panel have
- circuit names related to the tab (120V) or tabs (240V).  We do not modify entity ID's so if an installation had faulty names from a previous release those
- must be renamed manually
+- **Performance**: Revert to native sensors (non-synthetic) to avoid calculation engine for simple math. Features like net energy, OpenAPI, simulation are still
+  present. We may reintroduce the synthetic engine later in a modified form to allow users to add attributes, etc.
+- **Fix sensor circuit-based naming**: For new installations with circuit naming provide consistent behavior where all circuits, other than panel have circuit
+  names related to the tab (120V) or tabs (240V). We do not modify entity ID's so if an installation had faulty names from a previous release those must be
+  renamed manually
 - **Fix Faulty Legacy Single Panel Config**: Provided a repair for a pre-1.0.4 upgraded release where the config entry was missing the device unique ID (serial
   number) causing the new migration for normalized unique keys to fail. This repair only works for single panel installs because we derive the serial number
   from the entities and if more than one serial number is found we cannot determine which config the serial number would match.
