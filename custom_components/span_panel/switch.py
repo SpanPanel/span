@@ -6,6 +6,7 @@ from typing import Any, Literal
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -50,26 +51,34 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, span_panel, circuit_id)
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
-        # Set entity name for HA automatic naming based on user preferences
-        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        # Check if entity already exists in registry
+        entity_registry = er.async_get(coordinator.hass)
+        existing_entity_id = entity_registry.async_get_entity_id(
+            "switch", DOMAIN, self._attr_unique_id
+        )
 
-        if use_circuit_numbers:
-            # Use circuit number format: "Circuit 15 Breaker"
-            if circuit.tabs and len(circuit.tabs) == 2:
-                # 240V circuit - use both tab numbers
-                sorted_tabs = sorted(circuit.tabs)
-                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
-            elif circuit.tabs and len(circuit.tabs) == 1:
-                # 120V circuit - use single tab number
-                circuit_identifier = f"Circuit {circuit.tabs[0]}"
-            else:
-                # Fallback
-                circuit_identifier = f"Circuit {circuit_id}"
+        if existing_entity_id:
+            # Entity exists - always use panel name for sync
+            circuit_identifier = circuit.name
+            self._attr_name = f"{circuit_identifier} Breaker"
         else:
-            # Use friendly name format: "Kitchen Outlets Breaker"
-            circuit_identifier = name
+            # Initial install - use flag-based name for entity_id generation
+            use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        self._attr_name = f"{circuit_identifier} Breaker"
+            if use_circuit_numbers:
+                # Use circuit number format: "Circuit 15 Breaker"
+                if circuit.tabs and len(circuit.tabs) == 2:
+                    sorted_tabs = sorted(circuit.tabs)
+                    circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+                elif circuit.tabs and len(circuit.tabs) == 1:
+                    circuit_identifier = f"Circuit {circuit.tabs[0]}"
+                else:
+                    circuit_identifier = f"Circuit {circuit_id}"
+            else:
+                # Use friendly name format: "Kitchen Outlets Breaker"
+                circuit_identifier = name
+
+            self._attr_name = f"{circuit_identifier} Breaker"
 
         super().__init__(coordinator)
 
@@ -79,7 +88,15 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         # when coordinator data changes
 
         # Store initial circuit name for change detection in auto-sync
-        self._previous_circuit_name = name
+        # Only set to None if entity doesn't exist in registry (true first time)
+        if not existing_entity_id:
+            self._previous_circuit_name = None
+            _LOGGER.info("Switch entity not in registry, will sync on first update")
+        else:
+            self._previous_circuit_name = circuit.name
+            _LOGGER.info(
+                "Switch entity exists in registry, previous name set to '%s'", circuit.name
+            )
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up when entity is removed."""
@@ -95,7 +112,22 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             current_circuit_name = circuit.name
 
             # Only request reload if the circuit name has actually changed
-            if current_circuit_name != self._previous_circuit_name:
+            if self._previous_circuit_name is None:
+                # First update - sync to panel name
+                _LOGGER.info(
+                    "First update: syncing entity name to panel name '%s' for switch, requesting reload",
+                    current_circuit_name,
+                )
+                # Update stored previous name for next comparison
+                self._previous_circuit_name = current_circuit_name
+                # Request integration reload to persist name change
+                self.coordinator.request_reload()
+            elif current_circuit_name != self._previous_circuit_name:
+                _LOGGER.info(
+                    "Name change detected: previous='%s', current='%s' for switch",
+                    self._previous_circuit_name,
+                    current_circuit_name,
+                )
                 _LOGGER.info(
                     "Auto-sync detected circuit name change from '%s' to '%s' for "
                     "switch, requesting integration reload",

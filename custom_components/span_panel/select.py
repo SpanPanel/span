@@ -97,33 +97,49 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_unique_id = self._construct_select_unique_id(coordinator, span_panel, self.id)
         self._attr_device_info = panel_to_device_info(span_panel, device_name)
 
-        # Set entity name for HA automatic naming based on user preferences
-        use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        # Check if entity already exists in registry
+        entity_registry = er.async_get(coordinator.hass)
+        existing_entity_id = entity_registry.async_get_entity_id(
+            "select", DOMAIN, self._attr_unique_id
+        )
 
-        if use_circuit_numbers:
-            # Use circuit number format: "Circuit 15 Priority"
-            if circuit.tabs and len(circuit.tabs) == 2:
-                # 240V circuit - use both tab numbers
-                sorted_tabs = sorted(circuit.tabs)
-                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
-            elif circuit.tabs and len(circuit.tabs) == 1:
-                # 120V circuit - use single tab number
-                circuit_identifier = f"Circuit {circuit.tabs[0]}"
-            else:
-                # Fallback
-                circuit_identifier = f"Circuit {circuit_id}"
+        if existing_entity_id:
+            # Entity exists - always use panel name for sync
+            circuit_identifier = circuit.name
+            self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
         else:
-            # Use friendly name format: "Kitchen Outlets Priority"
-            circuit_identifier = name
+            # Initial install - use flag-based name for entity_id generation
+            use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
+            if use_circuit_numbers:
+                # Use circuit number format: "Circuit 15 Priority"
+                if circuit.tabs and len(circuit.tabs) == 2:
+                    sorted_tabs = sorted(circuit.tabs)
+                    circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+                elif circuit.tabs and len(circuit.tabs) == 1:
+                    circuit_identifier = f"Circuit {circuit.tabs[0]}"
+                else:
+                    circuit_identifier = f"Circuit {circuit_id}"
+            else:
+                # Use friendly name format: "Kitchen Outlets Priority"
+                circuit_identifier = name
+
+            self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
 
         circuit = self._get_circuit()
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)
 
         # Store initial circuit name for change detection in auto-sync of names
-        self._previous_circuit_name = name
+        # Only set to None if entity doesn't exist in registry (true first time)
+        if not existing_entity_id:
+            self._previous_circuit_name = None
+            _LOGGER.info("Select entity not in registry, will sync on first update")
+        else:
+            self._previous_circuit_name = circuit.name
+            _LOGGER.info(
+                "Select entity exists in registry, previous name set to '%s'", circuit.name
+            )
 
         # Use standard coordinator pattern - entities will update automatically
         # when coordinator data changes
@@ -197,7 +213,22 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
             current_circuit_name = circuit.name
 
             # Only request reload if the circuit name has actually changed
-            if current_circuit_name != self._previous_circuit_name:
+            if self._previous_circuit_name is None:
+                # First update - sync to panel name
+                _LOGGER.info(
+                    "First update: syncing entity name to panel name '%s' for select, requesting reload",
+                    current_circuit_name,
+                )
+                # Update stored previous name for next comparison
+                self._previous_circuit_name = current_circuit_name
+                # Request integration reload to persist name change
+                self.coordinator.request_reload()
+            elif current_circuit_name != self._previous_circuit_name:
+                _LOGGER.info(
+                    "Name change detected: previous='%s', current='%s' for select",
+                    self._previous_circuit_name,
+                    current_circuit_name,
+                )
                 _LOGGER.info(
                     "Auto-sync detected circuit name change from '%s' to '%s' for select, requesting integration reload",
                     self._previous_circuit_name,

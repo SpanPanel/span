@@ -129,7 +129,14 @@ class SpanPanelApi:
             offline_minutes: Number of minutes the panel should appear offline (0 to disable)
 
         """
+        _LOGGER.info(
+            "[SpanPanelApi] set_simulation_offline_mode called: offline_minutes=%s, simulation_mode=%s",
+            offline_minutes,
+            self.simulation_mode,
+        )
+
         if not self.simulation_mode:
+            _LOGGER.warning("[SpanPanelApi] Cannot set offline mode: not in simulation mode")
             return
 
         self.simulation_offline_minutes = offline_minutes
@@ -138,8 +145,9 @@ class SpanPanelApi:
         if offline_minutes > 0:
             self.offline_start_time = datetime.now()
             _LOGGER.info(
-                "[SpanPanelApi] Set simulation offline mode: %s minutes starting now",
+                "[SpanPanelApi] Set simulation offline mode: %s minutes starting now (%s)",
                 offline_minutes,
+                self.offline_start_time,
             )
         else:
             self.offline_start_time = None
@@ -587,6 +595,10 @@ class SpanPanelApi:
             Dictionary containing all panel data with proper processing applied
 
         """
+        # Check if panel should be offline in simulation mode
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
         self._ensure_client_open()
         if self._client is None:
             raise SpanPanelAPIError("API client has been closed")
