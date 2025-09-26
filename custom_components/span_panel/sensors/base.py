@@ -13,9 +13,11 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 from homeassistant.const import STATE_UNKNOWN
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.span_panel import SpanPanel
@@ -55,10 +57,25 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
         self._attr_device_info = device_info  # Re-enable device info
 
-        self._attr_name = self._generate_friendly_name(span_panel, description)
-
+        # Check if entity already exists in registry for name sync
         if span_panel.status.serial_number and description.key:
             self._attr_unique_id = self._generate_unique_id(span_panel, description)
+
+            # Check if entity exists for name sync logic
+            entity_registry = er.async_get(data_coordinator.hass)
+            existing_entity_id = entity_registry.async_get_entity_id(
+                "sensor", DOMAIN, self._attr_unique_id
+            )
+
+            if existing_entity_id:
+                # Entity exists - use panel name for sync
+                self._attr_name = self._generate_panel_name(span_panel, description)
+            else:
+                # Initial install - use flag-based name
+                self._attr_name = self._generate_friendly_name(span_panel, description)
+        else:
+            # Fallback for entities without unique_id
+            self._attr_name = self._generate_friendly_name(span_panel, description)
 
         self._attr_icon = "mdi:flash"
 
@@ -67,6 +84,25 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._attr_entity_registry_enabled_default = description.entity_registry_enabled_default
         if hasattr(description, "entity_registry_visible_default"):
             self._attr_entity_registry_visible_default = description.entity_registry_visible_default
+
+        # Initialize name sync tracking
+        # Only set to None if entity doesn't exist in registry (true first time)
+        if span_panel.status.serial_number and description.key and self._attr_unique_id:
+            entity_registry = er.async_get(data_coordinator.hass)
+            existing_entity_id = entity_registry.async_get_entity_id(
+                "sensor", DOMAIN, self._attr_unique_id
+            )
+            if not existing_entity_id:
+                self._previous_circuit_name = None
+            else:
+                # Entity exists, get current circuit name for comparison
+                if hasattr(self, "circuit_id"):
+                    circuit = span_panel.circuits.get(getattr(self, "circuit_id", ""))
+                    self._previous_circuit_name = circuit.name if circuit else None
+                else:
+                    self._previous_circuit_name = None
+        else:
+            self._previous_circuit_name = None
 
         # Use standard coordinator pattern - entities will update automatically
         # when coordinator data changes
@@ -101,8 +137,53 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         """
 
+    def _generate_panel_name(self, span_panel: SpanPanel, description: T) -> str:
+        """Generate panel name for the sensor (always uses panel circuit name).
+
+        This method is used for name sync - it always uses the panel circuit name
+        regardless of user preferences.
+
+        Args:
+            span_panel: The span panel data
+            description: The sensor description
+
+        Returns:
+            Panel name string
+
+        """
+        # This should be implemented by subclasses that need name sync
+        # For now, fall back to friendly name
+        return self._generate_friendly_name(span_panel, description)
+
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        # Check for circuit name changes for name sync (only for circuit sensors)
+        if hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits"):
+            circuit = self.coordinator.data.circuits.get(getattr(self, "circuit_id", ""))
+            if circuit:
+                current_circuit_name = circuit.name
+
+                if self._previous_circuit_name is None:
+                    # First update - sync to panel name
+                    _LOGGER.info(
+                        "First update: syncing sensor name to panel name '%s', requesting reload",
+                        current_circuit_name,
+                    )
+                    # Update stored previous name for next comparison
+                    self._previous_circuit_name = current_circuit_name
+                    # Request integration reload to persist name change
+                    self.coordinator.request_reload()
+                elif current_circuit_name != self._previous_circuit_name:
+                    _LOGGER.info(
+                        "Auto-sync detected circuit name change from '%s' to '%s' for sensor, requesting integration reload",
+                        self._previous_circuit_name,
+                        current_circuit_name,
+                    )
+                    # Update stored previous name for next comparison
+                    self._previous_circuit_name = current_circuit_name
+                    # Request integration reload for next update cycle
+                    self.coordinator.request_reload()
+
         self._update_native_value()
         super()._handle_coordinator_update()
 
@@ -247,6 +328,33 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], ABC):
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator with grace period tracking."""
+        # Check for circuit name changes for name sync (only for circuit sensors)
+        if hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits"):
+            circuit = self.coordinator.data.circuits.get(getattr(self, "circuit_id", ""))
+            if circuit:
+                current_circuit_name = circuit.name
+
+                if self._previous_circuit_name is None:
+                    # First update - sync to panel name
+                    _LOGGER.info(
+                        "First update: syncing energy sensor name to panel name '%s', requesting reload",
+                        current_circuit_name,
+                    )
+                    # Update stored previous name for next comparison
+                    self._previous_circuit_name = current_circuit_name
+                    # Request integration reload to persist name change
+                    self.coordinator.request_reload()
+                elif current_circuit_name != self._previous_circuit_name:
+                    _LOGGER.info(
+                        "Auto-sync detected circuit name change from '%s' to '%s' for energy sensor, requesting integration reload",
+                        self._previous_circuit_name,
+                        current_circuit_name,
+                    )
+                    # Update stored previous name for next comparison
+                    self._previous_circuit_name = current_circuit_name
+                    # Request integration reload for next update cycle
+                    self.coordinator.request_reload()
+
         # Update grace period from options in case it changed
         self._grace_period_minutes = self.coordinator.config_entry.options.get(
             ENERGY_REPORTING_GRACE_PERIOD, 15

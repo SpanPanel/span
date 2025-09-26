@@ -7,6 +7,7 @@ import enum
 import logging
 from pathlib import Path
 import shutil
+from time import time
 from typing import TYPE_CHECKING, Any
 import uuid
 
@@ -990,6 +991,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
             # Add a flag to indicate this is a simulation-only change
             merged_options["_simulation_only_change"] = True
+
+            # Add a timestamp to force change detection even when offline_minutes value is the same
+            # This ensures the update listener is called to restart the offline timer
+            merged_options["_simulation_timestamp"] = int(time())
 
             return self.async_create_entry(title="", data=merged_options)
 

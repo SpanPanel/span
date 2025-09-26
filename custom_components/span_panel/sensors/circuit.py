@@ -94,6 +94,20 @@ class SpanCircuitPowerSensor(
 
         return f"{circuit_identifier} {description.name or 'Sensor'}"
 
+    def _generate_panel_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate panel name for circuit sensors (always uses panel circuit name)."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return construct_unmapped_friendly_name(
+                self.circuit_id, str(description.name or "Sensor")
+            )
+
+        # Always use panel name for sync
+        circuit_identifier = circuit.name
+        return f"{circuit_identifier} {description.name or 'Sensor'}"
+
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the circuit power sensor."""
         circuit = span_panel.circuits.get(self.circuit_id)
@@ -208,6 +222,18 @@ class SpanCircuitEnergySensor(
             # Use friendly name format: "Kitchen Outlets Power"
             circuit_identifier = circuit.name
 
+        return f"{circuit_identifier} {description.name}"
+
+    def _generate_panel_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate panel name for circuit energy sensors (always uses panel circuit name)."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return f"Circuit {self.circuit_id} {description.name}"
+
+        # Always use panel name for sync
+        circuit_identifier = circuit.name
         return f"{circuit_identifier} {description.name}"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
