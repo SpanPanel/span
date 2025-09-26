@@ -394,9 +394,11 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if coordinator:
             # Handle simulation options change (offline minutes, start time)
             simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
+            simulation_timestamp = entry.options.get("_simulation_timestamp", 0)
             _LOGGER.info(
-                "Update listener: processing simulation_offline_minutes = %s",
+                "Update listener: processing simulation_offline_minutes = %s (timestamp: %s)",
                 simulation_offline_minutes,
+                simulation_timestamp,
             )
 
             # Update simulation parameters in the existing API instance
