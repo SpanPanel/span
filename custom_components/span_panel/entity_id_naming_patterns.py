@@ -56,7 +56,24 @@ class EntityIdMigrationManager:
             return device_name
 
         except Exception as e:
-            _LOGGER.error("Failed to get device name from registry: %s", e)
+            _LOGGER.debug(
+                "Failed to get device name for config entry %s: %s", active_config_entry_id, str(e)
+            )
+            return None
+
+    def _get_circuit_name_by_id(self, circuit_id: str) -> str | None:
+        """Get circuit friendly name by circuit ID only."""
+        try:
+            coordinator_data = self.hass.data[DOMAIN][self.config_entry_id]
+            coordinator = coordinator_data[COORDINATOR]
+            span_panel = coordinator.data
+            
+            if circuit_id not in span_panel["circuits"]:
+                return None
+            
+            circuit_data = span_panel["circuits"][circuit_id]
+            return circuit_data.get("name")
+        except Exception:
             return None
 
     async def migrate_entity_ids(
@@ -392,6 +409,11 @@ class EntityIdMigrationManager:
     def _should_migrate_entity(self, entity: er.RegistryEntry, sanitized_device_name: str) -> bool:
         """Determine if an entity should be migrated based on its unique ID pattern.
 
+        Uses process of elimination to identify circuit entities that can be renamed:
+        - Excludes panel-level entities (DSM state, door state, software version, power/energy, solar, etc.)
+        - Excludes unmapped circuits (backing data for synthetics)
+        - Allows circuit entities, switches, and selects to be migrated
+
         Args:
             entity: The entity registry entry
             sanitized_device_name: The sanitized device name for prefix checking
@@ -414,24 +436,82 @@ class EntityIdMigrationManager:
         if "unmapped_tab" in unique_id:
             return False
 
-        # Check if this is a circuit entity (has circuit_id in unique_id)
+        # Exclude panel-level entities (they should not be migrated)
+        if self._is_panel_level_entity(unique_id):
+            return False
+
+        # At this point, we have entities that are not panel-level or unmapped
+        # These are circuit entities, switches, and selects that can be migrated
+        return True
+
+    def _is_panel_level_entity(self, unique_id: str) -> bool:
+        """Check if the entity is a panel-level entity based on its unique_id pattern.
+
+        Panel-level entities have unique IDs like:
+        - span_{serial}_{panel_suffix} (no circuit_id)
+
+        Where panel_suffix includes suffixes for:
+        - Panel status: dsm_state, dsm_grid_state, current_run_config, main_relay_state
+        - Hardware status: software_version, doorState, eth0Link, wlanLink, wwanLink, panel_status
+        - Panel power/energy: current_power, feed_through_power, main_meter_*_energy, etc.
+        - Battery: battery_level, battery_percentage, storage_battery_percentage
+
+        Args:
+            unique_id: The unique ID to check
+
+        Returns:
+            True if this is a panel-level entity, False otherwise
+
+        """
+        # Panel-level suffixes from various sensor definitions and binary sensors
+        panel_level_suffixes = {
+            # Panel data status sensors (from PANEL_DATA_STATUS_SENSORS)
+            "dsm_state",
+            "dsm_grid_state",
+            "current_run_config",
+            "main_relay_state",
+
+            # Hardware status sensors (from STATUS_SENSORS)
+            "software_version",
+
+            # Binary sensor suffixes (from BINARY_SENSORS)
+            "doorState",
+            "eth0Link",
+            "wlanLink",
+            "wwanLink",
+            "panel_status",
+
+            # Panel power sensors (from PANEL_POWER_SENSORS)
+            "current_power",          # instantGridPowerW
+            "feed_through_power",     # feedthroughPowerW
+
+            # Panel energy sensors (from PANEL_ENERGY_SENSORS)
+            "main_meter_produced_energy",    # mainMeterEnergyProducedWh
+            "main_meter_consumed_energy",    # mainMeterEnergyConsumedWh
+            "main_meter_net_energy",         # mainMeterNetEnergyWh
+            "feed_through_produced_energy",  # feedthroughEnergyProducedWh
+            "feed_through_consumed_energy",  # feedthroughEnergyConsumedWh
+            "feed_through_net_energy",       # feedthroughNetEnergyWh
+
+            # Battery sensors
+            "battery_level",
+            "battery_percentage",
+            "storage_battery_percentage",
+
+            # Solar sensors (from SOLAR_SENSORS)
+            "solar_current_power",
+            "solar_produced_energy",
+            "solar_consumed_energy",
+            "solar_net_energy",
+
+            # Other panel-level sensors can be added here as needed
+            "panel_status",
+        }
+
+        # Check if the unique_id ends with any panel-level suffix
+        # Panel entities have pattern: span_{serial}_{suffix}
         # Circuit entities have pattern: span_{serial}_{circuit_id}_{suffix}
-        # where circuit_id is typically a UUID (longer than 8 chars)
-        if len(parts) >= 3:
-            potential_circuit_id = parts[2].split("_")[0]  # Get first part after serial
-            # Circuit IDs are typically UUIDs (32+ chars) or short identifiers
-            if len(potential_circuit_id) > 8:  # Likely a UUID circuit_id
-                return True
-
-        # Check for switch entities: span_{serial}_relay_{circuit_id}
-        if "relay" in unique_id:
-            return True
-
-        # Check for select entities: span_{serial}_select_{select_id}
-        if "select" in unique_id:
-            return True
-
-        return False
+        return any(unique_id.endswith(f"_{suffix}") for suffix in panel_level_suffixes)
 
     def _construct_new_entity_id(
         self,
@@ -440,7 +520,12 @@ class EntityIdMigrationManager:
         use_device_prefix: bool,
         sanitized_device_name: str,
     ) -> str | None:
-        """Construct new entity ID based on naming flags.
+        """Construct new entity ID based on entity domain and naming flags.
+
+        Uses the entity's domain (platform) to determine the proper construction method:
+        - switch domain -> use switch construction (adds "relay" suffix)
+        - select domain -> use select construction (preserves select suffix)  
+        - sensor domain -> use circuit construction (preserves sensor suffix)
 
         Args:
             entity: The entity registry entry
@@ -457,46 +542,63 @@ class EntityIdMigrationManager:
             if not unique_id:
                 return None
 
-            # Parse unique ID to extract components
+            # Parse unique ID to extract circuit info
+            # Pattern: span_{serial}_{circuit_id}_{suffix} or span_{serial}_relay_{circuit_id}
             parts = unique_id.split("_", 2)
             if len(parts) < 3 or parts[0] != "span":
                 return None
 
             remaining = parts[2]
 
-            # Determine entity type and extract circuit info
-            if "relay" in unique_id:
-                # Switch entity: span_{serial}_relay_{circuit_id}
-                circuit_id = remaining.split("_", 1)[1] if "_" in remaining else remaining
+            # Route based on entity domain (platform) for proper entity ID construction
+            if entity.domain == "switch":
+                # Switch entities: extract circuit_id from pattern like "relay_circuit_id"
+                if remaining.startswith("relay_"):
+                    circuit_id = remaining[6:]  # Remove "relay_" prefix
+                else:
+                    # Fallback: assume remaining is the circuit_id
+                    circuit_id = remaining
                 return self._construct_switch_entity_id(
-                    entity.platform, circuit_id, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                    entity.domain, circuit_id, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
                 )
-            elif "select" in unique_id and not any(x in unique_id for x in ["circuit", "priority"]):
-                # Panel-level select entity: span_{serial}_select_{select_id}
-                select_id = remaining.split("_", 1)[1] if "_" in remaining else remaining
-                return self._construct_select_entity_id(
-                    entity.platform, select_id, use_circuit_numbers, use_device_prefix, sanitized_device_name
-                )
+                
+            elif entity.domain == "select":
+                # Select entities: pattern is span_{serial}_select_{circuit_id} or span_{serial}_{circuit_id}_{select_suffix}
+                if remaining.startswith("select_"):
+                    # Pattern: span_{serial}_select_{circuit_id}
+                    circuit_id = remaining[7:]  # Remove "select_" prefix
+                    suffix = "select"
+                    return self._construct_circuit_select_entity_id(
+                        entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                    )
+                elif "_" in remaining:
+                    # Pattern: span_{serial}_{circuit_id}_{select_suffix}
+                    circuit_id = remaining.split("_")[0]
+                    suffix = remaining.split("_", 1)[1]
+                    return self._construct_circuit_select_entity_id(
+                        entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                    )
+                else:
+                    # Simple select pattern - treat as circuit select
+                    circuit_id = remaining
+                    suffix = "select"
+                    return self._construct_circuit_select_entity_id(
+                        entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                    )
+                    
             else:
-                # Circuit entity or circuit-related select: span_{serial}_{circuit_id}_{suffix}
-                circuit_parts = remaining.split("_", 1)
-                if len(circuit_parts) >= 2:
-                    circuit_id = circuit_parts[0]
-                    suffix = circuit_parts[1]
-
-                    # Check if this is a circuit-related select entity
-                    if "select" in suffix or "priority" in suffix:
-                        # This is a circuit-related select entity
-                        return self._construct_circuit_select_entity_id(
-                            entity.platform, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
-                        )
-                    else:
-                        # Regular circuit entity
-                        return self._construct_circuit_entity_id(
-                            entity.platform, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
-                        )
-
-            return None
+                # Sensor and other entities: pattern is span_{serial}_{circuit_id}_{suffix}
+                if "_" in remaining:
+                    circuit_id = remaining.split("_")[0]
+                    suffix = remaining.split("_", 1)[1]
+                else:
+                    # Simple pattern without suffix
+                    circuit_id = remaining
+                    suffix = ""
+                    
+                return self._construct_circuit_entity_id(
+                    entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                )
 
         except Exception as e:
             _LOGGER.error("Failed to construct new entity ID for %s: %s", entity.entity_id, e)
@@ -693,9 +795,12 @@ class EntityIdMigrationManager:
     ) -> str:
         """Construct entity ID for select entities.
 
+        Note: This method is deprecated and no longer used since we route by entity domain.
+        Kept for compatibility but _construct_circuit_select_entity_id is now used instead.
+
         Args:
             platform: The platform name
-            select_id: The select ID
+            select_id: The select ID (e.g., "circuit_id_priority_mode")
             use_circuit_numbers: Whether to use circuit numbers
             use_device_prefix: Whether to include device prefix
             sanitized_device_name: The sanitized device name
@@ -704,55 +809,41 @@ class EntityIdMigrationManager:
             Constructed entity ID
 
         """
+        # This is a fallback method - normally we route through _construct_circuit_select_entity_id
         parts = []
 
         if use_device_prefix:
             parts.append(sanitized_device_name)
 
-        # Check if this is a circuit-related select entity
-        # Circuit-related selects have pattern: span_{serial}_{circuit_id}_select_{select_type}
-        # or span_{serial}_{circuit_id}_{select_type}
-        if "circuit" in select_id or "priority" in select_id:
-            # This is a circuit-related select entity
-            # Extract circuit_id from select_id if it contains one
-            # For circuit-related selects, we need to get the circuit info
-            # The select_id might be something like "0dad2f16cd514812ae1807b0457d473e_circuit_priority"
-            if "_" in select_id:
-                potential_circuit_id = select_id.split("_")[0]
-                # Check if this looks like a circuit ID (UUID format)
-                if len(potential_circuit_id) > 8:
-                    # This is a circuit-related select, use circuit naming pattern
-                    tabs = self._get_circuit_tabs_from_coordinator(potential_circuit_id)
-                    if tabs:
-                        if len(tabs) == 2:
-                            # 240V circuit - use both tab numbers
-                            sorted_tabs = sorted(tabs)
-                            parts.append(f"circuit_{sorted_tabs[0]}_{sorted_tabs[1]}")
-                        elif len(tabs) == 1:
-                            # 120V circuit - use single tab number
-                            parts.append(f"circuit_{tabs[0]}")
-                        else:
-                            # Fallback to circuit_id
-                            parts.append(f"circuit_{potential_circuit_id}")
-                    else:
-                        # Fallback to circuit_id
-                        parts.append(f"circuit_{potential_circuit_id}")
-
-                    # Add the select type (e.g., "priority")
-                    select_type = select_id.split("_", 1)[1] if "_" in select_id else select_id
-                    parts.append(select_type)
-                else:
-                    # Not a circuit-related select, use simple naming
-                    parts.append("select")
-                    parts.append(select_id)
-            else:
-                # Not a circuit-related select, use simple naming
-                parts.append("select")
-                parts.append(select_id)
+        # Extract circuit_id and select_type from select_id
+        if "_" in select_id:
+            circuit_id = select_id.split("_")[0]
+            select_type = select_id.split("_", 1)[1]
         else:
-            # Not a circuit-related select, use simple naming
-            parts.append("select")
-            parts.append(select_id)
+            circuit_id = select_id
+            select_type = "select"
+
+        if use_circuit_numbers:
+            tabs = self._get_circuit_tabs_from_coordinator(circuit_id)
+            if tabs:
+                if len(tabs) == 2:
+                    sorted_tabs = sorted(tabs)
+                    parts.append(f"circuit_{sorted_tabs[0]}_{sorted_tabs[1]}")
+                elif len(tabs) == 1:
+                    parts.append(f"circuit_{tabs[0]}")
+                else:
+                    parts.append(f"circuit_{circuit_id}")
+            else:
+                parts.append(f"circuit_{circuit_id}")
+        else:
+            circuit_name = self._get_circuit_name_by_id(circuit_id)
+            if circuit_name:
+                parts.append(slugify(circuit_name))
+            else:
+                parts.append(circuit_id)
+
+        if select_type and not parts[-1].endswith(f"_{select_type}"):
+            parts.append(select_type)
 
         return f"{platform}.{'_'.join(parts)}"
 
