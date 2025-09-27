@@ -311,25 +311,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         host = user_input.get(CONF_HOST, "").strip()
         simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
 
-        # If no host provided, try to extract serial from the selected config
-        if not host:
-            try:
-                from tests.test_factories.span_panel_simulation_factory import (  # pylint: disable=import-outside-toplevel
-                    SpanPanelSimulationFactory,
-                )
+        # Generate unique simulator serial number first
+        from .helpers import generate_unique_simulator_serial_number
+        simulator_serial = generate_unique_simulator_serial_number(self.hass)
 
-                config_path = (
-                    Path(__file__).parent / "simulation_configs" / f"{simulation_config}.yaml"
-                )
-                if config_path.exists():
-                    host = SpanPanelSimulationFactory.extract_serial_number_from_yaml(
-                        str(config_path)
-                    )
-                else:
-                    host = "span-sim-001"
-            except (ImportError, FileNotFoundError, Exception):
-                # Fallback to a default
-                host = "span-sim-001"
+        # Use the generated simulator serial number as the host
+        # This ensures the span panel API uses the correct serial number
+        host = simulator_serial
 
         # Create entry for simulator mode
         base_name = "Span Simulator"
@@ -337,12 +325,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Prepare config data
         config_data = {
-            CONF_HOST: host,
+            CONF_HOST: host,  # This is now the simulator serial number (sim-nnn)
             CONF_ACCESS_TOKEN: "simulator_token",
             CONF_USE_SSL: False,
             "simulation_mode": True,
             CONF_SIMULATION_CONFIG: simulation_config,
             "device_name": device_name,
+            "simulator_serial_number": simulator_serial,
         }
 
         # Add simulation start time if provided
