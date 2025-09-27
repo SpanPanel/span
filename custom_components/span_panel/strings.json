@@ -86,6 +86,7 @@
         "title": "Options Menu",
         "menu_options": {
           "general_options": "General Options",
+          "entity_naming_options": "Entity Naming Options",
           "entity_naming": "Entity Naming Pattern",
           "export_config": "Export Synthetic Sensor Config",
           "simulation_start_time": "Simulation Start Time",
@@ -109,6 +110,18 @@
           "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
           "leg1": "Select the first solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 2 for proper 240V measurement.",
           "leg2": "Select the second solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 1 for proper 240V measurement."
+        }
+      },
+      "entity_naming_options": {
+        "title": "Entity Naming Options",
+        "description": "Configure how entity IDs are named. Choose between friendly names (e.g., kitchen_outlets_power) or circuit tab numbers (e.g., circuit_15_power).",
+        "data": {
+          "legacy_upgrade_to_friendly": "Upgrade Legacy Installation to Friendly Names",
+          "entity_naming_pattern": "Entity Naming Pattern"
+        },
+        "data_description": {
+          "legacy_upgrade_to_friendly": "Upgrade this legacy installation to use friendly entity names with device prefix. This will rename all existing entities.",
+          "entity_naming_pattern": "Choose how entity IDs are constructed. Friendly names use circuit names (e.g., kitchen_outlets_power), while circuit numbers use tab positions (e.g., circuit_15_power)."
         }
       },
       "simulation_start_time": {

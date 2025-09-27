@@ -69,22 +69,7 @@ async def async_setup_entry(
         # Enable unmapped tab entities if they were disabled
         enable_unmapped_tab_entities(hass, entities)
 
-        # Check for pending entity ID migration after sensors are created
-        _LOGGER.info(
-            "DEBUG: Checking for pending_legacy_migration flag in options: %s", config_entry.options
-        )
-        migration_flag = config_entry.options.get("pending_legacy_migration", False)
-        _LOGGER.info("DEBUG: Migration flag value: %s", migration_flag)
-
-        if migration_flag:
-            _LOGGER.info(
-                "Found pending legacy migration flag in sensor setup, triggering reload for migration"
-            )
-
-            def _trigger_reload():
-                hass.async_create_task(hass.config_entries.async_reload(config_entry.entry_id))
-
-            hass.loop.call_later(1.0, _trigger_reload)
+        # Migration detection moved to coordinator update cycle
 
         # Force immediate coordinator refresh to ensure all sensors update right away
         await coordinator.async_request_refresh()

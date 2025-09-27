@@ -101,11 +101,7 @@ def build_general_options_schema(
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
     }
 
-    # If legacy (no device prefix), show upgrade toggle in general options.
-    # Check USE_DEVICE_PREFIX flag to determine if this is a legacy installation.
-    is_legacy_install = not config_entry.options.get(USE_DEVICE_PREFIX, False)
-    if is_legacy_install:
-        schema_fields[vol.Optional("legacy_upgrade_to_friendly", default=False)] = bool
+    # Legacy upgrade option moved to Entity Naming Options
 
     return vol.Schema(schema_fields)
 
@@ -247,6 +243,9 @@ def get_current_naming_pattern(config_entry: ConfigEntry) -> str:
     """Determine the current entity naming pattern from configuration flags."""
     use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
     use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
+    
+    _LOGGER.debug("Config entry options: %s", config_entry.options)
+    _LOGGER.debug("USE_CIRCUIT_NUMBERS: %s, USE_DEVICE_PREFIX: %s", use_circuit_numbers, use_device_prefix)
 
     if use_circuit_numbers:
         return EntityNamingPattern.CIRCUIT_NUMBERS.value
@@ -327,3 +326,138 @@ def get_simulation_offline_minutes_defaults(config_entry: ConfigEntry) -> dict[s
             CONF_SIMULATION_OFFLINE_MINUTES, 0
         ),
     }
+
+
+def build_entity_naming_options_schema(config_entry: ConfigEntry) -> vol.Schema:
+    """Build the schema for entity naming options form.
+
+    Args:
+        config_entry: The config entry
+
+    Returns:
+        Voluptuous schema for the form
+
+    """
+    # Check if this is a legacy installation (no device prefix)
+    is_legacy_install = not config_entry.options.get(USE_DEVICE_PREFIX, False)
+    
+    schema_fields = {}
+    
+    # Add legacy upgrade option if this is a legacy installation
+    if is_legacy_install:
+        schema_fields[vol.Optional("legacy_upgrade_to_friendly", default=False)] = bool
+    
+    # Add mutually exclusive naming pattern options
+    naming_pattern_options = {
+        "friendly_names": "Friendly Entity ID Pattern",
+        "circuit_numbers": "Circuit Tab Naming Pattern",
+    }
+    
+    # Get the current pattern to use as default
+    current_pattern = get_current_naming_pattern(config_entry)
+    _LOGGER.debug("Current naming pattern: %s", current_pattern)
+    # Only show naming pattern options for non-legacy installations
+    if current_pattern != EntityNamingPattern.LEGACY_NAMES.value:
+        # For modern installations, show the current pattern as default
+        # This provides clear feedback about the current state
+        if current_pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
+            # Currently using friendly names, so show friendly names as default
+            default_pattern = "friendly_names"
+        elif current_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value:
+            # Currently using circuit numbers, so show circuit numbers as default
+            default_pattern = "circuit_numbers"
+        else:
+            # Fallback to friendly names
+            default_pattern = "friendly_names"
+        
+        _LOGGER.debug("Setting default pattern to: %s", default_pattern)
+        schema_fields[vol.Optional("entity_naming_pattern", default=default_pattern)] = vol.In(naming_pattern_options)
+    
+    return vol.Schema(schema_fields)
+
+
+def get_entity_naming_options_defaults(config_entry: ConfigEntry) -> dict[str, Any]:
+    """Get default values for entity naming options form.
+
+    Args:
+        config_entry: The config entry
+
+    Returns:
+        Dictionary of default values
+
+    """
+    # Determine current naming pattern
+    use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
+    
+    if use_circuit_numbers and use_device_prefix:
+        current_pattern = "circuit_numbers"
+    else:
+        current_pattern = "friendly_names"
+    
+    return {
+        "entity_naming_pattern": current_pattern,
+        "legacy_upgrade_to_friendly": False,
+    }
+
+
+def process_entity_naming_options_input(
+    config_entry: ConfigEntry, user_input: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Process entity naming options input and return filtered data.
+
+    Args:
+        config_entry: The config entry
+        user_input: Raw user input from the form
+
+    Returns:
+        Tuple of (filtered_input, errors)
+
+    """
+    filtered_input: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    
+    # Handle legacy upgrade if requested
+    legacy_upgrade_requested = user_input.get("legacy_upgrade_to_friendly", False)
+    if legacy_upgrade_requested:
+        # Mark this config entry for legacy prefix upgrade after reload
+        filtered_input[USE_DEVICE_PREFIX] = True
+        filtered_input[USE_CIRCUIT_NUMBERS] = False
+        filtered_input["pending_legacy_migration"] = True
+    else:
+        # Handle naming pattern selection - only if the field is present
+        selected_pattern = user_input.get("entity_naming_pattern")
+        if selected_pattern is None:
+            # No naming pattern field present (legacy installation), preserve existing values
+            filtered_input[USE_CIRCUIT_NUMBERS] = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+            filtered_input[USE_DEVICE_PREFIX] = config_entry.options.get(USE_DEVICE_PREFIX, False)
+            return filtered_input, errors
+        
+        # Determine new flags based on selected pattern
+        if selected_pattern == "circuit_numbers":
+            new_use_circuit_numbers = True
+            new_use_device_prefix = True
+        else:  # "friendly_names"
+            new_use_circuit_numbers = False
+            new_use_device_prefix = True
+        
+        # Check if this is actually a change that requires migration
+        current_use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        current_use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, False)
+        
+        # Only trigger migration if there's a real change in circuit numbers
+        # Device prefix changes are handled by legacy migration, not naming migration
+        if current_use_circuit_numbers != new_use_circuit_numbers:
+            # This is a naming pattern change (circuit numbers change)
+            # Store the old flags for migration
+            filtered_input["old_use_circuit_numbers"] = current_use_circuit_numbers
+            filtered_input["old_use_device_prefix"] = current_use_device_prefix
+            filtered_input[USE_CIRCUIT_NUMBERS] = new_use_circuit_numbers
+            filtered_input[USE_DEVICE_PREFIX] = new_use_device_prefix
+            filtered_input["pending_naming_migration"] = True
+        else:
+            # No change needed - preserve existing values
+            filtered_input[USE_CIRCUIT_NUMBERS] = current_use_circuit_numbers
+            filtered_input[USE_DEVICE_PREFIX] = current_use_device_prefix
+    
+    return filtered_input, errors

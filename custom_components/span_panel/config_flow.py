@@ -45,6 +45,11 @@ from .config_flow_utils import (
     validate_host,
     validate_simulation_time,
 )
+from .config_flow_utils.options import (
+    build_entity_naming_options_schema,
+    get_entity_naming_options_defaults,
+    process_entity_naming_options_input,
+)
 from .const import (
     CONF_API_RETRIES,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
@@ -759,6 +764,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is None:
             menu_options = {
                 "general_options": "General Options",
+                "entity_naming_options": "Entity Naming Options",
             }
 
             # Add simulation options if this is a simulation mode integration
@@ -814,6 +820,55 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="general_options",
+            data_schema=self.add_suggested_values_to_schema(schema, defaults),
+            errors=errors,
+        )
+
+    async def async_step_entity_naming_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage entity naming options including legacy upgrade and naming patterns."""
+        if user_input is not None:
+            # Process the user input for entity naming options
+            filtered_input, errors = process_entity_naming_options_input(
+                self.config_entry, user_input
+            )
+
+            # If no errors, proceed with saving options
+            if not errors:
+                # Check if there are pending migrations that need to be handled by coordinator
+                if (filtered_input.get("pending_legacy_migration", False) or
+                    filtered_input.get("pending_naming_migration", False)):
+                    # Merge with existing options to preserve all settings
+                    merged_options = dict(self.config_entry.options)
+                    merged_options.update(filtered_input)
+
+                    # Log the migration flags for debugging
+                    _LOGGER.info("Setting migration flags: pending_naming_migration=%s, old_flags=(%s,%s), new_flags=(%s,%s)",
+                        merged_options.get("pending_naming_migration", False),
+                        merged_options.get("old_use_circuit_numbers", "None"),
+                        merged_options.get("old_use_device_prefix", "None"),
+                        merged_options.get(USE_CIRCUIT_NUMBERS, "None"),
+                        merged_options.get(USE_DEVICE_PREFIX, "None")
+                    )
+
+                    # Return the merged options to trigger reload with migration flags
+                    return self.async_create_entry(title="", data=merged_options)
+                else:
+                    # No pending migrations, proceed with normal reload
+                    # Merge with existing options to preserve all settings
+                    merged_options = dict(self.config_entry.options)
+                    merged_options.update(filtered_input)
+                    return self.async_create_entry(title="", data=merged_options)
+        else:
+            errors = {}
+
+        # Build the entity naming options schema
+        schema = build_entity_naming_options_schema(self.config_entry)
+        defaults = get_entity_naming_options_defaults(self.config_entry)
+
+        return self.async_show_form(
+            step_id="entity_naming_options",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
         )
