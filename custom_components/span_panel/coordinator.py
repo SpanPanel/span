@@ -150,30 +150,46 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
 
             # Check for pending legacy migration
             # Only attempt migration if integration data is properly set up in hass.data
-            if (self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}) and
-                self.config_entry.options.get("pending_legacy_migration", False)):
-                _LOGGER.info("Found pending legacy migration flag in coordinator update, performing migration")
+            if self.config_entry.entry_id in self.hass.data.get(
+                DOMAIN, {}
+            ) and self.config_entry.options.get("pending_legacy_migration", False):
+                _LOGGER.info(
+                    "Found pending legacy migration flag in coordinator update, performing migration"
+                )
                 await self._handle_pending_legacy_migration()
 
             # Check for pending naming pattern migration
             # Only attempt migration if integration data is properly set up in hass.data
             if self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
-                _LOGGER.debug("Checking for pending_naming_migration flag: %s", self.config_entry.options.get("pending_naming_migration", False))
+                _LOGGER.debug(
+                    "Checking for pending_naming_migration flag: %s",
+                    self.config_entry.options.get("pending_naming_migration", False),
+                )
                 if self.config_entry.options.get("pending_naming_migration", False):
-                    _LOGGER.info("Found pending naming migration flag in coordinator update, performing migration")
+                    _LOGGER.info(
+                        "Found pending naming migration flag in coordinator update, performing migration"
+                    )
                     _LOGGER.debug("Config entry options: %s", self.config_entry.options)
                     # Only proceed if we have the old flags stored (indicating a real user change)
-                    if ("old_use_circuit_numbers" in self.config_entry.options and
-                        "old_use_device_prefix" in self.config_entry.options):
+                    if (
+                        "old_use_circuit_numbers" in self.config_entry.options
+                        and "old_use_device_prefix" in self.config_entry.options
+                    ):
                         await self._handle_pending_naming_migration()
                     else:
-                        _LOGGER.warning("Found pending_naming_migration flag but no old flags stored - skipping migration")
+                        _LOGGER.warning(
+                            "Found pending_naming_migration flag but no old flags stored - skipping migration"
+                        )
                         # Clean up the invalid flag
                         current_options = dict(self.config_entry.options)
                         current_options.pop("pending_naming_migration", None)
-                        self.hass.config_entries.async_update_entry(self.config_entry, options=current_options)
+                        self.hass.config_entries.async_update_entry(
+                            self.config_entry, options=current_options
+                        )
             else:
-                _LOGGER.debug("Integration data not yet set up in hass.data - skipping migration checks")
+                _LOGGER.debug(
+                    "Integration data not yet set up in hass.data - skipping migration checks"
+                )
 
             return self.span_panel
 
@@ -270,7 +286,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
             # Get the new flags from the current config entry options
             new_flags = {
                 USE_CIRCUIT_NUMBERS: self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False),
-                USE_DEVICE_PREFIX: self.config_entry.options.get(USE_DEVICE_PREFIX, True)
+                USE_DEVICE_PREFIX: self.config_entry.options.get(USE_DEVICE_PREFIX, True),
             }
 
             success = await self.migrate_entity_ids(old_flags, new_flags)
@@ -279,7 +295,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                 _LOGGER.info("Pending legacy migration completed successfully")
                 _LOGGER.info("Scheduling final reload to display new entity IDs in UI")
                 # Schedule reload to pick up new entity IDs
-                self.hass.async_create_task(self.hass.config_entries.async_reload(self.config_entry.entry_id))
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                )
             else:
                 _LOGGER.error("Pending legacy migration failed")
 
@@ -304,14 +322,16 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
 
             # Get the old flags that were stored during config flow processing
             old_flags = {
-                USE_CIRCUIT_NUMBERS: self.config_entry.options.get("old_use_circuit_numbers", False),
-                USE_DEVICE_PREFIX: self.config_entry.options.get("old_use_device_prefix", False)
+                USE_CIRCUIT_NUMBERS: self.config_entry.options.get(
+                    "old_use_circuit_numbers", False
+                ),
+                USE_DEVICE_PREFIX: self.config_entry.options.get("old_use_device_prefix", False),
             }
 
             # Get the new flags from the current config entry options
             new_flags = {
                 USE_CIRCUIT_NUMBERS: self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False),
-                USE_DEVICE_PREFIX: self.config_entry.options.get(USE_DEVICE_PREFIX, True)
+                USE_DEVICE_PREFIX: self.config_entry.options.get(USE_DEVICE_PREFIX, True),
             }
 
             # Use the generalized migration method that handles old/new flag comparison
@@ -323,9 +343,13 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
                 current_options = dict(self.config_entry.options)
                 current_options.pop("old_use_circuit_numbers", None)
                 current_options.pop("old_use_device_prefix", None)
-                self.hass.config_entries.async_update_entry(self.config_entry, options=current_options)
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, options=current_options
+                )
                 # Schedule reload to pick up new entity IDs
-                self.hass.async_create_task(self.hass.config_entries.async_reload(self.config_entry.entry_id))
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                )
             else:
                 _LOGGER.error("Pending naming pattern migration failed")
 

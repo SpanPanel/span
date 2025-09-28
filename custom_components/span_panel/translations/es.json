@@ -81,6 +81,7 @@
         "title": "Menú de Opciones",
         "menu_options": {
           "general_options": "Opciones Generales",
+          "entity_naming_options": "Opciones de Nomenclatura de Entidades",
           "entity_naming": "Patrón de Nomenclatura de Entidades",
           "export_config": "Exportar Configuración de Sensores Sintéticos",
           "simulation_start_time": "Tiempo de Inicio de Simulación",
@@ -105,6 +106,18 @@
           "enable_solar_circuit": "Habilitar sensores sintéticos para monitoreo de inversor solar. Requiere selección de dos pestañas no mapeadas en fases eléctricas opuestas.",
           "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
+        }
+      },
+      "entity_naming_options": {
+        "title": "Opciones de Nomenclatura de Entidades",
+        "description": "Configure cómo se nombran los IDs de entidad. Elija entre nombres amigables (ej., kitchen_outlets_power) o números de pestañas de circuito (ej., circuit_15_power).",
+        "data": {
+          "legacy_upgrade_to_friendly": "Actualizar Instalación Legacy a Nombres Amigables",
+          "entity_naming_pattern": "Patrón de Nomenclatura de Entidades"
+        },
+        "data_description": {
+          "legacy_upgrade_to_friendly": "Actualizar esta instalación legacy para usar nombres de entidad amigables con prefijo de dispositivo. Esto renombrará todas las entidades existentes.",
+          "entity_naming_pattern": "Elija cómo se construyen los IDs de entidad. Los nombres amigables usan nombres de circuito (ej., kitchen_outlets_power), mientras que los números de circuito usan posiciones de pestaña (ej., circuit_15_power)."
         }
       },
       "entity_naming": {

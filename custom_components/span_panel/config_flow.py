@@ -69,6 +69,7 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
+from .helpers import generate_unique_simulator_serial_number
 from .options import (
     BATTERY_ENABLE,
     ENERGY_DISPLAY_PRECISION,
@@ -312,7 +313,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
 
         # Generate unique simulator serial number first
-        from .helpers import generate_unique_simulator_serial_number
         simulator_serial = generate_unique_simulator_serial_number(self.hass)
 
         # Use the generated simulator serial number as the host
@@ -753,8 +753,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is None:
             menu_options = {
                 "general_options": "General Options",
-                "entity_naming_options": "Entity Naming Options",
             }
+
+            # Add entity naming options only for live panels (not simulations)
+            if not self.config_entry.data.get("simulation_mode", False):
+                menu_options["entity_naming_options"] = "Entity Naming Options"
 
             # Add simulation options if this is a simulation mode integration
             if self.config_entry.data.get("simulation_mode", False):
@@ -826,19 +829,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # If no errors, proceed with saving options
             if not errors:
                 # Check if there are pending migrations that need to be handled by coordinator
-                if (filtered_input.get("pending_legacy_migration", False) or
-                    filtered_input.get("pending_naming_migration", False)):
+                if filtered_input.get("pending_legacy_migration", False) or filtered_input.get(
+                    "pending_naming_migration", False
+                ):
                     # Merge with existing options to preserve all settings
                     merged_options = dict(self.config_entry.options)
                     merged_options.update(filtered_input)
 
                     # Log the migration flags for debugging
-                    _LOGGER.info("Setting migration flags: pending_naming_migration=%s, old_flags=(%s,%s), new_flags=(%s,%s)",
+                    _LOGGER.info(
+                        "Setting migration flags: pending_naming_migration=%s, old_flags=(%s,%s), new_flags=(%s,%s)",
                         merged_options.get("pending_naming_migration", False),
                         merged_options.get("old_use_circuit_numbers", "None"),
                         merged_options.get("old_use_device_prefix", "None"),
                         merged_options.get(USE_CIRCUIT_NUMBERS, "None"),
-                        merged_options.get(USE_DEVICE_PREFIX, "None")
+                        merged_options.get(USE_DEVICE_PREFIX, "None"),
                     )
 
                     # Return the merged options to trigger reload with migration flags

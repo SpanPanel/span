@@ -9,6 +9,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
 
 from .const import COORDINATOR, DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
+from .span_panel_circuit import SpanPanelCircuit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,8 +52,12 @@ class EntityIdMigrationManager:
             # Use name_by_user if available (user-customized name), otherwise fall back to name
             device_name = main_device.name_by_user or main_device.name
 
-            _LOGGER.debug("Retrieved device name from registry: %s (name_by_user: %s, name: %s)",
-                         device_name, main_device.name_by_user, main_device.name)
+            _LOGGER.debug(
+                "Retrieved device name from registry: %s (name_by_user: %s, name: %s)",
+                device_name,
+                main_device.name_by_user,
+                main_device.name,
+            )
             return device_name
 
         except Exception as e:
@@ -67,12 +72,12 @@ class EntityIdMigrationManager:
             coordinator_data = self.hass.data[DOMAIN][self.config_entry_id]
             coordinator = coordinator_data[COORDINATOR]
             span_panel = coordinator.data
-            
-            if circuit_id not in span_panel["circuits"]:
+
+            if circuit_id not in span_panel.circuits:
                 return None
-            
-            circuit_data = span_panel["circuits"][circuit_id]
-            return circuit_data.get("name")
+
+            circuit_data: SpanPanelCircuit = span_panel.circuits[circuit_id]
+            return circuit_data.name
         except Exception:
             return None
 
@@ -120,7 +125,9 @@ class EntityIdMigrationManager:
             legacy_success = await self._migrate_legacy_to_prefix(old_flags, new_flags)
             if legacy_success:
                 # After legacy migration, do naming pattern migration
-                return await self.migrate_entity_ids_with_flags(new_use_circuit_numbers, new_use_device_prefix)
+                return await self.migrate_entity_ids_with_flags(
+                    new_use_circuit_numbers, new_use_device_prefix
+                )
             return False
         elif needs_legacy_migration:
             # Legacy migration only
@@ -128,9 +135,14 @@ class EntityIdMigrationManager:
             return await self._migrate_legacy_to_prefix(old_flags, new_flags)
         elif needs_naming_migration:
             # Naming pattern migration only
-            _LOGGER.info("Performing naming pattern migration: circuit numbers %s -> %s",
-                       old_use_circuit_numbers, new_use_circuit_numbers)
-            return await self.migrate_entity_ids_with_flags(new_use_circuit_numbers, new_use_device_prefix)
+            _LOGGER.info(
+                "Performing naming pattern migration: circuit numbers %s -> %s",
+                old_use_circuit_numbers,
+                new_use_circuit_numbers,
+            )
+            return await self.migrate_entity_ids_with_flags(
+                new_use_circuit_numbers, new_use_device_prefix
+            )
         else:
             # No migration needed
             _LOGGER.info("No migration needed - flags unchanged")
@@ -168,7 +180,9 @@ class EntityIdMigrationManager:
 
             # Verify the config entry ID exists in the loaded data
             if self.config_entry_id not in domain_data:
-                _LOGGER.error("Config entry ID %s not found in loaded domain data", self.config_entry_id)
+                _LOGGER.error(
+                    "Config entry ID %s not found in loaded domain data", self.config_entry_id
+                )
                 available_entries = list(domain_data.keys())
                 _LOGGER.debug("Available config entry IDs: %s", available_entries)
                 return False
@@ -179,7 +193,9 @@ class EntityIdMigrationManager:
             # Get device name from device registry (this is the name shown in UI)
             device_name = self._get_device_name_from_registry(active_config_entry_id)
             if not device_name:
-                _LOGGER.error("Could not get device name from registry - migration aborted to prevent incorrect entity renaming")
+                _LOGGER.error(
+                    "Could not get device name from registry - migration aborted to prevent incorrect entity renaming"
+                )
                 return False
 
             sanitized_device_name = slugify(device_name)
@@ -193,16 +209,20 @@ class EntityIdMigrationManager:
             effective_config_entry_id = active_config_entry_id
 
             # Get entities for this config entry using HA helper
-            _LOGGER.debug("Attempting to get entities for config_entry_id: %s", effective_config_entry_id)
+            _LOGGER.debug(
+                "Attempting to get entities for config_entry_id: %s", effective_config_entry_id
+            )
 
             # Check if config entry exists first
             config_entry = self.hass.config_entries.async_get_entry(effective_config_entry_id)
             if config_entry is None:
                 _LOGGER.error(
                     "Config entry %s not found in config entries registry - migration aborted",
-                    effective_config_entry_id
+                    effective_config_entry_id,
                 )
-                available_entries = [entry.entry_id for entry in self.hass.config_entries.async_entries()]
+                available_entries = [
+                    entry.entry_id for entry in self.hass.config_entries.async_entries()
+                ]
                 _LOGGER.debug("Available config entry IDs: %s", available_entries)
                 return False
 
@@ -213,7 +233,7 @@ class EntityIdMigrationManager:
             except KeyError:
                 _LOGGER.error(
                     "Config entry ID %s not found in entity registry - migration aborted",
-                    effective_config_entry_id
+                    effective_config_entry_id,
                 )
                 return False
 
@@ -334,7 +354,9 @@ class EntityIdMigrationManager:
 
             # Verify the config entry ID exists in the loaded data
             if self.config_entry_id not in domain_data:
-                _LOGGER.error("Config entry ID %s not found in loaded domain data", self.config_entry_id)
+                _LOGGER.error(
+                    "Config entry ID %s not found in loaded domain data", self.config_entry_id
+                )
                 available_entries = list(domain_data.keys())
                 _LOGGER.debug("Available config entry IDs: %s", available_entries)
                 return False
@@ -345,7 +367,9 @@ class EntityIdMigrationManager:
             # Get device name from device registry (this is the name shown in UI)
             device_name = self._get_device_name_from_registry(active_config_entry_id)
             if not device_name:
-                _LOGGER.error("Could not get device name from registry - migration aborted to prevent incorrect entity renaming")
+                _LOGGER.error(
+                    "Could not get device name from registry - migration aborted to prevent incorrect entity renaming"
+                )
                 return False
 
             sanitized_device_name = slugify(device_name)
@@ -470,40 +494,33 @@ class EntityIdMigrationManager:
             "dsm_grid_state",
             "current_run_config",
             "main_relay_state",
-
             # Hardware status sensors (from STATUS_SENSORS)
             "software_version",
-
             # Binary sensor suffixes (from BINARY_SENSORS)
             "doorState",
             "eth0Link",
             "wlanLink",
             "wwanLink",
             "panel_status",
-
             # Panel power sensors (from PANEL_POWER_SENSORS)
-            "current_power",          # instantGridPowerW
-            "feed_through_power",     # feedthroughPowerW
-
+            "current_power",  # instantGridPowerW
+            "feed_through_power",  # feedthroughPowerW
             # Panel energy sensors (from PANEL_ENERGY_SENSORS)
-            "main_meter_produced_energy",    # mainMeterEnergyProducedWh
-            "main_meter_consumed_energy",    # mainMeterEnergyConsumedWh
-            "main_meter_net_energy",         # mainMeterNetEnergyWh
+            "main_meter_produced_energy",  # mainMeterEnergyProducedWh
+            "main_meter_consumed_energy",  # mainMeterEnergyConsumedWh
+            "main_meter_net_energy",  # mainMeterNetEnergyWh
             "feed_through_produced_energy",  # feedthroughEnergyProducedWh
             "feed_through_consumed_energy",  # feedthroughEnergyConsumedWh
-            "feed_through_net_energy",       # feedthroughNetEnergyWh
-
+            "feed_through_net_energy",  # feedthroughNetEnergyWh
             # Battery sensors
             "battery_level",
             "battery_percentage",
             "storage_battery_percentage",
-
             # Solar sensors (from SOLAR_SENSORS)
             "solar_current_power",
             "solar_produced_energy",
             "solar_consumed_energy",
             "solar_net_energy",
-
             # Other panel-level sensors can be added here as needed
             "panel_status",
         }
@@ -524,7 +541,7 @@ class EntityIdMigrationManager:
 
         Uses the entity's domain (platform) to determine the proper construction method:
         - switch domain -> use switch construction (adds "relay" suffix)
-        - select domain -> use select construction (preserves select suffix)  
+        - select domain -> use select construction (preserves select suffix)
         - sensor domain -> use circuit construction (preserves sensor suffix)
 
         Args:
@@ -559,33 +576,56 @@ class EntityIdMigrationManager:
                     # Fallback: assume remaining is the circuit_id
                     circuit_id = remaining
                 return self._construct_switch_entity_id(
-                    entity.domain, circuit_id, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                    entity.domain,
+                    circuit_id,
+                    use_circuit_numbers,
+                    use_device_prefix,
+                    sanitized_device_name,
+                    entity,
                 )
-                
+
             elif entity.domain == "select":
                 # Select entities: pattern is span_{serial}_select_{circuit_id} or span_{serial}_{circuit_id}_{select_suffix}
                 if remaining.startswith("select_"):
                     # Pattern: span_{serial}_select_{circuit_id}
                     circuit_id = remaining[7:]  # Remove "select_" prefix
-                    suffix = "select"
+                    suffix = "priority"
                     return self._construct_circuit_select_entity_id(
-                        entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                        entity.domain,
+                        circuit_id,
+                        suffix,
+                        use_circuit_numbers,
+                        use_device_prefix,
+                        sanitized_device_name,
+                        entity,
                     )
                 elif "_" in remaining:
                     # Pattern: span_{serial}_{circuit_id}_{select_suffix}
                     circuit_id = remaining.split("_")[0]
                     suffix = remaining.split("_", 1)[1]
                     return self._construct_circuit_select_entity_id(
-                        entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                        entity.domain,
+                        circuit_id,
+                        suffix,
+                        use_circuit_numbers,
+                        use_device_prefix,
+                        sanitized_device_name,
+                        entity,
                     )
                 else:
                     # Simple select pattern - treat as circuit select
                     circuit_id = remaining
-                    suffix = "select"
+                    suffix = "priority"
                     return self._construct_circuit_select_entity_id(
-                        entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                        entity.domain,
+                        circuit_id,
+                        suffix,
+                        use_circuit_numbers,
+                        use_device_prefix,
+                        sanitized_device_name,
+                        entity,
                     )
-                    
+
             else:
                 # Sensor and other entities: pattern is span_{serial}_{circuit_id}_{suffix}
                 if "_" in remaining:
@@ -595,9 +635,15 @@ class EntityIdMigrationManager:
                     # Simple pattern without suffix
                     circuit_id = remaining
                     suffix = ""
-                    
+
                 return self._construct_circuit_entity_id(
-                    entity.domain, circuit_id, suffix, use_circuit_numbers, use_device_prefix, sanitized_device_name, entity
+                    entity.domain,
+                    circuit_id,
+                    suffix,
+                    use_circuit_numbers,
+                    use_device_prefix,
+                    sanitized_device_name,
+                    entity,
                 )
 
         except Exception as e:
@@ -821,7 +867,7 @@ class EntityIdMigrationManager:
             select_type = select_id.split("_", 1)[1]
         else:
             circuit_id = select_id
-            select_type = "select"
+            select_type = "priority"
 
         if use_circuit_numbers:
             tabs = self._get_circuit_tabs_from_coordinator(circuit_id)
@@ -861,12 +907,17 @@ class EntityIdMigrationManager:
             # Find the active config entry ID in hass.data (might be different from stored ID due to reloads)
             domain_data = self.hass.data.get(DOMAIN, {})
             if not domain_data:
-                _LOGGER.warning("No %s data found in hass.data - returning None for circuit tabs", DOMAIN)
+                _LOGGER.warning(
+                    "No %s data found in hass.data - returning None for circuit tabs", DOMAIN
+                )
                 return None
 
             # Verify the config entry ID exists in the loaded data
             if self.config_entry_id not in domain_data:
-                _LOGGER.warning("Config entry ID %s not found in loaded domain data - returning None for circuit tabs", self.config_entry_id)
+                _LOGGER.warning(
+                    "Config entry ID %s not found in loaded domain data - returning None for circuit tabs",
+                    self.config_entry_id,
+                )
                 available_entries = list(domain_data.keys())
                 _LOGGER.debug("Available config entry IDs: %s", available_entries)
                 return None
@@ -879,7 +930,7 @@ class EntityIdMigrationManager:
             span_panel = coordinator.data
 
             # Look up circuit in span_panel data
-            circuit = span_panel.circuits.get(circuit_id)
+            circuit: SpanPanelCircuit | None = span_panel.circuits.get(circuit_id)
             if circuit and circuit.tabs:
                 return circuit.tabs
 
@@ -904,12 +955,17 @@ class EntityIdMigrationManager:
             # Find the active config entry ID in hass.data (might be different from stored ID due to reloads)
             domain_data = self.hass.data.get(DOMAIN, {})
             if not domain_data:
-                _LOGGER.warning("No %s data found in hass.data - returning None for circuit name", DOMAIN)
+                _LOGGER.warning(
+                    "No %s data found in hass.data - returning None for circuit name", DOMAIN
+                )
                 return None
 
             # Verify the config entry ID exists in the loaded data
             if self.config_entry_id not in domain_data:
-                _LOGGER.warning("Config entry ID %s not found in loaded domain data - returning None for circuit name", self.config_entry_id)
+                _LOGGER.warning(
+                    "Config entry ID %s not found in loaded domain data - returning None for circuit name",
+                    self.config_entry_id,
+                )
                 available_entries = list(domain_data.keys())
                 _LOGGER.debug("Available config entry IDs: %s", available_entries)
                 return None
@@ -922,7 +978,7 @@ class EntityIdMigrationManager:
             span_panel = coordinator.data
 
             # Look up circuit in span_panel data
-            circuit = span_panel.circuits.get(circuit_id)
+            circuit: SpanPanelCircuit | None = span_panel.circuits.get(circuit_id)
             if circuit and circuit.name:
                 return circuit.name
 
