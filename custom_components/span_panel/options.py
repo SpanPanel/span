@@ -13,6 +13,9 @@ from .const import (
     DEFAULT_API_RETRIES,
     DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
     DEFAULT_API_RETRY_TIMEOUT,
+    ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
+    ENABLE_PANEL_NET_ENERGY_SENSORS,
+    ENABLE_SOLAR_NET_ENERGY_SENSORS,
 )
 
 INVERTER_ENABLE = "enable_solar_circuit"
@@ -40,6 +43,15 @@ class Options:
         self.energy_display_precision: int = entry.options.get(ENERGY_DISPLAY_PRECISION, 2)
         self.energy_reporting_grace_period: int = entry.options.get(
             ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
+        self.enable_panel_net_energy_sensors: bool = entry.options.get(
+            ENABLE_PANEL_NET_ENERGY_SENSORS, True
+        )
+        self.enable_circuit_net_energy_sensors: bool = entry.options.get(
+            ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True
+        )
+        self.enable_solar_net_energy_sensors: bool = entry.options.get(
+            ENABLE_SOLAR_NET_ENERGY_SENSORS, True
         )
 
         # API retry configuration options
@@ -73,6 +85,9 @@ class Options:
             POWER_DISPLAY_PRECISION: self.power_display_precision,
             ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
             ENERGY_REPORTING_GRACE_PERIOD: self.energy_reporting_grace_period,
+            ENABLE_PANEL_NET_ENERGY_SENSORS: self.enable_panel_net_energy_sensors,
+            ENABLE_CIRCUIT_NET_ENERGY_SENSORS: self.enable_circuit_net_energy_sensors,
+            ENABLE_SOLAR_NET_ENERGY_SENSORS: self.enable_solar_net_energy_sensors,
             CONF_API_RETRIES: self.api_retries,
             CONF_API_RETRY_TIMEOUT: self.api_retry_timeout,
             CONF_API_RETRY_BACKOFF_MULTIPLIER: self.api_retry_backoff_multiplier,

@@ -9,13 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### 🔧 Technical Improvements
 
-- **Circuit Naming Logic**: Fixed logic for circuit naming patterns to ensure proper entity ID generation and panel prefixes (fresh installs only)
-- **Entity ID naming Choices**: Added the ability to change entity ID naming patterns in live panels
+- **Panel Level Net Energy**: Add net energy sensors for main meter and feed-through (consumed - produced)
+- **Net Energy Config Options**: Added separate config options to enable/disable panel, circuit, leg-based net energy. Disabling circuit net energy can help
+  resource constrained installations since the sensors are not created or updated
+- **Circuit Naming Logic**: Fixed logic for circuit-naming patterns to ensure proper entity ID generation and panel prefixes (fresh installs only)
+- **Entity ID naming Choices**: Restored the ability to change entity ID naming patterns in live panels (circuit tab-based sensors only, not panel)
 - **Panel Friendly Name Sync**: Fixed regression in panel circuit name synchronization. A new install will sync all friendly names once on the first refresh and
   anytime a user changes a name in the SPAN App changes the name in the mobile/SPAN App.
 - **API Optimization**: Removed unnecessary signal updates to improve performance and reduce overhead
 - **API Dependencies**: Updated span-panel-api OpenAPI package to version 1.1.13 to remove the cache
-- **Resolve Cache Config Entry**: Fixed an issue where a config entry tried to set up a cache window in the underlying OpenAPI library that was invalid
+- **Resolve Cache Config Entry Defect**: Fixed an issue where a 1.2.5 config entry could attempt to set up a cache window in the underlying OpenAPI library that
+  was invalid
 
 ## [1.2.5] - 2025-09-XX
 

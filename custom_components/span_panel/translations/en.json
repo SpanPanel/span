@@ -105,12 +105,18 @@
           "api_retry_timeout": "API Retry Timeout (seconds)",
           "api_retry_backoff_multiplier": "API Retry Backoff Multiplier",
           "energy_reporting_grace_period": "Energy Sensor Grace Period (minutes)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's"
+          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "enable_panel_net_energy_sensors": "Panel Net Energy",
+          "enable_circuit_net_energy_sensors": "Circuit Net Energy",
+          "enable_solar_net_energy_sensors": "Solar Net Energy"
         },
         "data_description": {
           "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
           "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
+          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
+          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
+          "enable_solar_net_energy_sensors": "Create net energy sensors for solar generation (only available when solar is configured). Shows net solar production accounting for any consumption on solar circuits."
         }
       },
       "entity_naming_options": {

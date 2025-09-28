@@ -84,6 +84,11 @@ PANEL_BACKUP = "PANEL_BACKUP"
 # Entity naming pattern options
 ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 
+# Net energy sensor configuration
+ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
+ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
+ENABLE_SOLAR_NET_ENERGY_SENSORS = "enable_solar_net_energy_sensors"
+
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
 # API timeout and retry configuration
 API_TIMEOUT = 30  # Default timeout for normal operations

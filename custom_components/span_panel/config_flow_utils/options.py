@@ -23,6 +23,9 @@ from custom_components.span_panel.const import (
     DEFAULT_API_RETRY_BACKOFF_MULTIPLIER,
     DEFAULT_API_RETRY_TIMEOUT,
     DEFAULT_SCAN_INTERVAL,
+    ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
+    ENABLE_PANEL_NET_ENERGY_SENSORS,
+    ENABLE_SOLAR_NET_ENERGY_SENSORS,
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
@@ -91,6 +94,9 @@ def build_general_options_schema(
         vol.Optional(INVERTER_LEG2, default=str(current_leg2)): selector(
             {"select": {"options": leg2_select_options, "mode": "dropdown"}}
         ),
+        vol.Optional(ENABLE_SOLAR_NET_ENERGY_SENSORS): bool,
+        vol.Optional(ENABLE_PANEL_NET_ENERGY_SENSORS): bool,
+        vol.Optional(ENABLE_CIRCUIT_NET_ENERGY_SENSORS): bool,
         vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
         vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
             vol.Coerce(float), vol.Range(min=0.1, max=10.0)
@@ -129,6 +135,15 @@ def get_general_options_defaults(
         # Defaults for selector values must be strings
         INVERTER_LEG1: str(current_leg1),
         INVERTER_LEG2: str(current_leg2),
+        ENABLE_PANEL_NET_ENERGY_SENSORS: config_entry.options.get(
+            ENABLE_PANEL_NET_ENERGY_SENSORS, True
+        ),
+        ENABLE_CIRCUIT_NET_ENERGY_SENSORS: config_entry.options.get(
+            ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True
+        ),
+        ENABLE_SOLAR_NET_ENERGY_SENSORS: config_entry.options.get(
+            ENABLE_SOLAR_NET_ENERGY_SENSORS, True
+        ),
         CONF_API_RETRIES: config_entry.options.get(CONF_API_RETRIES, DEFAULT_API_RETRIES),
         CONF_API_RETRY_TIMEOUT: config_entry.options.get(
             CONF_API_RETRY_TIMEOUT, DEFAULT_API_RETRY_TIMEOUT
