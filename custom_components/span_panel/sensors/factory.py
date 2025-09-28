@@ -65,20 +65,12 @@ def create_panel_sensors(
     # Add panel energy sensors (replacing synthetic ones)
     # Filter out net energy sensors if disabled
     panel_net_energy_enabled = config_entry.options.get(ENABLE_PANEL_NET_ENERGY_SENSORS, True)
-    _LOGGER.debug("PANEL_NET_ENERGY_DEBUG: panel_net_energy_enabled=%s", panel_net_energy_enabled)
 
     for description in PANEL_ENERGY_SENSORS:
         # Skip net energy sensors if disabled
         is_net_energy_sensor = "net_energy" in description.key or "NetEnergy" in description.key
-        _LOGGER.debug(
-            "PANEL_NET_ENERGY_DEBUG: sensor_key=%s, is_net_energy=%s, enabled=%s",
-            description.key,
-            is_net_energy_sensor,
-            panel_net_energy_enabled,
-        )
 
         if not panel_net_energy_enabled and is_net_energy_sensor:
-            _LOGGER.debug("PANEL_NET_ENERGY_DEBUG: Skipping net energy sensor %s", description.key)
             continue
         entities.append(SpanPanelEnergySensor(coordinator, description, span_panel))
 
@@ -99,30 +91,14 @@ def create_circuit_sensors(
     named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
     circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
 
-    _LOGGER.debug(
-        "CIRCUIT_NET_ENERGY_DEBUG: circuit_net_energy_enabled=%s, config_entry.options=%s",
-        circuit_net_energy_enabled,
-        config_entry.options,
-    )
-
     for circuit_id in named_circuits:
         for circuit_description in CIRCUIT_SENSORS:
             # Skip net energy sensors if disabled
             is_net_energy_sensor = (
                 "net_energy" in circuit_description.key or "energy_net" in circuit_description.key
             )
-            _LOGGER.debug(
-                "CIRCUIT_NET_ENERGY_DEBUG: sensor_key=%s, is_net_energy=%s, enabled=%s",
-                circuit_description.key,
-                is_net_energy_sensor,
-                circuit_net_energy_enabled,
-            )
 
             if not circuit_net_energy_enabled and is_net_energy_sensor:
-                _LOGGER.debug(
-                    "CIRCUIT_NET_ENERGY_DEBUG: Skipping net energy sensor %s",
-                    circuit_description.key,
-                )
                 continue
 
             if circuit_description.key == "circuit_power":
