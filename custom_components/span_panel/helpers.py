@@ -679,6 +679,36 @@ def construct_sensor_set_id(device_identifier: str) -> str:
     return f"{device_identifier}_sensors"
 
 
+def generate_unique_simulator_serial_number(hass: HomeAssistant) -> str:
+    """Generate a unique simulator serial number in the format sim-nnn.
+
+    Args:
+        hass: Home Assistant instance
+
+    Returns:
+        Unique serial number in format sim-nnn (e.g., sim-001, sim-002, etc.)
+
+    """
+    # Get all existing span panel config entries
+    existing_entries = hass.config_entries.async_entries(DOMAIN)
+
+    # Find existing simulator serial numbers
+    existing_serials = set()
+    for entry in existing_entries:
+        if entry.data.get("simulation_mode", False):
+            # Check if the entry has a serial number in the data
+            serial = entry.data.get("simulator_serial_number")
+            if serial and serial.startswith("sim-"):
+                existing_serials.add(serial)
+
+    # Find the next available number
+    counter = 1
+    while f"sim-{counter:03d}" in existing_serials:
+        counter += 1
+
+    return f"sim-{counter:03d}"
+
+
 def _get_device_identifier_for_unique_ids(
     coordinator: SpanPanelCoordinator,
     span_panel: SpanPanel,
@@ -687,18 +717,13 @@ def _get_device_identifier_for_unique_ids(
     """Compute per-entry device identifier for unique_ids.
 
     - Live panels: use true serial number
-    - Simulator entries: use slugified device name to avoid cross-entry collisions
+    - Simulator entries: use serial number from span panel status (which should be sim-nnn format)
     """
     is_simulator = bool(coordinator.config_entry.data.get("simulation_mode", False))
     if is_simulator:
-        # For simulators, ALWAYS use the config entry title first since it's guaranteed unique
-        # device_name parameter might not be unique between multiple simulator configs
-        effective_name = (
-            coordinator.config_entry.title
-            or device_name
-            or coordinator.config_entry.data.get("device_name")
-        )
-        return slugify(effective_name) if effective_name else span_panel.status.serial_number
+        # For simulators, use the serial number from the span panel status
+        # This should be in the format sim-nnn (e.g., sim-001, sim-002, etc.)
+        return span_panel.status.serial_number
     return span_panel.status.serial_number
 
 

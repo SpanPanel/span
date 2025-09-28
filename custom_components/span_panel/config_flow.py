@@ -45,6 +45,11 @@ from .config_flow_utils import (
     validate_host,
     validate_simulation_time,
 )
+from .config_flow_utils.options import (
+    build_entity_naming_options_schema,
+    get_entity_naming_options_defaults,
+    process_entity_naming_options_input,
+)
 from .const import (
     CONF_API_RETRIES,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
@@ -64,6 +69,7 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
+from .helpers import generate_unique_simulator_serial_number
 from .options import (
     BATTERY_ENABLE,
     ENERGY_DISPLAY_PRECISION,
@@ -306,25 +312,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         host = user_input.get(CONF_HOST, "").strip()
         simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
 
-        # If no host provided, try to extract serial from the selected config
-        if not host:
-            try:
-                from tests.test_factories.span_panel_simulation_factory import (  # pylint: disable=import-outside-toplevel
-                    SpanPanelSimulationFactory,
-                )
+        # Generate unique simulator serial number first
+        simulator_serial = generate_unique_simulator_serial_number(self.hass)
 
-                config_path = (
-                    Path(__file__).parent / "simulation_configs" / f"{simulation_config}.yaml"
-                )
-                if config_path.exists():
-                    host = SpanPanelSimulationFactory.extract_serial_number_from_yaml(
-                        str(config_path)
-                    )
-                else:
-                    host = "span-sim-001"
-            except (ImportError, FileNotFoundError, Exception):
-                # Fallback to a default
-                host = "span-sim-001"
+        # Use the generated simulator serial number as the host
+        # This ensures the span panel API uses the correct serial number
+        host = simulator_serial
 
         # Create entry for simulator mode
         base_name = "Span Simulator"
@@ -332,12 +325,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Prepare config data
         config_data = {
-            CONF_HOST: host,
+            CONF_HOST: host,  # This is now the simulator serial number (sim-nnn)
             CONF_ACCESS_TOKEN: "simulator_token",
             CONF_USE_SSL: False,
             "simulation_mode": True,
             CONF_SIMULATION_CONFIG: simulation_config,
             "device_name": device_name,
+            "simulator_serial_number": simulator_serial,
         }
 
         # Add simulation start time if provided
@@ -761,6 +755,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 "general_options": "General Options",
             }
 
+            # Add entity naming options only for live panels (not simulations)
+            if not self.config_entry.data.get("simulation_mode", False):
+                menu_options["entity_naming_options"] = "Entity Naming Options"
+
             # Add simulation options if this is a simulation mode integration
             if self.config_entry.data.get("simulation_mode", False):
                 menu_options["simulation_start_time"] = "Simulation Start Time"
@@ -814,6 +812,57 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="general_options",
+            data_schema=self.add_suggested_values_to_schema(schema, defaults),
+            errors=errors,
+        )
+
+    async def async_step_entity_naming_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage entity naming options including legacy upgrade and naming patterns."""
+        if user_input is not None:
+            # Process the user input for entity naming options
+            filtered_input, errors = process_entity_naming_options_input(
+                self.config_entry, user_input
+            )
+
+            # If no errors, proceed with saving options
+            if not errors:
+                # Check if there are pending migrations that need to be handled by coordinator
+                if filtered_input.get("pending_legacy_migration", False) or filtered_input.get(
+                    "pending_naming_migration", False
+                ):
+                    # Merge with existing options to preserve all settings
+                    merged_options = dict(self.config_entry.options)
+                    merged_options.update(filtered_input)
+
+                    # Log the migration flags for debugging
+                    _LOGGER.info(
+                        "Setting migration flags: pending_naming_migration=%s, old_flags=(%s,%s), new_flags=(%s,%s)",
+                        merged_options.get("pending_naming_migration", False),
+                        merged_options.get("old_use_circuit_numbers", "None"),
+                        merged_options.get("old_use_device_prefix", "None"),
+                        merged_options.get(USE_CIRCUIT_NUMBERS, "None"),
+                        merged_options.get(USE_DEVICE_PREFIX, "None"),
+                    )
+
+                    # Return the merged options to trigger reload with migration flags
+                    return self.async_create_entry(title="", data=merged_options)
+                else:
+                    # No pending migrations, proceed with normal reload
+                    # Merge with existing options to preserve all settings
+                    merged_options = dict(self.config_entry.options)
+                    merged_options.update(filtered_input)
+                    return self.async_create_entry(title="", data=merged_options)
+        else:
+            errors = {}
+
+        # Build the entity naming options schema
+        schema = build_entity_naming_options_schema(self.config_entry)
+        defaults = get_entity_naming_options_defaults(self.config_entry)
+
+        return self.async_show_form(
+            step_id="entity_naming_options",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
         )

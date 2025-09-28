@@ -81,6 +81,7 @@
         "title": "Menu des Options",
         "menu_options": {
           "general_options": "Options Générales",
+          "entity_naming_options": "Options de Nommage des Entités",
           "entity_naming": "Modèle de Nommage des Entités",
           "export_config": "Exporter la Configuration des Capteurs Synthétiques",
           "simulation_start_time": "Heure de Début de Simulation",
@@ -105,6 +106,18 @@
           "enable_solar_circuit": "Activer les capteurs synthétiques pour la surveillance de l'onduleur solaire. Nécessite la sélection de deux onglets non mappés sur des phases électriques opposées.",
           "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
+        }
+      },
+      "entity_naming_options": {
+        "title": "Options de Nommage des Entités",
+        "description": "Configurez comment les IDs d'entité sont nommés. Choisissez entre des noms conviviaux (ex., kitchen_outlets_power) ou des numéros d'onglets de circuit (ex., circuit_15_power).",
+        "data": {
+          "legacy_upgrade_to_friendly": "Mettre à niveau l'Installation Legacy vers les Noms Conviviaux",
+          "entity_naming_pattern": "Modèle de Nommage des Entités"
+        },
+        "data_description": {
+          "legacy_upgrade_to_friendly": "Mettre à niveau cette installation legacy pour utiliser des noms d'entité conviviaux avec préfixe de dispositif. Cela renommera toutes les entités existantes.",
+          "entity_naming_pattern": "Choisissez comment les IDs d'entité sont construits. Les noms conviviaux utilisent les noms de circuit (ex., kitchen_outlets_power), tandis que les numéros de circuit utilisent les positions d'onglet (ex., circuit_15_power)."
         }
       },
       "entity_naming": {

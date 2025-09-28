@@ -29,8 +29,6 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     NAME,
-    USE_CIRCUIT_NUMBERS,
-    USE_DEVICE_PREFIX,
 )
 from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_sensors
@@ -102,6 +100,8 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("SETUP ENTRY CALLED! Entry ID: %s, Version: %s", entry.entry_id, entry.version)
+
+    # Migration flags will be handled by the coordinator during its update cycle
 
     async def ha_compatible_delay(seconds: float) -> None:
         """HA-compatible delay function that works well with HA's event loop."""
@@ -298,10 +298,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-        # Check for pending legacy migration after all platforms are set up
-        if entry.options.get("pending_legacy_migration", False):
-            _LOGGER.info("Found pending legacy migration flag, performing migration")
-            await _handle_pending_legacy_migration(hass, entry, coordinator)
+        # Migration detection moved to coordinator update cycle
 
     except Exception:
         # Clean up on failure
@@ -628,35 +625,4 @@ async def ensure_device_registered(
         )
 
 
-async def _handle_pending_legacy_migration(
-    hass: HomeAssistant, entry: ConfigEntry, coordinator: SpanPanelCoordinator
-) -> None:
-    """Handle pending legacy migration after integration startup.
-
-    This function is called when a pending_legacy_migration flag is found in the
-    config entry data. It performs the migration and then cleans up the flag.
-    The migration happens after the coordinator is ready but before normal operation.
-    """
-    # Always remove the flag first to prevent infinite loops
-    _LOGGER.info("Removing pending_legacy_migration flag to prevent loops")
-    current_options = dict(entry.options)
-    current_options.pop("pending_legacy_migration", None)
-    hass.config_entries.async_update_entry(entry, options=current_options)
-
-    try:
-        _LOGGER.info("Starting pending legacy migration")
-
-        # Perform the migration from legacy to device prefix
-        old_flags = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: False}
-        new_flags = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
-
-        success = await coordinator.migrate_entity_ids(old_flags, new_flags)
-
-        if success:
-            _LOGGER.info("Pending legacy migration completed successfully")
-            _LOGGER.info("Migration completed - no reload needed, entities updated in registry")
-        else:
-            _LOGGER.error("Pending legacy migration failed")
-
-    except Exception as e:
-        _LOGGER.error("Pending legacy migration task failed: %s", e, exc_info=True)
+# Migration handling moved to coordinator update cycle

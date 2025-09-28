@@ -81,6 +81,7 @@
         "title": "Menu de Opções",
         "menu_options": {
           "general_options": "Opções Gerais",
+          "entity_naming_options": "Opções de Nomenclatura de Entidades",
           "entity_naming": "Padrão de Nomenclatura de Entidades",
           "export_config": "Exportar Configuração de Sensores Sintéticos",
           "simulation_start_time": "Horário de Início da Simulação",
@@ -105,6 +106,18 @@
           "enable_solar_circuit": "Ativar sensores sintéticos para monitoramento do inversor solar. Requer seleção de duas abas não mapeadas em fases elétricas opostas.",
           "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
+        }
+      },
+      "entity_naming_options": {
+        "title": "Opções de Nomenclatura de Entidades",
+        "description": "Configure como os IDs de entidade são nomeados. Escolha entre nomes amigáveis (ex., kitchen_outlets_power) ou números de abas de circuito (ex., circuit_15_power).",
+        "data": {
+          "legacy_upgrade_to_friendly": "Atualizar Instalação Legacy para Nomes Amigáveis",
+          "entity_naming_pattern": "Padrão de Nomenclatura de Entidades"
+        },
+        "data_description": {
+          "legacy_upgrade_to_friendly": "Atualizar esta instalação legacy para usar nomes de entidade amigáveis com prefixo de dispositivo. Isso renomeará todas as entidades existentes.",
+          "entity_naming_pattern": "Escolha como os IDs de entidade são construídos. Nomes amigáveis usam nomes de circuito (ex., kitchen_outlets_power), enquanto números de circuito usam posições de aba (ex., circuit_15_power)."
         }
       },
       "entity_naming": {
