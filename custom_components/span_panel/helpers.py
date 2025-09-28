@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.persistent_notification import async_create
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
@@ -689,6 +690,7 @@ def generate_unique_simulator_serial_number(hass: HomeAssistant) -> str:
         Unique serial number in format sim-nnn (e.g., sim-001, sim-002, etc.)
 
     """
+
     # Get all existing span panel config entries
     existing_entries = hass.config_entries.async_entries(DOMAIN)
 
@@ -696,10 +698,16 @@ def generate_unique_simulator_serial_number(hass: HomeAssistant) -> str:
     existing_serials = set()
     for entry in existing_entries:
         if entry.data.get("simulation_mode", False):
-            # Check if the entry has a serial number in the data
+            # Check both simulator_serial_number and CONF_HOST fields
+            # simulator_serial_number is the newer field
             serial = entry.data.get("simulator_serial_number")
             if serial and serial.startswith("sim-"):
                 existing_serials.add(serial)
+
+            # CONF_HOST may contain the serial for existing simulator configurations
+            host_serial = entry.data.get(CONF_HOST)
+            if host_serial and host_serial.startswith("sim-"):
+                existing_serials.add(host_serial)
 
     # Find the next available number
     counter = 1
