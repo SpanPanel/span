@@ -102,6 +102,9 @@
           "enable_solar_circuit": "Enable Solar Inverter Sensors",
           "leg1": "Solar Leg 1 (must be unmapped tab on opposite phase from Leg 2)",
           "leg2": "Solar Leg 2 (must be unmapped tab on opposite phase from Leg 1)",
+          "enable_panel_net_energy_sensors": "Panel Net Energy",
+          "enable_circuit_net_energy_sensors": "Circuit Net Energy",
+          "enable_solar_net_energy_sensors": "Solar Net Energy",
           "api_retries": "API Retries (0-10)",
           "api_retry_timeout": "API Retry Timeout (seconds)",
           "api_retry_backoff_multiplier": "API Retry Backoff Multiplier"
@@ -109,7 +112,10 @@
         "data_description": {
           "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
           "leg1": "Select the first solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 2 for proper 240V measurement.",
-          "leg2": "Select the second solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 1 for proper 240V measurement."
+          "leg2": "Select the second solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 1 for proper 240V measurement.",
+          "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
+          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
+          "enable_solar_net_energy_sensors": "Create net energy sensors for solar generation (only available when solar is configured). Shows net solar production accounting for any consumption on solar circuits."
         }
       },
       "entity_naming_options": {

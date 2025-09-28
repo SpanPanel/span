@@ -100,12 +100,18 @@
           "api_retry_timeout": "APIリトライタイムアウト (秒)",
           "api_retry_backoff_multiplier": "APIリトライバックオフ倍率",
           "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's"
+          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "enable_panel_net_energy_sensors": "パネル正味エネルギー",
+          "enable_circuit_net_energy_sensors": "回路正味エネルギー",
+          "enable_solar_net_energy_sensors": "ソーラー正味エネルギー"
         },
         "data_description": {
           "enable_solar_circuit": "ソーラーインバーター監視用の合成センサーを有効にします。反対の電気相の2つの未マップタブの選択が必要です。",
           "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel"
+          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "enable_panel_net_energy_sensors": "パネルレベルエネルギー流れ（メインメーターとフィードスルー）の正味エネルギーセンサーを作成します。双方向流れを考慮した真のエネルギー収支を表示します。",
+          "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
+          "enable_solar_net_energy_sensors": "ソーラー発電の正味エネルギーセンサーを作成します。ソーラー回路での消費を考慮した正味ソーラー生産量を表示します。"
         }
       },
       "entity_naming_options": {

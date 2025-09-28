@@ -206,6 +206,8 @@ PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyProducedWh",
@@ -242,6 +244,26 @@ PANEL_ENERGY_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda panel_data: panel_data.feedthrough_energy_consumed,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="mainMeterNetEnergyWh",
+        name="Main Meter Net Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: (panel_data.main_meter_energy_consumed or 0)
+        - (panel_data.main_meter_energy_produced or 0),
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="feedthroughNetEnergyWh",
+        name="Feed Through Net Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.ENERGY,
+        value_fn=lambda panel_data: (panel_data.feedthrough_energy_consumed or 0)
+        - (panel_data.feedthrough_energy_produced or 0),
     ),
 )
 
@@ -292,7 +314,7 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: (circuit.produced_energy or 0) - (circuit.consumed_energy or 0),
+        value_fn=lambda circuit: (circuit.consumed_energy or 0) - (circuit.produced_energy or 0),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),

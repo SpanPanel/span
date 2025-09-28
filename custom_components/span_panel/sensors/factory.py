@@ -9,6 +9,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
+from custom_components.span_panel.const import (
+    ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
+    ENABLE_PANEL_NET_ENERGY_SENSORS,
+    ENABLE_SOLAR_NET_ENERGY_SENSORS,
+)
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.options import (
     BATTERY_ENABLE,
@@ -42,7 +47,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 def create_panel_sensors(
-    coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
 ) -> list[SpanPanelPanelStatus | SpanPanelStatus | SpanPanelPowerSensor | SpanPanelEnergySensor]:
     """Create panel-level sensors."""
     entities: list[
@@ -58,7 +63,23 @@ def create_panel_sensors(
         entities.append(SpanPanelPowerSensor(coordinator, description, span_panel))
 
     # Add panel energy sensors (replacing synthetic ones)
+    # Filter out net energy sensors if disabled
+    panel_net_energy_enabled = config_entry.options.get(ENABLE_PANEL_NET_ENERGY_SENSORS, True)
+    _LOGGER.debug("PANEL_NET_ENERGY_DEBUG: panel_net_energy_enabled=%s", panel_net_energy_enabled)
+
     for description in PANEL_ENERGY_SENSORS:
+        # Skip net energy sensors if disabled
+        is_net_energy_sensor = "net_energy" in description.key or "NetEnergy" in description.key
+        _LOGGER.debug(
+            "PANEL_NET_ENERGY_DEBUG: sensor_key=%s, is_net_energy=%s, enabled=%s",
+            description.key,
+            is_net_energy_sensor,
+            panel_net_energy_enabled,
+        )
+
+        if not panel_net_energy_enabled and is_net_energy_sensor:
+            _LOGGER.debug("PANEL_NET_ENERGY_DEBUG: Skipping net energy sensor %s", description.key)
+            continue
         entities.append(SpanPanelEnergySensor(coordinator, description, span_panel))
 
     # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
@@ -69,15 +90,41 @@ def create_panel_sensors(
 
 
 def create_circuit_sensors(
-    coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+    coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
 ) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor]:
     """Create circuit-level sensors for named circuits."""
     entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor] = []
 
     # Add circuit sensors for all named circuits (replacing synthetic ones)
     named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
+    circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
+
+    _LOGGER.debug(
+        "CIRCUIT_NET_ENERGY_DEBUG: circuit_net_energy_enabled=%s, config_entry.options=%s",
+        circuit_net_energy_enabled,
+        config_entry.options,
+    )
+
     for circuit_id in named_circuits:
         for circuit_description in CIRCUIT_SENSORS:
+            # Skip net energy sensors if disabled
+            is_net_energy_sensor = (
+                "net_energy" in circuit_description.key or "energy_net" in circuit_description.key
+            )
+            _LOGGER.debug(
+                "CIRCUIT_NET_ENERGY_DEBUG: sensor_key=%s, is_net_energy=%s, enabled=%s",
+                circuit_description.key,
+                is_net_energy_sensor,
+                circuit_net_energy_enabled,
+            )
+
+            if not circuit_net_energy_enabled and is_net_energy_sensor:
+                _LOGGER.debug(
+                    "CIRCUIT_NET_ENERGY_DEBUG: Skipping net energy sensor %s",
+                    circuit_description.key,
+                )
+                continue
+
             if circuit_description.key == "circuit_power":
                 # Use enhanced power sensor for power measurements
                 entities.append(
@@ -165,7 +212,13 @@ def create_solar_sensors(
 
     # Create solar sensors if both legs found
     if leg1_circuit_id and leg2_circuit_id:
+        solar_net_energy_enabled = config_entry.options.get(ENABLE_SOLAR_NET_ENERGY_SENSORS, True)
+
         for solar_description in SOLAR_SENSORS:
+            # Skip net energy sensors if disabled
+            if not solar_net_energy_enabled and "net_energy" in solar_description.key:
+                continue
+
             if solar_description.key == "solar_current_power":
                 # Use regular solar sensor for power measurements
                 entities.append(
@@ -221,8 +274,8 @@ def create_native_sensors(
     ] = []
 
     # Create different sensor types
-    entities.extend(create_panel_sensors(coordinator, span_panel))
-    entities.extend(create_circuit_sensors(coordinator, span_panel))
+    entities.extend(create_panel_sensors(coordinator, span_panel, config_entry))
+    entities.extend(create_circuit_sensors(coordinator, span_panel, config_entry))
     entities.extend(create_unmapped_circuit_sensors(coordinator, span_panel))
     entities.extend(create_battery_sensors(coordinator, span_panel, config_entry))
     entities.extend(create_solar_sensors(coordinator, span_panel, config_entry))
