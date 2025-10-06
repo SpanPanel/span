@@ -406,15 +406,21 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
                         "Found existing SpanPanel API instance, updating simulation parameters"
                     )
 
-                    # Update simulation offline mode - this should start the offline timer
-                    # from "now"
-                    # The simulation_start_time is separate and used for the simulated time of day
-                    _LOGGER.info(
-                        "Calling span_panel.api.set_simulation_offline_mode(%s)",
-                        simulation_offline_minutes,
-                    )
-                    span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
-                    _LOGGER.info("Successfully called set_simulation_offline_mode")
+                    # Only update simulation offline mode if the API is actually in simulation mode
+                    if span_panel.api.simulation_mode:
+                        # Update simulation offline mode - this should start the offline timer
+                        # from "now"
+                        # The simulation_start_time is separate and used for the simulated time of day
+                        _LOGGER.info(
+                            "Calling span_panel.api.set_simulation_offline_mode(%s)",
+                            simulation_offline_minutes,
+                        )
+                        span_panel.api.set_simulation_offline_mode(simulation_offline_minutes)
+                        _LOGGER.info("Successfully called set_simulation_offline_mode")
+                    else:
+                        _LOGGER.debug(
+                            "Skipping simulation offline mode update - API not in simulation mode"
+                        )
                 else:
                     _LOGGER.warning("SpanPanel API instance not found in coordinator")
             else:
