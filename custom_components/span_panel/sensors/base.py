@@ -4,17 +4,20 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Self, TypeVar
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorEntity,
     SensorEntityDescription,
 )
 from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.restore_state import ExtraStoredData
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.span_panel.const import DOMAIN
@@ -294,8 +297,59 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         raise NotImplementedError("Subclasses must implement this method")
 
 
-class SpanEnergySensorBase(SpanSensorBase[T, D], ABC):
-    """Base class for energy sensors that includes grace period tracking."""
+@dataclass
+class SpanEnergyExtraStoredData(ExtraStoredData):
+    """Extra stored data for Span energy sensors with grace period tracking.
+
+    This data is persisted across Home Assistant restarts to maintain
+    grace period state for energy sensors, preventing statistics spikes
+    when the panel is offline at startup.
+    """
+
+    native_value: float | None
+    native_unit_of_measurement: str | None
+    last_valid_state: float | None
+    last_valid_changed: str | None  # ISO format datetime string
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a dict representation of the extra data."""
+        return {
+            "native_value": self.native_value,
+            "native_unit_of_measurement": self.native_unit_of_measurement,
+            "last_valid_state": self.last_valid_state,
+            "last_valid_changed": self.last_valid_changed,
+        }
+
+    @classmethod
+    def from_dict(cls, restored: dict[str, Any]) -> Self | None:
+        """Initialize extra stored data from a dict.
+
+        Args:
+            restored: Dictionary containing the stored data
+
+        Returns:
+            SpanEnergyExtraStoredData instance or None if restoration fails
+
+        """
+        try:
+            return cls(
+                native_value=restored.get("native_value"),
+                native_unit_of_measurement=restored.get("native_unit_of_measurement"),
+                last_valid_state=restored.get("last_valid_state"),
+                last_valid_changed=restored.get("last_valid_changed"),
+            )
+        except (KeyError, TypeError):
+            return None
+
+
+class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
+    """Base class for energy sensors that includes grace period tracking.
+
+    This class extends SpanSensorBase with:
+    - Grace period tracking for offline scenarios
+    - State restoration across HA restarts via RestoreSensor mixin
+    - Automatic persistence of last_valid_state and last_valid_changed
+    """
 
     def __init__(
         self,
@@ -309,6 +363,67 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], ABC):
         self._last_valid_changed: datetime | None = None
         self._grace_period_minutes = data_coordinator.config_entry.options.get(
             ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
+        # Track if we've restored data (used for logging)
+        self._restored_from_storage: bool = False
+
+    async def async_added_to_hass(self) -> None:
+        """Restore grace period state when entity is added to Home Assistant.
+
+        This method is called when the entity is added to HA, which happens
+        during startup or when the integration is reloaded. We use this
+        opportunity to restore the grace period tracking state from storage.
+        """
+        await super().async_added_to_hass()
+
+        # Try to restore the grace period state from storage
+        if (last_extra_data := await self.async_get_last_extra_data()) is not None:
+            restored = SpanEnergyExtraStoredData.from_dict(last_extra_data.as_dict())
+            if restored:
+                # Restore last_valid_state
+                if restored.last_valid_state is not None:
+                    self._last_valid_state = restored.last_valid_state
+
+                # Restore last_valid_changed timestamp
+                if restored.last_valid_changed is not None:
+                    try:
+                        self._last_valid_changed = datetime.fromisoformat(
+                            restored.last_valid_changed
+                        )
+                        self._restored_from_storage = True
+                        _LOGGER.debug(
+                            "Restored grace period state for %s: "
+                            "last_valid_state=%s, last_valid_changed=%s",
+                            self.entity_id or self._attr_unique_id,
+                            self._last_valid_state,
+                            self._last_valid_changed,
+                        )
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.warning(
+                            "Failed to parse restored last_valid_changed for %s: %s",
+                            self.entity_id or self._attr_unique_id,
+                            e,
+                        )
+
+    @property
+    def extra_restore_state_data(self) -> SpanEnergyExtraStoredData:
+        """Return sensor-specific state data to be restored.
+
+        This data is automatically saved by Home Assistant when the
+        integration is unloaded or HA shuts down, and restored when
+        the entity is added back to HA.
+        """
+        return SpanEnergyExtraStoredData(
+            native_value=(
+                float(self._attr_native_value)
+                if isinstance(self._attr_native_value, (int | float))
+                else None
+            ),
+            native_unit_of_measurement=self._attr_native_unit_of_measurement,
+            last_valid_state=self._last_valid_state,
+            last_valid_changed=(
+                self._last_valid_changed.isoformat() if self._last_valid_changed else None
+            ),
         )
 
     def _update_native_value(self) -> None:
