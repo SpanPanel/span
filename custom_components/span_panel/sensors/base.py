@@ -416,10 +416,10 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         return SpanEnergyExtraStoredData(
             native_value=(
                 float(self._attr_native_value)
-                if isinstance(self._attr_native_value, (int | float))
+                if isinstance(self._attr_native_value, int | float)
                 else None
             ),
-            native_unit_of_measurement=self._attr_native_unit_of_measurement,
+            native_unit_of_measurement=self.native_unit_of_measurement,
             last_valid_state=self._last_valid_state,
             last_valid_changed=(
                 self._last_valid_changed.isoformat() if self._last_valid_changed else None
