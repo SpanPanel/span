@@ -13,8 +13,10 @@ from homeassistant.components.sensor import (
     RestoreSensor,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.restore_state import ExtraStoredData
@@ -30,6 +32,28 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=SensorEntityDescription)
 D = TypeVar("D")  # For the type returned by get_data_source
+
+
+def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | None]:
+    """Extract a numeric value and naive timestamp from a restored HA state.
+
+    Returns (None, None) when the state is unknown/unavailable or not numeric.
+    """
+
+    if state is None:
+        return None, None
+
+    if state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE, None):
+        return None, None
+
+    try:
+        value = float(state.state)
+    except (TypeError, ValueError):
+        return None, None
+
+    # Normalize last_changed to naive datetime to match existing tracking
+    last_changed = state.last_changed.replace(tzinfo=None) if state.last_changed else None
+    return value, last_changed
 
 
 class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D], ABC):
@@ -259,6 +283,15 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             # For other sensors, use STATE_UNKNOWN string
             state_class = getattr(self.entity_description, "state_class", None)
             self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+        except Exception as err:  # pragma: no cover - defensive
+            # Avoid noisy stack traces from value functions; fall back to unknown
+            _LOGGER.warning(
+                "Value function failed for %s (%s); reporting unknown",
+                self._attr_name,
+                err,
+            )
+            state_class = getattr(self.entity_description, "state_class", None)
+            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
 
     def _log_debug_info(self, data_source: D) -> None:
         """Log debug information for circuit sensors."""
@@ -405,6 +438,40 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
                             e,
                         )
 
+        # Seed grace period tracking from the last stored HA state when extra data
+        # is missing (e.g., after first install or early offline event).
+        await self._initialize_grace_period_from_last_state()
+
+    async def _initialize_grace_period_from_last_state(self) -> None:
+        """Seed grace tracking from HA's last stored state when extra data is missing."""
+
+        if self._last_valid_state is not None:
+            return
+
+        try:
+            last_state = await self.async_get_last_state()
+        except Exception as err:  # pragma: no cover - defensive
+            _LOGGER.debug(
+                "Grace period restore: failed to fetch last state for %s: %s",
+                self.entity_id or self._attr_unique_id,
+                err,
+            )
+            return
+
+        restored_value, restored_changed = _parse_numeric_state(last_state)
+        if restored_value is None:
+            return
+
+        self._last_valid_state = restored_value
+        self._last_valid_changed = restored_changed or datetime.now()
+        self._restored_from_storage = True
+        _LOGGER.debug(
+            "Grace period initialized from last state for %s: value=%s, changed=%s",
+            self.entity_id or self._attr_unique_id,
+            self._last_valid_state,
+            self._last_valid_changed,
+        )
+
     @property
     def extra_restore_state_data(self) -> SpanEnergyExtraStoredData:
         """Return sensor-specific state data to be restored.
@@ -435,6 +502,25 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
 
         # Panel is online - use normal update logic from parent class
         super()._update_native_value()
+
+        # Validate total_increasing sensors to prevent drops (spikes)
+        state_class = getattr(self.entity_description, "state_class", None)
+        if (
+            state_class == SensorStateClass.TOTAL_INCREASING
+            and self._last_valid_state is not None
+            and isinstance(self._attr_native_value, int | float)
+        ):
+            new_value = float(self._attr_native_value)
+            if new_value < self._last_valid_state:
+                _LOGGER.warning(
+                    "Ignored decreasing value for %s: new=%s < old=%s",
+                    self.entity_id or self._attr_unique_id,
+                    new_value,
+                    self._last_valid_state,
+                )
+                # Keep the last valid state (effectively extending grace period)
+                self._attr_native_value = self._last_valid_state
+                return
 
         # Track valid state for grace period (only when we have a valid value)
         if self._attr_native_value is not None and isinstance(self._attr_native_value, int | float):
@@ -483,14 +569,30 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
 
     def _handle_offline_grace_period(self) -> None:
         """Handle grace period logic when panel is offline."""
-        if self._last_valid_changed is None or self._last_valid_state is None:
-            # No previous valid state, set to None (HA reports unknonwn)
+        # If we don't yet have a tracked valid state, fall back to the current
+        # native value (e.g., restored state) to avoid returning None during a
+        # brief offline period immediately after startup.
+        if self._last_valid_state is None and isinstance(self._attr_native_value, int | float):
+            self._last_valid_state = float(self._attr_native_value)
+            self._last_valid_changed = self._last_valid_changed or datetime.now()
+
+        if self._last_valid_state is None:
+            # No previous valid state, set to None (HA reports unknown)
             self._attr_native_value = None
             return
 
-        # Check if we're still within the grace period
-        time_since_last_valid = datetime.now() - self._last_valid_changed
-        grace_period_duration = timedelta(minutes=self._grace_period_minutes)
+        if self._last_valid_changed is None:
+            self._last_valid_changed = datetime.now()
+
+        grace_minutes = self._coerce_grace_period_minutes()
+
+        try:
+            time_since_last_valid = datetime.now() - self._last_valid_changed
+            grace_period_duration = timedelta(minutes=grace_minutes)
+        except Exception as err:  # pragma: no cover - defensive
+            _LOGGER.debug("Grace period calculation failed: %s", err)
+            self._attr_native_value = self._last_valid_state
+            return
 
         if time_since_last_valid <= grace_period_duration:
             # Still within grace period - use last valid state
@@ -498,6 +600,21 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         else:
             # Grace period expired - set to None (makes sensor unknown)
             self._attr_native_value = None
+
+    def _coerce_grace_period_minutes(self) -> int:
+        """Ensure grace period minutes is a non-negative integer."""
+
+        try:
+            minutes = int(self._grace_period_minutes)
+        except (TypeError, ValueError):
+            minutes = 15
+            self._grace_period_minutes = minutes
+
+        if minutes < 0:
+            minutes = 0
+            self._grace_period_minutes = minutes
+
+        return minutes
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

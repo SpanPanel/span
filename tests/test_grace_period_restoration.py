@@ -1,10 +1,12 @@
 """Tests for grace period state restoration across HA restarts."""
 
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
-from custom_components.span_panel.sensors.base import (
-    SpanEnergyExtraStoredData,
-)
+from homeassistant.components.sensor import SensorStateClass
+
+from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
+from custom_components.span_panel.sensors.base import SpanEnergyExtraStoredData, SpanEnergySensorBase
 
 
 class TestSpanEnergyExtraStoredData:
@@ -345,3 +347,153 @@ class TestRestorationScenarios:
         # The sensor should update to use the new value from the panel
         # (This is handled by the sensor's normal update logic, not restoration)
         assert new_panel_value > stored_last_valid_state  # Energy should increase
+
+
+class DummyEnergySensor(SpanEnergySensorBase):
+    """Minimal concrete energy sensor for offline grace period tests."""
+
+    def __init__(self, grace_minutes: int | str = 15) -> None:
+        # Bypass parent __init__ to avoid full HA dependencies for unit testing
+        self.coordinator = SimpleNamespace(
+            panel_offline=True,
+            config_entry=SimpleNamespace(options={ENERGY_REPORTING_GRACE_PERIOD: grace_minutes}),
+            data=SimpleNamespace(),
+        )
+        self.entity_description = SimpleNamespace(
+            device_class="energy",
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            key="dummy",
+            value_fn=lambda _: self._mock_panel_value,
+        )
+        self._attr_native_value = None
+        self._mock_panel_value = None
+        self._last_valid_state = None
+        self._last_valid_changed = None
+        self._grace_period_minutes = grace_minutes
+        self._previous_circuit_name = None
+        self._attr_unique_id = "dummy"
+        self._attr_name = "Dummy"
+
+    def _generate_unique_id(self, span_panel, description):
+        return "dummy"
+
+    def _generate_friendly_name(self, span_panel, description):
+        return "dummy"
+
+    def get_data_source(self, span_panel):
+        return "dummy_data"
+
+
+class TestGracePeriodFallback:
+    """Tests for grace period fallback behavior when panel is offline."""
+
+    def test_offline_uses_restored_native_value_when_missing_last_valid(self):
+        """Ensure last known value is reused when grace metadata is absent."""
+
+        sensor = DummyEnergySensor()
+        sensor._attr_native_value = 123.0
+
+        sensor._handle_offline_grace_period()
+
+        assert sensor._attr_native_value == 123.0
+        assert sensor._last_valid_state == 123.0
+        assert sensor._last_valid_changed is not None
+
+    def test_offline_grace_expires_after_duration(self):
+        """Verify values drop to unknown after grace period expiration."""
+
+        sensor = DummyEnergySensor(grace_minutes=5)
+        sensor._last_valid_state = 10.0
+        sensor._last_valid_changed = datetime.now() - timedelta(minutes=10)
+
+        sensor._handle_offline_grace_period()
+
+        assert sensor._attr_native_value is None
+
+    def test_grace_period_coerces_string_option(self):
+        """String grace period option is coerced to int for calculations."""
+
+        sensor = DummyEnergySensor(grace_minutes="15")
+        sensor._last_valid_state = 50.0
+        sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+
+        sensor._handle_offline_grace_period()
+
+        assert sensor._attr_native_value == 50.0
+
+
+class TestMonotonicValidation:
+    """Tests for monotonic validation of total_increasing sensors."""
+
+    def test_rejects_decreasing_value(self):
+        """Ensure a lower value is rejected and the old value is kept."""
+        sensor = DummyEnergySensor()
+        # Simulate online state
+        sensor.coordinator.panel_offline = False
+
+        # Initial valid state
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()  # Should accept and set _last_valid_state
+
+        assert sensor._last_valid_state == 1000.0
+
+        # Update with LOWER value
+        sensor._mock_panel_value = 900.0
+        sensor._update_native_value()
+
+        # Should have rejected 900 and kept 1000
+        assert sensor._attr_native_value == 1000.0
+        assert sensor._last_valid_state == 1000.0
+
+    def test_accepts_increasing_value(self):
+        """Ensure a higher value is accepted."""
+        sensor = DummyEnergySensor()
+        sensor.coordinator.panel_offline = False
+
+        # Initial valid state
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+
+        # Update with HIGHER value
+        sensor._mock_panel_value = 1100.0
+        sensor._update_native_value()
+
+        # Should accept 1100
+        assert sensor._attr_native_value == 1100.0
+        assert sensor._last_valid_state == 1100.0
+
+    def test_accepts_equal_value(self):
+        """Ensure an equal value is accepted."""
+        sensor = DummyEnergySensor()
+        sensor.coordinator.panel_offline = False
+
+        # Initial valid state
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+
+        # Update with EQUAL value
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+
+        # Should accept 1000
+        assert sensor._attr_native_value == 1000.0
+        assert sensor._last_valid_state == 1000.0
+
+    def test_ignores_validation_for_non_total_increasing(self):
+        """Ensure validation is skipped for other state classes."""
+        sensor = DummyEnergySensor()
+        sensor.coordinator.panel_offline = False
+        # Change state class to measurement (allows decrease)
+        sensor.entity_description.state_class = SensorStateClass.MEASUREMENT
+
+        # Initial valid state
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+
+        # Update with LOWER value
+        sensor._mock_panel_value = 900.0
+        sensor._update_native_value()
+
+        # Should accept 900 because it's not total_increasing
+        assert sensor._attr_native_value == 900.0
+        assert sensor._last_valid_state == 900.0
