@@ -153,7 +153,12 @@ class SpanPanel:
         except SpanPanelSimulationOfflineError:  # Debug logged in coordinator.py
             raise
         except Exception as err:
-            _LOGGER.error("Error updating panel: %s", err, exc_info=True)
+            # Keep the message concise to avoid noisy tracebacks; the coordinator
+            # will mark panel_offline and grace-period logic will take over.
+            _LOGGER.warning(
+                "Panel update failed (%s); marking offline",
+                err,
+            )
             raise
 
     @property

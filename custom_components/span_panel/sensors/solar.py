@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
 from typing import Any
 
@@ -306,12 +305,10 @@ class SpanSolarEnergySensor(SpanEnergySensorBase[SpanSolarSensorEntityDescriptio
             else:
                 self._attr_native_value = float(leg1_value) + float(leg2_value)
 
-            # Track valid state for grace period (only when we have a valid value)
-            if self._attr_native_value is not None and isinstance(
-                self._attr_native_value, int | float
-            ):
-                self._last_valid_state = float(self._attr_native_value)
-                self._last_valid_changed = datetime.now()
+            if not self._validate_total_increasing(self._attr_native_value):
+                return
+
+            self._track_valid_state(self._attr_native_value)
 
         except (ValueError, TypeError, AttributeError) as e:
             _LOGGER.warning(

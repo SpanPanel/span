@@ -11,7 +11,7 @@
   "requirements": [
     "span-panel-api~=1.1.13"
   ],
-  "version": "1.2.6",
+  "version": "1.2.8",
   "zeroconf": [
     {
       "type": "_span._tcp.local."
