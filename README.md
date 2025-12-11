@@ -232,23 +232,9 @@ will eventually expose.
 1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in
    the SPAN API, so we report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door
    state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal entry door.
-2. State Class Warnings - "Feed Through" sensors may produce erroneous data in the sense that logs may complain the sensor data is not constantly increasing
-   when the sensor statistics type is set to total/increasing. These sensors reflect the feed through lugs which may be used for a downstream panel. If you are
-   getting warnings in the log about a feed through sensor that has state class total_increasing, but its state is not strictly increasing, you can opt to
-   disable these sensors in the Home Assistant settings/devices/entities section:
-
-   ```text
-   sensor.span_panel_feed_through_consumed_energy
-   sensor.span_panel_feed_through_produced_energy
-   ```
-
-   **Note**: The exact entity names depend on your configured naming pattern. For circuit numbers pattern, feed through sensors use generic naming (e.g.,
-   `sensor.span_panel_circuit_X_consumed_energy` where X is the circuit number). For friendly names pattern, they use descriptive names based on the circuit
-   purpose.
-
-3. No Switch - If a circuit is set in the SPAN App as one of the "Always on Circuits", then that circuit will not have a switch because the API does not allow
+2. No Switch - If a circuit is set in the SPAN App as one of the "Always on Circuits", then that circuit will not have a switch because the API does not allow
    the user to control it.
-4. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this dropdown active because SPAN's browser also shows the
+3. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this dropdown active because SPAN's browser also shows the
    dropdown. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define critical or other
    must-have circuits. The PowerUp circuits are less clear, but what we know is that those at the top of the PowerUp list tend to be "Non-Essential", but this
    rule is inconsistent with respect to all circuit order, which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully

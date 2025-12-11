@@ -5,7 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 import logging
 from typing import Any, Generic, Self, TypeVar
 
@@ -20,6 +21,7 @@ from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.restore_state import ExtraStoredData
+from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.span_panel.const import DOMAIN
@@ -503,14 +505,20 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         # Panel is online - use normal update logic from parent class
         super()._update_native_value()
 
-        # Validate total_increasing sensors to prevent drops (spikes)
+        if not self._validate_total_increasing(self._attr_native_value):
+            return
+
+        self._track_valid_state(self._attr_native_value)
+
+    def _validate_total_increasing(self, value: StateType | date | Decimal | None) -> bool:
+        """Guard TOTAL_INCREASING sensors against decreasing values."""
         state_class = getattr(self.entity_description, "state_class", None)
         if (
             state_class == SensorStateClass.TOTAL_INCREASING
             and self._last_valid_state is not None
-            and isinstance(self._attr_native_value, int | float)
+            and isinstance(value, int | float | Decimal)
         ):
-            new_value = float(self._attr_native_value)
+            new_value = float(value)
             if new_value < self._last_valid_state:
                 _LOGGER.warning(
                     "Ignored decreasing value for %s: new=%s < old=%s",
@@ -520,11 +528,13 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
                 )
                 # Keep the last valid state (effectively extending grace period)
                 self._attr_native_value = self._last_valid_state
-                return
+                return False
+        return True
 
-        # Track valid state for grace period (only when we have a valid value)
-        if self._attr_native_value is not None and isinstance(self._attr_native_value, int | float):
-            self._last_valid_state = float(self._attr_native_value)
+    def _track_valid_state(self, value: StateType | date | Decimal | None) -> None:
+        """Update last valid state tracking when a numeric value is available."""
+        if value is not None and isinstance(value, int | float | Decimal):
+            self._last_valid_state = float(value)
             self._last_valid_changed = datetime.now()
 
     def _handle_coordinator_update(self) -> None:
@@ -628,9 +638,10 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
             attributes["last_valid_changed"] = self._last_valid_changed.isoformat()
 
             # Calculate grace period remaining
-            if self._grace_period_minutes > 0:
+            grace_minutes = self._coerce_grace_period_minutes()
+            if grace_minutes > 0:
                 time_since_last_valid = datetime.now() - self._last_valid_changed
-                grace_period_duration = timedelta(minutes=self._grace_period_minutes)
+                grace_period_duration = timedelta(minutes=grace_minutes)
                 remaining_seconds = (grace_period_duration - time_since_last_valid).total_seconds()
                 remaining_minutes = max(0, int(remaining_seconds / 60))
                 attributes["grace_period_remaining"] = str(remaining_minutes)
