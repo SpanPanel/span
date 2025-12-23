@@ -11,6 +11,7 @@ import logging
 
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, State, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_state_change_event,
@@ -19,20 +20,37 @@ from homeassistant.helpers.event import (
 _LOGGER = logging.getLogger(__name__)
 
 
-def find_main_meter_entity(hass: HomeAssistant) -> str | None:
+def find_main_meter_entity(hass: HomeAssistant, entry_id: str | None = None) -> str | None:
     """Find the main meter consumed energy sensor entity ID.
 
     Searches for SPAN energy sensors that match the main meter pattern.
+    If entry_id is provided, only searches for entities belonging to that config entry.
 
     Args:
         hass: Home Assistant instance
+        entry_id: Config entry ID to filter entities (optional)
 
     Returns:
         Entity ID of the main meter consumed energy sensor, or None if not found.
 
     """
+    # If entry_id provided, use entity registry to filter
+    if entry_id:
+        registry = er.async_get(hass)
+        entry_entities = {
+            entry.entity_id
+            for entry in registry.entities.values()
+            if entry.config_entry_id == entry_id
+        }
+    else:
+        entry_entities = None
+
     for entity_id in hass.states.async_entity_ids("sensor"):
         if not entity_id.startswith("sensor.span_panel_"):
+            continue
+
+        # Filter by config entry if specified
+        if entry_entities is not None and entity_id not in entry_entities:
             continue
 
         state = hass.states.get(entity_id)
@@ -51,7 +69,9 @@ def find_main_meter_entity(hass: HomeAssistant) -> str | None:
     return None
 
 
-async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> CALLBACK_TYPE | None:
+async def async_setup_main_meter_monitoring(
+    hass: HomeAssistant, entry_id: str | None = None
+) -> CALLBACK_TYPE | None:
     """Set up monitoring of the main meter for firmware reset detection.
 
     Automatically finds the main meter consumed energy sensor and sets up
@@ -59,12 +79,13 @@ async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> CALLBACK_TYP
 
     Args:
         hass: Home Assistant instance.
+        entry_id: Config entry ID to filter entities (optional).
 
     Returns:
         Unsubscribe callback to remove the listener, or None if setup failed.
 
     """
-    main_meter_entity_id = find_main_meter_entity(hass)
+    main_meter_entity_id = find_main_meter_entity(hass, entry_id)
 
     if not main_meter_entity_id:
         _LOGGER.debug("Main meter consumed energy sensor not found - monitoring will not be set up")
