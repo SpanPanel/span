@@ -21,6 +21,7 @@ from homeassistant.components.recorder.db_schema import (
     StatisticsShortTerm,
 )
 from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.components.recorder.util import session_scope
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
@@ -48,8 +49,15 @@ async def async_setup_cleanup_energy_spikes_service(hass: HomeAssistant) -> None
 
     async def handle_cleanup_energy_spikes(call: ServiceCall) -> dict[str, Any]:
         """Handle the service call."""
+        _LOGGER.info("Service called with data: %s", call.data)
         days_back = call.data.get("days_back", 1)
         dry_run = call.data.get("dry_run", True)
+        _LOGGER.info(
+            "Parsed values: days_back=%s, dry_run=%s (type=%s)",
+            days_back,
+            dry_run,
+            type(dry_run).__name__,
+        )
 
         return await cleanup_energy_spikes(hass, days_back=days_back, dry_run=dry_run)
 
@@ -146,7 +154,13 @@ async def cleanup_energy_spikes(
 
     # Delete entries if not in dry run mode
     entries_deleted = 0
+    _LOGGER.info("dry_run=%s, will delete=%s", dry_run, not dry_run)
     if not dry_run:
+        _LOGGER.info(
+            "Calling _delete_statistics_entries with %d sensors and %d timestamps",
+            len(span_energy_sensors),
+            len(reset_timestamps),
+        )
         entries_deleted = await _delete_statistics_entries(
             hass, span_energy_sensors, reset_timestamps
         )
@@ -371,10 +385,12 @@ async def _delete_statistics_entries(
 
     Returns the number of entries deleted.
     """
+    _LOGGER.info("_delete_statistics_entries called")
     entries_deleted = 0
 
     try:
         recorder = get_instance(hass)
+        _LOGGER.info("Got recorder instance, calling sync delete function")
 
         # Get the delete function - we need to use the recorder's internal APIs
         entries_deleted = await recorder.async_add_executor_job(
@@ -384,6 +400,7 @@ async def _delete_statistics_entries(
             span_energy_sensors,
             reset_timestamps,
         )
+        _LOGGER.info("Sync delete returned %d", entries_deleted)
 
     except Exception as e:
         _LOGGER.error("Error deleting statistics entries: %s", e, exc_info=True)
@@ -401,12 +418,19 @@ def _delete_statistics_entries_sync(
     entries_deleted = 0
 
     try:
-        with recorder.get_session() as session:
+        # Use session_scope with hass for proper write access and auto-commit
+        with session_scope(hass=hass) as session:
             # Get metadata IDs for all sensors
             metadata_query = session.query(StatisticsMeta).filter(
                 StatisticsMeta.statistic_id.in_(span_energy_sensors)
             )
             metadata_map = {m.statistic_id: m.id for m in metadata_query.all()}
+
+            _LOGGER.info(
+                "Found %d metadata entries for %d sensors",
+                len(metadata_map),
+                len(span_energy_sensors),
+            )
 
             for reset_time in reset_timestamps:
                 # Convert to timestamp for comparison
@@ -416,11 +440,48 @@ def _delete_statistics_entries_sync(
                 window_start = reset_ts - 300  # 5 minutes before
                 window_end = reset_ts + 300  # 5 minutes after
 
+                _LOGGER.info(
+                    "Processing reset at %s (ts=%s), window: %s to %s",
+                    reset_time.isoformat(),
+                    reset_ts,
+                    window_start,
+                    window_end,
+                )
+
                 for entity_id in span_energy_sensors:
                     if entity_id not in metadata_map:
                         continue
 
                     metadata_id = metadata_map[entity_id]
+
+                    # Count existing entries first for debugging
+                    short_count = (
+                        session.query(StatisticsShortTerm)
+                        .filter(
+                            StatisticsShortTerm.metadata_id == metadata_id,
+                            StatisticsShortTerm.start_ts >= window_start,
+                            StatisticsShortTerm.start_ts <= window_end,
+                        )
+                        .count()
+                    )
+                    long_count = (
+                        session.query(Statistics)
+                        .filter(
+                            Statistics.metadata_id == metadata_id,
+                            Statistics.start_ts >= window_start,
+                            Statistics.start_ts <= window_end,
+                        )
+                        .count()
+                    )
+
+                    if short_count > 0 or long_count > 0:
+                        _LOGGER.info(
+                            "Found %d short-term and %d long-term entries for %s (metadata_id=%d)",
+                            short_count,
+                            long_count,
+                            entity_id,
+                            metadata_id,
+                        )
 
                     # Delete from short-term statistics
                     deleted_short = (
@@ -446,7 +507,7 @@ def _delete_statistics_entries_sync(
 
                     total_deleted = deleted_short + deleted_long
                     if total_deleted > 0:
-                        _LOGGER.debug(
+                        _LOGGER.info(
                             "Deleted %d entries for %s at %s (short: %d, long: %d)",
                             total_deleted,
                             entity_id,
@@ -456,8 +517,9 @@ def _delete_statistics_entries_sync(
                         )
                         entries_deleted += total_deleted
 
-            session.commit()
-            _LOGGER.info("Committed deletion of %d statistics entries", entries_deleted)
+            # Explicitly flush to ensure deletes are executed
+            session.flush()
+            _LOGGER.info("Flushed deletion of %d statistics entries", entries_deleted)
 
     except Exception as e:
         _LOGGER.error("Error in _delete_statistics_entries_sync: %s", e, exc_info=True)
