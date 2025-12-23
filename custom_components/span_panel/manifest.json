@@ -1,6 +1,9 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@SpanPanel"
   ],
