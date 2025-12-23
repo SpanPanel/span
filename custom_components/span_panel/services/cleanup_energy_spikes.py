@@ -48,8 +48,15 @@ async def async_setup_cleanup_energy_spikes_service(hass: HomeAssistant) -> None
 
     async def handle_cleanup_energy_spikes(call: ServiceCall) -> dict[str, Any]:
         """Handle the service call."""
+        _LOGGER.info("Service called with data: %s", call.data)
         days_back = call.data.get("days_back", 1)
         dry_run = call.data.get("dry_run", True)
+        _LOGGER.info(
+            "Parsed values: days_back=%s, dry_run=%s (type=%s)",
+            days_back,
+            dry_run,
+            type(dry_run).__name__,
+        )
 
         return await cleanup_energy_spikes(hass, days_back=days_back, dry_run=dry_run)
 
@@ -124,7 +131,20 @@ async def cleanup_energy_spikes(
     _LOGGER.debug("Found %d SPAN energy sensors", len(span_energy_sensors))
 
     # Get statistics for the main meter to find reset timestamps
-    reset_timestamps = await _find_reset_timestamps(hass, main_meter_entity, start_time, end_time)
+    try:
+        reset_timestamps = await _find_reset_timestamps(
+            hass, main_meter_entity, start_time, end_time
+        )
+    except Exception as e:
+        _LOGGER.error("Error finding reset timestamps: %s", e, exc_info=True)
+        return {
+            "dry_run": dry_run,
+            "entities_processed": 0,
+            "reset_timestamps": [],
+            "entries_deleted": 0,
+            "details": [],
+            "error": f"Failed to query statistics: {e}",
+        }
 
     if not reset_timestamps:
         _LOGGER.info("No firmware reset spikes detected in the specified time range")
@@ -146,13 +166,24 @@ async def cleanup_energy_spikes(
 
     # Delete entries if not in dry run mode
     entries_deleted = 0
+    deletion_error: str | None = None
+    _LOGGER.info("dry_run=%s, will delete=%s", dry_run, not dry_run)
     if not dry_run:
-        entries_deleted = await _delete_statistics_entries(
-            hass, span_energy_sensors, reset_timestamps
+        _LOGGER.info(
+            "Calling _delete_statistics_entries with %d sensors and %d timestamps",
+            len(span_energy_sensors),
+            len(reset_timestamps),
         )
-        _LOGGER.info("Deleted %d statistics entries", entries_deleted)
+        try:
+            entries_deleted = await _delete_statistics_entries(
+                hass, span_energy_sensors, reset_timestamps
+            )
+            _LOGGER.info("Deleted %d statistics entries", entries_deleted)
+        except Exception as e:
+            _LOGGER.error("Error deleting statistics entries: %s", e, exc_info=True)
+            deletion_error = str(e)
 
-    result = {
+    result: dict[str, Any] = {
         "dry_run": dry_run,
         "entities_processed": len(span_energy_sensors),
         "reset_timestamps": [ts.isoformat() for ts in reset_timestamps],
@@ -160,7 +191,13 @@ async def cleanup_energy_spikes(
         "details": details,
     }
 
-    if dry_run:
+    if deletion_error:
+        result["error"] = f"Failed to delete statistics entries: {deletion_error}"
+        result["message"] = (
+            f"Found {len(reset_timestamps)} spike(s) but deletion failed. "
+            "Check Home Assistant logs for details."
+        )
+    elif dry_run:
         result["message"] = (
             f"Would delete {len(reset_timestamps)} spike(s) "
             f"from {len(span_energy_sensors)} sensors. "
@@ -220,57 +257,57 @@ async def _find_reset_timestamps(
     """Find timestamps where the main meter value decreased (firmware reset).
 
     These timestamps indicate firmware resets that affect all sensors.
+
+    Raises:
+        Exception: If statistics query fails.
+
     """
     reset_timestamps: list[datetime] = []
 
-    try:
-        # Query statistics for the main meter
-        # Use 5-minute period for more granular detection
-        stats = await get_instance(hass).async_add_executor_job(
-            _query_statistics,
-            hass,
-            start_time,
-            end_time,
-            {main_meter_entity},
-            "5minute",
-        )
+    # Query statistics for the main meter
+    # Use 5-minute period for more granular detection
+    stats = await get_instance(hass).async_add_executor_job(
+        _query_statistics,
+        hass,
+        start_time,
+        end_time,
+        {main_meter_entity},
+        "5minute",
+    )
 
-        if not stats or main_meter_entity not in stats:
-            _LOGGER.debug("No statistics found for %s", main_meter_entity)
-            return reset_timestamps
+    if not stats or main_meter_entity not in stats:
+        _LOGGER.debug("No statistics found for %s", main_meter_entity)
+        return reset_timestamps
 
-        sensor_stats = stats[main_meter_entity]
-        if len(sensor_stats) < 2:
-            _LOGGER.debug("Not enough statistics entries to detect resets")
-            return reset_timestamps
+    sensor_stats = stats[main_meter_entity]
+    if len(sensor_stats) < 2:
+        _LOGGER.debug("Not enough statistics entries to detect resets")
+        return reset_timestamps
 
-        # Look for any decrease in the cumulative value (sum)
-        for i in range(1, len(sensor_stats)):
-            current = sensor_stats[i]
-            previous = sensor_stats[i - 1]
+    # Look for any decrease in the cumulative value (sum)
+    for i in range(1, len(sensor_stats)):
+        current = sensor_stats[i]
+        previous = sensor_stats[i - 1]
 
-            current_sum = current.get("sum")
-            previous_sum = previous.get("sum")
+        current_sum = current.get("sum")
+        previous_sum = previous.get("sum")
 
-            if current_sum is None or previous_sum is None:
-                continue
+        if current_sum is None or previous_sum is None:
+            continue
 
-            delta = current_sum - previous_sum
+        delta = current_sum - previous_sum
 
-            # Any negative delta in a TOTAL_INCREASING sensor = firmware reset
-            if delta < 0:
-                reset_time = dt_util.utc_from_timestamp(current["start"])
-                reset_timestamps.append(reset_time)
-                _LOGGER.info(
-                    "Detected firmware reset at %s: %s -> %s (delta: %s Wh)",
-                    reset_time.isoformat(),
-                    previous_sum,
-                    current_sum,
-                    delta,
-                )
-
-    except Exception as e:
-        _LOGGER.error("Error querying statistics: %s", e, exc_info=True)
+        # Any negative delta in a TOTAL_INCREASING sensor = firmware reset
+        if delta < 0:
+            reset_time = dt_util.utc_from_timestamp(current["start"])
+            reset_timestamps.append(reset_time)
+            _LOGGER.info(
+                "Detected firmware reset at %s: %s -> %s (delta: %s Wh)",
+                reset_time.isoformat(),
+                previous_sum,
+                current_sum,
+                delta,
+            )
 
     return reset_timestamps
 
@@ -330,21 +367,50 @@ async def _collect_spike_details(
 
                 for reset_time in reset_timestamps:
                     # Match within 5 minutes (our query period)
-                    if abs((entry_time - reset_time).total_seconds()) < 300:
+                    if abs((entry_time - reset_time).total_seconds()) <= 300:
                         # Find the previous entry to show the drop
                         idx = sensor_stats.index(stat_entry)
+                        current_val = stat_entry.get("sum")
+
+                        # Skip if current value is None
+                        if current_val is None:
+                            continue
+
+                        # Try to get previous entry for delta calculation
                         if idx > 0:
                             prev_entry = sensor_stats[idx - 1]
-                            current_val = stat_entry.get("sum", 0)
-                            prev_val = prev_entry.get("sum", 0)
-                            delta = current_val - prev_val
+                            prev_val = prev_entry.get("sum")
 
+                            if prev_val is not None:
+                                delta = current_val - prev_val
+                                spikes.append(
+                                    {
+                                        "timestamp": entry_time.isoformat(),
+                                        "current_value": current_val,
+                                        "previous_value": prev_val,
+                                        "delta": delta,
+                                    }
+                                )
+                            else:
+                                # Previous entry exists but has no value
+                                spikes.append(
+                                    {
+                                        "timestamp": entry_time.isoformat(),
+                                        "current_value": current_val,
+                                        "previous_value": None,
+                                        "delta": None,
+                                    }
+                                )
+                        else:
+                            # First entry - no previous value to compare
+                            # Still include it in preview since it will be deleted
                             spikes.append(
                                 {
                                     "timestamp": entry_time.isoformat(),
                                     "current_value": current_val,
-                                    "previous_value": prev_val,
-                                    "delta": delta,
+                                    "previous_value": None,
+                                    "delta": None,
+                                    "note": "First entry in query range",
                                 }
                             )
 
@@ -370,23 +436,25 @@ async def _delete_statistics_entries(
     """Delete statistics entries at the specified timestamps.
 
     Returns the number of entries deleted.
+
+    Raises:
+        Exception: If deletion fails.
+
     """
-    entries_deleted = 0
+    _LOGGER.info("_delete_statistics_entries called")
 
-    try:
-        recorder = get_instance(hass)
+    recorder = get_instance(hass)
+    _LOGGER.info("Got recorder instance, calling sync delete function")
 
-        # Get the delete function - we need to use the recorder's internal APIs
-        entries_deleted = await recorder.async_add_executor_job(
-            _delete_statistics_entries_sync,
-            hass,
-            recorder,
-            span_energy_sensors,
-            reset_timestamps,
-        )
-
-    except Exception as e:
-        _LOGGER.error("Error deleting statistics entries: %s", e, exc_info=True)
+    # Get the delete function - we need to use the recorder's internal APIs
+    entries_deleted = await recorder.async_add_executor_job(
+        _delete_statistics_entries_sync,
+        hass,
+        recorder,
+        span_energy_sensors,
+        reset_timestamps,
+    )
+    _LOGGER.info("Sync delete returned %d", entries_deleted)
 
     return entries_deleted
 
@@ -400,27 +468,94 @@ def _delete_statistics_entries_sync(
     """Delete statistics entries synchronously (runs in executor)."""
     entries_deleted = 0
 
+    _LOGGER.info(
+        "Starting deletion for %d sensors at %d reset timestamp(s)",
+        len(span_energy_sensors),
+        len(reset_timestamps),
+    )
+
+    # Use session_scope context manager for proper session management
+    # This handles commit, rollback, and close automatically
+    # Do NOT use session=recorder.get_session() as get_session() returns
+    # a scoped_session factory, not an active Session instance.
     try:
-        with recorder.get_session() as session:
+        with recorder.session_scope() as session:
             # Get metadata IDs for all sensors
             metadata_query = session.query(StatisticsMeta).filter(
                 StatisticsMeta.statistic_id.in_(span_energy_sensors)
             )
             metadata_map = {m.statistic_id: m.id for m in metadata_query.all()}
 
+            _LOGGER.info(
+                "Found %d metadata entries for %d sensors",
+                len(metadata_map),
+                len(span_energy_sensors),
+            )
+
+            # Log missing metadata entries
+            missing_metadata = set(span_energy_sensors) - set(metadata_map.keys())
+            if missing_metadata:
+                _LOGGER.warning(
+                    "Missing metadata entries for %d sensor(s): %s",
+                    len(missing_metadata),
+                    missing_metadata,
+                )
+
             for reset_time in reset_timestamps:
                 # Convert to timestamp for comparison
                 reset_ts = reset_time.timestamp()
 
                 # Calculate time window (within 5 minutes of reset)
+                # Match the preview logic: abs(difference) <= 300 seconds
                 window_start = reset_ts - 300  # 5 minutes before
                 window_end = reset_ts + 300  # 5 minutes after
 
+                _LOGGER.info(
+                    "Processing reset at %s (ts=%.1f), window: %.1f to %.1f",
+                    reset_time.isoformat(),
+                    reset_ts,
+                    window_start,
+                    window_end,
+                )
+
                 for entity_id in span_energy_sensors:
                     if entity_id not in metadata_map:
+                        _LOGGER.debug(
+                            "Skipping %s - no metadata entry found",
+                            entity_id,
+                        )
                         continue
 
                     metadata_id = metadata_map[entity_id]
+
+                    # First, query to see what entries exist (for debugging)
+                    short_term_count = (
+                        session.query(StatisticsShortTerm)
+                        .filter(
+                            StatisticsShortTerm.metadata_id == metadata_id,
+                            StatisticsShortTerm.start_ts >= window_start,
+                            StatisticsShortTerm.start_ts <= window_end,
+                        )
+                        .count()
+                    )
+
+                    long_term_count = (
+                        session.query(Statistics)
+                        .filter(
+                            Statistics.metadata_id == metadata_id,
+                            Statistics.start_ts >= window_start,
+                            Statistics.start_ts <= window_end,
+                        )
+                        .count()
+                    )
+
+                    _LOGGER.debug(
+                        "Found %d short-term and %d long-term entries for %s at %s",
+                        short_term_count,
+                        long_term_count,
+                        entity_id,
+                        reset_time.isoformat(),
+                    )
 
                     # Delete from short-term statistics
                     deleted_short = (
@@ -446,7 +581,7 @@ def _delete_statistics_entries_sync(
 
                     total_deleted = deleted_short + deleted_long
                     if total_deleted > 0:
-                        _LOGGER.debug(
+                        _LOGGER.info(
                             "Deleted %d entries for %s at %s (short: %d, long: %d)",
                             total_deleted,
                             entity_id,
@@ -455,12 +590,25 @@ def _delete_statistics_entries_sync(
                             deleted_long,
                         )
                         entries_deleted += total_deleted
+                    else:
+                        _LOGGER.warning(
+                            "No entries deleted for %s at %s despite finding %d short-term and %d long-term entries (window: %.1f to %.1f)",
+                            entity_id,
+                            reset_time.isoformat(),
+                            short_term_count,
+                            long_term_count,
+                            window_start,
+                            window_end,
+                        )
 
-            session.commit()
             _LOGGER.info("Committed deletion of %d statistics entries", entries_deleted)
 
     except Exception as e:
-        _LOGGER.error("Error in _delete_statistics_entries_sync: %s", e, exc_info=True)
+        _LOGGER.error(
+            "Error during statistics deletion: %s",
+            e,
+            exc_info=True,
+        )
         raise
 
     return entries_deleted

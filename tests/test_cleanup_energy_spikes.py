@@ -254,6 +254,7 @@ class TestCleanupEnergySpikes:
             "custom_components.span_panel.services.cleanup_energy_spikes.get_instance"
         ) as mock_get_instance:
             mock_recorder = MagicMock()
+            # Called multiple times: _find_reset_timestamps, _collect_spike_details
             mock_recorder.async_add_executor_job = AsyncMock(return_value=mock_stats)
             mock_get_instance.return_value = mock_recorder
 
@@ -263,6 +264,7 @@ class TestCleanupEnergySpikes:
         assert result["entities_processed"] == 3
         assert len(result["reset_timestamps"]) == 1
         assert result["entries_deleted"] == 0  # Dry run, no actual deletion
+        assert "error" not in result  # No error should be present
 
     @pytest.mark.asyncio
     async def test_spike_deleted_when_not_dry_run(
@@ -289,7 +291,10 @@ class TestCleanupEnergySpikes:
         ) as mock_get_instance:
             mock_recorder = MagicMock()
 
-            # First call returns stats, second call does deletion
+            # Called multiple times:
+            # 1. _find_reset_timestamps (returns stats)
+            # 2. _collect_spike_details (returns stats)
+            # 3. _delete_statistics_entries (returns count)
             mock_recorder.async_add_executor_job = AsyncMock(
                 side_effect=[mock_stats, mock_stats, 3]  # 3 entries deleted
             )
@@ -300,6 +305,7 @@ class TestCleanupEnergySpikes:
         assert result["dry_run"] is False
         assert len(result["reset_timestamps"]) == 1
         assert result["entries_deleted"] == 3
+        assert "error" not in result  # No error should be present
 
 
 class TestMainMeterMonitoring:
