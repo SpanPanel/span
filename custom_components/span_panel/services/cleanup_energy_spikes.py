@@ -1,0 +1,522 @@
+"""Cleanup energy spikes service for SPAN Panel integration.
+
+This service detects and removes negative energy spikes from Home Assistant's
+statistics database that occur when the SPAN panel undergoes firmware updates.
+
+When the panel resets, it may temporarily report incorrect energy values,
+causing massive spikes when it recovers. This service identifies those
+timestamps and removes the problematic entries.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+import logging
+from typing import Any, Literal
+
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.db_schema import (
+    Statistics,
+    StatisticsMeta,
+    StatisticsShortTerm,
+)
+from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.components.sensor import SensorStateClass
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
+from homeassistant.util import dt as dt_util
+import voluptuous as vol
+
+from custom_components.span_panel.const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
+
+# Service name
+SERVICE_CLEANUP_ENERGY_SPIKES = "cleanup_energy_spikes"
+
+# Service schema
+SERVICE_CLEANUP_ENERGY_SPIKES_SCHEMA = vol.Schema(
+    {
+        vol.Optional("days_back", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=365)),
+        vol.Optional("dry_run", default=True): cv.boolean,
+    }
+)
+
+
+async def async_setup_cleanup_energy_spikes_service(hass: HomeAssistant) -> None:
+    """Register the cleanup_energy_spikes service."""
+
+    async def handle_cleanup_energy_spikes(call: ServiceCall) -> dict[str, Any]:
+        """Handle the service call."""
+        days_back = call.data.get("days_back", 1)
+        dry_run = call.data.get("dry_run", True)
+
+        result = await cleanup_energy_spikes(hass, days_back=days_back, dry_run=dry_run)
+
+        # Create persistent notification with results
+        await _create_result_notification(hass, result, dry_run)
+
+        return result
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CLEANUP_ENERGY_SPIKES,
+        handle_cleanup_energy_spikes,
+        schema=SERVICE_CLEANUP_ENERGY_SPIKES_SCHEMA,
+    )
+    _LOGGER.debug("Registered %s.%s service", DOMAIN, SERVICE_CLEANUP_ENERGY_SPIKES)
+
+
+async def cleanup_energy_spikes(
+    hass: HomeAssistant,
+    days_back: int = 1,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Detect and remove firmware reset spikes from all SPAN energy sensors.
+
+    Uses the main meter to detect reset timestamps (any decrease in value),
+    then deletes all SPAN TOTAL_INCREASING sensor entries at those timestamps.
+
+    Args:
+        hass: Home Assistant instance
+        days_back: How many days to scan (default: 1)
+        dry_run: Preview mode without making changes (default: True)
+
+    Returns:
+        Summary of spikes found and removed.
+
+    """
+    _LOGGER.info(
+        "Starting energy spike cleanup - days_back: %s, dry_run: %s",
+        days_back,
+        dry_run,
+    )
+
+    # Calculate time range
+    end_time = dt_util.utcnow()
+    start_time = end_time - timedelta(days=days_back)
+
+    # Get all SPAN energy sensors (TOTAL_INCREASING only)
+    span_energy_sensors = _get_span_energy_sensors(hass)
+
+    if not span_energy_sensors:
+        _LOGGER.warning("No SPAN energy sensors found")
+        return {
+            "dry_run": dry_run,
+            "entities_processed": 0,
+            "reset_timestamps": [],
+            "entries_deleted": 0,
+            "details": [],
+            "error": "No SPAN energy sensors found",
+        }
+
+    # Find the main meter consumed energy sensor
+    main_meter_entity = _find_main_meter_sensor(span_energy_sensors)
+
+    if not main_meter_entity:
+        _LOGGER.warning("Main meter consumed energy sensor not found")
+        return {
+            "dry_run": dry_run,
+            "entities_processed": 0,
+            "reset_timestamps": [],
+            "entries_deleted": 0,
+            "details": [],
+            "error": "Main meter consumed energy sensor not found",
+        }
+
+    _LOGGER.debug("Using main meter sensor: %s", main_meter_entity)
+    _LOGGER.debug("Found %d SPAN energy sensors", len(span_energy_sensors))
+
+    # Get statistics for the main meter to find reset timestamps
+    reset_timestamps = await _find_reset_timestamps(hass, main_meter_entity, start_time, end_time)
+
+    if not reset_timestamps:
+        _LOGGER.info("No firmware reset spikes detected in the specified time range")
+        return {
+            "dry_run": dry_run,
+            "entities_processed": len(span_energy_sensors),
+            "reset_timestamps": [],
+            "entries_deleted": 0,
+            "details": [],
+            "message": "No firmware reset spikes detected",
+        }
+
+    _LOGGER.info("Found %d reset timestamp(s)", len(reset_timestamps))
+
+    # Collect spike details for all affected sensors
+    details = await _collect_spike_details(
+        hass, span_energy_sensors, reset_timestamps, start_time, end_time
+    )
+
+    # Delete entries if not in dry run mode
+    entries_deleted = 0
+    if not dry_run:
+        entries_deleted = await _delete_statistics_entries(
+            hass, span_energy_sensors, reset_timestamps
+        )
+        _LOGGER.info("Deleted %d statistics entries", entries_deleted)
+
+    result = {
+        "dry_run": dry_run,
+        "entities_processed": len(span_energy_sensors),
+        "reset_timestamps": [ts.isoformat() for ts in reset_timestamps],
+        "entries_deleted": entries_deleted,
+        "details": details,
+    }
+
+    if dry_run:
+        result["message"] = (
+            f"Would delete {len(reset_timestamps)} spike(s) "
+            f"from {len(span_energy_sensors)} sensors. "
+            "Run with dry_run: false to apply."
+        )
+    else:
+        result["message"] = (
+            f"Deleted {entries_deleted} entries at {len(reset_timestamps)} "
+            f"timestamp(s) from {len(span_energy_sensors)} sensors."
+        )
+
+    return result
+
+
+def _get_span_energy_sensors(hass: HomeAssistant) -> list[str]:
+    """Get all SPAN energy sensors with TOTAL_INCREASING state class."""
+    span_energy_sensors = []
+
+    for entity_id in hass.states.async_entity_ids("sensor"):
+        if not entity_id.startswith("sensor.span_panel_"):
+            continue
+
+        state = hass.states.get(entity_id)
+        if state is None:
+            continue
+
+        state_class = state.attributes.get("state_class")
+        if state_class == SensorStateClass.TOTAL_INCREASING:
+            span_energy_sensors.append(entity_id)
+            _LOGGER.debug("Found TOTAL_INCREASING sensor: %s", entity_id)
+
+    return span_energy_sensors
+
+
+def _find_main_meter_sensor(span_energy_sensors: list[str]) -> str | None:
+    """Find the main meter consumed energy sensor from the list."""
+    # Look for the main meter consumed energy sensor
+    # Common patterns: main_meter_consumed_energy, consumed_energy (panel level)
+    for entity_id in span_energy_sensors:
+        if "main_meter" in entity_id and "consumed" in entity_id:
+            return entity_id
+
+    # Fallback: look for any main meter energy sensor
+    for entity_id in span_energy_sensors:
+        if "main_meter" in entity_id and "energy" in entity_id:
+            return entity_id
+
+    return None
+
+
+async def _find_reset_timestamps(
+    hass: HomeAssistant,
+    main_meter_entity: str,
+    start_time: datetime,
+    end_time: datetime,
+) -> list[datetime]:
+    """Find timestamps where the main meter value decreased (firmware reset).
+
+    These timestamps indicate firmware resets that affect all sensors.
+    """
+    reset_timestamps: list[datetime] = []
+
+    try:
+        # Query statistics for the main meter
+        # Use 5-minute period for more granular detection
+        stats = await get_instance(hass).async_add_executor_job(
+            _query_statistics,
+            hass,
+            start_time,
+            end_time,
+            {main_meter_entity},
+            "5minute",
+        )
+
+        if not stats or main_meter_entity not in stats:
+            _LOGGER.debug("No statistics found for %s", main_meter_entity)
+            return reset_timestamps
+
+        sensor_stats = stats[main_meter_entity]
+        if len(sensor_stats) < 2:
+            _LOGGER.debug("Not enough statistics entries to detect resets")
+            return reset_timestamps
+
+        # Look for any decrease in the cumulative value (sum)
+        for i in range(1, len(sensor_stats)):
+            current = sensor_stats[i]
+            previous = sensor_stats[i - 1]
+
+            current_sum = current.get("sum")
+            previous_sum = previous.get("sum")
+
+            if current_sum is None or previous_sum is None:
+                continue
+
+            delta = current_sum - previous_sum
+
+            # Any negative delta in a TOTAL_INCREASING sensor = firmware reset
+            if delta < 0:
+                reset_time = dt_util.utc_from_timestamp(current["start"])
+                reset_timestamps.append(reset_time)
+                _LOGGER.info(
+                    "Detected firmware reset at %s: %s -> %s (delta: %s Wh)",
+                    reset_time.isoformat(),
+                    previous_sum,
+                    current_sum,
+                    delta,
+                )
+
+    except Exception as e:
+        _LOGGER.error("Error querying statistics: %s", e, exc_info=True)
+
+    return reset_timestamps
+
+
+def _query_statistics(
+    hass: HomeAssistant,
+    start_time: datetime,
+    end_time: datetime,
+    entity_ids: set[str],
+    period: Literal["5minute", "hour", "day", "week", "month"],
+) -> dict[str, list[dict[str, Any]]]:
+    """Query statistics from recorder (runs in executor)."""
+    result = statistics_during_period(
+        hass,
+        start_time,
+        end_time,
+        statistic_ids=entity_ids,
+        period=period,
+        units=None,
+        types={"sum", "state"},
+    )
+    # Convert to plain dict for type compatibility
+    return {k: [dict(row) for row in v] for k, v in result.items()}
+
+
+async def _collect_spike_details(
+    hass: HomeAssistant,
+    span_energy_sensors: list[str],
+    reset_timestamps: list[datetime],
+    start_time: datetime,
+    end_time: datetime,
+) -> list[dict[str, Any]]:
+    """Collect detailed information about spikes at reset timestamps."""
+    details: list[dict[str, Any]] = []
+
+    try:
+        # Query statistics for all sensors
+        stats = await get_instance(hass).async_add_executor_job(
+            _query_statistics,
+            hass,
+            start_time,
+            end_time,
+            set(span_energy_sensors),
+            "5minute",
+        )
+
+        for entity_id in span_energy_sensors:
+            if entity_id not in stats:
+                continue
+
+            sensor_stats = stats[entity_id]
+            spikes: list[dict[str, Any]] = []
+
+            # Find entries at reset timestamps
+            for stat_entry in sensor_stats:
+                entry_time = dt_util.utc_from_timestamp(stat_entry["start"])
+
+                for reset_time in reset_timestamps:
+                    # Match within 5 minutes (our query period)
+                    if abs((entry_time - reset_time).total_seconds()) < 300:
+                        # Find the previous entry to show the drop
+                        idx = sensor_stats.index(stat_entry)
+                        if idx > 0:
+                            prev_entry = sensor_stats[idx - 1]
+                            current_val = stat_entry.get("sum", 0)
+                            prev_val = prev_entry.get("sum", 0)
+                            delta = current_val - prev_val
+
+                            spikes.append(
+                                {
+                                    "timestamp": entry_time.isoformat(),
+                                    "current_value": current_val,
+                                    "previous_value": prev_val,
+                                    "delta": delta,
+                                }
+                            )
+
+            if spikes:
+                details.append(
+                    {
+                        "entity_id": entity_id,
+                        "spikes": spikes,
+                    }
+                )
+
+    except Exception as e:
+        _LOGGER.error("Error collecting spike details: %s", e, exc_info=True)
+
+    return details
+
+
+async def _delete_statistics_entries(
+    hass: HomeAssistant,
+    span_energy_sensors: list[str],
+    reset_timestamps: list[datetime],
+) -> int:
+    """Delete statistics entries at the specified timestamps.
+
+    Returns the number of entries deleted.
+    """
+    entries_deleted = 0
+
+    try:
+        recorder = get_instance(hass)
+
+        # Get the delete function - we need to use the recorder's internal APIs
+        entries_deleted = await recorder.async_add_executor_job(
+            _delete_statistics_entries_sync,
+            hass,
+            recorder,
+            span_energy_sensors,
+            reset_timestamps,
+        )
+
+    except Exception as e:
+        _LOGGER.error("Error deleting statistics entries: %s", e, exc_info=True)
+
+    return entries_deleted
+
+
+def _delete_statistics_entries_sync(
+    hass: HomeAssistant,
+    recorder: Any,
+    span_energy_sensors: list[str],
+    reset_timestamps: list[datetime],
+) -> int:
+    """Delete statistics entries synchronously (runs in executor)."""
+    entries_deleted = 0
+
+    try:
+        with recorder.get_session() as session:
+            # Get metadata IDs for all sensors
+            metadata_query = session.query(StatisticsMeta).filter(
+                StatisticsMeta.statistic_id.in_(span_energy_sensors)
+            )
+            metadata_map = {m.statistic_id: m.id for m in metadata_query.all()}
+
+            for reset_time in reset_timestamps:
+                # Convert to timestamp for comparison
+                reset_ts = reset_time.timestamp()
+
+                # Calculate time window (within 5 minutes of reset)
+                window_start = reset_ts - 300  # 5 minutes before
+                window_end = reset_ts + 300  # 5 minutes after
+
+                for entity_id in span_energy_sensors:
+                    if entity_id not in metadata_map:
+                        continue
+
+                    metadata_id = metadata_map[entity_id]
+
+                    # Delete from short-term statistics
+                    deleted_short = (
+                        session.query(StatisticsShortTerm)
+                        .filter(
+                            StatisticsShortTerm.metadata_id == metadata_id,
+                            StatisticsShortTerm.start_ts >= window_start,
+                            StatisticsShortTerm.start_ts <= window_end,
+                        )
+                        .delete(synchronize_session=False)
+                    )
+
+                    # Delete from long-term statistics
+                    deleted_long = (
+                        session.query(Statistics)
+                        .filter(
+                            Statistics.metadata_id == metadata_id,
+                            Statistics.start_ts >= window_start,
+                            Statistics.start_ts <= window_end,
+                        )
+                        .delete(synchronize_session=False)
+                    )
+
+                    total_deleted = deleted_short + deleted_long
+                    if total_deleted > 0:
+                        _LOGGER.debug(
+                            "Deleted %d entries for %s at %s (short: %d, long: %d)",
+                            total_deleted,
+                            entity_id,
+                            reset_time.isoformat(),
+                            deleted_short,
+                            deleted_long,
+                        )
+                        entries_deleted += total_deleted
+
+            session.commit()
+            _LOGGER.info("Committed deletion of %d statistics entries", entries_deleted)
+
+    except Exception as e:
+        _LOGGER.error("Error in _delete_statistics_entries_sync: %s", e, exc_info=True)
+        raise
+
+    return entries_deleted
+
+
+async def _create_result_notification(
+    hass: HomeAssistant, result: dict[str, Any], dry_run: bool
+) -> None:
+    """Create a persistent notification with cleanup results."""
+    title = "SPAN Energy Spike Cleanup"
+    if dry_run:
+        title += " (Dry Run)"
+
+    # Build message
+    lines = []
+
+    if "error" in result:
+        lines.append(f"**Error:** {result['error']}")
+    elif not result.get("reset_timestamps"):
+        lines.append("✅ No firmware reset spikes detected in the specified time range.")
+    else:
+        num_timestamps = len(result.get("reset_timestamps", []))
+        num_entities = result.get("entities_processed", 0)
+        entries_deleted = result.get("entries_deleted", 0)
+
+        if dry_run:
+            lines.append(
+                f"Found **{num_timestamps}** spike timestamp(s) affecting **{num_entities}** sensors."
+            )
+            lines.append("")
+            lines.append("**Would delete entries at:**")
+            for ts in result.get("reset_timestamps", []):
+                lines.append(f"- {ts}")
+            lines.append("")
+            lines.append("Run with `dry_run: false` to delete these entries.")
+        else:
+            lines.append(f"✅ Deleted **{entries_deleted}** statistics entries.")
+            lines.append("")
+            lines.append(
+                f"Cleaned up spikes at {num_timestamps} timestamp(s) from {num_entities} sensors."
+            )
+            lines.append("")
+            lines.append("Your Energy Dashboard should now display correctly.")
+
+    message = "\n".join(lines)
+
+    await hass.services.async_call(
+        "persistent_notification",
+        "create",
+        {
+            "title": title,
+            "message": message,
+            "notification_id": "span_panel_spike_cleanup",
+        },
+    )

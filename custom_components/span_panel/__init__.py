@@ -40,6 +40,10 @@ from .options import (
     INVERTER_LEG2,
     Options,
 )
+from .services import (
+    async_setup_cleanup_energy_spikes_service,
+    async_setup_main_meter_monitoring,
+)
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelAuthError, set_async_delay_func
 from .util import panel_to_device_info
@@ -297,6 +301,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await ensure_device_registered(hass, entry, span_panel, smart_device_name)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # Register services
+        await async_setup_cleanup_energy_spikes_service(hass)
+
+        # Set up main meter monitoring for firmware reset detection
+        # This needs to run after sensors are created so we can find the main meter entity
+        await async_setup_main_meter_monitoring(hass)
 
         # Migration detection moved to coordinator update cycle
 
