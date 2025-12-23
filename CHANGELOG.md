@@ -5,20 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🔄 Changed
+
+- **Removed decreasing value protection**: Reverted the TOTAL_INCREASING validation that was blocking decreasing energy values. While this protection prevented
+  negative spikes, it caused sensors to freeze for extended periods (sometimes days) after panel firmware updates, resulting in blank Energy Dashboards.
+
+### 📝 Notes
+
+- A future release may implement local energy calculation from power values to eliminate both the freezing issue and negative spikes. See the
+  [energy calculation proposal](docs/dev/energy_calculation_proposal.md) for details.
+
 ## [1.2.8] - 2025-12-10
 
 ### 🔧 Technical Improvements
 
 - **Fix total increasing sensors** against receiving data that is less than previously reported
-- **Fix feedthroughh sensor types** now set to TOTAL instead of TOTAL_INCREASING
+- **Fix feedthrough sensor types** now set to TOTAL instead of TOTAL_INCREASING
 
 ## [1.2.7] - 2025-11-29
 
 ### 🔧 Technical Improvements
 
 - **Offline Listener Fix**: Fixed simulation listener to prevent being called when not in simulation mode
-- **Grace Period Restoration**: Fixed grace period algorithm to properly restore previous good values from Home Assistant statistics on
-  restart, ensuring energy sensors report accurately after system restarts
+- **Grace Period Restoration**: Fixed grace period algorithm to properly restore previous good values from Home Assistant statistics on restart, ensuring energy
+  sensors report accurately after system restarts
 - **CI/CD Dependencies**: Updated GitHub Actions checkout action to version 6
 
 ## [1.2.6] - 2025-09-XX

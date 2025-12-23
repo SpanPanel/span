@@ -423,10 +423,10 @@ class TestGracePeriodFallback:
 
 
 class TestMonotonicValidation:
-    """Tests for monotonic validation of total_increasing sensors."""
+    """Tests for value tracking of total_increasing sensors."""
 
-    def test_rejects_decreasing_value(self):
-        """Ensure a lower value is rejected and the old value is kept."""
+    def test_accepts_decreasing_value(self):
+        """Ensure a lower value is accepted (firmware reset scenario)."""
         sensor = DummyEnergySensor()
         # Simulate online state
         sensor.coordinator.panel_offline = False
@@ -437,13 +437,13 @@ class TestMonotonicValidation:
 
         assert sensor._last_valid_state == 1000.0
 
-        # Update with LOWER value
+        # Update with LOWER value (simulates firmware reset)
         sensor._mock_panel_value = 900.0
         sensor._update_native_value()
 
-        # Should have rejected 900 and kept 1000
-        assert sensor._attr_native_value == 1000.0
-        assert sensor._last_valid_state == 1000.0
+        # Should accept 900 (decreasing values no longer blocked)
+        assert sensor._attr_native_value == 900.0
+        assert sensor._last_valid_state == 900.0
 
     def test_accepts_increasing_value(self):
         """Ensure a higher value is accepted."""
@@ -480,10 +480,10 @@ class TestMonotonicValidation:
         assert sensor._last_valid_state == 1000.0
 
     def test_ignores_validation_for_non_total_increasing(self):
-        """Ensure validation is skipped for other state classes."""
+        """Ensure all values accepted regardless of state class."""
         sensor = DummyEnergySensor()
         sensor.coordinator.panel_offline = False
-        # Change state class to measurement (allows decrease)
+        # Change state class to measurement
         sensor.entity_description.state_class = SensorStateClass.MEASUREMENT
 
         # Initial valid state
@@ -494,6 +494,6 @@ class TestMonotonicValidation:
         sensor._mock_panel_value = 900.0
         sensor._update_native_value()
 
-        # Should accept 900 because it's not total_increasing
+        # Should accept 900
         assert sensor._attr_native_value == 900.0
         assert sensor._last_valid_state == 900.0

@@ -305,9 +305,6 @@ class SpanSolarEnergySensor(SpanEnergySensorBase[SpanSolarSensorEntityDescriptio
             else:
                 self._attr_native_value = float(leg1_value) + float(leg2_value)
 
-            if not self._validate_total_increasing(self._attr_native_value):
-                return
-
             self._track_valid_state(self._attr_native_value)
 
         except (ValueError, TypeError, AttributeError) as e:
