@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### ✨ New Features
+
+- **Energy Spike Cleanup Service**: New `span_panel.cleanup_energy_spikes` service to detect and remove negative energy spikes from Home Assistant statistics
+  caused by panel firmware updates. Includes dry-run mode for safe preview before deletion.
+- **Firmware Reset Detection**: Automatic monitoring of main meter energy sensor to detect panel firmware resets. Sends a persistent notification when detected,
+  guiding users to run the cleanup service.
+
 ### 🔄 Changed
 
 - **Removed decreasing value protection**: Reverted the TOTAL_INCREASING validation that was blocking decreasing energy values. While this protection prevented

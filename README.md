@@ -227,6 +227,37 @@ will eventually expose.
 
 ## Troubleshooting
 
+### Energy Dashboard Spikes After Firmware Updates
+
+When the SPAN panel undergoes a firmware update or reset, it may temporarily report incorrect energy values. This causes massive spikes (positive or negative)
+in the Home Assistant Energy Dashboard.
+
+**Symptoms:**
+
+- Huge energy consumption spikes appearing after panel firmware updates
+- Charts showing unrealistic values that dwarf normal usage
+- Negative energy values in statistics
+
+**Solution:**
+
+Use the built-in cleanup service to remove the problematic statistics entries:
+
+1. Go to **Developer Tools → Services**
+2. Search for `span_panel.cleanup_energy_spikes`
+3. First run with `dry_run: true` to preview what will be deleted
+4. Review the persistent notification showing affected timestamps
+5. Run again with `dry_run: false` to delete the problematic entries
+
+```yaml
+service: span_panel.cleanup_energy_spikes
+data:
+  days_back: 1 # Scan last 24 hours (up to 365 days)
+  dry_run: false # Set to false to actually delete
+```
+
+**Note:** The integration automatically monitors for firmware resets and will send a notification when one is detected, prompting you to run the cleanup
+service.
+
 ### Common Issues
 
 1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in
