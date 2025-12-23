@@ -21,6 +21,7 @@ from homeassistant.components.recorder.db_schema import (
     StatisticsShortTerm,
 )
 from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.components.recorder.util import session_scope
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
@@ -401,7 +402,8 @@ def _delete_statistics_entries_sync(
     entries_deleted = 0
 
     try:
-        with recorder.get_session() as session:
+        # Use session_scope for proper write access (not get_session which is read-only)
+        with session_scope(session=recorder.get_session()) as session:
             # Get metadata IDs for all sensors
             metadata_query = session.query(StatisticsMeta).filter(
                 StatisticsMeta.statistic_id.in_(span_energy_sensors)
@@ -456,7 +458,7 @@ def _delete_statistics_entries_sync(
                         )
                         entries_deleted += total_deleted
 
-            session.commit()
+            # session_scope auto-commits on successful exit
             _LOGGER.info("Committed deletion of %d statistics entries", entries_deleted)
 
     except Exception as e:
