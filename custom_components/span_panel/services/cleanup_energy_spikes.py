@@ -22,7 +22,7 @@ from homeassistant.components.recorder.db_schema import (
 )
 from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.components.sensor import SensorStateClass
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
@@ -51,18 +51,14 @@ async def async_setup_cleanup_energy_spikes_service(hass: HomeAssistant) -> None
         days_back = call.data.get("days_back", 1)
         dry_run = call.data.get("dry_run", True)
 
-        result = await cleanup_energy_spikes(hass, days_back=days_back, dry_run=dry_run)
-
-        # Create persistent notification with results
-        await _create_result_notification(hass, result, dry_run)
-
-        return result
+        return await cleanup_energy_spikes(hass, days_back=days_back, dry_run=dry_run)
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_CLEANUP_ENERGY_SPIKES,
         handle_cleanup_energy_spikes,
         schema=SERVICE_CLEANUP_ENERGY_SPIKES_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     _LOGGER.debug("Registered %s.%s service", DOMAIN, SERVICE_CLEANUP_ENERGY_SPIKES)
 
@@ -468,55 +464,3 @@ def _delete_statistics_entries_sync(
         raise
 
     return entries_deleted
-
-
-async def _create_result_notification(
-    hass: HomeAssistant, result: dict[str, Any], dry_run: bool
-) -> None:
-    """Create a persistent notification with cleanup results."""
-    title = "SPAN Energy Spike Cleanup"
-    if dry_run:
-        title += " (Dry Run)"
-
-    # Build message
-    lines = []
-
-    if "error" in result:
-        lines.append(f"**Error:** {result['error']}")
-    elif not result.get("reset_timestamps"):
-        lines.append("✅ No firmware reset spikes detected in the specified time range.")
-    else:
-        num_timestamps = len(result.get("reset_timestamps", []))
-        num_entities = result.get("entities_processed", 0)
-        entries_deleted = result.get("entries_deleted", 0)
-
-        if dry_run:
-            lines.append(
-                f"Found **{num_timestamps}** spike timestamp(s) affecting **{num_entities}** sensors."
-            )
-            lines.append("")
-            lines.append("**Would delete entries at:**")
-            for ts in result.get("reset_timestamps", []):
-                lines.append(f"- {ts}")
-            lines.append("")
-            lines.append("Run with `dry_run: false` to delete these entries.")
-        else:
-            lines.append(f"✅ Deleted **{entries_deleted}** statistics entries.")
-            lines.append("")
-            lines.append(
-                f"Cleaned up spikes at {num_timestamps} timestamp(s) from {num_entities} sensors."
-            )
-            lines.append("")
-            lines.append("Your Energy Dashboard should now display correctly.")
-
-    message = "\n".join(lines)
-
-    await hass.services.async_call(
-        "persistent_notification",
-        "create",
-        {
-            "title": title,
-            "message": message,
-            "notification_id": "span_panel_spike_cleanup",
-        },
-    )
