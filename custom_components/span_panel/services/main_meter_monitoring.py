@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.components.sensor import SensorStateClass
-from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, State, callback
 from homeassistant.helpers.event import (
     EventStateChangedData,
     async_track_state_change_event,
@@ -51,7 +51,7 @@ def find_main_meter_entity(hass: HomeAssistant) -> str | None:
     return None
 
 
-async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> None:
+async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> CALLBACK_TYPE | None:
     """Set up monitoring of the main meter for firmware reset detection.
 
     Automatically finds the main meter consumed energy sensor and sets up
@@ -60,12 +60,15 @@ async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> None:
     Args:
         hass: Home Assistant instance.
 
+    Returns:
+        Unsubscribe callback to remove the listener, or None if setup failed.
+
     """
     main_meter_entity_id = find_main_meter_entity(hass)
 
     if not main_meter_entity_id:
         _LOGGER.debug("Main meter consumed energy sensor not found - monitoring will not be set up")
-        return
+        return None
 
     @callback
     def _async_main_meter_state_changed(event: Event[EventStateChangedData]) -> None:
@@ -110,8 +113,8 @@ async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> None:
                 e,
             )
 
-    # Register listener
-    async_track_state_change_event(
+    # Register listener and store the unsubscribe callback
+    unsub = async_track_state_change_event(
         hass,
         [main_meter_entity_id],
         _async_main_meter_state_changed,
@@ -120,6 +123,7 @@ async def async_setup_main_meter_monitoring(hass: HomeAssistant) -> None:
         "Set up main meter monitoring for firmware reset detection on %s",
         main_meter_entity_id,
     )
+    return unsub
 
 
 async def _create_reset_notification(
