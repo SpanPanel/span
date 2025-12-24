@@ -13,11 +13,20 @@ export_synthetic_config:
 cleanup_energy_spikes:
   name: Cleanup Energy Spikes
   description: >
-    Detect and remove negative energy spikes from all SPAN energy sensors caused by panel
-    firmware updates or resets. Uses the main meter to detect reset timestamps where the
-    cumulative energy value decreased (which violates TOTAL_INCREASING behavior).
-    All SPAN energy sensor entries at those timestamps will be deleted.
+    Detect and remove negative energy spikes from a specific SPAN panel's energy sensors
+    caused by firmware updates or resets. Uses the main meter to detect reset timestamps
+    where the cumulative energy value decreased (which violates TOTAL_INCREASING behavior).
+    All energy sensor entries for that panel at those timestamps will be deleted.
   fields:
+    config_entry_id:
+      name: Panel Config Entry ID
+      description: >
+        The config entry ID of the SPAN panel to clean up. Find this in Settings → Devices &
+        Services → SPAN Panel → click the panel → look at the URL for the config entry ID.
+      required: true
+      selector:
+        config_entry:
+          integration: span_panel
     days_back:
       name: Days to Scan
       description: Number of days in the past to scan for spikes. Defaults to 1 (last 24 hours).
