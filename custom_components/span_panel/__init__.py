@@ -307,7 +307,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Set up main meter monitoring for firmware reset detection
         # This needs to run after sensors are created so we can find the main meter entity
-        await async_setup_main_meter_monitoring(hass)
+        unsub_main_meter = await async_setup_main_meter_monitoring(hass, entry.entry_id)
+        if unsub_main_meter:
+            entry.async_on_unload(unsub_main_meter)
 
         # Migration detection moved to coordinator update cycle
 
