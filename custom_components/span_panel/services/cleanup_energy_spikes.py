@@ -16,17 +16,11 @@ import logging
 from typing import Any, Literal
 
 from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.db_schema import (
-    Statistics,
-    StatisticsMeta,
-    StatisticsShortTerm,
-)
 from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.event import async_call_later
-from homeassistant.helpers.recorder import session_scope
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
@@ -774,8 +768,43 @@ async def _adjust_statistics_sums(
                         )
                         continue
 
-                    # Calculate adjustment needed (add back the drop)
-                    adjustment = prev_sum - current_sum
+                    # Calculate discontinuity (always needed to fix the drop)
+                    discontinuity = prev_sum - current_sum
+
+                    # Try to enhance adjustment with missing energy estimate
+                    # Look for next entry to calculate post-reset consumption rate
+                    missing_energy = 0.0
+                    if i + 1 < len(sensor_stats):
+                        next_entry = sensor_stats[i + 1]
+                        next_sum = next_entry.get("sum")
+
+                        if next_sum is not None and next_sum > current_sum:
+                            # Calculate rate from post-reset behavior
+                            next_time = dt_util.utc_from_timestamp(next_entry["start"])
+                            time_delta_hours = (next_time - entry_time).total_seconds() / 3600
+
+                            if time_delta_hours > 0:
+                                rate_wh_per_hour = (next_sum - current_sum) / time_delta_hours
+
+                                # Calculate gap duration between last good and spike
+                                prev_time = dt_util.utc_from_timestamp(prev_entry["start"])
+                                gap_duration_hours = (entry_time - prev_time).total_seconds() / 3600
+
+                                # Estimate missing energy during gap
+                                missing_energy = rate_wh_per_hour * gap_duration_hours
+
+                                _LOGGER.debug(
+                                    "ADJUST: Enhanced calculation for %s: "
+                                    "rate=%.2f Wh/hr (from next entry), gap=%.2f hr, "
+                                    "missing_energy=%.2f Wh",
+                                    entity_id,
+                                    rate_wh_per_hour,
+                                    gap_duration_hours,
+                                    missing_energy,
+                                )
+
+                    # Total adjustment = fix discontinuity + recover missing energy
+                    adjustment = discontinuity + missing_energy
 
                     # Any negative delta in a TOTAL_INCREASING sensor is invalid
                     # and should be corrected, regardless of size
@@ -785,21 +814,42 @@ async def _adjust_statistics_sums(
                     # Log the entry times for debugging
                     prev_time_local = dt_util.as_local(prev_time)
                     entry_time_local = dt_util.as_local(entry_time)
-                    _LOGGER.info(
-                        "ADJUST: Found drop in %s (iteration %d): "
-                        "prev_entry[%s / %s]=%.2f, current_entry[%s / %s]=%.2f, "
-                        "delta=%.2f, adjustment=+%.2f",
-                        entity_id,
-                        iteration,
-                        prev_time.isoformat(),
-                        prev_time_local.strftime("%Y-%m-%d %I:%M %p"),
-                        prev_sum,
-                        entry_time.isoformat(),
-                        entry_time_local.strftime("%Y-%m-%d %I:%M %p"),
-                        current_sum,
-                        prev_sum - current_sum,
-                        adjustment,
-                    )
+
+                    if missing_energy > 0:
+                        _LOGGER.info(
+                            "ADJUST: Found drop in %s (iteration %d): "
+                            "prev_entry[%s / %s]=%.2f, current_entry[%s / %s]=%.2f, "
+                            "delta=%.2f, discontinuity=+%.2f, missing_energy=+%.2f, "
+                            "total_adjustment=+%.2f",
+                            entity_id,
+                            iteration,
+                            prev_time.isoformat(),
+                            prev_time_local.strftime("%Y-%m-%d %I:%M %p"),
+                            prev_sum,
+                            entry_time.isoformat(),
+                            entry_time_local.strftime("%Y-%m-%d %I:%M %p"),
+                            current_sum,
+                            prev_sum - current_sum,
+                            discontinuity,
+                            missing_energy,
+                            adjustment,
+                        )
+                    else:
+                        _LOGGER.info(
+                            "ADJUST: Found drop in %s (iteration %d): "
+                            "prev_entry[%s / %s]=%.2f, current_entry[%s / %s]=%.2f, "
+                            "delta=%.2f, adjustment=+%.2f (no next entry for rate calculation)",
+                            entity_id,
+                            iteration,
+                            prev_time.isoformat(),
+                            prev_time_local.strftime("%Y-%m-%d %I:%M %p"),
+                            prev_sum,
+                            entry_time.isoformat(),
+                            entry_time_local.strftime("%Y-%m-%d %I:%M %p"),
+                            current_sum,
+                            prev_sum - current_sum,
+                            adjustment,
+                        )
 
                     # Call the recorder's async_adjust_statistics directly
                     # Energy sensors use Wh as native unit
@@ -868,236 +918,3 @@ async def _adjust_statistics_sums(
 
     _LOGGER.info("ADJUST: Completed - made %d total adjustment(s)", total_adjustments)
     return total_adjustments, adjustments_made
-
-
-async def _delete_statistics_entries(
-    hass: HomeAssistant,
-    span_energy_sensors: list[str],
-    reset_timestamps: list[datetime],
-) -> int:
-    """Delete statistics entries at the specified timestamps.
-
-    Returns the number of entries deleted.
-
-    Raises:
-        Exception: If deletion fails.
-
-    """
-    _LOGGER.info("_delete_statistics_entries called")
-
-    recorder = get_instance(hass)
-    _LOGGER.info("Got recorder instance, calling sync delete function")
-
-    # Run deletion in executor thread (required for database operations)
-    entries_deleted = await recorder.async_add_executor_job(
-        _delete_statistics_entries_sync,
-        hass,
-        span_energy_sensors,
-        reset_timestamps,
-    )
-    _LOGGER.info("Sync delete returned %d", entries_deleted)
-
-    return entries_deleted
-
-
-def _delete_statistics_entries_sync(
-    hass: HomeAssistant,
-    span_energy_sensors: list[str],
-    reset_timestamps: list[datetime],
-) -> int:
-    """Delete statistics entries synchronously (runs in executor)."""
-    entries_deleted = 0
-
-    _LOGGER.info(
-        "Starting deletion for %d sensors at %d reset timestamp(s)",
-        len(span_energy_sensors),
-        len(reset_timestamps),
-    )
-
-    # Use session_scope for proper transaction handling (commits on exit, rollback on error)
-    try:
-        with session_scope(hass=hass) as session:
-            # Get metadata IDs for all sensors
-            metadata_query = session.query(StatisticsMeta).filter(
-                StatisticsMeta.statistic_id.in_(span_energy_sensors)
-            )
-            metadata_map = {m.statistic_id: m.id for m in metadata_query.all()}
-
-            _LOGGER.info(
-                "Found %d metadata entries for %d sensors",
-                len(metadata_map),
-                len(span_energy_sensors),
-            )
-
-            # Log missing metadata entries
-            missing_metadata = set(span_energy_sensors) - set(metadata_map.keys())
-            if missing_metadata:
-                _LOGGER.warning(
-                    "Missing metadata entries for %d sensor(s): %s",
-                    len(missing_metadata),
-                    missing_metadata,
-                )
-
-            for reset_time in reset_timestamps:
-                # Convert to timestamp for comparison
-                # reset_time is already hour-aligned from hourly stats detection
-                reset_ts = reset_time.timestamp()
-
-                # The Energy Dashboard calculates bar "X:00 - Y:00" = sum[Y:00] - sum[X:00]
-                # A firmware reset creates a discontinuity in sum values:
-                #   - Before reset: high cumulative sum
-                #   - After reset: low cumulative sum (panel counter reset)
-                #
-                # To fully remove the spike, we need to delete entries so that NO bar
-                # can span from a "high" entry to a "low" entry. The dashboard won't
-                # show bars for periods with missing data.
-                #
-                # Strategy: Delete a window of entries covering:
-                #   - 2 hours BEFORE the detected reset (captures the last "high" entries)
-                #   - The reset hour itself
-                #   - 2 hours AFTER the reset (captures early "low" entries and any recovery spike)
-                # Total: ~5 hour window to create a clean gap
-
-                window_before = 2 * 3600  # 2 hours before
-                window_after = 2 * 3600  # 2 hours after
-
-                # For short-term stats (5-minute), delete within the same window
-                short_term_window_start = reset_ts - window_before
-                short_term_window_end = reset_ts + window_after
-
-                # For long-term (hourly) stats, same window with small buffer
-                long_term_window_start = reset_ts - window_before - 120
-                long_term_window_end = reset_ts + window_after + 120
-
-                # Log in local time for user visibility
-                local_time = dt_util.as_local(reset_time)
-                start_local = dt_util.as_local(dt_util.utc_from_timestamp(reset_ts - window_before))
-                end_local = dt_util.as_local(dt_util.utc_from_timestamp(reset_ts + window_after))
-                _LOGGER.info(
-                    "Processing spike at %s (local: %s). "
-                    "Will delete entries in 5-hour window from %s to %s.",
-                    reset_time.isoformat(),
-                    local_time.isoformat(),
-                    start_local.isoformat(),
-                    end_local.isoformat(),
-                )
-
-                for entity_id in span_energy_sensors:
-                    if entity_id not in metadata_map:
-                        _LOGGER.debug(
-                            "Skipping %s - no metadata entry found",
-                            entity_id,
-                        )
-                        continue
-
-                    metadata_id = metadata_map[entity_id]
-
-                    # First, query to see what entries exist (for debugging)
-                    # Short-term uses 5-minute window, long-term uses hour-aligned window
-                    short_term_entries = (
-                        session.query(StatisticsShortTerm)
-                        .filter(
-                            StatisticsShortTerm.metadata_id == metadata_id,
-                            StatisticsShortTerm.start_ts >= short_term_window_start,
-                            StatisticsShortTerm.start_ts <= short_term_window_end,
-                        )
-                        .all()
-                    )
-                    short_term_count = len(short_term_entries)
-
-                    long_term_entries = (
-                        session.query(Statistics)
-                        .filter(
-                            Statistics.metadata_id == metadata_id,
-                            Statistics.start_ts >= long_term_window_start,
-                            Statistics.start_ts <= long_term_window_end,
-                        )
-                        .all()
-                    )
-                    long_term_count = len(long_term_entries)
-
-                    _LOGGER.info(
-                        "Found %d short-term and %d long-term entries for %s at %s (local: %s)",
-                        short_term_count,
-                        long_term_count,
-                        entity_id,
-                        reset_time.isoformat(),
-                        dt_util.as_local(reset_time).isoformat(),
-                    )
-
-                    # Log actual timestamps found for debugging
-                    if short_term_entries:
-                        _LOGGER.debug(
-                            "Short-term entry timestamps: %s",
-                            [entry.start_ts for entry in short_term_entries[:5]],  # First 5
-                        )
-                    if long_term_entries:
-                        _LOGGER.debug(
-                            "Long-term entry timestamps: %s",
-                            [entry.start_ts for entry in long_term_entries[:5]],  # First 5
-                        )
-
-                    # Delete from short-term statistics (5-minute window)
-                    deleted_short = (
-                        session.query(StatisticsShortTerm)
-                        .filter(
-                            StatisticsShortTerm.metadata_id == metadata_id,
-                            StatisticsShortTerm.start_ts >= short_term_window_start,
-                            StatisticsShortTerm.start_ts <= short_term_window_end,
-                        )
-                        .delete(synchronize_session=False)
-                    )
-
-                    # Delete from long-term statistics (hour-aligned window)
-                    deleted_long = (
-                        session.query(Statistics)
-                        .filter(
-                            Statistics.metadata_id == metadata_id,
-                            Statistics.start_ts >= long_term_window_start,
-                            Statistics.start_ts <= long_term_window_end,
-                        )
-                        .delete(synchronize_session=False)
-                    )
-
-                    # Flush to ensure deletes are processed before commit
-                    session.flush()
-
-                    total_deleted = deleted_short + deleted_long
-                    if total_deleted > 0:
-                        _LOGGER.info(
-                            "Deleted %d entries for %s at %s (local: %s) - short: %d, long: %d",
-                            total_deleted,
-                            entity_id,
-                            reset_time.isoformat(),
-                            dt_util.as_local(reset_time).isoformat(),
-                            deleted_short,
-                            deleted_long,
-                        )
-                        entries_deleted += total_deleted
-                    else:
-                        _LOGGER.warning(
-                            "No entries deleted for %s at %s (local: %s) despite finding "
-                            "%d short-term entries (window: %.1f-%.1f) and "
-                            "%d long-term entries (window: %.1f-%.1f)",
-                            entity_id,
-                            reset_time.isoformat(),
-                            dt_util.as_local(reset_time).isoformat(),
-                            short_term_count,
-                            short_term_window_start,
-                            short_term_window_end,
-                            long_term_count,
-                            long_term_window_start,
-                            long_term_window_end,
-                        )
-
-            _LOGGER.info("Committed deletion of %d statistics entries", entries_deleted)
-
-    except Exception as e:
-        _LOGGER.error(
-            "Error during statistics deletion: %s",
-            e,
-            exc_info=True,
-        )
-        raise
-
-    return entries_deleted

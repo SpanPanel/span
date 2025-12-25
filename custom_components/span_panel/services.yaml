@@ -17,10 +17,10 @@ cleanup_energy_spikes:
     spikes from a specific SPAN panel's energy sensors caused by firmware updates or resets.
     Uses the main meter to detect reset timestamps where the cumulative energy value decreased.
     Adjusts the statistics sum values to restore continuity, eliminating spikes from the energy
-    Dashboard without data loss. Only processes statistics within the specified time range.
-    This works by looking for decreasing sum in the TOTAL_INCREASING main meter consumed
-    energy and applies each sensor's difference between the reported value and previous
-    higher value to during the spike time.
+    Dashboard. Only processes statistics within the specified time range.
+    For each sensor, calculates the adjustment needed to fix the discontinuity. When available,
+    also estimates missing energy during the gap by analyzing post-reset consumption rates,
+    providing more accurate energy accounting.
   fields:
     config_entry_id:
       name: Panel Config Entry ID
