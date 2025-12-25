@@ -43,6 +43,7 @@ from .options import (
 from .services import (
     async_setup_cleanup_energy_spikes_service,
     async_setup_main_meter_monitoring,
+    async_setup_undo_stats_adjustments_service,
 )
 from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelAuthError, set_async_delay_func
@@ -304,10 +305,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Register services
         await async_setup_cleanup_energy_spikes_service(hass)
+        await async_setup_undo_stats_adjustments_service(hass)
 
         # Set up main meter monitoring for firmware reset detection
         # This needs to run after sensors are created so we can find the main meter entity
-        await async_setup_main_meter_monitoring(hass)
+        unsub_main_meter = await async_setup_main_meter_monitoring(hass, entry.entry_id)
+        if unsub_main_meter:
+            entry.async_on_unload(unsub_main_meter)
 
         # Migration detection moved to coordinator update cycle
 
