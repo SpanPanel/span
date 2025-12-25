@@ -13,27 +13,41 @@ export_synthetic_config:
 cleanup_energy_spikes:
   name: Cleanup Energy Spikes
   description: >
-    Detect and remove negative energy spikes from all SPAN energy sensors caused by panel
-    firmware updates or resets. Uses the main meter to detect reset timestamps where the
-    cumulative energy value decreased (which violates TOTAL_INCREASING behavior).
-    All SPAN energy sensor entries at those timestamps will be deleted.
+    Detect and fix negative energy spikes from a specific SPAN panel's energy sensors
+    caused by firmware updates or resets. Uses the main meter to detect reset timestamps
+    where the cumulative energy value decreased. Adjusts the statistics sum values to
+    restore continuity, eliminating spikes from the Energy Dashboard without data loss.
+    Only processes statistics within the specified time range.
   fields:
-    days_back:
-      name: Days to Scan
-      description: Number of days in the past to scan for spikes. Defaults to 1 (last 24 hours).
-      required: false
-      default: 1
+    config_entry_id:
+      name: Panel Config Entry ID
+      description: >
+        The config entry ID of the SPAN panel to clean up.
+      required: true
       selector:
-        number:
-          min: 1
-          max: 365
-          mode: box
-          unit_of_measurement: "days"
+        config_entry:
+          integration: span_panel
+    start_time:
+      name: Start Time
+      description: >
+        Local start date and time for the time range to scan (down to seconds).
+        Only statistics within this time range will be processed.
+      required: true
+      selector:
+        datetime:
+    end_time:
+      name: End Time
+      description: >
+        Local end date and time for the time range to scan (down to seconds).
+        Must be after start_time. Only statistics within this time range will be processed.
+      required: true
+      selector:
+        datetime:
     dry_run:
       name: Dry Run
       description: >
-        Preview spikes without deleting. Returns list of what would be deleted.
-        Defaults to true for safety - set to false to actually delete the entries.
+        Preview spikes without fixing. Returns list of detected spikes and adjustments.
+        Defaults to true for safety - set to false to actually apply the corrections.
       required: false
       default: true
       selector:
