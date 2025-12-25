@@ -229,34 +229,38 @@ will eventually expose.
 
 ### Energy Dashboard Spikes After Firmware Updates
 
-When the SPAN panel undergoes a firmware update or reset, it may temporarily report incorrect energy values. This causes massive spikes (positive or negative)
-in the Home Assistant Energy Dashboard.
+When the SPAN panel undergoes a firmware update or reset, it may report decreased energy values in otherwise `TOTAL_INCREASING` sensors, losing some range of
+data. This errant drop causes a massive spike in the Home Assistant Energy Dashboard. This issue is on the SPAN firmware/cloud side and the only remedy we have
+is to adjust Home Assistant statistics for SPAN sensors upward to their previous value. That adjustment is carried forward for all future stat-reporting times.
 
 **Symptoms:**
 
 - Huge energy consumption spikes appearing after panel firmware updates
-- Charts showing unrealistic values that dwarf normal usage
+- Charts showing unrealistic untracked values unrelated to a single sensor that dwarf normal usage
 - Negative energy values in statistics
 
 **Solution:**
 
-Use the built-in cleanup service to remove the problematic statistics entries:
+Use the Developer Tools to adjust individual statistics. This method allows you greater control.
 
-1. Go to **Developer Tools → Services**
-2. Search for `span_panel.cleanup_energy_spikes`
-3. First run with `dry_run: true` to preview what will be deleted
-4. Review the persistent notification showing affected timestamps
-5. Run again with `dry_run: false` to delete the problematic entries
+OR
 
-```yaml
-service: span_panel.cleanup_energy_spikes
-data:
-  days_back: 1 # Scan last 24 hours (up to 365 days)
-  dry_run: false # Set to false to actually delete
-```
+Use the cleanup service to adjust negative statistics in `TOTAL_INCREASING` entries (Beta):
 
-**Note:** The integration automatically monitors for firmware resets and will send a notification when one is detected, prompting you to run the cleanup
-service.
+1. **Backup the system** - Create a backup of your Home Assistant instance before making any changes.
+2. **Verify the spike** - Go to **Developer Tools → Statistics** and search for the main meter consumed energy sensor
+   (`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike caused by negative value and note the timestamp
+3. Go to **Developer Tools → Actions**
+4. Search for `span_panel.cleanup_energy_spikes`
+5. Set `start_time` and `end_time` to cover the time range where the spike occurred (use the timestamp from step 2)
+6. First run with `dry_run: true` to preview what will be adjusted (important, save the JSON in case you need to undo with undo_stats_adjustment)
+7. Review the persistent notification showing affected timestamps in the JSON
+8. Run again with `dry_run: false` to adjust the problematic entries (uses the negative delta in each sensor's sum to adjust stats upward)
+9. Fine tune using the statistics adjustments if necessary
+
+The spike cleanup service looks at the energy usage just after the spike to extrapolate energy usage over any previous down time prior to the spike.
+
+**Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.
 
 ### Common Issues
 
