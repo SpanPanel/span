@@ -287,7 +287,7 @@ Note: The sensor key remains the same (`span_sp3-simulation-001_240v_power`) reg
 | Legacy (no prefix) migrating all sensors to prefix/friendly only | Update to device prefix friendly                 |
 | Panel-level sensor (see filter, non-legacy)                      | Excluded from migration                          |
 | User-customized entity ID (differs from expected, non-legacy)    | Excluded from migration                          |
-| Non-legacy pattern flip (friendly ↔ circuit) post-install       | Not supported in UI (install with desired style) |
+| Non-legacy pattern flip (friendly ↔ circuit) post-install        | Not supported in UI (install with desired style) |
 
 ## Benefits
 

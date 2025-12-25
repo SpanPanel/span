@@ -1,6 +1,9 @@
 {
   "domain": "span_panel",
   "name": "Span Panel",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@SpanPanel"
   ],
@@ -11,7 +14,7 @@
   "requirements": [
     "span-panel-api~=1.1.13"
   ],
-  "version": "1.2.8",
+  "version": "1.2.9",
   "zeroconf": [
     {
       "type": "_span._tcp.local."

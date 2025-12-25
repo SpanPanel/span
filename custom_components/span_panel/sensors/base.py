@@ -14,7 +14,6 @@ from homeassistant.components.sensor import (
     RestoreSensor,
     SensorEntity,
     SensorEntityDescription,
-    SensorStateClass,
 )
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
@@ -505,31 +504,7 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         # Panel is online - use normal update logic from parent class
         super()._update_native_value()
 
-        if not self._validate_total_increasing(self._attr_native_value):
-            return
-
         self._track_valid_state(self._attr_native_value)
-
-    def _validate_total_increasing(self, value: StateType | date | Decimal | None) -> bool:
-        """Guard TOTAL_INCREASING sensors against decreasing values."""
-        state_class = getattr(self.entity_description, "state_class", None)
-        if (
-            state_class == SensorStateClass.TOTAL_INCREASING
-            and self._last_valid_state is not None
-            and isinstance(value, int | float | Decimal)
-        ):
-            new_value = float(value)
-            if new_value < self._last_valid_state:
-                _LOGGER.warning(
-                    "Ignored decreasing value for %s: new=%s < old=%s",
-                    self.entity_id or self._attr_unique_id,
-                    new_value,
-                    self._last_valid_state,
-                )
-                # Keep the last valid state (effectively extending grace period)
-                self._attr_native_value = self._last_valid_state
-                return False
-        return True
 
     def _track_valid_state(self, value: StateType | date | Decimal | None) -> None:
         """Update last valid state tracking when a numeric value is available."""
