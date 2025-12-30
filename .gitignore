@@ -26,3 +26,4 @@ env/
 htmlcov/
 .pytest_cache/
 docs/agile-readme.md
+.mypy_cache/
