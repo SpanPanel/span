@@ -1,12 +1,14 @@
 """Span Panel API - Updated to use span-panel-api package."""
 
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from datetime import datetime
 import logging
 import os
-from typing import Any
+from typing import Any, TypeVar
 import uuid
 
+from httpcore import RemoteProtocolError
 from span_panel_api import SpanPanelClient, set_async_delay_func
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -34,6 +36,7 @@ from .span_panel_hardware_status import SpanPanelHardwareStatus
 from .span_panel_storage_battery import SpanPanelStorageBattery
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 class SpanPanelApi:
@@ -203,6 +206,47 @@ class SpanPanelApi:
             # Mark as authenticated since we have a token - avoid unnecessary re-auth
             self._authenticated = True
 
+    async def _recreate_client(self, reason: str) -> None:
+        """Recreate the SpanPanelClient after a connection-level failure."""
+        _LOGGER.warning(
+            "[SpanPanelApi] Recreating SpanPanelClient for host=%s after %s",
+            self.host,
+            reason,
+        )
+        if self._client is not None:
+            try:
+                await self._client.close()
+            except Exception as e:
+                _LOGGER.warning("Error closing API client before recreate: %s", e)
+        self._client = None
+        self._create_client()
+        self._client_created = True
+
+    async def _call_with_protocol_retry(
+        self, operation: Callable[[], Awaitable[T]], description: str
+    ) -> T:
+        """Retry once on httpcore RemoteProtocolError by recreating the client."""
+        try:
+            return await operation()
+        except RemoteProtocolError as err:
+            _LOGGER.warning(
+                "[SpanPanelApi] Remote protocol error during %s: %s. Recreating client and retrying.",
+                description,
+                err,
+            )
+            await self._recreate_client("remote protocol error")
+            try:
+                return await operation()
+            except RemoteProtocolError as retry_err:
+                _LOGGER.error(
+                    "[SpanPanelApi] Remote protocol error during %s after retry: %s",
+                    description,
+                    retry_err,
+                )
+                raise SpanPanelConnectionError(
+                    f"{description} failed after retry: {retry_err}"
+                ) from retry_err
+
     def _ensure_client_open(self) -> None:
         # Check if client was explicitly closed (None and we've tried to create it before)
         if self._client is None and hasattr(self, "_client_created"):
@@ -286,8 +330,11 @@ class SpanPanelApi:
             try:
                 # Generate a unique client name for re-authentication
                 client_name = f"home-assistant-{uuid.uuid4()}"
-                auth_response = await self._client.authenticate(
-                    client_name, "Home Assistant Local Span Integration"
+                auth_response = await self._call_with_protocol_retry(
+                    lambda: self._client.authenticate(
+                        client_name, "Home Assistant Local Span Integration"
+                    ),
+                    "authentication",
                 )
                 self.access_token = auth_response.access_token
                 self._authenticated = True
@@ -368,7 +415,10 @@ class SpanPanelApi:
             raise SpanPanelAPIError("API client has been closed")
         self._debug_check_client("get_status_data")
         try:
-            status_response = await self._client.get_status()
+            status_response = await self._call_with_protocol_retry(
+                self._client.get_status,
+                "get_status_data",
+            )
 
             # Convert the attrs model to dict and then to our data class
             status_dict = status_response.to_dict()
@@ -401,7 +451,10 @@ class SpanPanelApi:
         self._debug_check_client("get_panel_data")
         try:
             await self._ensure_authenticated()
-            panel_response = await self._client.get_panel_state()
+            panel_response = await self._call_with_protocol_retry(
+                self._client.get_panel_state,
+                "get_panel_data",
+            )
 
             # Convert the attrs model to dict and deep copy before processing
             raw_data: Any = deepcopy(panel_response.to_dict())
@@ -445,7 +498,10 @@ class SpanPanelApi:
         self._debug_check_client("get_circuits_data")
         try:
             await self._ensure_authenticated()
-            circuits_response = await self._client.get_circuits()
+            circuits_response = await self._call_with_protocol_retry(
+                self._client.get_circuits,
+                "get_circuits_data",
+            )
 
             # Extract circuits from the response
             raw_circuits_data = circuits_response.circuits.additional_properties
@@ -497,7 +553,10 @@ class SpanPanelApi:
         self._debug_check_client("get_storage_battery_data")
         try:
             await self._ensure_authenticated()
-            storage_response = await self._client.get_storage_soe()
+            storage_response = await self._call_with_protocol_retry(
+                self._client.get_storage_soe,
+                "get_storage_battery_data",
+            )
 
             # Extract SOE data from the response
             storage_battery_data = storage_response.soe.to_dict()
@@ -535,7 +594,10 @@ class SpanPanelApi:
         self._debug_check_client("set_relay")
         try:
             await self._ensure_authenticated()
-            await self._client.set_circuit_relay(circuit.circuit_id, state.name)
+            await self._call_with_protocol_retry(
+                lambda: self._client.set_circuit_relay(circuit.circuit_id, state.name),
+                "set_relay",
+            )
 
         except SpanPanelRetriableError as e:
             _LOGGER.warning("Retriable error setting relay state (will retry): %s", e)
@@ -564,7 +626,10 @@ class SpanPanelApi:
         self._debug_check_client("set_priority")
         try:
             await self._ensure_authenticated()
-            await self._client.set_circuit_priority(circuit.circuit_id, priority.name)
+            await self._call_with_protocol_retry(
+                lambda: self._client.set_circuit_priority(circuit.circuit_id, priority.name),
+                "set_priority",
+            )
 
         except SpanPanelRetriableError as e:
             _LOGGER.warning("Retriable error setting priority (will retry): %s", e)
@@ -605,7 +670,10 @@ class SpanPanelApi:
 
         try:
             # Use the client's parallel batch method
-            raw_data = await self._client.get_all_data(include_battery=include_battery)
+            raw_data = await self._call_with_protocol_retry(
+                lambda: self._client.get_all_data(include_battery=include_battery),
+                "get_all_data",
+            )
 
             # Process data using the same logic as individual methods
             result: dict[str, Any] = {}
