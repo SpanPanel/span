@@ -1,9 +1,11 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from httpcore import RemoteProtocolError
 import pytest
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
+    SpanPanelConnectionError,
     SpanPanelRetriableError,
     SpanPanelServerError,
 )
@@ -126,6 +128,38 @@ async def test_get_status_data():
 
     result = await api.get_status_data()
     assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_get_all_data_retries_on_remote_protocol_error():
+    api = SpanPanelApi("host")
+    mock_client = MagicMock()
+    mock_client.get_all_data = AsyncMock(
+        side_effect=[RemoteProtocolError("boom"), {}]
+    )
+    api._client = mock_client
+    api._ensure_client_open = MagicMock()
+    api._recreate_client = AsyncMock()
+
+    result = await api.get_all_data()
+
+    assert result == {}
+    api._recreate_client.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_all_data_remote_protocol_error_after_retry():
+    api = SpanPanelApi("host")
+    mock_client = MagicMock()
+    mock_client.get_all_data = AsyncMock(side_effect=RemoteProtocolError("boom"))
+    api._client = mock_client
+    api._ensure_client_open = MagicMock()
+    api._recreate_client = AsyncMock()
+
+    with pytest.raises(SpanPanelConnectionError):
+        await api.get_all_data()
+
+    api._recreate_client.assert_awaited_once()
 
 
 @pytest.mark.asyncio
