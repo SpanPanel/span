@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30] - 2025-12-31
+
+### 🔄 Changed
+
+- **Bump span-panel-api to v1.1.14**:  Recognize panel Keep-Alive at 5 sec, Handle httpx.RemoteProtocolError defensively, Thanks to @NickBorgersOnLowSecurityNode.
+
 ## [1.29] - 2025-12-25
 
 ### ✨ New Features
