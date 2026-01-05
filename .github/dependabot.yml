@@ -8,6 +8,29 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 1
+    allow:
+      - dependency-type: "all"
+    groups:
+      # Group development dependencies together
+      dev-dependencies:
+        patterns:
+          - "pytest*"
+          - "mypy"
+          - "ruff"
+          - "bandit"
+          - "pre-commit"
+          - "isort"
+          - "pylint"
+          - "radon"
+          - "prettier"
+          - "python-direnv"
+          - "*-cov"
+          - "types-*"
+          - "homeassistant-stubs"
+          - "voluptuous-stubs"
+          - "pyright"
+    reviewers:
+      - "cayossarian"
     assignees:
       - "cayossarian"
     commit-message:
@@ -35,6 +58,8 @@ updates:
       day: "monday"
       time: "09:00"
     open-pull-requests-limit: 1
+    reviewers:
+      - "cayossarian"
     assignees:
       - "cayossarian"
     commit-message:
