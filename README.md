@@ -16,27 +16,18 @@ monitoring and control of your home's electrical system.
 
 This integration relies on the OpenAPI interface contract sourced from the SPAN Panel. The integration may break if SPAN changes the API in an incompatible way.
 
-We cannot provide technical support for either SPAN or your home's electrical system. The software is provided as-is with no warranty or guarantee of
-performance or suitability to your particular setting.
+The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
 This integration provides the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and the ability
 to control user-manageable panel circuits.
 
-## What's New
+## Major Upgrade
 
-### Major Upgrade
+**Before upgrading to version 1.2.x from a prior version, please backup your Home Assistant configuration and database.**
 
-**Before upgrading to version 1.2.x, please backup your Home Assistant configuration and database.** This version introduces significant architectural changes.
-While we've implemented migration logic to preserve your existing entities and automations, it's always recommended to have a backup before major upgrades.
+See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
 
-**OpenAPI Support**: The integration now uses the OpenAPI specification provided by the SPAN panel. This change provides a reliable foundation for future
-interface changes but some users have reported that newer panels might have closed off the interface (see trouble shooting). If and when SPAN provides
-additional support we may adapt.
-
-**New Features**: This version introduces net energy calculations, simulation support, configurable timeouts, SSL support, circuit name sync, and flexible
-entity naming patterns. See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
-
-### HACS Upgrade Process
+## HACS Upgrade Process
 
 When upgrading through HACS, you'll see a notification about the new version. Before clicking "Update":
 
@@ -51,7 +42,7 @@ If you encounter any issues during the upgrade, you can:
 - Check the [troubleshooting section](#troubleshooting) below
 - Open an issue on GitHub with details about your installation
 
-## Prerequisites
+### Prerequisites
 
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
@@ -324,6 +315,7 @@ Additional contributors:
 
 - pavandave
 - sargonas
+- NickBorgersOnLowSecurityNode
 
 ## Issues
 
