@@ -250,9 +250,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 - [Home Assistant Developer Docs](https://developers.home-assistant.io/)
 - [Home Assistant Integration Quality Scale](https://www.home-assistant.io/docs/quality_scale/)
-- [SPAN Panel API](https://github.com/SpanPanel/span) - This repository
 - Repository README.md - User-facing documentation
-- `developer_attribute_readme.md` - Developer notes
+- `developer_attribute_readme.md` - Developer notes on attributes
 
 ## Questions to Ask Before Starting
 
