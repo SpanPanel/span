@@ -154,7 +154,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """
 
     @abstractmethod
-    def _generate_friendly_name(self, span_panel: SpanPanel, description: T) -> str:
+    def _generate_friendly_name(self, span_panel: SpanPanel, description: T) -> str | None:
         """Generate friendly name for the sensor.
 
         Subclasses must implement this to define their naming strategy.
@@ -164,11 +164,11 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             description: The sensor description
 
         Returns:
-            Friendly name string
+            Friendly name string, or None to let HA use default behavior
 
         """
 
-    def _generate_panel_name(self, span_panel: SpanPanel, description: T) -> str:
+    def _generate_panel_name(self, span_panel: SpanPanel, description: T) -> str | None:
         """Generate panel name for the sensor (always uses panel circuit name).
 
         This method is used for name sync - it always uses the panel circuit name
@@ -194,7 +194,23 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             if circuit:
                 current_circuit_name = circuit.name
 
-                if self._previous_circuit_name is _NAME_UNSET:
+                # Check if user has customized the name in HA registry
+                # If so, skip sync - user's customization takes precedence
+                user_has_override = False
+                if self.entity_id:
+                    entity_registry = er.async_get(self.hass)
+                    entity_entry = entity_registry.async_get(self.entity_id)
+                    if entity_entry and entity_entry.name:
+                        user_has_override = True
+                        _LOGGER.debug(
+                            "User has customized name for %s, skipping sync",
+                            self.entity_id,
+                        )
+
+                if user_has_override:
+                    # Track panel name for future comparisons but don't trigger reload
+                    self._previous_circuit_name = current_circuit_name
+                elif self._previous_circuit_name is _NAME_UNSET:
                     # First update - sync to panel name
                     _LOGGER.info(
                         "First update: syncing sensor name to panel name '%s', requesting reload",
@@ -523,7 +539,23 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
             if circuit:
                 current_circuit_name = circuit.name
 
-                if self._previous_circuit_name is _NAME_UNSET:
+                # Check if user has customized the name in HA registry
+                # If so, skip sync - user's customization takes precedence
+                user_has_override = False
+                if self.entity_id:
+                    entity_registry = er.async_get(self.hass)
+                    entity_entry = entity_registry.async_get(self.entity_id)
+                    if entity_entry and entity_entry.name:
+                        user_has_override = True
+                        _LOGGER.debug(
+                            "User has customized name for %s, skipping sync",
+                            self.entity_id,
+                        )
+
+                if user_has_override:
+                    # Track panel name for future comparisons but don't trigger reload
+                    self._previous_circuit_name = current_circuit_name
+                elif self._previous_circuit_name is _NAME_UNSET:
                     # First update - sync to panel name
                     _LOGGER.info(
                         "First update: syncing energy sensor name to panel name '%s', requesting reload",

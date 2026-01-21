@@ -65,8 +65,11 @@ class SpanCircuitPowerSensor(
 
     def _generate_friendly_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
-    ) -> str:
-        """Generate friendly name for circuit power sensors based on user preferences."""
+    ) -> str | None:
+        """Generate friendly name for circuit power sensors based on user preferences.
+
+        Returns None when circuit.name is None to let HA use default naming behavior.
+        """
         circuit = span_panel.circuits.get(self.circuit_id)
         if not circuit:
             return construct_unmapped_friendly_name(
@@ -90,23 +93,31 @@ class SpanCircuitPowerSensor(
                 circuit_identifier = f"Circuit {self.circuit_id}"
         else:
             # Use friendly name format: "Kitchen Outlets Power"
+            # Return None when panel name is None to let HA use default behavior
+            if circuit.name is None:
+                return None
             circuit_identifier = circuit.name
 
         return f"{circuit_identifier} {description.name or 'Sensor'}"
 
     def _generate_panel_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
-    ) -> str:
-        """Generate panel name for circuit sensors (always uses panel circuit name)."""
+    ) -> str | None:
+        """Generate panel name for circuit sensors (always uses panel circuit name).
+
+        Returns None when circuit.name is None to let HA use default naming behavior.
+        """
         circuit = span_panel.circuits.get(self.circuit_id)
         if not circuit:
             return construct_unmapped_friendly_name(
                 self.circuit_id, str(description.name or "Sensor")
             )
 
-        # Always use panel name for sync
-        circuit_identifier = circuit.name
-        return f"{circuit_identifier} {description.name or 'Sensor'}"
+        # Return None when panel name is None to let HA use default behavior
+        if circuit.name is None:
+            return None
+
+        return f"{circuit.name} {description.name or 'Sensor'}"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the circuit power sensor."""
@@ -197,8 +208,11 @@ class SpanCircuitEnergySensor(
 
     def _generate_friendly_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
-    ) -> str:
-        """Generate friendly name for circuit energy sensors based on user preferences."""
+    ) -> str | None:
+        """Generate friendly name for circuit energy sensors based on user preferences.
+
+        Returns None when circuit.name is None to let HA use default naming behavior.
+        """
         circuit = span_panel.circuits.get(self.circuit_id)
         if not circuit:
             return f"Circuit {self.circuit_id} {description.name}"
@@ -220,21 +234,29 @@ class SpanCircuitEnergySensor(
                 circuit_identifier = f"Circuit {self.circuit_id}"
         else:
             # Use friendly name format: "Kitchen Outlets Power"
+            # Return None when panel name is None to let HA use default behavior
+            if circuit.name is None:
+                return None
             circuit_identifier = circuit.name
 
         return f"{circuit_identifier} {description.name}"
 
     def _generate_panel_name(
         self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
-    ) -> str:
-        """Generate panel name for circuit energy sensors (always uses panel circuit name)."""
+    ) -> str | None:
+        """Generate panel name for circuit energy sensors (always uses panel circuit name).
+
+        Returns None when circuit.name is None to let HA use default naming behavior.
+        """
         circuit = span_panel.circuits.get(self.circuit_id)
         if not circuit:
             return f"Circuit {self.circuit_id} {description.name}"
 
-        # Always use panel name for sync
-        circuit_identifier = circuit.name
-        return f"{circuit_identifier} {description.name}"
+        # Return None when panel name is None to let HA use default behavior
+        if circuit.name is None:
+            return None
+
+        return f"{circuit.name} {description.name}"
 
     def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
         """Get the data source for the circuit energy sensor."""
