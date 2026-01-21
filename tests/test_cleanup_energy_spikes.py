@@ -119,14 +119,23 @@ def mock_span_energy_sensors():
 class TestGetSpanEnergySensors:
     """Tests for _get_span_energy_sensors function."""
 
-    def test_finds_total_increasing_sensors(self, mock_hass, mock_span_energy_sensors):
+    def test_finds_total_increasing_sensors(
+        self, mock_hass, mock_span_energy_sensors, mock_entity_registry
+    ):
         """Test that only TOTAL_INCREASING sensors are returned."""
-        mock_hass.states.async_entity_ids.return_value = list(
-            mock_span_energy_sensors.keys()
-        )
+        # Set up entity registry with SPAN entities
+        entity_ids = list(mock_span_energy_sensors.keys())
+        registry = mock_entity_registry(entity_ids)
+
+        # Set up states
+        mock_hass.states.async_entity_ids.return_value = entity_ids
         mock_hass.states.get = lambda entity_id: mock_span_energy_sensors.get(entity_id)
 
-        result = _get_span_energy_sensors(mock_hass)
+        with patch(
+            "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+        ) as mock_er:
+            mock_er.return_value = registry
+            result = _get_span_energy_sensors(mock_hass)
 
         # Should find 3 TOTAL_INCREASING sensors (not the power sensor)
         assert len(result) == 3
@@ -135,30 +144,81 @@ class TestGetSpanEnergySensors:
         assert "sensor.span_panel_kitchen_consumed_energy" in result
         assert "sensor.span_panel_current_power" not in result
 
-    def test_ignores_non_span_sensors(self, mock_hass):
-        """Test that non-SPAN sensors are ignored."""
+    def test_ignores_non_span_sensors(self, mock_hass, mock_entity_registry):
+        """Test that non-SPAN sensors are ignored (not in span_panel config entry)."""
+        # Only register the span sensor in the entity registry
+        registry = mock_entity_registry(["sensor.span_panel_test_energy"])
+
+        # Create a mock entry for non-span sensor that returns None (not in registry)
+        original_async_get = registry.async_get
+
+        def mock_async_get_fn(entity_id):
+            if entity_id == "sensor.some_other_sensor":
+                return None  # Not a SPAN sensor
+            return original_async_get(entity_id)
+
+        registry.async_get = mock_async_get_fn
+
+        # Set up states for both sensors
         mock_hass.states.async_entity_ids.return_value = [
             "sensor.some_other_sensor",
             "sensor.span_panel_test_energy",
         ]
-        mock_hass.states.get.return_value = State(
-            "sensor.span_panel_test_energy",
+        mock_hass.states.get = lambda entity_id: State(
+            entity_id,
             "1000",
             {"state_class": SensorStateClass.TOTAL_INCREASING},
         )
 
-        result = _get_span_energy_sensors(mock_hass)
+        with patch(
+            "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+        ) as mock_er:
+            mock_er.return_value = registry
+            result = _get_span_energy_sensors(mock_hass)
 
+        # Only the SPAN sensor should be returned
         assert len(result) == 1
         assert "sensor.span_panel_test_energy" in result
 
-    def test_handles_no_sensors(self, mock_hass):
+    def test_handles_no_sensors(self, mock_hass, mock_entity_registry):
         """Test handling when no sensors exist."""
+        registry = mock_entity_registry([])
         mock_hass.states.async_entity_ids.return_value = []
 
-        result = _get_span_energy_sensors(mock_hass)
+        with patch(
+            "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+        ) as mock_er:
+            mock_er.return_value = registry
+            result = _get_span_energy_sensors(mock_hass)
 
         assert result == []
+
+    def test_finds_legacy_sensors_without_span_prefix(self, mock_hass, mock_entity_registry):
+        """Test that legacy sensors without span_panel_ prefix are found via registry."""
+        # Legacy sensors don't have span_panel_ prefix but ARE in the registry
+        legacy_sensors = [
+            "sensor.main_meter_consumed_energy",
+            "sensor.kitchen_consumed_energy",
+        ]
+        registry = mock_entity_registry(legacy_sensors)
+
+        mock_hass.states.async_entity_ids.return_value = legacy_sensors
+        mock_hass.states.get = lambda entity_id: State(
+            entity_id,
+            "5000" if "main_meter" in entity_id else "1000",
+            {"state_class": SensorStateClass.TOTAL_INCREASING},
+        )
+
+        with patch(
+            "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+        ) as mock_er:
+            mock_er.return_value = registry
+            result = _get_span_energy_sensors(mock_hass)
+
+        # Both legacy sensors should be found via registry lookup
+        assert len(result) == 2
+        assert "sensor.main_meter_consumed_energy" in result
+        assert "sensor.kitchen_consumed_energy" in result
 
 
 class TestFindMainMeterSensor:
@@ -198,6 +258,18 @@ class TestFindMainMeterSensor:
         result = _find_main_meter_sensor(sensors)
 
         assert result is None
+
+    def test_finds_legacy_main_meter_without_prefix(self):
+        """Test finding legacy main meter sensor without span_panel_ prefix."""
+        # Legacy naming pattern from pre-1.0.4 installations
+        sensors = [
+            "sensor.main_meter_consumed_energy",
+            "sensor.kitchen_consumed_energy",
+        ]
+
+        result = _find_main_meter_sensor(sensors)
+
+        assert result == "sensor.main_meter_consumed_energy"
 
 
 class TestServiceRegistration:
@@ -245,18 +317,23 @@ class TestCleanupEnergySpikes:
         assert "not a SPAN panel" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_no_sensors_found(self, mock_hass):
+    async def test_no_sensors_found(self, mock_hass, mock_entity_registry):
         """Test handling when no SPAN sensors are found."""
+        registry = mock_entity_registry([])
         mock_hass.states.async_entity_ids.return_value = []
         start_time, end_time = _get_test_time_range()
 
-        result = await cleanup_energy_spikes(
-            mock_hass,
-            config_entry_id=TEST_CONFIG_ENTRY_ID,
-            start_time=start_time,
-            end_time=end_time,
-            dry_run=True,
-        )
+        with patch(
+            "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+        ) as mock_er:
+            mock_er.return_value = registry
+            result = await cleanup_energy_spikes(
+                mock_hass,
+                config_entry_id=TEST_CONFIG_ENTRY_ID,
+                start_time=start_time,
+                end_time=end_time,
+                dry_run=True,
+            )
 
         assert result["entities_processed"] == 0
         assert result["error"] == "No SPAN energy sensors found"
@@ -266,6 +343,7 @@ class TestCleanupEnergySpikes:
         """Test handling when main meter is not found."""
         # Create sensor without "main_meter" in name
         entity_ids = ["sensor.span_panel_kitchen_consumed_energy"]
+        registry = mock_entity_registry(entity_ids)
         mock_hass.states.async_entity_ids.return_value = entity_ids
         mock_hass.states.get.return_value = State(
             "sensor.span_panel_kitchen_consumed_energy",
@@ -276,7 +354,7 @@ class TestCleanupEnergySpikes:
         with patch(
             "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
         ) as mock_er:
-            mock_er.return_value = mock_entity_registry(entity_ids)
+            mock_er.return_value = registry
             start_time, end_time = _get_test_time_range()
             result = await cleanup_energy_spikes(
                 mock_hass,
@@ -286,7 +364,94 @@ class TestCleanupEnergySpikes:
                 dry_run=True,
             )
 
-        assert "No main meter sensor found" in result["error"]
+        assert "No main meter sensor auto-detected" in result["error"]
+        # Should include available sensors in response
+        assert "available_sensors" in result
+        assert "sensor.span_panel_kitchen_consumed_energy" in result["available_sensors"]
+
+    @pytest.mark.asyncio
+    async def test_user_provided_main_meter_entity_id(
+        self, mock_hass, mock_entity_registry
+    ):
+        """Test using user-provided main_meter_entity_id parameter."""
+        # Create sensors including a renamed main meter
+        entity_ids = [
+            "sensor.my_custom_main_meter",  # User renamed this
+            "sensor.span_panel_kitchen_consumed_energy",
+        ]
+        registry = mock_entity_registry(entity_ids)
+        mock_hass.states.async_entity_ids.return_value = entity_ids
+        mock_hass.states.get = lambda entity_id: State(
+            entity_id,
+            "5000" if "custom_main_meter" in entity_id else "1000",
+            {"state_class": SensorStateClass.TOTAL_INCREASING},
+        )
+
+        # Mock recorder to return stable statistics (no spikes)
+        mock_stats = {
+            "sensor.my_custom_main_meter": [
+                {"start": 1733760000, "sum": 5000.0},
+                {"start": 1733763600, "sum": 5100.0},
+            ]
+        }
+
+        with (
+            patch(
+                "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+            ) as mock_er,
+            patch(
+                "custom_components.span_panel.services.cleanup_energy_spikes.get_instance"
+            ) as mock_get_instance,
+        ):
+            mock_er.return_value = registry
+            mock_recorder = MagicMock()
+            mock_recorder.async_add_executor_job = AsyncMock(return_value=mock_stats)
+            mock_get_instance.return_value = mock_recorder
+            start_time, end_time = _get_test_time_range()
+
+            result = await cleanup_energy_spikes(
+                mock_hass,
+                config_entry_id=TEST_CONFIG_ENTRY_ID,
+                start_time=start_time,
+                end_time=end_time,
+                dry_run=True,
+                main_meter_entity_id="sensor.my_custom_main_meter",
+            )
+
+        # Should succeed using the user-provided entity
+        assert "error" not in result or result.get("error") is None
+        assert result["entities_processed"] == 2
+
+    @pytest.mark.asyncio
+    async def test_invalid_user_provided_main_meter_entity_id(
+        self, mock_hass, mock_entity_registry
+    ):
+        """Test error when user provides invalid main_meter_entity_id."""
+        entity_ids = ["sensor.span_panel_kitchen_consumed_energy"]
+        registry = mock_entity_registry(entity_ids)
+        mock_hass.states.async_entity_ids.return_value = entity_ids
+        mock_hass.states.get.return_value = State(
+            "sensor.span_panel_kitchen_consumed_energy",
+            "1000",
+            {"state_class": SensorStateClass.TOTAL_INCREASING},
+        )
+
+        with patch(
+            "custom_components.span_panel.services.cleanup_energy_spikes.er.async_get"
+        ) as mock_er:
+            mock_er.return_value = registry
+            start_time, end_time = _get_test_time_range()
+            result = await cleanup_energy_spikes(
+                mock_hass,
+                config_entry_id=TEST_CONFIG_ENTRY_ID,
+                start_time=start_time,
+                end_time=end_time,
+                dry_run=True,
+                main_meter_entity_id="sensor.nonexistent_sensor",
+            )
+
+        assert "not a SPAN energy sensor" in result["error"]
+        assert "available_sensors" in result
 
     @pytest.mark.asyncio
     async def test_no_spikes_detected(

@@ -33,6 +33,9 @@ ICON = "mdi:chevron-down"
 
 _LOGGER = logging.getLogger(__name__)
 
+# Sentinel value to distinguish "never synced" from "circuit name is None"
+_NAME_UNSET: object = object()
+
 
 class SpanPanelSelectEntityDescriptionWrapper:
     """Wrapper class for Span Panel Select entities."""
@@ -105,8 +108,11 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
 
         if existing_entity_id:
             # Entity exists - always use panel name for sync
-            circuit_identifier = circuit.name
-            self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
+            # Return None when panel name is None to let HA use default behavior
+            if circuit.name is None:
+                self._attr_name = None
+            else:
+                self._attr_name = f"{circuit.name} {description.entity_description.name}"
         else:
             # Initial install - use flag-based name for entity_id generation
             use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
@@ -120,20 +126,23 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                     circuit_identifier = f"Circuit {circuit.tabs[0]}"
                 else:
                     circuit_identifier = f"Circuit {circuit_id}"
+                self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
             else:
                 # Use friendly name format: "Kitchen Outlets Priority"
-                circuit_identifier = name
-
-            self._attr_name = f"{circuit_identifier} {description.entity_description.name}"
+                # Return None when panel name is None to let HA use default behavior
+                if name is None:
+                    self._attr_name = None
+                else:
+                    self._attr_name = f"{name} {description.entity_description.name}"
 
         circuit = self._get_circuit()
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)
 
         # Store initial circuit name for change detection in auto-sync of names
-        # Only set to None if entity doesn't exist in registry (true first time)
+        # Use sentinel to distinguish "never synced" from "circuit name is None"
         if not existing_entity_id:
-            self._previous_circuit_name = None
+            self._previous_circuit_name: str | None | object = _NAME_UNSET
             _LOGGER.info("Select entity not in registry, will sync on first update")
         else:
             self._previous_circuit_name = circuit.name
@@ -212,8 +221,23 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         if circuit:
             current_circuit_name = circuit.name
 
-            # Only request reload if the circuit name has actually changed
-            if self._previous_circuit_name is None:
+            # Check if user has customized the name in HA registry
+            # If so, skip sync - user's customization takes precedence
+            user_has_override = False
+            if self.entity_id:
+                entity_registry = er.async_get(self.hass)
+                entity_entry = entity_registry.async_get(self.entity_id)
+                if entity_entry and entity_entry.name:
+                    user_has_override = True
+                    _LOGGER.debug(
+                        "User has customized name for %s, skipping sync",
+                        self.entity_id,
+                    )
+
+            if user_has_override:
+                # Track panel name for future comparisons but don't trigger reload
+                self._previous_circuit_name = current_circuit_name
+            elif self._previous_circuit_name is _NAME_UNSET:
                 # First update - sync to panel name
                 _LOGGER.info(
                     "First update: syncing entity name to panel name '%s' for select, requesting reload",
@@ -224,11 +248,6 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
                 # Request integration reload to persist name change
                 self.coordinator.request_reload()
             elif current_circuit_name != self._previous_circuit_name:
-                _LOGGER.info(
-                    "Name change detected: previous='%s', current='%s' for select",
-                    self._previous_circuit_name,
-                    current_circuit_name,
-                )
                 _LOGGER.info(
                     "Auto-sync detected circuit name change from '%s' to '%s' for select, requesting integration reload",
                     self._previous_circuit_name,

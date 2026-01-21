@@ -58,6 +58,21 @@ cleanup_energy_spikes:
       default: true
       selector:
         boolean:
+    main_meter_entity_id:
+      name: Main Meter Sensor (Optional)
+      description: >
+        The main meter energy sensor to use for spike detection. Must be a consumed
+        or produced energy sensor (not net/calculated sensors). If not specified,
+        auto-detects the main meter. Use if you have renamed sensors or auto-detection
+        fails. Note: The dropdown shows all energy sensors but only consumed/produced
+        sensors with TOTAL_INCREASING state class are valid. If an invalid sensor is
+        selected, the error response will list valid sensors.
+      required: false
+      selector:
+        entity:
+          integration: span_panel
+          domain: sensor
+          device_class: energy
 
 undo_stats_adjustments:
   name: Undo Statistics Adjustments
