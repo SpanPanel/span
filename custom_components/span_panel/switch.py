@@ -29,6 +29,9 @@ ICON: Literal["mdi:toggle-switch"] = "mdi:toggle-switch"
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
+# Sentinel value to distinguish "never synced" from "circuit name is None"
+_NAME_UNSET: object = object()
+
 
 class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEntity):
     """Represent a switch entity."""
@@ -88,9 +91,9 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         # when coordinator data changes
 
         # Store initial circuit name for change detection in auto-sync
-        # Only set to None if entity doesn't exist in registry (true first time)
+        # Use sentinel to distinguish "never synced" from "circuit name is None"
         if not existing_entity_id:
-            self._previous_circuit_name = None
+            self._previous_circuit_name: str | None | object = _NAME_UNSET
             _LOGGER.info("Switch entity not in registry, will sync on first update")
         else:
             self._previous_circuit_name = circuit.name
@@ -112,7 +115,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             current_circuit_name = circuit.name
 
             # Only request reload if the circuit name has actually changed
-            if self._previous_circuit_name is None:
+            if self._previous_circuit_name is _NAME_UNSET:
                 # First update - sync to panel name
                 _LOGGER.info(
                     "First update: syncing entity name to panel name '%s' for switch, requesting reload",

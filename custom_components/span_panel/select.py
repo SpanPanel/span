@@ -33,6 +33,9 @@ ICON = "mdi:chevron-down"
 
 _LOGGER = logging.getLogger(__name__)
 
+# Sentinel value to distinguish "never synced" from "circuit name is None"
+_NAME_UNSET: object = object()
+
 
 class SpanPanelSelectEntityDescriptionWrapper:
     """Wrapper class for Span Panel Select entities."""
@@ -131,9 +134,9 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         self._attr_current_option = description.current_option_fn(circuit)
 
         # Store initial circuit name for change detection in auto-sync of names
-        # Only set to None if entity doesn't exist in registry (true first time)
+        # Use sentinel to distinguish "never synced" from "circuit name is None"
         if not existing_entity_id:
-            self._previous_circuit_name = None
+            self._previous_circuit_name: str | None | object = _NAME_UNSET
             _LOGGER.info("Select entity not in registry, will sync on first update")
         else:
             self._previous_circuit_name = circuit.name
@@ -213,7 +216,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
             current_circuit_name = circuit.name
 
             # Only request reload if the circuit name has actually changed
-            if self._previous_circuit_name is None:
+            if self._previous_circuit_name is _NAME_UNSET:
                 # First update - sync to panel name
                 _LOGGER.info(
                     "First update: syncing entity name to panel name '%s' for select, requesting reload",

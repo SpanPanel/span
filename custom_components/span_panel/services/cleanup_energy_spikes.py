@@ -41,6 +41,7 @@ SERVICE_CLEANUP_ENERGY_SPIKES_SCHEMA = vol.Schema(
         vol.Required("start_time"): cv.datetime,
         vol.Required("end_time"): cv.datetime,
         vol.Optional("dry_run", default=True): cv.boolean,
+        vol.Optional("main_meter_entity_id"): cv.entity_id,
     }
 )
 
@@ -73,12 +74,14 @@ async def async_setup_cleanup_energy_spikes_service(hass: HomeAssistant) -> None
             start_time = call.data["start_time"]
             end_time = call.data["end_time"]
             dry_run = call.data.get("dry_run", True)
+            main_meter_entity_id = call.data.get("main_meter_entity_id")
             _LOGGER.info(
-                "Parsed values: config_entry_id=%s, start_time=%s, end_time=%s, dry_run=%s",
+                "Parsed values: config_entry_id=%s, start_time=%s, end_time=%s, dry_run=%s, main_meter_entity_id=%s",
                 config_entry_id,
                 start_time,
                 end_time,
                 dry_run,
+                main_meter_entity_id,
             )
 
             return await cleanup_energy_spikes(
@@ -87,6 +90,7 @@ async def async_setup_cleanup_energy_spikes_service(hass: HomeAssistant) -> None
                 start_time=start_time,
                 end_time=end_time,
                 dry_run=dry_run,
+                main_meter_entity_id=main_meter_entity_id,
             )
 
         try:
@@ -116,6 +120,7 @@ async def cleanup_energy_spikes(
     start_time: datetime,
     end_time: datetime,
     dry_run: bool = True,
+    main_meter_entity_id: str | None = None,
 ) -> dict[str, Any]:
     """Detect and remove firmware reset spikes from a specific SPAN panel's energy sensors.
 
@@ -128,17 +133,20 @@ async def cleanup_energy_spikes(
         start_time: Local start time for the time range to scan
         end_time: Local end time for the time range to scan
         dry_run: Preview mode without making changes (default: True)
+        main_meter_entity_id: Optional entity ID of the main meter sensor to use.
+            If not provided, auto-detects the main meter from the panel's sensors.
 
     Returns:
         Summary of spikes found and removed for the specified panel.
 
     """
     _LOGGER.info(
-        "SERVICE CALLED: cleanup_energy_spikes - config_entry_id: %s, start_time: %s, end_time: %s, dry_run: %s",
+        "SERVICE CALLED: cleanup_energy_spikes - config_entry_id: %s, start_time: %s, end_time: %s, dry_run: %s, main_meter_entity_id: %s",
         config_entry_id,
         start_time,
         end_time,
         dry_run,
+        main_meter_entity_id,
     )
 
     # Validate config entry exists and is a SPAN panel
@@ -233,24 +241,49 @@ async def cleanup_energy_spikes(
     )
 
     # Find the main meter for this specific panel
-    main_meter_entity = _find_main_meter_sensor(entry_sensors)
-
-    if not main_meter_entity:
-        _LOGGER.warning(
-            "No main meter found for config entry %s",
-            config_entry_id,
-        )
-        return {
-            "dry_run": dry_run,
-            "config_entry_id": config_entry_id,
-            "entities_processed": len(entry_sensors),
-            "reset_timestamps": [],
-            "sensors_adjusted": 0,
-            "details": [],
-            "error": f"No main meter sensor found for config entry {config_entry_id}",
-        }
-
-    _LOGGER.debug("Using main meter sensor: %s", main_meter_entity)
+    # Use provided entity ID if available, otherwise auto-detect
+    if main_meter_entity_id:
+        # Validate provided entity exists and belongs to this config entry
+        if main_meter_entity_id not in entry_sensors:
+            _LOGGER.warning(
+                "Provided main_meter_entity_id '%s' is not a SPAN energy sensor for config entry %s. "
+                "Available sensors: %s",
+                main_meter_entity_id,
+                config_entry_id,
+                entry_sensors,
+            )
+            return {
+                "dry_run": dry_run,
+                "config_entry_id": config_entry_id,
+                "entities_processed": len(entry_sensors),
+                "reset_timestamps": [],
+                "sensors_adjusted": 0,
+                "details": [],
+                "available_sensors": sorted(entry_sensors),
+                "error": f"Provided sensor '{main_meter_entity_id}' is not a SPAN energy sensor for this panel",
+            }
+        main_meter_entity: str | None = main_meter_entity_id
+        _LOGGER.info("Using user-provided main meter sensor: %s", main_meter_entity)
+    else:
+        main_meter_entity = _find_main_meter_sensor(entry_sensors)
+        if not main_meter_entity:
+            _LOGGER.warning(
+                "No main meter auto-detected for config entry %s. Available sensors: %s",
+                config_entry_id,
+                entry_sensors,
+            )
+            return {
+                "dry_run": dry_run,
+                "config_entry_id": config_entry_id,
+                "entities_processed": len(entry_sensors),
+                "reset_timestamps": [],
+                "sensors_adjusted": 0,
+                "details": [],
+                "available_sensors": sorted(entry_sensors),
+                "error": f"No main meter sensor auto-detected for config entry {config_entry_id}. "
+                f"Please specify main_meter_entity_id from available sensors.",
+            }
+        _LOGGER.debug("Auto-detected main meter sensor: %s", main_meter_entity)
 
     # Expand query window by 1 hour before start_time for spike detection
     # This ensures we can detect spikes AT start_time by having the previous entry to compare.
@@ -274,6 +307,8 @@ async def cleanup_energy_spikes(
     )
 
     # Get statistics for this panel's main meter to find reset timestamps
+    # At this point main_meter_entity is guaranteed to be set (we returned early otherwise)
+    assert main_meter_entity is not None
     try:
         reset_timestamps = await _find_reset_timestamps(
             hass, main_meter_entity, query_start_time_utc, query_end_time_utc
@@ -416,11 +451,21 @@ async def cleanup_energy_spikes(
 
 
 def _get_span_energy_sensors(hass: HomeAssistant) -> list[str]:
-    """Get all SPAN energy sensors with TOTAL_INCREASING state class."""
+    """Get all SPAN energy sensors with TOTAL_INCREASING state class.
+
+    Uses entity registry to find sensors by config entry rather than entity ID prefix.
+    This correctly handles all naming patterns including legacy names without span_panel_ prefix.
+    """
     span_energy_sensors = []
+    registry = er.async_get(hass)
+
+    # Get all config entry IDs for span_panel domain
+    span_entry_ids = {entry.entry_id for entry in hass.config_entries.async_entries(DOMAIN)}
 
     for entity_id in hass.states.async_entity_ids("sensor"):
-        if not entity_id.startswith("sensor.span_panel_"):
+        # Check if entity belongs to a span_panel config entry
+        entry = registry.async_get(entity_id)
+        if not entry or entry.config_entry_id not in span_entry_ids:
             continue
 
         state = hass.states.get(entity_id)
