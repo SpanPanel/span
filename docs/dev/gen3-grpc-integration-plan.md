@@ -5,8 +5,8 @@
 **Library work**: Complete on `span-panel-api` branch
 [`grpc_addition`](https://github.com/SpanPanel/span-panel-api/tree/grpc_addition) — version **1.1.15**.
 
-**Integration work**: Phase 1 complete on branch `gen3-grpc-integration` — version **1.3.2**.
-Phase 2 (push coordinator, Gen3 power-metric sensors) is deferred until Gen3 hardware
+**Integration work**: Phase 1 and Phase 2a complete on branch `gen3-grpc-integration` — version **1.3.2**.
+Phase 2b (push coordinator, Gen3 power-metric sensors) is deferred until Gen3 hardware
 is available for testing.
 
 ---
@@ -353,7 +353,7 @@ entity classes — after Phase 2a they already read from `SpanCircuitSnapshot`.
 | 1 | Where to store detected generation? | `entry.data` as `CONF_PANEL_GENERATION` ✅ |
 | 2 | Push coordinator: separate class or flag? | Separate class (`SpanPanelPushCoordinator`) — Phase 2b ⏳ |
 | 3 | Gen3 sensors: existing file with capability-gates or new file? | Capability-gates in existing `sensors/factory.py` ✅ |
-| 4 | `get_snapshot()` replace or coexist with individual Gen2 calls? | Replace — `update()` calls `get_snapshot()` exclusively (Phase 2a) ⏳ |
+| 4 | `get_snapshot()` replace or coexist with individual Gen2 calls? | Replace — `update()` calls `get_snapshot()` exclusively (Phase 2a) ✅ |
 | 5 | Minimum `span-panel-api` version in `manifest.json`? | `~=1.1.15` with `[grpc]` extra ✅ |
 | 6 | Gen3 entity architecture: separate classes, translation layer, or shared base? | Shared base via `SpanCircuitSnapshot` (Phase 2a migration eliminates the choice — existing entity classes work unchanged for overlapping metrics) ✅ |
 
@@ -372,10 +372,13 @@ entity classes — after Phase 2a they already read from `SpanCircuitSnapshot`.
     ✅ config_flow.py — generation dropdown + async_step_gen3_setup
     ✅ sensors/factory.py — capability-gated sensor groups
     ✅ manifest.json — version 1.3.2, span-panel-api[grpc]~=1.1.15
-  Phase 2a pending (Gen2 hardware sufficient):
-    ⏳ span_panel_api.py — update() calls get_snapshot()
-    ⏳ span_panel.py — populate from SpanPanelSnapshot
-    ⏳ span_panel_circuit.py — wrap SpanCircuitSnapshot instead of OpenAPI Circuit
+  Phase 2a complete:
+    ✅ span_panel_api.py — get_snapshot() delegates to client.get_snapshot()
+    ✅ span_panel.py — update() calls get_snapshot(); populates all domain objects
+    ✅ span_panel_circuit.py — from_snapshot(SpanCircuitSnapshot) factory
+    ✅ span_panel_data.py — from_snapshot(SpanPanelSnapshot) factory
+    ✅ span_panel_hardware_status.py — from_snapshot(SpanPanelSnapshot) factory
+    ✅ span_panel_storage_battery.py — from_snapshot(SpanPanelSnapshot) factory
   Phase 2b pending (Gen3 hardware required, depends on 2a):
     ⏳ span_panel_api.py — _create_client() Gen3 branch; widen _client type
     ⏳ coordinator.py — SpanPanelPushCoordinator
@@ -400,9 +403,12 @@ branch can be merged, since the integration depends on the new library API.
 | `custom_components/span_panel/config_flow.py` | Generation dropdown; `async_step_gen3_setup`; store generation in entry data | ✅ Done |
 | `custom_components/span_panel/sensors/factory.py` | Capability-gated sensor groups (DSM, energy, hardware, battery, solar) | ✅ Done |
 | `custom_components/span_panel/manifest.json` | Version 1.3.2; `span-panel-api[grpc]~=1.1.15` | ✅ Done |
-| `custom_components/span_panel/span_panel_api.py` | `update()` calls `get_snapshot()`; widen `_client` to protocol type | ⏳ Phase 2a/2b |
-| `custom_components/span_panel/span_panel.py` | Populate from `SpanPanelSnapshot` instead of OpenAPI types | ⏳ Phase 2a |
-| `custom_components/span_panel/span_panel_circuit.py` | Wrap `SpanCircuitSnapshot` instead of OpenAPI `Circuit` | ⏳ Phase 2a |
+| `custom_components/span_panel/span_panel_api.py` | Added `get_snapshot()` (Phase 2a); widen `_client` to protocol type (Phase 2b) | ✅ Phase 2a done / ⏳ Phase 2b |
+| `custom_components/span_panel/span_panel.py` | `update()` calls `get_snapshot()`; all domain objects from snapshot | ✅ Done |
+| `custom_components/span_panel/span_panel_circuit.py` | Added `from_snapshot(SpanCircuitSnapshot)` factory | ✅ Done |
+| `custom_components/span_panel/span_panel_data.py` | Added `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
+| `custom_components/span_panel/span_panel_hardware_status.py` | Added `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
+| `custom_components/span_panel/span_panel_storage_battery.py` | Added `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
 | `custom_components/span_panel/coordinator.py` | Add `SpanPanelPushCoordinator`; coordinator selection in setup | ⏳ Phase 2b |
 | `custom_components/span_panel/__init__.py` | Coordinator selection by `PUSH_STREAMING` capability | ⏳ Phase 2b |
 | `custom_components/span_panel/sensors/factory.py` | Gen3-only sensor entities (voltage, current, apparent/reactive power, frequency, power factor) | ⏳ Phase 2b |
