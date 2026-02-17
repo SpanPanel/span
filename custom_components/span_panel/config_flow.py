@@ -54,6 +54,7 @@ from .const import (
     CONF_API_RETRIES,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
     CONF_API_RETRY_TIMEOUT,
+    CONF_PANEL_GEN,
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
@@ -280,8 +281,24 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         use_ssl: bool = user_input.get(CONF_USE_SSL, False)
 
-        # Validate host before setting up flow
+        # Validate host before setting up flow (Gen2 REST API)
         if not await validate_host(self.hass, host, use_ssl=use_ssl):
+            # REST failed — try Gen3 gRPC as fallback
+            if await self._test_gen3_connection(host):
+                _LOGGER.info(
+                    "Gen3 panel detected at %s (REST unavailable, gRPC OK)", host
+                )
+                # Gen3 panels don't need auth — create entry directly
+                await self.async_set_unique_id(host)
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=f"SPAN Panel ({host})",
+                    data={
+                        CONF_HOST: host,
+                        CONF_PANEL_GEN: "gen3",
+                    },
+                )
+
             return self.async_show_form(
                 step_id="user",
                 data_schema=STEP_USER_DATA_SCHEMA,
@@ -297,6 +314,17 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             await self.ensure_not_already_configured()
 
         return await self.async_step_choose_auth_type()
+
+    async def _test_gen3_connection(self, host: str) -> bool:
+        """Test if the host is a Gen3 panel via gRPC on port 50065."""
+        try:
+            from .gen3.span_grpc_client import SpanGrpcClient  # noqa: E402
+
+            client = SpanGrpcClient(host)
+            return await client.test_connection()
+        except Exception:
+            _LOGGER.debug("Gen3 gRPC connection test failed for %s", host)
+            return False
 
     async def _handle_simulator_setup(self, user_input: dict[str, Any]) -> ConfigFlowResult:
         """Handle simulator mode setup."""
