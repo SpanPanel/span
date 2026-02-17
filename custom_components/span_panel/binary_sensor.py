@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_DEVICE_NAME,
+    CONF_PANEL_GEN,
     COORDINATOR,
     DOMAIN,
     PANEL_STATUS,
@@ -257,6 +258,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up status sensor platform."""
+
+    # Gen3 path — use Gen3 binary sensor factory
+    if config_entry.data.get(CONF_PANEL_GEN) == "gen3":
+        from .gen3.binary_sensors import create_gen3_binary_sensors  # noqa: E402
+
+        coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
+        async_add_entities(create_gen3_binary_sensors(coordinator))
+        return
 
     _LOGGER.debug("ASYNC SETUP ENTRY BINARYSENSOR")
 
