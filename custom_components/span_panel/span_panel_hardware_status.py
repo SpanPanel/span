@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import Any
 
+from span_panel_api import SpanPanelSnapshot
+
 from .const import SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN
 
 _LOGGER = logging.getLogger(__name__)
@@ -79,6 +81,31 @@ class SpanPanelHardwareStatus:
             proximity_proven=proximity_proven,
             remaining_auth_unlock_button_presses=remaining_auth_unlock_button_presses,
             _system_data=system_data,
+        )
+
+    @classmethod
+    def from_snapshot(cls, snapshot: SpanPanelSnapshot) -> "SpanPanelHardwareStatus":
+        """Create a SpanPanelHardwareStatus from a transport-agnostic snapshot.
+
+        Gen2 panels populate all hardware status fields.  Gen3 panels only
+        populate serial_number and firmware_version; all other fields default
+        to None or False because the corresponding entity classes are gated
+        behind PanelCapability.HARDWARE_STATUS and will not be created.
+        """
+        return cls(
+            firmware_version=snapshot.firmware_version,
+            update_status=snapshot.hardware_update_status or "",
+            env=snapshot.hardware_env or "",
+            manufacturer=snapshot.hardware_manufacturer or "",
+            serial_number=snapshot.serial_number,
+            model=snapshot.hardware_model or "",
+            door_state=snapshot.hardware_door_state,
+            uptime=snapshot.hardware_uptime or 0,
+            is_ethernet_connected=snapshot.hardware_is_ethernet_connected or False,
+            is_wifi_connected=snapshot.hardware_is_wifi_connected or False,
+            is_cellular_connected=snapshot.hardware_is_cellular_connected or False,
+            proximity_proven=snapshot.hardware_proximity_proven,
+            remaining_auth_unlock_button_presses=0,
         )
 
     def copy(self) -> "SpanPanelHardwareStatus":

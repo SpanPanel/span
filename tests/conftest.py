@@ -14,10 +14,25 @@ from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulati
 
 # sys.path.insert(0, str(Path(__file__).parent.parent))  # Removed - using pytest pythonpath instead
 
+# Import real model classes before the mock is installed so that snapshot-based
+# tests can construct real SpanPanelSnapshot / SpanCircuitSnapshot instances.
+from span_panel_api.models import PanelCapability as _PanelCapability  # noqa: E402
+from span_panel_api.models import PanelGeneration as _PanelGeneration  # noqa: E402
+from span_panel_api.models import SpanCircuitSnapshot as _SpanCircuitSnapshot  # noqa: E402
+from span_panel_api.models import SpanPanelSnapshot as _SpanPanelSnapshot  # noqa: E402
+
 # Mock span_panel_api before importing custom_components
 # Create mock modules for span_panel_api
 span_panel_api_mock = MagicMock()
 span_panel_api_exceptions_mock = MagicMock()
+
+# Register real model classes on the mock so imports like
+#   from span_panel_api import SpanPanelSnapshot
+# return the actual dataclass, not a MagicMock.
+span_panel_api_mock.PanelCapability = _PanelCapability
+span_panel_api_mock.PanelGeneration = _PanelGeneration
+span_panel_api_mock.SpanCircuitSnapshot = _SpanCircuitSnapshot
+span_panel_api_mock.SpanPanelSnapshot = _SpanPanelSnapshot
 
 # Create proper mock exception classes that maintain distinct types
 class MockSpanPanelError(Exception):

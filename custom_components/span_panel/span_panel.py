@@ -113,41 +113,27 @@ class SpanPanel:
         self._storage_battery = new_battery
 
     async def update(self) -> None:
-        """Update all panel data atomically."""
+        """Update all panel data atomically from a single get_snapshot() call."""
         try:
-            # Start timing for API calls
             api_start = _epoch_time()
 
-            # Debug battery option status
             battery_option_enabled = self._options and self._options.enable_battery_percentage
 
-            # Use batch API call for true parallelization at the client level
-            # This makes concurrent HTTP requests when cache misses occur
-            all_data = await self.api.get_all_data(include_battery=bool(battery_option_enabled))
+            snapshot = await self.api.get_snapshot()
 
-            # Extract processed data from batch response
-            new_status = all_data.get("status")
-            new_panel = all_data.get("panel")
-            new_circuits = all_data.get("circuits")
-            new_battery = all_data.get("battery") if battery_option_enabled else None
+            self._update_status(SpanPanelHardwareStatus.from_snapshot(snapshot))
+            self._update_panel(SpanPanelData.from_snapshot(snapshot))
+            self._update_circuits(
+                {cid: SpanPanelCircuit.from_snapshot(cs) for cid, cs in snapshot.circuits.items()}
+            )
 
-            # Atomic updates - ensure we have the required data
-            if new_status is not None:
-                self._update_status(new_status)
-            if new_panel is not None:
-                self._update_panel(new_panel)
-            if new_circuits is not None:
-                self._update_circuits(new_circuits)
-
-            if new_battery is not None:
-                self._update_storage_battery(new_battery)
+            if battery_option_enabled:
+                self._update_storage_battery(SpanPanelStorageBattery.from_snapshot(snapshot))
 
             api_duration = _epoch_time() - api_start
-
-            # INFO level logging for API call performance
-            _LOGGER.info("Panel API calls completed (CLIENT-PARALLEL) - Total: %.3fs", api_duration)
-
+            _LOGGER.info("Panel API calls completed (SNAPSHOT) - Total: %.3fs", api_duration)
             _LOGGER.debug("Panel update completed successfully")
+
         except SpanPanelReturnedEmptyData:
             _LOGGER.warning("Span Panel returned empty data")
         except SpanPanelSimulationOfflineError:  # Debug logged in coordinator.py

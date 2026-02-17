@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from span_panel_api import PanelGeneration, SpanCircuitSnapshot, SpanPanelSnapshot
+
 from custom_components.span_panel.exceptions import SpanPanelReturnedEmptyData
 from custom_components.span_panel.options import Options
 from custom_components.span_panel.span_panel import SpanPanel
@@ -54,6 +56,49 @@ def mock_circuits():
 def mock_battery():
     """Create mock storage battery."""
     return MagicMock(spec=SpanPanelStorageBattery)
+
+
+@pytest.fixture
+def minimal_snapshot():
+    """Create a minimal SpanPanelSnapshot for update() tests."""
+    return SpanPanelSnapshot(
+        panel_generation=PanelGeneration.GEN2,
+        serial_number="SPAN123",
+        firmware_version="1.2.3",
+        main_power_w=500.0,
+        main_relay_state="CLOSED",
+        grid_power_w=500.0,
+        dsm_state="DSM_GRID_OK",
+        dsm_grid_state="DSM_ON_GRID",
+        current_run_config="PANEL_ON_GRID",
+        battery_soe=75.0,
+        feedthrough_power_w=0.0,
+        hardware_door_state="CLOSED",
+        hardware_uptime=12345,
+        hardware_is_ethernet_connected=True,
+        hardware_is_wifi_connected=False,
+        hardware_is_cellular_connected=False,
+        hardware_update_status="UP_TO_DATE",
+        hardware_env="prod",
+        hardware_manufacturer="Span",
+        hardware_model="MAIN40",
+        hardware_proximity_proven=True,
+        circuits={
+            "circuit_1": SpanCircuitSnapshot(
+                circuit_id="circuit_1",
+                name="Washer",
+                power_w=200.0,
+                voltage_v=120.0,
+                current_a=1.67,
+                is_on=True,
+                relay_state="CLOSED",
+                priority="MUST_HAVE",
+                tabs=[1],
+                energy_produced_wh=0.0,
+                energy_consumed_wh=5000.0,
+            )
+        },
+    )
 
 
 class TestSpanPanelInit:
@@ -161,93 +206,62 @@ class TestSpanPanelUpdate:
     """Test SpanPanel update functionality."""
 
     @pytest.mark.asyncio
-    async def test_update_success_without_battery(
-        self, mock_status, mock_panel_data, mock_circuits
-    ):
-        """Test successful update without battery data."""
-        panel = SpanPanel("192.168.1.100")
+    async def test_update_success_without_battery(self, minimal_snapshot):
+        """Test successful update without battery data (battery option disabled)."""
+        panel = SpanPanel("192.168.1.100")  # no options → battery disabled
 
-        # Mock API methods
-        panel.api.get_all_data = AsyncMock(return_value={
-            "status": mock_status,
-            "panel": mock_panel_data,
-            "circuits": mock_circuits,
-            "battery": None
-        })
+        panel.api.get_snapshot = AsyncMock(return_value=minimal_snapshot)
 
         await panel.update()
 
-        # Verify API calls
-        panel.api.get_all_data.assert_called_once_with(include_battery=False)
+        panel.api.get_snapshot.assert_called_once()
 
-        # Verify data is updated
-        assert panel._status is mock_status
-        assert panel._panel is mock_panel_data
-        assert panel._circuits is mock_circuits
-        assert panel._storage_battery is None
+        # Domain objects are derived from the snapshot
+        assert panel._status is not None
+        assert panel._status.serial_number == "SPAN123"
+        assert panel._panel is not None
+        assert panel._panel.instant_grid_power == 500.0
+        assert "circuit_1" in panel._circuits
+        assert panel._circuits["circuit_1"].instant_power == 200.0
+        assert panel._storage_battery is None  # battery option not enabled
 
     @pytest.mark.asyncio
-    async def test_update_success_with_battery(
-        self, mock_status, mock_panel_data, mock_circuits, mock_battery, mock_options
-    ):
-        """Test successful update with battery data."""
-        panel = SpanPanel("192.168.1.100", options=mock_options)
+    async def test_update_success_with_battery(self, minimal_snapshot, mock_options):
+        """Test successful update with battery data when option is enabled."""
+        panel = SpanPanel("192.168.1.100", options=mock_options)  # battery enabled
 
-        # Mock API methods
-        panel.api.get_all_data = AsyncMock(return_value={
-            "status": mock_status,
-            "panel": mock_panel_data,
-            "circuits": mock_circuits,
-            "battery": mock_battery
-        })
+        panel.api.get_snapshot = AsyncMock(return_value=minimal_snapshot)
 
         await panel.update()
 
-        # Verify API calls
-        panel.api.get_all_data.assert_called_once_with(include_battery=True)
+        panel.api.get_snapshot.assert_called_once()
 
-        # Verify data is updated
-        assert panel._status is mock_status
-        assert panel._panel is mock_panel_data
-        assert panel._circuits is mock_circuits
-        assert panel._storage_battery is mock_battery
+        assert panel._storage_battery is not None
+        assert panel._storage_battery.storage_battery_percentage == 75  # from battery_soe=75.0
 
     @pytest.mark.asyncio
-    async def test_update_with_battery_disabled(self, mock_status, mock_panel_data, mock_circuits):
+    async def test_update_with_battery_disabled(self, minimal_snapshot):
         """Test update when battery is disabled in options."""
         options = MagicMock(spec=Options)
         options.enable_battery_percentage = False
-        options.enable_solar_sensors = False
-        options.inverter_leg1 = 0
-        options.inverter_leg2 = 0
         options.api_retries = 3
         options.api_retry_timeout = 5.0
         options.api_retry_backoff_multiplier = 2.0
         panel = SpanPanel("192.168.1.100", options=options)
 
-        # Mock API methods
-        panel.api.get_all_data = AsyncMock(return_value={
-            "status": mock_status,
-            "panel": mock_panel_data,
-            "circuits": mock_circuits,
-            "battery": None
-        })
+        panel.api.get_snapshot = AsyncMock(return_value=minimal_snapshot)
 
         await panel.update()
 
-        # Verify API calls
-        panel.api.get_all_data.assert_called_once_with(include_battery=False)
+        panel.api.get_snapshot.assert_called_once()
         assert panel._storage_battery is None
 
     @pytest.mark.asyncio
-    async def test_update_handles_empty_data_exception(
-        self, mock_status, mock_panel_data, mock_circuits
-    ):
+    async def test_update_handles_empty_data_exception(self):
         """Test update handles SpanPanelReturnedEmptyData exception."""
         panel = SpanPanel("192.168.1.100")
 
-        # Mock API methods - raises empty data exception
-        panel.api.get_all_data = AsyncMock(side_effect=SpanPanelReturnedEmptyData("Empty data"))
+        panel.api.get_snapshot = AsyncMock(side_effect=SpanPanelReturnedEmptyData("Empty data"))
 
         # Should not raise exception, just log warning
         await panel.update()
@@ -262,8 +276,7 @@ class TestSpanPanelUpdate:
         """Test update propagates non-empty-data exceptions."""
         panel = SpanPanel("192.168.1.100")
 
-        # Mock API method to raise generic exception
-        panel.api.get_all_data = AsyncMock(side_effect=Exception("API error"))
+        panel.api.get_snapshot = AsyncMock(side_effect=Exception("API error"))
 
         with pytest.raises(Exception, match="API error"):
             await panel.update()

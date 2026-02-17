@@ -4,6 +4,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from span_panel_api import SpanPanelSnapshot
+
 from .const import (
     CURRENT_RUN_CONFIG,
     DSM_GRID_STATE,
@@ -64,6 +66,29 @@ class SpanPanelData:
         }
 
         return cls(**common_data)
+
+    @classmethod
+    def from_snapshot(cls, snapshot: SpanPanelSnapshot) -> "SpanPanelData":
+        """Create a SpanPanelData from a transport-agnostic snapshot.
+
+        Gen3 panels only supply main_power_w; all Gen2-only fields default to
+        zero or empty string.  Those fields are only read by entity classes that
+        are gated behind ENERGY_HISTORY, DSM_STATE, or SOLAR capabilities.
+        """
+        return cls(
+            main_relay_state=snapshot.main_relay_state or "UNKNOWN",
+            main_meter_energy_produced=snapshot.main_meter_energy_produced_wh or 0.0,
+            main_meter_energy_consumed=snapshot.main_meter_energy_consumed_wh or 0.0,
+            instant_grid_power=snapshot.main_power_w,
+            feedthrough_power=snapshot.feedthrough_power_w or 0.0,
+            feedthrough_energy_produced=snapshot.feedthrough_energy_produced_wh or 0.0,
+            feedthrough_energy_consumed=snapshot.feedthrough_energy_consumed_wh or 0.0,
+            grid_sample_start_ms=0,
+            grid_sample_end_ms=0,
+            dsm_grid_state=snapshot.dsm_grid_state or "",
+            dsm_state=snapshot.dsm_state or "",
+            current_run_config=snapshot.current_run_config or "",
+        )
 
     def copy(self) -> "SpanPanelData":
         """Create a deep copy for atomic operations."""

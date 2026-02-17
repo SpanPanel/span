@@ -4,6 +4,8 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from span_panel_api import SpanCircuitSnapshot
+
 from .const import CircuitRelayState
 
 
@@ -64,6 +66,36 @@ class SpanPanelCircuit:
             circuit_config=data_copy.get("config", {}),
             state_config=data_copy.get("state", {}),
             raw_data=data_copy,
+        )
+
+    @staticmethod
+    def from_snapshot(snapshot: SpanCircuitSnapshot) -> "SpanPanelCircuit":
+        """Create a SpanPanelCircuit from a transport-agnostic SpanCircuitSnapshot.
+
+        Used by both Gen2 (via get_snapshot()) and Gen3 transports.
+        Fields absent from Gen3 snapshots default to neutral values; they are
+        only accessed by capability-gated entity classes that won't be created
+        for Gen3 panels.
+        """
+        relay = snapshot.relay_state
+        return SpanPanelCircuit(
+            circuit_id=snapshot.circuit_id,
+            name=snapshot.name,
+            relay_state=relay if relay is not None else CircuitRelayState.CLOSED.name,
+            instant_power=snapshot.power_w,
+            instant_power_update_time=0,
+            produced_energy=snapshot.energy_produced_wh
+            if snapshot.energy_produced_wh is not None
+            else 0.0,
+            consumed_energy=snapshot.energy_consumed_wh
+            if snapshot.energy_consumed_wh is not None
+            else 0.0,
+            energy_accum_update_time=0,
+            tabs=list(snapshot.tabs) if snapshot.tabs is not None else [],
+            priority=snapshot.priority if snapshot.priority is not None else "MUST_HAVE",
+            is_user_controllable=relay is not None,
+            is_sheddable=False,
+            is_never_backup=False,
         )
 
     def copy(self) -> "SpanPanelCircuit":

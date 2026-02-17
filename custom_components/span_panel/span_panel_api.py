@@ -7,7 +7,7 @@ import os
 from typing import Any
 import uuid
 
-from span_panel_api import PanelCapability, SpanPanelClient, set_async_delay_func
+from span_panel_api import PanelCapability, SpanPanelClient, SpanPanelSnapshot, set_async_delay_func
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -525,6 +525,42 @@ class SpanPanelApi:
             SpanPanelAPIError,
         ) as e:
             _LOGGER.error("Failed to get storage battery data: %s", e)
+            raise
+
+    async def get_snapshot(self) -> SpanPanelSnapshot:
+        """Get a unified, transport-agnostic snapshot of the current panel state.
+
+        This is the primary data-fetch method for all panel generations.
+        Individual API methods (get_status_data, get_panel_data, etc.) are
+        preserved for legacy callers but should not be used by new code.
+        """
+        if self._is_panel_offline():
+            raise SpanPanelSimulationOfflineError("Panel is offline in simulation mode")
+
+        self._ensure_client_open()
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        self._debug_check_client("get_snapshot")
+        try:
+            await self._ensure_authenticated()
+            return await self._client.get_snapshot()
+
+        except SpanPanelRetriableError as e:
+            _LOGGER.warning("Retriable error getting snapshot (will retry): %s", e)
+            raise
+        except SpanPanelServerError as e:
+            _LOGGER.error("Server error getting snapshot (will not retry): %s", e)
+            raise
+        except SpanPanelAuthError as e:
+            self._authenticated = False
+            _LOGGER.error("Authentication failed for snapshot: %s", e)
+            raise
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as e:
+            _LOGGER.error("Failed to get snapshot: %s", e)
             raise
 
     async def set_relay(self, circuit: SpanPanelCircuit, state: CircuitRelayState) -> None:
