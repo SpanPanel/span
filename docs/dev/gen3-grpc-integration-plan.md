@@ -396,3 +396,79 @@ branch can be merged, since the integration depends on the new library API.
 | `custom_components/span_panel/span_panel_storage_battery.py` | `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
 | `custom_components/span_panel/coordinator.py` | Push-streaming extensions: capability detection, `update_interval=None` for Gen3, push callback methods, `async_shutdown()` | ✅ Done |
 | `custom_components/span_panel/translations/` | No simulation-specific strings needed | ✅ Done |
+
+---
+
+## Developer Testing Setup
+
+This section is for developers who need to test Gen3 gRPC changes without publishing a new
+`span-panel-api` release between every fix. Use an **editable install** so library changes take
+effect on the next integration reload.
+
+### Editable Library Install
+
+Both repos must be cloned locally. Inside whichever Python environment HA is running in:
+
+```bash
+# Install the library in editable mode (run once)
+pip install -e /path/to/span-panel-api[grpc]
+
+# Confirm — Location must be a file path, not site-packages
+pip show span-panel-api
+```
+
+After this, editing `src/span_panel_api/grpc/client.py` or `grpc/const.py` and reloading the
+integration (HA UI → Settings → Devices & Services → SPAN Panel → ⋮ → Reload) is sufficient to
+test decode changes — no reinstall or HA restart required.
+
+### HA Deployment Options
+
+#### Local HA core (fastest loop)
+
+```bash
+python -m venv ha-venv && source ha-venv/bin/activate
+pip install homeassistant
+pip install -e /path/to/span-panel-api[grpc]
+ln -s /path/to/span/custom_components/span_panel ~/ha-config/custom_components/span_panel
+hass -c ~/ha-config
+```
+
+#### HA in Docker (Home Assistant Container)
+
+```bash
+# Start HA with both repos volume-mounted
+docker run -d --name homeassistant \
+  -v /path/to/span-panel-api:/span-panel-api \
+  -v /path/to/span/custom_components/span_panel:/config/custom_components/span_panel \
+  -v ~/ha-config:/config --network host \
+  ghcr.io/home-assistant/home-assistant:stable
+
+# Install editable library inside the container
+docker exec homeassistant pip install -e /span-panel-api[grpc]
+docker restart homeassistant
+```
+
+The editable install persists through container restarts. If the container is removed and recreated, re-run the `docker exec pip install` step.
+
+### Enable Debug Logging
+
+Add to `configuration.yaml`:
+
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.span_panel: debug
+```
+
+### Diagnostic Symptom Table
+
+| Symptom | Where to look |
+| --- | --- |
+| No circuits discovered | `grpc/client.py` → `_parse_instances()` |
+| Circuits found but power stays 0 | `grpc/client.py` → `_decode_and_store_metric()` |
+| Circuit names wrong or swapped | `grpc/client.py` → `_get_circuit_name_by_iid()`, `CircuitInfo.name_iid` |
+| No push updates (entities frozen) | `grpc/client.py` → `_streaming_loop()` |
+| Connection refused | `grpc/const.py` → port 50065, `VENDOR_SPAN`, `PRODUCT_GEN3_PANEL` |
+
+See the library design doc (`span-panel-api/docs/dev/grpc-transport-design.md` → Developer Setup) for the full setup guide and log message reference.
