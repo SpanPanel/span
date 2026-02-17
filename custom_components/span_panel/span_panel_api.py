@@ -7,7 +7,7 @@ import os
 from typing import Any
 import uuid
 
-from span_panel_api import SpanPanelClient, set_async_delay_func
+from span_panel_api import PanelCapability, SpanPanelClient, set_async_delay_func
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -653,6 +653,18 @@ class SpanPanelApi:
         ) as e:
             _LOGGER.error("Failed to get all panel data: %s", e)
             raise
+
+    @property
+    def capabilities(self) -> PanelCapability:
+        """Return the panel's capabilities.
+
+        Reads directly from the underlying client so the value reflects the
+        connected transport (GEN2_FULL for OpenAPI/HTTP, GEN3_INITIAL for gRPC).
+        Falls back to GEN2_FULL when the client has not yet been created.
+        """
+        if self._client is not None:
+            return self._client.capabilities
+        return PanelCapability.GEN2_FULL
 
     async def close(self) -> None:
         """Close the API client and clean up resources."""

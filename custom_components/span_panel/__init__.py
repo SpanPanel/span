@@ -17,6 +17,7 @@ from homeassistant.const import (
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
+from span_panel_api import PanelCapability
 
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401  # type: ignore[misc]
@@ -49,12 +50,29 @@ from .span_panel import SpanPanel
 from .span_panel_api import SpanPanelAuthError, set_async_delay_func
 from .util import panel_to_device_info
 
+# Platforms that are always loaded regardless of panel generation.
+_BASE_PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+]
+
+# Platforms that are only loaded when the panel advertises the matching capability.
+_CAPABILITY_PLATFORMS: dict[PanelCapability, Platform] = {
+    PanelCapability.RELAY_CONTROL: Platform.SWITCH,
+    PanelCapability.PRIORITY_CONTROL: Platform.SELECT,
+}
+
+# Convenience constant for callers (e.g. unload) that need the full set — this is
+# the Gen2 superset.  Per-entry active platforms are stored in hass.data.
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
 ]
+
+# Key for storing the active platform list in hass.data per config entry.
+_ACTIVE_PLATFORMS = "active_platforms"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -254,10 +272,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         entry.async_on_unload(entry.add_update_listener(update_listener))
 
+        # Build the capability-gated platform list for this entry.
+        capabilities = span_panel.api.capabilities
+        active_platforms: list[Platform] = list(_BASE_PLATFORMS)
+        for cap, platform in _CAPABILITY_PLATFORMS.items():
+            if cap in capabilities:
+                active_platforms.append(platform)
+        _LOGGER.debug(
+            "Panel capabilities: %s — loading platforms: %s",
+            capabilities,
+            [p.value for p in active_platforms],
+        )
+
         hass.data.setdefault(DOMAIN, {})
         hass.data[DOMAIN][entry.entry_id] = {
             COORDINATOR: coordinator,
             NAME: name,
+            _ACTIVE_PLATFORMS: active_platforms,
         }
 
         # Generate default device name based on existing devices
@@ -301,7 +332,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # PHASE 1 Ensure device is registered BEFORE sensors are created
         await ensure_device_registered(hass, entry, span_panel, smart_device_name)
 
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await hass.config_entries.async_forward_entry_setups(entry, active_platforms)
 
         # Register services
         await async_setup_cleanup_energy_spikes_service(hass)
@@ -357,8 +388,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         _LOGGER.warning("No coordinator data found for entry %s", entry.entry_id)
 
-    _LOGGER.debug("Unloading platforms: %s", PLATFORMS)
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    # Retrieve the exact set of platforms that were loaded for this entry so we
+    # unload the same set (capability-gated entries may not have SELECT/SWITCH).
+    entry_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
+    active_platforms = entry_data.get(_ACTIVE_PLATFORMS, PLATFORMS)
+    _LOGGER.debug("Unloading platforms: %s", [p.value for p in active_platforms])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, active_platforms)
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)

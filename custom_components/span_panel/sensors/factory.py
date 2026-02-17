@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from span_panel_api import PanelCapability
 
 from custom_components.span_panel.const import (
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
@@ -54,29 +55,31 @@ def create_panel_sensors(
         SpanPanelPanelStatus | SpanPanelStatus | SpanPanelPowerSensor | SpanPanelEnergySensor
     ] = []
 
-    # Add panel data status sensors (DSM State, DSM Grid State, etc.)
-    for description in PANEL_DATA_STATUS_SENSORS:
-        entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+    capabilities = span_panel.api.capabilities
 
-    # Add panel power sensors (replacing synthetic ones)
+    # Add panel data status sensors (DSM State, DSM Grid State, etc.)
+    # These are Gen2-only; Gen3 has no DSM state data.
+    if PanelCapability.DSM_STATE in capabilities:
+        for description in PANEL_DATA_STATUS_SENSORS:
+            entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
+
+    # Add panel power sensors — available for all panel generations.
     for description in PANEL_POWER_SENSORS:
         entities.append(SpanPanelPowerSensor(coordinator, description, span_panel))
 
-    # Add panel energy sensors (replacing synthetic ones)
-    # Filter out net energy sensors if disabled
-    panel_net_energy_enabled = config_entry.options.get(ENABLE_PANEL_NET_ENERGY_SENSORS, True)
+    # Add panel energy sensors — Gen2-only (energy history requires OpenAPI).
+    if PanelCapability.ENERGY_HISTORY in capabilities:
+        panel_net_energy_enabled = config_entry.options.get(ENABLE_PANEL_NET_ENERGY_SENSORS, True)
+        for description in PANEL_ENERGY_SENSORS:
+            is_net_energy_sensor = "net_energy" in description.key or "NetEnergy" in description.key
+            if not panel_net_energy_enabled and is_net_energy_sensor:
+                continue
+            entities.append(SpanPanelEnergySensor(coordinator, description, span_panel))
 
-    for description in PANEL_ENERGY_SENSORS:
-        # Skip net energy sensors if disabled
-        is_net_energy_sensor = "net_energy" in description.key or "NetEnergy" in description.key
-
-        if not panel_net_energy_enabled and is_net_energy_sensor:
-            continue
-        entities.append(SpanPanelEnergySensor(coordinator, description, span_panel))
-
-    # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
-    for description_ss in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
+    # Add hardware status sensors (Door State, WiFi, Cellular, etc.) — Gen2-only.
+    if PanelCapability.HARDWARE_STATUS in capabilities:
+        for description_ss in STATUS_SENSORS:
+            entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
 
     return entities
 
@@ -87,19 +90,29 @@ def create_circuit_sensors(
     """Create circuit-level sensors for named circuits."""
     entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor] = []
 
+    capabilities = span_panel.api.capabilities
+    has_energy_history = PanelCapability.ENERGY_HISTORY in capabilities
+
     # Add circuit sensors for all named circuits (replacing synthetic ones)
     named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
     circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
 
     for circuit_id in named_circuits:
         for circuit_description in CIRCUIT_SENSORS:
-            # Skip net energy sensors if disabled
-            is_net_energy_sensor = (
-                "net_energy" in circuit_description.key or "energy_net" in circuit_description.key
-            )
+            is_energy_sensor = circuit_description.key != "circuit_power"
 
-            if not circuit_net_energy_enabled and is_net_energy_sensor:
+            # Energy sensors require energy history capability (Gen2-only).
+            if is_energy_sensor and not has_energy_history:
                 continue
+
+            # Skip net energy sensors if disabled via user option.
+            if is_energy_sensor:
+                is_net_energy_sensor = (
+                    "net_energy" in circuit_description.key
+                    or "energy_net" in circuit_description.key
+                )
+                if not circuit_net_energy_enabled and is_net_energy_sensor:
+                    continue
 
             if circuit_description.key == "circuit_power":
                 # Use enhanced power sensor for power measurements
@@ -139,10 +152,13 @@ def create_unmapped_circuit_sensors(
 def create_battery_sensors(
     coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
 ) -> list[SpanPanelBattery]:
-    """Create battery sensors if enabled."""
+    """Create battery sensors if enabled and the panel supports battery data."""
     entities: list[SpanPanelBattery] = []
 
-    # Add battery sensor if enabled
+    # Battery data is only available on Gen2 panels.
+    if PanelCapability.BATTERY not in span_panel.api.capabilities:
+        return entities
+
     battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
     if battery_enabled:
         entities.append(SpanPanelBattery(coordinator, BATTERY_SENSOR, span_panel))
@@ -153,8 +169,12 @@ def create_battery_sensors(
 def create_solar_sensors(
     coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
 ) -> list[SpanSolarSensor | SpanSolarEnergySensor]:
-    """Create solar sensors if enabled and configured."""
+    """Create solar sensors if enabled and the panel supports solar data."""
     entities: list[SpanSolarSensor | SpanSolarEnergySensor] = []
+
+    # Solar/feedthrough data is only available on Gen2 panels.
+    if PanelCapability.SOLAR not in span_panel.api.capabilities:
+        return entities
 
     # Add solar sensors if enabled
     solar_enabled = config_entry.options.get(INVERTER_ENABLE, False)

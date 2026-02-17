@@ -29,8 +29,8 @@ def get_manifest_versions():
 
         for req in requirements:
             if req.startswith("span-panel-api"):
-                # Extract version from span-panel-api~=1.1.0
-                match = re.search(r"span-panel-api[~=]+([0-9.]+)", req)
+                # Extract version from span-panel-api~=1.1.0 or span-panel-api[grpc]~=1.1.0
+                match = re.search(r"span-panel-api(?:\[[^\]]+\])?[~=]+([0-9.]+)", req)
                 if match:
                     versions["span-panel-api"] = match.group(1)
             elif req.startswith("ha-synthetic-sensors"):

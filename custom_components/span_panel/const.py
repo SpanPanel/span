@@ -11,6 +11,7 @@ NAME = "name"
 CONF_SERIAL_NUMBER = "serial_number"
 CONF_USE_SSL = "use_ssl"
 CONF_DEVICE_NAME = "device_name"
+CONF_PANEL_GENERATION = "panel_generation"
 
 # Simulation configuration
 CONF_SIMULATION_CONFIG = "simulation_config"

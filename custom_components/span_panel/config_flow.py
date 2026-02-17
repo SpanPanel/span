@@ -54,6 +54,7 @@ from .const import (
     CONF_API_RETRIES,
     CONF_API_RETRY_BACKOFF_MULTIPLIER,
     CONF_API_RETRY_TIMEOUT,
+    CONF_PANEL_GENERATION,
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
@@ -108,6 +109,18 @@ def get_user_data_schema(default_host: str = "") -> vol.Schema:
             vol.Optional("simulator_mode", default=False): bool,
             vol.Optional(POWER_DISPLAY_PRECISION, default=0): int,
             vol.Optional(ENERGY_DISPLAY_PRECISION, default=2): int,
+            vol.Optional(CONF_PANEL_GENERATION, default="auto"): selector(
+                {
+                    "select": {
+                        "options": [
+                            {"value": "auto", "label": "Auto-detect"},
+                            {"value": "gen2", "label": "Gen2 (OpenAPI/HTTP)"},
+                            {"value": "gen3", "label": "Gen3 (gRPC)"},
+                        ],
+                        "mode": "dropdown",
+                    }
+                }
+            ),
         }
     )
 
@@ -177,6 +190,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Initial naming selection chosen during pre-setup
         self._chosen_use_device_prefix: bool | None = None
         self._chosen_use_circuit_numbers: bool | None = None
+        # Panel generation selected by the user (auto/gen2/gen3)
+        self.panel_generation: str = "auto"
 
     async def setup_flow(
         self, trigger_type: TriggerFlowType, host: str, use_ssl: bool = False
@@ -215,6 +230,75 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         }
 
         self._is_flow_setup = True
+
+    async def async_step_gen3_setup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Set up a Gen3 (gRPC) panel — no authentication required.
+
+        Probes port 50065, retrieves the serial number from a snapshot, then
+        jumps straight to entity naming (skipping the JWT auth steps).
+        """
+        if user_input is None:
+            # Show a minimal form asking only for the host
+            schema = vol.Schema({vol.Required(CONF_HOST, default=""): str})
+            return self.async_show_form(step_id="gen3_setup", data_schema=schema)
+
+        host: str = str(user_input.get(CONF_HOST, "")).strip()
+        if not host:
+            schema = vol.Schema({vol.Required(CONF_HOST, default=""): str})
+            return self.async_show_form(
+                step_id="gen3_setup",
+                data_schema=schema,
+                errors={"base": "host_required"},
+            )
+
+        # Probe the gRPC endpoint to confirm connectivity.
+        try:
+            from span_panel_api.grpc import (  # pylint: disable=import-outside-toplevel
+                SpanGrpcClient,
+            )
+            from span_panel_api.grpc.const import (  # pylint: disable=import-outside-toplevel
+                DEFAULT_GRPC_PORT,
+            )
+
+            client = SpanGrpcClient(host, DEFAULT_GRPC_PORT)
+            connected = await client.connect()
+            if not connected:
+                raise ConnectionError("gRPC connect() returned False")
+            try:
+                snapshot = await client.get_snapshot()
+                serial = snapshot.serial_number or host
+            finally:
+                await client.close()
+        except Exception as exc:
+            _LOGGER.warning("Gen3 gRPC probe failed for host %s: %s", host, exc)
+            schema = vol.Schema({vol.Required(CONF_HOST, default=host): str})
+            return self.async_show_form(
+                step_id="gen3_setup",
+                data_schema=schema,
+                errors={"base": "cannot_connect"},
+            )
+
+        self.host = host
+        self.serial_number = serial
+        # Gen3 panels have no authentication — store empty token so downstream
+        # code that checks `if access_token:` skips auth-related calls.
+        self.access_token = ""  # nosec B105
+        self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
+        self._is_flow_setup = True
+
+        self.context = {
+            **self.context,
+            "title_placeholders": {
+                **self.context.get("title_placeholders", {}),
+                CONF_HOST: host,
+            },
+        }
+
+        await self.ensure_not_already_configured()
+        # Gen3 panels require no auth — go straight to entity naming.
+        return await self.async_step_choose_entity_naming_initial()
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
@@ -257,11 +341,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Store precision settings from user input (needed for both simulator and regular mode)
         self.power_display_precision = user_input.get(POWER_DISPLAY_PRECISION, 0)
         self.energy_display_precision = user_input.get(ENERGY_DISPLAY_PRECISION, 2)
+        self.panel_generation = user_input.get(CONF_PANEL_GENERATION, "auto")
 
         _LOGGER.debug(
-            "CONFIG_INPUT_DEBUG: User input precision - power: %s, energy: %s, full input: %s",
+            "CONFIG_INPUT_DEBUG: User input precision - power: %s, energy: %s, generation: %s, full input: %s",
             self.power_display_precision,
             self.energy_display_precision,
+            self.panel_generation,
             user_input,
         )
 
@@ -280,7 +366,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         use_ssl: bool = user_input.get(CONF_USE_SSL, False)
 
-        # Validate host before setting up flow
+        # Route Gen3 panels to a dedicated setup path (no HTTP auth required).
+        if self.panel_generation == "gen3":
+            self.use_ssl = use_ssl
+            return await self.async_step_gen3_setup({"host": host})
+
+        # Gen2 / auto-detect: validate via HTTP then proceed through auth flow.
         if not await validate_host(self.hass, host, use_ssl=use_ssl):
             return self.async_show_form(
                 step_id="user",
@@ -634,6 +725,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 CONF_HOST: host,
                 CONF_ACCESS_TOKEN: access_token,
                 CONF_USE_SSL: self.use_ssl,
+                CONF_PANEL_GENERATION: self.panel_generation,
                 "device_name": device_name,
             },
             options={
