@@ -45,6 +45,7 @@ class CircuitInfo:
     circuit_id: int
     name: str
     metric_iid: int
+    name_iid: int = 0
     is_dual_phase: bool = False
 
 
@@ -77,6 +78,8 @@ class PanelData:
     circuits: dict[int, CircuitInfo] = field(default_factory=dict)
     metrics: dict[int, CircuitMetrics] = field(default_factory=dict)
     main_feed: CircuitMetrics = field(default_factory=CircuitMetrics)
+    # Reverse lookup: metric IID → circuit_id (built during discovery)
+    metric_iid_to_circuit: dict[int, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -514,9 +517,19 @@ class SpanGrpcClient:
         self._parse_instances(response)
 
     def _parse_instances(self, data: bytes) -> None:
-        """Parse GetInstancesResponse to discover circuits and panel info."""
+        """Parse GetInstancesResponse to discover circuits and panel info.
+
+        Collects both trait 16 (name) and trait 26 (metric) instance IDs,
+        then pairs them by sorted position to build the circuit mapping.
+        This avoids hardcoding a fixed offset between the two trait IID
+        spaces, which can vary across panel models/configurations.
+        """
         fields = _parse_protobuf_fields(data)
         items = fields.get(1, [])
+
+        # Collect instance IDs for both traits before building circuits
+        name_iids: list[int] = []      # Trait 16 instance IDs
+        metric_iids: list[int] = []    # Trait 26 instance IDs (excl main feed)
 
         for item_data in items:
             if not isinstance(item_data, bytes):
@@ -574,30 +587,97 @@ class SpanGrpcClient:
             ):
                 self._data.panel_resource_id = resource_id_str
 
-            # Detect power metric circuits (trait 26)
+            # Collect trait 16 (circuit names) instance IDs
+            if trait_id == TRAIT_CIRCUIT_NAMES and vendor_id == VENDOR_SPAN:
+                name_iids.append(instance_id)
+
+            # Collect trait 26 (power metrics) instance IDs
             if trait_id == TRAIT_POWER_METRICS and vendor_id == VENDOR_SPAN:
-                circuit_id = instance_id - METRIC_IID_OFFSET
+                if instance_id != MAIN_FEED_IID:
+                    metric_iids.append(instance_id)
+
+        # Sort both sets to pair by position (lowest IID = first circuit)
+        name_iids.sort()
+        metric_iids.sort()
+
+        _LOGGER.debug(
+            "Discovered %d name instances (trait 16) and %d metric instances "
+            "(trait 26, excl main feed). Name IIDs: %s, Metric IIDs: %s",
+            len(name_iids),
+            len(metric_iids),
+            name_iids[:5],
+            metric_iids[:5],
+        )
+
+        if name_iids and metric_iids:
+            if len(name_iids) != len(metric_iids):
+                _LOGGER.warning(
+                    "Trait 16 has %d instances but trait 26 has %d — "
+                    "pairing by position (some circuits may be unnamed)",
+                    len(name_iids),
+                    len(metric_iids),
+                )
+
+            # Pair by sorted position — each name IID corresponds to the
+            # metric IID at the same index
+            for idx, metric_iid in enumerate(metric_iids):
+                circuit_id = idx + 1
+                name_iid = name_iids[idx] if idx < len(name_iids) else 0
+                self._data.circuits[circuit_id] = CircuitInfo(
+                    circuit_id=circuit_id,
+                    name=f"Circuit {circuit_id}",
+                    metric_iid=metric_iid,
+                    name_iid=name_iid,
+                )
+                self._data.metric_iid_to_circuit[metric_iid] = circuit_id
+
+        elif metric_iids:
+            # No trait 16 instances — fall back to offset-based mapping
+            _LOGGER.warning(
+                "No trait 16 (name) instances found — falling back to "
+                "offset-based circuit mapping (offset=%d)",
+                METRIC_IID_OFFSET,
+            )
+            for metric_iid in metric_iids:
+                circuit_id = metric_iid - METRIC_IID_OFFSET
                 if 1 <= circuit_id <= 50:
-                    if circuit_id not in self._data.circuits:
-                        self._data.circuits[circuit_id] = CircuitInfo(
-                            circuit_id=circuit_id,
-                            name=f"Circuit {circuit_id}",
-                            metric_iid=instance_id,
-                        )
+                    self._data.circuits[circuit_id] = CircuitInfo(
+                        circuit_id=circuit_id,
+                        name=f"Circuit {circuit_id}",
+                        metric_iid=metric_iid,
+                        name_iid=circuit_id,
+                    )
+                    self._data.metric_iid_to_circuit[metric_iid] = circuit_id
 
     # ------------------------------------------------------------------
     # Circuit names
     # ------------------------------------------------------------------
 
     async def _fetch_circuit_names(self) -> None:
-        """Fetch circuit names from trait 16 via GetRevision."""
-        for circuit_id in list(self._data.circuits.keys()):
+        """Fetch circuit names from trait 16 via GetRevision.
+
+        Uses each circuit's name_iid (trait 16 instance ID) rather than
+        the circuit_id, since the two numbering spaces may differ.
+        """
+        for circuit_id, info in list(self._data.circuits.items()):
+            name_iid = info.name_iid or circuit_id
             try:
-                name = await self._get_circuit_name(circuit_id)
+                name = await self._get_circuit_name(name_iid)
                 if name:
-                    self._data.circuits[circuit_id].name = name
+                    info.name = name
+                    _LOGGER.debug(
+                        "Circuit %d (name_iid=%d, metric_iid=%d): %s",
+                        circuit_id,
+                        name_iid,
+                        info.metric_iid,
+                        name,
+                    )
             except Exception:
-                _LOGGER.debug("Failed to get name for circuit %d", circuit_id)
+                _LOGGER.debug(
+                    "Failed to get name for circuit %d (name_iid=%d)",
+                    circuit_id,
+                    name_iid,
+                )
 
     async def _get_circuit_name(self, circuit_id: int) -> str | None:
         """Get a single circuit name via GetRevision on trait 16."""
@@ -767,8 +847,9 @@ class SpanGrpcClient:
             self._data.main_feed = _decode_main_feed(raw)
             return
 
-        circuit_id = iid - METRIC_IID_OFFSET
-        if not (1 <= circuit_id <= 50):
+        # Look up circuit_id from the discovered mapping
+        circuit_id = self._data.metric_iid_to_circuit.get(iid)
+        if circuit_id is None:
             return
 
         # Dual-phase (field 12) — check first since it's more specific
