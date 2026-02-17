@@ -22,6 +22,7 @@ from span_panel_api import PanelCapability
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401  # type: ignore[misc]
 from .const import (
+    CONF_PANEL_GENERATION,
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
@@ -103,10 +104,19 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
             )
             return False
         else:
-            # Normal successful migration
+            # Normal successful migration.
+            # Stamp CONF_PANEL_GENERATION on entries that pre-date Gen3 support —
+            # all v1 config entries were created against Gen2 hardware.
+            migrated_data = dict(config_entry.data)
+            if CONF_PANEL_GENERATION not in migrated_data:
+                migrated_data[CONF_PANEL_GENERATION] = "gen2"
+                _LOGGER.debug(
+                    "Migration: set panel_generation=gen2 for entry %s",
+                    config_entry.entry_id,
+                )
             hass.config_entries.async_update_entry(
                 config_entry,
-                data=config_entry.data,
+                data=migrated_data,
                 options=config_entry.options,
                 title=config_entry.title,
                 version=CURRENT_CONFIG_VERSION,
@@ -218,6 +228,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             simulation_config_path=simulation_config_path,
             simulation_start_time=simulation_start_time,
             simulation_offline_minutes=simulation_offline_minutes,
+            panel_generation=config.get(CONF_PANEL_GENERATION, "auto"),
         )
 
         _LOGGER.debug("Created SpanPanel instance: %s", span_panel)
@@ -372,16 +383,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
     if coordinator_data and COORDINATOR in coordinator_data:
         coordinator = coordinator_data[COORDINATOR]
-        # Clean up the API client resources
-        if hasattr(coordinator, "span_panel_api") and coordinator.span_panel_api:
-            span_panel = coordinator.span_panel_api
+        # Close the SpanPanel (stops gRPC streaming, closes HTTP connections, etc.)
+        span_panel = getattr(coordinator, "span_panel", None)
+        if isinstance(span_panel, SpanPanel):
             try:
-                # SpanPanel has a close method that properly cleans up the API client
-                if isinstance(span_panel, SpanPanel):
-                    await span_panel.close()
-                    _LOGGER.debug("Successfully closed SpanPanel API client")
+                await span_panel.close()
+                _LOGGER.debug("Successfully closed SpanPanel API client")
             except TypeError as e:
-                # Handle non-awaitable objects gracefully
                 _LOGGER.debug("API close method is not awaitable, skipping cleanup: %s", e)
             except Exception as e:
                 _LOGGER.error("Error during API cleanup: %s", e)

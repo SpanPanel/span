@@ -26,6 +26,13 @@ class SpanPanelCircuit:
     is_user_controllable: bool
     is_sheddable: bool
     is_never_backup: bool
+    # Gen3-only fields (None for Gen2 panels — entities gated on PUSH_STREAMING capability)
+    voltage_v: float | None = None
+    current_a: float | None = None
+    apparent_power_va: float | None = None
+    reactive_power_var: float | None = None
+    frequency_hz: float | None = None
+    power_factor: float | None = None
     breaker_positions: list[int] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     circuit_config: dict[str, Any] = field(default_factory=dict)
@@ -96,6 +103,12 @@ class SpanPanelCircuit:
             is_user_controllable=relay is not None,
             is_sheddable=False,
             is_never_backup=False,
+            voltage_v=snapshot.voltage_v,
+            current_a=snapshot.current_a,
+            apparent_power_va=snapshot.apparent_power_va,
+            reactive_power_var=snapshot.reactive_power_var,
+            frequency_hz=snapshot.frequency_hz,
+            power_factor=snapshot.power_factor,
         )
 
     def copy(self) -> "SpanPanelCircuit":

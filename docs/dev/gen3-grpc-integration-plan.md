@@ -5,9 +5,7 @@
 **Library work**: Complete on `span-panel-api` branch
 [`grpc_addition`](https://github.com/SpanPanel/span-panel-api/tree/grpc_addition) — version **1.1.15**.
 
-**Integration work**: Phase 1 and Phase 2a complete on branch `gen3-grpc-integration` — version **1.3.2**.
-Phase 2b (push coordinator, Gen3 power-metric sensors) is deferred until Gen3 hardware
-is available for testing.
+**Integration work**: Phases 1, 2a, and 2b complete on branch `gen3-grpc-integration` — version **1.3.2**.
 
 ---
 
@@ -26,7 +24,7 @@ The library's `grpc_addition` branch introduces:
 - `SpanGrpcClient` — the Gen3 gRPC transport (migrated from PR #169's `gen3/`)
 - `create_span_client()` — factory with auto-detection
 
-**Reference**: `span-panel-api/docs/Dev/grpc-transport-design.md` on the
+**Reference**: `span-panel-api/docs/dev/grpc-transport-design.md` on the
 `grpc_addition` branch contains the full transport-layer architecture and
 interface specification.
 
@@ -59,12 +57,6 @@ from span_panel_api import PanelCapability
 
 @property
 def capabilities(self) -> PanelCapability:
-    """Return the panel's capabilities.
-
-    Reads directly from the underlying client so the value reflects the
-    connected transport (GEN2_FULL for OpenAPI/HTTP, GEN3_INITIAL for gRPC).
-    Falls back to GEN2_FULL when the client has not yet been created.
-    """
     if self._client is not None:
         return self._client.capabilities
     return PanelCapability.GEN2_FULL
@@ -88,7 +80,7 @@ _BASE_PLATFORMS: list[Platform] = [
 ]
 
 _CAPABILITY_PLATFORMS: dict[PanelCapability, Platform] = {
-    PanelCapability.RELAY_CONTROL:   Platform.SWITCH,
+    PanelCapability.RELAY_CONTROL:    Platform.SWITCH,
     PanelCapability.PRIORITY_CONTROL: Platform.SELECT,
 }
 
@@ -124,9 +116,8 @@ unload_ok = await hass.config_entries.async_unload_platforms(entry, active_platf
 **Gen2 result**: all four platforms loaded (`BINARY_SENSOR`, `SENSOR`,
 `SWITCH`, `SELECT`) — identical to previous behaviour.
 
-**Gen3 result** (when `_create_client()` is updated in Phase 2):
-`GEN3_INITIAL` = `PUSH_STREAMING` only → only `BINARY_SENSOR` + `SENSOR`
-loaded; no switches, no selects.
+**Gen3 result**: `GEN3_INITIAL` = `PUSH_STREAMING` only → only
+`BINARY_SENSOR` + `SENSOR` loaded; no switches, no selects.
 
 ### 4. `config_flow.py` — Panel Generation Selector
 
@@ -195,154 +186,139 @@ capability flag is absent.  All gates read from `span_panel.api.capabilities`:
 
 ## Phase 2a — Snapshot Migration (Gen2 hardware, no Gen3 hardware required)
 
-The current data path calls four individual API methods and maps OpenAPI-generated
-types into integration domain objects.  This phase migrates to `get_snapshot()` as
-the single data-fetch call for both generations, eliminating any dependency on
-OpenAPI types above `span-panel-api`.
+The current data path called four individual API methods and mapped
+OpenAPI-generated types into integration domain objects.  This phase migrates
+to `get_snapshot()` as the single data-fetch call for both generations,
+eliminating any dependency on OpenAPI types above `span-panel-api`.
 
-### Why This Must Precede Phase 2b
-
-Phase 2b slots in `SpanGrpcClient` behind the same interface.  If entity classes
-still read from OpenAPI-backed properties, Gen3 data has nowhere to go.  Completing
-this migration means entities read from `SpanCircuitSnapshot` fields — the same
-fields `SpanGrpcClient.get_snapshot()` populates — so Gen3 entities require no
-additional changes for the metrics that both generations share.
-
-### `SpanPanelApi.update()` — call `get_snapshot()` instead of four methods
-
-Replace the four individual calls with one:
+### `SpanPanel.update()` — single `get_snapshot()` call
 
 ```python
-# Before
-status = await self._client.get_status()
-panel  = await self._client.get_panel_state()
-circs  = await self._client.get_circuits()
-batt   = await self._client.get_storage_soe()
-
-# After
-snapshot = await self._client.get_snapshot()
+snapshot = await self.api.get_snapshot()
+self._update_status(SpanPanelHardwareStatus.from_snapshot(snapshot))
+self._update_panel(SpanPanelData.from_snapshot(snapshot))
+self._update_circuits(
+    {cid: SpanPanelCircuit.from_snapshot(cs) for cid, cs in snapshot.circuits.items()}
+)
+if battery_option_enabled:
+    self._update_storage_battery(SpanPanelStorageBattery.from_snapshot(snapshot))
 ```
 
-`SpanPanelClient.get_snapshot()` already makes those same four calls internally —
-this is a refactor, not a behaviour change.
+### `from_snapshot()` factories
 
-### `SpanPanel` — populate from `SpanPanelSnapshot`
-
-`SpanPanel` currently holds the four OpenAPI response objects.  Replace with a
-single `SpanPanelSnapshot` (or equivalent fields derived from it):
-
-```python
-self._snapshot = snapshot          # SpanPanelSnapshot
-self.main_power_w   = snapshot.main_power_w
-self.grid_power_w   = snapshot.grid_power_w
-self.battery_soe    = snapshot.battery_soe
-self.dsm_state      = snapshot.dsm_state
-# ... etc.
-```
-
-### `SpanPanelCircuit` — wrap `SpanCircuitSnapshot`
-
-`SpanPanelCircuit` currently wraps the OpenAPI `Circuit` type.  Redirect it to
-wrap `SpanCircuitSnapshot` instead, mapping field names as needed:
-
-| Old (`Circuit` field) | New (`SpanCircuitSnapshot` field) |
-|-----------------------|----------------------------------|
-| `instantPowerW` | `power_w` |
-| `name` | `name` |
-| `relayState` | `relay_state` |
-| `priority` | `priority` |
-| `tabs` | `tabs` |
-| `energyAccumImportWh` | `energy_consumed_wh` |
-| `energyAccumExportWh` | `energy_produced_wh` |
-
-Entity classes need no changes — they continue reading from `SpanPanelCircuit`
-properties.  Only the backing field source changes.
+Each domain object gained a `from_snapshot()` classmethod.  Gen3-only fields
+(e.g. `main_voltage_v`) are populated if present; Gen2-only fields (energy,
+relay state, DSM) default to `None` / `""` / `0.0` when absent.  Entity
+classes that read those fields are already gated on the corresponding
+`PanelCapability` flag and are never created for Gen3.
 
 ---
 
-## Phase 2b — Gen3 Runtime Wiring (Gen3 hardware required)
+## Phase 2b — Gen3 Runtime Wiring (Complete)
 
-Depends on Phase 2a being complete.  The entity data path must already read from
-`SpanCircuitSnapshot`-backed properties before Gen3 data can flow through it.
+Depends on Phase 2a being complete.
 
-### `SpanPanelApi._create_client()` — Gen3 branch
+### `span_panel_api.py` — Gen3 client creation
+
+`_create_client()` instantiates `SpanGrpcClient` when
+`panel_generation == "gen3"`:
 
 ```python
-def _create_client(self) -> SpanPanelClientProtocol:
-    if self._config.get(CONF_PANEL_GENERATION) == "gen3":
-        from span_panel_api.grpc import SpanGrpcClient  # pylint: disable=import-outside-toplevel
-        from span_panel_api.grpc.const import DEFAULT_GRPC_PORT  # pylint: disable=import-outside-toplevel
-        return SpanGrpcClient(host=self._host, port=DEFAULT_GRPC_PORT)
-    return SpanPanelClient(host=self._host, ...)
+if self._panel_generation == "gen3":
+    from span_panel_api.grpc import SpanGrpcClient
+    self._client = SpanGrpcClient(host=self.host)
+    return
 ```
 
-`_client` is widened to `SpanPanelClientProtocol | None`.  All callers that
-currently rely on `SpanPanelClient`-specific methods (authenticate, etc.) must
-be guarded by `isinstance(self._client, AuthCapableProtocol)`.
+`setup()` for Gen3 calls `connect()` then `start_streaming()` on the gRPC
+client.  `_ensure_authenticated()` is a no-op for Gen3 (no JWT).
 
-### `coordinator.py` — `SpanPanelPushCoordinator`
+`register_push_callback()` was added to expose callback registration without
+requiring callers to access the private `_client`:
 
 ```python
-class SpanPanelPushCoordinator(DataUpdateCoordinator):
-    async def async_setup(self) -> None:
-        assert isinstance(self._api.client, StreamingCapableProtocol)
-        self._unsub = self._api.client.register_callback(self._on_push)
-        await self._api.client.start_streaming()
-
-    def _on_push(self) -> None:
-        # get_snapshot() on Gen3 is a cheap in-memory conversion — no I/O
-        snapshot = asyncio.get_event_loop().run_until_complete(
-            self._api.client.get_snapshot()
-        )
-        self.async_set_updated_data(snapshot)
-
-    async def async_teardown(self) -> None:
-        if self._unsub:
-            self._unsub()
-        await self._api.client.stop_streaming()
+def register_push_callback(self, cb: Callable[[], None]) -> Callable[[], None] | None:
+    if self._client is None or not isinstance(self._client, StreamingCapableProtocol):
+        return None
+    return cast(StreamingCapableProtocol, self._client).register_callback(cb)
 ```
 
-### `__init__.py` — choose coordinator at setup time
+### `coordinator.py` — Push-streaming extensions to `SpanPanelCoordinator`
+
+Rather than a separate coordinator class, push-streaming behaviour was folded
+into the existing `SpanPanelCoordinator` via capability detection at init time:
 
 ```python
-caps = span_panel.api.capabilities
-if PanelCapability.PUSH_STREAMING in caps:
-    coordinator = SpanPanelPushCoordinator(hass, span_panel.api)
-    await coordinator.async_setup()
+is_push_streaming = PanelCapability.PUSH_STREAMING in span_panel.api.capabilities
+
+if is_push_streaming:
+    update_interval = None          # disable polling timer for Gen3
 else:
-    coordinator = SpanPanelCoordinator(hass, span_panel.api)
-    await coordinator.async_config_entry_first_refresh()
+    update_interval = timedelta(seconds=scan_interval_seconds)
+
+super().__init__(..., update_interval=update_interval)
+
+if is_push_streaming:
+    self._register_push_callback()
 ```
 
-### `SpanGrpcClient` hardware validation
+Key methods added:
 
-Before wiring the runtime path, validate the library client against a real panel:
+- `_register_push_callback()` — calls `span_panel.api.register_push_callback(self._on_push_data)`
+- `_on_push_data()` — sync callback; guards against concurrent tasks with `_push_update_pending` flag; schedules `_async_push_update`
+- `_async_push_update()` — calls `span_panel.update()` then `async_set_updated_data(span_panel)`
+- `async_shutdown()` override — unregisters the push callback before delegating to `super()`
 
-- `connect()` populates circuits with correct IIDs and names
-- `Subscribe` stream delivers notifications at expected cadence
-- `_decode_circuit_metrics()` produces correct power/voltage values
-- Dual-phase circuit detection works correctly
-- `get_snapshot()` returns consistent data during active streaming
+**Rationale for extending vs. subclassing**: A single coordinator class is
+easier to maintain and avoids duplicating all the migration/reload logic.  The
+`update_interval=None` + push-callback approach is the idiomatic HA pattern
+for push-driven coordinators.
 
-See `span-panel-api/docs/Dev/grpc-transport-design.md` → "Hardware Validation
-Required" for the full validation checklist.
+### `__init__.py` — `async_unload_entry` cleanup fix
 
-### Sensors — Gen3-only power metrics
+`async_unload_entry` was looking for `coordinator.span_panel_api` (which does
+not exist).  Fixed to `coordinator.span_panel` so `span_panel.close()` is
+reliably called during unload, stopping the gRPC streaming task and closing
+the channel.
+
+### `__init__.py` — Migration stamps `panel_generation` on Gen2 upgrades
+
+In `async_migrate_entry` (v1 → v2), `CONF_PANEL_GENERATION: "gen2"` is added
+to the config entry data if absent.  All v1 entries pre-date Gen3 support and
+are definitively Gen2:
+
+```python
+migrated_data = dict(config_entry.data)
+if CONF_PANEL_GENERATION not in migrated_data:
+    migrated_data[CONF_PANEL_GENERATION] = "gen2"
+```
+
+### `span_panel_api.py` — Simulation always uses Gen2 transport
+
+Gen3 has no simulation infrastructure; simulation is a `SpanPanelClient` (Gen2 REST) feature only.
+Rather than blocking the combination in the UI, `SpanPanelApi.__init__` silently normalises
+`_panel_generation` to `"gen2"` whenever `simulation_mode=True`:
+
+```python
+self._panel_generation = "gen2" if simulation_mode else panel_generation
+```
+
+This means a user can leave the generation dropdown at any value and check the simulator box —
+the correct Gen2 transport is used automatically.  No config flow guard or translation error
+key is needed.
+
+### `sensors/factory.py` + `sensor_definitions.py` — Gen3-only power metrics
 
 Gen3 exposes per-circuit `voltage_v`, `current_a`, `apparent_power_va`,
-`reactive_power_var`, `frequency_hz`, `power_factor` — fields that have no Gen2
-equivalent.  These are added as new entity classes that read directly from
-`SpanCircuitSnapshot`, created only when the field is not `None` in the first
-snapshot:
+`reactive_power_var`, `frequency_hz`, `power_factor` — fields that have no
+Gen2 equivalent.  These are defined in `CIRCUIT_GEN3_SENSORS` and
+`PANEL_GEN3_SENSORS`, both gated on `PanelCapability.PUSH_STREAMING`:
 
 ```python
-first_circuit = next(iter(snapshot.circuits.values()), None)
-if first_circuit and first_circuit.voltage_v is not None:
-    entities.extend(build_gen3_circuit_sensors(snapshot))
+if PanelCapability.PUSH_STREAMING in capabilities:
+    entities.extend(create_gen3_circuit_sensors(coordinator, circuits))
+    entities.extend(create_panel_gen3_sensors(coordinator))
 ```
-
-Sensors that exist on both generations (circuit power, panel power) need no new
-entity classes — after Phase 2a they already read from `SpanCircuitSnapshot`.
 
 ---
 
@@ -351,11 +327,11 @@ entity classes — after Phase 2a they already read from `SpanCircuitSnapshot`.
 | # | Question | Decision |
 |---|----------|----------|
 | 1 | Where to store detected generation? | `entry.data` as `CONF_PANEL_GENERATION` ✅ |
-| 2 | Push coordinator: separate class or flag? | Separate class (`SpanPanelPushCoordinator`) — Phase 2b ⏳ |
+| 2 | Push coordinator: separate class or flag? | Flag + extensions in existing `SpanPanelCoordinator`; `update_interval=None` disables polling ✅ |
 | 3 | Gen3 sensors: existing file with capability-gates or new file? | Capability-gates in existing `sensors/factory.py` ✅ |
-| 4 | `get_snapshot()` replace or coexist with individual Gen2 calls? | Replace — `update()` calls `get_snapshot()` exclusively (Phase 2a) ✅ |
+| 4 | `get_snapshot()` replace or coexist with individual Gen2 calls? | Replace — `update()` calls `get_snapshot()` exclusively ✅ |
 | 5 | Minimum `span-panel-api` version in `manifest.json`? | `~=1.1.15` with `[grpc]` extra ✅ |
-| 6 | Gen3 entity architecture: separate classes, translation layer, or shared base? | Shared base via `SpanCircuitSnapshot` (Phase 2a migration eliminates the choice — existing entity classes work unchanged for overlapping metrics) ✅ |
+| 6 | Gen3 entity architecture: separate classes, translation layer, or shared base? | Shared base via `SpanCircuitSnapshot`; Gen3-only metrics in dedicated sensor definitions gated on `PUSH_STREAMING` ✅ |
 
 ---
 
@@ -379,13 +355,22 @@ entity classes — after Phase 2a they already read from `SpanCircuitSnapshot`.
     ✅ span_panel_data.py — from_snapshot(SpanPanelSnapshot) factory
     ✅ span_panel_hardware_status.py — from_snapshot(SpanPanelSnapshot) factory
     ✅ span_panel_storage_battery.py — from_snapshot(SpanPanelSnapshot) factory
-  Phase 2b pending (Gen3 hardware required, depends on 2a):
-    ⏳ span_panel_api.py — _create_client() Gen3 branch; widen _client type
-    ⏳ coordinator.py — SpanPanelPushCoordinator
-    ⏳ __init__.py — coordinator selection by capability
-    ⏳ sensors/factory.py — Gen3-only sensor entities (voltage, current, etc.)
+  Phase 2b complete:
+    ✅ span_panel_api.py — _create_client() Gen3 branch; register_push_callback()
+    ✅ coordinator.py — push-streaming extensions; _register_push_callback(),
+                        _on_push_data(), _async_push_update(), async_shutdown()
+    ✅ __init__.py — async_unload_entry cleanup fix; migration stamps panel_generation
+    ✅ span_panel_api.py — simulation normalises _panel_generation to "gen2"
+    ✅ config_flow.py — Gen3 + simulation no longer needs a guard (normalised at API layer)
+    ✅ sensor_definitions.py — CIRCUIT_GEN3_SENSORS, PANEL_GEN3_SENSORS
+    ✅ sensors/factory.py — Gen3-only sensor creation gated on PUSH_STREAMING
+  Circuit IID mapping bug fixed (span-panel-api grpc/client.py):
+    ✅ Removed hardcoded METRIC_IID_OFFSET=27 — wrong for MLO48 (reported in PR #169)
+    ✅ _parse_instances() now pairs trait 16 / trait 26 IIDs by sorted position
+    ✅ CircuitInfo.name_iid stores trait 16 IID for correct GetRevision calls
+    ✅ _metric_iid_to_circuit reverse map enables O(1) streaming lookup
         ↓
-        → PR review
+        → PR review + Gen3 hardware validation
 ```
 
 The library branch must be merged and published **before** this integration
@@ -398,17 +383,16 @@ branch can be merged, since the integration depends on the new library API.
 | File | Change | Status |
 |------|--------|--------|
 | `custom_components/span_panel/const.py` | Added `CONF_PANEL_GENERATION` | ✅ Done |
-| `custom_components/span_panel/span_panel_api.py` | Added `capabilities` property | ✅ Done |
-| `custom_components/span_panel/__init__.py` | Capability-gated platform loading; store `active_platforms` per entry | ✅ Done |
-| `custom_components/span_panel/config_flow.py` | Generation dropdown; `async_step_gen3_setup`; store generation in entry data | ✅ Done |
-| `custom_components/span_panel/sensors/factory.py` | Capability-gated sensor groups (DSM, energy, hardware, battery, solar) | ✅ Done |
+| `custom_components/span_panel/span_panel_api.py` | `capabilities` property; `_create_client()` Gen3 branch; `register_push_callback()`; Gen3 `setup()`/`ping()`/`close()` paths | ✅ Done |
+| `custom_components/span_panel/__init__.py` | Capability-gated platform loading; `async_unload_entry` fix; migration stamps `panel_generation` | ✅ Done |
+| `custom_components/span_panel/config_flow.py` | Generation dropdown; `async_step_gen3_setup` | ✅ Done |
+| `custom_components/span_panel/sensors/factory.py` | Capability-gated sensor groups; Gen3-only sensor creation | ✅ Done |
+| `custom_components/span_panel/sensor_definitions.py` | `CIRCUIT_GEN3_SENSORS`, `PANEL_GEN3_SENSORS` | ✅ Done |
 | `custom_components/span_panel/manifest.json` | Version 1.3.2; `span-panel-api[grpc]~=1.1.15` | ✅ Done |
-| `custom_components/span_panel/span_panel_api.py` | Added `get_snapshot()` (Phase 2a); widen `_client` to protocol type (Phase 2b) | ✅ Phase 2a done / ⏳ Phase 2b |
 | `custom_components/span_panel/span_panel.py` | `update()` calls `get_snapshot()`; all domain objects from snapshot | ✅ Done |
-| `custom_components/span_panel/span_panel_circuit.py` | Added `from_snapshot(SpanCircuitSnapshot)` factory | ✅ Done |
-| `custom_components/span_panel/span_panel_data.py` | Added `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
-| `custom_components/span_panel/span_panel_hardware_status.py` | Added `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
-| `custom_components/span_panel/span_panel_storage_battery.py` | Added `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
-| `custom_components/span_panel/coordinator.py` | Add `SpanPanelPushCoordinator`; coordinator selection in setup | ⏳ Phase 2b |
-| `custom_components/span_panel/__init__.py` | Coordinator selection by `PUSH_STREAMING` capability | ⏳ Phase 2b |
-| `custom_components/span_panel/sensors/factory.py` | Gen3-only sensor entities (voltage, current, apparent/reactive power, frequency, power factor) | ⏳ Phase 2b |
+| `custom_components/span_panel/span_panel_circuit.py` | `from_snapshot(SpanCircuitSnapshot)` factory | ✅ Done |
+| `custom_components/span_panel/span_panel_data.py` | `from_snapshot(SpanPanelSnapshot)` factory; Gen3 main feed fields | ✅ Done |
+| `custom_components/span_panel/span_panel_hardware_status.py` | `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
+| `custom_components/span_panel/span_panel_storage_battery.py` | `from_snapshot(SpanPanelSnapshot)` factory | ✅ Done |
+| `custom_components/span_panel/coordinator.py` | Push-streaming extensions: capability detection, `update_interval=None` for Gen3, push callback methods, `async_shutdown()` | ✅ Done |
+| `custom_components/span_panel/translations/` | No simulation-specific strings needed | ✅ Done |

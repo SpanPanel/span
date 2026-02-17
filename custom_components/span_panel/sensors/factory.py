@@ -24,9 +24,11 @@ from custom_components.span_panel.options import (
 )
 from custom_components.span_panel.sensor_definitions import (
     BATTERY_SENSOR,
+    CIRCUIT_GEN3_SENSORS,
     CIRCUIT_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
+    PANEL_GEN3_SENSORS,
     PANEL_POWER_SENSORS,
     SOLAR_SENSORS,
     STATUS_SENSORS,
@@ -34,7 +36,12 @@ from custom_components.span_panel.sensor_definitions import (
 )
 from custom_components.span_panel.span_panel import SpanPanel
 
-from .circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor, SpanUnmappedCircuitSensor
+from .circuit import (
+    SpanCircuitEnergySensor,
+    SpanCircuitGen3Sensor,
+    SpanCircuitPowerSensor,
+    SpanUnmappedCircuitSensor,
+)
 from .panel import (
     SpanPanelBattery,
     SpanPanelEnergySensor,
@@ -80,6 +87,11 @@ def create_panel_sensors(
     if PanelCapability.HARDWARE_STATUS in capabilities:
         for description_ss in STATUS_SENSORS:
             entities.append(SpanPanelStatus(coordinator, description_ss, span_panel))
+
+    # Add Gen3 main-feed metrics (voltage, current, frequency) — Gen3-only.
+    if PanelCapability.PUSH_STREAMING in capabilities:
+        for description in PANEL_GEN3_SENSORS:
+            entities.append(SpanPanelPanelStatus(coordinator, description, span_panel))
 
     return entities
 
@@ -145,6 +157,23 @@ def create_unmapped_circuit_sensors(
             entities.append(
                 SpanUnmappedCircuitSensor(coordinator, unmapped_description, span_panel, circuit_id)
             )
+
+    return entities
+
+
+def create_gen3_circuit_sensors(
+    coordinator: SpanPanelCoordinator, span_panel: SpanPanel
+) -> list[SpanCircuitGen3Sensor]:
+    """Create Gen3-only per-circuit metric sensors gated on PUSH_STREAMING capability."""
+    entities: list[SpanCircuitGen3Sensor] = []
+
+    if PanelCapability.PUSH_STREAMING not in span_panel.api.capabilities:
+        return entities
+
+    named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
+    for circuit_id in named_circuits:
+        for description in CIRCUIT_GEN3_SENSORS:
+            entities.append(SpanCircuitGen3Sensor(coordinator, description, span_panel, circuit_id))
 
     return entities
 
@@ -250,6 +279,7 @@ def create_native_sensors(
     | SpanPanelEnergySensor
     | SpanCircuitPowerSensor
     | SpanCircuitEnergySensor
+    | SpanCircuitGen3Sensor
     | SpanUnmappedCircuitSensor
     | SpanPanelBattery
     | SpanSolarSensor
@@ -263,6 +293,7 @@ def create_native_sensors(
         | SpanPanelEnergySensor
         | SpanCircuitPowerSensor
         | SpanCircuitEnergySensor
+        | SpanCircuitGen3Sensor
         | SpanUnmappedCircuitSensor
         | SpanPanelBattery
         | SpanSolarSensor
@@ -272,6 +303,7 @@ def create_native_sensors(
     # Create different sensor types
     entities.extend(create_panel_sensors(coordinator, span_panel, config_entry))
     entities.extend(create_circuit_sensors(coordinator, span_panel, config_entry))
+    entities.extend(create_gen3_circuit_sensors(coordinator, span_panel))
     entities.extend(create_unmapped_circuit_sensors(coordinator, span_panel))
     entities.extend(create_battery_sensors(coordinator, span_panel, config_entry))
     entities.extend(create_solar_sensors(coordinator, span_panel, config_entry))

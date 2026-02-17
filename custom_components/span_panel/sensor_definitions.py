@@ -19,7 +19,14 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfFrequency,
+    UnitOfPower,
+)
 
 from .const import (
     CIRCUITS_ENERGY_CONSUMED,
@@ -36,7 +43,7 @@ from .span_panel_storage_battery import SpanPanelStorageBattery
 class SpanPanelCircuitsRequiredKeysMixin:
     """Required keys mixin for Span Panel circuit sensors."""
 
-    value_fn: Callable[[SpanPanelCircuit], float]
+    value_fn: Callable[[SpanPanelCircuit], float | None]
 
 
 @dataclass(frozen=True)
@@ -50,7 +57,7 @@ class SpanPanelCircuitsSensorEntityDescription(
 class SpanPanelDataRequiredKeysMixin:
     """Required keys mixin for Span Panel data sensors."""
 
-    value_fn: Callable[[SpanPanelData], float | str]
+    value_fn: Callable[[SpanPanelData], float | str | None]
 
 
 @dataclass(frozen=True)
@@ -381,5 +388,119 @@ SOLAR_SENSORS: tuple[
         leg1_circuit_suffix="net_energy",
         leg2_circuit_suffix="net_energy",
         calculation_type="sum",
+    ),
+)
+
+# Gen3-only circuit sensor definitions (gated on PanelCapability.PUSH_STREAMING)
+CIRCUIT_GEN3_SENSORS: tuple[
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
+] = (
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_voltage_v",
+        name="Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        device_class=SensorDeviceClass.VOLTAGE,
+        value_fn=lambda circuit: circuit.voltage_v,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_current_a",
+        name="Current",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.CURRENT,
+        value_fn=lambda circuit: circuit.current_a,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_apparent_power_va",
+        name="Apparent Power",
+        native_unit_of_measurement="VA",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        device_class=SensorDeviceClass.APPARENT_POWER,
+        value_fn=lambda circuit: circuit.apparent_power_va,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_reactive_power_var",
+        name="Reactive Power",
+        native_unit_of_measurement="var",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        device_class=SensorDeviceClass.REACTIVE_POWER,
+        value_fn=lambda circuit: circuit.reactive_power_var,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_frequency_hz",
+        name="Frequency",
+        native_unit_of_measurement=UnitOfFrequency.HERTZ,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.FREQUENCY,
+        value_fn=lambda circuit: circuit.frequency_hz,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_power_factor",
+        name="Power Factor",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        device_class=SensorDeviceClass.POWER_FACTOR,
+        value_fn=lambda circuit: (circuit.power_factor * 100)
+        if circuit.power_factor is not None
+        else None,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+)
+
+# Gen3-only panel-level sensor definitions (gated on PanelCapability.PUSH_STREAMING)
+PANEL_GEN3_SENSORS: tuple[
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
+] = (
+    SpanPanelDataSensorEntityDescription(
+        key="mainVoltageV",
+        name="Main Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        device_class=SensorDeviceClass.VOLTAGE,
+        value_fn=lambda panel_data: panel_data.main_voltage_v,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="mainCurrentA",
+        name="Main Current",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.CURRENT,
+        value_fn=lambda panel_data: panel_data.main_current_a,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="mainFrequencyHz",
+        name="Main Frequency",
+        native_unit_of_measurement=UnitOfFrequency.HERTZ,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=2,
+        device_class=SensorDeviceClass.FREQUENCY,
+        value_fn=lambda panel_data: panel_data.main_frequency_hz,
     ),
 )

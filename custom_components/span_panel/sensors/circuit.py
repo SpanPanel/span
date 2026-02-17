@@ -286,6 +286,106 @@ class SpanCircuitEnergySensor(
         return attributes if attributes else None
 
 
+class SpanCircuitGen3Sensor(
+    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
+    """Gen3-only circuit sensor for push-streamed electrical metrics.
+
+    Used for voltage, current, apparent/reactive power, frequency, and power
+    factor — all of which are only available from Gen3 (gRPC) panels.
+    """
+
+    _API_KEY_MAP: dict[str, str] = {
+        "circuit_voltage_v": "voltageV",
+        "circuit_current_a": "currentA",
+        "circuit_apparent_power_va": "apparentPowerVa",
+        "circuit_reactive_power_var": "reactivePowerVar",
+        "circuit_frequency_hz": "frequencyHz",
+        "circuit_power_factor": "powerFactor",
+    }
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        span_panel: SpanPanel,
+        circuit_id: str,
+    ) -> None:
+        """Initialize the Gen3 circuit metric sensor."""
+        self.circuit_id = circuit_id
+        self.original_key = description.key
+
+        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+            key=circuit_id,
+            name=description.name,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            device_class=description.device_class,
+            value_fn=description.value_fn,
+            entity_registry_enabled_default=description.entity_registry_enabled_default,
+            entity_registry_visible_default=description.entity_registry_visible_default,
+        )
+
+        super().__init__(data_coordinator, description_with_circuit, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for Gen3 circuit metric sensors."""
+        api_key = self._API_KEY_MAP.get(self.original_key, self.original_key)
+        return construct_circuit_unique_id_for_entry(
+            self.coordinator, span_panel, self.circuit_id, api_key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str | None:
+        """Generate friendly name for Gen3 circuit metric sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return construct_unmapped_friendly_name(
+                self.circuit_id, str(description.name or "Sensor")
+            )
+
+        use_circuit_numbers = self.coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+
+        if use_circuit_numbers:
+            if circuit.tabs and len(circuit.tabs) == 2:
+                sorted_tabs = sorted(circuit.tabs)
+                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+            elif circuit.tabs and len(circuit.tabs) == 1:
+                circuit_identifier = f"Circuit {circuit.tabs[0]}"
+            else:
+                circuit_identifier = f"Circuit {self.circuit_id}"
+        else:
+            if circuit.name is None:
+                return None
+            circuit_identifier = circuit.name
+
+        return f"{circuit_identifier} {description.name or 'Sensor'}"
+
+    def _generate_panel_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str | None:
+        """Generate panel name for Gen3 circuit metric sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return construct_unmapped_friendly_name(
+                self.circuit_id, str(description.name or "Sensor")
+            )
+        if circuit.name is None:
+            return None
+        return f"{circuit.name} {description.name or 'Sensor'}"
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the Gen3 circuit metric sensor."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit is None:
+            raise ValueError(f"Circuit {self.circuit_id} not found in panel data")
+        return circuit
+
+
 class SpanUnmappedCircuitSensor(
     SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
 ):

@@ -1,13 +1,23 @@
 """Span Panel API - Updated to use span-panel-api package."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime
 import logging
 import os
-from typing import Any
+from typing import Any, cast
 import uuid
 
-from span_panel_api import PanelCapability, SpanPanelClient, SpanPanelSnapshot, set_async_delay_func
+from span_panel_api import (
+    PanelCapability,
+    SpanPanelClient,
+    SpanPanelClientProtocol,
+    SpanPanelSnapshot,
+    StreamingCapableProtocol,
+    set_async_delay_func,
+)
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -50,6 +60,7 @@ class SpanPanelApi:
         simulation_config_path: str | None = None,
         simulation_start_time: datetime | None = None,
         simulation_offline_minutes: int = 0,
+        panel_generation: str = "auto",
     ) -> None:
         """Initialize the Span Panel API."""
         # For simulation mode, keep the original host (which should be the serial number)
@@ -57,6 +68,8 @@ class SpanPanelApi:
         self.host: str = host if simulation_mode else host.lower()
         self.access_token: str | None = access_token
         self.options: Options | None = options
+        # Simulation only runs on the Gen2 REST transport; override any gen3 selection.
+        self._panel_generation: str = "gen2" if simulation_mode else panel_generation
         self.scan_interval: int = scan_interval or 15  # Default to 15 seconds
         self.use_ssl: bool = use_ssl
         self.simulation_mode: bool = simulation_mode
@@ -85,7 +98,7 @@ class SpanPanelApi:
             self._retry_backoff_multiplier = DEFAULT_API_RETRY_BACKOFF_MULTIPLIER
 
         # Initialize client as None - will be created in setup()
-        self._client: SpanPanelClient | None = None
+        self._client: SpanPanelClientProtocol | None = None
 
     def _is_panel_offline(self) -> bool:
         """Check if the panel should be offline based on simulation settings.
@@ -153,8 +166,33 @@ class SpanPanelApi:
             self.offline_start_time = None
             _LOGGER.info("[SpanPanelApi] Disabled simulation offline mode")
 
+    @property
+    def _gen2_client(self) -> SpanPanelClient:
+        """Return the Gen2 REST client, raising if the active transport is not Gen2.
+
+        The _panel_generation guard ensures _client is always SpanPanelClient when
+        not "gen3".  cast() is used instead of isinstance so that test environments
+        that mock SpanPanelClient as a MagicMock (non-type) work correctly.
+        """
+        if self._panel_generation == "gen3":
+            raise SpanPanelAPIError(
+                "Operation not supported: panel is not connected via Gen2 (REST) transport"
+            )
+        if self._client is None:
+            raise SpanPanelAPIError("API client has been closed")
+        return cast(SpanPanelClient, self._client)
+
     def _create_client(self) -> None:
-        """Create the SpanPanelClient with stored parameters."""
+        """Create the appropriate transport client based on panel generation."""
+        if self._panel_generation == "gen3":
+            _LOGGER.debug("[SpanPanelApi] Creating SpanGrpcClient for host=%s", self.host)
+            from span_panel_api.grpc import (  # pylint: disable=import-outside-toplevel
+                SpanGrpcClient,  # noqa: PLC0415  # type: ignore[import-untyped]
+            )
+
+            self._client = SpanGrpcClient(host=self.host)
+            return
+
         _LOGGER.debug("[SpanPanelApi] Creating SpanPanelClient for host=%s", self.host)
 
         # Determine simulation config path if in simulation mode
@@ -257,6 +295,22 @@ class SpanPanelApi:
             self._create_client()
             self._client_created = True
 
+        if self._client is None:
+            raise SpanPanelAPIError("Failed to create API client")
+
+        if self._panel_generation == "gen3":
+            _LOGGER.debug("[SpanPanelApi] Gen3 setup: connecting via gRPC")
+            try:
+                if not await self._client.connect():
+                    raise SpanPanelConnectionError("Failed to connect to Gen3 SPAN panel via gRPC")
+                await cast(StreamingCapableProtocol, self._client).start_streaming()
+                _LOGGER.debug("[SpanPanelApi] Gen3 streaming started")
+            except Exception as e:
+                _LOGGER.error("[SpanPanelApi] Gen3 setup failed: %s", e)
+                await self.close()
+                raise
+            return
+
         try:
             # If we have a token, verify it works
             if self.access_token:
@@ -278,7 +332,12 @@ class SpanPanelApi:
             raise
 
     async def _ensure_authenticated(self) -> None:
-        """Ensure we have valid authentication, re-authenticate if needed."""
+        """Ensure we have valid authentication, re-authenticate if needed.
+
+        Gen3 panels do not use JWT authentication; this method is a no-op for them.
+        """
+        if self._panel_generation == "gen3":
+            return
         if not self._authenticated:
             _LOGGER.debug("[SpanPanelApi] Re-authentication needed")
             if self._client is None:
@@ -286,7 +345,7 @@ class SpanPanelApi:
             try:
                 # Generate a unique client name for re-authentication
                 client_name = f"home-assistant-{uuid.uuid4()}"
-                auth_response = await self._client.authenticate(
+                auth_response = await self._gen2_client.authenticate(
                     client_name, "Home Assistant Local Span Integration"
                 )
                 self.access_token = auth_response.access_token
@@ -305,7 +364,14 @@ class SpanPanelApi:
         self._ensure_client_open()
         if self._client is None:
             return False
-        # status endpoint doesn't require auth.
+
+        if self._panel_generation == "gen3":
+            try:
+                return bool(await self._client.ping())
+            except Exception:
+                return False
+
+        # Gen2: status endpoint doesn't require auth.
         try:
             await self.get_status_data()
             return True
@@ -321,6 +387,14 @@ class SpanPanelApi:
         self._ensure_client_open()
         if self._client is None:
             return False
+
+        if self._panel_generation == "gen3":
+            # Gen3 has no authentication; a successful ping implies a working connection.
+            try:
+                return bool(await self._client.ping())
+            except Exception:
+                return False
+
         try:
             # Use get_panel_data() since it requires authentication
             await self.get_panel_data()
@@ -341,12 +415,10 @@ class SpanPanelApi:
     async def get_access_token(self) -> str:
         """Get the access token."""
         self._ensure_client_open()
-        if self._client is None:
-            raise SpanPanelAPIError("API client has been closed")
         try:
             # Generate a unique client name
             client_name = f"home-assistant-{uuid.uuid4()}"
-            auth_response = await self._client.authenticate(
+            auth_response = await self._gen2_client.authenticate(
                 client_name, "Home Assistant Local Span Integration"
             )
 
@@ -368,7 +440,7 @@ class SpanPanelApi:
             raise SpanPanelAPIError("API client has been closed")
         self._debug_check_client("get_status_data")
         try:
-            status_response = await self._client.get_status()
+            status_response = await self._gen2_client.get_status()
 
             # Convert the attrs model to dict and then to our data class
             status_dict = status_response.to_dict()
@@ -401,7 +473,7 @@ class SpanPanelApi:
         self._debug_check_client("get_panel_data")
         try:
             await self._ensure_authenticated()
-            panel_response = await self._client.get_panel_state()
+            panel_response = await self._gen2_client.get_panel_state()
 
             # Convert the attrs model to dict and deep copy before processing
             raw_data: Any = deepcopy(panel_response.to_dict())
@@ -445,7 +517,7 @@ class SpanPanelApi:
         self._debug_check_client("get_circuits_data")
         try:
             await self._ensure_authenticated()
-            circuits_response = await self._client.get_circuits()
+            circuits_response = await self._gen2_client.get_circuits()
 
             # Extract circuits from the response
             raw_circuits_data = circuits_response.circuits.additional_properties
@@ -497,7 +569,7 @@ class SpanPanelApi:
         self._debug_check_client("get_storage_battery_data")
         try:
             await self._ensure_authenticated()
-            storage_response = await self._client.get_storage_soe()
+            storage_response = await self._gen2_client.get_storage_soe()
 
             # Extract SOE data from the response
             storage_battery_data = storage_response.soe.to_dict()
@@ -571,7 +643,7 @@ class SpanPanelApi:
         self._debug_check_client("set_relay")
         try:
             await self._ensure_authenticated()
-            await self._client.set_circuit_relay(circuit.circuit_id, state.name)
+            await self._gen2_client.set_circuit_relay(circuit.circuit_id, state.name)
 
         except SpanPanelRetriableError as e:
             _LOGGER.warning("Retriable error setting relay state (will retry): %s", e)
@@ -600,7 +672,7 @@ class SpanPanelApi:
         self._debug_check_client("set_priority")
         try:
             await self._ensure_authenticated()
-            await self._client.set_circuit_priority(circuit.circuit_id, priority.name)
+            await self._gen2_client.set_circuit_priority(circuit.circuit_id, priority.name)
 
         except SpanPanelRetriableError as e:
             _LOGGER.warning("Retriable error setting priority (will retry): %s", e)
@@ -641,7 +713,7 @@ class SpanPanelApi:
 
         try:
             # Use the client's parallel batch method
-            raw_data = await self._client.get_all_data(include_battery=include_battery)
+            raw_data = await self._gen2_client.get_all_data(include_battery=include_battery)
 
             # Process data using the same logic as individual methods
             result: dict[str, Any] = {}
@@ -702,11 +774,26 @@ class SpanPanelApi:
             return self._client.capabilities
         return PanelCapability.GEN2_FULL
 
+    def register_push_callback(self, cb: Callable[[], None]) -> Callable[[], None] | None:
+        """Register a callback for Gen3 push-streaming updates.
+
+        Returns the unregister callable, or None when the active transport is
+        not push-streaming capable (e.g. Gen2 REST panels).
+        """
+        if self._client is None or not isinstance(self._client, StreamingCapableProtocol):
+            return None
+        result: Callable[[], None] = cast(StreamingCapableProtocol, self._client).register_callback(
+            cb
+        )
+        return result
+
     async def close(self) -> None:
         """Close the API client and clean up resources."""
         _LOGGER.debug("[SpanPanelApi] Closing API client for host=%s", self.host)
         if self._client is not None:
             try:
+                if self._panel_generation == "gen3":
+                    await cast(StreamingCapableProtocol, self._client).stop_streaming()
                 await self._client.close()
             except Exception as e:
                 _LOGGER.warning("Error closing API client: %s", e)

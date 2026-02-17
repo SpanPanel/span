@@ -46,6 +46,7 @@ class SpanPanel:
         simulation_config_path: str | None = None,
         simulation_start_time: datetime | None = None,
         simulation_offline_minutes: int = 0,
+        panel_generation: str = "auto",
     ) -> None:
         """Initialize the Span Panel."""
         self._options = options
@@ -59,6 +60,7 @@ class SpanPanel:
             simulation_config_path,
             simulation_start_time,
             simulation_offline_minutes,
+            panel_generation,
         )
         self._status: SpanPanelHardwareStatus | None = None
         self._panel: SpanPanelData | None = None

@@ -32,6 +32,10 @@ class SpanPanelData:
     dsm_grid_state: str
     dsm_state: str
     current_run_config: str
+    # Gen3-only panel fields (None for Gen2 — entities gated on PUSH_STREAMING capability)
+    main_voltage_v: float | None = None
+    main_current_a: float | None = None
+    main_frequency_hz: float | None = None
     main_meter_energy: dict[str, Any] = field(default_factory=dict)
     feedthrough_energy: dict[str, Any] = field(default_factory=dict)
     solar_data: dict[str, Any] = field(default_factory=dict)
@@ -88,6 +92,9 @@ class SpanPanelData:
             dsm_grid_state=snapshot.dsm_grid_state or "",
             dsm_state=snapshot.dsm_state or "",
             current_run_config=snapshot.current_run_config or "",
+            main_voltage_v=snapshot.main_voltage_v,
+            main_current_a=snapshot.main_current_a,
+            main_frequency_hz=snapshot.main_frequency_hz,
         )
 
     def copy(self) -> "SpanPanelData":
@@ -124,3 +131,18 @@ class SpanPanelData:
     def feedthroughEnergyConsumedWh(self) -> float:
         """Feedthrough consumed energy in Wh (camelCase for sensor mapping)."""
         return self.feedthrough_energy_consumed
+
+    @property
+    def mainVoltageV(self) -> float | None:
+        """Main feed voltage in V (camelCase for sensor mapping)."""
+        return self.main_voltage_v
+
+    @property
+    def mainCurrentA(self) -> float | None:
+        """Main feed current in A (camelCase for sensor mapping)."""
+        return self.main_current_a
+
+    @property
+    def mainFrequencyHz(self) -> float | None:
+        """Main feed frequency in Hz (camelCase for sensor mapping)."""
+        return self.main_frequency_hz

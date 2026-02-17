@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
@@ -15,6 +16,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from span_panel_api import PanelCapability
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelConnectionError,
@@ -60,49 +62,64 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
         self._panel_offline = False
         # Track last grace period value for comparison
         self._last_grace_period = config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
+        # Push-streaming support (Gen3 gRPC panels)
+        self._push_unregister: Callable[[], None] | None = None
+        self._push_update_pending: bool = False
 
-        # Get scan interval from options, with fallback to default
-        raw_scan_interval = config_entry.options.get(
-            CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds())
-        )
+        # Detect Gen3 push-streaming panels before selecting update interval.
+        is_push_streaming = PanelCapability.PUSH_STREAMING in span_panel.api.capabilities
 
-        # Coerce scan interval to integer seconds, clamp to minimum of 5
-        try:
-            # Accept strings, floats, and ints; e.g., "15", 15.0, 15
-            scan_interval_seconds = int(float(raw_scan_interval))
-        except (TypeError, ValueError):
-            scan_interval_seconds = int(DEFAULT_SCAN_INTERVAL.total_seconds())
-
-        if scan_interval_seconds < 5:
-            _LOGGER.debug(
-                "Configured scan interval %s is below minimum; clamping to 5 seconds",
-                scan_interval_seconds,
+        if is_push_streaming:
+            # Gen3: disable polling timer; updates are driven by gRPC push callbacks.
+            update_interval: timedelta | None = None
+            _LOGGER.info(
+                "Span Panel coordinator: Gen3 push-streaming mode — polling timer disabled"
             )
-            scan_interval_seconds = 5
-
-        if str(raw_scan_interval) != str(scan_interval_seconds):
-            _LOGGER.debug(
-                "Coerced scan interval option from raw=%s to %s seconds",
-                raw_scan_interval,
-                scan_interval_seconds,
+        else:
+            # Gen2: compute polling interval from config options.
+            raw_scan_interval = config_entry.options.get(
+                CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds())
             )
 
-        # Log at INFO so it is visible without debug logging
-        _LOGGER.info(
-            "Span Panel coordinator: update interval set to %s seconds",
-            scan_interval_seconds,
-        )
+            try:
+                scan_interval_seconds = int(float(raw_scan_interval))
+            except (TypeError, ValueError):
+                scan_interval_seconds = int(DEFAULT_SCAN_INTERVAL.total_seconds())
+
+            if scan_interval_seconds < 5:
+                _LOGGER.debug(
+                    "Configured scan interval %s is below minimum; clamping to 5 seconds",
+                    scan_interval_seconds,
+                )
+                scan_interval_seconds = 5
+
+            if str(raw_scan_interval) != str(scan_interval_seconds):
+                _LOGGER.debug(
+                    "Coerced scan interval option from raw=%s to %s seconds",
+                    raw_scan_interval,
+                    scan_interval_seconds,
+                )
+
+            _LOGGER.info(
+                "Span Panel coordinator: update interval set to %s seconds",
+                scan_interval_seconds,
+            )
+            update_interval = timedelta(seconds=scan_interval_seconds)
 
         super().__init__(
             hass,
             _LOGGER,
             config_entry=config_entry,
             name=DOMAIN,
-            update_interval=timedelta(seconds=scan_interval_seconds),
+            update_interval=update_interval,
         )
 
         # Ensure config_entry is properly set after super().__init__
         self.config_entry = config_entry
+
+        # Register push callback now that the event loop (hass) is available.
+        if is_push_streaming:
+            self._register_push_callback()
 
     @property
     def panel_offline(self) -> bool:
@@ -116,6 +133,55 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanel]):
     def request_reload(self) -> None:
         """Request a reload of the integration."""
         self._reload_requested = True
+
+    # ------------------------------------------------------------------
+    # Gen3 push-streaming support
+    # ------------------------------------------------------------------
+
+    def _register_push_callback(self) -> None:
+        """Register a callback with the Gen3 gRPC streaming client.
+
+        The callback fires each time the gRPC stream pushes new panel data.
+        It schedules an async task on the HA event loop to update coordinator
+        data without blocking the streaming loop.
+        """
+        unregister = self.span_panel.api.register_push_callback(self._on_push_data)
+        if unregister is None:
+            _LOGGER.warning("Gen3 push streaming requested but client does not support callbacks")
+            return
+        self._push_unregister = unregister
+        _LOGGER.debug("Registered Gen3 push-streaming coordinator callback")
+
+    def _on_push_data(self) -> None:
+        """Sync callback invoked by the gRPC stream on each new notification.
+
+        Guards against concurrent update tasks: if one is already pending
+        we skip scheduling another — the in-flight task will read the latest
+        data when it runs.
+        """
+        if self._push_update_pending:
+            return
+        self._push_update_pending = True
+        self.hass.async_create_task(self._async_push_update())
+
+    async def _async_push_update(self) -> None:
+        """Apply incoming push data to coordinator state and notify listeners."""
+        try:
+            await self.span_panel.update()
+            self._panel_offline = False
+            self.async_set_updated_data(self.span_panel)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            self._panel_offline = True
+            _LOGGER.warning("Gen3 push update failed: %s", err)
+        finally:
+            self._push_update_pending = False
+
+    async def async_shutdown(self) -> None:
+        """Shutdown coordinator and unregister Gen3 push-streaming callback."""
+        if self._push_unregister is not None:
+            self._push_unregister()
+            self._push_unregister = None
+        await super().async_shutdown()
 
     async def _async_update_data(self) -> SpanPanel:
         """Fetch data from API endpoint."""
