@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - Unreleased
+
+### ✨ New Features
+
+- **Gen3 panel support (MAIN40 / MLO48)**: Real-time power monitoring for Gen3 gRPC panels via
+  push-streaming. Circuit and panel power sensors are created automatically; features not
+  available on Gen3 (relay control, energy history, battery, priorities) are suppressed.
+  Panel generation is selected during config flow (auto-detect / Gen2 / Gen3).
+  Thanks to @Griswoldlabs for the Gen3 implementation (PR #169).
+
+### 🔧 Improvements
+
+- **Capability-gated platform loading**: Entity platforms (switch, select, battery, solar) now
+  load only when the panel reports the corresponding capability. Gen2 behavior is unchanged.
+- **Unified snapshot model**: All panel data flows through a single `SpanPanelSnapshot` /
+  `SpanCircuitSnapshot` model regardless of transport, removing all direct OpenAPI type
+  dependencies from integration code above the library boundary.
+- **Push-streaming coordinator**: Gen3 panels drive entity updates via gRPC push callbacks
+  rather than a polling timer. The coordinator self-configures based on panel capabilities.
+
 ## [1.3.1] - 2026-01-19
 
 ### 🐛 Bug Fixes
