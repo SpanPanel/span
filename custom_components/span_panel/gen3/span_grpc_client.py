@@ -652,16 +652,18 @@ class SpanGrpcClient:
                     request_serializer=lambda x: x,
                     response_deserializer=lambda x: x,
                 )(request)
-                name_id, breaker_pos = self._parse_breaker_group(response)
+                name_id, breaker_pos, is_dual = self._parse_breaker_group(response)
                 circuit = self._data.circuits[group_iid]
                 circuit.name_iid = name_id
+                circuit.is_dual_phase = is_dual
                 if breaker_pos > 0:
                     circuit.breaker_position = breaker_pos
                 _LOGGER.debug(
-                    "BreakerGroup IID %d → name_iid=%d, breaker_position=%d",
+                    "BreakerGroup IID %d → name_iid=%d, breaker_position=%d, dual=%s",
                     group_iid,
                     name_id,
                     breaker_pos,
+                    is_dual,
                 )
             except grpc.aio.AioRpcError:
                 _LOGGER.debug("Failed to fetch BreakerGroup for IID %d", group_iid)
@@ -807,10 +809,11 @@ class SpanGrpcClient:
         return 0
 
     @staticmethod
-    def _parse_breaker_group(data: bytes) -> tuple[int, int]:
+    def _parse_breaker_group(data: bytes) -> tuple[int, int, bool]:
         """Parse a BreakerGroups (trait 15) GetRevision response.
 
-        Returns (name_id, breaker_position).  Both are 0 on failure.
+        Returns (name_id, breaker_position, is_dual_phase).  All zero/False
+        on failure.
 
         Single-pole (120V) groups use field 11:
           f11.f1 -> CircuitNames ref (f2.f1 = name_id)
@@ -823,15 +826,15 @@ class SpanGrpcClient:
         fields = _parse_protobuf_fields(data)
         sr_data = _get_field(fields, 3)
         if not sr_data or not isinstance(sr_data, bytes):
-            return 0, 0
+            return 0, 0, False
         sr_fields = _parse_protobuf_fields(sr_data)
         payload_data = _get_field(sr_fields, 2)
         if not payload_data or not isinstance(payload_data, bytes):
-            return 0, 0
+            return 0, 0, False
         pl_fields = _parse_protobuf_fields(payload_data)
         raw = _get_field(pl_fields, 1)
         if not raw or not isinstance(raw, bytes):
-            return 0, 0
+            return 0, 0, False
 
         group_fields = _parse_protobuf_fields(raw)
 
@@ -843,7 +846,7 @@ class SpanGrpcClient:
             config_ref = _get_field(refs, 2)
             name_id = SpanGrpcClient._extract_trait_ref_iid(name_ref or b"")
             brk_pos = SpanGrpcClient._extract_trait_ref_iid(config_ref or b"")
-            return name_id, brk_pos
+            return name_id, brk_pos, False
 
         # Dual-pole (field 13)
         dual_data = _get_field(group_fields, 13)
@@ -858,9 +861,9 @@ class SpanGrpcClient:
                     name_id = SpanGrpcClient._extract_trait_ref_iid(name_ref)
             leg_a_ref = _get_field(dual_fields, 4)
             brk_pos = SpanGrpcClient._extract_trait_ref_iid(leg_a_ref or b"")
-            return name_id, brk_pos
+            return name_id, brk_pos, True
 
-        return 0, 0
+        return 0, 0, False
 
     # ------------------------------------------------------------------
     # Metric streaming
