@@ -33,7 +33,12 @@ from custom_components.span_panel.sensor_definitions import (
 )
 from custom_components.span_panel.span_panel import SpanPanel
 
-from .circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor, SpanUnmappedCircuitSensor
+from .circuit import (
+    SpanCircuitEnergySensor,
+    SpanCircuitPositionSensor,
+    SpanCircuitPowerSensor,
+    SpanUnmappedCircuitSensor,
+)
 from .panel import (
     SpanPanelBattery,
     SpanPanelEnergySensor,
@@ -83,9 +88,9 @@ def create_panel_sensors(
 
 def create_circuit_sensors(
     coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
-) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor]:
+) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor | SpanCircuitPositionSensor]:
     """Create circuit-level sensors for named circuits."""
-    entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor] = []
+    entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor | SpanCircuitPositionSensor] = []
 
     # Add circuit sensors for all named circuits (replacing synthetic ones)
     named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
@@ -105,6 +110,13 @@ def create_circuit_sensors(
                 # Use enhanced power sensor for power measurements
                 entities.append(
                     SpanCircuitPowerSensor(coordinator, circuit_description, span_panel, circuit_id)
+                )
+            elif circuit_description.key == "circuit_panel_position":
+                # Use position sensor for breaker slot number
+                entities.append(
+                    SpanCircuitPositionSensor(
+                        coordinator, circuit_description, span_panel, circuit_id
+                    )
                 )
             else:
                 # Use energy sensor with grace period tracking for energy measurements
@@ -230,6 +242,7 @@ def create_native_sensors(
     | SpanPanelEnergySensor
     | SpanCircuitPowerSensor
     | SpanCircuitEnergySensor
+    | SpanCircuitPositionSensor
     | SpanUnmappedCircuitSensor
     | SpanPanelBattery
     | SpanSolarSensor
@@ -243,6 +256,7 @@ def create_native_sensors(
         | SpanPanelEnergySensor
         | SpanCircuitPowerSensor
         | SpanCircuitEnergySensor
+        | SpanCircuitPositionSensor
         | SpanUnmappedCircuitSensor
         | SpanPanelBattery
         | SpanSolarSensor

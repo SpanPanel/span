@@ -273,6 +273,7 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
+    SpanPanelCircuitsSensorEntityDescription,
 ] = (
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_power",
@@ -315,6 +316,17 @@ CIRCUIT_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda circuit: (circuit.consumed_energy or 0) - (circuit.produced_energy or 0),
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_panel_position",
+        name="Panel Position",
+        native_unit_of_measurement=None,
+        state_class=None,
+        suggested_display_precision=0,
+        device_class=None,
+        value_fn=lambda circuit: min(circuit.tabs) if circuit.tabs else None,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),

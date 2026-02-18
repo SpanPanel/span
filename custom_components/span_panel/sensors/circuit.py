@@ -286,6 +286,103 @@ class SpanCircuitEnergySensor(
         return attributes if attributes else None
 
 
+class SpanCircuitPositionSensor(
+    SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
+):
+    """Circuit panel position (breaker slot number) sensor for Gen2 panels."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        span_panel: SpanPanel,
+        circuit_id: str,
+    ) -> None:
+        """Initialize the circuit panel position sensor."""
+        self.circuit_id = circuit_id
+        self.original_key = description.key
+
+        description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
+            key=circuit_id,
+            name=description.name,
+            native_unit_of_measurement=description.native_unit_of_measurement,
+            state_class=description.state_class,
+            suggested_display_precision=description.suggested_display_precision,
+            device_class=description.device_class,
+            value_fn=description.value_fn,
+            entity_registry_enabled_default=description.entity_registry_enabled_default,
+            entity_registry_visible_default=description.entity_registry_visible_default,
+        )
+
+        super().__init__(data_coordinator, description_with_circuit, span_panel)
+
+    def _generate_unique_id(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for circuit position sensors."""
+        return construct_circuit_unique_id_for_entry(
+            self.coordinator, span_panel, self.circuit_id,
+            "circuit_panel_position", self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str | None:
+        """Generate friendly name for circuit position sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return construct_unmapped_friendly_name(
+                self.circuit_id, str(description.name or "Panel Position")
+            )
+
+        use_circuit_numbers = self.coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+
+        if use_circuit_numbers:
+            if circuit.tabs and len(circuit.tabs) == 2:
+                sorted_tabs = sorted(circuit.tabs)
+                circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+            elif circuit.tabs and len(circuit.tabs) == 1:
+                circuit_identifier = f"Circuit {circuit.tabs[0]}"
+            else:
+                circuit_identifier = f"Circuit {self.circuit_id}"
+        else:
+            if circuit.name is None:
+                return None
+            circuit_identifier = circuit.name
+
+        return f"{circuit_identifier} {description.name or 'Panel Position'}"
+
+    def _generate_panel_name(
+        self, span_panel: SpanPanel, description: SpanPanelCircuitsSensorEntityDescription
+    ) -> str | None:
+        """Generate panel name for circuit position sensors."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if not circuit:
+            return construct_unmapped_friendly_name(
+                self.circuit_id, str(description.name or "Panel Position")
+            )
+        if circuit.name is None:
+            return None
+        return f"{circuit.name} {description.name or 'Panel Position'}"
+
+    def get_data_source(self, span_panel: SpanPanel) -> SpanPanelCircuit:
+        """Get the data source for the circuit position sensor."""
+        circuit = span_panel.circuits.get(self.circuit_id)
+        if circuit is None:
+            raise ValueError(f"Circuit {self.circuit_id} not found in panel data")
+        return circuit
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the breaker slot number (lowest tab position)."""
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            return None
+        circuit = self.coordinator.data.circuits.get(self.circuit_id)
+        if not circuit or not circuit.tabs:
+            return None
+        return min(circuit.tabs)
+
+
 class SpanUnmappedCircuitSensor(
     SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanPanelCircuit]
 ):
