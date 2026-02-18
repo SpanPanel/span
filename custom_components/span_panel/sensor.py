@@ -10,6 +10,7 @@ from .const import CONF_PANEL_GEN, COORDINATOR, DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .sensors import (
     SpanCircuitEnergySensor,
+    SpanCircuitPositionSensor,
     SpanCircuitPowerSensor,
     SpanEnergySensorBase,
     SpanPanelBattery,
@@ -37,6 +38,7 @@ __all__ = [
     "SpanPanelEnergySensor",
     "SpanCircuitPowerSensor",
     "SpanCircuitEnergySensor",
+    "SpanCircuitPositionSensor",
     "SpanUnmappedCircuitSensor",
     "SpanSolarSensor",
     "SpanSolarEnergySensor",

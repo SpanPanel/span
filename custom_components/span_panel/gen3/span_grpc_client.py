@@ -24,6 +24,7 @@ from .const import (
     MAIN_FEED_IID,
     METRIC_IID_OFFSET,
     PRODUCT_GEN3_PANEL,
+    TRAIT_BREAKER_GROUPS,
     TRAIT_CIRCUIT_NAMES,
     TRAIT_POWER_METRICS,
     VENDOR_SPAN,
@@ -47,6 +48,7 @@ class CircuitInfo:
     metric_iid: int
     name_iid: int = 0
     is_dual_phase: bool = False
+    breaker_position: int = 0
 
 
 @dataclass
@@ -80,6 +82,8 @@ class PanelData:
     main_feed: CircuitMetrics = field(default_factory=CircuitMetrics)
     # Reverse lookup: metric IID → circuit_id (built during discovery)
     metric_iid_to_circuit: dict[int, int] = field(default_factory=dict)
+    # BreakerGroups trait 15 instance IIDs — populated in _parse_instances
+    breaker_group_iids: list[int] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -437,13 +441,17 @@ class SpanGrpcClient:
                 ],
             )
             await self._fetch_instances()
+            await self._fetch_breaker_groups()
             await self._fetch_circuit_names()
             self._connected = True
+            with_pos = sum(1 for c in self._data.circuits.values() if c.breaker_position > 0)
             _LOGGER.info(
-                "Connected to Gen3 panel at %s:%s — %d circuits discovered",
+                "Connected to Gen3 panel at %s:%s — %d circuits discovered, "
+                "%d with breaker positions",
                 self._host,
                 self._port,
                 len(self._data.circuits),
+                with_pos,
             )
             return True
         except Exception:
@@ -519,16 +527,14 @@ class SpanGrpcClient:
     def _parse_instances(self, data: bytes) -> None:
         """Parse GetInstancesResponse to discover circuits and panel info.
 
-        Collects both trait 16 (name) and trait 26 (metric) instance IDs,
-        then pairs them by sorted position to build the circuit mapping.
-        This avoids hardcoding a fixed offset between the two trait IID
-        spaces, which can vary across panel models/configurations.
+        Collects trait 26 (PowerMetrics) instance IDs as circuit entries,
+        and trait 15 (BreakerGroups) IIDs for later BreakerGroups resolution.
+        Circuit names and breaker positions are resolved in subsequent steps
+        (_fetch_breaker_groups, _fetch_circuit_names) rather than here.
         """
         fields = _parse_protobuf_fields(data)
         items = fields.get(1, [])
 
-        # Collect instance IDs for both traits before building circuits
-        name_iids: list[int] = []      # Trait 16 instance IDs
         metric_iids: list[int] = []    # Trait 26 instance IDs (excl main feed)
 
         for item_data in items:
@@ -587,67 +593,92 @@ class SpanGrpcClient:
             ):
                 self._data.panel_resource_id = resource_id_str
 
-            # Collect trait 16 (circuit names) instance IDs
-            if trait_id == TRAIT_CIRCUIT_NAMES and vendor_id == VENDOR_SPAN:
-                name_iids.append(instance_id)
+            if vendor_id != VENDOR_SPAN:
+                continue
 
-            # Collect trait 26 (power metrics) instance IDs
-            if trait_id == TRAIT_POWER_METRICS and vendor_id == VENDOR_SPAN:
-                if instance_id != MAIN_FEED_IID:
-                    metric_iids.append(instance_id)
+            # Trait 15 (BreakerGroups): collect IIDs for Step 2
+            if trait_id == TRAIT_BREAKER_GROUPS:
+                if instance_id not in self._data.breaker_group_iids:
+                    self._data.breaker_group_iids.append(instance_id)
 
-        # Sort both sets to pair by position (lowest IID = first circuit)
-        name_iids.sort()
-        metric_iids.sort()
+            # Trait 26 (PowerMetrics): each non-main-feed instance is a circuit
+            if trait_id == TRAIT_POWER_METRICS and instance_id != MAIN_FEED_IID:
+                metric_iids.append(instance_id)
+                self._data.circuits[instance_id] = CircuitInfo(
+                    circuit_id=instance_id,
+                    name=f"Circuit {instance_id}",
+                    metric_iid=instance_id,
+                )
+                self._data.metric_iid_to_circuit[instance_id] = instance_id
 
         _LOGGER.debug(
-            "Discovered %d name instances (trait 16) and %d metric instances "
-            "(trait 26, excl main feed). Name IIDs: %s, Metric IIDs: %s",
-            len(name_iids),
+            "Discovered %d metric instances (trait 26, excl main feed) and "
+            "%d breaker group instances (trait 15). Metric IIDs: %s, "
+            "BreakerGroup IIDs: %s",
             len(metric_iids),
-            name_iids[:5],
-            metric_iids[:5],
+            len(self._data.breaker_group_iids),
+            sorted(metric_iids)[:5],
+            sorted(self._data.breaker_group_iids)[:5],
         )
 
-        if name_iids and metric_iids:
-            if len(name_iids) != len(metric_iids):
-                _LOGGER.warning(
-                    "Trait 16 has %d instances but trait 26 has %d — "
-                    "pairing by position (some circuits may be unnamed)",
-                    len(name_iids),
-                    len(metric_iids),
-                )
+    # ------------------------------------------------------------------
+    # Breaker group resolution
+    # ------------------------------------------------------------------
 
-            # Pair by sorted position — each name IID corresponds to the
-            # metric IID at the same index
-            for idx, metric_iid in enumerate(metric_iids):
-                circuit_id = idx + 1
-                name_iid = name_iids[idx] if idx < len(name_iids) else 0
-                self._data.circuits[circuit_id] = CircuitInfo(
-                    circuit_id=circuit_id,
-                    name=f"Circuit {circuit_id}",
-                    metric_iid=metric_iid,
-                    name_iid=name_iid,
-                )
-                self._data.metric_iid_to_circuit[metric_iid] = circuit_id
+    async def _fetch_breaker_groups(self) -> None:
+        """Fetch BreakerGroup mappings (trait 15) to get name_iid and breaker_position.
 
-        elif metric_iids:
-            # No trait 16 instances — fall back to offset-based mapping
-            _LOGGER.warning(
-                "No trait 16 (name) instances found — falling back to "
-                "offset-based circuit mapping (offset=%d)",
-                METRIC_IID_OFFSET,
+        For each BreakerGroup IID that matches a PowerMetrics circuit, calls
+        GetRevision(trait 15) to extract:
+        - name_iid: the trait 16 IID used to fetch the human-readable circuit name
+        - breaker_position: the physical slot number (1-48) in the panel
+
+        Circuits with no BreakerGroup mapping (orphans) are removed — they are
+        system/ghost metrics with no physical breaker.
+        """
+        for group_iid in self._data.breaker_group_iids:
+            if group_iid not in self._data.circuits:
+                # BreakerGroup IID without a matching PowerMetrics instance — skip
+                continue
+            request = self._build_get_revision_request(
+                vendor_id=VENDOR_SPAN,
+                product_id=PRODUCT_GEN3_PANEL,
+                trait_id=TRAIT_BREAKER_GROUPS,
+                instance_id=group_iid,
             )
-            for metric_iid in metric_iids:
-                circuit_id = metric_iid - METRIC_IID_OFFSET
-                if 1 <= circuit_id <= 50:
-                    self._data.circuits[circuit_id] = CircuitInfo(
-                        circuit_id=circuit_id,
-                        name=f"Circuit {circuit_id}",
-                        metric_iid=metric_iid,
-                        name_iid=circuit_id,
-                    )
-                    self._data.metric_iid_to_circuit[metric_iid] = circuit_id
+            try:
+                response = await self._channel.unary_unary(
+                    _GET_REVISION,
+                    request_serializer=lambda x: x,
+                    response_deserializer=lambda x: x,
+                )(request)
+                name_id, breaker_pos = self._parse_breaker_group(response)
+                circuit = self._data.circuits[group_iid]
+                circuit.name_iid = name_id
+                if breaker_pos > 0:
+                    circuit.breaker_position = breaker_pos
+                _LOGGER.debug(
+                    "BreakerGroup IID %d → name_iid=%d, breaker_position=%d",
+                    group_iid,
+                    name_id,
+                    breaker_pos,
+                )
+            except grpc.aio.AioRpcError:
+                _LOGGER.debug("Failed to fetch BreakerGroup for IID %d", group_iid)
+
+        # Orphan filtering: circuits with no BreakerGroup mapping are not real
+        # user circuits (system/ghost metrics) — remove them
+        orphan_iids = [iid for iid, c in self._data.circuits.items() if c.name_iid == 0]
+        for iid in orphan_iids:
+            _LOGGER.debug("Removing orphan circuit IID %d (no BreakerGroup mapping)", iid)
+            del self._data.circuits[iid]
+            self._data.metric_iid_to_circuit.pop(iid, None)
+
+        _LOGGER.debug(
+            "After BreakerGroups resolution: %d circuits remain (%d orphans removed)",
+            len(self._data.circuits),
+            len(orphan_iids),
+        )
 
     # ------------------------------------------------------------------
     # Circuit names
@@ -656,20 +687,28 @@ class SpanGrpcClient:
     async def _fetch_circuit_names(self) -> None:
         """Fetch circuit names from trait 16 via GetRevision.
 
-        Uses each circuit's name_iid (trait 16 instance ID) rather than
-        the circuit_id, since the two numbering spaces may differ.
+        Uses each circuit's name_iid (from BreakerGroups resolution) to look
+        up the human-readable name from trait 16.
         """
         for circuit_id, info in list(self._data.circuits.items()):
-            name_iid = info.name_iid or circuit_id
+            name_iid = info.name_iid
+            if not name_iid:
+                _LOGGER.debug(
+                    "Circuit %d has no name_iid (not resolved via BreakerGroups), "
+                    "skipping name fetch",
+                    circuit_id,
+                )
+                continue
             try:
                 name = await self._get_circuit_name(name_iid)
                 if name:
                     info.name = name
                     _LOGGER.debug(
-                        "Circuit %d (name_iid=%d, metric_iid=%d): %s",
+                        "Circuit %d (name_iid=%d, metric_iid=%d, breaker_pos=%d): %s",
                         circuit_id,
                         name_iid,
                         info.metric_iid,
+                        info.breaker_position,
                         name,
                     )
             except Exception:
@@ -750,6 +789,78 @@ class SpanGrpcClient:
         if name and isinstance(name, bytes):
             return name.decode("utf-8", errors="replace").strip()
         return None
+
+    @staticmethod
+    def _extract_trait_ref_iid(ref_data: bytes) -> int:
+        """Extract an IID from a trait reference sub-message.
+
+        Trait references use the structure: field 2 -> field 1 = iid (varint).
+        Returns 0 if the data cannot be parsed.
+        """
+        if not ref_data or not isinstance(ref_data, bytes):
+            return 0
+        ref_fields = _parse_protobuf_fields(ref_data)
+        iid_data = _get_field(ref_fields, 2)
+        if iid_data and isinstance(iid_data, bytes):
+            iid_fields = _parse_protobuf_fields(iid_data)
+            return _get_field(iid_fields, 1, 0)
+        return 0
+
+    @staticmethod
+    def _parse_breaker_group(data: bytes) -> tuple[int, int]:
+        """Parse a BreakerGroups (trait 15) GetRevision response.
+
+        Returns (name_id, breaker_position).  Both are 0 on failure.
+
+        Single-pole (120V) groups use field 11:
+          f11.f1 -> CircuitNames ref (f2.f1 = name_id)
+          f11.f2 -> BreakerConfig ref (f2.f1 = breaker position)
+
+        Dual-pole (240V) groups use field 13:
+          f13.f1.f1 -> CircuitNames ref (f2.f1 = name_id)
+          f13.f4    -> BreakerConfig leg A ref (f2.f1 = breaker position A)
+        """
+        fields = _parse_protobuf_fields(data)
+        sr_data = _get_field(fields, 3)
+        if not sr_data or not isinstance(sr_data, bytes):
+            return 0, 0
+        sr_fields = _parse_protobuf_fields(sr_data)
+        payload_data = _get_field(sr_fields, 2)
+        if not payload_data or not isinstance(payload_data, bytes):
+            return 0, 0
+        pl_fields = _parse_protobuf_fields(payload_data)
+        raw = _get_field(pl_fields, 1)
+        if not raw or not isinstance(raw, bytes):
+            return 0, 0
+
+        group_fields = _parse_protobuf_fields(raw)
+
+        # Single-pole (field 11)
+        refs_data = _get_field(group_fields, 11)
+        if refs_data and isinstance(refs_data, bytes):
+            refs = _parse_protobuf_fields(refs_data)
+            name_ref = _get_field(refs, 1)
+            config_ref = _get_field(refs, 2)
+            name_id = SpanGrpcClient._extract_trait_ref_iid(name_ref or b"")
+            brk_pos = SpanGrpcClient._extract_trait_ref_iid(config_ref or b"")
+            return name_id, brk_pos
+
+        # Dual-pole (field 13)
+        dual_data = _get_field(group_fields, 13)
+        if dual_data and isinstance(dual_data, bytes):
+            dual_fields = _parse_protobuf_fields(dual_data)
+            name_id = 0
+            name_wrapper = _get_field(dual_fields, 1)
+            if name_wrapper and isinstance(name_wrapper, bytes):
+                wf = _parse_protobuf_fields(name_wrapper)
+                name_ref = _get_field(wf, 1)
+                if name_ref and isinstance(name_ref, bytes):
+                    name_id = SpanGrpcClient._extract_trait_ref_iid(name_ref)
+            leg_a_ref = _get_field(dual_fields, 4)
+            brk_pos = SpanGrpcClient._extract_trait_ref_iid(leg_a_ref or b"")
+            return name_id, brk_pos
+
+        return 0, 0
 
     # ------------------------------------------------------------------
     # Metric streaming

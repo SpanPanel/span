@@ -58,6 +58,7 @@ def create_gen3_sensors(
                 SpanGen3CircuitPowerSensor(coordinator, host, circuit_id),
                 SpanGen3CircuitVoltageSensor(coordinator, host, circuit_id),
                 SpanGen3CircuitCurrentSensor(coordinator, host, circuit_id),
+                SpanGen3CircuitPositionSensor(coordinator, host, circuit_id),
             ]
         )
 
@@ -264,3 +265,23 @@ class SpanGen3CircuitCurrentSensor(SpanGen3CircuitSensorBase):
     def native_value(self) -> float | None:
         m = self._circuit_metrics
         return round(m.current_a, 3) if m else None
+
+
+class SpanGen3CircuitPositionSensor(SpanGen3CircuitSensorBase):
+    """Per-circuit panel position (breaker slot number) sensor."""
+
+    _attr_icon = "mdi:electric-switch"
+    _attr_state_class = None  # Static configuration value, not a time-series measurement
+
+    def __init__(self, coordinator, host, circuit_id):
+        super().__init__(coordinator, host, circuit_id)
+        self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_position"
+        self._attr_name = "Panel Position"
+
+    @property
+    def native_value(self) -> int | None:
+        info = self._circuit_info
+        if info is None:
+            return None
+        pos = info.breaker_position
+        return pos if pos > 0 else None

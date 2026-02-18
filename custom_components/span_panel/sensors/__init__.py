@@ -1,7 +1,12 @@
 """Sensors package for Span Panel integration."""
 
 from .base import SpanEnergySensorBase, SpanSensorBase
-from .circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor, SpanUnmappedCircuitSensor
+from .circuit import (
+    SpanCircuitEnergySensor,
+    SpanCircuitPositionSensor,
+    SpanCircuitPowerSensor,
+    SpanUnmappedCircuitSensor,
+)
 from .factory import create_native_sensors, enable_unmapped_tab_entities
 from .panel import (
     SpanPanelBattery,
@@ -22,6 +27,7 @@ __all__ = [
     "SpanPanelEnergySensor",
     "SpanCircuitPowerSensor",
     "SpanCircuitEnergySensor",
+    "SpanCircuitPositionSensor",
     "SpanUnmappedCircuitSensor",
     "SpanSolarSensor",
     "SpanSolarEnergySensor",
