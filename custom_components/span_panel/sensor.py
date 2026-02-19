@@ -63,6 +63,13 @@ async def async_setup_entry(
         # Create all native sensors (now includes panel, circuit, and solar sensors)
         entities = create_native_sensors(coordinator, span_panel, config_entry)
 
+        _LOGGER.info(
+            "SENSOR SETUP: %d circuits, %d entities created, serial=%s",
+            len(span_panel.circuits),
+            len(entities),
+            span_panel.status.serial_number,
+        )
+
         # Add all native sensor entities
         async_add_entities(entities)
 
