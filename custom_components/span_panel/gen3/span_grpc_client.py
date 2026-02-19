@@ -455,9 +455,7 @@ class SpanGrpcClient:
             )
             return True
         except Exception:
-            _LOGGER.exception(
-                "Failed to connect to Gen3 panel at %s:%s", self._host, self._port
-            )
+            _LOGGER.exception("Failed to connect to Gen3 panel at %s:%s", self._host, self._port)
             self._connected = False
             return False
 
@@ -535,7 +533,7 @@ class SpanGrpcClient:
         fields = _parse_protobuf_fields(data)
         items = fields.get(1, [])
 
-        metric_iids: list[int] = []    # Trait 26 instance IDs (excl main feed)
+        metric_iids: list[int] = []  # Trait 26 instance IDs (excl main feed)
 
         for item_data in items:
             if not isinstance(item_data, bytes):

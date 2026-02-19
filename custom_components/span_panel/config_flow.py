@@ -285,9 +285,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not await validate_host(self.hass, host, use_ssl=use_ssl):
             # REST failed — try Gen3 gRPC as fallback
             if await self._test_gen3_connection(host):
-                _LOGGER.info(
-                    "Gen3 panel detected at %s (REST unavailable, gRPC OK)", host
-                )
+                _LOGGER.info("Gen3 panel detected at %s (REST unavailable, gRPC OK)", host)
                 # Gen3 panels don't need auth — create entry directly
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()

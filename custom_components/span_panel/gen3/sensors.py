@@ -121,9 +121,7 @@ class SpanGen3CircuitSensorBase(SpanGen3SensorBase):
         info = self._circuit_info
         name = info.name if info else f"Circuit {self._circuit_id}"
         return DeviceInfo(
-            identifiers={
-                (DOMAIN, f"{self._host}_circuit_{self._circuit_id}")
-            },
+            identifiers={(DOMAIN, f"{self._host}_circuit_{self._circuit_id}")},
             name=name,
             manufacturer="Span",
             model="Circuit Breaker",

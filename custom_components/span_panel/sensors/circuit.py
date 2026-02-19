@@ -321,8 +321,11 @@ class SpanCircuitPositionSensor(
     ) -> str:
         """Generate unique ID for circuit position sensors."""
         return construct_circuit_unique_id_for_entry(
-            self.coordinator, span_panel, self.circuit_id,
-            "circuit_panel_position", self._device_name
+            self.coordinator,
+            span_panel,
+            self.circuit_id,
+            "circuit_panel_position",
+            self._device_name,
         )
 
     def _generate_friendly_name(

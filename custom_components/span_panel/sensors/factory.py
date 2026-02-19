@@ -90,7 +90,9 @@ def create_circuit_sensors(
     coordinator: SpanPanelCoordinator, span_panel: SpanPanel, config_entry: ConfigEntry
 ) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor | SpanCircuitPositionSensor]:
     """Create circuit-level sensors for named circuits."""
-    entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor | SpanCircuitPositionSensor] = []
+    entities: list[
+        SpanCircuitPowerSensor | SpanCircuitEnergySensor | SpanCircuitPositionSensor
+    ] = []
 
     # Add circuit sensors for all named circuits (replacing synthetic ones)
     named_circuits = [cid for cid in span_panel.circuits if not cid.startswith("unmapped_tab_")]
