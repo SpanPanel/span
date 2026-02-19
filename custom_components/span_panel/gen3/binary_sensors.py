@@ -32,16 +32,12 @@ def create_gen3_binary_sensors(
     entities: list[BinarySensorEntity] = []
 
     for circuit_id in data.circuits:
-        entities.append(
-            SpanGen3BreakerSensor(coordinator, host, circuit_id)
-        )
+        entities.append(SpanGen3BreakerSensor(coordinator, host, circuit_id))
 
     return entities
 
 
-class SpanGen3BreakerSensor(
-    CoordinatorEntity[SpanGen3Coordinator], BinarySensorEntity
-):
+class SpanGen3BreakerSensor(CoordinatorEntity[SpanGen3Coordinator], BinarySensorEntity):
     """Binary sensor for breaker state (ON/OFF based on voltage)."""
 
     _attr_has_entity_name = True
@@ -66,9 +62,7 @@ class SpanGen3BreakerSensor(
         info = self.coordinator.data.circuits.get(self._circuit_id)
         name = info.name if info else f"Circuit {self._circuit_id}"
         return DeviceInfo(
-            identifiers={
-                (DOMAIN, f"{self._host}_circuit_{self._circuit_id}")
-            },
+            identifiers={(DOMAIN, f"{self._host}_circuit_{self._circuit_id}")},
             name=name,
             manufacturer="Span",
             model="Circuit Breaker",
