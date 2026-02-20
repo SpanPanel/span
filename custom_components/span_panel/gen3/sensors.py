@@ -23,7 +23,8 @@ from homeassistant.const import (
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ..const import DOMAIN
+from custom_components.span_panel.const import DOMAIN
+
 from .coordinator import SpanGen3Coordinator
 from .span_grpc_client import PanelData
 
@@ -142,12 +143,14 @@ class SpanGen3MainPowerSensor(SpanGen3SensorBase):
     _attr_suggested_display_precision = 0
 
     def __init__(self, coordinator, host):
+        """Initialize the main feed power sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_power"
         self._attr_name = "Main Feed Power"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current power reading."""
         m = self.coordinator.data.main_feed
         return round(m.power_w, 1) if m else None
 
@@ -160,12 +163,14 @@ class SpanGen3MainVoltageSensor(SpanGen3SensorBase):
     _attr_suggested_display_precision = 1
 
     def __init__(self, coordinator, host):
+        """Initialize the main feed voltage sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_voltage"
         self._attr_name = "Main Feed Voltage"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current voltage reading."""
         m = self.coordinator.data.main_feed
         return round(m.voltage_v, 1) if m else None
 
@@ -178,12 +183,14 @@ class SpanGen3MainCurrentSensor(SpanGen3SensorBase):
     _attr_suggested_display_precision = 1
 
     def __init__(self, coordinator, host):
+        """Initialize the main feed current sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_current"
         self._attr_name = "Main Feed Current"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current amperage reading."""
         m = self.coordinator.data.main_feed
         return round(m.current_a, 1) if m else None
 
@@ -196,12 +203,14 @@ class SpanGen3MainFrequencySensor(SpanGen3SensorBase):
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator, host):
+        """Initialize the main feed frequency sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_frequency"
         self._attr_name = "Main Feed Frequency"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current frequency reading."""
         m = self.coordinator.data.main_feed
         return round(m.frequency_hz, 2) if m and m.frequency_hz > 0 else None
 
@@ -219,12 +228,14 @@ class SpanGen3CircuitPowerSensor(SpanGen3CircuitSensorBase):
     _attr_suggested_display_precision = 0
 
     def __init__(self, coordinator, host, circuit_id):
+        """Initialize the circuit power sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_power"
         self._attr_name = "Power"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current power reading."""
         m = self._circuit_metrics
         return round(m.power_w, 1) if m else None
 
@@ -237,12 +248,14 @@ class SpanGen3CircuitVoltageSensor(SpanGen3CircuitSensorBase):
     _attr_suggested_display_precision = 1
 
     def __init__(self, coordinator, host, circuit_id):
+        """Initialize the circuit voltage sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_voltage"
         self._attr_name = "Voltage"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current voltage reading."""
         m = self._circuit_metrics
         return round(m.voltage_v, 1) if m else None
 
@@ -255,12 +268,14 @@ class SpanGen3CircuitCurrentSensor(SpanGen3CircuitSensorBase):
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator, host, circuit_id):
+        """Initialize the circuit current sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_current"
         self._attr_name = "Current"
 
     @property
     def native_value(self) -> float | None:
+        """Return the current amperage reading."""
         m = self._circuit_metrics
         return round(m.current_a, 3) if m else None
 
@@ -272,12 +287,14 @@ class SpanGen3CircuitPositionSensor(SpanGen3CircuitSensorBase):
     _attr_state_class = None  # Static configuration value, not a time-series measurement
 
     def __init__(self, coordinator, host, circuit_id):
+        """Initialize the circuit position sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_position"
         self._attr_name = "Panel Position"
 
     @property
     def native_value(self) -> int | None:
+        """Return the breaker slot number."""
         info = self._circuit_info
         if info is None:
             return None
