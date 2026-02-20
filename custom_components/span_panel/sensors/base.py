@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 import logging
-from typing import Any, Generic, Self, TypeVar
+from typing import Any, Self
 
 from homeassistant.components.sensor import (
     RestoreSensor,
@@ -34,9 +34,6 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
 
-T = TypeVar("T", bound=SensorEntityDescription)
-D = TypeVar("D")  # For the type returned by get_data_source
-
 
 def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | None]:
     """Extract a numeric value and naive timestamp from a restored HA state.
@@ -60,7 +57,9 @@ def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | 
     return value, last_changed
 
 
-class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D], ABC):
+class SpanSensorBase[T: SensorEntityDescription, D](
+    CoordinatorEntity[SpanPanelCoordinator], SensorEntity, ABC
+):
     """Abstract base class for Span Panel Sensors with overrideable methods."""
 
     _attr_has_entity_name = True
@@ -395,7 +394,7 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
             return None
 
 
-class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
+class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], RestoreSensor, ABC):
     """Base class for energy sensors that includes grace period tracking.
 
     This class extends SpanSensorBase with:

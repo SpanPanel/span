@@ -36,7 +36,7 @@ from .span_panel_storage_battery import SpanPanelStorageBattery
 class SpanPanelCircuitsRequiredKeysMixin:
     """Required keys mixin for Span Panel circuit sensors."""
 
-    value_fn: Callable[[SpanPanelCircuit], float]
+    value_fn: Callable[[SpanPanelCircuit], float | None]
 
 
 @dataclass(frozen=True)

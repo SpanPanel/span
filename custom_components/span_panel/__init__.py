@@ -342,7 +342,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_setup_gen3_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a Gen3 panel via gRPC."""
-    from .gen3.coordinator import SpanGen3Coordinator  # noqa: E402
+    from .gen3.coordinator import (  # pylint: disable=import-outside-toplevel
+        SpanGen3Coordinator,  # noqa: E402
+    )
 
     coordinator = SpanGen3Coordinator(hass, entry)
     if not await coordinator.async_setup():

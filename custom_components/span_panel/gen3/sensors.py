@@ -75,7 +75,7 @@ class SpanGen3SensorBase(CoordinatorEntity[SpanGen3Coordinator], SensorEntity):
     """Base class for Gen3 sensors."""
 
     _attr_has_entity_name = True
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class: str | None = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: SpanGen3Coordinator, host: str) -> None:
         """Initialize the sensor."""
@@ -138,11 +138,11 @@ class SpanGen3CircuitSensorBase(SpanGen3SensorBase):
 class SpanGen3MainPowerSensor(SpanGen3SensorBase):
     """Main feed power sensor."""
 
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_suggested_display_precision = 0
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.POWER  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfPower.WATT
+    _attr_suggested_display_precision: int | None = 0
 
-    def __init__(self, coordinator, host):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str) -> None:
         """Initialize the main feed power sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_power"
@@ -158,11 +158,11 @@ class SpanGen3MainPowerSensor(SpanGen3SensorBase):
 class SpanGen3MainVoltageSensor(SpanGen3SensorBase):
     """Main feed voltage sensor."""
 
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_suggested_display_precision = 1
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.VOLTAGE  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfElectricPotential.VOLT
+    _attr_suggested_display_precision: int | None = 1
 
-    def __init__(self, coordinator, host):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str) -> None:
         """Initialize the main feed voltage sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_voltage"
@@ -178,11 +178,11 @@ class SpanGen3MainVoltageSensor(SpanGen3SensorBase):
 class SpanGen3MainCurrentSensor(SpanGen3SensorBase):
     """Main feed current sensor."""
 
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    _attr_suggested_display_precision = 1
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.CURRENT  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfElectricCurrent.AMPERE
+    _attr_suggested_display_precision: int | None = 1
 
-    def __init__(self, coordinator, host):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str) -> None:
         """Initialize the main feed current sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_current"
@@ -198,11 +198,11 @@ class SpanGen3MainCurrentSensor(SpanGen3SensorBase):
 class SpanGen3MainFrequencySensor(SpanGen3SensorBase):
     """Main feed frequency sensor."""
 
-    _attr_device_class = SensorDeviceClass.FREQUENCY
-    _attr_native_unit_of_measurement = UnitOfFrequency.HERTZ
-    _attr_suggested_display_precision = 2
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.FREQUENCY  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfFrequency.HERTZ
+    _attr_suggested_display_precision: int | None = 2
 
-    def __init__(self, coordinator, host):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str) -> None:
         """Initialize the main feed frequency sensor."""
         super().__init__(coordinator, host)
         self._attr_unique_id = f"{host}_gen3_main_frequency"
@@ -223,11 +223,11 @@ class SpanGen3MainFrequencySensor(SpanGen3SensorBase):
 class SpanGen3CircuitPowerSensor(SpanGen3CircuitSensorBase):
     """Per-circuit power sensor."""
 
-    _attr_device_class = SensorDeviceClass.POWER
-    _attr_native_unit_of_measurement = UnitOfPower.WATT
-    _attr_suggested_display_precision = 0
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.POWER  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfPower.WATT
+    _attr_suggested_display_precision: int | None = 0
 
-    def __init__(self, coordinator, host, circuit_id):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str, circuit_id: int) -> None:
         """Initialize the circuit power sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_power"
@@ -243,11 +243,11 @@ class SpanGen3CircuitPowerSensor(SpanGen3CircuitSensorBase):
 class SpanGen3CircuitVoltageSensor(SpanGen3CircuitSensorBase):
     """Per-circuit voltage sensor."""
 
-    _attr_device_class = SensorDeviceClass.VOLTAGE
-    _attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
-    _attr_suggested_display_precision = 1
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.VOLTAGE  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfElectricPotential.VOLT
+    _attr_suggested_display_precision: int | None = 1
 
-    def __init__(self, coordinator, host, circuit_id):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str, circuit_id: int) -> None:
         """Initialize the circuit voltage sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_voltage"
@@ -263,11 +263,11 @@ class SpanGen3CircuitVoltageSensor(SpanGen3CircuitSensorBase):
 class SpanGen3CircuitCurrentSensor(SpanGen3CircuitSensorBase):
     """Per-circuit current sensor."""
 
-    _attr_device_class = SensorDeviceClass.CURRENT
-    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
-    _attr_suggested_display_precision = 2
+    _attr_device_class: SensorDeviceClass | None = SensorDeviceClass.CURRENT  # type: ignore[mutable-override]
+    _attr_native_unit_of_measurement: str | None = UnitOfElectricCurrent.AMPERE
+    _attr_suggested_display_precision: int | None = 2
 
-    def __init__(self, coordinator, host, circuit_id):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str, circuit_id: int) -> None:
         """Initialize the circuit current sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_current"
@@ -283,10 +283,12 @@ class SpanGen3CircuitCurrentSensor(SpanGen3CircuitSensorBase):
 class SpanGen3CircuitPositionSensor(SpanGen3CircuitSensorBase):
     """Per-circuit panel position (breaker slot number) sensor."""
 
-    _attr_icon = "mdi:electric-switch"
-    _attr_state_class = None  # Static configuration value, not a time-series measurement
+    _attr_icon: str | None = "mdi:electric-switch"
+    _attr_state_class: str | None = (
+        None  # Static configuration value, not a time-series measurement
+    )
 
-    def __init__(self, coordinator, host, circuit_id):
+    def __init__(self, coordinator: SpanGen3Coordinator, host: str, circuit_id: int) -> None:
         """Initialize the circuit position sensor."""
         super().__init__(coordinator, host, circuit_id)
         self._attr_unique_id = f"{host}_gen3_circuit_{circuit_id}_position"

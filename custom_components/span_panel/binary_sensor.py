@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -105,11 +105,9 @@ BINARY_SENSORS: tuple[
     ),
 )
 
-T = TypeVar("T", bound=SpanPanelBinarySensorEntityDescription)
 
-
-class SpanPanelBinarySensor(
-    CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity, Generic[T]
+class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
+    CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity
 ):
     """Binary Sensor status entity."""
 
@@ -261,10 +259,12 @@ async def async_setup_entry(
 
     # Gen3 path — use Gen3 binary sensor factory
     if config_entry.data.get(CONF_PANEL_GEN) == "gen3":
-        from .gen3.binary_sensors import create_gen3_binary_sensors  # noqa: E402
+        from .gen3.binary_sensors import (  # pylint: disable=import-outside-toplevel
+            create_gen3_binary_sensors,  # noqa: E402
+        )
 
-        coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
-        async_add_entities(create_gen3_binary_sensors(coordinator))
+        gen3_coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
+        async_add_entities(create_gen3_binary_sensors(gen3_coordinator))
         return
 
     _LOGGER.debug("ASYNC SETUP ENTRY BINARYSENSOR")

@@ -59,10 +59,12 @@ async def async_setup_entry(
     """Set up sensor platform."""
     # Gen3 path — use Gen3 sensor factory
     if config_entry.data.get(CONF_PANEL_GEN) == "gen3":
-        from .gen3.sensors import create_gen3_sensors  # noqa: E402
+        from .gen3.sensors import (  # pylint: disable=import-outside-toplevel
+            create_gen3_sensors,  # noqa: E402
+        )
 
-        coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
-        async_add_entities(create_gen3_sensors(coordinator))
+        gen3_coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
+        async_add_entities(create_gen3_sensors(gen3_coordinator))
         return
 
     try:

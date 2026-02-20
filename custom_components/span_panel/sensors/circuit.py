@@ -383,7 +383,8 @@ class SpanCircuitPositionSensor(
         circuit = self.coordinator.data.circuits.get(self.circuit_id)
         if not circuit or not circuit.tabs:
             return None
-        return min(circuit.tabs)
+        tab_min: int = min(circuit.tabs)
+        return tab_min
 
 
 class SpanUnmappedCircuitSensor(

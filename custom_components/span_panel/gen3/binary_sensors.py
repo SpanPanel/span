@@ -42,7 +42,7 @@ class SpanGen3BreakerSensor(CoordinatorEntity[SpanGen3Coordinator], BinarySensor
     """Binary sensor for breaker state (ON/OFF based on voltage)."""
 
     _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.POWER
+    _attr_device_class: BinarySensorDeviceClass | None = BinarySensorDeviceClass.POWER
 
     def __init__(
         self,
@@ -76,4 +76,5 @@ class SpanGen3BreakerSensor(CoordinatorEntity[SpanGen3Coordinator], BinarySensor
         m = self.coordinator.data.metrics.get(self._circuit_id)
         if m is None:
             return None
-        return m.is_on
+        is_on: bool = m.is_on
+        return is_on

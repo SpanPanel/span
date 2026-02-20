@@ -316,7 +316,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def _test_gen3_connection(self, host: str) -> bool:
         """Test if the host is a Gen3 panel via gRPC on port 50065."""
         try:
-            from .gen3.span_grpc_client import SpanGrpcClient  # noqa: E402
+            from .gen3.span_grpc_client import (  # pylint: disable=import-outside-toplevel
+                SpanGrpcClient,  # noqa: E402
+            )
 
             client = SpanGrpcClient(host)
             return await client.test_connection()

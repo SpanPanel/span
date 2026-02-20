@@ -16,6 +16,7 @@ import contextlib
 from dataclasses import dataclass, field
 import logging
 import struct
+from typing import Any
 
 import grpc
 
@@ -105,15 +106,16 @@ def _decode_varint(data: bytes, offset: int) -> tuple[int, int]:
     return result, offset
 
 
-def _parse_protobuf_fields(data: bytes) -> dict[int, list]:
+def _parse_protobuf_fields(data: bytes) -> dict[int, list[Any]]:
     """Parse raw protobuf bytes into a dict of field_number -> [values]."""
-    fields: dict[int, list] = {}
+    fields: dict[int, list[Any]] = {}
     offset = 0
     while offset < len(data):
         tag, offset = _decode_varint(data, offset)
         field_num = tag >> 3
         wire_type = tag & 0x07
 
+        value: int | bytes
         if wire_type == 0:  # varint
             value, offset = _decode_varint(data, offset)
         elif wire_type == 1:  # 64-bit
@@ -139,7 +141,7 @@ def _parse_protobuf_fields(data: bytes) -> dict[int, list]:
     return fields
 
 
-def _get_field(fields: dict, num: int, default=None):
+def _get_field(fields: dict[int, list[Any]], num: int, default: Any = None) -> Any:
     """Get first value for a field number."""
     vals = fields.get(num)
     return vals[0] if vals else default
@@ -511,6 +513,7 @@ class SpanGrpcClient:
 
     async def _fetch_instances(self) -> None:
         """Fetch all trait instances to discover circuits."""
+        assert self._channel is not None
         response = await self._channel.unary_unary(
             _GET_INSTANCES,
             request_serializer=lambda x: x,
@@ -630,6 +633,7 @@ class SpanGrpcClient:
         Circuits with no BreakerGroup mapping (orphans) are removed — they are
         system/ghost metrics with no physical breaker.
         """
+        assert self._channel is not None
         for group_iid in self._data.breaker_group_iids:
             if group_iid not in self._data.circuits:
                 # BreakerGroup IID without a matching PowerMetrics instance — skip
@@ -716,6 +720,7 @@ class SpanGrpcClient:
 
     async def _get_circuit_name(self, circuit_id: int) -> str | None:
         """Get a single circuit name via GetRevision on trait 16."""
+        assert self._channel is not None
         request = self._build_get_revision_request(
             vendor_id=VENDOR_SPAN,
             product_id=PRODUCT_GEN3_PANEL,
@@ -783,7 +788,8 @@ class SpanGrpcClient:
         name_fields = _parse_protobuf_fields(raw)
         name = _get_field(name_fields, 4)
         if name and isinstance(name, bytes):
-            return name.decode("utf-8", errors="replace").strip()
+            decoded: str = name.decode("utf-8", errors="replace").strip()
+            return decoded
         return None
 
     @staticmethod
@@ -799,7 +805,8 @@ class SpanGrpcClient:
         iid_data = _get_field(ref_fields, 2)
         if iid_data and isinstance(iid_data, bytes):
             iid_fields = _parse_protobuf_fields(iid_data)
-            return _get_field(iid_fields, 1, 0)
+            val = _get_field(iid_fields, 1, 0)
+            return val if isinstance(val, int) else 0
         return 0
 
     @staticmethod
@@ -876,6 +883,7 @@ class SpanGrpcClient:
 
     async def _subscribe_stream(self) -> None:
         """Subscribe to the gRPC stream and process updates."""
+        assert self._channel is not None
         call = self._channel.unary_stream(
             _SUBSCRIBE,
             request_serializer=lambda x: x,
