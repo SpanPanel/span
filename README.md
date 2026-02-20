@@ -14,18 +14,14 @@ monitoring and control of your home's electrical system.
 [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-This integration relies on the OpenAPI interface contract sourced from the SPAN Panel. The integration may break if SPAN changes the API in an incompatible way.
+This integration supports both **Gen2** panels (MAIN 32 — REST/OpenAPI) and **Gen3** panels (MAIN 40 / MLO 48 — gRPC).
+The Gen2 integration relies on the OpenAPI interface contract sourced from the panel. The integration may break if SPAN
+changes the API in an incompatible way.
 
 The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
 This integration provides the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and the ability
 to control user-manageable panel circuits.
-
-## Major Upgrade
-
-**Before upgrading to version 1.2.x from a prior version, please backup your Home Assistant configuration and database.**
-
-See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
 
 ## HACS Upgrade Process
 
@@ -55,21 +51,21 @@ If you encounter any issues during the upgrade, you can:
 
 This integration provides a Home Assistant device for your SPAN panel with entities for:
 
-- User Managed Circuits
+- User Managed Circuits _(Gen2 only)_
   - On/Off Switch (user managed circuits)
   - Priority Selector (user managed circuits)
 - Power Sensors
-  - Power Usage / Generation (Watts)
-  - Energy Usage / Generation (Wh)
-  - Net Energy (Wh) - Calculated as consumed energy minus produced energy
-- Panel and Grid Status
+  - Power Usage / Generation (Watts) _(Gen2 and Gen3)_
+  - Energy Usage / Generation (Wh) _(Gen2 only)_
+  - Net Energy (Wh) - Calculated as consumed energy minus produced energy _(Gen2 only)_
+- Panel and Grid Status _(Gen2 only)_
   - Main Relay State (e.g., CLOSED)
   - Current Run Config (e.g., PANEL_ON_GRID)
   - DSM State (e.g., DSM_GRID_UP)
   - DSM Grid State (e.g., DSM_ON_GRID)
   - Network Connectivity Status (Wi-Fi, Wired, & Cellular)
   - Door State (device class is tamper)
-- Storage Battery
+- Storage Battery _(Gen2 only)_
   - Battery percentage (options configuration)
 
 ## Installation
@@ -85,20 +81,23 @@ This integration provides a Home Assistant device for your SPAN panel with entit
 9. Click `+ Add Integration`.
 10. Search for "Span". This entry should correspond to this repository and offer the current version.
 11. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up or another address if you have multiple panels.
-12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable
-    against network changes, for example, if you change client hostname or IP and don't want to access the panel for authorization.
+12. **Gen2 panels**: Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be
+    more durable against network changes, for example, if you change client hostname or IP and don't want to access the panel for authorization.
+    **Gen3 panels** (MAIN 40 / MLO 48): No authentication is required. The integration connects directly over gRPC without any token or door-proximity step.
 13. See post install steps for solar or scan frequency configuration to optionally add additional sensors if applicable.
 
 ## Authorization Methods
 
-### Method 1: Door Proximity Authentication
+> **Gen3 panels (MAIN 40 / MLO 48) do not require authentication.** Steps 1 and 2 below apply only to Gen2 (MAIN 32) panels.
+
+### Method 1: Door Proximity Authentication (Gen2 only)
 
 1. Open your SPAN Panel door
 2. Press the door sensor button at the top 3 times in succession
 3. Wait for the frame lights to blink, indicating the panel is "unlocked" for 15 minutes
 4. Complete the integration setup in Home Assistant
 
-### Method 2: Authentication Token (Optional)
+### Method 2: Authentication Token (Gen2 only, optional)
 
 To acquire an authorization token, proceed as follows while the panel is in its unlocked period:
 
@@ -207,14 +206,46 @@ You can change the display precision for any entity in Home Assistant via `Setti
 to change in the list and click on it, then click on the gear wheel in the top right. Select the precision you prefer from the "Display Precision" menu and then
 press `UPDATE`.
 
-## Limitations
+## Panel Generation Support
 
-The original SPAN Panel MAIN 32 has a standardized OpenAPI endpoint that is leveraged by this integration.
+### Gen2 — SPAN Panel MAIN 32
 
-However, the new SPAN Panel MAIN 40 and MLO 48 that were released in Q2 of 2025 leverage a different hardware/software stack, even going so far as to use a
-different mobile app logins. This stack is not yet publicly documented and as such, we have not had a chance to discern how to support this stack at the time of
-writing this. The underlying software may be the same codebase as the MAIN 32, so in theory, SPAN may provide access that we have yet to discover or that they
-will eventually expose.
+The original MAIN 32 uses a REST/OpenAPI interface and provides the full feature set of this integration, including circuit relay control, circuit priority
+selector, energy history, battery/storage state-of-energy, solar/DSM state, and network connectivity status.
+
+### Gen3 — SPAN Panel MAIN 40 / MLO 48
+
+The MAIN 40 and MLO 48 released in Q2 2025 use a gRPC-based interface on port 50065. Gen3 panels are **read-only** — no authentication is required to
+connect, but the protocol does not expose any write operations. As a result, the following features are **not available** on Gen3 panels:
+
+- Circuit relay (on/off) control — no switches
+- Circuit priority selector
+- Energy history (Wh accumulated)
+- Battery / storage state-of-energy
+- Solar / DSM state
+- Network connectivity status
+
+Gen3 panels **do** provide real-time power metrics (watts, voltage, current) for each circuit, as well as apparent power (VA), reactive power (VAR), and
+power factor — fields that are not available on Gen2.
+
+The integration auto-detects the panel generation on first connection. No additional configuration is required to support a Gen3 panel; entities that are not
+available for Gen3 will simply not be created.
+
+### Feature Comparison
+
+| Feature | Gen2 (MAIN 32) | Gen3 (MAIN 40 / MLO 48) |
+| --------------------------------- | -------------- | ----------------------- |
+| Authentication | Required (JWT) | None |
+| Circuit on/off switch | Yes | No |
+| Circuit priority selector | Yes | No |
+| Energy history (Wh) | Yes | No |
+| Battery / storage SOE | Yes | No |
+| Solar / DSM state | Yes | No |
+| Network connectivity status | Yes | No |
+| Real-time power (W) per circuit | Yes | Yes |
+| Apparent power (VA) per circuit | No | Yes |
+| Reactive power (VAR) per circuit | No | Yes |
+| Power factor per circuit | No | Yes |
 
 ## Troubleshooting
 
@@ -302,7 +333,7 @@ This integration is published under the MIT license.
 This repository is set up as part of an organization so a single committer is not the weak link. The repository is a fork in a long line of SPAN forks that may
 or may not be stable (from newer to older):
 
-- SpanPanel/span (current GitHub organization, current repository, currently listed in HACS)
+- SpanPanel/span (current GitHub organization, current repository, default listed in HACS)
 - SpanPanel/Span (was moved to [SpanPanel/SpanCustom](https://github.com/SpanPanel/SpanCustom))
 - cayossarian/span
 - haext/span
@@ -310,12 +341,6 @@ or may not be stable (from newer to older):
 - thetoothpick/span-hacs
 - wez/span-hacs
 - galak/span-hacs
-
-Additional contributors:
-
-- pavandave
-- sargonas
-- NickBorgersOnLowSecurityNode
 
 ## Issues
 
