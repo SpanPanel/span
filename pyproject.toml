@@ -31,7 +31,7 @@ radon = "*"
 pylint = "*"  # For import-outside-toplevel checks
 # Testing dependencies
 pytest = "^9.0.0"  # Compatible with Python 3.14
-pytest-homeassistant-custom-component = "^0.13.300"  # Latest version compatible with HA 2025.8.2
+pytest-homeassistant-custom-component = "^0.13.315"  # Latest version compatible with HA 2026.2.x
 isort = "*"
 
 [build-system]
