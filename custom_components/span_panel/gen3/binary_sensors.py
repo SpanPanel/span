@@ -16,7 +16,8 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ..const import DOMAIN
+from custom_components.span_panel.const import DOMAIN
+
 from .coordinator import SpanGen3Coordinator
 from .span_grpc_client import PanelData
 

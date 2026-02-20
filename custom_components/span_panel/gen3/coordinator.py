@@ -8,14 +8,13 @@ real-time updates from the gRPC stream rather than polling.
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
+import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from ..const import DOMAIN
 from .const import DEFAULT_GRPC_PORT
 from .span_grpc_client import PanelData, SpanGrpcClient
 

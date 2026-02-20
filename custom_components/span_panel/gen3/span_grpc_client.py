@@ -11,10 +11,11 @@ stubs, keeping the dependency footprint minimal (only grpcio is needed).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
+import contextlib
+from dataclasses import dataclass, field
 import logging
 import struct
-from collections.abc import Callable
-from dataclasses import dataclass, field
 
 import grpc
 
@@ -22,7 +23,6 @@ from .const import (
     BREAKER_OFF_VOLTAGE_MV,
     DEFAULT_GRPC_PORT,
     MAIN_FEED_IID,
-    METRIC_IID_OFFSET,
     PRODUCT_GEN3_PANEL,
     TRAIT_BREAKER_GROUPS,
     TRAIT_CIRCUIT_NAMES,
@@ -464,10 +464,8 @@ class SpanGrpcClient:
         self._connected = False
         if self._stream_task and not self._stream_task.done():
             self._stream_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._stream_task
-            except asyncio.CancelledError:
-                pass
         if self._channel:
             await self._channel.close()
             self._channel = None
@@ -482,10 +480,8 @@ class SpanGrpcClient:
         """Stop the metric streaming task."""
         if self._stream_task and not self._stream_task.done():
             self._stream_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._stream_task
-            except asyncio.CancelledError:
-                pass
 
     async def test_connection(self) -> bool:
         """Test if we can connect to the panel (static method-like)."""
@@ -868,7 +864,7 @@ class SpanGrpcClient:
     # ------------------------------------------------------------------
 
     async def _stream_loop(self) -> None:
-        """Main streaming loop with automatic reconnection."""
+        """Run the main streaming loop with automatic reconnection."""
         while self._connected:
             try:
                 await self._subscribe_stream()
