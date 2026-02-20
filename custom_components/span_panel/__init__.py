@@ -21,6 +21,7 @@ from homeassistant.util import slugify
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401  # type: ignore[misc]
 from .const import (
+    CONF_PANEL_GEN,
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
@@ -102,9 +103,19 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     return True
 
 
+GEN3_PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+]
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("SETUP ENTRY CALLED! Entry ID: %s, Version: %s", entry.entry_id, entry.version)
+
+    # Gen3 gRPC path — completely separate from Gen2 REST
+    if entry.data.get(CONF_PANEL_GEN) == "gen3":
+        return await _async_setup_gen3_entry(hass, entry)
 
     # Migration flags will be handled by the coordinator during its update cycle
 
@@ -329,8 +340,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return True
 
 
+async def _async_setup_gen3_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up a Gen3 panel via gRPC."""
+    from .gen3.coordinator import SpanGen3Coordinator  # noqa: E402
+
+    coordinator = SpanGen3Coordinator(hass, entry)
+    if not await coordinator.async_setup():
+        _LOGGER.error("Failed to connect to Gen3 panel at %s", entry.data.get("host"))
+        return False
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {COORDINATOR: coordinator, NAME: "SpanPanel"}
+
+    await hass.config_entries.async_forward_entry_setups(entry, GEN3_PLATFORMS)
+    _LOGGER.info("Gen3 panel setup complete for %s", entry.data.get("host"))
+    return True
+
+
+async def _async_unload_gen3_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a Gen3 panel entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, GEN3_PLATFORMS)
+    if unload_ok:
+        coordinator_data = hass.data[DOMAIN].pop(entry.entry_id, {})
+        coordinator = coordinator_data.get(COORDINATOR)
+        if coordinator and hasattr(coordinator, "async_shutdown"):
+            await coordinator.async_shutdown()
+    return bool(unload_ok)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Gen3 unload path
+    if entry.data.get(CONF_PANEL_GEN) == "gen3":
+        return await _async_unload_gen3_entry(hass, entry)
+
     _LOGGER.debug("Unloading SPAN Panel integration")
 
     # Reset span-panel-api delay function to default

@@ -6,10 +6,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import COORDINATOR, DOMAIN
+from .const import CONF_PANEL_GEN, COORDINATOR, DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .sensors import (
     SpanCircuitEnergySensor,
+    SpanCircuitPositionSensor,
     SpanCircuitPowerSensor,
     SpanEnergySensorBase,
     SpanPanelBattery,
@@ -37,6 +38,7 @@ __all__ = [
     "SpanPanelEnergySensor",
     "SpanCircuitPowerSensor",
     "SpanCircuitEnergySensor",
+    "SpanCircuitPositionSensor",
     "SpanUnmappedCircuitSensor",
     "SpanSolarSensor",
     "SpanSolarEnergySensor",
@@ -55,6 +57,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor platform."""
+    # Gen3 path — use Gen3 sensor factory
+    if config_entry.data.get(CONF_PANEL_GEN) == "gen3":
+        from .gen3.sensors import create_gen3_sensors  # noqa: E402
+
+        coordinator = hass.data[DOMAIN][config_entry.entry_id][COORDINATOR]
+        async_add_entities(create_gen3_sensors(coordinator))
+        return
+
     try:
         data = hass.data[DOMAIN][config_entry.entry_id]
         coordinator: SpanPanelCoordinator = data[COORDINATOR]

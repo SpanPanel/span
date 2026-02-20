@@ -252,8 +252,10 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: (panel_data.main_meter_energy_consumed or 0)
-        - (panel_data.main_meter_energy_produced or 0),
+        value_fn=lambda panel_data: (
+            (panel_data.main_meter_energy_consumed or 0)
+            - (panel_data.main_meter_energy_produced or 0)
+        ),
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
@@ -262,13 +264,16 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: (panel_data.feedthrough_energy_consumed or 0)
-        - (panel_data.feedthrough_energy_produced or 0),
+        value_fn=lambda panel_data: (
+            (panel_data.feedthrough_energy_consumed or 0)
+            - (panel_data.feedthrough_energy_produced or 0)
+        ),
     ),
 )
 
 # Circuit sensor definitions (native sensors to replace synthetic ones)
 CIRCUIT_SENSORS: tuple[
+    SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
@@ -315,6 +320,17 @@ CIRCUIT_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda circuit: (circuit.consumed_energy or 0) - (circuit.produced_energy or 0),
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=True,
+    ),
+    SpanPanelCircuitsSensorEntityDescription(
+        key="circuit_panel_position",
+        name="Panel Position",
+        native_unit_of_measurement=None,
+        state_class=None,
+        suggested_display_precision=0,
+        device_class=None,
+        value_fn=lambda circuit: min(circuit.tabs) if circuit.tabs else None,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),

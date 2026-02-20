@@ -12,6 +12,9 @@ CONF_SERIAL_NUMBER = "serial_number"
 CONF_USE_SSL = "use_ssl"
 CONF_DEVICE_NAME = "device_name"
 
+# Gen3 gRPC panel generation detection
+CONF_PANEL_GEN = "panel_generation"
+
 # Simulation configuration
 CONF_SIMULATION_CONFIG = "simulation_config"
 CONF_SIMULATION_START_TIME = "simulation_start_time"
