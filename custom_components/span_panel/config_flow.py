@@ -8,8 +8,7 @@ import logging
 from pathlib import Path
 import shutil
 from time import time
-from typing import TYPE_CHECKING, Any
-import uuid
+from typing import Any
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
@@ -24,19 +23,15 @@ from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util import slugify
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import SpanPanelClient
+from span_panel_api import detect_api_version
+from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 from span_panel_api.simulation import DynamicSimulationEngine, SimulationConfig
 import voluptuous as vol
 import yaml
 
-from custom_components.span_panel.span_panel_hardware_status import (
-    SpanPanelHardwareStatus,
-)
-
 from .config_flow_utils import (
     build_general_options_schema,
     get_available_simulation_configs,
-    get_available_unmapped_tabs,
     get_current_naming_pattern,
     get_general_options_defaults,
     pattern_to_flags,
@@ -44,6 +39,7 @@ from .config_flow_utils import (
     validate_auth_token,
     validate_host,
     validate_simulation_time,
+    validate_v2_passphrase,
 )
 from .config_flow_utils.options import (
     build_entity_naming_options_schema,
@@ -51,17 +47,16 @@ from .config_flow_utils.options import (
     process_entity_naming_options_input,
 )
 from .const import (
-    CONF_API_RETRIES,
-    CONF_API_RETRY_BACKOFF_MULTIPLIER,
-    CONF_API_RETRY_TIMEOUT,
+    CONF_API_VERSION,
+    CONF_EBUS_BROKER_HOST,
+    CONF_EBUS_BROKER_PASSWORD,
+    CONF_EBUS_BROKER_PORT,
+    CONF_EBUS_BROKER_USERNAME,
+    CONF_HOP_PASSPHRASE,
+    CONF_PANEL_SERIAL,
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
-    CONF_USE_SSL,
-    CONFIG_API_RETRIES,
-    CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-    CONFIG_API_RETRY_TIMEOUT,
-    CONFIG_TIMEOUT,
     COORDINATOR,
     DOMAIN,
     ENTITY_NAMING_PATTERN,
@@ -74,13 +69,9 @@ from .options import (
     BATTERY_ENABLE,
     ENERGY_DISPLAY_PRECISION,
     ENERGY_REPORTING_GRACE_PERIOD,
-    INVERTER_ENABLE,
-    INVERTER_LEG1,
-    INVERTER_LEG2,
     POWER_DISPLAY_PRECISION,
 )
 from .simulation_utils import clone_panel_to_simulation
-from .span_panel_api import SpanPanelApi
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -95,16 +86,11 @@ class ConfigFlowError(Exception):
     """Custom exception for config flow internal errors."""
 
 
-if TYPE_CHECKING:
-    from span_panel_api import SpanPanelClient
-
-
 def get_user_data_schema(default_host: str = "") -> vol.Schema:
     """Get the user data schema with optional default host."""
     return vol.Schema(
         {
             vol.Optional(CONF_HOST, default=default_host): str,
-            vol.Optional(CONF_USE_SSL, default=False): bool,
             vol.Optional("simulator_mode", default=False): bool,
             vol.Optional(POWER_DISPLAY_PRECISION, default=0): int,
             vol.Optional(ENERGY_DISPLAY_PRECISION, default=2): int,
@@ -120,6 +106,12 @@ STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
     }
 )
 
+STEP_AUTH_PASSPHRASE_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_HOP_PASSPHRASE): str,
+    }
+)
+
 
 class TriggerFlowType(enum.Enum):
     """Types of configuration flow triggers."""
@@ -128,34 +120,10 @@ class TriggerFlowType(enum.Enum):
     UPDATE_ENTRY = enum.auto()
 
 
-def create_config_client(host: str, use_ssl: bool = False) -> SpanPanelClient:
-    """Create a SpanPanelClient with config settings for quick feedback."""
-    return SpanPanelClient(
-        host=host,
-        timeout=CONFIG_TIMEOUT,
-        use_ssl=use_ssl,
-        retries=CONFIG_API_RETRIES,
-        retry_timeout=CONFIG_API_RETRY_TIMEOUT,
-        retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-    )
-
-
-def create_api_controller(
-    hass: HomeAssistant,
-    host: str,
-    access_token: str | None = None,  # nosec
-) -> SpanPanelApi:
-    """Create a Span Panel API controller."""
-    params: dict[str, Any] = {"host": host}
-    if access_token is not None:
-        params["access_token"] = access_token
-    return SpanPanelApi(**params)
-
-
 class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
-    VERSION = 2
+    VERSION = 3
     MINOR_VERSION = 1
     domain = DOMAIN
 
@@ -169,7 +137,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.host: str | None = None
         self.serial_number: str | None = None
         self.access_token: str | None = None
-        self.use_ssl: bool = False
         self.power_display_precision: int = 0
         self.energy_display_precision: int = 2
         self._is_flow_setup: bool = False
@@ -177,33 +144,30 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Initial naming selection chosen during pre-setup
         self._chosen_use_device_prefix: bool | None = None
         self._chosen_use_circuit_numbers: bool | None = None
+        # v2 provisioning state
+        self.api_version: str = "v1"
+        self._v2_broker_host: str | None = None
+        self._v2_broker_port: int | None = None
+        self._v2_broker_username: str | None = None
+        self._v2_broker_password: str | None = None
+        self._v2_passphrase: str | None = None
+        self._v2_panel_serial: str | None = None
 
-    async def setup_flow(
-        self, trigger_type: TriggerFlowType, host: str, use_ssl: bool = False
-    ) -> None:
-        """Set up the flow."""
+    async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
+        """Set up the flow by detecting the panel API version and serial number."""
 
         if self._is_flow_setup is True:
             _LOGGER.error("Flow setup attempted when already set up")
             raise ConfigFlowError("Flow is already set up")
 
-        # Use config settings for quick feedback - no retries and shorter timeout
-        async with SpanPanelClient(
-            host=host,
-            timeout=CONFIG_TIMEOUT,
-            use_ssl=use_ssl,
-            retries=CONFIG_API_RETRIES,
-            retry_timeout=CONFIG_API_RETRY_TIMEOUT,
-            retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-        ) as client:
-            status_response = await client.get_status()
-            # Convert to our data class format
-            status_dict = status_response.to_dict()  # type: ignore[attr-defined]
-            panel_status = SpanPanelHardwareStatus.from_dict(status_dict)
+        result = await detect_api_version(host)
+        self.api_version = result.api_version
 
         self.trigger_flow_type = trigger_type
         self.host = host
-        self.serial_number = panel_status.serial_number
+
+        if result.status_info is not None:
+            self.serial_number = result.status_info.serial_number
 
         # Keep the existing context values and add the host value
         self.context = {
@@ -239,13 +203,34 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not is_ipv4_address(discovery_info.host):
             return self.async_abort(reason="not_ipv4_address")
 
-        # Validate that this is a valid Span Panel (assume HTTP for discovery)
-        if not await validate_host(self.hass, discovery_info.host, use_ssl=False):
+        # Detect whether this is a v2 panel based on zeroconf service type
+        svc_type = getattr(discovery_info, "type", "") or ""
+        is_v2_service = svc_type in ("_ebus._tcp.local.", "_secure-mqtt._tcp.local.")
+
+        if is_v2_service:
+            # v2 panels discovered via eBus / secure-mqtt service types
+            self.api_version = "v2"
+            detection = await detect_api_version(discovery_info.host)
+            self.host = discovery_info.host
+            if detection.status_info is not None:
+                self.serial_number = detection.status_info.serial_number
+            self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
+            self.context = {
+                **self.context,
+                "title_placeholders": {
+                    **self.context.get("title_placeholders", {}),
+                    CONF_HOST: discovery_info.host,
+                },
+            }
+            self._is_flow_setup = True
+            await self.ensure_not_already_configured()
+            return await self.async_step_confirm_discovery()
+
+        # v1 path: validate via REST status endpoint
+        if not await validate_host(self.hass, discovery_info.host):
             return self.async_abort(reason="not_span_panel")
 
-            # Discovered devices default to HTTP/no SSL
-        self.use_ssl = False
-        await self.setup_flow(TriggerFlowType.CREATE_ENTRY, discovery_info.host, False)
+        await self.setup_flow(TriggerFlowType.CREATE_ENTRY, discovery_info.host)
         await self.ensure_not_already_configured()
         return await self.async_step_confirm_discovery()
 
@@ -278,22 +263,38 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 errors={"base": "host_required"},
             )
 
-        use_ssl: bool = user_input.get(CONF_USE_SSL, False)
-
         # Validate host before setting up flow
-        if not await validate_host(self.hass, host, use_ssl=use_ssl):
+        if not await validate_host(self.hass, host):
             return self.async_show_form(
                 step_id="user",
                 data_schema=STEP_USER_DATA_SCHEMA,
                 errors={"base": "cannot_connect"},
             )
 
-        # Store SSL setting for later use
-        self.use_ssl = use_ssl
+        # Detect v2 API before setting up the v1 flow
+        detection = await detect_api_version(host)
+        self.api_version = detection.api_version
 
-        # Only setup flow if validation succeeded
+        if self.api_version == "v2":
+            # v2 panels: serial comes from detection, no v1 status probe needed
+            self.host = host
+            if detection.status_info is not None:
+                self.serial_number = detection.status_info.serial_number
+            self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
+            self.context = {
+                **self.context,
+                "title_placeholders": {
+                    **self.context.get("title_placeholders", {}),
+                    CONF_HOST: host,
+                },
+            }
+            self._is_flow_setup = True
+            await self.ensure_not_already_configured()
+            return await self.async_step_auth_passphrase()
+
+        # v1 path: probe via the existing setup_flow
         if not self._is_flow_setup:
-            await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host, use_ssl)
+            await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
             await self.ensure_not_already_configured()
 
         return await self.async_step_choose_auth_type()
@@ -324,10 +325,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         device_name = self.get_unique_device_name(base_name)
 
         # Prepare config data
-        config_data = {
+        config_data: dict[str, Any] = {
             CONF_HOST: host,  # This is now the simulator serial number (sim-nnn)
             CONF_ACCESS_TOKEN: "simulator_token",
-            CONF_USE_SSL: False,
+            CONF_API_VERSION: "simulation",
             "simulation_mode": True,
             CONF_SIMULATION_CONFIG: simulation_config,
             "device_name": device_name,
@@ -438,9 +439,23 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle a flow initiated by re-auth."""
-        use_ssl = entry_data.get(CONF_USE_SSL, False)
-        self.use_ssl = use_ssl
-        await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, entry_data[CONF_HOST], use_ssl)
+        host = entry_data[CONF_HOST]
+
+        # Detect current API version of the panel
+        detection = await detect_api_version(host)
+        self.api_version = detection.api_version
+
+        if self.api_version == "v2":
+            # v2 reauth: set up flow state manually and go to passphrase
+            self.host = host
+            if detection.status_info is not None:
+                self.serial_number = detection.status_info.serial_number
+            self.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
+            self._is_flow_setup = True
+            return await self.async_step_auth_passphrase()
+
+        # v1 reauth: existing token flow
+        await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, host)
         return await self.async_step_auth_token(dict(entry_data))
 
     async def async_step_confirm_discovery(
@@ -460,7 +475,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 },
             )
 
-        # Pass (empty) dictionary to signal the call came from this step, not abort
+        # v2 panels go straight to passphrase auth after confirmation
+        if self.api_version == "v2":
+            return await self.async_step_auth_passphrase()
+
+        # v1 panels: choose between proximity and token auth
         return await self.async_step_choose_auth_type(user_input)
 
     async def async_step_choose_auth_type(
@@ -485,53 +504,20 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self,
         entry_data: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
-        """Step that guide users through the proximity authentication process."""
+        """Step that guide users through the proximity authentication process.
+
+        Proximity auth requires v1 REST API which is no longer supported.
+        v1 panels should upgrade firmware to v2.
+        """
         self.ensure_flow_is_set_up()
 
-        # Use config settings for quick feedback - no retries and shorter timeout
-        async with SpanPanelClient(
-            host=self.host or "",
-            timeout=CONFIG_TIMEOUT,
-            use_ssl=self.use_ssl,
-            retries=CONFIG_API_RETRIES,
-            retry_timeout=CONFIG_API_RETRY_TIMEOUT,
-            retry_backoff_multiplier=CONFIG_API_RETRY_BACKOFF_MULTIPLIER,
-        ) as client:
-            # Get status to check proximity state
-            status_response = await client.get_status()
-            status_dict = status_response.to_dict()  # type: ignore[attr-defined]
-            panel_status = SpanPanelHardwareStatus.from_dict(status_dict)
-
-            # Check if running firmware newer or older than r202342
-            if panel_status.proximity_proven is not None:
-                # Reprompt until we are able to do proximity auth for new firmware
-                proximity_verified: bool = panel_status.proximity_proven
-                if proximity_verified is False:
-                    return self.async_show_form(step_id="auth_proximity")
-            else:
-                # Reprompt until we are able to do proximity auth for old firmware
-                remaining_presses: int = panel_status.remaining_auth_unlock_button_presses
-                if remaining_presses != 0:
-                    return self.async_show_form(
-                        step_id="auth_proximity",
-                    )
-
-            # Ensure host is set
-            if not self.host:
-                return self.async_abort(reason="host_not_set")
-
-            client_name = f"home-assistant-{uuid.uuid4()}"
-            auth_response = await client.authenticate(
-                client_name, "Home Assistant Local Span Integration"
-            )
-            self.access_token = auth_response.access_token
-        # Type checking: ensure access_token is not None before calling validate_auth_token
-        if self.access_token is None:
-            return self.async_abort(reason="invalid_access_token")
-        if not await validate_auth_token(self.hass, self.host, self.access_token, self.use_ssl):
-            return self.async_abort(reason="invalid_access_token")
-
-        return await self.async_step_resolve_entity(entry_data)
+        # v1 proximity auth is no longer supported — the REST client has been removed.
+        # Panels that reach this step have v1 firmware and need an upgrade.
+        _LOGGER.warning(
+            "Proximity auth is not supported for v1 panels. "
+            "Please upgrade your panel firmware to v2."
+        )
+        return self.async_abort(reason="v1_not_supported")
 
     async def async_step_auth_token(
         self,
@@ -558,7 +544,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 return self.async_abort(reason="host_not_set")
 
             # Validate the provided token
-            if not await validate_auth_token(self.hass, self.host, self.access_token, self.use_ssl):
+            if not await validate_auth_token(self.hass, self.host, self.access_token):
                 return self.async_show_form(
                     step_id="auth_token",
                     data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
@@ -574,6 +560,62 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
             errors={"base": "missing_access_token"},
         )
+
+    async def async_step_auth_passphrase(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Collect the panel passphrase for v2 authentication."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+            )
+
+        passphrase = user_input.get(CONF_HOP_PASSPHRASE, "").strip()
+        if not passphrase:
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+                errors={"base": "invalid_auth"},
+            )
+
+        if not self.host:
+            return self.async_abort(reason="host_not_set")
+
+        try:
+            result = await validate_v2_passphrase(self.host, passphrase)
+        except SpanPanelAuthError:
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+                errors={"base": "invalid_auth"},
+            )
+        except SpanPanelConnectionError:
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+                errors={"base": "cannot_connect"},
+            )
+
+        # Store v2 credentials
+        self.access_token = result.access_token
+        self._v2_broker_host = result.ebus_broker_host
+        self._v2_broker_port = result.ebus_broker_mqtts_port
+        self._v2_broker_username = result.ebus_broker_username
+        self._v2_broker_password = result.ebus_broker_password
+        self._v2_passphrase = passphrase
+        self._v2_panel_serial = result.serial_number
+
+        # Route based on flow type
+        if self.trigger_flow_type == TriggerFlowType.UPDATE_ENTRY:
+            # Reauth: update entry with new v2 credentials
+            if "entry_id" not in self.context:
+                raise ValueError("Entry ID is missing from context")
+            return self._update_v2_entry(self.context["entry_id"])
+
+        # New entry: proceed to naming selection then creation
+        return await self.async_step_choose_entity_naming_initial()
 
     async def async_step_resolve_entity(
         self,
@@ -628,14 +670,25 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             False if self._chosen_use_circuit_numbers is None else self._chosen_use_circuit_numbers
         )
 
+        entry_data: dict[str, Any] = {
+            CONF_HOST: host,
+            CONF_ACCESS_TOKEN: access_token,
+            "device_name": device_name,
+        }
+
+        # Add v2-specific fields
+        if self.api_version == "v2":
+            entry_data[CONF_API_VERSION] = "v2"
+            entry_data[CONF_EBUS_BROKER_HOST] = self._v2_broker_host
+            entry_data[CONF_EBUS_BROKER_PORT] = self._v2_broker_port
+            entry_data[CONF_EBUS_BROKER_USERNAME] = self._v2_broker_username
+            entry_data[CONF_EBUS_BROKER_PASSWORD] = self._v2_broker_password
+            entry_data[CONF_HOP_PASSPHRASE] = self._v2_passphrase
+            entry_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
+
         return self.async_create_entry(
             title=device_name,
-            data={
-                CONF_HOST: host,
-                CONF_ACCESS_TOKEN: access_token,
-                CONF_USE_SSL: self.use_ssl,
-                "device_name": device_name,
-            },
+            data=entry_data,
             options={
                 USE_DEVICE_PREFIX: use_device_prefix,
                 USE_CIRCUIT_NUMBERS: use_circuit_numbers,
@@ -643,6 +696,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
             },
         )
+
+    def _update_v2_entry(self, entry_id: str) -> ConfigFlowResult:
+        """Update an existing config entry with new v2 MQTT credentials."""
+        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(entry_id)
+        if entry is None:
+            _LOGGER.error("Config entry %s does not exist during v2 reauth", entry_id)
+            return self.async_abort(reason="reauth_failed")
+
+        updated_data = dict(entry.data)
+        updated_data[CONF_ACCESS_TOKEN] = self.access_token
+        updated_data[CONF_API_VERSION] = "v2"
+        updated_data[CONF_EBUS_BROKER_HOST] = self._v2_broker_host
+        updated_data[CONF_EBUS_BROKER_PORT] = self._v2_broker_port
+        updated_data[CONF_EBUS_BROKER_USERNAME] = self._v2_broker_username
+        updated_data[CONF_EBUS_BROKER_PASSWORD] = self._v2_broker_password
+        updated_data[CONF_HOP_PASSPHRASE] = self._v2_passphrase
+        updated_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
+
+        self.hass.config_entries.async_update_entry(entry, data=updated_data)
+        self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
+        return self.async_abort(reason="reauth_successful")
 
     def update_existing_entry(
         self,
@@ -657,7 +731,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         updated_data = dict(entry_data)
         updated_data[CONF_HOST] = host
         updated_data[CONF_ACCESS_TOKEN] = access_token
-        updated_data[CONF_USE_SSL] = self.use_ssl
 
         # An existing entry must exist before we can update it
         entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(entry_id)
@@ -725,21 +798,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         return OptionsFlowHandler()
 
 
-OPTIONS_SCHEMA: Any = vol.Schema(
+OPTIONS_SCHEMA: vol.Schema = vol.Schema(
     {
         vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
         vol.Optional(BATTERY_ENABLE): bool,
-        vol.Optional(INVERTER_ENABLE): bool,
-        vol.Optional(INVERTER_LEG1): vol.All(vol.Coerce(int), vol.Range(min=0)),
-        vol.Optional(INVERTER_LEG2): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(ENTITY_NAMING_PATTERN): vol.In([e.value for e in EntityNamingPattern]),
-        vol.Optional(CONF_API_RETRIES): vol.All(int, vol.Range(min=0, max=10)),
-        vol.Optional(CONF_API_RETRY_TIMEOUT): vol.All(
-            vol.Coerce(float), vol.Range(min=0.1, max=10.0)
-        ),
-        vol.Optional(CONF_API_RETRY_BACKOFF_MULTIPLIER): vol.All(
-            vol.Coerce(float), vol.Range(min=1.0, max=5.0)
-        ),
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
     }
 )
@@ -779,14 +842,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
-        # Get available unmapped tabs for dropdown
-        available_tabs = await get_available_unmapped_tabs(self.hass, self.config_entry)
-
         if user_input is not None:
             # Process the user input using the utility function
-            filtered_input, errors = process_general_options_input(
-                self.config_entry, user_input, available_tabs
-            )
+            filtered_input, errors = process_general_options_input(self.config_entry, user_input)
 
             # If no errors, proceed with saving options
             if not errors:
@@ -794,21 +852,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         else:
             errors = {}
 
-        # Get current values for dynamic filtering
-        try:
-            current_leg1 = int(self.config_entry.options.get(INVERTER_LEG1, 0))
-        except (TypeError, ValueError):
-            current_leg1 = 0
-        try:
-            current_leg2 = int(self.config_entry.options.get(INVERTER_LEG2, 0))
-        except (TypeError, ValueError):
-            current_leg2 = 0
-
         # Build schema and defaults using utility functions
-        schema = build_general_options_schema(
-            self.config_entry, available_tabs, current_leg1, current_leg2, user_input
-        )
-        defaults = get_general_options_defaults(self.config_entry, current_leg1, current_leg2)
+        schema = build_general_options_schema(self.config_entry)
+        defaults = get_general_options_defaults(self.config_entry)
 
         return self.async_show_form(
             step_id="general_options",
@@ -917,19 +963,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 current_options[USE_CIRCUIT_NUMBERS] = naming_options[USE_CIRCUIT_NUMBERS]
                 current_options[USE_DEVICE_PREFIX] = naming_options[USE_DEVICE_PREFIX]
 
-                # Debug: Log what options we're preserving
-                preserved_options = {
-                    k: v
-                    for k, v in current_options.items()
-                    if k not in [USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX]
-                }
-                _LOGGER.debug("Preserving existing options: %s", preserved_options)
-                _LOGGER.debug(
-                    "Solar sensor enabled: %s",
-                    current_options.get(INVERTER_ENABLE, False),
-                )
-                _LOGGER.debug("Inverter leg 1: %s", current_options.get(INVERTER_LEG1, 0))
-                _LOGGER.debug("Inverter leg 2: %s", current_options.get(INVERTER_LEG2, 0))
                 _LOGGER.debug("All options after update: %s", current_options)
 
                 # Schedule reload after the options flow completes

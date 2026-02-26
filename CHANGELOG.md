@@ -9,21 +9,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### 🐛 Bug Fixes
 
-- **Fix reload loop when circuit name is None (#162)**: Fixed infinite reload loop that caused entity flickering when the SPAN panel
-  API returns None for circuit names. Uses sentinel value to distinguish between "never synced" and "circuit name is None" states.
-  When circuit name is None, entity name is set to None allowing HA to use default naming behavior.
-  Thanks to @NickBorgers for reporting and correctly analyzing a solution.  @cayossarian.
+- **Fix reload loop when circuit name is None (#162)**: Fixed infinite reload loop that caused entity flickering when the SPAN panel API returns None for
+  circuit names. Uses sentinel value to distinguish between "never synced" and "circuit name is None" states. When circuit name is None, entity name is set to
+  None allowing HA to use default naming behavior. Thanks to @NickBorgers for reporting and correctly analyzing a solution. @cayossarian.
 
-- **Fix spike cleanup service not finding legacy sensor names (#160)**: The `cleanup_energy_spikes` service now correctly finds sensors
-  regardless of naming pattern (friendly names, circuit numbers, or legacy names without `span_panel_` prefix).
-  Also adds optional `main_meter_entity_id` parameter allowing users to manually specify the
-  spike detection sensor when auto-detection of main meter fails or that sensor has been renamed.
-  Thanks to @mepoland for reporting. @cayossarian.
+- **Fix spike cleanup service not finding legacy sensor names (#160)**: The `cleanup_energy_spikes` service now correctly finds sensors regardless of naming
+  pattern (friendly names, circuit numbers, or legacy names without `span_panel_` prefix). Also adds optional `main_meter_entity_id` parameter allowing users to
+  manually specify the spike detection sensor when auto-detection of main meter fails or that sensor has been renamed. Thanks to @mepoland for reporting.
+  @cayossarian.
 
 ### 🔧 Improvements
 
-- **Respect user-customized entity names**: When a user has customized an entity's friendly name in Home Assistant,
-  the integration skips name sync for that entity. @cayossarian
+- **Respect user-customized entity names**: When a user has customized an entity's friendly name in Home Assistant, the integration skips name sync for that
+  entity. @cayossarian
 
 ## [1.30] - 2025-12-31
 

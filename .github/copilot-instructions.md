@@ -44,7 +44,8 @@ scripts/                        # Development scripts
 
 ### Code Style
 
-1. **Imports**: Use absolute imports. No relative imports like `from .module import X`. Always import from `custom_components.span_panel` or use top-level imports
+1. **Imports**: Use absolute imports. No relative imports like `from .module import X`. Always import from `custom_components.span_panel` or use top-level
+   imports
 2. **Imports Location**: ALL imports MUST be at the top of the file (enforced by Pylint). No `import-outside-toplevel` violations allowed
 3. **Type Hints**: Required for all functions and methods (enforced by MyPy with strict settings)
 4. **Docstrings**: Required for all public modules, classes, and functions (Google style, enforced by Ruff D-rules)
@@ -261,6 +262,5 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 4. Does this require new tests?
 5. Does this change affect Home Assistant compatibility?
 
-Remember: This is a custom integration that users install in their Home Assistant instance.
-Breaking changes can affect real home automation systems, so test thoroughly and maintain
-backward compatibility when possible.
+Remember: This is a custom integration that users install in their Home Assistant instance. Breaking changes can affect real home automation systems, so test
+thoroughly and maintain backward compatibility when possible.

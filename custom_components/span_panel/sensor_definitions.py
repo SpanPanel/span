@@ -1,12 +1,12 @@
 """Sensor definitions for SPAN Panel integration.
 
-This file contains sensor definitions for NATIVE integration sensors only:
+This file contains sensor definitions for all native integration sensors:
 - Panel status sensors (DSM state, grid state, current run config, main relay state)
 - Hardware status sensors (software version)
-- Unmapped circuit sensors (power, energy for unmapped breaker positions - invisible backing data)
-
-SYNTHETIC sensors (panel power, circuit power/energy, solar, battery) are now defined
-in YAML templates in yaml_templates/ directory and created via ha-synthetic-sensors package.
+- Panel power and energy sensors
+- Circuit power and energy sensors
+- Unmapped circuit sensors (invisible backing data)
+- Battery sensor
 """
 
 from __future__ import annotations
@@ -20,23 +20,14 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
-
-from .const import (
-    CIRCUITS_ENERGY_CONSUMED,
-    CIRCUITS_ENERGY_PRODUCED,
-    CIRCUITS_POWER,
-)
-from .span_panel_circuit import SpanPanelCircuit
-from .span_panel_data import SpanPanelData
-from .span_panel_hardware_status import SpanPanelHardwareStatus
-from .span_panel_storage_battery import SpanPanelStorageBattery
+from span_panel_api import SpanBatterySnapshot, SpanCircuitSnapshot, SpanPanelSnapshot
 
 
 @dataclass(frozen=True)
 class SpanPanelCircuitsRequiredKeysMixin:
     """Required keys mixin for Span Panel circuit sensors."""
 
-    value_fn: Callable[[SpanPanelCircuit], float]
+    value_fn: Callable[[SpanCircuitSnapshot], float]
 
 
 @dataclass(frozen=True)
@@ -50,7 +41,7 @@ class SpanPanelCircuitsSensorEntityDescription(
 class SpanPanelDataRequiredKeysMixin:
     """Required keys mixin for Span Panel data sensors."""
 
-    value_fn: Callable[[SpanPanelData], float | str]
+    value_fn: Callable[[SpanPanelSnapshot], float | str]
 
 
 @dataclass(frozen=True)
@@ -62,7 +53,7 @@ class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDat
 class SpanPanelStatusRequiredKeysMixin:
     """Required keys mixin for Span Panel status sensors."""
 
-    value_fn: Callable[[SpanPanelHardwareStatus], str]
+    value_fn: Callable[[SpanPanelSnapshot], str]
 
 
 @dataclass(frozen=True)
@@ -76,7 +67,7 @@ class SpanPanelStatusSensorEntityDescription(
 class SpanPanelBatteryRequiredKeysMixin:
     """Required keys mixin for Span Panel battery sensors."""
 
-    value_fn: Callable[[SpanPanelStorageBattery], int]
+    value_fn: Callable[[SpanBatterySnapshot], float | None]
 
 
 @dataclass(frozen=True)
@@ -86,7 +77,7 @@ class SpanPanelBatterySensorEntityDescription(
     """Describes a Span Panel battery sensor entity."""
 
 
-# Panel data status sensor definitions (native sensors)
+# Panel data status sensor definitions
 PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
@@ -96,76 +87,77 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="dsm_state",
         name="DSM State",
-        value_fn=lambda panel_data: panel_data.dsm_state,
+        value_fn=lambda s: s.dsm_state,
     ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
         name="DSM Grid State",
-        value_fn=lambda panel_data: panel_data.dsm_grid_state,
+        value_fn=lambda s: s.dsm_grid_state,
     ),
     SpanPanelDataSensorEntityDescription(
         key="current_run_config",
         name="Current Run Config",
-        value_fn=lambda panel_data: panel_data.current_run_config,
+        value_fn=lambda s: s.current_run_config,
     ),
     SpanPanelDataSensorEntityDescription(
         key="main_relay_state",
         name="Main Relay State",
-        value_fn=lambda panel_data: panel_data.main_relay_state,
+        value_fn=lambda s: s.main_relay_state,
     ),
 )
 
-# Hardware status sensor definitions (native sensors)
+# Hardware status sensor definitions
 STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription,] = (
     SpanPanelStatusSensorEntityDescription(
         key="software_version",
         name="Software Version",
-        value_fn=lambda status: getattr(status, "firmware_version", "Unknown"),
+        value_fn=lambda s: s.firmware_version,
     ),
 )
 
-# Unmapped circuit sensor definitions (native sensors - invisible backing data for synthetics)
+# Unmapped circuit sensor definitions (invisible backing data)
+# Keys are inline string literals preserving the v1 camelCase values for unique_id stability
 UNMAPPED_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
 ] = (
     SpanPanelCircuitsSensorEntityDescription(
-        key=CIRCUITS_POWER,
+        key="instantPowerW",
         name="Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda circuit: circuit.instant_power,
-        entity_registry_enabled_default=True,  # Enabled but invisible
-        entity_registry_visible_default=False,  # Hidden from UI
+        value_fn=lambda c: c.instant_power_w,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=False,
     ),
     SpanPanelCircuitsSensorEntityDescription(
-        key=CIRCUITS_ENERGY_PRODUCED,
+        key="producedEnergyWh",
         name="Produced Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: circuit.produced_energy,
-        entity_registry_enabled_default=True,  # Enabled but invisible
-        entity_registry_visible_default=False,  # Hidden from UI
+        value_fn=lambda c: c.produced_energy_wh,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=False,
     ),
     SpanPanelCircuitsSensorEntityDescription(
-        key=CIRCUITS_ENERGY_CONSUMED,
+        key="consumedEnergyWh",
         name="Consumed Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: circuit.consumed_energy,
-        entity_registry_enabled_default=True,  # Enabled but invisible
-        entity_registry_visible_default=False,  # Hidden from UI
+        value_fn=lambda c: c.consumed_energy_wh,
+        entity_registry_enabled_default=True,
+        entity_registry_visible_default=False,
     ),
 )
 
-# Battery sensor definition (native sensor - conditionally created)
+# Battery sensor definition (conditionally created when battery data available)
 BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensorEntityDescription(
     key="storage_battery_percentage",
     name="Battery Level",
@@ -173,10 +165,10 @@ BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensor
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.BATTERY,
-    value_fn=lambda battery: battery.storage_battery_percentage,
+    value_fn=lambda b: b.soe_percentage,
 )
 
-# Panel power and energy sensor definitions (native sensors to replace synthetic ones)
+# Panel power sensor definitions
 PANEL_POWER_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
@@ -188,7 +180,7 @@ PANEL_POWER_SENSORS: tuple[
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda panel_data: panel_data.instant_grid_power,
+        value_fn=lambda s: s.instant_grid_power_w,
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
@@ -197,10 +189,11 @@ PANEL_POWER_SENSORS: tuple[
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda panel_data: panel_data.feedthrough_power,
+        value_fn=lambda s: s.feedthrough_power_w,
     ),
 )
 
+# Panel energy sensor definitions
 PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
@@ -216,7 +209,7 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.main_meter_energy_produced,
+        value_fn=lambda s: s.main_meter_energy_produced_wh,
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyConsumedWh",
@@ -225,7 +218,7 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.main_meter_energy_consumed,
+        value_fn=lambda s: s.main_meter_energy_consumed_wh,
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyProducedWh",
@@ -234,7 +227,7 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.feedthrough_energy_produced,
+        value_fn=lambda s: s.feedthrough_energy_produced_wh,
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyConsumedWh",
@@ -243,7 +236,7 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: panel_data.feedthrough_energy_consumed,
+        value_fn=lambda s: s.feedthrough_energy_consumed_wh,
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterNetEnergyWh",
@@ -252,8 +245,8 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: (panel_data.main_meter_energy_consumed or 0)
-        - (panel_data.main_meter_energy_produced or 0),
+        value_fn=lambda s: (s.main_meter_energy_consumed_wh or 0)
+        - (s.main_meter_energy_produced_wh or 0),
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
@@ -262,12 +255,12 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda panel_data: (panel_data.feedthrough_energy_consumed or 0)
-        - (panel_data.feedthrough_energy_produced or 0),
+        value_fn=lambda s: (s.feedthrough_energy_consumed_wh or 0)
+        - (s.feedthrough_energy_produced_wh or 0),
     ),
 )
 
-# Circuit sensor definitions (native sensors to replace synthetic ones)
+# Circuit sensor definitions
 CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription,
     SpanPanelCircuitsSensorEntityDescription,
@@ -281,7 +274,7 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda circuit: circuit.instant_power,
+        value_fn=lambda c: c.instant_power_w,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
@@ -292,7 +285,7 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: circuit.produced_energy,
+        value_fn=lambda c: c.produced_energy_wh,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
@@ -303,7 +296,7 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: circuit.consumed_energy,
+        value_fn=lambda c: c.consumed_energy_wh,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
@@ -314,72 +307,8 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda circuit: (circuit.consumed_energy or 0) - (circuit.produced_energy or 0),
+        value_fn=lambda c: (c.consumed_energy_wh or 0) - (c.produced_energy_wh or 0),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
-    ),
-)
-
-
-# Solar sensor definitions (native sensors to replace synthetic ones)
-# These are template sensors that will be created when solar is enabled
-@dataclass(frozen=True)
-class SpanSolarSensorEntityDescription(SensorEntityDescription):
-    """Describes a solar sensor entity that combines leg1 and leg2 circuits."""
-
-    leg1_circuit_suffix: str = ""
-    leg2_circuit_suffix: str = ""
-    calculation_type: str = "sum"  # "sum" for power, "sum" for energy
-
-
-SOLAR_SENSORS: tuple[
-    SpanSolarSensorEntityDescription,
-    SpanSolarSensorEntityDescription,
-    SpanSolarSensorEntityDescription,
-    SpanSolarSensorEntityDescription,
-] = (
-    SpanSolarSensorEntityDescription(
-        key="solar_current_power",
-        name="Solar Current Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=0,
-        device_class=SensorDeviceClass.POWER,
-        leg1_circuit_suffix="power",
-        leg2_circuit_suffix="power",
-        calculation_type="sum",
-    ),
-    SpanSolarSensorEntityDescription(
-        key="solar_produced_energy",
-        name="Solar Produced Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        leg1_circuit_suffix="produced_energy",
-        leg2_circuit_suffix="produced_energy",
-        calculation_type="sum",
-    ),
-    SpanSolarSensorEntityDescription(
-        key="solar_consumed_energy",
-        name="Solar Consumed Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        leg1_circuit_suffix="consumed_energy",
-        leg2_circuit_suffix="consumed_energy",
-        calculation_type="sum",
-    ),
-    SpanSolarSensorEntityDescription(
-        key="solar_net_energy",
-        name="Solar Net Energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
-        state_class=SensorStateClass.TOTAL,
-        suggested_display_precision=2,
-        device_class=SensorDeviceClass.ENERGY,
-        leg1_circuit_suffix="net_energy",
-        leg2_circuit_suffix="net_energy",
-        calculation_type="sum",
     ),
 )

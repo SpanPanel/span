@@ -121,7 +121,6 @@ async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: A
 
     circuits = {"1": circuit}
     mock_panel = create_mock_span_panel(circuits)
-    mock_panel.api.set_relay = AsyncMock()
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
@@ -132,15 +131,17 @@ async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: A
     mock_coordinator.config_entry.options = {}  # Empty options dict
     mock_coordinator.async_request_refresh = AsyncMock()
 
+    # v2: relay control goes through coordinator.client
+    mock_client = AsyncMock()
+    mock_coordinator.client = mock_client
+
     switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Turn on the switch
     await switch.async_turn_on()
 
-    # Verify API was called with correct parameters
-    mock_panel.api.set_relay.assert_called_once()
-    call_args = mock_panel.api.set_relay.call_args
-    assert call_args[0][1] == CircuitRelayState.CLOSED  # Second argument should be CLOSED
+    # Verify client was called with correct parameters
+    mock_client.set_circuit_relay.assert_called_once_with("1", "CLOSED")
 
     # Verify refresh was requested
     mock_coordinator.async_request_refresh.assert_called_once()
@@ -161,7 +162,6 @@ async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: 
 
     circuits = {"1": circuit}
     mock_panel = create_mock_span_panel(circuits)
-    mock_panel.api.set_relay = AsyncMock()
 
     mock_coordinator = MagicMock()
     mock_coordinator.data = mock_panel
@@ -172,15 +172,17 @@ async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: 
     mock_coordinator.config_entry.options = {}  # Empty options dict
     mock_coordinator.async_request_refresh = AsyncMock()
 
+    # v2: relay control goes through coordinator.client
+    mock_client = AsyncMock()
+    mock_coordinator.client = mock_client
+
     switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
 
     # Turn off the switch
     await switch.async_turn_off()
 
-    # Verify API was called with correct parameters
-    mock_panel.api.set_relay.assert_called_once()
-    call_args = mock_panel.api.set_relay.call_args
-    assert call_args[0][1] == CircuitRelayState.OPEN  # Second argument should be OPEN
+    # Verify client was called with correct parameters
+    mock_client.set_circuit_relay.assert_called_once_with("1", "OPEN")
 
     # Verify refresh was requested
     mock_coordinator.async_request_refresh.assert_called_once()

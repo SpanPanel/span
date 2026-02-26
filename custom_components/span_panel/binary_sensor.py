@@ -13,12 +13,15 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from span_panel_api import SpanPanelSnapshot
 
 from .const import (
+    CONF_API_VERSION,
     CONF_DEVICE_NAME,
     COORDINATOR,
     DOMAIN,
@@ -34,9 +37,7 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
 )
-from .span_panel import SpanPanel
-from .span_panel_hardware_status import SpanPanelHardwareStatus
-from .util import panel_to_device_info
+from .util import snapshot_to_device_info
 
 # pylint: disable=invalid-overridden-method
 
@@ -48,7 +49,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 class SpanPanelRequiredKeysMixin:
     """Required keys mixin for Span Panel binary sensors."""
 
-    value_fn: Callable[[SpanPanelHardwareStatus], bool | None]
+    value_fn: Callable[[SpanPanelSnapshot], bool | None]
 
 
 @dataclass(frozen=True)
@@ -58,7 +59,7 @@ class SpanPanelBinarySensorEntityDescription(
     """Describes an SpanPanelCircuits sensor entity."""
 
 
-# Door state has benn observed to return UNKNOWN if the door
+# Door state has been observed to return UNKNOWN if the door
 # has not been operated recently so we check for invalid values
 # pylint: disable=unexpected-keyword-arg
 BINARY_SENSORS: tuple[
@@ -72,35 +73,35 @@ BINARY_SENSORS: tuple[
         key=SYSTEM_DOOR_STATE,
         name="Door State",
         device_class=BinarySensorDeviceClass.TAMPER,
-        value_fn=lambda status_data: (
+        value_fn=lambda s: (
             None
-            if status_data.door_state not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
-            else not status_data.is_door_closed
+            if s.door_state not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
+            else s.door_state != SYSTEM_DOOR_STATE_CLOSED
         ),
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_ETHERNET_LINK,
         name="Ethernet Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        value_fn=lambda status_data: status_data.is_ethernet_connected,
+        value_fn=lambda s: s.eth0_link,
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_WIFI_LINK,
         name="Wi-Fi Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        value_fn=lambda status_data: status_data.is_wifi_connected,
+        value_fn=lambda s: s.wlan_link,
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_CELLULAR_LINK,
         name="Cellular Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        value_fn=lambda status_data: status_data.is_cellular_connected,
+        value_fn=lambda s: s.wwan_link,
     ),
     SpanPanelBinarySensorEntityDescription(
         key=PANEL_STATUS,
         name="Panel Status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        value_fn=lambda status_data: True,  # Placeholder - actual logic handled in sensor class
+        value_fn=lambda s: True,  # Placeholder - actual logic handled in sensor class
     ),
 )
 
@@ -122,7 +123,7 @@ class SpanPanelBinarySensor(
     ) -> None:
         """Initialize Span Panel Circuit entity."""
         super().__init__(data_coordinator, context=description)
-        span_panel: SpanPanel = data_coordinator.data
+        snapshot: SpanPanelSnapshot = data_coordinator.data
 
         # See developer_attrtribute_readme.md for why we use
         # entity_description instead of _attr_entity_description
@@ -138,7 +139,11 @@ class SpanPanelBinarySensor(
             CONF_DEVICE_NAME, data_coordinator.config_entry.title
         )
 
-        device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
+        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+        host = data_coordinator.config_entry.data.get(CONF_HOST)
+        device_info: DeviceInfo = snapshot_to_device_info(
+            snapshot, self._device_name, is_simulator, host
+        )
         self._attr_device_info = device_info
         base_name: str | None = f"{description.name}"
 
@@ -146,7 +151,7 @@ class SpanPanelBinarySensor(
         self._attr_name = base_name or ""
 
         self._attr_unique_id = self._construct_binary_sensor_unique_id(
-            data_coordinator, span_panel, description.key
+            data_coordinator, snapshot, description.key
         )
 
     @property
@@ -163,22 +168,19 @@ class SpanPanelBinarySensor(
 
         # Hardware status sensors should remain available when offline to show Unknown
         hardware_status_sensors = {
-            SYSTEM_DOOR_STATE,  # Door State
-            SYSTEM_ETHERNET_LINK,  # Ethernet Link
-            SYSTEM_WIFI_LINK,  # Wi-Fi Link
-            SYSTEM_CELLULAR_LINK,  # Cellular Link
+            SYSTEM_DOOR_STATE,
+            SYSTEM_ETHERNET_LINK,
+            SYSTEM_WIFI_LINK,
+            SYSTEM_CELLULAR_LINK,
         }
 
         if (
             hasattr(self.entity_description, "key")
             and self.entity_description.key in hardware_status_sensors
         ):
-            # Keep hardware status sensors available when offline so they can show Unknown
             if getattr(self.coordinator, "panel_offline", False):
                 return True
 
-        # All other binary sensors (switches) use default coordinator availability logic
-        # This makes them unavailable when panel is offline
         return super().available
 
     def _handle_coordinator_update(self) -> None:
@@ -193,35 +195,27 @@ class SpanPanelBinarySensor(
                 self._attr_available,
             )
             super()._handle_coordinator_update()
-            _LOGGER.debug(
-                "PANEL_STATUS_DEBUG: After super() is_on=%s, available=%s",
-                self._attr_is_on,
-                self._attr_available,
-            )
             return
 
         # Check for panel offline status first to prevent accessing None data
         if self.coordinator.panel_offline or self.coordinator.data is None:
-            # Hardware status sensors show as unknown when offline
-            # Other sensors (switches) will become unavailable via availability property
             hardware_status_sensors = {
-                SYSTEM_DOOR_STATE,  # Door State
-                SYSTEM_ETHERNET_LINK,  # Ethernet Link
-                SYSTEM_WIFI_LINK,  # Wi-Fi Link
-                SYSTEM_CELLULAR_LINK,  # Cellular Link
+                SYSTEM_DOOR_STATE,
+                SYSTEM_ETHERNET_LINK,
+                SYSTEM_WIFI_LINK,
+                SYSTEM_CELLULAR_LINK,
             }
 
             if (
                 hasattr(self.entity_description, "key")
                 and self.entity_description.key in hardware_status_sensors
             ):
-                self._attr_is_on = None  # Show as 'unknown' for hardware status sensors
+                self._attr_is_on = None
                 _LOGGER.debug(
                     "Hardware status sensor %s: panel offline or no data - showing as unknown",
                     self.entity_id,
                 )
             else:
-                # For switches and other sensors, let availability property handle unavailable state
                 _LOGGER.debug(
                     "Binary sensor %s: panel offline or no data - will be unavailable",
                     self.entity_id,
@@ -230,9 +224,9 @@ class SpanPanelBinarySensor(
             super()._handle_coordinator_update()
             return
 
-        # Panel is online and data is available - use normal logic
-        status_data = self.coordinator.data.status
-        status_value = self._value_fn(status_data)
+        # Panel is online and data is available — snapshot provides status fields directly
+        snapshot = self.coordinator.data
+        status_value = self._value_fn(snapshot)
 
         self._attr_is_on = status_value
         self._attr_available = status_value is not None
@@ -242,12 +236,12 @@ class SpanPanelBinarySensor(
     def _construct_binary_sensor_unique_id(
         self,
         data_coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
+        snapshot: SpanPanelSnapshot,
         description_key: str,
     ) -> str:
         """Construct unique ID for binary sensor entities."""
         return build_binary_sensor_unique_id_for_entry(
-            data_coordinator, span_panel, description_key, self._device_name
+            data_coordinator, snapshot, description_key, self._device_name
         )
 
 

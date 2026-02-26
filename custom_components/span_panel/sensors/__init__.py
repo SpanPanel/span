@@ -10,7 +10,6 @@ from .panel import (
     SpanPanelPowerSensor,
     SpanPanelStatus,
 )
-from .solar import SpanSolarEnergySensor, SpanSolarSensor
 
 __all__ = [
     "SpanSensorBase",
@@ -23,8 +22,6 @@ __all__ = [
     "SpanCircuitPowerSensor",
     "SpanCircuitEnergySensor",
     "SpanUnmappedCircuitSensor",
-    "SpanSolarSensor",
-    "SpanSolarEnergySensor",
     "create_native_sensors",
     "enable_unmapped_tab_entities",
 ]

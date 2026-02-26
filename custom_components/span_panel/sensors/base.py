@@ -15,19 +15,19 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
 )
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.restore_state import ExtraStoredData
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from span_panel_api import SpanPanelSnapshot
 
-from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.const import CONF_API_VERSION, DOMAIN
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
-from custom_components.span_panel.span_panel import SpanPanel
-from custom_components.span_panel.util import panel_to_device_info
+from custom_components.span_panel.util import snapshot_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
-        span_panel: SpanPanel,
+        snapshot: SpanPanelSnapshot,
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
         super().__init__(data_coordinator, context=description)
@@ -85,12 +85,16 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             "device_name", data_coordinator.config_entry.title
         )
 
-        device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
-        self._attr_device_info = device_info  # Re-enable device info
+        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+        host = data_coordinator.config_entry.data.get(CONF_HOST)
+        device_info: DeviceInfo = snapshot_to_device_info(
+            snapshot, self._device_name, is_simulator, host
+        )
+        self._attr_device_info = device_info
 
         # Check if entity already exists in registry for name sync
-        if span_panel.status.serial_number and description.key:
-            self._attr_unique_id = self._generate_unique_id(span_panel, description)
+        if snapshot.serial_number and description.key:
+            self._attr_unique_id = self._generate_unique_id(snapshot, description)
 
             # Check if entity exists for name sync logic
             entity_registry = er.async_get(data_coordinator.hass)
@@ -100,13 +104,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
             if existing_entity_id:
                 # Entity exists - use panel name for sync
-                self._attr_name = self._generate_panel_name(span_panel, description)
+                self._attr_name = self._generate_panel_name(snapshot, description)
             else:
                 # Initial install - use flag-based name
-                self._attr_name = self._generate_friendly_name(span_panel, description)
+                self._attr_name = self._generate_friendly_name(snapshot, description)
         else:
             # Fallback for entities without unique_id
-            self._attr_name = self._generate_friendly_name(span_panel, description)
+            self._attr_name = self._generate_friendly_name(snapshot, description)
 
         self._attr_icon = "mdi:flash"
 
@@ -118,7 +122,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         # Initialize name sync tracking
         # Use sentinel to distinguish "never synced" from "circuit name is None"
-        if span_panel.status.serial_number and description.key and self._attr_unique_id:
+        if snapshot.serial_number and description.key and self._attr_unique_id:
             entity_registry = er.async_get(data_coordinator.hass)
             existing_entity_id = entity_registry.async_get_entity_id(
                 "sensor", DOMAIN, self._attr_unique_id
@@ -128,7 +132,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             else:
                 # Entity exists, get current circuit name for comparison
                 if hasattr(self, "circuit_id"):
-                    circuit = span_panel.circuits.get(getattr(self, "circuit_id", ""))
+                    circuit = snapshot.circuits.get(getattr(self, "circuit_id", ""))
                     self._previous_circuit_name = circuit.name if circuit else None
                 else:
                     self._previous_circuit_name = None
@@ -139,13 +143,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         # when coordinator data changes
 
     @abstractmethod
-    def _generate_unique_id(self, span_panel: SpanPanel, description: T) -> str:
+    def _generate_unique_id(self, snapshot: SpanPanelSnapshot, description: T) -> str:
         """Generate unique ID for the sensor.
 
         Subclasses must implement this to define their unique ID strategy.
 
         Args:
-            span_panel: The span panel data
+            snapshot: The panel snapshot data
             description: The sensor description
 
         Returns:
@@ -154,13 +158,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """
 
     @abstractmethod
-    def _generate_friendly_name(self, span_panel: SpanPanel, description: T) -> str | None:
+    def _generate_friendly_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate friendly name for the sensor.
 
         Subclasses must implement this to define their naming strategy.
 
         Args:
-            span_panel: The span panel data
+            snapshot: The panel snapshot data
             description: The sensor description
 
         Returns:
@@ -168,14 +172,14 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         """
 
-    def _generate_panel_name(self, span_panel: SpanPanel, description: T) -> str | None:
+    def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate panel name for the sensor (always uses panel circuit name).
 
         This method is used for name sync - it always uses the panel circuit name
         regardless of user preferences.
 
         Args:
-            span_panel: The span panel data
+            snapshot: The panel snapshot data
             description: The sensor description
 
         Returns:
@@ -184,7 +188,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """
         # This should be implemented by subclasses that need name sync
         # For now, fall back to friendly name
-        return self._generate_friendly_name(span_panel, description)
+        return self._generate_friendly_name(snapshot, description)
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -319,10 +323,10 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if (
             not self.coordinator.panel_offline
             and hasattr(self, "id")
-            and hasattr(data_source, "instant_power")
+            and hasattr(data_source, "instant_power_w")
         ):
             circuit_id = getattr(self, "id", STATE_UNKNOWN)
-            instant_power = getattr(data_source, "instant_power", None)
+            instant_power = getattr(data_source, "instant_power_w", None)
             description_key = getattr(self.entity_description, "key", STATE_UNKNOWN)
             _LOGGER.debug(
                 "CIRCUIT_POWER_DEBUG: Circuit %s, sensor %s, instant_power=%s, data_source type=%s",
@@ -345,7 +349,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             # For string values, keep as string - this is valid for Home Assistant sensors
             self._attr_native_value = str(raw_value)
 
-    def get_data_source(self, span_panel: SpanPanel) -> D:
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> D:
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -408,10 +412,10 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
-        span_panel: SpanPanel,
+        snapshot: SpanPanelSnapshot,
     ) -> None:
         """Initialize the energy sensor with grace period tracking."""
-        super().__init__(data_coordinator, description, span_panel)
+        super().__init__(data_coordinator, description, snapshot)
         self._last_valid_state: float | None = None
         self._last_valid_changed: datetime | None = None
         self._grace_period_minutes = data_coordinator.config_entry.options.get(

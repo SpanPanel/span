@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "No devices found on the network",
       "already_configured": "Span Panel already configured. Only a single configuration is possible.",
-      "reauth_successful": "Authentication successful."
+      "reauth_successful": "Authentication successful.",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
@@ -20,14 +21,12 @@
       "user": {
         "data": {
           "host": "Host",
-          "use_ssl": "Use SSL",
           "simulator_mode": "Simulator Mode",
           "power_display_precision": "Power Display Precision",
           "energy_display_precision": "Energy Display Precision"
         },
         "data_description": {
           "host": "IP address or hostname of SPAN Panel (required for real hardware, optional for simulation mode)",
-          "use_ssl": "Enable secure HTTPS connection to the SPAN Panel",
           "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled.",
           "power_display_precision": "Number of decimal places for power values (0-3)",
           "energy_display_precision": "Number of decimal places for energy values (0-3)"
@@ -53,6 +52,16 @@
           "access_token": "Access Token"
         }
       },
+      "auth_passphrase": {
+        "title": "Panel Passphrase",
+        "description": "Enter the passphrase for your SPAN Panel. This is printed on the panel label or set by the panel owner.",
+        "data": {
+          "hop_passphrase": "Passphrase"
+        },
+        "data_description": {
+          "hop_passphrase": "The passphrase used to authenticate with the SPAN Panel v2 API"
+        }
+      },
       "simulator_config": {
         "title": "Simulator Configuration",
         "description": "Select a simulation configuration and optionally set a custom start time. {config_count} configurations available.",
@@ -73,10 +82,6 @@
   },
   "options": {
     "error": {
-      "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.": "Both solar legs must be selected. Single leg configuration is not supported for proper 240V measurement.",
-      "Solar legs cannot use the same tab ({tab}). Two different tabs are required for 240V measurement.": "Solar legs cannot use the same tab. Two different tabs are required for 240V measurement.",
-      "Tab {tab} is not available or is already mapped to a circuit.": "Selected tab is not available or is already mapped to a circuit.",
-      "Solar tabs {tab1} and {tab2} are both on {phase}. For proper 240V measurement, tabs must be on opposite phases.": "Selected solar tabs are both on the same electrical phase. For proper 240V measurement, tabs must be on opposite phases (L1 and L2).",
       "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Invalid time format. Use HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS)",
       "directory": "Directory path is required",
       "base": "Export failed: {error}"
@@ -95,27 +100,16 @@
       },
       "general_options": {
         "title": "General Options",
-        "description": "Configure SPAN Panel integration settings. For solar configuration, select two unmapped tabs that are on opposite electrical phases (L1 and L2) to ensure proper 240V measurement.",
+        "description": "Configure SPAN Panel integration settings.",
         "data": {
           "scan_interval": "Scan interval in seconds",
           "enable_battery_percentage": "Enable Battery Percentage Sensor",
-          "enable_solar_circuit": "Enable Solar Inverter Sensors",
-          "leg1": "Solar Leg 1 (must be unmapped tab on opposite phase from Leg 2)",
-          "leg2": "Solar Leg 2 (must be unmapped tab on opposite phase from Leg 1)",
           "enable_panel_net_energy_sensors": "Panel Net Energy",
-          "enable_circuit_net_energy_sensors": "Circuit Net Energy",
-          "enable_solar_net_energy_sensors": "Solar Net Energy",
-          "api_retries": "API Retries (0-10)",
-          "api_retry_timeout": "API Retry Timeout (seconds)",
-          "api_retry_backoff_multiplier": "API Retry Backoff Multiplier"
+          "enable_circuit_net_energy_sensors": "Circuit Net Energy"
         },
         "data_description": {
-          "enable_solar_circuit": "Enable synthetic sensors for solar inverter monitoring. Requires selection of two unmapped tabs on opposite electrical phases.",
-          "leg1": "Select the first solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 2 for proper 240V measurement.",
-          "leg2": "Select the second solar leg from available unmapped tabs. This tab must be on the opposite electrical phase from Leg 1 for proper 240V measurement.",
           "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
-          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
-          "enable_solar_net_energy_sensors": "Create net energy sensors for solar generation (only available when solar is configured). Shows net solar production accounting for any consumption on solar circuits."
+          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows."
         }
       },
       "entity_naming_options": {

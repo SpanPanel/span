@@ -12,6 +12,15 @@ CONF_SERIAL_NUMBER = "serial_number"
 CONF_USE_SSL = "use_ssl"
 CONF_DEVICE_NAME = "device_name"
 
+# v2 API / MQTT configuration (stored in config entry data)
+CONF_API_VERSION = "api_version"
+CONF_EBUS_BROKER_HOST = "ebus_broker_host"
+CONF_EBUS_BROKER_USERNAME = "ebus_broker_username"
+CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"
+CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
+CONF_HOP_PASSPHRASE = "hop_passphrase"
+CONF_PANEL_SERIAL = "panel_serial"
+
 # Simulation configuration
 CONF_SIMULATION_CONFIG = "simulation_config"
 CONF_SIMULATION_START_TIME = "simulation_start_time"
@@ -21,29 +30,7 @@ CONF_SIMULATION_OFFLINE_MINUTES = "simulation_offline_minutes"
 TIME_ONLY_FORMATS = ["HH:MM", "H:MM"]  # 24-hour and 12-hour formats
 ISO_DATETIME_FORMAT = "YYYY-MM-DDTHH:MM:SS"  # Full ISO datetime format
 
-URL_STATUS = "http://{}/api/v1/status"
-URL_SPACES = "http://{}/api/v1/spaces"
-URL_CIRCUITS = "http://{}/api/v1/circuits"
-URL_PANEL = "http://{}/api/v1/panel"
-URL_REGISTER = "http://{}/api/v1/auth/register"
-URL_STORAGE_BATTERY = "http://{}/api/v1/storage/soe"
-
-STORAGE_BATTERY_PERCENTAGE = "batteryPercentage"
-CIRCUITS_NAME = "name"
-CIRCUITS_RELAY = "relayState"
-CIRCUITS_POWER = "instantPowerW"
-CIRCUITS_ENERGY_PRODUCED = "producedEnergyWh"
-CIRCUITS_ENERGY_CONSUMED = "consumedEnergyWh"
-CIRCUITS_BREAKER_POSITIONS = "tabs"
-CIRCUITS_PRIORITY = "priority"
-CIRCUITS_IS_USER_CONTROLLABLE = "is_user_controllable"
-CIRCUITS_IS_SHEDDABLE = "is_sheddable"
-CIRCUITS_IS_NEVER_BACKUP = "is_never_backup"
-
-SPAN_CIRCUITS = "circuits"
-SPAN_SOE = "soe"
-SPAN_SYSTEM = "system"
-PANEL_POWER = "instantGridPowerW"
+# Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"
 SYSTEM_DOOR_STATE_CLOSED = "CLOSED"
 SYSTEM_DOOR_STATE_UNKNOWN = "UNKNOWN"
@@ -53,13 +40,6 @@ SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
 PANEL_STATUS = "panel_status"
 
-STATUS_SOFTWARE_VER = "softwareVer"
-DSM_GRID_STATE = "dsmGridState"
-DSM_STATE = "dsmState"
-CURRENT_RUN_CONFIG = "currentRunConfig"
-MAIN_RELAY_STATE = "mainRelayState"
-
-PANEL_MAIN_RELAY_STATE_UNKNOWN_VALUE = "UNKNOWN"
 USE_DEVICE_PREFIX = "use_device_prefix"
 USE_CIRCUIT_NUMBERS = "use_circuit_numbers"
 
@@ -87,28 +67,8 @@ ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 # Net energy sensor configuration
 ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
-ENABLE_SOLAR_NET_ENERGY_SENSORS = "enable_solar_net_energy_sensors"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
-# API timeout and retry configuration
-API_TIMEOUT = 30  # Default timeout for normal operations
-CONFIG_TIMEOUT = 15  # Shorter timeout for config operations to give quick feedback
-
-# Retry configuration constants
-CONF_API_RETRIES = "api_retries"
-CONF_API_RETRY_TIMEOUT = "api_retry_timeout"
-CONF_API_RETRY_BACKOFF_MULTIPLIER = "api_retry_backoff_multiplier"
-
-# Default retry settings for normal operations
-DEFAULT_API_RETRIES = 3
-DEFAULT_API_RETRY_TIMEOUT = 0.5
-DEFAULT_API_RETRY_BACKOFF_MULTIPLIER = 2.0
-
-
-# Config operation settings (no retries for quick feedback)
-CONFIG_API_RETRIES = 0
-CONFIG_API_RETRY_TIMEOUT = 0.5
-CONFIG_API_RETRY_BACKOFF_MULTIPLIER = 2.0
 
 
 class CircuitRelayState(enum.Enum):
@@ -122,9 +82,9 @@ class CircuitRelayState(enum.Enum):
 class CircuitPriority(enum.Enum):
     """Enumeration representing the possible circuit priority levels."""
 
-    MUST_HAVE = "Must Have"
-    NICE_TO_HAVE = "Nice To Have"
-    NON_ESSENTIAL = "Non-Essential"
+    NEVER = "Never"
+    SOC_THRESHOLD = "SOC Threshold"
+    OFF_GRID = "Off-Grid"
     UNKNOWN = "Unknown"
 
 

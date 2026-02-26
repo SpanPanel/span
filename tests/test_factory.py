@@ -1,158 +1,96 @@
-"""Tests for the factory classes and their use of constants."""
-
+"""Tests for the factory classes and snapshot types."""
 
 from custom_components.span_panel.binary_sensor import BINARY_SENSORS
 from custom_components.span_panel.const import (
-    CURRENT_RUN_CONFIG,
-    DSM_GRID_STATE,
     DSM_GRID_UP,
     DSM_ON_GRID,
-    DSM_STATE,
-    MAIN_RELAY_STATE,
     PANEL_ON_GRID,
-    SYSTEM_CELLULAR_LINK,
     SYSTEM_DOOR_STATE_CLOSED,
     SYSTEM_DOOR_STATE_OPEN,
-    SYSTEM_ETHERNET_LINK,
-    SYSTEM_WIFI_LINK,
-)
-from custom_components.span_panel.span_panel_hardware_status import (
-    SpanPanelHardwareStatus,
 )
 from tests.factories import (
-    SpanPanelApiResponseFactory,
-    SpanPanelDataFactory,
-    SpanPanelStatusFactory,
+    SpanBatterySnapshotFactory,
+    SpanCircuitSnapshotFactory,
+    SpanPanelSnapshotFactory,
 )
 
 
-def test_panel_factory_uses_correct_constants():
-    """Test that panel factory uses the correct constant keys."""
-    panel_data = SpanPanelDataFactory.create_on_grid_panel_data()
+def test_panel_factory_creates_correct_defaults():
+    """Test that panel factory creates snapshot with correct default values."""
+    snapshot = SpanPanelSnapshotFactory.create()
 
-    # Verify that the factory uses the constant keys
-    assert CURRENT_RUN_CONFIG in panel_data
-    assert DSM_GRID_STATE in panel_data
-    assert DSM_STATE in panel_data
-    assert MAIN_RELAY_STATE in panel_data
-
-    # Verify expected values
-    assert panel_data[CURRENT_RUN_CONFIG] == PANEL_ON_GRID
-    assert panel_data[DSM_GRID_STATE] == DSM_GRID_UP
-    assert panel_data[DSM_STATE] == DSM_ON_GRID
-    assert panel_data[MAIN_RELAY_STATE] == "CLOSED"
+    assert snapshot.current_run_config == PANEL_ON_GRID
+    assert snapshot.dsm_grid_state == DSM_GRID_UP
+    assert snapshot.dsm_state == DSM_ON_GRID
+    assert snapshot.main_relay_state == "CLOSED"
+    assert snapshot.serial_number == "sp3-242424-001"
+    assert snapshot.firmware_version == "1.2.3"
 
 
-def test_status_factory_uses_correct_constants():
-    """Test that status factory uses the correct constant values."""
-    status_data = SpanPanelStatusFactory.create_status()
+def test_panel_factory_on_grid():
+    """Test on-grid panel snapshot has correct state."""
+    snapshot = SpanPanelSnapshotFactory.create_on_grid()
 
-    # Verify that the factory uses the correct constant values
-    assert status_data["system"]["doorState"] == SYSTEM_DOOR_STATE_CLOSED
+    assert snapshot.current_run_config == PANEL_ON_GRID
+    assert snapshot.dsm_grid_state == DSM_GRID_UP
+    assert snapshot.dsm_state == DSM_ON_GRID
+    assert snapshot.instant_grid_power_w == 1850.5
 
-    # Verify network link constants are used as keys
-    assert SYSTEM_ETHERNET_LINK in status_data["network"]
-    assert SYSTEM_WIFI_LINK in status_data["network"]
-    assert SYSTEM_CELLULAR_LINK in status_data["network"]
 
-    # Verify expected structure for API compatibility
-    assert "software" in status_data
-    assert "firmwareVersion" in status_data["software"]
-    assert "system" in status_data
-    assert "network" in status_data
+def test_status_factory_network_defaults():
+    """Test that snapshot has correct network connectivity defaults."""
+    snapshot = SpanPanelSnapshotFactory.create()
 
-    # Verify default network values
-    assert status_data["network"][SYSTEM_ETHERNET_LINK] is True
-    assert status_data["network"][SYSTEM_WIFI_LINK] is True
-    assert status_data["network"][SYSTEM_CELLULAR_LINK] is False
+    assert snapshot.door_state == SYSTEM_DOOR_STATE_CLOSED
+    assert snapshot.eth0_link is True
+    assert snapshot.wlan_link is True
+    assert snapshot.wwan_link is False
 
 
 def test_status_factory_network_configuration():
-    """Test that status factory can create different network configurations."""
-    # Test with all connections disabled
-    status_offline = SpanPanelStatusFactory.create_status(
-        ethernet_link=False,
-        wifi_link=False,
-        cellular_link=False,
+    """Test that snapshot can be created with different network configurations."""
+    snapshot_offline = SpanPanelSnapshotFactory.create(
+        eth0_link=False,
+        wlan_link=False,
+        wwan_link=False,
     )
 
-    assert status_offline["network"][SYSTEM_ETHERNET_LINK] is False
-    assert status_offline["network"][SYSTEM_WIFI_LINK] is False
-    assert status_offline["network"][SYSTEM_CELLULAR_LINK] is False
+    assert snapshot_offline.eth0_link is False
+    assert snapshot_offline.wlan_link is False
+    assert snapshot_offline.wwan_link is False
 
-    # Test with only cellular enabled
-    status_cellular = SpanPanelStatusFactory.create_status(
-        ethernet_link=False,
-        wifi_link=False,
-        cellular_link=True,
+    snapshot_cellular = SpanPanelSnapshotFactory.create(
+        eth0_link=False,
+        wlan_link=False,
+        wwan_link=True,
     )
 
-    assert status_cellular["network"][SYSTEM_ETHERNET_LINK] is False
-    assert status_cellular["network"][SYSTEM_WIFI_LINK] is False
-    assert status_cellular["network"][SYSTEM_CELLULAR_LINK] is True
-
-
-def test_status_factory_integration_with_hardware_status():
-    """Test that status factory data works correctly with SpanPanelHardwareStatus."""
-    # Test with mixed network connectivity
-    status_data = SpanPanelStatusFactory.create_status(
-        ethernet_link=True,
-        wifi_link=False,
-        cellular_link=True,
-        software_version="2.5.1",
-        serial_number="TEST123456789",
-    )
-
-    # Create actual SpanPanelHardwareStatus object
-    hardware_status = SpanPanelHardwareStatus.from_dict(status_data)
-
-    # Verify that network constants are properly mapped to boolean properties
-    assert hardware_status.is_ethernet_connected is True
-    assert hardware_status.is_wifi_connected is False
-    assert hardware_status.is_cellular_connected is True
-
-    # Verify other properties work as expected
-    assert hardware_status.firmware_version == "2.5.1"
-    assert hardware_status.serial_number == "TEST123456789"
-    assert hardware_status.door_state == SYSTEM_DOOR_STATE_CLOSED
+    assert snapshot_cellular.eth0_link is False
+    assert snapshot_cellular.wlan_link is False
+    assert snapshot_cellular.wwan_link is True
 
 
 def test_door_state_tamper_sensor_logic():
     """Test that door state works correctly as a tamper sensor."""
-    # Test door CLOSED (tamper sensor should be OFF/clear)
-    status_closed = SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_CLOSED)
-    hardware_status_closed = SpanPanelHardwareStatus.from_dict(status_closed)
+    # Door CLOSED -> tamper clear
+    snapshot_closed = SpanPanelSnapshotFactory.create(door_state=SYSTEM_DOOR_STATE_CLOSED)
+    assert snapshot_closed.door_state == SYSTEM_DOOR_STATE_CLOSED
+    tamper_closed = snapshot_closed.door_state != SYSTEM_DOOR_STATE_CLOSED
+    assert tamper_closed is False
 
-    assert hardware_status_closed.door_state == SYSTEM_DOOR_STATE_CLOSED
-    assert hardware_status_closed.is_door_closed is True
-    # Tamper sensor logic: not is_door_closed -> not True -> False (clear/OFF)
-    tamper_sensor_value_closed = not hardware_status_closed.is_door_closed
-    assert tamper_sensor_value_closed is False  # Tamper clear when door closed
+    # Door OPEN -> tamper detected
+    snapshot_open = SpanPanelSnapshotFactory.create(door_state=SYSTEM_DOOR_STATE_OPEN)
+    assert snapshot_open.door_state == SYSTEM_DOOR_STATE_OPEN
+    tamper_open = snapshot_open.door_state != SYSTEM_DOOR_STATE_CLOSED
+    assert tamper_open is True
 
-    # Test door OPEN (tamper sensor should be ON/detected)
-    status_open = SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_OPEN)
-    hardware_status_open = SpanPanelHardwareStatus.from_dict(status_open)
-
-    assert hardware_status_open.door_state == SYSTEM_DOOR_STATE_OPEN
-    assert hardware_status_open.is_door_closed is False
-    # Tamper sensor logic: not is_door_closed -> not False -> True (tampered/ON)
-    tamper_sensor_value_open = not hardware_status_open.is_door_closed
-    assert tamper_sensor_value_open is True  # Tamper detected when door open
-
-    # Test unknown door state (tamper sensor should be unavailable)
-    status_unknown = SpanPanelStatusFactory.create_status(door_state="UNKNOWN")
-    hardware_status_unknown = SpanPanelHardwareStatus.from_dict(status_unknown)
-
-    assert hardware_status_unknown.door_state == "UNKNOWN"
-    assert hardware_status_unknown.is_door_closed is None
-    # When is_door_closed is None, the binary sensor should be unavailable
-    # (This matches the binary sensor logic that checks for None)
+    # UNKNOWN door state
+    snapshot_unknown = SpanPanelSnapshotFactory.create(door_state="UNKNOWN")
+    assert snapshot_unknown.door_state == "UNKNOWN"
 
 
 def test_door_state_binary_sensor_availability():
     """Test that door state binary sensor handles availability correctly."""
-
-    # Find the door state sensor description
     door_sensor = None
     for sensor in BINARY_SENSORS:
         if sensor.key == "doorState":
@@ -163,50 +101,58 @@ def test_door_state_binary_sensor_availability():
     assert door_sensor.device_class is not None
     assert door_sensor.device_class.value == "tamper"
 
-    # Test the actual value_fn logic used by the binary sensor
+    # Door closed -> tamper clear (False)
+    snapshot_closed = SpanPanelSnapshotFactory.create(door_state=SYSTEM_DOOR_STATE_CLOSED)
+    assert door_sensor.value_fn(snapshot_closed) is False
 
-    # Test with door closed - should return False (tamper clear)
-    status_closed = SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_CLOSED)
-    hardware_closed = SpanPanelHardwareStatus.from_dict(status_closed)
-    sensor_value_closed = door_sensor.value_fn(hardware_closed)
-    assert sensor_value_closed is False  # Tamper clear
+    # Door open -> tamper detected (True)
+    snapshot_open = SpanPanelSnapshotFactory.create(door_state=SYSTEM_DOOR_STATE_OPEN)
+    assert door_sensor.value_fn(snapshot_open) is True
 
-    # Test with door open - should return True (tamper detected)
-    status_open = SpanPanelStatusFactory.create_status(door_state=SYSTEM_DOOR_STATE_OPEN)
-    hardware_open = SpanPanelHardwareStatus.from_dict(status_open)
-    sensor_value_open = door_sensor.value_fn(hardware_open)
-    assert sensor_value_open is True  # Tamper detected
-
-    # Test with unknown state - should return None (unavailable)
-    status_unknown = SpanPanelStatusFactory.create_status(door_state="UNKNOWN")
-    hardware_unknown = SpanPanelHardwareStatus.from_dict(status_unknown)
-    sensor_value_unknown = door_sensor.value_fn(hardware_unknown)
-    assert sensor_value_unknown is None  # Unavailable
+    # Unknown state -> unavailable (None)
+    snapshot_unknown = SpanPanelSnapshotFactory.create(door_state="UNKNOWN")
+    assert door_sensor.value_fn(snapshot_unknown) is None
 
 
 def test_complete_response_factory_structure():
-    """Test that the complete response factory creates the expected structure."""
-    response = SpanPanelApiResponseFactory.create_complete_panel_response()
+    """Test that the complete factory creates expected snapshot structure."""
+    snapshot = SpanPanelSnapshotFactory.create_complete()
 
-    # Verify top-level structure
-    assert "circuits" in response
-    assert "panel" in response
-    assert "status" in response
-    assert "battery" in response
+    assert snapshot.serial_number == "sp3-242424-001"
+    assert len(snapshot.circuits) == 3
+    assert snapshot.battery.soe_percentage == 85.0
 
-    # Verify panel data uses constants
-    panel_data = response["panel"]
-    assert CURRENT_RUN_CONFIG in panel_data
-    assert DSM_GRID_STATE in panel_data
-    assert DSM_STATE in panel_data
-    assert MAIN_RELAY_STATE in panel_data
+    # Verify panel data
+    assert snapshot.current_run_config == PANEL_ON_GRID
+    assert snapshot.dsm_grid_state == DSM_GRID_UP
+    assert snapshot.dsm_state == DSM_ON_GRID
+    assert snapshot.main_relay_state == "CLOSED"
 
-    # Verify status data uses constants and correct structure
-    status_data = response["status"]
-    assert status_data["system"]["doorState"] == SYSTEM_DOOR_STATE_CLOSED
-    assert "firmwareVersion" in status_data["software"]  # API field, not constant
+    # Verify status data
+    assert snapshot.door_state == SYSTEM_DOOR_STATE_CLOSED
+    assert snapshot.firmware_version == "1.2.3"
+    assert snapshot.eth0_link is True
+    assert snapshot.wlan_link is True
+    assert snapshot.wwan_link is False
 
-    # Verify network data uses constants as keys
-    assert SYSTEM_ETHERNET_LINK in status_data["network"]
-    assert SYSTEM_WIFI_LINK in status_data["network"]
-    assert SYSTEM_CELLULAR_LINK in status_data["network"]
+
+def test_circuit_factory_defaults():
+    """Test circuit factory creates correct defaults."""
+    circuit = SpanCircuitSnapshotFactory.create()
+
+    assert circuit.circuit_id == "1"
+    assert circuit.name == "Test Circuit"
+    assert circuit.relay_state == "CLOSED"
+    assert circuit.instant_power_w == 150.5
+    assert circuit.consumed_energy_wh == 1500.0
+    assert circuit.produced_energy_wh == 0.0
+    assert circuit.is_user_controllable is True
+    assert circuit.tabs == [1]
+
+
+def test_battery_factory_defaults():
+    """Test battery factory creates correct defaults."""
+    battery = SpanBatterySnapshotFactory.create()
+
+    assert battery.soe_percentage == 85.0
+    assert battery.soe_kwh is None

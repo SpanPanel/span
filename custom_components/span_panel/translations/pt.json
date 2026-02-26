@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "Não foram encontrados dispositivos na rede",
       "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
-      "reauth_successful": "Autenticação bem-sucedida."
+      "reauth_successful": "Autenticação bem-sucedida.",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "Falha ao ligar ao Painel Span",
@@ -20,14 +21,12 @@
       "user": {
         "data": {
           "host": "Anfitrião",
-          "use_ssl": "Usar SSL",
           "simulator_mode": "Modo Simulador",
           "power_display_precision": "Precisão de Exibição de Potência",
           "energy_display_precision": "Precisão de Exibição de Energia"
         },
         "data_description": {
           "host": "Endereço IP ou nome do host do SPAN Panel (para simulação: use número de série como 'sp3-simulation-001' ou deixe vazio para padrão)",
-          "use_ssl": "Ativar conexão HTTPS segura ao SPAN Panel",
           "simulator_mode": "Ativar modo simulador para testes (não requer hardware). Deixe o host vazio para simulação padrão, ou insira um número de série personalizado.",
           "power_display_precision": "Número de casas decimais para valores de potência (0-3)",
           "energy_display_precision": "Número de casas decimais para valores de energia (0-3)"
@@ -93,25 +92,19 @@
         "data": {
           "scan_interval": "Intervalo de verificação em segundos",
           "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria",
-          "enable_solar_circuit": "Ativar Sensores do Inversor Solar",
-          "leg1": "Fase Solar 1",
-          "leg2": "Fase Solar 2",
           "api_retries": "Tentativas de API (0-10)",
           "api_retry_timeout": "Tempo limite de tentativa de API (segundos)",
           "api_retry_backoff_multiplier": "Multiplicador de atraso de tentativa de API",
           "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)",
           "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
           "enable_panel_net_energy_sensors": "Energia Líquida do Painel",
-          "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito",
-          "enable_solar_net_energy_sensors": "Energia Líquida Solar"
+          "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito"
         },
         "data_description": {
-          "enable_solar_circuit": "Ativar sensores sintéticos para monitoramento do inversor solar. Requer seleção de duas abas não mapeadas em fases elétricas opostas.",
           "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
           "enable_panel_net_energy_sensors": "Criar sensores de energia líquida para fluxos de energia no nível do painel (medidor principal e derivação). Mostra o verdadeiro balanço energético contabilizando fluxos bidirecionais.",
-          "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos.",
-          "enable_solar_net_energy_sensors": "Criar sensores de energia líquida para geração solar. Mostra a produção solar líquida contabilizando qualquer consumo em circuitos solares."
+          "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos."
         }
       },
       "entity_naming_options": {

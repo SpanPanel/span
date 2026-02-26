@@ -17,8 +17,6 @@ class SimulationYamlGenerator:
 
     hass: Any
     coordinator: Any
-    solar_leg1: int | None = None
-    solar_leg2: int | None = None
 
     async def build_yaml_from_live_panel(self) -> tuple[dict[str, Any], int]:
         """Build YAML from live panel data."""
@@ -101,57 +99,7 @@ class SimulationYamlGenerator:
             },
         }
 
-        # Add solar configuration if legs provided and valid
-        self._maybe_add_solar(snapshot_yaml)
-
         return snapshot_yaml, num_tabs
-
-    def _maybe_add_solar(self, yaml_doc: dict[str, Any]) -> None:
-        l1 = int(self.solar_leg1 or 0)
-        l2 = int(self.solar_leg2 or 0)
-        if l1 <= 0 or l2 <= 0 or l1 == l2:
-            return
-
-        # Ensure solar template exists
-        templates = yaml_doc.setdefault("circuit_templates", {})
-        if "solar_production" not in templates:
-            templates["solar_production"] = {
-                "energy_profile": {
-                    "mode": "producer",
-                    "power_range": [-2000.0, 0.0],
-                    "typical_power": -1500.0,
-                    "power_variation": 0.2,
-                    "efficiency": 0.85,
-                },
-                "relay_behavior": "non_controllable",
-                "priority": "MUST_HAVE",
-                "time_of_day_profile": {
-                    "enabled": True,
-                    "peak_hours": [11, 12, 13, 14, 15],
-                },
-            }
-
-        # Unmapped tab templates for the two solar legs
-        unmapped = yaml_doc.setdefault("unmapped_tab_templates", {})
-        for tab in (l1, l2):
-            key = str(tab)
-            if key not in unmapped:
-                unmapped[key] = templates["solar_production"]
-
-        # Synchronization group for the two legs
-        tab_syncs: list[dict[str, Any]] = yaml_doc.setdefault("tab_synchronizations", [])
-        tab_syncs.append(
-            {
-                "tabs": [l1, l2],
-                "behavior": "240v_split_phase",
-                "power_split": "equal",
-                "energy_sync": True,
-                "template": "solar_production",
-            }
-        )
-
-        # Ensure legs listed as unmapped
-        yaml_doc["unmapped_tabs"] = sorted(set(yaml_doc.get("unmapped_tabs", [])) | {l1, l2})
 
     def _infer_template_key(self, name: str, power_w: float, tabs: list[int]) -> str:
         lname = name.lower()

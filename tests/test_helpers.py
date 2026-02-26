@@ -76,40 +76,32 @@ class TestHelperFunctions:
         # With empty options, should use legacy naming (no device prefix)
         assert result == "sensor.kitchen_power"
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
-    def test_construct_entity_id_empty_options_legacy(self, mock_device_info):
+    def test_construct_entity_id_empty_options_legacy(self):
         """Test construct_entity_id with empty options (legacy installation)."""
-        mock_device_info.return_value = {"name": "Span Panel"}
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
         coordinator.config_entry.title = "SPAN Panel"
-        span_panel = MagicMock()
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
+        snapshot = MagicMock()
 
         result = construct_entity_id(
-            coordinator, span_panel, "sensor", "Kitchen Outlets", 1, "power"
+            coordinator, snapshot, "sensor", "Kitchen Outlets", 1, "power"
         )
         assert result == "sensor.kitchen_outlets_power"
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
-    def test_construct_entity_id_circuit_numbers_no_device_name(self, mock_device_info):
+    def test_construct_entity_id_circuit_numbers_no_device_name(self):
         """Test construct_entity_id with circuit numbers but no device name."""
-        mock_device_info.return_value = {"name": None}
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
         coordinator.config_entry.title = None
         coordinator.config_entry.data = {"device_name": None}
-        span_panel = MagicMock()
+        snapshot = MagicMock()
 
-        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        result = construct_entity_id(coordinator, snapshot, "sensor", "Kitchen", 1, "power")
         assert result is None
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
-    def test_construct_entity_id_device_prefix_no_device_name(self, mock_device_info):
+    def test_construct_entity_id_device_prefix_no_device_name(self):
         """Test construct_entity_id with device prefix but no device name."""
-        mock_device_info.return_value = {"name": None}
-
         coordinator = MagicMock()
         coordinator.config_entry.options = {
             USE_CIRCUIT_NUMBERS: False,
@@ -117,9 +109,9 @@ class TestHelperFunctions:
         }
         coordinator.config_entry.title = None
         coordinator.config_entry.data = {"device_name": None}
-        span_panel = MagicMock()
+        snapshot = MagicMock()
 
-        result = construct_entity_id(coordinator, span_panel, "sensor", "Kitchen", 1, "power")
+        result = construct_entity_id(coordinator, snapshot, "sensor", "Kitchen", 1, "power")
         assert result is None
 
     @patch("custom_components.span_panel.helpers.er.async_get")
@@ -144,16 +136,15 @@ class TestHelperFunctions:
         # With empty options, should use legacy naming (no device prefix)
         assert result == "sensor.solar_inverter_power"
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_empty_options(self, mock_registry, mock_device_info):
+    def test_construct_multi_circuit_entity_id_empty_options(self, mock_registry):
         """Test construct_multi_circuit_entity_id with stable naming (synthetic sensors are always stable)."""
         mock_registry.return_value = None
-        mock_device_info.return_value = {"name": "Span Panel"}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         span_panel = MagicMock()
 
         # Test with friendly name - legacy installation should not use device prefix
@@ -178,14 +169,10 @@ class TestHelperFunctions:
         )
         assert result == "sensor.solar_inverter_power"
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_no_device_name(
-        self, mock_registry, mock_device_info
-    ):
+    def test_construct_multi_circuit_entity_id_no_device_name(self, mock_registry):
         """Test construct_multi_circuit_entity_id with no device name - should return None."""
         mock_registry.return_value = None
-        mock_device_info.return_value = {"name": None}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True}
@@ -204,15 +191,11 @@ class TestHelperFunctions:
         )
         assert result is None
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_circuit_numbers_pattern(
-        self, mock_registry, mock_device_info
-    ):
+    def test_construct_multi_circuit_entity_id_circuit_numbers_pattern(self, mock_registry):
         """Test construct_multi_circuit_entity_id with circuit numbers pattern."""
         mock_registry.return_value = MagicMock()
         mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-        mock_device_info.return_value = {"name": "SPAN Panel"}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
@@ -220,7 +203,6 @@ class TestHelperFunctions:
         coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
-        span_panel.status.serial_number = "TEST123456"
 
         # Test with multiple circuit numbers (solar inverter case)
         result = construct_multi_circuit_entity_id(
@@ -240,15 +222,11 @@ class TestHelperFunctions:
         )
         assert result == "sensor.span_panel_circuit_30_32_energy_produced"
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_friendly_names_pattern(
-        self, mock_registry, mock_device_info
-    ):
+    def test_construct_multi_circuit_entity_id_friendly_names_pattern(self, mock_registry):
         """Test construct_multi_circuit_entity_id with friendly names pattern."""
         mock_registry.return_value = MagicMock()
         mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-        mock_device_info.return_value = {"name": "SPAN Panel"}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: False, USE_DEVICE_PREFIX: True}
@@ -256,7 +234,6 @@ class TestHelperFunctions:
         coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
-        span_panel.status.serial_number = "TEST123456"
 
         # Test with friendly name (should ignore circuit_numbers when USE_CIRCUIT_NUMBERS is False)
         result = construct_multi_circuit_entity_id(
@@ -275,19 +252,16 @@ class TestHelperFunctions:
         )
         assert result is None
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_circuit_numbers_no_device_prefix(
-        self, mock_registry, mock_device_info
-    ):
+    def test_construct_multi_circuit_entity_id_circuit_numbers_no_device_prefix(self, mock_registry):
         """Test construct_multi_circuit_entity_id with circuit numbers but no device prefix."""
         mock_registry.return_value = MagicMock()
         mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-        mock_device_info.return_value = {"name": "SPAN Panel"}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: False}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 
@@ -297,19 +271,16 @@ class TestHelperFunctions:
         )
         assert result == "sensor.circuit_30_32_power"
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_empty_circuit_numbers(
-        self, mock_registry, mock_device_info
-    ):
+    def test_construct_multi_circuit_entity_id_empty_circuit_numbers(self, mock_registry):
         """Test construct_multi_circuit_entity_id with empty circuit numbers."""
         mock_registry.return_value = MagicMock()
         mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-        mock_device_info.return_value = {"name": "SPAN Panel"}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {USE_CIRCUIT_NUMBERS: True, USE_DEVICE_PREFIX: True}
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 
@@ -340,19 +311,16 @@ class TestHelperFunctions:
                 coordinator, span_panel, "sensor", "power", circuit_numbers=[0, -1]
             )
 
-    @patch("custom_components.span_panel.helpers.panel_to_device_info")
     @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_construct_multi_circuit_entity_id_legacy_compatibility(
-        self, mock_registry, mock_device_info
-    ):
+    def test_construct_multi_circuit_entity_id_legacy_compatibility(self, mock_registry):
         """Test construct_multi_circuit_entity_id maintains legacy compatibility."""
         mock_registry.return_value = MagicMock()
         mock_registry.return_value.async_get_entity_id = MagicMock(return_value=None)
-        mock_device_info.return_value = {"name": "SPAN Panel"}
 
         coordinator = MagicMock()
         coordinator.config_entry.options = {}  # Legacy installation
         coordinator.config_entry.title = "SPAN Panel"
+        coordinator.config_entry.data = {"device_name": "SPAN Panel"}
         coordinator.hass = MagicMock()
         span_panel = MagicMock()
 

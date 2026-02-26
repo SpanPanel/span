@@ -7,9 +7,9 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
+from span_panel_api import SpanCircuitSnapshot
 
 from .const import COORDINATOR, DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
-from .span_panel_circuit import SpanPanelCircuit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,8 +76,9 @@ class EntityIdMigrationManager:
             if circuit_id not in span_panel.circuits:
                 return None
 
-            circuit_data: SpanPanelCircuit = span_panel.circuits[circuit_id]
-            return circuit_data.name
+            circuit_data: SpanCircuitSnapshot = span_panel.circuits[circuit_id]
+            name: str | None = circuit_data.name
+            return name
         except Exception:
             return None
 
@@ -930,9 +931,10 @@ class EntityIdMigrationManager:
             span_panel = coordinator.data
 
             # Look up circuit in span_panel data
-            circuit: SpanPanelCircuit | None = span_panel.circuits.get(circuit_id)
+            circuit: SpanCircuitSnapshot | None = span_panel.circuits.get(circuit_id)
             if circuit and circuit.tabs:
-                return circuit.tabs
+                tabs: list[int] = circuit.tabs
+                return tabs
 
             return None
 
@@ -978,9 +980,10 @@ class EntityIdMigrationManager:
             span_panel = coordinator.data
 
             # Look up circuit in span_panel data
-            circuit: SpanPanelCircuit | None = span_panel.circuits.get(circuit_id)
+            circuit: SpanCircuitSnapshot | None = span_panel.circuits.get(circuit_id)
             if circuit and circuit.name:
-                return circuit.name
+                name: str = circuit.name
+                return name
 
             return None
 

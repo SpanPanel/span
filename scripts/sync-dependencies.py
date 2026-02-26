@@ -29,13 +29,13 @@ def get_manifest_versions():
 
         for req in requirements:
             if req.startswith("span-panel-api"):
-                # Extract version from span-panel-api~=1.1.0
-                match = re.search(r"span-panel-api[~=]+([0-9.]+)", req)
+                # Extract version from span-panel-api>=2.0.0 or span-panel-api~=1.1.0
+                match = re.search(r"span-panel-api[>~=]+([0-9.]+)", req)
                 if match:
                     versions["span-panel-api"] = match.group(1)
             elif req.startswith("ha-synthetic-sensors"):
-                # Extract version from ha-synthetic-sensors~=1.0.8
-                match = re.search(r"ha-synthetic-sensors[~=]+([0-9.]+)", req)
+                # Extract version from ha-synthetic-sensors>=1.0.8 or ~=1.0.8
+                match = re.search(r"ha-synthetic-sensors[>~=]+([0-9.]+)", req)
                 if match:
                     versions["ha-synthetic-sensors"] = match.group(1)
 
@@ -58,20 +58,20 @@ def update_ci_workflow(versions):
 
         original_content = content
 
-        # Update span-panel-api version
+        # Update span-panel-api version (handles ^, >=, ~= specifiers)
         if "span-panel-api" in versions:
             span_version = versions["span-panel-api"]
             content = re.sub(
-                r'span-panel-api = "\^[0-9.]+"',
-                f'span-panel-api = "^{span_version}"',
+                r'span-panel-api = "[>=~^]+[0-9.]+"',
+                f'span-panel-api = ">={span_version}"',
                 content,
             )
 
-        # Update ha-synthetic-sensors version
+        # Update ha-synthetic-sensors version (handles ^, >=, ~= specifiers)
         if "ha-synthetic-sensors" in versions:
             ha_version = versions["ha-synthetic-sensors"]
             content = re.sub(
-                r'ha-synthetic-sensors = "\^[0-9.]+"',
+                r'ha-synthetic-sensors = "[>=~^]+[0-9.]+"',
                 f'ha-synthetic-sensors = "^{ha_version}"',
                 content,
             )

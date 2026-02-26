@@ -16,10 +16,6 @@ from .const import (
     COORDINATOR,
     DOMAIN,
 )
-from .options import (
-    INVERTER_LEG1,
-    INVERTER_LEG2,
-)
 from .simulation_generator import SimulationYamlGenerator
 
 _LOGGER = logging.getLogger(__name__)
@@ -107,14 +103,9 @@ async def clone_panel_to_simulation(
     if user_input is not None:
         try:
             # Use a separate generator to build YAML purely from live data
-            # Pass solar leg selections from options if present
-            leg1_opt = config_entry.options.get(INVERTER_LEG1, 0)
-            leg2_opt = config_entry.options.get(INVERTER_LEG2, 0)
             generator = SimulationYamlGenerator(
                 hass=hass,
                 coordinator=coordinator,
-                solar_leg1=int(leg1_opt) if leg1_opt else None,
-                solar_leg2=int(leg2_opt) if leg2_opt else None,
             )
             snapshot_yaml, num_tabs = await generator.build_yaml_from_live_panel()
 

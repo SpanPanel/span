@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from span_panel_api import SpanPanelSnapshot
 
 from .const import COORDINATOR, DOMAIN
 from .coordinator import SpanPanelCoordinator
@@ -18,13 +21,10 @@ from .sensors import (
     SpanPanelPowerSensor,
     SpanPanelStatus,
     SpanSensorBase,
-    SpanSolarEnergySensor,
-    SpanSolarSensor,
     SpanUnmappedCircuitSensor,
     create_native_sensors,
     enable_unmapped_tab_entities,
 )
-from .span_panel import SpanPanel
 
 # Export the sensor classes for backward compatibility with tests
 __all__ = [
@@ -38,11 +38,7 @@ __all__ = [
     "SpanCircuitPowerSensor",
     "SpanCircuitEnergySensor",
     "SpanUnmappedCircuitSensor",
-    "SpanSolarSensor",
-    "SpanSolarEnergySensor",
 ]
-
-import logging
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -58,18 +54,16 @@ async def async_setup_entry(
     try:
         data = hass.data[DOMAIN][config_entry.entry_id]
         coordinator: SpanPanelCoordinator = data[COORDINATOR]
-        span_panel: SpanPanel = coordinator.data
+        snapshot: SpanPanelSnapshot = coordinator.data
 
-        # Create all native sensors (now includes panel, circuit, and solar sensors)
-        entities = create_native_sensors(coordinator, span_panel, config_entry)
+        # Create all native sensors (panel, circuit, and battery sensors)
+        entities = create_native_sensors(coordinator, snapshot, config_entry)
 
         # Add all native sensor entities
         async_add_entities(entities)
 
         # Enable unmapped tab entities if they were disabled
         enable_unmapped_tab_entities(hass, entities)
-
-        # Migration detection moved to coordinator update cycle
 
         # Force immediate coordinator refresh to ensure all sensors update right away
         await coordinator.async_request_refresh()

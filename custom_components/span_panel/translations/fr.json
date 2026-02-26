@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "Aucun appareil trouvé sur le réseau",
       "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
-      "reauth_successful": "Authentification réussie."
+      "reauth_successful": "Authentification réussie.",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "Échec de la connexion au Span Panel",
@@ -20,14 +21,12 @@
       "user": {
         "data": {
           "host": "Host",
-          "use_ssl": "Utiliser SSL",
           "simulator_mode": "Mode Simulateur",
           "power_display_precision": "Précision d'Affichage de Puissance",
           "energy_display_precision": "Précision d'Affichage d'Énergie"
         },
         "data_description": {
           "host": "Adresse IP ou nom d'hôte du SPAN Panel (pour la simulation : utilisez un numéro de série comme 'sp3-simulation-001' ou laissez vide pour la valeur par défaut)",
-          "use_ssl": "Activer la connexion HTTPS sécurisée au SPAN Panel",
           "simulator_mode": "Activer le mode simulateur pour les tests (aucun matériel requis). Laissez l'hôte vide pour la simulation par défaut, ou entrez un numéro de série personnalisé.",
           "power_display_precision": "Nombre de décimales pour les valeurs de puissance (0-3)",
           "energy_display_precision": "Nombre de décimales pour les valeurs d'énergie (0-3)"
@@ -93,25 +92,19 @@
         "data": {
           "scan_interval": "Intervalle d'analyse en secondes",
           "enable_battery_percentage": "Activer le Capteur de Pourcentage de Batterie",
-          "enable_solar_circuit": "Activer les capteurs de l'onduleur solaire",
-          "leg1": "Jambe solaire 1",
-          "leg2": "Jambe solaire 2",
           "api_retries": "Tentatives API (0-10)",
           "api_retry_timeout": "Délai de tentative API (secondes)",
           "api_retry_backoff_multiplier": "Multiplicateur de délai de tentative API",
           "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)",
           "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
           "enable_panel_net_energy_sensors": "Énergie Nette du Panneau",
-          "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit",
-          "enable_solar_net_energy_sensors": "Énergie Nette Solaire"
+          "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit"
         },
         "data_description": {
-          "enable_solar_circuit": "Activer les capteurs synthétiques pour la surveillance de l'onduleur solaire. Nécessite la sélection de deux onglets non mappés sur des phases électriques opposées.",
           "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
           "enable_panel_net_energy_sensors": "Créer des capteurs d'énergie nette pour les flux d'énergie au niveau du panneau (compteur principal et dérivation). Affiche le vrai bilan énergétique en tenant compte des flux bidirectionnels.",
-          "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs.",
-          "enable_solar_net_energy_sensors": "Créer des capteurs d'énergie nette pour la génération solaire. Affiche la production solaire nette en tenant compte de toute consommation sur les circuits solaires."
+          "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs."
         }
       },
       "entity_naming_options": {

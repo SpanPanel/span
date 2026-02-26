@@ -198,118 +198,71 @@ class TestEntityIdConstructionUpgradeScenarios:
 
     def test_legacy_entity_id_construction_preserved(self, mock_coordinator, mock_span_panel):
         """Test that legacy entity ID construction is preserved."""
-        # Legacy installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # Legacy format: no device prefix, use circuit name
-            assert entity_id == "sensor.kitchen_outlets_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.kitchen_outlets_power"
 
     def test_post_104_friendly_names_entity_id_construction_preserved(
         self, mock_coordinator, mock_span_panel
     ):
         """Test that post-1.0.4 friendly names entity ID construction is preserved."""
-        # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # Post-1.0.4 format: device prefix + circuit name
-            assert entity_id == "sensor.span_panel_kitchen_outlets_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.span_panel_kitchen_outlets_power"
 
     def test_modern_circuit_numbers_entity_id_construction_preserved(
         self, mock_coordinator, mock_span_panel
     ):
         """Test that modern circuit numbers entity ID construction is preserved."""
-        # Modern circuit numbers installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # Modern format: device prefix + circuit number
-            assert entity_id == "sensor.span_panel_circuit_15_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.span_panel_circuit_15_power"
 
     def test_missing_options_use_new_installation_defaults(self, mock_coordinator, mock_span_panel):
         """Test that new installations with explicit options use modern defaults."""
-        # New installation: explicit modern defaults (as set by create_new_entry)
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # New installation defaults: device prefix + circuit numbers
-            assert entity_id == "sensor.span_panel_circuit_15_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.span_panel_circuit_15_power"
 
 
 class TestSyntheticEntityUpgradeScenarios:
@@ -322,30 +275,20 @@ class TestSyntheticEntityUpgradeScenarios:
         """Test that legacy synthetic entity construction is preserved."""
         mock_registry.return_value = None
 
-        # Legacy installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_multi_circuit_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "power",
-                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
-                friendly_name="Solar Inverter",
-            )
-
-            # Legacy format: no device prefix, use friendly name
-            assert entity_id == "sensor.solar_inverter_power"
+        entity_id = construct_multi_circuit_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "power",
+            circuit_numbers=[30, 32], friendly_name="Solar Inverter",
+        )
+        assert entity_id == "sensor.solar_inverter_power"
 
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_post_104_synthetic_entity_construction_preserved(
@@ -354,31 +297,20 @@ class TestSyntheticEntityUpgradeScenarios:
         """Test that post-1.0.4 synthetic entity construction is preserved."""
         mock_registry.return_value = None
 
-        # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_multi_circuit_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "power",
-                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
-                friendly_name="Solar Inverter",
-            )
-
-            # Post-1.0.4 format: device prefix + friendly name
-            assert entity_id == "sensor.span_panel_solar_inverter_power"
+        entity_id = construct_multi_circuit_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "power",
+            circuit_numbers=[30, 32], friendly_name="Solar Inverter",
+        )
+        assert entity_id == "sensor.span_panel_solar_inverter_power"
 
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_modern_synthetic_entity_construction_preserved(
@@ -387,31 +319,20 @@ class TestSyntheticEntityUpgradeScenarios:
         """Test that modern synthetic entity construction is preserved."""
         mock_registry.return_value = None
 
-        # Modern circuit numbers installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_multi_circuit_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "power",
-                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
-                friendly_name="Solar Inverter",
-            )
-
-            # Modern format: device prefix + circuit numbers (when USE_CIRCUIT_NUMBERS is True)
-            assert entity_id == "sensor.span_panel_circuit_30_32_power"
+        entity_id = construct_multi_circuit_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "power",
+            circuit_numbers=[30, 32], friendly_name="Solar Inverter",
+        )
+        assert entity_id == "sensor.span_panel_circuit_30_32_power"
 
 
 class TestGeneralOptionsPreservesNamingFlags:

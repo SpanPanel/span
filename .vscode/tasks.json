@@ -6,8 +6,8 @@
       "type": "shell",
       "command": "${workspaceFolder}/setup-hooks.sh",
       "presentation": {
-        "echo": true,
-        "reveal": "always",
+        "echo": false,
+        "reveal": "silent",
         "focus": false,
         "panel": "dedicated",
         "showReuseMessage": false,

@@ -9,15 +9,21 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/SpanPanel/span",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/SpanPanel/span/issues",
   "requirements": [
-    "span-panel-api~=1.1.14"
+    "span-panel-api>=2.0.0"
   ],
   "version": "1.3.1",
   "zeroconf": [
     {
       "type": "_span._tcp.local."
+    },
+    {
+      "type": "_ebus._tcp.local."
+    },
+    {
+      "type": "_secure-mqtt._tcp.local."
     }
   ]
 }

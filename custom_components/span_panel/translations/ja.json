@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "ネットワーク上にデバイスが見つかりません",
       "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
-      "reauth_successful": "認証できました"
+      "reauth_successful": "認証できました",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "スパンパネルへの接続に失敗しました",
@@ -20,14 +21,12 @@
       "user": {
         "data": {
           "host": "ホスト",
-          "use_ssl": "SSLを使用",
           "simulator_mode": "シミュレーターモード",
           "power_display_precision": "電力表示精度",
           "energy_display_precision": "エネルギー表示精度"
         },
         "data_description": {
           "host": "SPAN PanelのIPアドレスまたはホスト名（シミュレーション用：'sp3-simulation-001'のようなシリアル番号を使用するか、デフォルトの場合は空にしてください）",
-          "use_ssl": "SPAN Panelへの安全なHTTPS接続を有効にします",
           "simulator_mode": "テスト用のシミュレーターモードを有効にします（ハードウェア不要）。デフォルトシミュレーションの場合はホストを空にするか、カスタムシリアル番号を入力してください。",
           "power_display_precision": "電力値の小数点以下の桁数（0-3）",
           "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）"
@@ -93,25 +92,19 @@
         "data": {
           "scan_interval": "スキャンインターバル(秒)",
           "enable_battery_percentage": "バッテリーパーセントセンサーを有効にする",
-          "enable_solar_circuit": "ソーラーインバーターセンサーを有効にする",
-          "leg1": "ソーラーレッグ1",
-          "leg2": "ソーラーレッグ2",
           "api_retries": "APIリトライ回数 (0-10)",
           "api_retry_timeout": "APIリトライタイムアウト (秒)",
           "api_retry_backoff_multiplier": "APIリトライバックオフ倍率",
           "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
           "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
-          "enable_circuit_net_energy_sensors": "回路正味エネルギー",
-          "enable_solar_net_energy_sensors": "ソーラー正味エネルギー"
+          "enable_circuit_net_energy_sensors": "回路正味エネルギー"
         },
         "data_description": {
-          "enable_solar_circuit": "ソーラーインバーター監視用の合成センサーを有効にします。反対の電気相の2つの未マップタブの選択が必要です。",
           "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
           "enable_panel_net_energy_sensors": "パネルレベルエネルギー流れ（メインメーターとフィードスルー）の正味エネルギーセンサーを作成します。双方向流れを考慮した真のエネルギー収支を表示します。",
-          "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
-          "enable_solar_net_energy_sensors": "ソーラー発電の正味エネルギーセンサーを作成します。ソーラー回路での消費を考慮した正味ソーラー生産量を表示します。"
+          "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。"
         }
       },
       "entity_naming_options": {

@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "No se hallaron aparatos en la red",
       "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
-      "reauth_successful": "Autenticación exitosa."
+      "reauth_successful": "Autenticación exitosa.",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "No se logró establecer conexión con Span Panel",
@@ -20,14 +21,12 @@
       "user": {
         "data": {
           "host": "Host",
-          "use_ssl": "Usar SSL",
           "simulator_mode": "Modo Simulador",
           "power_display_precision": "Precisión de Visualización de Potencia",
           "energy_display_precision": "Precisión de Visualización de Energía"
         },
         "data_description": {
           "host": "Dirección IP o nombre de host del SPAN Panel (para simulación: use número de serie como 'sp3-simulation-001' o déjelo vacío para el predeterminado)",
-          "use_ssl": "Habilitar conexión HTTPS segura al SPAN Panel",
           "simulator_mode": "Habilitar modo simulador para pruebas (no se requiere hardware). Deje el host vacío para simulación predeterminada, o ingrese un número de serie personalizado.",
           "power_display_precision": "Número de lugares decimales para valores de potencia (0-3)",
           "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)"
@@ -93,25 +92,19 @@
         "data": {
           "scan_interval": "Intervalo de escaneo en segundos",
           "enable_battery_percentage": "Habilitar Sensor de Porcentaje de Batería",
-          "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
-          "leg1": "Pata solar 1",
-          "leg2": "Pata solar 2",
           "api_retries": "Reintentos de API (0-10)",
           "api_retry_timeout": "Tiempo de espera de reintento de API (segundos)",
           "api_retry_backoff_multiplier": "Multiplicador de retraso de reintento de API",
           "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
           "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
           "enable_panel_net_energy_sensors": "Energía Neta del Panel",
-          "enable_circuit_net_energy_sensors": "Energía Neta del Circuito",
-          "enable_solar_net_energy_sensors": "Energía Neta Solar"
+          "enable_circuit_net_energy_sensors": "Energía Neta del Circuito"
         },
         "data_description": {
-          "enable_solar_circuit": "Habilitar sensores sintéticos para monitoreo de inversor solar. Requiere selección de dos pestañas no mapeadas en fases eléctricas opuestas.",
           "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
           "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
           "enable_panel_net_energy_sensors": "Crear sensores de energía neta para flujos de energía a nivel de panel (medidor principal y derivación). Muestra el verdadero balance de energía contabilizando flujos bidireccionales.",
-          "enable_circuit_net_energy_sensors": "Crear sensores de energía neta para circuitos individuales. Muestra el verdadero consumo de energía contabilizando potencia reactiva y flujos regenerativos.",
-          "enable_solar_net_energy_sensors": "Crear sensores de energía neta para generación solar. Muestra la producción solar neta contabilizando cualquier consumo en circuitos solares."
+          "enable_circuit_net_energy_sensors": "Crear sensores de energía neta para circuitos individuales. Muestra el verdadero consumo de energía contabilizando potencia reactiva y flujos regenerativos."
         }
       },
       "entity_naming_options": {
