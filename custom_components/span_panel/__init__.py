@@ -148,7 +148,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
-    _LOGGER.debug("SETUP ENTRY CALLED! Entry ID: %s, Version: %s", entry.entry_id, entry.version)
+    _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
 
     config = entry.data
     api_version = config.get(CONF_API_VERSION, "v1")
