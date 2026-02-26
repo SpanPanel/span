@@ -93,7 +93,7 @@ BINARY_SENSORS: tuple[
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_CELLULAR_LINK,
-        name="Cellular Link",
+        name="Vendor Cloud",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda s: s.wwan_link,
     ),

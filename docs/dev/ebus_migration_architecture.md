@@ -140,28 +140,16 @@ driven integration with many sensors potentially spread across multiple panels o
 ### What's Problematic
 
 1. **MQTT threading model incompatible with HA core patterns**
-   - Both span-hass and its ebus-sdk dependency use paho-mqtt's
-     `loop_start()` background thread with `call_soon_threadsafe()`
-     dispatch.
-   - HA core's own MQTT integration (`homeassistant.components.mqtt`)
-     uses a fundamentally different approach: `AsyncMQTTClient`
-     subclasses paho's `Client`, replaces all 7 internal threading
-     locks with `NullLock` no-ops, and drives I/O entirely from the
-     asyncio event loop via `add_reader`/`add_writer` on paho's socket
-     with direct `loop_read()`/`loop_write()`/`loop_misc()` calls.
-     Zero background threads.
-   - Any integration targeting HA core acceptance must follow this
-     pattern. span-panel-api's `AsyncMqttBridge` follows HA core's
-     `AsyncMQTTClient`/`NullLock` approach with zero background threads
-     and no `threading.Lock` usage. span-hass and ebus-sdk's threading
-     model is baked in and unfixable without a rewrite.
-   - `DiscoveredDevice.properties` dict is mutated on paho thread and
-     read from HA thread without synchronization.
-   - `_property_callbacks` dict is accessed from both threads (HA thread
-     registers; paho thread iterates in `_on_property_changed`).
+   - Both span-hass and its ebus-sdk dependency use paho-mqtt's `loop_start()` background thread with `call_soon_threadsafe()` dispatch.
+   - HA core's own MQTT integration (`homeassistant.components.mqtt`) uses a fundamentally different approach: `AsyncMQTTClient` subclasses paho's `Client`,
+     replaces all 7 internal threading locks with `NullLock` no-ops, and drives I/O entirely from the asyncio event loop via `add_reader`/`add_writer` on paho's
+     socket with direct `loop_read()`/`loop_write()`/`loop_misc()` calls. Zero background threads.
+   - Any integration targeting HA core acceptance must follow this pattern. span-panel-api's `AsyncMqttBridge` follows HA core's `AsyncMQTTClient`/`NullLock`
+     approach with zero background threads and no `threading.Lock` usage. span-hass and ebus-sdk's threading model is baked in and unfixable without a rewrite.
+   - `DiscoveredDevice.properties` dict is mutated on paho thread and read from HA thread without synchronization.
+   - `_property_callbacks` dict is accessed from both threads (HA thread registers; paho thread iterates in `_on_property_changed`).
    - `_available` boolean is set from paho thread, read from HA thread.
-   - `call_soon_threadsafe` is correct for dispatching *to* the HA loop,
-     but data access *before* dispatch is not synchronized.
+   - `call_soon_threadsafe` is correct for dispatching _to_ the HA loop, but data access _before_ dispatch is not synchronized.
 
 2. **Fire-and-forget control** `set_property()` publishes to MQTT and returns `True/False` based on publish success only. No optimistic state, no confirmation
    the relay changed, no timeout/retry. Entity state updates only when the next MQTT message arrives (or never, on loss).
@@ -178,7 +166,7 @@ driven integration with many sensors potentially spread across multiple panels o
 6. **Code maturity** No tests. No type annotations on some parameters (`panel: Any`). Alpha-quality SDK dependency.
 
 7. **ebus-sdk quality concerns**
-   - Comments literally say *"TODO: Make getting and setting a property's value thread-safe."*
+   - Comments literally say _"TODO: Make getting and setting a property's value thread-safe."_
    - Debug imports (`pp`, `pformat`) in production code.
    - `asyncio.ensure_future(callback, loop=...)` — deprecated in Python 3.10+.
    - Bare `except:` handlers (catch SystemExit, KeyboardInterrupt).
@@ -191,8 +179,7 @@ driven integration with many sensors potentially spread across multiple panels o
 
 ### The Question
 
-> Should MQTT/Homie support be added to span-panel-api or directly to
-> the span integration? And should it coexist with REST, or replace it?
+> Should MQTT/Homie support be added to span-panel-api or directly to the span integration? And should it coexist with REST, or replace it?
 
 ### Key Finding: span-panel-api Already Has a Transport Abstraction
 
@@ -204,68 +191,48 @@ The span-panel-api library already defined:
 - **`SpanPanelSnapshot` / `SpanCircuitSnapshot`** — transport-agnostic data models.
 - **`create_span_client()` factory** — creates transport clients.
 
-This architecture was designed for adding transports. We used this to
-add MQTT alongside REST, then removed REST entirely in v2.0.0.
+This architecture was designed for adding transports. We used this to add MQTT alongside REST, then removed REST entirely in v2.0.0.
 
 ### Options Evaluated
 
-| Option                                 | Description                                   | Verdict                                                                      |
-| -------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------- |
-| **A: Add MQTT to span-panel-api, then remove REST** | MQTT replaces all legacy transports | **Selected** |
-| **B: Use ebus-sdk directly from span** | Skip span-panel-api, depend on ebus-sdk       | Rejected — alpha quality, no thread safety, no async, no types               |
-| **C: MQTT directly in span**           | Bypass span-panel-api entirely for MQTT       | Rejected — violates established library boundary, duplicates transport logic |
-| ~~**D: Add MQTT as a third transport alongside REST**~~ | Keep REST + MQTT coexisting | Rejected — unnecessary complexity; v1 REST sunset 2026-12-31, users told to upgrade firmware before upgrading integration |
+| Option                                                  | Description                             | Verdict                                                                                                                   |
+| ------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **A: Add MQTT to span-panel-api, then remove REST**     | MQTT replaces all legacy transports     | **Selected**                                                                                                              |
+| **B: Use ebus-sdk directly from span**                  | Skip span-panel-api, depend on ebus-sdk | Rejected — alpha quality, no thread safety, no async, no types                                                            |
+| **C: MQTT directly in span**                            | Bypass span-panel-api entirely for MQTT | Rejected — violates established library boundary, duplicates transport logic                                              |
+| ~~**D: Add MQTT as a third transport alongside REST**~~ | Keep REST + MQTT coexisting             | Rejected — unnecessary complexity; v1 REST sunset 2026-12-31, users told to upgrade firmware before upgrading integration |
 
 ### Decision: Replace All Transports with MQTT in span-panel-api (COMPLETE)
 
-**Outcome (2026-02-24):** MQTT was added alongside REST as an
-intermediate step, then REST was surgically removed. The result
-is span-panel-api 2.0.0 — an MQTT-only library. Users are told not to
-upgrade the integration until they have v2 firmware, eliminating the need
-for dual-transport coexistence.
+**Outcome (2026-02-24):** MQTT was added alongside REST as an intermediate step, then REST was surgically removed. The result is span-panel-api 2.0.0 — an
+MQTT-only library. Users are told not to upgrade the integration until they have v2 firmware, eliminating the need for dual-transport coexistence.
 
 **Rationale:**
 
-1. **Architectural alignment** — span-panel-api's purpose is "communicate
-   with SPAN Panel hardware." MQTT is the v2 transport for that purpose.
-   With v1 REST sunset at 2026-12-31, maintaining multiple transports
-   added complexity with no long-term benefit.
+1. **Architectural alignment** — span-panel-api's purpose is "communicate with SPAN Panel hardware." MQTT is the v2 transport for that purpose. With v1 REST
+   sunset at 2026-12-31, maintaining multiple transports added complexity with no long-term benefit.
 
-2. **Reject ebus-sdk dependency** — Alpha quality with admitted thread-safety
-   problems, no async support, debug code in production. We should not
-   depend on it for a production integration.
+2. **Reject ebus-sdk dependency** — Alpha quality with admitted thread-safety problems, no async support, debug code in production. We should not depend on it
+   for a production integration.
 
-3. **Homie protocol is straightforward** — The ebus-sdk's ~1500-line
-   `homie.py` is mostly for *publishing* devices. We only need the
-   *consumer/controller* side: subscribe to topics, parse `$description`,
-   track property values, publish to `/set` topics. This is ~300-400
-   lines of well-typed code.
+3. **Homie protocol is straightforward** — The ebus-sdk's ~1500-line `homie.py` is mostly for _publishing_ devices. We only need the _consumer/controller_ side:
+   subscribe to topics, parse `$description`, track property values, publish to `/set` topics. This is ~300-400 lines of well-typed code.
 
-4. **MQTT client architecture matches HA core.** span-panel-api's
-   `AsyncMqttBridge` follows HA core's own MQTT pattern
-   (`homeassistant.components.mqtt`):
-   - **No background thread** — paho's socket is registered with the
-     asyncio event loop via `add_reader`/`add_writer`, calling
-     `loop_read()`/`loop_write()`/`loop_misc()` directly from the
-     event loop.
-   - **NullLock** — `AsyncMQTTClient` subclasses paho's `Client` and
-     replaces all 7 internal threading locks with no-ops, because
-     everything runs on the single event loop thread.
-   - **Zero threading** — no background thread, no `threading.Lock`,
-     fully event-loop driven.
+4. **MQTT client architecture matches HA core.** span-panel-api's `AsyncMqttBridge` follows HA core's own MQTT pattern (`homeassistant.components.mqtt`):
+   - **No background thread** — paho's socket is registered with the asyncio event loop via `add_reader`/`add_writer`, calling
+     `loop_read()`/`loop_write()`/`loop_misc()` directly from the event loop.
+   - **NullLock** — `AsyncMQTTClient` subclasses paho's `Client` and replaces all 7 internal threading locks with no-ops, because everything runs on the single
+     event loop thread.
+   - **Zero threading** — no background thread, no `threading.Lock`, fully event-loop driven.
 
-   This architecture is implemented once in span-panel-api. The
-   coordinator sees the same `SpanMqttClient` interface. Had we adopted
-   ebus-sdk, its incompatible threading model would have been unfixable
-   without a rewrite — a key factor in the architecture decision.
+   This architecture is implemented once in span-panel-api. The coordinator sees the same `SpanMqttClient` interface. Had we adopted ebus-sdk, its incompatible
+   threading model would have been unfixable without a rewrite — a key factor in the architecture decision.
 
-5. **Unified data models** — `SpanPanelSnapshot` / `SpanCircuitSnapshot`
-   already represent the data we need. The MQTT transport populates them
-   from MQTT/Homie instead of REST JSON.
+5. **Unified data models** — `SpanPanelSnapshot` / `SpanCircuitSnapshot` already represent the data we need. The MQTT transport populates them from MQTT/Homie
+   instead of REST JSON.
 
-6. **Factory simplification** — `create_span_client()` is MQTT-only. No
-   `api_version` parameter, no detection cascade. Accepts `passphrase`
-   or pre-built `MqttClientConfig`.
+6. **Factory simplification** — `create_span_client()` is MQTT-only. No `api_version` parameter, no detection cascade. Accepts `passphrase` or pre-built
+   `MqttClientConfig`.
 
 ### The API Boundary (Updated for v2.0.0)
 
@@ -299,12 +266,9 @@ for dual-transport coexistence.
 ### What NOT to Do
 
 - **Do not adopt ebus-sdk.** Too risky for production.
-- **Do not change the `span_panel` domain name.** Entity ID and statistics
-  preservation requires keeping the domain.
-- **Do not maintain dual-transport code.** REST v1 has been dropped in
-  span-panel-api 2.0.0. Users are told not to upgrade the integration
-  until they have v2 firmware. The integration requires
-  `span-panel-api>=2.0.0` and removes all REST client references.
+- **Do not change the `span_panel` domain name.** Entity ID and statistics preservation requires keeping the domain.
+- **Do not maintain dual-transport code.** REST v1 has been dropped in span-panel-api 2.0.0. Users are told not to upgrade the integration until they have v2
+  firmware. The integration requires `span-panel-api>=2.0.0` and removes all REST client references.
 
 ---
 
@@ -387,12 +351,9 @@ All `/api/v1/*` endpoints on v2-capable firmware return HTTP headers:
 | `Sunset`      | `2026-12-31`                             |
 | `Link`        | `</api/v2/...>; rel="successor-version"` |
 
-These headers are only visible to installations still running the v1 REST integration.
-They indicate that v2 firmware is present and the v1 API has a sunset date — purely informational.
-By the time a user has upgraded to the v2 integration (MQTT-only),
-they have already completed passphrase auth and are no longer making v1 REST calls.
-If a user upgrades the integration before their panel has v2 firmware,
-the integration will fail to connect and they must roll back.
+These headers are only visible to installations still running the v1 REST integration. They indicate that v2 firmware is present and the v1 API has a sunset
+date — purely informational. By the time a user has upgraded to the v2 integration (MQTT-only), they have already completed passphrase auth and are no longer
+making v1 REST calls. If a user upgrades the integration before their panel has v2 firmware, the integration will fail to connect and they must roll back.
 
 ### Detection Implementation
 
@@ -580,12 +541,9 @@ src/span_panel_api/
        stored — see Phase 0 notes).
      - TLS disabled: plain WebSocket on `ebusBrokerWsPort`.
      - WSS also available via `ebusBrokerWssPort` (TLS over WebSocket).
-   - Follows HA core's async MQTT pattern: `AsyncMQTTClient` subclass
-     with `NullLock` replacing paho's 7 internal threading locks, asyncio
-     `add_reader`/`add_writer` on paho's socket, `loop_read()`/`loop_write()`/
-     `loop_misc()` driven from the event loop. Zero background threads.
-   - Async reconnect loop with exponential backoff (managed by the bridge,
-     not paho's built-in threaded reconnection).
+   - Follows HA core's async MQTT pattern: `AsyncMQTTClient` subclass with `NullLock` replacing paho's 7 internal threading locks, asyncio
+     `add_reader`/`add_writer` on paho's socket, `loop_read()`/`loop_write()`/ `loop_misc()` driven from the event loop. Zero background threads.
+   - Async reconnect loop with exponential backoff (managed by the bridge, not paho's built-in threaded reconnection).
    - Last Will and Testament for `$state = lost`.
    - Connection state tracking with callbacks.
 
@@ -672,7 +630,7 @@ integration. Existing v1 installations continue running the old integration vers
    - Passphrase step: input `hopPassphrase`, call `register_v2()` from span-panel-api, receive `V2AuthResponse` with `accessToken` + all `ebusBroker*` MQTT
      credentials.
    - **User guidance text** for passphrase entry: the config flow must include clear instructions directing the user to find their passphrase in the SPAN Home
-     app: *"Open the SPAN Home app → Settings → All Settings → On-Premise Settings → Passphrase"*
+     app: _"Open the SPAN Home app → Settings → All Settings → On-Premise Settings → Passphrase"_
    - Door bypass step: prompt user to press door button 3 times within 15 minutes, then call v2 auth (passphrase check bypassed during the 15-minute window).
      Pass `passphrase=None` to `register_v2()`.
    - Download CA certificate via `download_ca_cert()` — verified during setup but not stored in config entry. Fetched fresh on each MQTT connect/reconnect by
@@ -746,38 +704,26 @@ HA supports two entity update models:
 1. **Polling:** `DataUpdateCoordinator` calls the library on a timer, gets data, pushes to entities. This is what the v1 REST integration does.
 2. **Pure push:** Each entity subscribes to MQTT callbacks, calls `async_write_ha_state()` on every update. This is what dcj's span-hass does.
 
-Pure push has a **CPU cost problem** on SPAN panels. This was
-demonstrated empirically during the abandoned gRPC event-driven
-prototype (Griswoldlabs, cecilkootz, et al): a Gen3 panel streaming
-per-property updates via gRPC caused unsustainable CPU load on
-Raspberry Pi hardware, forcing the effort to be abandoned. The root
-cause was not gRPC itself but the per-event HA state write overhead.
+Pure push has a **CPU cost problem** on SPAN panels. This was demonstrated empirically during the abandoned gRPC event-driven prototype (Griswoldlabs,
+cecilkootz, et al): a Gen3 panel streaming per-property updates via gRPC caused unsustainable CPU load on Raspberry Pi hardware, forcing the effort to be
+abandoned. The root cause was not gRPC itself but the per-event HA state write overhead.
 
-A 32-circuit panel publishes `active-power`, `exported-energy`,
-`imported-energy`, `relay`, `shed-priority`, and more per circuit —
-160+ properties. Power values update continuously. Each
-`async_write_ha_state()` call triggers:
+A 32-circuit panel publishes `active-power`, `exported-energy`, `imported-energy`, `relay`, `shed-priority`, and more per circuit — 160+ properties. Power
+values update continuously. Each `async_write_ha_state()` call triggers:
 
 - State machine write
 - Event bus fire (`state_changed` event)
 - All state change listeners notified (automations, templates, logbook)
 - Recorder queues a DB write (batched at ~1s, but still per-entity)
 
-On Raspberry Pi hardware common among HA users, hundreds of state
-writes per second is significant. **HA does not rate-limit or coalesce
-these.** The gRPC prototype proved this — and MQTT/Homie has the same
-property-level push granularity. Without coalescing, MQTT would
-reproduce the same CPU problem.
+On Raspberry Pi hardware common among HA users, hundreds of state writes per second is significant. **HA does not rate-limit or coalesce these.** The gRPC
+prototype proved this — and MQTT/Homie has the same property-level push granularity. Without coalescing, MQTT would reproduce the same CPU problem.
 
-**Solution: Hybrid Coordinator.** The key insight from the gRPC failure
-is that the problem is not the push transport — it's firing HA state
-writes on every individual property change. The fix is to **decouple
-MQTT message receipt from HA state writes** using the snapshot as a
-coalescing boundary.
+**Solution: Hybrid Coordinator.** The key insight from the gRPC failure is that the problem is not the push transport — it's firing HA state writes on every
+individual property change. The fix is to **decouple MQTT message receipt from HA state writes** using the snapshot as a coalescing boundary.
 
-Use `DataUpdateCoordinator` with `update_interval=timedelta(seconds=60)`
-(fallback poll). MQTT pushes trigger snapshot builds on a controlled
-cadence rather than per-property.
+Use `DataUpdateCoordinator` with `update_interval=timedelta(seconds=60)` (fallback poll). MQTT pushes trigger snapshot builds on a controlled cadence rather
+than per-property.
 
 ```text
 MQTT broker
@@ -1496,17 +1442,17 @@ changes that tie everything together. Solar migration spans steps 13, 14, and 18
 
 ## Part 5 — Risk Assessment (Updated)
 
-| Risk                                                   | Impact   | Likelihood | Mitigation                                                                                      |
-| ------------------------------------------------------ | -------- | ---------- | ----------------------------------------------------------------------------------------------- |
-| SPAN changes Homie schema before GA                    | High     | Medium     | Schema-driven entity generation; `typesSchemaHash` in `V2HomieSchema` detects changes           |
-| Energy statistics gap during migration                 | High     | Low        | Statistics transfer API; test UUID migration extensively before release                         |
+| Risk                                                   | Impact   | Likelihood  | Mitigation                                                                                                                 |
+| ------------------------------------------------------ | -------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| SPAN changes Homie schema before GA                    | High     | Medium      | Schema-driven entity generation; `typesSchemaHash` in `V2HomieSchema` detects changes                                      |
+| Energy statistics gap during migration                 | High     | Low         | Statistics transfer API; test UUID migration extensively before release                                                    |
 | ~~paho-mqtt threaded model vs HA async patterns~~      | ~~High~~ | ~~Certain~~ | **Resolved.** `AsyncMqttBridge` uses HA core's `AsyncMQTTClient`/`NullLock`/`add_reader` pattern. Zero background threads. |
-| ~~v1 API sunset accelerated~~                          | ~~High~~ | N/A        | **Mitigated** — library is already MQTT-only                                                    |
-| MQTT broker unreachable (panel offline)                | Medium   | Medium     | Availability tracking; paho-mqtt auto-reconnect; graceful degradation                           |
-| Circuit UUID correlation fails                         | Medium   | Low        | Verified identical on live panel; defensive fallback via dash-stripping + name+tabs correlation |
-| Users upgrade integration before firmware              | Medium   | Medium     | `api_version="v1"` raises `ConfigEntryNotReady` with clear message                              |
-| Solar migration fails (multiple PV circuits)           | Low      | Low        | Persistent notification guides manual reconfiguration; flag remains set for retry               |
-| Library signature mismatch (v2_provisioning → library) | Medium   | Medium     | Documented field name mapping; test coverage for detection + registration flows                 |
+| ~~v1 API sunset accelerated~~                          | ~~High~~ | N/A         | **Mitigated** — library is already MQTT-only                                                                               |
+| MQTT broker unreachable (panel offline)                | Medium   | Medium      | Availability tracking; paho-mqtt auto-reconnect; graceful degradation                                                      |
+| Circuit UUID correlation fails                         | Medium   | Low         | Verified identical on live panel; defensive fallback via dash-stripping + name+tabs correlation                            |
+| Users upgrade integration before firmware              | Medium   | Medium      | `api_version="v1"` raises `ConfigEntryNotReady` with clear message                                                         |
+| Solar migration fails (multiple PV circuits)           | Low      | Low         | Persistent notification guides manual reconfiguration; flag remains set for retry                                          |
+| Library signature mismatch (v2_provisioning → library) | Medium   | Medium      | Documented field name mapping; test coverage for detection + registration flows                                            |
 
 ---
 
@@ -1514,16 +1460,16 @@ changes that tie everything together. Solar migration spans steps 13, 14, and 18
 
 While we won't adopt `span-hass` directly, these elements inform our implementation:
 
-| Element                        | Use                                                |
-| ------------------------------ | -------------------------------------------------- |
-| Homie node/property naming     | Validates our property mapping tables              |
-| zeroconf service types         | `_ebus._tcp`, `_secure-mqtt._tcp`                  |
-| Auth flow sequence             | v2 REST endpoint contract, credential fields       |
+| Element                        | Use                                                                                    |
+| ------------------------------ | -------------------------------------------------------------------------------------- |
+| Homie node/property naming     | Validates our property mapping tables                                                  |
+| zeroconf service types         | `_ebus._tcp`, `_secure-mqtt._tcp`                                                      |
+| Auth flow sequence             | v2 REST endpoint contract, credential fields                                           |
 | `call_soon_threadsafe` pattern | Identified the anti-pattern; span-panel-api uses HA core's event-loop approach instead |
-| `EntitySpec` concept           | Similar to our existing sensor factory pattern     |
-| Sub-device grouping            | `_SUB_DEVICE_TYPES` informs device registry layout |
-| `$description` parsing         | Validates schema-driven entity discovery           |
-| Negation for energy values     | `exported-energy` = consumed (inverted)            |
+| `EntitySpec` concept           | Similar to our existing sensor factory pattern                                         |
+| Sub-device grouping            | `_SUB_DEVICE_TYPES` informs device registry layout                                     |
+| `$description` parsing         | Validates schema-driven entity discovery                                               |
+| Negation for energy values     | `exported-energy` = consumed (inverted)                                                |
 
 **What we explicitly reject from DCJ:**
 
