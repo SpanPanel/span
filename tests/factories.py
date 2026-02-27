@@ -6,7 +6,12 @@ SpanBatterySnapshot) — frozen dataclasses from span_panel_api.
 
 from typing import Any
 
-from span_panel_api import SpanBatterySnapshot, SpanCircuitSnapshot, SpanPVSnapshot, SpanPanelSnapshot
+from span_panel_api import (
+    SpanBatterySnapshot,
+    SpanCircuitSnapshot,
+    SpanPanelSnapshot,
+    SpanPVSnapshot,
+)
 
 from custom_components.span_panel.const import (
     DSM_OFF_GRID,

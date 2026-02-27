@@ -5,13 +5,12 @@ from __future__ import annotations
 import ipaddress
 from unittest.mock import patch
 
-import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 
@@ -25,7 +24,6 @@ from custom_components.span_panel.const import (
     CONF_PANEL_SERIAL,
     DOMAIN,
 )
-
 
 # ---------- helpers ----------
 

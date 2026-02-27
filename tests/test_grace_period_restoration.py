@@ -6,7 +6,10 @@ from types import SimpleNamespace
 from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
-from custom_components.span_panel.sensors.base import SpanEnergyExtraStoredData, SpanEnergySensorBase
+from custom_components.span_panel.sensors.base import (
+    SpanEnergyExtraStoredData,
+    SpanEnergySensorBase,
+)
 
 
 class TestSpanEnergyExtraStoredData:
