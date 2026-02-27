@@ -28,9 +28,8 @@ Users MUST upgrade by the end 2026 to avoid disruption.
 > **This release migrates from v1 REST polling to v2 MQTT push.** The integration now communicates with your SPAN Panel over its private eBus MQTT broker for
 > real-time data — no more polling intervals.
 
-**Do NOT upgrade this integration unless your panel is running firmware `spanos2/r202603/05` or later.**
-This version requires the v2 eBus MQTT API — panels on older firmware will not work.
-If you upgrade without the required firmware, you will need to restore the previous integration version from a backup.
+**Do NOT upgrade this integration unless your panel is running firmware `spanos2/r202603/05` or later.** This version requires the v2 eBus MQTT API — panels on
+older firmware will not work. If you upgrade without the required firmware, you will need to restore the previous integration version from a backup.
 
 **What you need:**
 
@@ -43,6 +42,7 @@ If you upgrade without the required firmware, you will need to restore the previ
 - **Improved:** `DSM Grid State` — multi-signal heuristic instead of BESS-only lookup
 - **Improved:** `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
 - **New sensors:** `Dominant Power Source`, `Battery Power`, `Site Power`
+- **Fixed:** `Circuit Priority` select — now functional in v2 (was non-functional in v1)
 - **Enriched attributes:** per-leg voltages, per-leg amperage (upstream and downstream lugs), breaker ratings, device types, relay states, shed priorities,
   panel size, Wi-Fi SSID
 
@@ -209,10 +209,10 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Circuit Controls (per user-controllable circuit)
 
-| Entity           | Type   | Notes                   |
-| ---------------- | ------ | ----------------------- |
-| Breaker          | Switch | On/off control          |
-| Circuit Priority | Select | Priority level selector |
+| Entity                | Type   | Notes                                                                                                         |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| Breaker               | Switch | On/off control                                                                                                |
+| Circuit Shed Priority | Select | **Fixed in v2.** Controls when a circuit is shed during off-grid operation (NEVER / SOC_THRESHOLD / OFF_GRID) |
 
 ## Configuration Options
 
@@ -284,8 +284,8 @@ The spike cleanup service looks at the energy usage just after the spike to extr
    a tamper sensor (reflecting "Detected" or "Clear") to differentiate it from a normal entry door.
 2. **No Switch** - If a circuit is set in the SPAN App as one of the "Always on Circuits", it will not have a switch because the API does not allow the user to
    control it.
-3. **Circuit Priority** - The SPAN API doesn't allow the user to set the circuit priority. The dropdown remains active because SPAN's browser also shows it.
-   Priority is affected by the "Always-on circuits" and PowerUp settings in the SPAN app.
+3. **Circuit Shed Priority** - Controls when a circuit is shed (turned off) during off-grid operation. `NEVER` means the circuit is never shed, `SOC_THRESHOLD`
+   sheds when battery drops below a threshold, and `OFF_GRID` sheds whenever the panel goes off-grid. This control was non-functional in v1 and now works in v2.
 
 ## Development
 
