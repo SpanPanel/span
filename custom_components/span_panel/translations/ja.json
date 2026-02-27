@@ -52,6 +52,16 @@
           "access_token": "アクセストークン"
         }
       },
+      "auth_passphrase": {
+        "title": "パネルパスフレーズ",
+        "description": "SPAN Panelのパスフレーズを入力してください。パネルラベルに印刷されているか、パネルオーナーによって設定されています。",
+        "data": {
+          "hop_passphrase": "パスフレーズ"
+        },
+        "data_description": {
+          "hop_passphrase": "SPAN Panel v2 APIでの認証に使用するパスフレーズ"
+        }
+      },
       "simulator_config": {
         "title": "シミュレーター設定",
         "description": "シミュレーション設定を選択し、必要に応じてカスタム開始時刻を設定します。{config_count}の設定が利用可能です。",
@@ -72,6 +82,7 @@
   },
   "options": {
     "error": {
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "日付/時刻の形式が無効です。HH:MM（24時間）、H:MM（12時間）、または完全なISO日時（YYYY-MM-DDTHH:MM:SS）を使用してください",
       "directory": "ファイルパスが必要です",
       "base": "エクスポートに失敗しました：{error}"
     },
@@ -89,22 +100,18 @@
       },
       "general_options": {
         "title": "一般オプション",
+        "description": "SPAN Panel統合の設定を構成します。",
         "data": {
-          "scan_interval": "スキャンインターバル(秒)",
-          "enable_battery_percentage": "バッテリーパーセントセンサーを有効にする",
-          "api_retries": "APIリトライ回数 (0-10)",
-          "api_retry_timeout": "APIリトライタイムアウト (秒)",
-          "api_retry_backoff_multiplier": "APIリトライバックオフ倍率",
-          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "snapshot_update_interval": "スナップショット更新間隔（秒）",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
-          "enable_circuit_net_energy_sensors": "回路正味エネルギー"
+          "enable_circuit_net_energy_sensors": "回路正味エネルギー",
+          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)"
         },
         "data_description": {
-          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "snapshot_update_interval": "MQTTデータからパネルスナップショットを再構築する頻度。低い値はより速い更新を提供しますが、CPUをより多く使用します。低電力ハードウェア（例：Raspberry Pi）では増加させてください。0に設定するとデバウンスなし。範囲：0〜15秒。",
           "enable_panel_net_energy_sensors": "パネルレベルエネルギー流れ（メインメーターとフィードスルー）の正味エネルギーセンサーを作成します。双方向流れを考慮した真のエネルギー収支を表示します。",
-          "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。"
+          "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
+          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。"
         }
       },
       "entity_naming_options": {

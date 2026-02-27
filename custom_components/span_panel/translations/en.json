@@ -52,6 +52,16 @@
           "access_token": "Access Token"
         }
       },
+      "auth_passphrase": {
+        "title": "Panel Passphrase",
+        "description": "Enter the passphrase for your SPAN Panel. This is printed on the panel label or set by the panel owner.",
+        "data": {
+          "hop_passphrase": "Passphrase"
+        },
+        "data_description": {
+          "hop_passphrase": "The passphrase used to authenticate with the SPAN Panel v2 API"
+        }
+      },
       "simulator_config": {
         "title": "Simulator Configuration",
         "description": "Choose the simulation configuration for your SPAN Panel. This determines the number of circuits and behaviors. {config_count} configurations are available.",
@@ -90,22 +100,18 @@
       },
       "general_options": {
         "title": "General Options",
+        "description": "Configure SPAN Panel integration settings.",
         "data": {
-          "scan_interval": "Scan interval in seconds",
-          "enable_battery_percentage": "Enable Battery Percentage Sensor",
-          "api_retries": "API Retries (0-10)",
-          "api_retry_timeout": "API Retry Timeout (seconds)",
-          "api_retry_backoff_multiplier": "API Retry Backoff Multiplier",
-          "energy_reporting_grace_period": "Energy Sensor Grace Period (minutes)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "snapshot_update_interval": "Snapshot Update Interval (seconds)",
           "enable_panel_net_energy_sensors": "Panel Net Energy",
-          "enable_circuit_net_energy_sensors": "Circuit Net Energy"
+          "enable_circuit_net_energy_sensors": "Circuit Net Energy",
+          "energy_reporting_grace_period": "Energy Sensor Grace Period (minutes)"
         },
         "data_description": {
-          "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "snapshot_update_interval": "How often to rebuild the panel snapshot from MQTT data. Lower values give faster updates but use more CPU. Increase on low-power hardware (e.g., Raspberry Pi). Set to 0 for no debounce. Range: 0\u201315 seconds.",
           "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
-          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows."
+          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
+          "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes."
         }
       },
       "entity_naming_options": {

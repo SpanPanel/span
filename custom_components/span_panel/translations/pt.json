@@ -52,6 +52,16 @@
           "access_token": "Token de Acesso"
         }
       },
+      "auth_passphrase": {
+        "title": "Frase-passe do Painel",
+        "description": "Insira a frase-passe do seu SPAN Panel. Está impressa na etiqueta do painel ou definida pelo proprietário do painel.",
+        "data": {
+          "hop_passphrase": "Frase-passe"
+        },
+        "data_description": {
+          "hop_passphrase": "A frase-passe utilizada para autenticar com a API v2 do SPAN Panel"
+        }
+      },
       "simulator_config": {
         "title": "Configuração do Simulador",
         "description": "Selecione uma configuração de simulação e opcionalmente defina um horário de início personalizado. {config_count} configurações disponíveis.",
@@ -72,6 +82,7 @@
   },
   "options": {
     "error": {
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Formato de data/hora inválido. Use HH:MM (24h), H:MM (12h), ou datetime ISO completo (YYYY-MM-DDTHH:MM:SS)",
       "directory": "O caminho do arquivo é necessário",
       "base": "Falha na exportação: {error}"
     },
@@ -89,22 +100,18 @@
       },
       "general_options": {
         "title": "Opções Gerais",
+        "description": "Configurar os ajustes da integração SPAN Panel.",
         "data": {
-          "scan_interval": "Intervalo de verificação em segundos",
-          "enable_battery_percentage": "Ativar Sensor de Percentagem da Bateria",
-          "api_retries": "Tentativas de API (0-10)",
-          "api_retry_timeout": "Tempo limite de tentativa de API (segundos)",
-          "api_retry_backoff_multiplier": "Multiplicador de atraso de tentativa de API",
-          "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "snapshot_update_interval": "Intervalo de Atualização do Snapshot (segundos)",
           "enable_panel_net_energy_sensors": "Energia Líquida do Painel",
-          "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito"
+          "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito",
+          "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)"
         },
         "data_description": {
-          "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "snapshot_update_interval": "Com que frequência reconstruir o snapshot do painel a partir de dados MQTT. Valores mais baixos dão atualizações mais rápidas mas usam mais CPU. Aumente em hardware de baixa potência (ex., Raspberry Pi). Defina como 0 para sem debounce. Intervalo: 0\u201315 segundos.",
           "enable_panel_net_energy_sensors": "Criar sensores de energia líquida para fluxos de energia no nível do painel (medidor principal e derivação). Mostra o verdadeiro balanço energético contabilizando fluxos bidirecionais.",
-          "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos."
+          "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos.",
+          "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos."
         }
       },
       "entity_naming_options": {

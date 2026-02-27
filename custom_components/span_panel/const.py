@@ -67,6 +67,7 @@ ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
+DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 1.0
 
 
 class CircuitRelayState(enum.Enum):

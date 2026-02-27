@@ -101,3 +101,44 @@ sensor:
 
 The v1 integration relies on the OpenAPI interface contract sourced from the SPAN Panel. The integration may break if SPAN changes the API in an incompatible
 way. This contract is specific to the SPAN Panel MAIN 32 hardware.
+
+## Troubleshooting (v1)
+
+### Circuit Priority
+
+The v1 REST API does not support setting circuit priority. The dropdown remains visible but changes are not persisted by the panel.
+
+### Energy Dashboard Spikes After Firmware Updates
+
+When the SPAN panel undergoes a firmware update or reset, it may report decreased energy values in otherwise `TOTAL_INCREASING` sensors, losing some range of
+data. This errant drop causes a massive spike in the Home Assistant Energy Dashboard. This issue is on the SPAN firmware/cloud side and the only remedy we have
+is to adjust Home Assistant statistics for SPAN sensors upward to their previous value. That adjustment is carried forward for all future stat-reporting times.
+
+**Symptoms:**
+
+- Huge energy consumption spikes appearing after panel firmware updates
+- Charts showing unrealistic untracked values unrelated to a single sensor that dwarf normal usage
+- Negative energy values in statistics
+
+**Solution:**
+
+Use the Developer Tools to adjust individual statistics. This method allows you greater control.
+
+OR
+
+Use the cleanup service to adjust negative statistics in `TOTAL_INCREASING` entries (Beta):
+
+1. **Backup the system** - Create a backup of your Home Assistant instance before making any changes.
+2. **Verify the spike** - Go to **Developer Tools > Statistics** and search for the main meter consumed energy sensor
+   (`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike caused by negative value and note the timestamp
+3. Go to **Developer Tools > Actions**
+4. Search for `span_panel.cleanup_energy_spikes`
+5. Set `start_time` and `end_time` to cover the time range where the spike occurred (use the timestamp from step 2)
+6. First run with `dry_run: true` to preview what will be adjusted (important, save the JSON in case you need to undo with undo_stats_adjustment)
+7. Review the persistent notification showing affected timestamps in the JSON
+8. Run again with `dry_run: false` to adjust the problematic entries (uses the negative delta in each sensor's sum to adjust stats upward)
+9. Fine tune using the statistics adjustments if necessary
+
+The spike cleanup service looks at the energy usage just after the spike to extrapolate energy usage over any previous down time prior to the spike.
+
+**Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.

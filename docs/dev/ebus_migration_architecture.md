@@ -1396,6 +1396,29 @@ With REST removed from span-panel-api 2.0.0, no dual-mode handling is needed in 
   development and testing.
 - **Config export**: Reads from `SpanPanelSnapshot` — already transport-agnostic.
 
+### Phase 7: MQTT Snapshot Debounce (span-panel-api + span)
+
+**Goal:** Reduce CPU load from high-frequency MQTT messages by debouncing snapshot rebuilds.
+
+**Problem:** The SPAN panel publishes ~100 MQTT messages/second. Each message triggers
+a full `build_snapshot()` — iterating all nodes, circuits, and properties — plus
+coordinator dispatch and entity updates. On low-end hardware (Raspberry Pi) this is
+untenable, mirroring the gRPC streaming CPU problem.
+
+**Solution:** Rate-limit `build_snapshot()` + callback dispatch in `SpanMqttClient`.
+MQTT messages continue to update the Homie property store immediately (cheap dict writes),
+but the expensive snapshot rebuild is gated by a configurable timer.
+
+| Component | Change |
+| --- | --- |
+| `SpanMqttClient.__init__` | `snapshot_interval` param (default 1.0s) |
+| `SpanMqttClient._on_message` | Schedule debounce timer instead of per-message dispatch |
+| `SpanMqttClient._fire_snapshot` | Timer callback — build + dispatch one snapshot |
+| Integration options flow | `snapshot_update_interval` option (0–15s, default 1s) |
+| Integration `__init__.py` | Pass interval from config to client constructor |
+
+Setting interval to 0 preserves current no-debounce behavior.
+
 ---
 
 ## Part 4 — Sequencing & Dependencies (Updated)
@@ -1432,7 +1455,11 @@ Phase 5: Tests & Remaining (span) ← Steps 19-21
   │
   v
 Phase 6: New Capabilities (span)
-     New v2-only sensors (future PR)
+  │  New v2-only sensors (future PR)
+  │
+  v
+Phase 7: Snapshot Debounce (span-panel-api + span)
+     Rate-limit build_snapshot to configurable interval
 ```
 
 Steps 1-12 can be done as a batch (type/import changes that compile together). The coordinator (Step 4/13) and `__init__.py` (Step 14) are the structural

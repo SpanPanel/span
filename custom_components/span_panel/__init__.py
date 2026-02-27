@@ -37,11 +37,13 @@ from .const import (
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
     COORDINATOR,
+    DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     NAME,
 )
 from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_sensors
+from .options import SNAPSHOT_UPDATE_INTERVAL
 from .services import (
     async_setup_cleanup_energy_spikes_service,
     async_setup_main_meter_monitoring,
@@ -217,7 +219,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 mqtts_port=int(config[CONF_EBUS_BROKER_PORT]),
             )
 
-            client = SpanMqttClient(host, serial_number, broker_config)
+            snapshot_interval = entry.options.get(
+                SNAPSHOT_UPDATE_INTERVAL, DEFAULT_SNAPSHOT_INTERVAL
+            )
+            client = SpanMqttClient(
+                host,
+                serial_number,
+                broker_config,
+                snapshot_interval=snapshot_interval,
+            )
             try:
                 await client.connect()
             except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:

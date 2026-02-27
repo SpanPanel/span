@@ -16,7 +16,7 @@ from homeassistant.config_entries import (
     ConfigFlowContext,
     ConfigFlowResult,
 )
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST, CONF_SCAN_INTERVAL
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import selector
@@ -66,10 +66,10 @@ from .const import (
 )
 from .helpers import generate_unique_simulator_serial_number
 from .options import (
-    BATTERY_ENABLE,
     ENERGY_DISPLAY_PRECISION,
     ENERGY_REPORTING_GRACE_PERIOD,
     POWER_DISPLAY_PRECISION,
+    SNAPSHOT_UPDATE_INTERVAL,
 )
 from .simulation_utils import clone_panel_to_simulation
 
@@ -800,8 +800,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
 OPTIONS_SCHEMA: vol.Schema = vol.Schema(
     {
-        vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
-        vol.Optional(BATTERY_ENABLE): bool,
+        vol.Optional(SNAPSHOT_UPDATE_INTERVAL): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=15)
+        ),
         vol.Optional(ENTITY_NAMING_PATTERN): vol.In([e.value for e in EntityNamingPattern]),
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
     }

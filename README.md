@@ -23,38 +23,25 @@ circuits.
 
 Users MUST upgrade by the end 2026 to avoid disruption.
 
-## 1.2.x Potential Breaking Changes (v2)
+## 1.2.x Breaking Changes (v2)
 
-> **This release migrates from v1 REST polling to v2 MQTT push.** The integration now communicates with your SPAN Panel over its private eBus MQTT broker for
-> real-time data — no more polling intervals.
-
-**Do NOT upgrade this integration unless your panel is running firmware `spanos2/r202603/05` or later.** This version requires the v2 eBus MQTT API — panels on
-older firmware will not work. If you upgrade without the required firmware, you will need to restore the previous integration version from a backup.
+**Do NOT upgrade unless your panel is running firmware `spanos2/r202603/05` or later.**
 
 **What you need:**
 
-- SPAN Panel firmware `spanos2/r202603/05` or later (v2 eBus MQTT support)
+- SPAN Panel firmware `spanos2/r202603/05` or later
 - Panel passphrase (found in the SPAN mobile app, On-premise settings)
 
-**What changed:**
+**Breaking:**
 
-- **Removed:** `DSM State` sensor — replaced by `Dominant Power Source`, which exposes the raw enum without conflating power source with grid connectivity
-- **Improved:** `DSM Grid State` — multi-signal heuristic instead of BESS-only lookup
-- **Improved:** `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
-- **New sensors:** `Dominant Power Source`, `Battery Power`, `Site Power`
-- **Fixed:** `Circuit Priority` select — now functional in v2 (was non-functional in v1)
-- **Enriched attributes:** per-leg voltages, per-leg amperage (upstream and downstream lugs), breaker ratings, device types, relay states, shed priorities,
-  panel size, Wi-Fi SSID
-
-**What's preserved:**
-
-- All existing unique IDs and entity IDs — most installs continue without disruption
+- Requires firmware `spanos2/r202603/05` or later — panels on older firmware will not work
+- `DSM State` sensor removed — replaced by `Dominant Power Source`
+- `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 - Users with automations referencing `dsm_state` must update to `dominant_power_source`
 
-> Running firmware prior to `spanos2/r202603/05`? See [v1 Legacy Documentation](docs/v1-legacy.md). v1 support is deprecated — SPAN is rolling out v2 firmware
-> across all panels.
+> Running older firmware? See [v1 Legacy Documentation](docs/v1-legacy.md).
 
-See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all changes.
+See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 
 ## Prerequisites
 
@@ -92,26 +79,26 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Panel-Level Sensors
 
-| Sensor                       | Device Class | Unit | Notes                                                                                                                                                                 |
-| ---------------------------- | ------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                                                                |
-| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                                                       |
-| Battery Power                | Power        | W    | **New in v2.** Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kwh` |
-| PV Power                     | Power        | W    | **New in v2.** PV inverter power. Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw`                                 |
-| Site Power                   | Power        | W    | **New in v2.** Total site power (grid + PV + battery). Only present when power-flows node is active                                                                   |
-| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                                                                  |
-| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                                                                  |
-| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                                                               |
-| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                                                                           |
-| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                                                                           |
-| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                                                                |
-| DSM Grid State               | —            | —    | Grid connection state: DSM_ON_GRID, DSM_OFF_GRID, UNKNOWN. **Improved in v2** — multi-signal heuristic                                                                |
-| Current Run Config           | —            | —    | Panel mode: PANEL_ON_GRID, PANEL_OFF_GRID, PANEL_BACKUP, UNKNOWN. **Improved in v2** — full tri-state derivation                                                      |
-| Dominant Power Source        | —            | —    | **New in v2.** Raw enum: GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN                                                                                                  |
-| Main Relay State             | —            | —    | CLOSED, OPEN                                                                                                                                                          |
-| Vendor Cloud                 | —            | —    | **New in v2** UNKNOWN, UNCONNECTED, CONNECTED                                                                                                                         |
-| Software Version             | —            | —    | Firmware version string                                                                                                                                               |
-| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned)                                                                                                      |
+| Sensor                       | Device Class | Unit | Notes                                                                                                                                                       |
+| ---------------------------- | ------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                                                      |
+| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                                             |
+| Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kwh` |
+| PV Power                     | Power        | W    | (v2) PV inverter power. Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw`                                 |
+| Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                                                                   |
+| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                                                        |
+| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                                                        |
+| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                                                     |
+| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                                                                 |
+| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                                                                 |
+| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                                                      |
+| DSM Grid State               | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN                                                                                              |
+| Current Run Config           | —            | —    | PANEL_ON_GRID (grid connected), PANEL_OFF_GRID (islanded on PV/generator), PANEL_BACKUP (islanded on battery), UNKNOWN                                      |
+| Dominant Power Source        | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN                                                                                                            |
+| Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                                                        |
+| Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                                                        |
+| Software Version             | —            | —    | Firmware version string                                                                                                                                     |
+| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned)                                                                                            |
 
 **Removed:**
 
@@ -121,16 +108,16 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Current Power Sensor Attributes
 
-| Attribute             | Type   | Notes                                     |
-| --------------------- | ------ | ----------------------------------------- |
-| `voltage`             | string | Nominal panel voltage ("240")             |
-| `amperage`            | string | Calculated current (power / voltage)      |
-| `l1_voltage`          | float  | **New.** L1 leg actual voltage            |
-| `l2_voltage`          | float  | **New.** L2 leg actual voltage            |
-| `l1_amperage`         | float  | **New.** Upstream lugs L1 current         |
-| `l2_amperage`         | float  | **New.** Upstream lugs L2 current         |
-| `main_breaker_rating` | int    | **New.** Main breaker amperage            |
-| `grid_islandable`     | bool   | **New.** Whether panel supports islanding |
+| Attribute             | Type   | Notes                                |
+| --------------------- | ------ | ------------------------------------ |
+| `voltage`             | string | Nominal panel voltage ("240")        |
+| `amperage`            | string | Calculated current (power / voltage) |
+| `l1_voltage`          | float  | L1 leg actual voltage                |
+| `l2_voltage`          | float  | L2 leg actual voltage                |
+| `l1_amperage`         | float  | Upstream lugs L1 current             |
+| `l2_amperage`         | float  | Upstream lugs L2 current             |
+| `main_breaker_rating` | int    | Main breaker amperage                |
+| `grid_islandable`     | bool   | Whether panel supports islanding     |
 
 ### Feed Through Power Sensor Attributes
 
@@ -138,35 +125,35 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | ------------- | ------ | ------------------------------------ |
 | `voltage`     | string | Nominal panel voltage ("240")        |
 | `amperage`    | string | Calculated current (power / voltage) |
-| `l1_amperage` | float  | **New.** Downstream lugs L1 current  |
-| `l2_amperage` | float  | **New.** Downstream lugs L2 current  |
+| `l1_amperage` | float  | Downstream lugs L1 current           |
+| `l2_amperage` | float  | Downstream lugs L2 current           |
 
 ### PV Power Sensor Attributes
 
-| Attribute               | Type   | Notes                                                  |
-| ----------------------- | ------ | ------------------------------------------------------ |
-| `voltage`               | string | Nominal panel voltage ("240")                          |
-| `amperage`              | string | Calculated current (power / voltage)                   |
-| `vendor_name`           | string | **New.** PV inverter vendor (e.g., "Enphase", "Other") |
-| `product_name`          | string | **New.** PV inverter product (e.g., "IQ8+")            |
-| `nameplate_capacity_kw` | float  | **New.** Rated inverter capacity in kW                 |
+| Attribute               | Type   | Notes                                         |
+| ----------------------- | ------ | --------------------------------------------- |
+| `voltage`               | string | Nominal panel voltage ("240")                 |
+| `amperage`              | string | Calculated current (power / voltage)          |
+| `vendor_name`           | string | PV inverter vendor (e.g., "Enphase", "Other") |
+| `product_name`          | string | PV inverter product (e.g., "IQ8+")            |
+| `nameplate_capacity_kw` | float  | Rated inverter capacity in kW                 |
 
 ### Battery Power Sensor Attributes
 
-| Attribute                | Type   | Notes                                  |
-| ------------------------ | ------ | -------------------------------------- |
-| `voltage`                | string | Nominal panel voltage ("240")          |
-| `amperage`               | string | Calculated current (power / voltage)   |
-| `vendor_name`            | string | **New.** BESS vendor name              |
-| `product_name`           | string | **New.** BESS product name             |
-| `nameplate_capacity_kwh` | float  | **New.** Rated battery capacity in kWh |
+| Attribute                | Type   | Notes                                |
+| ------------------------ | ------ | ------------------------------------ |
+| `voltage`                | string | Nominal panel voltage ("240")        |
+| `amperage`               | string | Calculated current (power / voltage) |
+| `vendor_name`            | string | BESS vendor name                     |
+| `product_name`           | string | BESS product name                    |
+| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh        |
 
 ### Software Version Sensor Attributes
 
-| Attribute    | Type   | Notes                                        |
-| ------------ | ------ | -------------------------------------------- |
-| `panel_size` | int    | **New.** Total breaker spaces (e.g., 32, 40) |
-| `wifi_ssid`  | string | **New.** Current Wi-Fi network               |
+| Attribute    | Type   | Notes                               |
+| ------------ | ------ | ----------------------------------- |
+| `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
+| `wifi_ssid`  | string | Current Wi-Fi network               |
 
 ### Circuit-Level Sensors (per circuit)
 
@@ -179,18 +166,18 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Circuit Power Sensor Attributes
 
-| Attribute         | Type   | Notes                                               |
-| ----------------- | ------ | --------------------------------------------------- |
-| `tabs`            | string | Breaker slot position(s)                            |
-| `voltage`         | string | 120 or 240 (derived from tab count)                 |
-| `amperage`        | string | Measured current, or calculated from power          |
-| `breaker_rating`  | int    | **New.** Circuit breaker amperage                   |
-| `device_type`     | string | **New.** "circuit", "pv", or "evse"                 |
-| `always_on`       | bool   | **New.** Whether circuit is always-on               |
-| `relay_state`     | string | **New.** OPEN / CLOSED / UNKNOWN                    |
-| `relay_requester` | string | **New.** Who requested relay state                  |
-| `shed_priority`   | string | **New.** NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
-| `is_sheddable`    | bool   | **New.** Whether circuit can be shed                |
+| Attribute         | Type   | Notes                                      |
+| ----------------- | ------ | ------------------------------------------ |
+| `tabs`            | string | Breaker slot position(s)                   |
+| `voltage`         | string | 120 or 240 (derived from tab count)        |
+| `amperage`        | string | Measured current, or calculated from power |
+| `breaker_rating`  | int    | Circuit breaker amperage                   |
+| `device_type`     | string | "circuit", "pv", or "evse"                 |
+| `always_on`       | bool   | Whether circuit is always-on               |
+| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                    |
+| `relay_requester` | string | Who requested relay state                  |
+| `shed_priority`   | string | NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
+| `is_sheddable`    | bool   | Whether circuit can be shed                |
 
 ### Binary Sensors
 
@@ -203,18 +190,32 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 **Removed from binary sensors:**
 
-| Sensor                | Reason                                                      |
-| --------------------- | ----------------------------------------------------------- |
-| Vendor Cloud (binary) | Moved to regular sensor — was coercing tri-state to boolean |
+| Sensor          | Reason                                                 |
+| --------------- | ------------------------------------------------------ |
+| Cellular (wwan) | Replaced by `Vendor Cloud` sensor (cloud connectivity) |
 
 ### Circuit Controls (per user-controllable circuit)
 
-| Entity                | Type   | Notes                                                                                                         |
-| --------------------- | ------ | ------------------------------------------------------------------------------------------------------------- |
-| Breaker               | Switch | On/off control                                                                                                |
-| Circuit Shed Priority | Select | **Fixed in v2.** Controls when a circuit is shed during off-grid operation (NEVER / SOC_THRESHOLD / OFF_GRID) |
+| Entity                | Type   | Notes                                                                              |
+| --------------------- | ------ | ---------------------------------------------------------------------------------- |
+| Breaker               | Switch | On/off relay control                                                               |
+| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid: NEVER, SOC_THRESHOLD, OFF_GRID |
 
 ## Configuration Options
+
+### Snapshot Update Interval
+
+Controls how often the integration rebuilds the panel snapshot from incoming MQTT data. The SPAN
+panel publishes high-frequency MQTT messages (~100/second), but each individual message is a cheap
+dictionary write. The expensive operation — rebuilding the full snapshot and dispatching entity
+updates — is rate-limited by this timer.
+
+- **Default:** 1 second
+- **Range:** 0–15 seconds
+- **Set to 0** for no debounce (every MQTT message triggers a snapshot rebuild)
+- **Increase on low-power hardware** (e.g., Raspberry Pi) to reduce CPU usage
+
+Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`.
 
 ### Entity Naming Pattern
 
@@ -284,8 +285,6 @@ The spike cleanup service looks at the energy usage just after the spike to extr
    a tamper sensor (reflecting "Detected" or "Clear") to differentiate it from a normal entry door.
 2. **No Switch** - If a circuit is set in the SPAN App as one of the "Always on Circuits", it will not have a switch because the API does not allow the user to
    control it.
-3. **Circuit Shed Priority** - Controls when a circuit is shed (turned off) during off-grid operation. `NEVER` means the circuit is never shed, `SOC_THRESHOLD`
-   sheds when battery drops below a threshold, and `OFF_GRID` sheds whenever the panel goes off-grid. This control was non-functional in v1 and now works in v2.
 
 ## Development
 

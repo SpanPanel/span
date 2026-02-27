@@ -52,6 +52,16 @@
           "access_token": "Jeton d'accès"
         }
       },
+      "auth_passphrase": {
+        "title": "Mot de passe du panneau",
+        "description": "Entrez le mot de passe de votre SPAN Panel. Il est imprimé sur l'étiquette du panneau ou défini par le propriétaire du panneau.",
+        "data": {
+          "hop_passphrase": "Mot de passe"
+        },
+        "data_description": {
+          "hop_passphrase": "Le mot de passe utilisé pour s'authentifier avec l'API v2 du SPAN Panel"
+        }
+      },
       "simulator_config": {
         "title": "Configuration du Simulateur",
         "description": "Sélectionnez une configuration de simulation et définissez optionnellement un heure de début personnalisée. {config_count} configurations disponibles.",
@@ -72,6 +82,7 @@
   },
   "options": {
     "error": {
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Format de date/heure invalide. Utilisez HH:MM (24h), H:MM (12h), ou datetime ISO complet (YYYY-MM-DDTHH:MM:SS)",
       "directory": "Le chemin du fichier est requis",
       "base": "Échec de l'exportation : {error}"
     },
@@ -89,22 +100,18 @@
       },
       "general_options": {
         "title": "Options Générales",
+        "description": "Configurer les paramètres de l'intégration SPAN Panel.",
         "data": {
-          "scan_interval": "Intervalle d'analyse en secondes",
-          "enable_battery_percentage": "Activer le Capteur de Pourcentage de Batterie",
-          "api_retries": "Tentatives API (0-10)",
-          "api_retry_timeout": "Délai de tentative API (secondes)",
-          "api_retry_backoff_multiplier": "Multiplicateur de délai de tentative API",
-          "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "snapshot_update_interval": "Intervalle de Mise à Jour du Snapshot (secondes)",
           "enable_panel_net_energy_sensors": "Énergie Nette du Panneau",
-          "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit"
+          "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit",
+          "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)"
         },
         "data_description": {
-          "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "snapshot_update_interval": "Fréquence de reconstruction du snapshot du panneau à partir des données MQTT. Des valeurs plus basses donnent des mises à jour plus rapides mais utilisent plus de CPU. Augmentez sur du matériel peu puissant (ex., Raspberry Pi). Définissez sur 0 pour désactiver le debounce. Plage : 0\u201315 secondes.",
           "enable_panel_net_energy_sensors": "Créer des capteurs d'énergie nette pour les flux d'énergie au niveau du panneau (compteur principal et dérivation). Affiche le vrai bilan énergétique en tenant compte des flux bidirectionnels.",
-          "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs."
+          "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs.",
+          "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes."
         }
       },
       "entity_naming_options": {

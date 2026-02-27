@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - v2 MQTT Integration
+
+### Breaking Changes
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- Removed `DSM State` sensor — replaced by `Dominant Power Source`
+- `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
+- `dsm_state` entity ID replaced by `dominant_power_source`
+
+### New Features
+
+- Real-time MQTT push via eBus broker — no more polling intervals
+- `Dominant Power Source` sensor (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN)
+- `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)
+- `PV Power` sensor with inverter metadata attributes (vendor, product, nameplate capacity)
+- `Site Power` sensor (grid + PV + battery from power-flows node)
+- Circuit Shed Priority select — controls off-grid shedding (NEVER / SOC_THRESHOLD / OFF_GRID)
+- Per-leg voltages and amperage (upstream and downstream lugs)
+- Breaker ratings, device types, relay states, shed priorities as circuit attributes
+- Panel size and Wi-Fi SSID as software version attributes
+
+### Improvements
+
+- `DSM Grid State` — multi-signal heuristic instead of BESS-only lookup
+- `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
+- Configurable snapshot update interval (0–15s, default 1s) to rate-limit snapshot rebuilds from
+  high-frequency MQTT messages — reduces CPU on low-power hardware
+- Removed stale v1 options from the configuration UI: `Scan Interval` (no longer applicable with
+  MQTT push) and `Enable Battery Percentage` (now auto-detected via panel capabilities)
+
 ## [1.3.1] - 2026-01-19
 
 ### 🐛 Bug Fixes

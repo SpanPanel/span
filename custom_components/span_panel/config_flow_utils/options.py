@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
@@ -15,7 +14,7 @@ import voluptuous as vol
 from custom_components.span_panel.const import (
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
-    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SNAPSHOT_INTERVAL,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     ENTITY_NAMING_PATTERN,
@@ -24,8 +23,8 @@ from custom_components.span_panel.const import (
     EntityNamingPattern,
 )
 from custom_components.span_panel.options import (
-    BATTERY_ENABLE,
     ENERGY_REPORTING_GRACE_PERIOD,
+    SNAPSHOT_UPDATE_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,8 +51,9 @@ def build_general_options_schema(
 
     """
     schema_fields = {
-        vol.Optional(CONF_SCAN_INTERVAL): vol.All(int, vol.Range(min=5)),
-        vol.Optional(BATTERY_ENABLE): bool,
+        vol.Optional(SNAPSHOT_UPDATE_INTERVAL): vol.All(
+            vol.Coerce(float), vol.Range(min=0, max=15)
+        ),
         vol.Optional(ENABLE_PANEL_NET_ENERGY_SENSORS): bool,
         vol.Optional(ENABLE_CIRCUIT_NET_ENERGY_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
@@ -77,10 +77,9 @@ def get_general_options_defaults(
 
     """
     defaults = {
-        CONF_SCAN_INTERVAL: config_entry.options.get(
-            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL.seconds
+        SNAPSHOT_UPDATE_INTERVAL: config_entry.options.get(
+            SNAPSHOT_UPDATE_INTERVAL, DEFAULT_SNAPSHOT_INTERVAL
         ),
-        BATTERY_ENABLE: config_entry.options.get("enable_battery_percentage", False),
         ENABLE_PANEL_NET_ENERGY_SENSORS: config_entry.options.get(
             ENABLE_PANEL_NET_ENERGY_SENSORS, True
         ),
