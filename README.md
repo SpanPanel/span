@@ -159,7 +159,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 | Sensor          | Device Class | Unit | Notes                                                         |
 | --------------- | ------------ | ---- | ------------------------------------------------------------- |
-| Power           | Power        | W    | Instantaneous circuit power                                   |
+| Power           | Power        | W    | Instantaneous circuit power (+producing for PV, +consuming otherwise) |
 | Produced Energy | Energy       | Wh   | Cumulative energy produced                                    |
 | Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                    |
 | Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert) |
