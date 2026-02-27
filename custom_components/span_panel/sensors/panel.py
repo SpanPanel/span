@@ -90,6 +90,22 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         """Get the data source for the panel status sensor."""
         return snapshot
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes for the software version sensor."""
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            return None
+
+        snapshot = self.coordinator.data
+        attributes: dict[str, Any] = {}
+
+        if snapshot.panel_size is not None:
+            attributes["panel_size"] = snapshot.panel_size
+        if snapshot.wifi_ssid is not None:
+            attributes["wifi_ssid"] = snapshot.wifi_ssid
+
+        return attributes if attributes else None
+
 
 class SpanPanelBattery(
     SpanSensorBase[SpanPanelBatterySensorEntityDescription, SpanBatterySnapshot]
@@ -136,6 +152,7 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         snapshot: SpanPanelSnapshot,
     ) -> None:
         """Initialize the enhanced panel power sensor."""
+        self._description_key = description.key
         super().__init__(data_coordinator, description, snapshot)
 
     def _generate_unique_id(
@@ -166,7 +183,8 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         if not self.coordinator.last_update_success or not self.coordinator.data:
             return None
 
-        attributes = {}
+        snapshot = self.coordinator.data
+        attributes: dict[str, Any] = {}
 
         # Add voltage attribute (standard panel voltage)
         attributes["voltage"] = "240"
@@ -180,6 +198,46 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
                 attributes["amperage"] = "0.0"
         else:
             attributes["amperage"] = "0.0"
+
+        # v2 attributes for main grid power sensor (upstream lugs)
+        if self._description_key == "instantGridPowerW":
+            if snapshot.l1_voltage is not None:
+                attributes["l1_voltage"] = snapshot.l1_voltage
+            if snapshot.l2_voltage is not None:
+                attributes["l2_voltage"] = snapshot.l2_voltage
+            if snapshot.upstream_l1_current_a is not None:
+                attributes["l1_amperage"] = snapshot.upstream_l1_current_a
+            if snapshot.upstream_l2_current_a is not None:
+                attributes["l2_amperage"] = snapshot.upstream_l2_current_a
+            if snapshot.main_breaker_rating_a is not None:
+                attributes["main_breaker_rating"] = snapshot.main_breaker_rating_a
+            if snapshot.grid_islandable is not None:
+                attributes["grid_islandable"] = snapshot.grid_islandable
+
+        # v2 attributes for feedthrough power sensor (downstream lugs)
+        if self._description_key == "feedthroughPowerW":
+            if snapshot.downstream_l1_current_a is not None:
+                attributes["l1_amperage"] = snapshot.downstream_l1_current_a
+            if snapshot.downstream_l2_current_a is not None:
+                attributes["l2_amperage"] = snapshot.downstream_l2_current_a
+
+        # PV inverter metadata
+        if self._description_key == "pvPowerW":
+            if snapshot.pv.vendor_name is not None:
+                attributes["vendor_name"] = snapshot.pv.vendor_name
+            if snapshot.pv.product_name is not None:
+                attributes["product_name"] = snapshot.pv.product_name
+            if snapshot.pv.nameplate_capacity_kw is not None:
+                attributes["nameplate_capacity_kw"] = snapshot.pv.nameplate_capacity_kw
+
+        # BESS metadata
+        if self._description_key == "batteryPowerW":
+            if snapshot.battery.vendor_name is not None:
+                attributes["vendor_name"] = snapshot.battery.vendor_name
+            if snapshot.battery.product_name is not None:
+                attributes["product_name"] = snapshot.battery.product_name
+            if snapshot.battery.nameplate_capacity_kwh is not None:
+                attributes["nameplate_capacity_kwh"] = snapshot.battery.nameplate_capacity_kwh
 
         return attributes
 

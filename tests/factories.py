@@ -6,11 +6,9 @@ SpanBatterySnapshot) — frozen dataclasses from span_panel_api.
 
 from typing import Any
 
-from span_panel_api import SpanBatterySnapshot, SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanBatterySnapshot, SpanCircuitSnapshot, SpanPVSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.const import (
-    DSM_GRID_DOWN,
-    DSM_GRID_UP,
     DSM_OFF_GRID,
     DSM_ON_GRID,
     PANEL_BACKUP,
@@ -146,8 +144,7 @@ class SpanPanelSnapshotFactory:
         main_meter_energy_produced_wh: float = 0.0,
         feedthrough_energy_consumed_wh: float = 0.0,
         feedthrough_energy_produced_wh: float = 0.0,
-        dsm_state: str = DSM_ON_GRID,
-        dsm_grid_state: str = DSM_GRID_UP,
+        dsm_grid_state: str = DSM_ON_GRID,
         current_run_config: str = PANEL_ON_GRID,
         door_state: str = SYSTEM_DOOR_STATE_CLOSED,
         proximity_proven: bool = False,
@@ -165,12 +162,18 @@ class SpanPanelSnapshotFactory:
         main_breaker_rating_a: int | None = None,
         wifi_ssid: str | None = None,
         vendor_cloud: str | None = None,
+        power_flow_battery: float | None = None,
+        power_flow_site: float | None = None,
+        power_flow_pv: float | None = None,
+        pv: SpanPVSnapshot | None = None,
     ) -> SpanPanelSnapshot:
         """Create a SpanPanelSnapshot with reasonable defaults."""
         if circuits is None:
             circuits = {}
         if battery is None:
             battery = SpanBatterySnapshot()
+        if pv is None:
+            pv = SpanPVSnapshot()
         return SpanPanelSnapshot(
             serial_number=serial_number,
             firmware_version=firmware_version,
@@ -181,7 +184,6 @@ class SpanPanelSnapshotFactory:
             main_meter_energy_produced_wh=main_meter_energy_produced_wh,
             feedthrough_energy_consumed_wh=feedthrough_energy_consumed_wh,
             feedthrough_energy_produced_wh=feedthrough_energy_produced_wh,
-            dsm_state=dsm_state,
             dsm_grid_state=dsm_grid_state,
             current_run_config=current_run_config,
             door_state=door_state,
@@ -200,6 +202,10 @@ class SpanPanelSnapshotFactory:
             main_breaker_rating_a=main_breaker_rating_a,
             wifi_ssid=wifi_ssid,
             vendor_cloud=vendor_cloud,
+            power_flow_battery=power_flow_battery,
+            power_flow_site=power_flow_site,
+            power_flow_pv=power_flow_pv,
+            pv=pv,
         )
 
     @staticmethod
@@ -237,8 +243,7 @@ class SpanPanelSnapshotFactory:
         return SpanPanelSnapshotFactory.create_complete(
             serial_number=serial_number,
             instant_grid_power_w=1850.5,
-            dsm_grid_state=DSM_GRID_UP,
-            dsm_state=DSM_ON_GRID,
+            dsm_grid_state=DSM_ON_GRID,
             current_run_config=PANEL_ON_GRID,
         )
 
@@ -248,8 +253,7 @@ class SpanPanelSnapshotFactory:
         return SpanPanelSnapshotFactory.create_complete(
             serial_number=serial_number,
             instant_grid_power_w=0.0,
-            dsm_grid_state=DSM_GRID_DOWN,
-            dsm_state=DSM_OFF_GRID,
+            dsm_grid_state=DSM_OFF_GRID,
             current_run_config=PANEL_BACKUP,
         )
 

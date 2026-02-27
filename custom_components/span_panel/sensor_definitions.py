@@ -1,9 +1,9 @@
 """Sensor definitions for SPAN Panel integration.
 
 This file contains sensor definitions for all native integration sensors:
-- Panel status sensors (DSM state, grid state, current run config, main relay state)
+- Panel status sensors (grid state, run config, relay state, dominant power source, vendor cloud)
 - Hardware status sensors (software version)
-- Panel power and energy sensors
+- Panel power and energy sensors (grid, feedthrough, battery, site)
 - Circuit power and energy sensors
 - Unmapped circuit sensors (invisible backing data)
 - Battery sensor
@@ -83,12 +83,8 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
 ] = (
-    SpanPanelDataSensorEntityDescription(
-        key="dsm_state",
-        name="DSM State",
-        value_fn=lambda s: s.dsm_state,
-    ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
         name="DSM Grid State",
@@ -103,6 +99,16 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         key="main_relay_state",
         name="Main Relay State",
         value_fn=lambda s: s.main_relay_state,
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="dominant_power_source",
+        name="Dominant Power Source",
+        value_fn=lambda s: s.dominant_power_source or "UNKNOWN",
+    ),
+    SpanPanelDataSensorEntityDescription(
+        key="vendor_cloud",
+        name="Vendor Cloud",
+        value_fn=lambda s: s.vendor_cloud or "UNKNOWN",
     ),
 )
 
@@ -191,6 +197,39 @@ PANEL_POWER_SENSORS: tuple[
         device_class=SensorDeviceClass.POWER,
         value_fn=lambda s: s.feedthrough_power_w,
     ),
+)
+
+# Battery power sensor (conditionally created when BESS is commissioned)
+BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="batteryPowerW",
+    name="Battery Power",
+    native_unit_of_measurement=UnitOfPower.WATT,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=0,
+    device_class=SensorDeviceClass.POWER,
+    value_fn=lambda s: s.power_flow_battery if s.power_flow_battery is not None else 0.0,
+)
+
+# PV power sensor (conditionally created when PV is commissioned)
+PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="pvPowerW",
+    name="PV Power",
+    native_unit_of_measurement=UnitOfPower.WATT,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=0,
+    device_class=SensorDeviceClass.POWER,
+    value_fn=lambda s: s.power_flow_pv if s.power_flow_pv is not None else 0.0,
+)
+
+# Site power sensor (conditionally created when power-flows data is available)
+SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="sitePowerW",
+    name="Site Power",
+    native_unit_of_measurement=UnitOfPower.WATT,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=0,
+    device_class=SensorDeviceClass.POWER,
+    value_fn=lambda s: s.power_flow_site if s.power_flow_site is not None else 0.0,
 )
 
 # Panel energy sensor definitions

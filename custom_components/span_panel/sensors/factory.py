@@ -15,13 +15,15 @@ from custom_components.span_panel.const import (
     ENABLE_PANEL_NET_ENERGY_SENSORS,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.options import BATTERY_ENABLE
 from custom_components.span_panel.sensor_definitions import (
+    BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
     CIRCUIT_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
     PANEL_POWER_SENSORS,
+    PV_POWER_SENSOR,
+    SITE_POWER_SENSOR,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
 )
@@ -46,7 +48,7 @@ def create_panel_sensors(
         SpanPanelPanelStatus | SpanPanelStatus | SpanPanelPowerSensor | SpanPanelEnergySensor
     ] = []
 
-    # Add panel data status sensors (DSM State, DSM Grid State, etc.)
+    # Add panel data status sensors (grid state, run config, relay, dominant power source, vendor cloud)
     for description in PANEL_DATA_STATUS_SENSORS:
         entities.append(SpanPanelPanelStatus(coordinator, description, snapshot))
 
@@ -125,15 +127,74 @@ def create_unmapped_circuit_sensors(
     return entities
 
 
-def create_battery_sensors(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, config_entry: ConfigEntry
-) -> list[SpanPanelBattery]:
-    """Create battery sensors if enabled and data available."""
-    entities: list[SpanPanelBattery] = []
+def has_bess(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether a BESS (battery energy storage system) is commissioned.
 
-    battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
-    if battery_enabled and snapshot.battery.soe_percentage is not None:
-        entities.append(SpanPanelBattery(coordinator, BATTERY_SENSOR, snapshot))
+    Only soe_percentage is a reliable signal — the power-flows node publishes
+    battery=0.0 even on panels without a commissioned BESS.
+    """
+    return snapshot.battery.soe_percentage is not None
+
+
+def has_pv(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether PV (solar) is commissioned."""
+    return snapshot.power_flow_pv is not None or any(
+        c.device_type == "pv" for c in snapshot.circuits.values()
+    )
+
+
+def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the power-flows node is publishing data."""
+    return snapshot.power_flow_site is not None
+
+
+def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
+    """Derive the set of optional capabilities present in the snapshot.
+
+    Used by the coordinator to detect when new hardware (BESS, PV) appears
+    and trigger a reload so new sensors are created.
+    """
+    caps: set[str] = set()
+    if has_bess(snapshot):
+        caps.add("bess")
+    if has_pv(snapshot):
+        caps.add("pv")
+    if has_power_flows(snapshot):
+        caps.add("power_flows")
+    return frozenset(caps)
+
+
+def create_battery_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanPanelBattery | SpanPanelPowerSensor]:
+    """Create battery sensors when BESS is commissioned.
+
+    Auto-detected from soe_percentage — only a commissioned BESS reports SoE.
+    """
+    if not has_bess(snapshot):
+        return []
+
+    return [
+        SpanPanelPowerSensor(coordinator, BATTERY_POWER_SENSOR, snapshot),
+        SpanPanelBattery(coordinator, BATTERY_SENSOR, snapshot),
+    ]
+
+
+def create_power_flow_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanPanelPowerSensor]:
+    """Create power-flow sensors that are conditional on hardware presence.
+
+    PV Power — only when PV is commissioned.
+    Site Power — only when the power-flows node is publishing.
+    """
+    entities: list[SpanPanelPowerSensor] = []
+
+    if has_pv(snapshot):
+        entities.append(SpanPanelPowerSensor(coordinator, PV_POWER_SENSOR, snapshot))
+
+    if has_power_flows(snapshot):
+        entities.append(SpanPanelPowerSensor(coordinator, SITE_POWER_SENSOR, snapshot))
 
     return entities
 
@@ -166,7 +227,8 @@ def create_native_sensors(
     entities.extend(create_panel_sensors(coordinator, snapshot, config_entry))
     entities.extend(create_circuit_sensors(coordinator, snapshot, config_entry))
     entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
-    entities.extend(create_battery_sensors(coordinator, snapshot, config_entry))
+    entities.extend(create_battery_sensors(coordinator, snapshot))
+    entities.extend(create_power_flow_sensors(coordinator, snapshot))
 
     return entities
 

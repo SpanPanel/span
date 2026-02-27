@@ -160,7 +160,7 @@ class SpanCircuitPowerSensor(
         if not circuit:
             return None
 
-        attributes = {}
+        attributes: dict[str, Any] = {}
 
         # Add tabs attribute
         tabs_result = construct_tabs_attribute(circuit)
@@ -182,6 +182,27 @@ class SpanCircuitPowerSensor(
                 attributes["amperage"] = "0.0"
         else:
             attributes["amperage"] = "0.0"
+
+        # v2 circuit attributes
+        if circuit.breaker_rating_a is not None:
+            attributes["breaker_rating"] = circuit.breaker_rating_a
+        device_type = getattr(circuit, "device_type", "circuit") or "circuit"
+        attributes["device_type"] = device_type
+        attributes["always_on"] = circuit.always_on
+        attributes["relay_state"] = circuit.relay_state
+        attributes["relay_requester"] = circuit.relay_requester
+        attributes["shed_priority"] = circuit.priority
+        attributes["is_sheddable"] = circuit.is_sheddable
+
+        # PV inverter metadata for PV circuits
+        snapshot = self.coordinator.data
+        if device_type == "pv":
+            if snapshot.pv.vendor_name is not None:
+                attributes["vendor_name"] = snapshot.pv.vendor_name
+            if snapshot.pv.product_name is not None:
+                attributes["product_name"] = snapshot.pv.product_name
+            if snapshot.pv.nameplate_capacity_kw is not None:
+                attributes["nameplate_capacity_kw"] = snapshot.pv.nameplate_capacity_kw
 
         return attributes
 

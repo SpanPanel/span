@@ -42,6 +42,9 @@ CIRCUIT_SUFFIX_MAPPING = {
 PANEL_SUFFIX_MAPPING = {
     "instantGridPowerW": "grid_power",  # Descriptive to differentiate from other power types
     "feedthroughPowerW": "feed_through_power",
+    "batteryPowerW": "battery_power",
+    "pvPowerW": "pv_power",
+    "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_energy_produced",  # Consistent naming
     "mainMeterEnergyConsumedWh": "main_meter_energy_consumed",  # Consistent naming
     "mainMeterNetEnergyWh": "main_meter_energy_net",  # Consistent naming
@@ -49,7 +52,6 @@ PANEL_SUFFIX_MAPPING = {
     "feedthroughEnergyConsumedWh": "feed_through_energy_consumed",  # Consistent naming
     "feedthroughNetEnergyWh": "feed_through_energy_net",  # Consistent naming
     "batteryPercentage": "battery_percentage",
-    "dsmState": "dsm_state",
 }
 
 # Panel entity suffix mappings (used by get_panel_entity_suffix)
@@ -58,6 +60,9 @@ PANEL_SUFFIX_MAPPING = {
 PANEL_ENTITY_SUFFIX_MAPPING = {
     "instantGridPowerW": "current_power",
     "feedthroughPowerW": "feed_through_power",
+    "batteryPowerW": "battery_power",
+    "pvPowerW": "pv_power",
+    "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_produced_energy",
     "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",
     "mainMeterNetEnergyWh": "main_meter_net_energy",
@@ -65,7 +70,6 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
     "feedthroughEnergyConsumedWh": "feed_through_consumed_energy",
     "feedthroughNetEnergyWh": "feed_through_net_energy",
     "batteryPercentage": "battery_level",
-    "dsmState": "dsm_state",
 }
 
 # Combined mapping for general suffix lookup

@@ -26,7 +26,6 @@ from .const import (
     COORDINATOR,
     DOMAIN,
     PANEL_STATUS,
-    SYSTEM_CELLULAR_LINK,
     SYSTEM_DOOR_STATE,
     SYSTEM_DOOR_STATE_CLOSED,
     SYSTEM_DOOR_STATE_OPEN,
@@ -67,7 +66,6 @@ BINARY_SENSORS: tuple[
     SpanPanelBinarySensorEntityDescription,
     SpanPanelBinarySensorEntityDescription,
     SpanPanelBinarySensorEntityDescription,
-    SpanPanelBinarySensorEntityDescription,
 ] = (
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_DOOR_STATE,
@@ -90,12 +88,6 @@ BINARY_SENSORS: tuple[
         name="Wi-Fi Link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda s: s.wlan_link,
-    ),
-    SpanPanelBinarySensorEntityDescription(
-        key=SYSTEM_CELLULAR_LINK,
-        name="Vendor Cloud",
-        device_class=BinarySensorDeviceClass.CONNECTIVITY,
-        value_fn=lambda s: s.wwan_link,
     ),
     SpanPanelBinarySensorEntityDescription(
         key=PANEL_STATUS,
@@ -171,7 +163,6 @@ class SpanPanelBinarySensor(
             SYSTEM_DOOR_STATE,
             SYSTEM_ETHERNET_LINK,
             SYSTEM_WIFI_LINK,
-            SYSTEM_CELLULAR_LINK,
         }
 
         if (
@@ -203,7 +194,6 @@ class SpanPanelBinarySensor(
                 SYSTEM_DOOR_STATE,
                 SYSTEM_ETHERNET_LINK,
                 SYSTEM_WIFI_LINK,
-                SYSTEM_CELLULAR_LINK,
             }
 
             if (

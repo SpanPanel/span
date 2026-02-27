@@ -50,8 +50,6 @@ MIGRATION_VERSION = "migration_version"
 
 # SPAN Panel State Constants
 # DSM (Demand Side Management) States
-DSM_GRID_UP = "DSM_GRID_UP"
-DSM_GRID_DOWN = "DSM_GRID_DOWN"
 DSM_ON_GRID = "DSM_ON_GRID"
 DSM_OFF_GRID = "DSM_OFF_GRID"
 

@@ -78,6 +78,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._simulation_offline_minutes: int = 0
         self._offline_start_time: float | None = None
 
+        # Hardware capability tracking — detect when BESS/PV are commissioned
+        # and trigger a reload so the factory creates the appropriate sensors.
+        self._known_capabilities: frozenset[str] | None = None
+
         # Determine update interval based on transport mode
         if is_streaming:
             update_interval = _STREAMING_FALLBACK_INTERVAL
@@ -152,6 +156,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
         self._panel_offline = False
+        self._check_capability_change(snapshot)
         self.async_set_updated_data(snapshot)
 
     async def async_shutdown(self) -> None:
@@ -195,6 +200,39 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         return True
 
+    # --- Hardware capability detection ---
+
+    @staticmethod
+    def _detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
+        """Derive optional hardware capabilities present in the snapshot."""
+        caps: set[str] = set()
+        if snapshot.battery.soe_percentage is not None:
+            caps.add("bess")
+        if snapshot.power_flow_pv is not None or any(
+            c.device_type == "pv" for c in snapshot.circuits.values()
+        ):
+            caps.add("pv")
+        if snapshot.power_flow_site is not None:
+            caps.add("power_flows")
+        return frozenset(caps)
+
+    def _check_capability_change(self, snapshot: SpanPanelSnapshot) -> None:
+        """Check if hardware capabilities changed and request reload if expanded."""
+        current = self._detect_capabilities(snapshot)
+        if self._known_capabilities is None:
+            # First snapshot — record baseline
+            self._known_capabilities = current
+            return
+
+        new_caps = current - self._known_capabilities
+        if new_caps:
+            _LOGGER.info(
+                "New hardware capabilities detected: %s — requesting reload",
+                ", ".join(sorted(new_caps)),
+            )
+            self._known_capabilities = current
+            self.request_reload()
+
     # --- Data update ---
 
     async def _async_update_data(self) -> SpanPanelSnapshot:
@@ -221,6 +259,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
                 cycle_total,
                 fetch_duration,
             )
+
+            # Check for new hardware capabilities (BESS, PV, power-flows)
+            self._check_capability_change(snapshot)
 
             # Handle reload request if one was made
             if self._reload_requested:

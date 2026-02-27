@@ -316,13 +316,13 @@ async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
         result = await async_migrate_entry(hass, entry)
 
     assert result is True
-    assert entry.version == 4
+    assert entry.version == 5
     assert entry.data.get(CONF_API_VERSION) == "v1"
 
 
 @pytest.mark.asyncio
 async def test_migration_v2_to_v4_simulator(hass: HomeAssistant) -> None:
-    """Simulator entries migrating from version 2 to 4 should get api_version=simulation."""
+    """Simulator entries migrating from version 2 to 5 should get api_version=simulation."""
     entry = MockConfigEntry(
         version=2,
         minor_version=1,
@@ -349,7 +349,7 @@ async def test_migration_v2_to_v4_simulator(hass: HomeAssistant) -> None:
         result = await async_migrate_entry(hass, entry)
 
     assert result is True
-    assert entry.version == 4
+    assert entry.version == 5
     assert entry.data.get(CONF_API_VERSION) == "simulation"
 
 

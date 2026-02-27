@@ -74,16 +74,35 @@ class TestPanelSensors:
                 f"Expected {expected_output} for input {input_state}, got {sensor_value}"
             )
 
-    def test_dsm_state_sensor(self) -> None:
-        """Test the DSM state sensor."""
-        from custom_components.span_panel.const import DSM_GRID_UP, DSM_ON_GRID
+    def test_dominant_power_source_sensor(self) -> None:
+        """Test the dominant power source sensor."""
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
 
-        dsm_description = next(d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_state")
+        description = next(
+            d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dominant_power_source"
+        )
 
-        for state in [DSM_ON_GRID, DSM_GRID_UP]:
-            snapshot = SpanPanelSnapshotFactory.create(dsm_state=state)
-            assert dsm_description.value_fn(snapshot) == state
+        for source in ["GRID", "BATTERY", "PV", "GENERATOR", "NONE"]:
+            snapshot = SpanPanelSnapshotFactory.create(dominant_power_source=source)
+            assert description.value_fn(snapshot) == source
+
+        # None defaults to "UNKNOWN"
+        snapshot_none = SpanPanelSnapshotFactory.create(dominant_power_source=None)
+        assert description.value_fn(snapshot_none) == "UNKNOWN"
+
+    def test_vendor_cloud_sensor(self) -> None:
+        """Test the vendor cloud sensor."""
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
+        description = next(d for d in PANEL_DATA_STATUS_SENSORS if d.key == "vendor_cloud")
+
+        for state in ["CONNECTED", "UNCONNECTED"]:
+            snapshot = SpanPanelSnapshotFactory.create(vendor_cloud=state)
+            assert description.value_fn(snapshot) == state
+
+        # None defaults to "UNKNOWN"
+        snapshot_none = SpanPanelSnapshotFactory.create(vendor_cloud=None)
+        assert description.value_fn(snapshot_none) == "UNKNOWN"
 
     def test_software_version_sensor(self) -> None:
         """Test the software version sensor."""
@@ -152,20 +171,20 @@ class TestPanelSensors:
         snapshot_open = SpanPanelSnapshotFactory.create(main_relay_state="OPEN")
         assert main_relay_description.value_fn(snapshot_open) == "OPEN"
 
-    def test_dsm_states_with_real_data(self) -> None:
-        """Test DSM state sensors with real snapshot data."""
-        from custom_components.span_panel.const import DSM_GRID_UP, DSM_ON_GRID
+    def test_dsm_grid_state_with_real_data(self) -> None:
+        """Test DSM grid state sensor with real snapshot data."""
+        from custom_components.span_panel.const import DSM_OFF_GRID, DSM_ON_GRID
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
-        dsm_description = next(d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_state")
-        snapshot = SpanPanelSnapshotFactory.create(dsm_state=DSM_ON_GRID)
-        assert dsm_description.value_fn(snapshot) == DSM_ON_GRID
 
         dsm_grid_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_grid_state"
         )
-        snapshot2 = SpanPanelSnapshotFactory.create(dsm_grid_state=DSM_GRID_UP)
-        assert dsm_grid_description.value_fn(snapshot2) == DSM_GRID_UP
+
+        snapshot_on = SpanPanelSnapshotFactory.create(dsm_grid_state=DSM_ON_GRID)
+        assert dsm_grid_description.value_fn(snapshot_on) == DSM_ON_GRID
+
+        snapshot_off = SpanPanelSnapshotFactory.create(dsm_grid_state=DSM_OFF_GRID)
+        assert dsm_grid_description.value_fn(snapshot_off) == DSM_OFF_GRID
 
 
 if __name__ == "__main__":

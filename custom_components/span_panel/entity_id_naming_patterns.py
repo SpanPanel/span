@@ -491,10 +491,12 @@ class EntityIdMigrationManager:
         # Panel-level suffixes from various sensor definitions and binary sensors
         panel_level_suffixes = {
             # Panel data status sensors (from PANEL_DATA_STATUS_SENSORS)
-            "dsm_state",
+            "dsm_state",  # kept for migration backward compatibility
             "dsm_grid_state",
             "current_run_config",
             "main_relay_state",
+            "dominant_power_source",
+            "vendor_cloud",
             # Hardware status sensors (from STATUS_SENSORS)
             "software_version",
             # Binary sensor suffixes (from BINARY_SENSORS)
@@ -506,6 +508,9 @@ class EntityIdMigrationManager:
             # Panel power sensors (from PANEL_POWER_SENSORS)
             "current_power",  # instantGridPowerW
             "feed_through_power",  # feedthroughPowerW
+            "battery_power",  # batteryPowerW
+            "pv_power",  # pvPowerW
+            "site_power",  # sitePowerW
             # Panel energy sensors (from PANEL_ENERGY_SENSORS)
             "main_meter_produced_energy",  # mainMeterEnergyProducedWh
             "main_meter_consumed_energy",  # mainMeterEnergyConsumedWh
@@ -522,8 +527,6 @@ class EntityIdMigrationManager:
             "solar_produced_energy",
             "solar_consumed_energy",
             "solar_net_energy",
-            # Other panel-level sensors can be added here as needed
-            "panel_status",
         }
 
         # Check if the unique_id ends with any panel-level suffix

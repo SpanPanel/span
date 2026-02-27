@@ -4,28 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.config_entries import ConfigEntry
-
 from .coordinator import SpanPanelCoordinator
-from .options import BATTERY_ENABLE
 from .sensor_definitions import (
     PANEL_DATA_STATUS_SENSORS,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
 )
 
-_LOGGER = logging.getLogger(__name__)
 
-
-def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEntry) -> None:
+def log_entity_summary(coordinator: SpanPanelCoordinator) -> None:
     """Log a comprehensive summary of entities that will be created.
 
     Uses debug level for detailed info, info level for basic summary.
-
-    Args:
-        coordinator: The SpanPanelCoordinator instance
-        config_entry: The config entry with options
-
     """
     # Check if any logging is enabled for the main span_panel module
     main_logger = logging.getLogger("custom_components.span_panel")
@@ -51,15 +41,31 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
         if not circuit.is_user_controllable
     ]
 
-    battery_enabled = config_entry.options.get(BATTERY_ENABLE, False)
+    # Detect hardware capabilities from snapshot data
+    bess_present = span_panel_data.battery.soe_percentage is not None
+    pv_present = span_panel_data.power_flow_pv is not None or any(
+        c.device_type == "pv" for c in span_panel_data.circuits.values()
+    )
+    power_flows_present = span_panel_data.power_flow_site is not None
 
     # Native sensors only - synthetic sensors now handled by template system
     unmapped_sensors = total_circuits * len(UNMAPPED_SENSORS)  # Invisible backing sensors
     panel_status_sensors = len(PANEL_DATA_STATUS_SENSORS)  # Panel status only
     status_sensors = len(STATUS_SENSORS)  # Hardware status
 
-    # Native battery sensor (conditionally created)
-    native_battery_sensors = 1 if battery_enabled else 0  # Battery level (native sensor)
+    # Battery sensors (auto-detected)
+    native_battery_sensors = 0
+    if bess_present:
+        native_battery_sensors += 1  # Battery power
+        if span_panel_data.battery.soe_percentage is not None:
+            native_battery_sensors += 1  # Battery level
+
+    # Power-flow sensors (conditional on hardware)
+    power_flow_sensors = 0
+    if pv_present:
+        power_flow_sensors += 1  # PV power
+    if power_flows_present:
+        power_flow_sensors += 1  # Site power
 
     # Synthetic sensors (now handled by template system - counts are estimates)
     synthetic_circuit_sensors = (
@@ -68,7 +74,11 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
     synthetic_panel_sensors = 6  # Panel power sensors (current power, feedthrough, energy sensors)
 
     total_native_sensors = (
-        unmapped_sensors + panel_status_sensors + status_sensors + native_battery_sensors
+        unmapped_sensors
+        + panel_status_sensors
+        + status_sensors
+        + native_battery_sensors
+        + power_flow_sensors
     )
     total_synthetic_sensors = synthetic_circuit_sensors + synthetic_panel_sensors
     total_sensors = total_native_sensors + total_synthetic_sensors
@@ -105,10 +115,16 @@ def log_entity_summary(coordinator: SpanPanelCoordinator, config_entry: ConfigEn
     )
     log_func("Panel status sensors: %d", panel_status_sensors)
     log_func("Hardware status sensors: %d", status_sensors)
-    if battery_enabled:
-        log_func("Battery sensors: %d (native sensor)", native_battery_sensors)
+    if bess_present:
+        log_func("Battery sensors: %d (BESS detected)", native_battery_sensors)
     else:
-        log_func("Battery sensors: 0 (battery disabled)")
+        log_func("Battery sensors: 0 (no BESS)")
+    if pv_present:
+        log_func("PV sensors: 1 (PV detected)")
+    else:
+        log_func("PV sensors: 0 (no PV)")
+    if power_flows_present:
+        log_func("Site power: 1 (power-flows active)")
     log_func("Total native sensors: %d", total_native_sensors)
 
     log_func("=== SYNTHETIC SENSORS (Template-based) ===")
