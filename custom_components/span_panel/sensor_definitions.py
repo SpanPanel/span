@@ -218,7 +218,7 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: s.power_flow_pv if s.power_flow_pv is not None else 0.0,
+    value_fn=lambda s: -s.power_flow_pv if s.power_flow_pv is not None else 0.0,
 )
 
 # Site power sensor (conditionally created when power-flows data is available)

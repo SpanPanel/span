@@ -84,7 +84,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                                                      |
 | Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                                             |
 | Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kwh` |
-| PV Power                     | Power        | W    | (v2) PV inverter power. Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw`                                 |
+| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw` |
 | Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                                                                   |
 | Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                                                        |
 | Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                                                        |
