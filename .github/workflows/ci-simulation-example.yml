@@ -6,14 +6,18 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13", "3.14"]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -21,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: |
           # Replace path dependencies with PyPI versions for CI
-          sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = "^1.1.5"/' pyproject.toml
-          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.1.1"/' pyproject.toml
+          sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = ">=2.0.0"/' pyproject.toml
+          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.1.13"/' pyproject.toml
           # Regenerate lock file with the modified dependencies
           poetry lock
           poetry install --with dev
