@@ -30,10 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - `DSM Grid State` — multi-signal heuristic instead of BESS-only lookup
 - `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
-- Configurable snapshot update interval (0–15s, default 1s) to rate-limit snapshot rebuilds from
-  high-frequency MQTT messages — reduces CPU on low-power hardware
-- Removed stale v1 options from the configuration UI: `Scan Interval` (no longer applicable with
-  MQTT push) and `Enable Battery Percentage` (now auto-detected via panel capabilities)
+- Configurable snapshot update interval (0–15s, default 1s) to rate-limit snapshot rebuilds from high-frequency MQTT messages — reduces CPU on low-power
+  hardware
+- Removed stale v1 options from the configuration UI: `Scan Interval` (no longer applicable with MQTT push) and `Enable Battery Percentage` (now auto-detected
+  via panel capabilities)
 
 ## [1.3.1] - 2026-01-19
 

@@ -1400,22 +1400,19 @@ With REST removed from span-panel-api 2.0.0, no dual-mode handling is needed in 
 
 **Goal:** Reduce CPU load from high-frequency MQTT messages by debouncing snapshot rebuilds.
 
-**Problem:** The SPAN panel publishes ~100 MQTT messages/second. Each message triggers
-a full `build_snapshot()` — iterating all nodes, circuits, and properties — plus
-coordinator dispatch and entity updates. On low-end hardware (Raspberry Pi) this is
-untenable, mirroring the gRPC streaming CPU problem.
+**Problem:** The SPAN panel publishes ~100 MQTT messages/second. Each message triggers a full `build_snapshot()` — iterating all nodes, circuits, and properties
+— plus coordinator dispatch and entity updates. On low-end hardware (Raspberry Pi) this is untenable, mirroring the gRPC streaming CPU problem.
 
-**Solution:** Rate-limit `build_snapshot()` + callback dispatch in `SpanMqttClient`.
-MQTT messages continue to update the Homie property store immediately (cheap dict writes),
-but the expensive snapshot rebuild is gated by a configurable timer.
+**Solution:** Rate-limit `build_snapshot()` + callback dispatch in `SpanMqttClient`. MQTT messages continue to update the Homie property store immediately
+(cheap dict writes), but the expensive snapshot rebuild is gated by a configurable timer.
 
-| Component | Change |
-| --- | --- |
-| `SpanMqttClient.__init__` | `snapshot_interval` param (default 1.0s) |
-| `SpanMqttClient._on_message` | Schedule debounce timer instead of per-message dispatch |
-| `SpanMqttClient._fire_snapshot` | Timer callback — build + dispatch one snapshot |
-| Integration options flow | `snapshot_update_interval` option (0–15s, default 1s) |
-| Integration `__init__.py` | Pass interval from config to client constructor |
+| Component                       | Change                                                  |
+| ------------------------------- | ------------------------------------------------------- |
+| `SpanMqttClient.__init__`       | `snapshot_interval` param (default 1.0s)                |
+| `SpanMqttClient._on_message`    | Schedule debounce timer instead of per-message dispatch |
+| `SpanMqttClient._fire_snapshot` | Timer callback — build + dispatch one snapshot          |
+| Integration options flow        | `snapshot_update_interval` option (0–15s, default 1s)   |
+| Integration `__init__.py`       | Pass interval from config to client constructor         |
 
 Setting interval to 0 preserves current no-debounce behavior.
 
