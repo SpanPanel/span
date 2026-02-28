@@ -165,6 +165,17 @@
       }
     }
   },
+  "entity": {
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "Permanece ligado em caso de falha",
+          "soc_threshold": "Permanece ligado até o limite da bateria",
+          "off_grid": "Desliga em caso de falha"
+        }
+      }
+    }
+  },
   "selector": {
     "entity_naming_pattern": {
       "options": {

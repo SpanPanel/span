@@ -165,6 +165,17 @@
       }
     }
   },
+  "entity": {
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "停電時もオンのまま",
+          "soc_threshold": "バッテリーしきい値までオンのまま",
+          "off_grid": "停電時にオフになる"
+        }
+      }
+    }
+  },
   "selector": {
     "entity_naming_pattern": {
       "options": {

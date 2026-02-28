@@ -81,10 +81,10 @@ class CircuitRelayState(enum.Enum):
 class CircuitPriority(enum.Enum):
     """Enumeration representing the possible circuit priority levels."""
 
-    NEVER = "Never"
-    SOC_THRESHOLD = "SOC Threshold"
-    OFF_GRID = "Off-Grid"
-    UNKNOWN = "Unknown"
+    NEVER = "never"
+    SOC_THRESHOLD = "soc_threshold"
+    OFF_GRID = "off_grid"
+    UNKNOWN = "unknown"
 
 
 class EntityNamingPattern(enum.Enum):

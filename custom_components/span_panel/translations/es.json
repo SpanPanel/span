@@ -165,6 +165,17 @@
       }
     }
   },
+  "entity": {
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "Permanece encendido en un apagón",
+          "soc_threshold": "Permanece encendido hasta el umbral de batería",
+          "off_grid": "Se apaga en un apagón"
+        }
+      }
+    }
+  },
   "selector": {
     "entity_naming_pattern": {
       "options": {

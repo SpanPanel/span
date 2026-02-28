@@ -165,6 +165,17 @@
       }
     }
   },
+  "entity": {
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "Stays on in an outage",
+          "soc_threshold": "Stays on until battery threshold",
+          "off_grid": "Turns off in an outage"
+        }
+      }
+    }
+  },
   "selector": {
     "entity_naming_pattern": {
       "options": {

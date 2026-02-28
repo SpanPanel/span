@@ -195,7 +195,7 @@ Applies to Main Meter and Feed Through energy sensors.
 | `always_on`       | bool   | Whether circuit is always-on               |
 | `relay_state`     | string | OPEN / CLOSED / UNKNOWN                    |
 | `relay_requester` | string | Who requested relay state                  |
-| `shed_priority`   | string | NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
+| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
 | `is_sheddable`    | bool   | Whether circuit can be shed                |
 
 ### Circuit Energy Sensor Attributes
@@ -225,7 +225,17 @@ Applies to Main Meter and Feed Through energy sensors.
 | Entity                | Type   | Notes                                                                              |
 | --------------------- | ------ | ---------------------------------------------------------------------------------- |
 | Breaker               | Switch | On/off relay control                                                               |
-| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid: NEVER, SOC_THRESHOLD, OFF_GRID |
+| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid (translated, see below)          |
+
+### Circuit Shed Priority Options
+
+Labels match the SPAN Home On-Premise app. Translations are provided for all supported languages.
+
+| Option Key      | Display Label (EN)                   | API Value       |
+| --------------- | ------------------------------------ | --------------- |
+| `never`         | Stays on in an outage                | NEVER           |
+| `soc_threshold` | Stays on until battery threshold     | SOC_THRESHOLD   |
+| `off_grid`      | Turns off in an outage               | OFF_GRID        |
 
 ## Configuration Options
 

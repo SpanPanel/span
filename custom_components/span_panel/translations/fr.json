@@ -165,6 +165,17 @@
       }
     }
   },
+  "entity": {
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "Reste allumé en cas de panne",
+          "soc_threshold": "Reste allumé jusqu'au seuil de batterie",
+          "off_grid": "S'éteint en cas de panne"
+        }
+      }
+    }
+  },
   "selector": {
     "entity_naming_pattern": {
       "options": {

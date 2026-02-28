@@ -68,7 +68,9 @@ class SpanPanelSelectEntityDescriptionWrapper:
         select_option_fn: Callable[[SpanCircuitSnapshot, str], None] | None = None,
     ) -> None:
         """Initialize the select entity description wrapper."""
-        self.entity_description = SelectEntityDescription(key=key, name=name, icon=icon)
+        self.entity_description = SelectEntityDescription(
+            key=key, name=name, icon=icon, translation_key=key
+        )
         self.options_fn = options_fn
         self.current_option_fn = current_option_fn
         self.select_option_fn = select_option_fn
