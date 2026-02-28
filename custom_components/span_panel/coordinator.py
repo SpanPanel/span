@@ -158,6 +158,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._panel_offline = False
         self._check_capability_change(snapshot)
         self.async_set_updated_data(snapshot)
+        await self._run_post_update_tasks(snapshot)
 
     async def async_shutdown(self) -> None:
         """Shut down the coordinator and release resources."""
@@ -233,6 +234,65 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._known_capabilities = current
             self.request_reload()
 
+    # --- Post-update maintenance ---
+
+    async def _run_post_update_tasks(self, snapshot: SpanPanelSnapshot) -> None:
+        """Run maintenance tasks after a snapshot update.
+
+        Called from both the polling path (_async_update_data) and the streaming
+        path (_on_snapshot_push). The HA DataUpdateCoordinator resets its fallback
+        poll timer on every async_set_updated_data() call, so during active MQTT
+        streaming the polling path effectively never fires. This shared method
+        ensures reload requests and pending migrations are processed regardless
+        of transport mode.
+        """
+        # Handle reload request if one was made (e.g., name sync, capability change)
+        if self._reload_requested:
+            self._reload_requested = False
+            self.hass.async_create_task(self._async_reload_task())
+
+        # Check for pending legacy migration
+        if self.config_entry.entry_id in self.hass.data.get(
+            DOMAIN, {}
+        ) and self.config_entry.options.get("pending_legacy_migration", False):
+            _LOGGER.info(
+                "Found pending legacy migration flag in coordinator update, performing migration"
+            )
+            await self._handle_pending_legacy_migration()
+
+        # Check for pending naming pattern migration
+        if self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
+            _LOGGER.debug(
+                "Checking for pending_naming_migration flag: %s",
+                self.config_entry.options.get("pending_naming_migration", False),
+            )
+            if self.config_entry.options.get("pending_naming_migration", False):
+                _LOGGER.info(
+                    "Found pending naming migration flag in coordinator update, performing migration"
+                )
+                if (
+                    "old_use_circuit_numbers" in self.config_entry.options
+                    and "old_use_device_prefix" in self.config_entry.options
+                ):
+                    await self._handle_pending_naming_migration()
+                else:
+                    _LOGGER.warning(
+                        "Found pending_naming_migration flag but no old flags stored - skipping migration"
+                    )
+                    current_options = dict(self.config_entry.options)
+                    current_options.pop("pending_naming_migration", None)
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, options=current_options
+                    )
+        else:
+            _LOGGER.debug(
+                "Integration data not yet set up in hass.data - skipping migration checks"
+            )
+
+        # Check for pending solar entity migration (v1 solar → v2 PV circuit)
+        if self.config_entry.data.get("solar_migration_pending", False):
+            await self._handle_solar_migration(snapshot)
+
     # --- Data update ---
 
     async def _async_update_data(self) -> SpanPanelSnapshot:
@@ -263,52 +323,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             # Check for new hardware capabilities (BESS, PV, power-flows)
             self._check_capability_change(snapshot)
 
-            # Handle reload request if one was made
-            if self._reload_requested:
-                self._reload_requested = False
-                self.hass.async_create_task(self._async_reload_task())
-
-            # Check for pending legacy migration
-            if self.config_entry.entry_id in self.hass.data.get(
-                DOMAIN, {}
-            ) and self.config_entry.options.get("pending_legacy_migration", False):
-                _LOGGER.info(
-                    "Found pending legacy migration flag in coordinator update, performing migration"
-                )
-                await self._handle_pending_legacy_migration()
-
-            # Check for pending naming pattern migration
-            if self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
-                _LOGGER.debug(
-                    "Checking for pending_naming_migration flag: %s",
-                    self.config_entry.options.get("pending_naming_migration", False),
-                )
-                if self.config_entry.options.get("pending_naming_migration", False):
-                    _LOGGER.info(
-                        "Found pending naming migration flag in coordinator update, performing migration"
-                    )
-                    if (
-                        "old_use_circuit_numbers" in self.config_entry.options
-                        and "old_use_device_prefix" in self.config_entry.options
-                    ):
-                        await self._handle_pending_naming_migration()
-                    else:
-                        _LOGGER.warning(
-                            "Found pending_naming_migration flag but no old flags stored - skipping migration"
-                        )
-                        current_options = dict(self.config_entry.options)
-                        current_options.pop("pending_naming_migration", None)
-                        self.hass.config_entries.async_update_entry(
-                            self.config_entry, options=current_options
-                        )
-            else:
-                _LOGGER.debug(
-                    "Integration data not yet set up in hass.data - skipping migration checks"
-                )
-
-            # Check for pending solar entity migration (v1 solar → v2 PV circuit)
-            if self.config_entry.data.get("solar_migration_pending", False):
-                await self._handle_solar_migration(snapshot)
+            await self._run_post_update_tasks(snapshot)
 
             return snapshot
 
