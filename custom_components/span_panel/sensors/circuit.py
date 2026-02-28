@@ -306,7 +306,7 @@ class SpanCircuitEnergySensor(
                     attributes["tabs"] = tabs
 
                 voltage = construct_voltage_attribute(circuit) or 240
-                attributes["voltage"] = voltage
+                attributes["voltage"] = str(voltage)
 
         return attributes if attributes else None
 

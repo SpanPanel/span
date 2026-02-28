@@ -83,8 +83,8 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | ---------------------------- | ------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                                                      |
 | Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                                             |
-| Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kwh` |
-| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw`                        |
+| Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned                                                                 |
+| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned                                                                                       |
 | Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                                                                   |
 | Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                                                        |
 | Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                                                        |
@@ -98,7 +98,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                                                        |
 | Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                                                        |
 | Software Version             | —            | —    | Firmware version string                                                                                                                                     |
-| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned)                                                                                            |
+| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned). Attr: `soe_kwh`                                                                           |
 
 **Removed:**
 
@@ -160,6 +160,20 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
 | `wifi_ssid`  | string | Current Wi-Fi network               |
 
+### Battery Level Sensor Attributes
+
+| Attribute | Type  | Notes                        |
+| --------- | ----- | ---------------------------- |
+| `soe_kwh` | float | Current stored energy in kWh |
+
+### Panel Energy Sensor Attributes
+
+Applies to Main Meter and Feed Through energy sensors.
+
+| Attribute | Type   | Notes                         |
+| --------- | ------ | ----------------------------- |
+| `voltage` | string | Nominal panel voltage ("240") |
+
 ### Circuit-Level Sensors (per circuit)
 
 | Sensor          | Device Class | Unit | Notes                                                                 |
@@ -183,6 +197,13 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | `relay_requester` | string | Who requested relay state                  |
 | `shed_priority`   | string | NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
 | `is_sheddable`    | bool   | Whether circuit can be shed                |
+
+### Circuit Energy Sensor Attributes
+
+| Attribute | Type   | Notes                                 |
+| --------- | ------ | ------------------------------------- |
+| `tabs`    | string | Breaker slot position(s)              |
+| `voltage` | string | 120 or 240 (derived from tab count)   |
 
 ### Binary Sensors
 
