@@ -12,7 +12,7 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SpanPanel/span/issues",
   "requirements": [
-    "span-panel-api>=2.0.0"
+    "span-panel-api>=2.0.1"
   ],
   "version": "2.0.0",
   "zeroconf": [
