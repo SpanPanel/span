@@ -141,6 +141,20 @@ class SpanPanelBattery(
         """Get the data source for the battery sensor."""
         return snapshot.battery
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return additional state attributes for the battery sensor."""
+        if not self.coordinator.last_update_success or not self.coordinator.data:
+            return None
+
+        battery = self.coordinator.data.battery
+        attributes: dict[str, Any] = {}
+
+        if battery.soe_kwh is not None:
+            attributes["soe_kwh"] = battery.soe_kwh
+
+        return attributes if attributes else None
+
 
 class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
     """Enhanced panel power sensor with amperage attribute calculation."""
@@ -177,6 +191,43 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         """Get the data source for the panel power sensor."""
         return snapshot
 
+    def _add_grid_power_attributes(
+        self, attributes: dict[str, Any], snapshot: SpanPanelSnapshot
+    ) -> None:
+        """Add upstream lug attributes for the main grid power sensor."""
+        if snapshot.l1_voltage is not None:
+            attributes["l1_voltage"] = snapshot.l1_voltage
+        if snapshot.l2_voltage is not None:
+            attributes["l2_voltage"] = snapshot.l2_voltage
+        if snapshot.upstream_l1_current_a is not None:
+            attributes["l1_amperage"] = snapshot.upstream_l1_current_a
+        if snapshot.upstream_l2_current_a is not None:
+            attributes["l2_amperage"] = snapshot.upstream_l2_current_a
+        if snapshot.main_breaker_rating_a is not None:
+            attributes["main_breaker_rating"] = snapshot.main_breaker_rating_a
+        if snapshot.grid_islandable is not None:
+            attributes["grid_islandable"] = snapshot.grid_islandable
+
+    def _add_bess_attributes(self, attributes: dict[str, Any], snapshot: SpanPanelSnapshot) -> None:
+        """Add BESS metadata attributes for the battery power sensor."""
+        batt = snapshot.battery
+        if batt.vendor_name is not None:
+            attributes["vendor_name"] = batt.vendor_name
+        if batt.product_name is not None:
+            attributes["product_name"] = batt.product_name
+        if batt.model is not None:
+            attributes["model"] = batt.model
+        if batt.serial_number is not None:
+            attributes["serial_number"] = batt.serial_number
+        if batt.software_version is not None:
+            attributes["software_version"] = batt.software_version
+        if batt.nameplate_capacity_kwh is not None:
+            attributes["nameplate_capacity_kwh"] = batt.nameplate_capacity_kwh
+        if batt.soe_kwh is not None:
+            attributes["soe_kwh"] = batt.soe_kwh
+        if batt.connected is not None:
+            attributes["connected"] = batt.connected
+
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes including amperage calculation."""
@@ -201,18 +252,7 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
 
         # v2 attributes for main grid power sensor (upstream lugs)
         if self._description_key == "instantGridPowerW":
-            if snapshot.l1_voltage is not None:
-                attributes["l1_voltage"] = snapshot.l1_voltage
-            if snapshot.l2_voltage is not None:
-                attributes["l2_voltage"] = snapshot.l2_voltage
-            if snapshot.upstream_l1_current_a is not None:
-                attributes["l1_amperage"] = snapshot.upstream_l1_current_a
-            if snapshot.upstream_l2_current_a is not None:
-                attributes["l2_amperage"] = snapshot.upstream_l2_current_a
-            if snapshot.main_breaker_rating_a is not None:
-                attributes["main_breaker_rating"] = snapshot.main_breaker_rating_a
-            if snapshot.grid_islandable is not None:
-                attributes["grid_islandable"] = snapshot.grid_islandable
+            self._add_grid_power_attributes(attributes, snapshot)
 
         # v2 attributes for feedthrough power sensor (downstream lugs)
         if self._description_key == "feedthroughPowerW":
@@ -232,12 +272,7 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
 
         # BESS metadata
         if self._description_key == "batteryPowerW":
-            if snapshot.battery.vendor_name is not None:
-                attributes["vendor_name"] = snapshot.battery.vendor_name
-            if snapshot.battery.product_name is not None:
-                attributes["product_name"] = snapshot.battery.product_name
-            if snapshot.battery.nameplate_capacity_kwh is not None:
-                attributes["nameplate_capacity_kwh"] = snapshot.battery.nameplate_capacity_kwh
+            self._add_bess_attributes(attributes, snapshot)
 
         return attributes
 

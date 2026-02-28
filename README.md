@@ -84,7 +84,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                                                      |
 | Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                                             |
 | Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kwh` |
-| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw` |
+| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned. Attrs: `vendor_name`, `product_name`, `nameplate_capacity_kw`                        |
 | Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                                                                   |
 | Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                                                        |
 | Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                                                        |
@@ -140,13 +140,18 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Battery Power Sensor Attributes
 
-| Attribute                | Type   | Notes                                |
-| ------------------------ | ------ | ------------------------------------ |
-| `voltage`                | string | Nominal panel voltage ("240")        |
-| `amperage`               | string | Calculated current (power / voltage) |
-| `vendor_name`            | string | BESS vendor name                     |
-| `product_name`           | string | BESS product name                    |
-| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh        |
+| Attribute                | Type   | Notes                                       |
+| ------------------------ | ------ | ------------------------------------------- |
+| `voltage`                | string | Nominal panel voltage ("240")               |
+| `amperage`               | string | Calculated current (power / voltage)        |
+| `vendor_name`            | string | BESS vendor name                            |
+| `product_name`           | string | BESS product name                           |
+| `model`                  | string | BESS model identifier                       |
+| `serial_number`          | string | BESS serial number                          |
+| `software_version`       | string | BESS firmware version                       |
+| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh               |
+| `soe_kwh`                | float  | Current stored energy in kWh                |
+| `connected`              | bool   | Whether the backup system is reachable      |
 
 ### Software Version Sensor Attributes
 
@@ -157,12 +162,12 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Circuit-Level Sensors (per circuit)
 
-| Sensor          | Device Class | Unit | Notes                                                         |
-| --------------- | ------------ | ---- | ------------------------------------------------------------- |
+| Sensor          | Device Class | Unit | Notes                                                                 |
+| --------------- | ------------ | ---- | --------------------------------------------------------------------- |
 | Power           | Power        | W    | Instantaneous circuit power (+producing for PV, +consuming otherwise) |
-| Produced Energy | Energy       | Wh   | Cumulative energy produced                                    |
-| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                    |
-| Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert) |
+| Produced Energy | Energy       | Wh   | Cumulative energy produced                                            |
+| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                            |
+| Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert)         |
 
 ### Circuit Power Sensor Attributes
 
@@ -205,10 +210,9 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Snapshot Update Interval
 
-Controls how often the integration rebuilds the panel snapshot from incoming MQTT data. The SPAN
-panel publishes high-frequency MQTT messages (~100/second), but each individual message is a cheap
-dictionary write. The expensive operation — rebuilding the full snapshot and dispatching entity
-updates — is rate-limited by this timer.
+Controls how often the integration rebuilds the panel snapshot from incoming MQTT data. The SPAN panel publishes high-frequency MQTT messages (~100/second), but
+each individual message is a cheap dictionary write. The expensive operation — rebuilding the full snapshot and dispatching entity updates — is rate-limited by
+this timer.
 
 - **Default:** 1 second
 - **Range:** 0–15 seconds
