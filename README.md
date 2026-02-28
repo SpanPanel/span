@@ -23,7 +23,7 @@ circuits.
 
 Users MUST upgrade by the end 2026 to avoid disruption.
 
-## 1.2.x Breaking Changes (v2)
+## 2.0.x Breaking Changes (v2)
 
 **Do NOT upgrade unless your panel is running firmware `spanos2/r202603/05` or later.**
 
