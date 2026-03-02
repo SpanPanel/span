@@ -25,6 +25,7 @@ from .validation import (
     validate_ipv4_address,
     validate_simulation_time,
     validate_v2_passphrase,
+    validate_v2_proximity,
 )
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "validate_ipv4_address",
     "validate_simulation_time",
     "validate_v2_passphrase",
+    "validate_v2_proximity",
     # Simulation
     "extract_serial_from_config",
     "get_available_simulation_configs",

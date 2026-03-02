@@ -10,6 +10,7 @@
       "cannot_connect": "Failed to connect to Span Panel",
       "host_required": "Host is required for non-simulator mode",
       "invalid_auth": "Invalid authentication",
+      "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
       "unknown": "Unexpected error"
     },
     "flow_title": "Span Panel ({host})",
@@ -50,6 +51,13 @@
         "description": "Please enter your access token (empty to start over):",
         "data": {
           "access_token": "Access Token"
+        }
+      },
+      "choose_v2_auth": {
+        "title": "Choose Authentication Method",
+        "menu_options": {
+          "auth_passphrase": "Enter Panel Passphrase",
+          "auth_proximity": "Proof of Proximity (open/close door)"
         }
       },
       "auth_passphrase": {

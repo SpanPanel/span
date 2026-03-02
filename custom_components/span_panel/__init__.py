@@ -8,18 +8,21 @@ import logging
 import os
 from pathlib import Path
 
+from homeassistant.components.persistent_notification import async_create as pn_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import CoreState, HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
 from span_panel_api import (
     DynamicSimulationEngine,
     SpanMqttClient,
     SpanPanelSnapshot,
+    detect_api_version,
 )
 from span_panel_api.exceptions import (
+    SpanPanelAuthError,
     SpanPanelConnectionError,
     SpanPanelTimeoutError,
 )
@@ -69,6 +72,62 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
     if config_entry.version >= CURRENT_CONFIG_VERSION:
         return True
+
+    # --- Gate: verify panel firmware before any schema changes ---
+    # For entries from the v1 integration era (pre-v3 schema), probe the panel
+    # to confirm it is running v2 firmware.  If the panel is still on v1
+    # firmware, the v2 integration cannot operate it.  By returning False
+    # *before* touching the schema we leave the config entry at its original
+    # version so the user can safely roll back to the prior integration.
+    if config_entry.version < 3 and not config_entry.data.get("simulation_mode", False):
+        host = config_entry.data.get(CONF_HOST)
+        if not host:
+            _LOGGER.error(
+                "Config entry %s has no host — cannot verify panel firmware",
+                config_entry.entry_id,
+            )
+            return False
+
+        try:
+            detection = await detect_api_version(host)
+        except Exception as err:
+            _LOGGER.error(
+                "Could not reach panel at %s to verify firmware version: %s. "
+                "Migration deferred until the panel is reachable.",
+                host,
+                err,
+            )
+            pn_create(
+                hass,
+                f"Could not reach your SPAN Panel at **{host}** to verify its "
+                "firmware version. The integration will not load until the panel "
+                "is reachable. Please ensure the panel is online, then reload "
+                "the integration.",
+                title="SPAN Panel: Panel Unreachable During Migration",
+                notification_id=f"span_panel_unreachable_{config_entry.entry_id}",
+            )
+            return False
+
+        if detection.api_version != "v2":
+            _LOGGER.error(
+                "Panel at %s is running %s firmware. "
+                "This version of the integration requires v2 firmware. "
+                "Please upgrade your panel firmware, then reload the integration. "
+                "You can also roll back to the previous integration version.",
+                host,
+                detection.api_version,
+            )
+            pn_create(
+                hass,
+                f"Your SPAN Panel at **{host}** is running **{detection.api_version}** "
+                "firmware which is not compatible with this version of the "
+                "integration. Please either:\n\n"
+                "1. Upgrade the panel firmware to v2, then reload the integration.\n"
+                "2. Roll back to the previous integration version.",
+                title="SPAN Panel: Firmware Upgrade Required",
+                notification_id=f"span_panel_v1_firmware_{config_entry.entry_id}",
+            )
+            return False
 
     _LOGGER.debug(
         "Migrating config entry %s from version %s to %s",
@@ -182,11 +241,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     config = entry.data
     api_version = config.get(CONF_API_VERSION, "v1")
 
-    # v1 entries: block until firmware upgrade
+    # v1 entries: trigger reauthentication so user can provide v2 credentials
     if api_version == "v1":
-        raise ConfigEntryNotReady(
-            "This panel has v1 firmware which is no longer supported. "
-            "Please upgrade to v2 firmware and reconfigure the integration."
+        raise ConfigEntryAuthFailed(
+            "This panel requires reauthentication. "
+            "Please reauthenticate with your panel passphrase or proximity."
         )
 
     coordinator: SpanPanelCoordinator | None = None
@@ -202,9 +261,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             missing = [k for k in required_keys if not config.get(k)]
             if missing:
-                raise ConfigEntryNotReady(
+                raise ConfigEntryAuthFailed(
                     f"v2 panel is missing MQTT credentials ({', '.join(missing)}). "
-                    "Please reconfigure the integration to provide a passphrase."
+                    "Please reauthenticate to provide a passphrase."
                 )
 
             host = config[CONF_HOST]
@@ -230,6 +289,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
             try:
                 await client.connect()
+            except SpanPanelAuthError as err:
+                await client.close()
+                raise ConfigEntryAuthFailed(f"MQTT authentication failed: {err}") from err
             except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:
                 await client.close()
                 raise ConfigEntryNotReady(f"Failed to connect to SPAN panel: {err}") from err

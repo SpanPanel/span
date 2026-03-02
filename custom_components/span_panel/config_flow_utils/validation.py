@@ -107,3 +107,19 @@ async def validate_v2_passphrase(host: str, passphrase: str) -> V2AuthResponse:
 
     """
     return await register_v2(host, "Home Assistant", passphrase)
+
+
+async def validate_v2_proximity(host: str) -> V2AuthResponse:
+    """Validate v2 panel proximity (door bypass) and return MQTT credentials.
+
+    Calls register_v2 without a passphrase, which triggers door-bypass
+    registration. The panel accepts this when the user opens/closes the
+    door 3 times within the proximity window.
+
+    Raises:
+        SpanPanelAuthError: if proximity was not proven (door not opened).
+        SpanPanelConnectionError: on network/timeout failures.
+        SpanPanelTimeoutError: on request timeout.
+
+    """
+    return await register_v2(host, "Home Assistant")

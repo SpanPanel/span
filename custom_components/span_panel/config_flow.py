@@ -23,7 +23,7 @@ from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util import slugify
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import detect_api_version
+from span_panel_api import V2AuthResponse, detect_api_version
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 from span_panel_api.simulation import DynamicSimulationEngine, SimulationConfig
 import voluptuous as vol
@@ -40,6 +40,7 @@ from .config_flow_utils import (
     validate_host,
     validate_simulation_time,
     validate_v2_passphrase,
+    validate_v2_proximity,
 )
 from .config_flow_utils.options import (
     build_entity_naming_options_schema,
@@ -290,7 +291,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             }
             self._is_flow_setup = True
             await self.ensure_not_already_configured()
-            return await self.async_step_auth_passphrase()
+            return await self.async_step_choose_v2_auth()
 
         # v1 path: probe via the existing setup_flow
         if not self._is_flow_setup:
@@ -446,13 +447,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
-            # v2 reauth: set up flow state manually and go to passphrase
+            # v2 reauth: set up flow state manually and offer auth choice
             self.host = host
             if detection.status_info is not None:
                 self.serial_number = detection.status_info.serial_number
             self.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
             self._is_flow_setup = True
-            return await self.async_step_auth_passphrase()
+            return await self.async_step_choose_v2_auth()
 
         # v1 reauth: existing token flow
         await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, host)
@@ -475,9 +476,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 },
             )
 
-        # v2 panels go straight to passphrase auth after confirmation
+        # v2 panels: offer auth method choice after confirmation
         if self.api_version == "v2":
-            return await self.async_step_auth_passphrase()
+            return await self.async_step_choose_v2_auth()
 
         # v1 panels: choose between proximity and token auth
         return await self.async_step_choose_auth_type(user_input)
@@ -500,24 +501,49 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             },
         )
 
+    async def async_step_choose_v2_auth(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose v2 authentication method: passphrase or proximity."""
+        return self.async_show_menu(
+            step_id="choose_v2_auth",
+            menu_options={
+                "auth_passphrase": "Enter Panel Passphrase",
+                "auth_proximity": "Proof of Proximity (open/close door)",
+            },
+        )
+
     async def async_step_auth_proximity(
         self,
-        entry_data: dict[str, Any] | None = None,
+        user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
-        """Step that guide users through the proximity authentication process.
+        """Guide user through v2 proof-of-proximity authentication."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="auth_proximity",
+                data_schema=vol.Schema({}),
+            )
 
-        Proximity auth requires v1 REST API which is no longer supported.
-        v1 panels should upgrade firmware to v2.
-        """
-        self.ensure_flow_is_set_up()
+        if not self.host:
+            return self.async_abort(reason="host_not_set")
 
-        # v1 proximity auth is no longer supported — the REST client has been removed.
-        # Panels that reach this step have v1 firmware and need an upgrade.
-        _LOGGER.warning(
-            "Proximity auth is not supported for v1 panels. "
-            "Please upgrade your panel firmware to v2."
-        )
-        return self.async_abort(reason="v1_not_supported")
+        try:
+            result = await validate_v2_proximity(self.host)
+        except SpanPanelAuthError:
+            return self.async_show_form(
+                step_id="auth_proximity",
+                data_schema=vol.Schema({}),
+                errors={"base": "proximity_failed"},
+            )
+        except SpanPanelConnectionError:
+            return self.async_show_form(
+                step_id="auth_proximity",
+                data_schema=vol.Schema({}),
+                errors={"base": "cannot_connect"},
+            )
+
+        self._store_v2_auth_result(result, passphrase="")
+        return await self._async_finalize_v2_auth()
 
     async def async_step_auth_token(
         self,
@@ -598,7 +624,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 errors={"base": "cannot_connect"},
             )
 
-        # Store v2 credentials
+        self._store_v2_auth_result(result, passphrase)
+        return await self._async_finalize_v2_auth()
+
+    def _store_v2_auth_result(self, result: V2AuthResponse, passphrase: str) -> None:
+        """Store v2 auth credentials from registration result."""
         self.access_token = result.access_token
         self._v2_broker_host = result.ebus_broker_host
         self._v2_broker_port = result.ebus_broker_mqtts_port
@@ -607,14 +637,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_passphrase = passphrase
         self._v2_panel_serial = result.serial_number
 
-        # Route based on flow type
+    async def _async_finalize_v2_auth(self) -> ConfigFlowResult:
+        """Route to appropriate next step after successful v2 auth."""
         if self.trigger_flow_type == TriggerFlowType.UPDATE_ENTRY:
-            # Reauth: update entry with new v2 credentials
             if "entry_id" not in self.context:
                 raise ValueError("Entry ID is missing from context")
             return self._update_v2_entry(self.context["entry_id"])
-
-        # New entry: proceed to naming selection then creation
         return await self.async_step_choose_entity_naming_initial()
 
     async def async_step_resolve_entity(

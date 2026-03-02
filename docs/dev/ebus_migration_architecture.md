@@ -1416,6 +1416,112 @@ With REST removed from span-panel-api 2.0.0, no dual-mode handling is needed in 
 
 Setting interval to 0 preserves current no-debounce behavior.
 
+### Phase 8: Upgrade Reauthentication & v2 Auth Method Choice (span) — COMPLETE
+
+**Goal:** When a user upgrades an existing v1 installation to the v2 integration,
+trigger a reauthentication flow instead of leaving the entry stuck in an infinite
+retry loop. Offer the user a choice between passphrase and proof-of-proximity
+(door bypass) authentication — both for the upgrade path and for fresh installs.
+
+#### Firmware Gate (async_migrate_entry)
+
+The critical safety invariant: **never migrate the schema if the panel firmware
+is still v1.** If the user installs the v2 integration but their panel hasn't
+been firmware-upgraded, the integration must leave the config entry at its
+original schema version so the user can safely roll back.
+
+For pre-v3 entries (the v1 integration era), `async_migrate_entry` now probes the panel with `detect_api_version(host)` before running any migration steps:
+
+| Probe Result | Action | Rationale |
+| --- | --- | --- |
+| Panel returns v2 | Proceed with all migrations (v1→v5) | Panel is compatible |
+| Panel returns v1 | Return `False`, persistent notification | Schema stays untouched, user can roll back |
+| Panel unreachable | Return `False`, persistent notification | Conservative — retry on next reload |
+
+When `async_migrate_entry` returns `False`, HA sets the entry state to `MIGRATION_ERROR` without calling `async_setup_entry`. The schema version is never modified.
+
+#### ConfigEntryAuthFailed for v1/missing-creds entries
+
+After migration succeeds (panel confirmed v2), the entry has `api_version="v1"`
+— meaning "created during v1 era, needs reauthentication." Three code paths in
+`async_setup_entry` now raise `ConfigEntryAuthFailed` instead of
+`ConfigEntryNotReady`:
+
+| Path | Exception | Rationale |
+| --- | --- | --- |
+| `api_version == "v1"` | `ConfigEntryAuthFailed` | HA auto-calls `entry.async_start_reauth()` |
+| v2 entry missing MQTT credentials | `ConfigEntryAuthFailed` | Can't start without credentials |
+| `SpanPanelAuthError` during MQTT connect | `ConfigEntryAuthFailed` | Expired/invalid creds trigger reauth |
+
+Network/timeout errors remain `ConfigEntryNotReady` (transient, HA retries automatically).
+
+#### Auth method choice menu
+
+A new `async_step_choose_v2_auth` menu step offers two authentication methods:
+
+- **Enter Panel Passphrase** → `async_step_auth_passphrase` (existing, refactored)
+- **Proof of Proximity** → `async_step_auth_proximity` (repurposed from dead v1 code)
+
+Three routing points updated to go through the menu: `async_step_user` (fresh install), `async_step_confirm_discovery` (zeroconf), and `async_step_reauth` (upgrade/reauth).
+
+#### Proximity auth step
+
+`async_step_auth_proximity` was dead code (aborted with `v1_not_supported`).
+Repurposed for v2 door-bypass registration: shows instructions, user
+opens/closes door 3 times, clicks Submit, calls
+`register_v2(host, "Home Assistant")` without a passphrase. The panel accepts
+if within the proximity window.
+
+#### Shared helpers
+
+Both auth paths store credentials and route identically. Extracted into:
+
+- `_store_v2_auth_result(result, passphrase)` — stores token, MQTT broker fields, serial
+- `_async_finalize_v2_auth()` — routes to `_update_v2_entry` (reauth) or `async_step_choose_entity_naming_initial` (fresh install)
+
+#### Validation function
+
+`validate_v2_proximity(host)` in `config_flow_utils/validation.py` — calls `register_v2(host, "Home Assistant")` without passphrase. Exported from `config_flow_utils/__init__.py`.
+
+#### Upgrade flow (end-to-end)
+
+```text
+1. User installs v2 integration over v1 → HA restarts
+2. async_migrate_entry:
+   Gate: detect_api_version(host)
+     Panel is v1 → return False, persistent notification, schema untouched
+     Panel unreachable → return False, persistent notification, schema untouched
+     Panel is v2 → proceed:
+       v1 → v2 (unique_id normalization)
+       v2 → v3 (sets api_version="v1")
+       v3 → v4 (solar flag + remove v1 options)
+       v4 → v5 (remove deprecated entities)
+3. async_setup_entry sees api_version="v1"
+   → raises ConfigEntryAuthFailed
+4. HA shows "Reauthenticate" notification
+5. User clicks → async_step_reauth
+   → detect_api_version(host) confirms v2
+   → async_step_choose_v2_auth
+6. User chooses:
+   a. Passphrase → async_step_auth_passphrase → enter passphrase
+   b. Proximity  → async_step_auth_proximity → open/close door → Submit
+7. register_v2() returns V2AuthResponse with MQTT credentials
+8. _update_v2_entry() stores credentials, sets api_version="v2", reloads
+9. async_setup_entry runs with v2 MQTT credentials → success
+```
+
+#### Files modified
+
+| File | Change |
+| --- | --- |
+| `__init__.py` | Import `detect_api_version`, `ConfigEntryAuthFailed`, `SpanPanelAuthError`, `pn_create`; firmware gate before migrations; 3 exception path changes |
+| `config_flow.py` | Import `V2AuthResponse`, `validate_v2_proximity`; add `choose_v2_auth` menu; repurpose `auth_proximity`; extract `_store_v2_auth_result` + `_async_finalize_v2_auth`; update 3 routing points; refactor `auth_passphrase` |
+| `config_flow_utils/validation.py` | Add `validate_v2_proximity` |
+| `config_flow_utils/__init__.py` | Export `validate_v2_proximity` |
+| `strings.json` | Add `choose_v2_auth` step, `proximity_failed` error |
+| `translations/en.json` | Mirror `strings.json` changes |
+| `tests/test_v2_config_flow.py` | Update 7 tests for menu step; add `test_migration_blocked_when_panel_is_v1`, `test_migration_blocked_when_panel_unreachable` |
+
 ---
 
 ## Part 4 — Sequencing & Dependencies (Updated)
@@ -1451,6 +1557,13 @@ Phase 5: Tests & Remaining (span) ← Steps 19-21
   │  services, entity_summary cleanup
   │
   v
+Phase 8: Upgrade Reauth & Auth Choice (span) .... COMPLETE
+  │  Firmware gate in async_migrate_entry
+  │  ConfigEntryAuthFailed for v1/missing-creds
+  │  choose_v2_auth menu (passphrase + proximity)
+  │  Repurpose auth_proximity for door bypass
+  │
+  v
 Phase 6: New Capabilities (span)
   │  New v2-only sensors (future PR)
   │
@@ -1474,7 +1587,7 @@ changes that tie everything together. Solar migration spans steps 13, 14, and 18
 | ~~v1 API sunset accelerated~~                          | ~~High~~ | N/A         | **Mitigated** — library is already MQTT-only                                                                               |
 | MQTT broker unreachable (panel offline)                | Medium   | Medium      | Availability tracking; paho-mqtt auto-reconnect; graceful degradation                                                      |
 | Circuit UUID correlation fails                         | Medium   | Low         | Verified identical on live panel; defensive fallback via dash-stripping + name+tabs correlation                            |
-| Users upgrade integration before firmware              | Medium   | Medium      | `api_version="v1"` raises `ConfigEntryNotReady` with clear message                                                         |
+| ~~Users upgrade integration before firmware~~          | ~~Medium~~ | ~~Medium~~ | **Resolved (Phase 8).** Firmware gate in `async_migrate_entry` probes panel before any schema changes. v1 firmware → migration returns `False`, schema untouched, persistent notification, user can roll back. |
 | Solar migration fails (multiple PV circuits)           | Low      | Low         | Persistent notification guides manual reconfiguration; flag remains set for retry                                          |
 | Library signature mismatch (v2_provisioning → library) | Medium   | Medium      | Documented field name mapping; test coverage for detection + registration flows                                            |
 

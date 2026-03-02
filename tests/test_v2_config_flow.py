@@ -63,8 +63,8 @@ MOCK_V2_AUTH = V2AuthResponse(
 
 
 @pytest.mark.asyncio
-async def test_user_flow_detects_v2_and_shows_passphrase(hass: HomeAssistant) -> None:
-    """When detect_api_version returns v2, the user flow should show the passphrase step."""
+async def test_user_flow_detects_v2_and_shows_auth_choice(hass: HomeAssistant) -> None:
+    """When detect_api_version returns v2, the user flow should show the auth choice menu."""
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -86,8 +86,10 @@ async def test_user_flow_detects_v2_and_shows_passphrase(hass: HomeAssistant) ->
             {CONF_HOST: MOCK_HOST, "simulator_mode": False},
         )
 
-        assert result2["type"] == FlowResultType.FORM
-        assert result2["step_id"] == "auth_passphrase"
+        assert result2["type"] == FlowResultType.MENU
+        assert result2["step_id"] == "choose_v2_auth"
+        assert "auth_passphrase" in result2["menu_options"]
+        assert "auth_proximity" in result2["menu_options"]
 
 
 @pytest.mark.asyncio
@@ -146,10 +148,17 @@ async def test_passphrase_auth_success(hass: HomeAssistant) -> None:
             result["flow_id"],
             {CONF_HOST: MOCK_HOST, "simulator_mode": False},
         )
-        assert result2["step_id"] == "auth_passphrase"
+        assert result2["step_id"] == "choose_v2_auth"
+
+        # Select passphrase auth from the menu
+        result2b = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+        assert result2b["step_id"] == "auth_passphrase"
 
         result3 = await hass.config_entries.flow.async_configure(
-            result2["flow_id"],
+            result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
@@ -183,8 +192,14 @@ async def test_passphrase_auth_bad_passphrase(hass: HomeAssistant) -> None:
             {CONF_HOST: MOCK_HOST, "simulator_mode": False},
         )
 
-        result3 = await hass.config_entries.flow.async_configure(
+        # Select passphrase auth from the menu
+        result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+
+        result3 = await hass.config_entries.flow.async_configure(
+            result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: "wrong-passphrase"},
         )
 
@@ -219,8 +234,14 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
             {CONF_HOST: MOCK_HOST, "simulator_mode": False},
         )
 
-        result3 = await hass.config_entries.flow.async_configure(
+        # Select passphrase auth from the menu
+        result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+
+        result3 = await hass.config_entries.flow.async_configure(
+            result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
@@ -259,13 +280,19 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
             {CONF_HOST: MOCK_HOST, "simulator_mode": False},
         )
 
-        # Step 2: submit passphrase
-        result3 = await hass.config_entries.flow.async_configure(
+        # Step 2: choose auth method (passphrase)
+        result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+
+        # Step 3: submit passphrase
+        result3 = await hass.config_entries.flow.async_configure(
+            result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
-        # Step 3: choose entity naming pattern (accept default)
+        # Step 4: choose entity naming pattern (accept default)
         result4 = await hass.config_entries.flow.async_configure(
             result3["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
@@ -289,7 +316,7 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
-    """Live panel entries migrating from version 2 to 3 should get api_version=v1."""
+    """Live panel entries migrating from version 2 to 5 should get api_version=v1 when panel is v2."""
     entry = MockConfigEntry(
         version=2,
         minor_version=1,
@@ -305,9 +332,15 @@ async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
-    with patch(
-        "custom_components.span_panel.migrate_config_entry_sensors",
-        return_value=True,
+    with (
+        patch(
+            "custom_components.span_panel.migrate_config_entry_sensors",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
     ):
         from custom_components.span_panel import async_migrate_entry
 
@@ -316,6 +349,66 @@ async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
     assert result is True
     assert entry.version == 5
     assert entry.data.get(CONF_API_VERSION) == "v1"
+
+
+@pytest.mark.asyncio
+async def test_migration_blocked_when_panel_is_v1(hass: HomeAssistant) -> None:
+    """Migration should fail and leave schema untouched when panel firmware is v1."""
+    entry = MockConfigEntry(
+        version=2,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: "192.168.1.50",
+            CONF_ACCESS_TOKEN: "old-token",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SN-LIVE-002",
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.detect_api_version",
+        return_value=MOCK_V1_DETECTION,
+    ):
+        from custom_components.span_panel import async_migrate_entry
+
+        result = await async_migrate_entry(hass, entry)
+
+    assert result is False
+    assert entry.version == 2  # schema untouched
+
+
+@pytest.mark.asyncio
+async def test_migration_blocked_when_panel_unreachable(hass: HomeAssistant) -> None:
+    """Migration should fail and leave schema untouched when the panel is unreachable."""
+    entry = MockConfigEntry(
+        version=2,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: "192.168.1.50",
+            CONF_ACCESS_TOKEN: "old-token",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SN-LIVE-003",
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.detect_api_version",
+        side_effect=SpanPanelConnectionError("timeout"),
+    ):
+        from custom_components.span_panel import async_migrate_entry
+
+        result = await async_migrate_entry(hass, entry)
+
+    assert result is False
+    assert entry.version == 2  # schema untouched
 
 
 @pytest.mark.asyncio
@@ -393,8 +486,8 @@ async def test_zeroconf_ebus_discovery_routes_to_confirm(hass: HomeAssistant) ->
 
 
 @pytest.mark.asyncio
-async def test_reauth_v2_shows_passphrase(hass: HomeAssistant) -> None:
-    """Reauth for a v2 panel should show the passphrase form."""
+async def test_reauth_v2_shows_auth_choice(hass: HomeAssistant) -> None:
+    """Reauth for a v2 panel should show the auth choice menu."""
     entry = MockConfigEntry(
         version=3,
         minor_version=1,
@@ -417,8 +510,8 @@ async def test_reauth_v2_shows_passphrase(hass: HomeAssistant) -> None:
     ):
         result = await entry.start_reauth_flow(hass)
 
-        assert result["type"] == FlowResultType.FORM
-        assert result["step_id"] == "auth_passphrase"
+        assert result["type"] == FlowResultType.MENU
+        assert result["step_id"] == "choose_v2_auth"
 
 
 @pytest.mark.asyncio
@@ -456,10 +549,17 @@ async def test_reauth_v2_success_updates_entry(hass: HomeAssistant) -> None:
         patch.object(hass.config_entries, "async_reload", return_value=True),
     ):
         result = await entry.start_reauth_flow(hass)
-        assert result["step_id"] == "auth_passphrase"
+        assert result["step_id"] == "choose_v2_auth"
+
+        # Select passphrase auth from the menu
+        result1b = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+        assert result1b["step_id"] == "auth_passphrase"
 
         result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
+            result1b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
