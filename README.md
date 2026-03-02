@@ -79,26 +79,26 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Panel-Level Sensors
 
-| Sensor                       | Device Class | Unit | Notes                                                                                                                                                       |
-| ---------------------------- | ------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                                                      |
-| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                                                             |
-| Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned                                                                 |
-| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned                                                                                       |
-| Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                                                                   |
-| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                                                        |
-| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                                                        |
-| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                                                     |
-| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                                                                 |
-| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                                                                 |
-| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                                                      |
-| DSM Grid State               | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN                                                                                              |
-| Current Run Config           | —            | —    | PANEL_ON_GRID (grid connected), PANEL_OFF_GRID (islanded on PV/generator), PANEL_BACKUP (islanded on battery), UNKNOWN                                      |
-| Dominant Power Source        | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN                                                                                                            |
-| Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                                                        |
-| Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                                                        |
-| Software Version             | —            | —    | Firmware version string                                                                                                                                     |
-| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned). Attr: `soe_kwh`                                                                           |
+| Sensor                       | Device Class | Unit | Notes                                                                                                                  |
+| ---------------------------- | ------------ | ---- | ---------------------------------------------------------------------------------------------------------------------- |
+| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                 |
+| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                        |
+| Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned                            |
+| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned                                                  |
+| Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                              |
+| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                   |
+| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                   |
+| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                |
+| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                            |
+| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                            |
+| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
+| DSM Grid State               | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN                                                         |
+| Current Run Config           | —            | —    | PANEL_ON_GRID (grid connected), PANEL_OFF_GRID (islanded on PV/generator), PANEL_BACKUP (islanded on battery), UNKNOWN |
+| Dominant Power Source        | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN                                                                       |
+| Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                   |
+| Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                   |
+| Software Version             | —            | —    | Firmware version string                                                                                                |
+| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned). Attr: `soe_kwh`                                      |
 
 **Removed:**
 
@@ -140,18 +140,18 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Battery Power Sensor Attributes
 
-| Attribute                | Type   | Notes                                       |
-| ------------------------ | ------ | ------------------------------------------- |
-| `voltage`                | string | Nominal panel voltage ("240")               |
-| `amperage`               | string | Calculated current (power / voltage)        |
-| `vendor_name`            | string | BESS vendor name                            |
-| `product_name`           | string | BESS product name                           |
-| `model`                  | string | BESS model identifier                       |
-| `serial_number`          | string | BESS serial number                          |
-| `software_version`       | string | BESS firmware version                       |
-| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh               |
-| `soe_kwh`                | float  | Current stored energy in kWh                |
-| `connected`              | bool   | Whether the backup system is reachable      |
+| Attribute                | Type   | Notes                                  |
+| ------------------------ | ------ | -------------------------------------- |
+| `voltage`                | string | Nominal panel voltage ("240")          |
+| `amperage`               | string | Calculated current (power / voltage)   |
+| `vendor_name`            | string | BESS vendor name                       |
+| `product_name`           | string | BESS product name                      |
+| `model`                  | string | BESS model identifier                  |
+| `serial_number`          | string | BESS serial number                     |
+| `software_version`       | string | BESS firmware version                  |
+| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh          |
+| `soe_kwh`                | float  | Current stored energy in kWh           |
+| `connected`              | bool   | Whether the backup system is reachable |
 
 ### Software Version Sensor Attributes
 
@@ -185,25 +185,25 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit Power Sensor Attributes
 
-| Attribute         | Type   | Notes                                      |
-| ----------------- | ------ | ------------------------------------------ |
-| `tabs`            | string | Breaker slot position(s)                   |
-| `voltage`         | string | 120 or 240 (derived from tab count)        |
-| `amperage`        | string | Measured current, or calculated from power |
-| `breaker_rating`  | int    | Circuit breaker amperage                   |
-| `device_type`     | string | "circuit", "pv", or "evse"                 |
-| `always_on`       | bool   | Whether circuit is always-on               |
-| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                    |
-| `relay_requester` | string | Who requested relay state                  |
+| Attribute         | Type   | Notes                                                 |
+| ----------------- | ------ | ----------------------------------------------------- |
+| `tabs`            | string | Breaker slot position(s)                              |
+| `voltage`         | string | 120 or 240 (derived from tab count)                   |
+| `amperage`        | string | Measured current, or calculated from power            |
+| `breaker_rating`  | int    | Circuit breaker amperage                              |
+| `device_type`     | string | "circuit", "pv", or "evse"                            |
+| `always_on`       | bool   | Whether circuit is always-on                          |
+| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                               |
+| `relay_requester` | string | Who requested relay state                             |
 | `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
-| `is_sheddable`    | bool   | Whether circuit can be shed                |
+| `is_sheddable`    | bool   | Whether circuit can be shed                           |
 
 ### Circuit Energy Sensor Attributes
 
-| Attribute | Type   | Notes                                 |
-| --------- | ------ | ------------------------------------- |
-| `tabs`    | string | Breaker slot position(s)              |
-| `voltage` | string | 120 or 240 (derived from tab count)   |
+| Attribute | Type   | Notes                               |
+| --------- | ------ | ----------------------------------- |
+| `tabs`    | string | Breaker slot position(s)            |
+| `voltage` | string | 120 or 240 (derived from tab count) |
 
 ### Binary Sensors
 
@@ -222,20 +222,20 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit Controls (per user-controllable circuit)
 
-| Entity                | Type   | Notes                                                                              |
-| --------------------- | ------ | ---------------------------------------------------------------------------------- |
-| Breaker               | Switch | On/off relay control                                                               |
-| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid (translated, see below)          |
+| Entity                | Type   | Notes                                                                      |
+| --------------------- | ------ | -------------------------------------------------------------------------- |
+| Breaker               | Switch | On/off relay control                                                       |
+| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid (translated, see below) |
 
 ### Circuit Shed Priority Options
 
 Labels match the SPAN Home On-Premise app. Translations are provided for all supported languages.
 
-| Option Key      | Display Label (EN)                   | API Value       |
-| --------------- | ------------------------------------ | --------------- |
-| `never`         | Stays on in an outage                | NEVER           |
-| `soc_threshold` | Stays on until battery threshold     | SOC_THRESHOLD   |
-| `off_grid`      | Turns off in an outage               | OFF_GRID        |
+| Option Key      | Display Label (EN)               | API Value     |
+| --------------- | -------------------------------- | ------------- |
+| `never`         | Stays on in an outage            | NEVER         |
+| `soc_threshold` | Stays on until battery threshold | SOC_THRESHOLD |
+| `off_grid`      | Turns off in an outage           | OFF_GRID      |
 
 ## Configuration Options
 
