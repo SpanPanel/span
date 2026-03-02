@@ -30,7 +30,7 @@ Users MUST upgrade by the end 2026 to avoid disruption.
 **What you need:**
 
 - SPAN Panel firmware `spanos2/r202603/05` or later
-- Panel passphrase (found in the SPAN mobile app, On-premise settings)
+- Panel passphrase (found in the SPAN mobile app, On-premise settings) **or** physical access to the panel door for proof-of-proximity authentication
 
 **Breaking:**
 
@@ -48,7 +48,7 @@ See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel with firmware `spanos2/r202603/05` or later
-- Panel passphrase (found via the SPAN app)
+- Panel passphrase (found via the SPAN app) **or** physical access to the panel door
 
 ## Installation
 
@@ -60,9 +60,11 @@ See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 6. Go to `Settings` > `Devices & Services`
 7. Click `+ Add Integration` and search for "Span"
 8. Enter the IP address of your SPAN Panel
-9. The integration detects the panel as v2 — enter your panel passphrase
+9. The integration detects the panel as v2 and presents an authentication choice:
+   - **Enter Panel Passphrase** — type the passphrase found in the SPAN mobile app under On-premise settings
+   - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
 10. Choose your entity naming pattern
-11. Done — data streams in real-time via MQTT push, no scan interval to configure
+11. Optionally adjust the scan interval - 0 is realtime, up to 15 seconds based on CPU
 
 ### Upgrade Process
 
