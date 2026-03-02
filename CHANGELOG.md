@@ -16,6 +16,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### New Features
 
+- **Energy Dip Compensation**: Proactively compensates when the SPAN panel reports lower energy readings for `TOTAL_INCREASING` sensors (consumed/produced
+  energy). Maintains a cumulative offset per sensor so Home Assistant never sees a decrease, preventing negative spikes in the energy dashboard. Enabled by
+  default for new installs; existing installs can enable via General Options. Includes persistent notification when dips are detected and sensor attributes
+  (`energy_offset`, `last_dip_delta`) for diagnostics. See [design doc](docs/dev/energy_dip_compensation.md) for details.
 - Real-time MQTT push via eBus broker — no more polling intervals
 - `Dominant Power Source` sensor (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN)
 - `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)

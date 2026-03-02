@@ -23,13 +23,15 @@
           "host": "ホスト",
           "simulator_mode": "シミュレーターモード",
           "power_display_precision": "電力表示精度",
-          "energy_display_precision": "エネルギー表示精度"
+          "energy_display_precision": "エネルギー表示精度",
+          "enable_energy_dip_compensation": "エネルギー低下を自動補正"
         },
         "data_description": {
           "host": "SPAN PanelのIPアドレスまたはホスト名（シミュレーション用：'sp3-simulation-001'のようなシリアル番号を使用するか、デフォルトの場合は空にしてください）",
           "simulator_mode": "テスト用のシミュレーターモードを有効にします（ハードウェア不要）。デフォルトシミュレーションの場合はホストを空にするか、カスタムシリアル番号を入力してください。",
           "power_display_precision": "電力値の小数点以下の桁数（0-3）",
-          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）"
+          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）",
+          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正し、エネルギーダッシュボードのスパイクを防止します。"
         },
         "description": "SPAN Panelの接続詳細を入力してください。シミュレーターモードの場合は、シミュレーターチェックボックスをチェックし、必要に応じてカスタムシリアル番号を入力してください。",
         "title": "スパンパネルに接続"
@@ -105,13 +107,15 @@
           "snapshot_update_interval": "スナップショット更新間隔（秒）",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
           "enable_circuit_net_energy_sensors": "回路正味エネルギー",
-          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)"
+          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
+          "enable_energy_dip_compensation": "エネルギー低下を自動補正"
         },
         "data_description": {
           "snapshot_update_interval": "MQTTデータからパネルスナップショットを再構築する頻度。低い値はより速い更新を提供しますが、CPUをより多く使用します。低電力ハードウェア（例：Raspberry Pi）では増加させてください。0に設定するとデバウンスなし。範囲：0〜15秒。",
           "enable_panel_net_energy_sensors": "パネルレベルエネルギー流れ（メインメーターとフィードスルー）の正味エネルギーセンサーを作成します。双方向流れを考慮した真のエネルギー収支を表示します。",
           "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
-          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。"
+          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
+          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正します。無効にすると、蓄積されたすべてのオフセットがクリアされます。"
         }
       },
       "entity_naming_options": {
@@ -175,6 +179,11 @@
         }
       }
     }
+  },
+  "notifications": {
+    "energy_dip_title": "SPAN Panel：エネルギー低下を検出",
+    "energy_dip_preamble": "以下のエネルギーセンサーで累積値の低下が報告されました。低下補正により自動的にオフセットが適用されました — 新しいデータに対する操作は不要です。補正を有効にする前に記録された過去のデータを修正するには、`span_panel.cleanup_energy_spikes` サービスを使用してください。",
+    "energy_dip_sensor_line": "- **{entity_id}**：低下 {delta} Wh（累積オフセット {offset} Wh）"
   },
   "selector": {
     "entity_naming_pattern": {

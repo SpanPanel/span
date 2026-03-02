@@ -60,6 +60,7 @@ from .const import (
     CONF_SIMULATION_START_TIME,
     COORDINATOR,
     DOMAIN,
+    ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
@@ -95,6 +96,7 @@ def get_user_data_schema(default_host: str = "") -> vol.Schema:
             vol.Optional("simulator_mode", default=False): bool,
             vol.Optional(POWER_DISPLAY_PRECISION, default=0): int,
             vol.Optional(ENERGY_DISPLAY_PRECISION, default=2): int,
+            vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION, default=True): bool,
         }
     )
 
@@ -153,6 +155,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_broker_password: str | None = None
         self._v2_passphrase: str | None = None
         self._v2_panel_serial: str | None = None
+        # Energy dip compensation default for fresh installs
+        self._enable_dip_compensation: bool = True
 
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
         """Set up the flow by detecting the panel API version and serial number."""
@@ -243,6 +247,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Store precision settings from user input (needed for both simulator and regular mode)
         self.power_display_precision = user_input.get(POWER_DISPLAY_PRECISION, 0)
         self.energy_display_precision = user_input.get(ENERGY_DISPLAY_PRECISION, 2)
+        self._enable_dip_compensation = user_input.get(ENABLE_ENERGY_DIP_COMPENSATION, True)
 
         _LOGGER.debug(
             "CONFIG_INPUT_DEBUG: User input precision - power: %s, energy: %s, full input: %s",
@@ -379,6 +384,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 USE_CIRCUIT_NUMBERS: sim_use_circuit_numbers,
                 POWER_DISPLAY_PRECISION: self.power_display_precision,
                 ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
+                ENABLE_ENERGY_DIP_COMPENSATION: self._enable_dip_compensation,
             },
         )
 
@@ -722,6 +728,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 USE_CIRCUIT_NUMBERS: use_circuit_numbers,
                 POWER_DISPLAY_PRECISION: self.power_display_precision,
                 ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
+                ENABLE_ENERGY_DIP_COMPENSATION: self._enable_dip_compensation,
             },
         )
 

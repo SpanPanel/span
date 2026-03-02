@@ -16,6 +16,7 @@ from custom_components.span_panel.const import (
     CONF_SIMULATION_START_TIME,
     DEFAULT_SNAPSHOT_INTERVAL,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
+    ENABLE_ENERGY_DIP_COMPENSATION,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
@@ -57,6 +58,7 @@ def build_general_options_schema(
         vol.Optional(ENABLE_PANEL_NET_ENERGY_SENSORS): bool,
         vol.Optional(ENABLE_CIRCUIT_NET_ENERGY_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
+        vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
     }
 
     return vol.Schema(schema_fields)
@@ -87,6 +89,9 @@ def get_general_options_defaults(
             ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True
         ),
         ENERGY_REPORTING_GRACE_PERIOD: config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15),
+        ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
+            ENABLE_ENERGY_DIP_COMPENSATION, False
+        ),
     }
 
     # Add legacy upgrade default if applicable

@@ -65,6 +65,7 @@ ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 # Net energy sensor configuration
 ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
+ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 1.0

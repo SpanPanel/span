@@ -23,13 +23,15 @@
           "host": "Host",
           "simulator_mode": "Mode Simulateur",
           "power_display_precision": "Précision d'Affichage de Puissance",
-          "energy_display_precision": "Précision d'Affichage d'Énergie"
+          "energy_display_precision": "Précision d'Affichage d'Énergie",
+          "enable_energy_dip_compensation": "Compenser les Baisses d'Énergie Automatiquement"
         },
         "data_description": {
           "host": "Adresse IP ou nom d'hôte du SPAN Panel (pour la simulation : utilisez un numéro de série comme 'sp3-simulation-001' ou laissez vide pour la valeur par défaut)",
           "simulator_mode": "Activer le mode simulateur pour les tests (aucun matériel requis). Laissez l'hôte vide pour la simulation par défaut, ou entrez un numéro de série personnalisé.",
           "power_display_precision": "Nombre de décimales pour les valeurs de puissance (0-3)",
-          "energy_display_precision": "Nombre de décimales pour les valeurs d'énergie (0-3)"
+          "energy_display_precision": "Nombre de décimales pour les valeurs d'énergie (0-3)",
+          "enable_energy_dip_compensation": "Compenser automatiquement lorsque le panneau signale des lectures d'énergie inférieures, évitant les pics dans le tableau de bord énergétique."
         },
         "description": "Entrez les détails de connexion pour votre SPAN Panel. Pour le mode simulateur, cochez la case simulateur et entrez optionnellement un numéro de série personnalisé.",
         "title": "Connectez-vous au Span Panel"
@@ -105,13 +107,15 @@
           "snapshot_update_interval": "Intervalle de Mise à Jour du Snapshot (secondes)",
           "enable_panel_net_energy_sensors": "Énergie Nette du Panneau",
           "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit",
-          "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)"
+          "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)",
+          "enable_energy_dip_compensation": "Compenser les Baisses d'Énergie Automatiquement"
         },
         "data_description": {
           "snapshot_update_interval": "Fréquence de reconstruction du snapshot du panneau à partir des données MQTT. Des valeurs plus basses donnent des mises à jour plus rapides mais utilisent plus de CPU. Augmentez sur du matériel peu puissant (ex., Raspberry Pi). Définissez sur 0 pour désactiver le debounce. Plage : 0\u201315 secondes.",
           "enable_panel_net_energy_sensors": "Créer des capteurs d'énergie nette pour les flux d'énergie au niveau du panneau (compteur principal et dérivation). Affiche le vrai bilan énergétique en tenant compte des flux bidirectionnels.",
           "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs.",
-          "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes."
+          "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
+          "enable_energy_dip_compensation": "Compenser automatiquement lorsque le panneau signale des lectures d'énergie inférieures. La désactivation efface toutes les compensations accumulées."
         }
       },
       "entity_naming_options": {
@@ -175,6 +179,11 @@
         }
       }
     }
+  },
+  "notifications": {
+    "energy_dip_title": "SPAN Panel : Baisse d'Énergie Détectée",
+    "energy_dip_preamble": "Les capteurs d'énergie suivants ont signalé une diminution de leur valeur cumulée. La compensation des baisses a automatiquement appliqué des ajustements — aucune action n'est requise pour les nouvelles données. Pour corriger les données historiques enregistrées avant l'activation de la compensation, utilisez le service `span_panel.cleanup_energy_spikes`.",
+    "energy_dip_sensor_line": "- **{entity_id}** : baisse de {delta} Wh (compensation cumulée {offset} Wh)"
   },
   "selector": {
     "entity_naming_pattern": {

@@ -270,6 +270,31 @@ The integration provides flexible entity naming patterns, configured during init
    - Entity IDs remain stable even when circuits are renamed
    - Friendly names still sync from SPAN panel for display
 
+### Energy Dip Compensation
+
+SPAN panels occasionally report lower energy readings for cumulative energy sensors after firmware updates or resets. Home Assistant's statistics engine
+interprets any decrease as a counter reset, creating negative spikes in the energy dashboard.
+
+When enabled, the integration automatically detects these dips and maintains a cumulative offset per sensor so Home Assistant always sees a monotonically
+increasing value.
+
+- **Default for new installs:** ON
+- **Default for existing installs:** OFF (enable via General Options)
+- **Threshold:** 1.0 Wh minimum to avoid false triggers from float precision noise
+- **Disabling:** Clears all accumulated offsets (starts fresh if re-enabled)
+
+When a dip is detected, a persistent notification lists the affected sensors and their dip amounts. The notification also references the `cleanup_energy_spikes`
+service for fixing historical data.
+
+**Diagnostic attributes** (visible when compensation is active):
+
+| Attribute        | Description                                   |
+| ---------------- | --------------------------------------------- |
+| `energy_offset`  | Cumulative Wh compensation applied (when > 0) |
+| `last_dip_delta` | Size of the most recent dip in Wh             |
+
+Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`.
+
 ### Customizing Entity Precision
 
 The power sensors report with the exact precision from the SPAN panel, which may be more decimal places than you need. By default, sensors display with
@@ -286,13 +311,18 @@ When the SPAN panel undergoes a firmware update or reset, it may report decrease
 data. This errant drop causes a massive spike in the Home Assistant Energy Dashboard. This issue is on the SPAN firmware/cloud side and the only remedy we have
 is to adjust Home Assistant statistics for SPAN sensors upward to their previous value. That adjustment is carried forward for all future stat-reporting times.
 
-**Symptoms:**
+**Prevention:**
+
+Enable **Energy Dip Compensation** in General Options (on by default for new installs). This automatically compensates for counter dips so they never reach Home
+Assistant's statistics engine. See [Energy Dip Compensation](#energy-dip-compensation) above.
+
+**Symptoms (if compensation is not enabled):**
 
 - Huge energy consumption spikes appearing after panel firmware updates
 - Charts showing unrealistic untracked values unrelated to a single sensor that dwarf normal usage
 - Negative energy values in statistics
 
-**Solution:**
+**Solution for existing spikes:**
 
 Use the Developer Tools to adjust individual statistics. This method allows you greater control.
 

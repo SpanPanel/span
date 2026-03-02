@@ -16,7 +16,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import entity_registry as er, translation
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import (
     DynamicSimulationEngine,
@@ -82,6 +82,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
 
+        # Energy dip compensation — sensors append events here during updates;
+        # drained and surfaced as a persistent notification after each cycle.
+        self._pending_dip_events: list[tuple[str, float, float]] = []
+
         # Determine update interval based on transport mode
         if is_streaming:
             update_interval = _STREAMING_FALLBACK_INTERVAL
@@ -141,6 +145,68 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def request_reload(self) -> None:
         """Request a reload of the integration."""
         self._reload_requested = True
+
+    # --- Energy dip compensation ---
+
+    def report_energy_dip(self, entity_id: str, delta: float, cumulative_offset: float) -> None:
+        """Record an energy dip detected by a sensor during this update cycle.
+
+        Called synchronously by sensors from _process_raw_value. No I/O —
+        just a list append. Events are drained in _run_post_update_tasks.
+        """
+        self._pending_dip_events.append((entity_id, delta, cumulative_offset))
+
+    async def _fire_dip_notification(self) -> None:
+        """Create a persistent notification summarising energy dips this cycle."""
+        if not self._pending_dip_events:
+            return
+
+        events = self._pending_dip_events
+        self._pending_dip_events = []
+
+        # Load translated strings for the current language
+        lang = self.hass.config.language
+        translations = await translation.async_get_translations(
+            self.hass, lang, "notifications", {DOMAIN}
+        )
+        prefix = f"component.{DOMAIN}.notifications"
+
+        title = translations.get(
+            f"{prefix}.energy_dip_title",
+            "SPAN Panel: Energy Dip Detected",
+        )
+        preamble = translations.get(
+            f"{prefix}.energy_dip_preamble",
+            "The following energy sensors reported a decrease in their "
+            "counter value. Dip compensation has automatically applied "
+            "offsets — no action is required for new data. To fix "
+            "historical data recorded before compensation was enabled, "
+            "use the `span_panel.cleanup_energy_spikes` service.",
+        )
+        line_template = translations.get(
+            f"{prefix}.energy_dip_sensor_line",
+            "- **{entity_id}**: dip {delta} Wh (cumulative offset {offset} Wh)",
+        )
+
+        lines: list[str] = []
+        for entity_id, delta, offset in events:
+            lines.append(
+                line_template.format(
+                    entity_id=entity_id,
+                    delta=f"{delta:.1f}",
+                    offset=f"{offset:.1f}",
+                )
+            )
+
+        body = preamble + "\n\n" + "\n".join(lines)
+
+        entry_id = self.config_entry.entry_id
+        async_create(
+            self.hass,
+            body,
+            title=title,
+            notification_id=f"span_energy_dip_{entry_id}",
+        )
 
     # --- Streaming ---
 
@@ -246,6 +312,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         ensures reload requests and pending migrations are processed regardless
         of transport mode.
         """
+        # Fire persistent notification for any energy dips detected this cycle
+        await self._fire_dip_notification()
+
         # Handle reload request if one was made (e.g., name sync, capability change)
         if self._reload_requested:
             self._reload_requested = False

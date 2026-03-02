@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from homeassistant.components.sensor import SensorStateClass
 
+from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensors.base import (
     SpanEnergyExtraStoredData,
@@ -32,6 +33,9 @@ class TestSpanEnergyExtraStoredData:
             "native_unit_of_measurement": "Wh",
             "last_valid_state": 1234.56,
             "last_valid_changed": "2025-11-29T12:00:00",
+            "energy_offset": None,
+            "last_panel_reading": None,
+            "last_dip_delta": None,
         }
 
     def test_as_dict_with_none_values(self):
@@ -50,6 +54,9 @@ class TestSpanEnergyExtraStoredData:
             "native_unit_of_measurement": None,
             "last_valid_state": None,
             "last_valid_changed": None,
+            "energy_offset": None,
+            "last_panel_reading": None,
+            "last_dip_delta": None,
         }
 
     def test_from_dict_with_all_values(self):
@@ -359,7 +366,12 @@ class DummyEnergySensor(SpanEnergySensorBase):
         # Bypass parent __init__ to avoid full HA dependencies for unit testing
         self.coordinator = SimpleNamespace(
             panel_offline=True,
-            config_entry=SimpleNamespace(options={ENERGY_REPORTING_GRACE_PERIOD: grace_minutes}),
+            config_entry=SimpleNamespace(
+                options={
+                    ENERGY_REPORTING_GRACE_PERIOD: grace_minutes,
+                    ENABLE_ENERGY_DIP_COMPENSATION: False,
+                },
+            ),
             data=SimpleNamespace(),
         )
         self.entity_description = SimpleNamespace(
@@ -376,6 +388,14 @@ class DummyEnergySensor(SpanEnergySensorBase):
         self._previous_circuit_name = None
         self._attr_unique_id = "dummy"
         self._attr_name = "Dummy"
+        self._restored_from_storage: bool = False
+
+        # Energy dip compensation state (disabled for grace period tests)
+        self._energy_offset: float = 0.0
+        self._last_panel_reading: float | None = None
+        self._last_dip_delta: float | None = None
+        self._is_total_increasing: bool = True
+        self._dip_compensation_enabled: bool = False
 
     def _generate_unique_id(self, span_panel, description):
         return "dummy"

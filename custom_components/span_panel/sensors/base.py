@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
     RestoreSensor,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
@@ -24,7 +25,11 @@ from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanPanelSnapshot
 
-from custom_components.span_panel.const import CONF_API_VERSION, DOMAIN
+from custom_components.span_panel.const import (
+    CONF_API_VERSION,
+    DOMAIN,
+    ENABLE_ENERGY_DIP_COMPENSATION,
+)
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.util import snapshot_to_device_info
@@ -367,6 +372,9 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
     native_unit_of_measurement: str | None
     last_valid_state: float | None
     last_valid_changed: str | None  # ISO format datetime string
+    energy_offset: float | None = None
+    last_panel_reading: float | None = None
+    last_dip_delta: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dict representation of the extra data."""
@@ -375,6 +383,9 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
             "native_unit_of_measurement": self.native_unit_of_measurement,
             "last_valid_state": self.last_valid_state,
             "last_valid_changed": self.last_valid_changed,
+            "energy_offset": self.energy_offset,
+            "last_panel_reading": self.last_panel_reading,
+            "last_dip_delta": self.last_dip_delta,
         }
 
     @classmethod
@@ -394,6 +405,9 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
                 native_unit_of_measurement=restored.get("native_unit_of_measurement"),
                 last_valid_state=restored.get("last_valid_state"),
                 last_valid_changed=restored.get("last_valid_changed"),
+                energy_offset=restored.get("energy_offset"),
+                last_panel_reading=restored.get("last_panel_reading"),
+                last_dip_delta=restored.get("last_dip_delta"),
             )
         except (KeyError, TypeError):
             return None
@@ -423,6 +437,39 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         )
         # Track if we've restored data (used for logging)
         self._restored_from_storage: bool = False
+
+        # Energy dip compensation state
+        self._energy_offset: float = 0.0
+        self._last_panel_reading: float | None = None
+        self._last_dip_delta: float | None = None
+        self._is_total_increasing: bool = (
+            getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
+        )
+        self._dip_compensation_enabled: bool = data_coordinator.config_entry.options.get(
+            ENABLE_ENERGY_DIP_COMPENSATION, False
+        )
+
+    def _process_raw_value(self, raw_value: float | int | str | None) -> None:
+        """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
+        if (
+            self._dip_compensation_enabled
+            and self._is_total_increasing
+            and isinstance(raw_value, float | int)
+        ):
+            raw_float = float(raw_value)
+            if self._last_panel_reading is not None and self._last_panel_reading - raw_float >= 1.0:
+                dip = self._last_panel_reading - raw_float
+                self._energy_offset += dip
+                self._last_dip_delta = dip
+                self.coordinator.report_energy_dip(
+                    self.entity_id or self._attr_unique_id or "unknown",
+                    dip,
+                    self._energy_offset,
+                )
+            self._last_panel_reading = raw_float
+            super()._process_raw_value(raw_float + self._energy_offset)
+        else:
+            super()._process_raw_value(raw_value)
 
     async def async_added_to_hass(self) -> None:
         """Restore grace period state when entity is added to Home Assistant.
@@ -461,6 +508,23 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
                             self.entity_id or self._attr_unique_id,
                             e,
                         )
+
+                # Restore energy dip compensation state (only when enabled)
+                if self._dip_compensation_enabled and self._is_total_increasing:
+                    if restored.energy_offset is not None:
+                        self._energy_offset = restored.energy_offset
+                    if restored.last_panel_reading is not None:
+                        self._last_panel_reading = restored.last_panel_reading
+                    if restored.last_dip_delta is not None:
+                        self._last_dip_delta = restored.last_dip_delta
+                    _LOGGER.debug(
+                        "Restored energy dip compensation for %s: "
+                        "offset=%s, last_reading=%s, last_dip=%s",
+                        self.entity_id or self._attr_unique_id,
+                        self._energy_offset,
+                        self._last_panel_reading,
+                        self._last_dip_delta,
+                    )
 
         # Seed grace period tracking from the last stored HA state when extra data
         # is missing (e.g., after first install or early offline event).
@@ -515,6 +579,9 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
             last_valid_changed=(
                 self._last_valid_changed.isoformat() if self._last_valid_changed else None
             ),
+            energy_offset=self._energy_offset if self._energy_offset else None,
+            last_panel_reading=self._last_panel_reading,
+            last_dip_delta=self._last_dip_delta,
         )
 
     def _update_native_value(self) -> None:
@@ -583,6 +650,11 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         # Update grace period from options in case it changed
         self._grace_period_minutes = self.coordinator.config_entry.options.get(
             ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
+
+        # Update dip compensation flag from options in case it changed
+        self._dip_compensation_enabled = self.coordinator.config_entry.options.get(
+            ENABLE_ENERGY_DIP_COMPENSATION, False
         )
 
         # Use the overridden _update_native_value method which handles grace period
@@ -664,5 +736,12 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
                 panel_offline = getattr(self.coordinator, "panel_offline", False)
                 if panel_offline and remaining_seconds > 0:
                     attributes["using_grace_period"] = "True"
+
+        # Energy dip compensation attributes (only when enabled and meaningful)
+        if self._dip_compensation_enabled and self._is_total_increasing:
+            if self._energy_offset > 0:
+                attributes["energy_offset"] = str(round(self._energy_offset, 1))
+            if self._last_dip_delta is not None:
+                attributes["last_dip_delta"] = str(round(self._last_dip_delta, 1))
 
         return attributes if attributes else None

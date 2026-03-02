@@ -23,13 +23,15 @@
           "host": "Anfitrião",
           "simulator_mode": "Modo Simulador",
           "power_display_precision": "Precisão de Exibição de Potência",
-          "energy_display_precision": "Precisão de Exibição de Energia"
+          "energy_display_precision": "Precisão de Exibição de Energia",
+          "enable_energy_dip_compensation": "Compensar Quedas de Energia Automaticamente"
         },
         "data_description": {
           "host": "Endereço IP ou nome do host do SPAN Panel (para simulação: use número de série como 'sp3-simulation-001' ou deixe vazio para padrão)",
           "simulator_mode": "Ativar modo simulador para testes (não requer hardware). Deixe o host vazio para simulação padrão, ou insira um número de série personalizado.",
           "power_display_precision": "Número de casas decimais para valores de potência (0-3)",
-          "energy_display_precision": "Número de casas decimais para valores de energia (0-3)"
+          "energy_display_precision": "Número de casas decimais para valores de energia (0-3)",
+          "enable_energy_dip_compensation": "Compensar automaticamente quando o painel reporta leituras de energia mais baixas, prevenindo picos no painel de energia."
         },
         "description": "Insira os detalhes de conexão para seu SPAN Panel. Para modo simulador, marque a caixa do simulador e opcionalmente insira um número de série personalizado.",
         "title": "Ligar ao Painel Span"
@@ -105,13 +107,15 @@
           "snapshot_update_interval": "Intervalo de Atualização do Snapshot (segundos)",
           "enable_panel_net_energy_sensors": "Energia Líquida do Painel",
           "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito",
-          "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)"
+          "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)",
+          "enable_energy_dip_compensation": "Compensar Quedas de Energia Automaticamente"
         },
         "data_description": {
           "snapshot_update_interval": "Com que frequência reconstruir o snapshot do painel a partir de dados MQTT. Valores mais baixos dão atualizações mais rápidas mas usam mais CPU. Aumente em hardware de baixa potência (ex., Raspberry Pi). Defina como 0 para sem debounce. Intervalo: 0\u201315 segundos.",
           "enable_panel_net_energy_sensors": "Criar sensores de energia líquida para fluxos de energia no nível do painel (medidor principal e derivação). Mostra o verdadeiro balanço energético contabilizando fluxos bidirecionais.",
           "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos.",
-          "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos."
+          "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
+          "enable_energy_dip_compensation": "Compensar automaticamente quando o painel reporta leituras de energia mais baixas. Ao desativar, todas as compensações acumuladas são apagadas."
         }
       },
       "entity_naming_options": {
@@ -175,6 +179,11 @@
         }
       }
     }
+  },
+  "notifications": {
+    "energy_dip_title": "SPAN Panel: Queda de Energia Detectada",
+    "energy_dip_preamble": "Os seguintes sensores de energia reportaram uma diminuição no seu valor acumulado. A compensação de quedas aplicou ajustes automaticamente — nenhuma ação é necessária para os novos dados. Para corrigir dados históricos registrados antes de ativar a compensação, use o serviço `span_panel.cleanup_energy_spikes`.",
+    "energy_dip_sensor_line": "- **{entity_id}**: queda {delta} Wh (compensação acumulada {offset} Wh)"
   },
   "selector": {
     "entity_naming_pattern": {
