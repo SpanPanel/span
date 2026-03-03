@@ -19,7 +19,7 @@ def test_panel_factory_creates_correct_defaults():
     snapshot = SpanPanelSnapshotFactory.create()
 
     assert snapshot.current_run_config == PANEL_ON_GRID
-    assert snapshot.dsm_grid_state == DSM_ON_GRID
+    assert snapshot.dsm_state == DSM_ON_GRID
     assert snapshot.main_relay_state == "CLOSED"
     assert snapshot.serial_number == "sp3-242424-001"
     assert snapshot.firmware_version == "1.2.3"
@@ -30,7 +30,7 @@ def test_panel_factory_on_grid():
     snapshot = SpanPanelSnapshotFactory.create_on_grid()
 
     assert snapshot.current_run_config == PANEL_ON_GRID
-    assert snapshot.dsm_grid_state == DSM_ON_GRID
+    assert snapshot.dsm_state == DSM_ON_GRID
     assert snapshot.instant_grid_power_w == 1850.5
 
 
@@ -121,7 +121,7 @@ def test_complete_response_factory_structure():
 
     # Verify panel data
     assert snapshot.current_run_config == PANEL_ON_GRID
-    assert snapshot.dsm_grid_state == DSM_ON_GRID
+    assert snapshot.dsm_state == DSM_ON_GRID
     assert snapshot.main_relay_state == "CLOSED"
 
     # Verify status data

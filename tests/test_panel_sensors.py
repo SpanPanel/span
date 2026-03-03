@@ -171,20 +171,32 @@ class TestPanelSensors:
         snapshot_open = SpanPanelSnapshotFactory.create(main_relay_state="OPEN")
         assert main_relay_description.value_fn(snapshot_open) == "OPEN"
 
-    def test_dsm_grid_state_with_real_data(self) -> None:
-        """Test DSM grid state sensor with real snapshot data."""
+    def test_dsm_state_with_real_data(self) -> None:
+        """Test DSM state sensor with real snapshot data."""
         from custom_components.span_panel.const import DSM_OFF_GRID, DSM_ON_GRID
+        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+
+        dsm_description = next(
+            d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_state"
+        )
+
+        snapshot_on = SpanPanelSnapshotFactory.create(dsm_state=DSM_ON_GRID)
+        assert dsm_description.value_fn(snapshot_on) == DSM_ON_GRID
+
+        snapshot_off = SpanPanelSnapshotFactory.create(dsm_state=DSM_OFF_GRID)
+        assert dsm_description.value_fn(snapshot_off) == DSM_OFF_GRID
+
+    def test_dsm_grid_state_deprecated_alias(self) -> None:
+        """Test DSM Grid State reads from dsm_state (deprecated alias)."""
+        from custom_components.span_panel.const import DSM_ON_GRID
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
 
         dsm_grid_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_grid_state"
         )
 
-        snapshot_on = SpanPanelSnapshotFactory.create(dsm_grid_state=DSM_ON_GRID)
-        assert dsm_grid_description.value_fn(snapshot_on) == DSM_ON_GRID
-
-        snapshot_off = SpanPanelSnapshotFactory.create(dsm_grid_state=DSM_OFF_GRID)
-        assert dsm_grid_description.value_fn(snapshot_off) == DSM_OFF_GRID
+        snapshot = SpanPanelSnapshotFactory.create(dsm_state=DSM_ON_GRID)
+        assert dsm_grid_description.value_fn(snapshot) == DSM_ON_GRID
 
 
 if __name__ == "__main__":

@@ -63,7 +63,7 @@ PLATFORMS: list[Platform] = [
 
 _LOGGER = logging.getLogger(__name__)
 
-# Config entry version — bumped to 5 for v2 sensor alignment (remove dsm_state, vendor cloud binary)
+# Config entry version — bumped to 5 for v2 sensor alignment (remove wwanLink binary)
 CURRENT_CONFIG_VERSION = 5
 
 
@@ -204,18 +204,13 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         )
         _LOGGER.debug("Migrated config entry %s to version 4", config_entry.entry_id)
 
-    # --- v4 → v5: remove dsm_state sensor and wwanLink binary sensor ---
+    # --- v4 → v5: remove wwanLink binary sensor ---
     if config_entry.version < 5:
         entity_registry = er.async_get(hass)
         entities = er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
 
         removed = 0
         for entity in entities:
-            # Remove dsm_state sensor (replaced by dominant_power_source)
-            if entity.domain == "sensor" and entity.unique_id.endswith("_dsm_state"):
-                entity_registry.async_remove(entity.entity_id)
-                _LOGGER.info("Removed deprecated dsm_state sensor: %s", entity.entity_id)
-                removed += 1
             # Remove wwanLink binary sensor (replaced by vendor_cloud regular sensor)
             if entity.domain == "binary_sensor" and entity.unique_id.endswith("_wwanLink"):
                 entity_registry.async_remove(entity.entity_id)

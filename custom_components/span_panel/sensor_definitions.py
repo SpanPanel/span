@@ -89,11 +89,17 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
+    SpanPanelDataSensorEntityDescription,
 ] = (
+    SpanPanelDataSensorEntityDescription(
+        key="dsm_state",
+        name="DSM State",
+        value_fn=lambda s: s.dsm_state,
+    ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
         name="DSM Grid State",
-        value_fn=lambda s: s.dsm_grid_state,
+        value_fn=lambda s: s.dsm_state,  # deprecated alias — reads dsm_state
     ),
     SpanPanelDataSensorEntityDescription(
         key="current_run_config",

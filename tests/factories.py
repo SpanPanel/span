@@ -189,7 +189,7 @@ class SpanPanelSnapshotFactory:
         main_meter_energy_produced_wh: float = 0.0,
         feedthrough_energy_consumed_wh: float = 0.0,
         feedthrough_energy_produced_wh: float = 0.0,
-        dsm_grid_state: str = DSM_ON_GRID,
+        dsm_state: str = DSM_ON_GRID,
         current_run_config: str = PANEL_ON_GRID,
         door_state: str = SYSTEM_DOOR_STATE_CLOSED,
         proximity_proven: bool = False,
@@ -232,7 +232,7 @@ class SpanPanelSnapshotFactory:
             main_meter_energy_produced_wh=main_meter_energy_produced_wh,
             feedthrough_energy_consumed_wh=feedthrough_energy_consumed_wh,
             feedthrough_energy_produced_wh=feedthrough_energy_produced_wh,
-            dsm_grid_state=dsm_grid_state,
+            dsm_state=dsm_state,
             current_run_config=current_run_config,
             door_state=door_state,
             proximity_proven=proximity_proven,
@@ -292,7 +292,7 @@ class SpanPanelSnapshotFactory:
         return SpanPanelSnapshotFactory.create_complete(
             serial_number=serial_number,
             instant_grid_power_w=1850.5,
-            dsm_grid_state=DSM_ON_GRID,
+            dsm_state=DSM_ON_GRID,
             current_run_config=PANEL_ON_GRID,
         )
 
@@ -302,7 +302,7 @@ class SpanPanelSnapshotFactory:
         return SpanPanelSnapshotFactory.create_complete(
             serial_number=serial_number,
             instant_grid_power_w=0.0,
-            dsm_grid_state=DSM_OFF_GRID,
+            dsm_state=DSM_OFF_GRID,
             current_run_config=PANEL_BACKUP,
         )
 
