@@ -170,6 +170,42 @@
     }
   },
   "entity": {
+    "sensor": {
+      "evse_status": {
+        "name": "充電器ステータス",
+        "state": {
+          "UNKNOWN": "不明",
+          "AVAILABLE": "利用可能",
+          "PREPARING": "準備中",
+          "CHARGING": "充電中",
+          "SUSPENDED_EV": "車両により一時停止",
+          "SUSPENDED_EVSE": "充電器により一時停止",
+          "FINISHING": "終了処理中",
+          "RESERVED": "予約済み",
+          "FAULTED": "故障",
+          "UNAVAILABLE": "利用不可"
+        }
+      },
+      "evse_lock_state": {
+        "name": "ロック状態",
+        "state": {
+          "UNKNOWN": "不明",
+          "LOCKED": "ロック",
+          "UNLOCKED": "アンロック"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "通知電流"
+      }
+    },
+    "binary_sensor": {
+      "evse_charging": {
+        "name": "充電中"
+      },
+      "evse_ev_connected": {
+        "name": "EV接続済み"
+      }
+    },
     "select": {
       "circuit_priority": {
         "state": {

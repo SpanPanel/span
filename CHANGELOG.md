@@ -16,6 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### New Features
 
+- **EVSE (SPAN Drive) Support**: Full EV charger entity support when an EVSE is commissioned on the panel. Each charger appears as a separate sub-device with
+  manufacturer, model, serial number, and software version in device info. Entities created per charger: Charger Status (enum sensor with OCPP states),
+  Advertised Current (measurement sensor), Lock State (enum sensor), Charging (binary sensor), and EV Connected (binary sensor). Includes translated state names
+  in 5 languages (en, es, fr, ja, pt), simulation mode support, and automatic capability detection that triggers a reload when an EVSE first appears. EVSE
+  circuits use "EV Charger" as the fallback name. See [design doc](docs/dev/evse_span_drive_support.md) for details.
 - **Energy Dip Compensation**: Proactively compensates when the SPAN panel reports lower energy readings for `TOTAL_INCREASING` sensors (consumed/produced
   energy). Maintains a cumulative offset per sensor so Home Assistant never sees a decrease, preventing negative spikes in the energy dashboard. Enabled by
   default for new installs; existing installs can enable via General Options. Includes persistent notification when dips are detected and sensor attributes

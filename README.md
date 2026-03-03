@@ -207,6 +207,35 @@ Applies to Main Meter and Feed Through energy sensors.
 | `tabs`    | string | Breaker slot position(s)            |
 | `voltage` | string | 120 or 240 (derived from tab count) |
 
+### EVSE (EV Charger) Entities
+
+Created automatically when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via
+`via_device`. Vendor, product, serial number, and software version are surfaced as device info attributes — not separate entities.
+
+#### EVSE Sensors (per charger)
+
+| Sensor             | Device Class | Unit | Notes                                                                            |
+| ------------------ | ------------ | ---- | -------------------------------------------------------------------------------- |
+| Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
+| Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
+| Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
+
+#### EVSE Binary Sensors (per charger)
+
+| Sensor       | Device Class     | Notes                                                              |
+| ------------ | ---------------- | ------------------------------------------------------------------ |
+| Charging     | Battery Charging | ON when status is CHARGING                                         |
+| EV Connected | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING |
+
+#### EVSE Device Info Attributes
+
+| Attribute        | Source             |
+| ---------------- | ------------------ |
+| Manufacturer     | `vendor-name`      |
+| Model            | `product-name`     |
+| Serial Number    | `serial-number`    |
+| Software Version | `software-version` |
+
 ### Binary Sensors
 
 | Sensor        | Device Class | Notes                        |

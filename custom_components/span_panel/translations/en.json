@@ -178,6 +178,42 @@
     }
   },
   "entity": {
+    "sensor": {
+      "evse_status": {
+        "name": "Charger Status",
+        "state": {
+          "UNKNOWN": "Unknown",
+          "AVAILABLE": "Available",
+          "PREPARING": "Preparing",
+          "CHARGING": "Charging",
+          "SUSPENDED_EV": "Suspended by Vehicle",
+          "SUSPENDED_EVSE": "Suspended by Charger",
+          "FINISHING": "Finishing",
+          "RESERVED": "Reserved",
+          "FAULTED": "Faulted",
+          "UNAVAILABLE": "Unavailable"
+        }
+      },
+      "evse_lock_state": {
+        "name": "Lock State",
+        "state": {
+          "UNKNOWN": "Unknown",
+          "LOCKED": "Locked",
+          "UNLOCKED": "Unlocked"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "Advertised Current"
+      }
+    },
+    "binary_sensor": {
+      "evse_charging": {
+        "name": "Charging"
+      },
+      "evse_ev_connected": {
+        "name": "EV Connected"
+      }
+    },
     "select": {
       "circuit_priority": {
         "state": {

@@ -1,0 +1,67 @@
+"""EVSE (EV Charger) sensors for Span Panel integration."""
+
+from __future__ import annotations
+
+import logging
+
+from homeassistant.helpers.typing import UNDEFINED
+from homeassistant.util import slugify
+from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
+
+from custom_components.span_panel.const import CONF_API_VERSION, CONF_DEVICE_NAME
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.sensor_definitions import SpanEvseSensorEntityDescription
+from custom_components.span_panel.util import evse_device_info
+
+from .base import SpanSensorBase
+
+_LOGGER: logging.Logger = logging.getLogger(__name__)
+
+# Fallback EVSE snapshot used when the EVSE disappears mid-session
+_EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
+
+
+class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSnapshot]):
+    """EVSE (EV charger) sensor entity."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanEvseSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+        evse_id: str,
+    ) -> None:
+        """Initialize the EVSE sensor."""
+        self._evse_id = evse_id
+        super().__init__(data_coordinator, description, snapshot)
+
+        # Override device_info to point to EVSE sub-device instead of panel
+        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+        if is_simulator:
+            device_name = data_coordinator.config_entry.data.get(
+                CONF_DEVICE_NAME, data_coordinator.config_entry.title
+            )
+            panel_identifier = slugify(device_name) if device_name else snapshot.serial_number
+        else:
+            panel_identifier = snapshot.serial_number
+
+        evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
+        self._attr_device_info = evse_device_info(panel_identifier, evse)
+
+    def _generate_unique_id(
+        self, snapshot: SpanPanelSnapshot, description: SpanEvseSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for EVSE sensors."""
+        return f"span_{snapshot.serial_number}_evse_{self._evse_id}_{description.key}"
+
+    def _generate_friendly_name(
+        self, snapshot: SpanPanelSnapshot, description: SpanEvseSensorEntityDescription
+    ) -> str | None:
+        """Generate friendly name for EVSE sensors."""
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return None
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanEvseSnapshot:
+        """Get the EVSE snapshot for this sensor's charger."""
+        return snapshot.evse.get(self._evse_id, _EMPTY_EVSE)

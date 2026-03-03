@@ -18,7 +18,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from span_panel_api import SpanPanelSnapshot
+from homeassistant.util import slugify
+from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import (
     CONF_API_VERSION,
@@ -36,7 +37,7 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
 )
-from .util import snapshot_to_device_info
+from .util import evse_device_info, snapshot_to_device_info
 
 # pylint: disable=invalid-overridden-method
 
@@ -235,6 +236,98 @@ class SpanPanelBinarySensor(
         )
 
 
+# ---------------------------------------------------------------------------
+# EVSE (EV Charger) binary sensors
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SpanEvseBinarySensorRequiredKeysMixin:
+    """Required keys mixin for EVSE binary sensors."""
+
+    value_fn: Callable[[SpanEvseSnapshot], bool | None]
+
+
+@dataclass(frozen=True)
+class SpanEvseBinarySensorEntityDescription(
+    BinarySensorEntityDescription, SpanEvseBinarySensorRequiredKeysMixin
+):
+    """Describes an EVSE binary sensor entity."""
+
+
+_EV_CONNECTED_STATUSES: frozenset[str] = frozenset(
+    {"PREPARING", "CHARGING", "SUSPENDED_EV", "SUSPENDED_EVSE", "FINISHING"}
+)
+
+EVSE_BINARY_SENSORS: tuple[
+    SpanEvseBinarySensorEntityDescription,
+    SpanEvseBinarySensorEntityDescription,
+] = (
+    SpanEvseBinarySensorEntityDescription(
+        key="evse_charging",
+        translation_key="evse_charging",
+        device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
+        value_fn=lambda e: e.status == "CHARGING",
+    ),
+    SpanEvseBinarySensorEntityDescription(
+        key="evse_ev_connected",
+        translation_key="evse_ev_connected",
+        device_class=BinarySensorDeviceClass.PLUG,
+        value_fn=lambda e: e.status in _EV_CONNECTED_STATUSES,
+    ),
+)
+
+# Fallback EVSE snapshot used when the EVSE disappears mid-session
+_EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
+
+
+class SpanEvseBinarySensor(CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity):
+    """EVSE (EV charger) binary sensor entity."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanEvseBinarySensorEntityDescription,
+        evse_id: str,
+    ) -> None:
+        """Initialize EVSE binary sensor."""
+        super().__init__(data_coordinator, context=description)
+        snapshot: SpanPanelSnapshot = data_coordinator.data
+        self._evse_id = evse_id
+        self.entity_description = description
+        self._attr_device_class = description.device_class
+        self._value_fn = description.value_fn
+
+        # Build EVSE sub-device info
+        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+        if is_simulator:
+            device_name = data_coordinator.config_entry.data.get(
+                CONF_DEVICE_NAME, data_coordinator.config_entry.title
+            )
+            panel_identifier = slugify(device_name) if device_name else snapshot.serial_number
+        else:
+            panel_identifier = snapshot.serial_number
+
+        evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
+        self._attr_device_info = evse_device_info(panel_identifier, evse)
+
+        self._attr_unique_id = f"span_{snapshot.serial_number}_evse_{evse_id}_{description.key}"
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        if self.coordinator.panel_offline or self.coordinator.data is None:
+            self._attr_is_on = None
+            super()._handle_coordinator_update()
+            return
+
+        snapshot = self.coordinator.data
+        evse = snapshot.evse.get(self._evse_id, _EMPTY_EVSE)
+        self._attr_is_on = self._value_fn(evse)
+        super()._handle_coordinator_update()
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -247,10 +340,19 @@ async def async_setup_entry(
     data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
     coordinator: SpanPanelCoordinator = data[COORDINATOR]
 
-    entities: list[SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]] = []
+    entities: list[
+        SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanEvseBinarySensor
+    ] = []
 
     for description in BINARY_SENSORS:
         entities.append(SpanPanelBinarySensor(coordinator, description))
+
+    # Add EVSE binary sensors for each commissioned charger
+    snapshot: SpanPanelSnapshot = coordinator.data
+    if snapshot.evse:
+        for evse_id in snapshot.evse:
+            for evse_desc in EVSE_BINARY_SENSORS:
+                entities.append(SpanEvseBinarySensor(coordinator, evse_desc, evse_id))
 
     async_add_entities(entities)
 

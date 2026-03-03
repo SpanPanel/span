@@ -281,6 +281,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             caps.add("pv")
         if snapshot.power_flow_site is not None:
             caps.add("power_flows")
+        if (
+            any(c.device_type == "evse" for c in snapshot.circuits.values())
+            or len(snapshot.evse) > 0
+        ):
+            caps.add("evse")
         return frozenset(caps)
 
     def _check_capability_change(self, snapshot: SpanPanelSnapshot) -> None:

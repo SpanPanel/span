@@ -178,6 +178,42 @@
           "off_grid": "Se apaga en un apagón"
         }
       }
+    },
+    "sensor": {
+      "evse_status": {
+        "name": "Estado del Cargador",
+        "state": {
+          "UNKNOWN": "Desconocido",
+          "AVAILABLE": "Disponible",
+          "PREPARING": "Preparando",
+          "CHARGING": "Cargando",
+          "SUSPENDED_EV": "Suspendido por Vehículo",
+          "SUSPENDED_EVSE": "Suspendido por Cargador",
+          "FINISHING": "Finalizando",
+          "RESERVED": "Reservado",
+          "FAULTED": "Averiado",
+          "UNAVAILABLE": "No Disponible"
+        }
+      },
+      "evse_lock_state": {
+        "name": "Estado de Bloqueo",
+        "state": {
+          "UNKNOWN": "Desconocido",
+          "LOCKED": "Bloqueado",
+          "UNLOCKED": "Desbloqueado"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "Corriente Anunciada"
+      }
+    },
+    "binary_sensor": {
+      "evse_charging": {
+        "name": "Cargando"
+      },
+      "evse_ev_connected": {
+        "name": "VE Conectado"
+      }
     }
   },
   "notifications": {

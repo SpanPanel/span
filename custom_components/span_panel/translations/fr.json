@@ -178,6 +178,42 @@
           "off_grid": "S'éteint en cas de panne"
         }
       }
+    },
+    "sensor": {
+      "evse_status": {
+        "name": "État du Chargeur",
+        "state": {
+          "UNKNOWN": "Inconnu",
+          "AVAILABLE": "Disponible",
+          "PREPARING": "En préparation",
+          "CHARGING": "En charge",
+          "SUSPENDED_EV": "Suspendu par le Véhicule",
+          "SUSPENDED_EVSE": "Suspendu par le Chargeur",
+          "FINISHING": "Finalisation",
+          "RESERVED": "Réservé",
+          "FAULTED": "En défaut",
+          "UNAVAILABLE": "Indisponible"
+        }
+      },
+      "evse_lock_state": {
+        "name": "État du Verrouillage",
+        "state": {
+          "UNKNOWN": "Inconnu",
+          "LOCKED": "Verrouillé",
+          "UNLOCKED": "Déverrouillé"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "Courant Annoncé"
+      }
+    },
+    "binary_sensor": {
+      "evse_charging": {
+        "name": "En charge"
+      },
+      "evse_ev_connected": {
+        "name": "VE Connecté"
+      }
     }
   },
   "notifications": {

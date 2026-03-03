@@ -19,8 +19,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower
-from span_panel_api import SpanBatterySnapshot, SpanCircuitSnapshot, SpanPanelSnapshot
+from homeassistant.const import PERCENTAGE, UnitOfElectricCurrent, UnitOfEnergy, UnitOfPower
+from span_panel_api import (
+    SpanBatterySnapshot,
+    SpanCircuitSnapshot,
+    SpanEvseSnapshot,
+    SpanPanelSnapshot,
+)
 
 
 @dataclass(frozen=True)
@@ -351,5 +356,68 @@ CIRCUIT_SENSORS: tuple[
         else (c.consumed_energy_wh or 0) - (c.produced_energy_wh or 0),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# EVSE (EV Charger) sensor definitions
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SpanEvseRequiredKeysMixin:
+    """Required keys mixin for EVSE sensors."""
+
+    value_fn: Callable[[SpanEvseSnapshot], float | str | None]
+
+
+@dataclass(frozen=True)
+class SpanEvseSensorEntityDescription(SensorEntityDescription, SpanEvseRequiredKeysMixin):
+    """Describes an EVSE sensor entity."""
+
+
+EVSE_STATUS_OPTIONS: list[str] = [
+    "UNKNOWN",
+    "AVAILABLE",
+    "PREPARING",
+    "CHARGING",
+    "SUSPENDED_EV",
+    "SUSPENDED_EVSE",
+    "FINISHING",
+    "RESERVED",
+    "FAULTED",
+    "UNAVAILABLE",
+]
+
+EVSE_LOCK_STATE_OPTIONS: list[str] = ["UNKNOWN", "LOCKED", "UNLOCKED"]
+
+EVSE_SENSORS: tuple[
+    SpanEvseSensorEntityDescription,
+    SpanEvseSensorEntityDescription,
+    SpanEvseSensorEntityDescription,
+] = (
+    SpanEvseSensorEntityDescription(
+        key="evse_status",
+        translation_key="evse_status",
+        device_class=SensorDeviceClass.ENUM,
+        options=EVSE_STATUS_OPTIONS,
+        value_fn=lambda e: e.status,
+    ),
+    SpanEvseSensorEntityDescription(
+        key="evse_advertised_current",
+        translation_key="evse_advertised_current",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.CURRENT,
+        suggested_display_precision=1,
+        value_fn=lambda e: e.advertised_current_a,
+    ),
+    SpanEvseSensorEntityDescription(
+        key="evse_lock_state",
+        translation_key="evse_lock_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=EVSE_LOCK_STATE_OPTIONS,
+        value_fn=lambda e: e.lock_state,
     ),
 )

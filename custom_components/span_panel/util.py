@@ -4,7 +4,7 @@ import logging
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import slugify
-from span_panel_api import SpanPanelSnapshot
+from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import DOMAIN
 
@@ -37,4 +37,20 @@ def snapshot_to_device_info(
         name=device_name or "Span Panel",
         sw_version=snapshot.firmware_version,
         configuration_url=configuration_url,
+    )
+
+
+def evse_device_info(
+    panel_identifier: str,
+    evse: SpanEvseSnapshot,
+) -> DeviceInfo:
+    """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{panel_identifier}_evse_{evse.node_id}")},
+        name=evse.product_name or "EV Charger",
+        manufacturer=evse.vendor_name or "SPAN",
+        model=evse.product_name or "SPAN Drive",
+        serial_number=evse.serial_number,
+        sw_version=evse.software_version,
+        via_device=(DOMAIN, panel_identifier),
     )

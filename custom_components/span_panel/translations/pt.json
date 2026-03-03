@@ -170,6 +170,42 @@
     }
   },
   "entity": {
+    "sensor": {
+      "evse_status": {
+        "name": "Estado do Carregador",
+        "state": {
+          "UNKNOWN": "Desconhecido",
+          "AVAILABLE": "Disponível",
+          "PREPARING": "Preparando",
+          "CHARGING": "Carregando",
+          "SUSPENDED_EV": "Suspenso pelo Veículo",
+          "SUSPENDED_EVSE": "Suspenso pelo Carregador",
+          "FINISHING": "Finalizando",
+          "RESERVED": "Reservado",
+          "FAULTED": "Com Defeito",
+          "UNAVAILABLE": "Indisponível"
+        }
+      },
+      "evse_lock_state": {
+        "name": "Estado do Bloqueio",
+        "state": {
+          "UNKNOWN": "Desconhecido",
+          "LOCKED": "Bloqueado",
+          "UNLOCKED": "Desbloqueado"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "Corrente Anunciada"
+      }
+    },
+    "binary_sensor": {
+      "evse_charging": {
+        "name": "Carregando"
+      },
+      "evse_ev_connected": {
+        "name": "VE Conectado"
+      }
+    },
     "select": {
       "circuit_priority": {
         "state": {

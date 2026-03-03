@@ -27,14 +27,21 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 # matching v1 naming conventions (e.g., "Solar Power", "Solar Produced Energy").
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
 
+# Device types that use "EV Charger" as the fallback identifier when unnamed.
+_EVSE_DEVICE_TYPES: frozenset[str] = frozenset({"evse"})
+
 
 def _unnamed_circuit_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
     """Return a descriptive identifier for an unnamed circuit.
 
-    PV circuits use "Solar" (matching v1 naming), all others use tab-based naming.
+    PV circuits use "Solar" (matching v1 naming), EVSE circuits use "EV Charger",
+    all others use tab-based naming.
     """
-    if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
+    device_type = getattr(circuit, "device_type", "circuit")
+    if device_type in _SOLAR_DEVICE_TYPES:
         return "Solar"
+    if device_type in _EVSE_DEVICE_TYPES:
+        return "EV Charger"
     return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 
 

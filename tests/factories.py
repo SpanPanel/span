@@ -9,6 +9,7 @@ from typing import Any
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
+    SpanEvseSnapshot,
     SpanPanelSnapshot,
     SpanPVSnapshot,
 )
@@ -120,6 +121,45 @@ class SpanCircuitSnapshotFactory:
         )
 
 
+class SpanEvseSnapshotFactory:
+    """Factory for creating SpanEvseSnapshot test objects."""
+
+    @staticmethod
+    def create(
+        node_id: str = "evse-0",
+        feed_circuit_id: str = "evse_circuit_1",
+        status: str = "CHARGING",
+        lock_state: str = "LOCKED",
+        advertised_current_a: float | None = 32.0,
+        vendor_name: str | None = "SPAN",
+        product_name: str | None = "SPAN Drive",
+        part_number: str | None = None,
+        serial_number: str | None = "SN-EVSE-001",
+        software_version: str | None = "2.1.0",
+    ) -> SpanEvseSnapshot:
+        """Create a SpanEvseSnapshot with reasonable defaults."""
+        return SpanEvseSnapshot(
+            node_id=node_id,
+            feed_circuit_id=feed_circuit_id,
+            status=status,
+            lock_state=lock_state,
+            advertised_current_a=advertised_current_a,
+            vendor_name=vendor_name,
+            product_name=product_name,
+            part_number=part_number,
+            serial_number=serial_number,
+            software_version=software_version,
+        )
+
+    @staticmethod
+    def create_available() -> SpanEvseSnapshot:
+        """Create an EVSE snapshot in AVAILABLE state."""
+        return SpanEvseSnapshotFactory.create(
+            status="AVAILABLE",
+            lock_state="UNLOCKED",
+        )
+
+
 class SpanBatterySnapshotFactory:
     """Factory for creating SpanBatterySnapshot test objects."""
 
@@ -171,6 +211,7 @@ class SpanPanelSnapshotFactory:
         power_flow_site: float | None = None,
         power_flow_pv: float | None = None,
         pv: SpanPVSnapshot | None = None,
+        evse: dict[str, SpanEvseSnapshot] | None = None,
     ) -> SpanPanelSnapshot:
         """Create a SpanPanelSnapshot with reasonable defaults."""
         if circuits is None:
@@ -179,6 +220,8 @@ class SpanPanelSnapshotFactory:
             battery = SpanBatterySnapshot()
         if pv is None:
             pv = SpanPVSnapshot()
+        if evse is None:
+            evse = {}
         return SpanPanelSnapshot(
             serial_number=serial_number,
             firmware_version=firmware_version,
@@ -211,6 +254,7 @@ class SpanPanelSnapshotFactory:
             power_flow_site=power_flow_site,
             power_flow_pv=power_flow_pv,
             pv=pv,
+            evse=evse,
         )
 
     @staticmethod

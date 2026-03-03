@@ -19,6 +19,7 @@ from custom_components.span_panel.sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
     CIRCUIT_SENSORS,
+    EVSE_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
     PANEL_POWER_SENSORS,
@@ -29,6 +30,7 @@ from custom_components.span_panel.sensor_definitions import (
 )
 
 from .circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor, SpanUnmappedCircuitSensor
+from .evse import SpanEvseSensor
 from .panel import (
     SpanPanelBattery,
     SpanPanelEnergySensor,
@@ -148,10 +150,15 @@ def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.power_flow_site is not None
 
 
+def has_evse(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether an EVSE (EV charger) is commissioned."""
+    return len(snapshot.evse) > 0
+
+
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """Derive the set of optional capabilities present in the snapshot.
 
-    Used by the coordinator to detect when new hardware (BESS, PV) appears
+    Used by the coordinator to detect when new hardware (BESS, PV, EVSE) appears
     and trigger a reload so new sensors are created.
     """
     caps: set[str] = set()
@@ -161,6 +168,8 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
         caps.add("pv")
     if has_power_flows(snapshot):
         caps.add("power_flows")
+    if has_evse(snapshot):
+        caps.add("evse")
     return frozenset(caps)
 
 
@@ -199,6 +208,19 @@ def create_power_flow_sensors(
     return entities
 
 
+def create_evse_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanEvseSensor]:
+    """Create EVSE sensors for each commissioned charger."""
+    if not has_evse(snapshot):
+        return []
+    entities: list[SpanEvseSensor] = []
+    for evse_id in snapshot.evse:
+        for desc in EVSE_SENSORS:
+            entities.append(SpanEvseSensor(coordinator, desc, snapshot, evse_id))
+    return entities
+
+
 def create_native_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, config_entry: ConfigEntry
 ) -> list[
@@ -210,6 +232,7 @@ def create_native_sensors(
     | SpanCircuitEnergySensor
     | SpanUnmappedCircuitSensor
     | SpanPanelBattery
+    | SpanEvseSensor
 ]:
     """Create all native sensors for the platform."""
     entities: list[
@@ -221,6 +244,7 @@ def create_native_sensors(
         | SpanCircuitEnergySensor
         | SpanUnmappedCircuitSensor
         | SpanPanelBattery
+        | SpanEvseSensor
     ] = []
 
     # Create different sensor types
@@ -229,6 +253,7 @@ def create_native_sensors(
     entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
     entities.extend(create_battery_sensors(coordinator, snapshot))
     entities.extend(create_power_flow_sensors(coordinator, snapshot))
+    entities.extend(create_evse_sensors(coordinator, snapshot))
 
     return entities
 
