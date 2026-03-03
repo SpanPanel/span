@@ -35,9 +35,7 @@ Users MUST upgrade by the end 2026 to avoid disruption.
 **Breaking:**
 
 - Requires firmware `spanos2/r202603/05` or later — panels on older firmware will not work
-- `DSM State` sensor removed — replaced by `Dominant Power Source`
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
-- Users with automations referencing `dsm_state` must update to `dominant_power_source`
 
 > Running older firmware? See [v1 Legacy Documentation](docs/v1-legacy.md).
 
@@ -72,7 +70,7 @@ When upgrading through HACS:
 
 1. **Create a backup** of your Home Assistant configuration and database
 2. **Review the changes** in this README and CHANGELOG
-3. **Check your automations** — especially any referencing `dsm_state` (now `dominant_power_source`)
+3. **Check your automations** — review any references to removed entities
 4. **Update during a quiet period** when you can monitor the upgrade
 
 If you encounter issues, restore from your backup or check the [troubleshooting section](#troubleshooting) below.
@@ -94,7 +92,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                            |
 | Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                            |
 | Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
-| DSM Grid State               | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN                                                         |
+| DSM State                    | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN. Derived from multiple eBus signals                     |
 | Current Run Config           | —            | —    | PANEL_ON_GRID (grid connected), PANEL_OFF_GRID (islanded on PV/generator), PANEL_BACKUP (islanded on battery), UNKNOWN |
 | Dominant Power Source        | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN                                                                       |
 | Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                   |
@@ -102,11 +100,11 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Software Version             | —            | —    | Firmware version string                                                                                                |
 | Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned). Attr: `soe_kwh`                                      |
 
-**Removed:**
+**Deprecated:**
 
-| Sensor    | Reason                                                                              |
-| --------- | ----------------------------------------------------------------------------------- |
-| DSM State | Replaced by `Dominant Power Source` — conflated power source with grid connectivity |
+| Sensor         | Reason                                              |
+| -------------- | --------------------------------------------------- |
+| DSM Grid State | Superseded by `DSM State` — will be removed in v3.0 |
 
 ### Current Power Sensor Attributes
 

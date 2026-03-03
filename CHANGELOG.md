@@ -10,9 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Breaking Changes
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- Removed `DSM State` sensor — replaced by `Dominant Power Source`
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
-- `dsm_state` entity ID replaced by `dominant_power_source`
+- `DSM Grid State` deprecated — superseded by `DSM State`
 
 ### New Features
 
@@ -20,9 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   manufacturer, model, serial number, and software version in device info. Device names include the panel name prefix for cross-panel collision avoidance and HA
   bulk rename support (e.g., "Main House SPAN Drive (Garage)"). Display suffix resolved from circuit name (friendly names mode) or EVSE serial number (circuit
   numbers mode). Entities created per charger: Charger Status (enum sensor with OCPP states), Advertised Current (measurement sensor), Lock State (enum sensor),
-  Charging (binary sensor), and EV Connected (binary sensor). Includes translated state names in 5 languages (en, es, fr, ja, pt), simulation mode support (32-tab
-  config has 1 SPAN Drive, 40-tab config has 2), and automatic capability detection that triggers a reload when an EVSE first appears. EVSE circuits use "EV
-  Charger" as the fallback name. See [design doc](docs/dev/evse_span_drive_support.md) for details.
+  Charging (binary sensor), and EV Connected (binary sensor). Includes translated state names in 5 languages (en, es, fr, ja, pt), simulation mode support
+  (32-tab config has 1 SPAN Drive, 40-tab config has 2), and automatic capability detection that triggers a reload when an EVSE first appears. EVSE circuits use
+  "EV Charger" as the fallback name. See [design doc](docs/dev/evse_span_drive_support.md) for details.
 - **Energy Dip Compensation**: Proactively compensates when the SPAN panel reports lower energy readings for `TOTAL_INCREASING` sensors (consumed/produced
   energy). Maintains a cumulative offset per sensor so Home Assistant never sees a decrease, preventing negative spikes in the energy dashboard. Enabled by
   default for new installs; existing installs can enable via General Options. Includes persistent notification when dips are detected and sensor attributes
@@ -39,7 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Improvements
 
-- `DSM Grid State` — multi-signal heuristic instead of BESS-only lookup
+- `DSM State` — multi-signal heuristic deriving grid connectivity from battery grid-state, dominant power source, upstream lugs power, and power-flows grid
 - `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
 - Configurable snapshot update interval (0–15s, default 1s) to rate-limit snapshot rebuilds from high-frequency MQTT messages — reduces CPU on low-power
   hardware
