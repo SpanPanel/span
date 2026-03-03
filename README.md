@@ -102,9 +102,9 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 **Deprecated:**
 
-| Sensor         | Reason                                              |
-| -------------- | --------------------------------------------------- |
-| DSM Grid State | Superseded by `DSM State` — will be removed in v3.0 |
+| Sensor         | Reason                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| DSM Grid State | Deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version |
 
 ### Current Power Sensor Attributes
 

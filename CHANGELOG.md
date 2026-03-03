@@ -11,7 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
-- `DSM Grid State` deprecated — superseded by `DSM State`
+- `DSM Grid State` deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version since it is an
+  alias for `DSM State`
 
 ### New Features
 
