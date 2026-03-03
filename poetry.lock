@@ -4419,7 +4419,7 @@ test = ["covdefaults (==2.3.0)", "pytest (==8.4.1)", "pytest-aiohttp (==1.1.0)",
 
 [[package]]
 name = "span-panel-api"
-version = "2.0.0"
+version = "2.2.0"
 description = "A client library for SPAN Panel API"
 optional = false
 python-versions = ">=3.10,<4.0"
