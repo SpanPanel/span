@@ -8,8 +8,16 @@ from homeassistant.helpers.typing import UNDEFINED
 from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.const import CONF_API_VERSION, CONF_DEVICE_NAME
+from custom_components.span_panel.const import (
+    CONF_API_VERSION,
+    CONF_DEVICE_NAME,
+    USE_CIRCUIT_NUMBERS,
+)
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.helpers import (
+    build_evse_unique_id_for_entry,
+    resolve_evse_display_suffix,
+)
 from custom_components.span_panel.sensor_definitions import SpanEvseSensorEntityDescription
 from custom_components.span_panel.util import evse_device_info
 
@@ -37,22 +45,31 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
 
         # Override device_info to point to EVSE sub-device instead of panel
         is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        if is_simulator:
-            device_name = data_coordinator.config_entry.data.get(
+        panel_name = (
+            data_coordinator.config_entry.data.get(
                 CONF_DEVICE_NAME, data_coordinator.config_entry.title
             )
-            panel_identifier = slugify(device_name) if device_name else snapshot.serial_number
+            or "Span Panel"
+        )
+        if is_simulator:
+            panel_identifier = slugify(panel_name)
         else:
             panel_identifier = snapshot.serial_number
 
         evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
-        self._attr_device_info = evse_device_info(panel_identifier, evse)
+        use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
+        self._attr_device_info = evse_device_info(
+            panel_identifier, evse, panel_name, display_suffix
+        )
 
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanEvseSensorEntityDescription
     ) -> str:
         """Generate unique ID for EVSE sensors."""
-        return f"span_{snapshot.serial_number}_evse_{self._evse_id}_{description.key}"
+        return build_evse_unique_id_for_entry(
+            self.coordinator, snapshot, self._evse_id, description.key, self._device_name
+        )
 
     def _generate_friendly_name(
         self, snapshot: SpanPanelSnapshot, description: SpanEvseSensorEntityDescription

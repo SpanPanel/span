@@ -19,12 +19,26 @@ circuit_templates:
 
   outlets:
     energy_profile:
-      mode: "bidirectional"
+      mode: "consumer"
       power_range: [0.0, 1800.0]
       typical_power: 150.0
       power_variation: 0.4
     relay_behavior: "controllable"
     priority: "MUST_HAVE"
+
+  # EV charger (SPAN Drive) with smart grid response
+  ev_charger:
+    energy_profile:
+      mode: "consumer"
+      power_range: [0.0, 9600.0]
+      typical_power: 7200.0  # Level 2 charging (240V @ 30A)
+      power_variation: 0.05
+    relay_behavior: "controllable"
+    priority: "NON_ESSENTIAL"
+    device_type: "evse"  # Generates EVSE (SPAN Drive) snapshot
+    smart_behavior:
+      responds_to_grid: true
+      max_power_reduction: 0.6  # Can reduce to 40% during grid stress
 
   hvac:
     energy_profile:
@@ -84,7 +98,7 @@ circuit_templates:
         21: 0.7  # Demand decreasing
 
 circuits:
-  # Define only 37 circuits for a 40-tab panel (tabs 38-40 will be unmapped)
+  # 38 circuits for a 40-tab panel (tab 39 unmapped)
 
   # Main lighting circuits (tabs 1-8)
   - id: "kitchen_lights"
@@ -204,13 +218,15 @@ circuits:
       power_range: [0.0, 4500.0]
       typical_power: 2000.0
 
-  - id: "ev_charger"
-    name: "EV Charger"
-    template: "outlets"
+  - id: "ev_charger_garage"
+    name: "Garage EV Charger"
+    template: "ev_charger"
     tabs: [26, 28]
-    overrides:
-      power_range: [0.0, 7200.0]
-      typical_power: 3600.0
+
+  - id: "ev_charger_driveway"
+    name: "Driveway EV Charger"
+    template: "ev_charger"
+    tabs: [38, 40]  # 240V Level 2 charger
 
   # Solar and battery systems
   - id: "solar_inverter_1"
@@ -243,10 +259,9 @@ circuits:
       power_range: [0.0, 2000.0]
       typical_power: 800.0
 
-  # Tabs 38-40 are intentionally left unmapped to test unmapped tab creation
-  # This will trigger the code in lines 866-876 of client.py
+  # Tab 39 is intentionally left unmapped to test unmapped tab creation
 
-# Circuit synchronizations for 240V battery systems and solar arrays
+# Circuit synchronizations for 240V systems
 tab_synchronizations:
   - tabs: [33, 35]  # Battery System 1 - 240V split phase
     behavior: "240v_split_phase"
@@ -272,20 +287,23 @@ tab_synchronizations:
     energy_sync: true
     template: "solar_sync"
 
+  - tabs: [26, 28]  # Garage EV Charger - 240V split phase
+    behavior: "240v_split_phase"
+    power_split: "equal"
+    energy_sync: true
+    template: "ev_charger_sync"
+
+  - tabs: [38, 40]  # Driveway EV Charger - 240V split phase
+    behavior: "240v_split_phase"
+    power_split: "equal"
+    energy_sync: true
+    template: "ev_charger_sync"
+
 # Explicitly list unmapped tabs for testing purposes
-unmapped_tabs: [38, 39, 40]  # These tabs will have auto-generated behavior
+unmapped_tabs: [39]  # Tab 39 remains unmapped (38 and 40 now used by driveway EV charger)
 
 # Unmapped tab templates for tabs that should have behavior but remain unmapped
 unmapped_tab_templates:
-  "38":
-    energy_profile:
-      mode: "consumer"
-      power_range: [0.0, 1000.0]
-      typical_power: 200.0
-      power_variation: 0.3
-    relay_behavior: "non_controllable"
-    priority: "NON_ESSENTIAL"
-
   "39":
     energy_profile:
       mode: "consumer"
@@ -294,20 +312,6 @@ unmapped_tab_templates:
       power_variation: 0.2
     relay_behavior: "non_controllable"
     priority: "NON_ESSENTIAL"
-
-  "40":
-    energy_profile:
-      mode: "producer"
-      power_range: [-1500.0, 0.0]
-      typical_power: -500.0
-      power_variation: 0.4
-    relay_behavior: "non_controllable"
-    priority: "MUST_HAVE"
-    time_of_day_profile:
-      enabled: true
-      peak_hours: [11, 12, 13, 14, 15]
-      peak_multiplier: 1.0
-      off_peak_multiplier: 0.0
 
 simulation_params:
   enable_realistic_behaviors: true

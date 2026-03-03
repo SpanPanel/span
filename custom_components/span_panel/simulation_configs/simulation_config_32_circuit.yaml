@@ -5,8 +5,6 @@ panel_config:
   serial_number: "SPAN-32-SIM-001"
   total_tabs: 32
   main_size: 200  # Main breaker size in Amps
-  # Uncomment the line below to simulate panel being offline
-  # offline_mode: true  # Makes panel appear offline for testing connection loss behavior
 
 # Circuit templates define reusable behavior patterns
 circuit_templates:
@@ -69,15 +67,16 @@ circuit_templates:
       on_duration: 600    # 10 minutes
       off_duration: 1800  # 30 minutes
 
-  # EV charger with smart grid response
+  # EV charger (SPAN Drive) with smart grid response
   ev_charger:
     energy_profile:
       mode: "consumer"
       power_range: [0.0, 11500.0]
-      typical_power: 7200.0  # Level 2 charging
+      typical_power: 7200.0  # Level 2 charging (240V @ 30A)
       power_variation: 0.05
     relay_behavior: "controllable"
     priority: "NON_ESSENTIAL"
+    device_type: "evse"  # Generates EVSE (SPAN Drive) snapshot
     smart_behavior:
       responds_to_grid: true
       max_power_reduction: 0.6  # Can reduce to 40% during grid stress

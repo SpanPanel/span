@@ -32,10 +32,13 @@ from .const import (
     SYSTEM_DOOR_STATE_OPEN,
     SYSTEM_ETHERNET_LINK,
     SYSTEM_WIFI_LINK,
+    USE_CIRCUIT_NUMBERS,
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
+    build_evse_unique_id,
+    resolve_evse_display_suffix,
 )
 from .util import evse_device_info, snapshot_to_device_info
 
@@ -302,18 +305,27 @@ class SpanEvseBinarySensor(CoordinatorEntity[SpanPanelCoordinator], BinarySensor
 
         # Build EVSE sub-device info
         is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        if is_simulator:
-            device_name = data_coordinator.config_entry.data.get(
+        panel_name = (
+            data_coordinator.config_entry.data.get(
                 CONF_DEVICE_NAME, data_coordinator.config_entry.title
             )
-            panel_identifier = slugify(device_name) if device_name else snapshot.serial_number
+            or "Span Panel"
+        )
+        if is_simulator:
+            panel_identifier = slugify(panel_name)
         else:
             panel_identifier = snapshot.serial_number
 
         evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
-        self._attr_device_info = evse_device_info(panel_identifier, evse)
+        use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
+        self._attr_device_info = evse_device_info(
+            panel_identifier, evse, panel_name, display_suffix
+        )
 
-        self._attr_unique_id = f"span_{snapshot.serial_number}_evse_{evse_id}_{description.key}"
+        self._attr_unique_id = build_evse_unique_id(
+            snapshot.serial_number, evse_id, description.key
+        )
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

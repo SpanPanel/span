@@ -21,6 +21,10 @@ from custom_components.span_panel.binary_sensor import (
     _EV_CONNECTED_STATUSES,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.helpers import (
+    build_evse_unique_id,
+    resolve_evse_display_suffix,
+)
 from custom_components.span_panel.sensor_definitions import (
     EVSE_LOCK_STATE_OPTIONS,
     EVSE_SENSORS,
@@ -162,11 +166,13 @@ class TestEvseDeviceInfo:
             serial_number="SN123",
             software_version="2.0.0",
         )
-        info = evse_device_info("panel-serial", evse)
+        info = evse_device_info(
+            "panel-serial", evse, "Main House", display_suffix="Garage"
+        )
         identifiers = info.get("identifiers")
         assert identifiers is not None
         assert ("span_panel", "panel-serial_evse_evse-0") in identifiers
-        assert info.get("name") == "SPAN Drive"
+        assert info.get("name") == "Main House SPAN Drive (Garage)"
         assert info.get("manufacturer") == "SPAN"
         assert info.get("model") == "SPAN Drive"
         assert info.get("serial_number") == "SN123"
@@ -179,14 +185,24 @@ class TestEvseDeviceInfo:
             vendor_name=None,
             product_name=None,
         )
-        info = evse_device_info("panel-serial", evse)
-        assert info.get("name") == "EV Charger"
+        info = evse_device_info("panel-serial", evse, "Span Panel", display_suffix=None)
+        assert info.get("name") == "Span Panel EV Charger"
         assert info.get("manufacturer") == "SPAN"
         assert info.get("model") == "SPAN Drive"
 
+    def test_evse_device_info_serial_suffix(self):
+        evse = SpanEvseSnapshotFactory.create(
+            product_name="SPAN Drive",
+            serial_number="SN-EVSE-001",
+        )
+        info = evse_device_info(
+            "panel-serial", evse, "Museum Garage", display_suffix="SN-EVSE-001"
+        )
+        assert info.get("name") == "Museum Garage SPAN Drive (SN-EVSE-001)"
+
     def test_evse_device_info_no_serial(self):
         evse = SpanEvseSnapshotFactory.create(serial_number=None)
-        info = evse_device_info("panel-serial", evse)
+        info = evse_device_info("panel-serial", evse, "Span Panel")
         assert info.get("serial_number") is None
 
 
@@ -225,8 +241,8 @@ class TestEvseMultipleDevices:
     def test_multiple_evse_device_infos_are_distinct(self):
         evse_a = SpanEvseSnapshotFactory.create(node_id="evse-0")
         evse_b = SpanEvseSnapshotFactory.create(node_id="evse-1")
-        info_a = evse_device_info("panel", evse_a)
-        info_b = evse_device_info("panel", evse_b)
+        info_a = evse_device_info("panel", evse_a, "Span Panel")
+        info_b = evse_device_info("panel", evse_b, "Span Panel")
         assert info_a.get("identifiers") != info_b.get("identifiers")
 
 
@@ -246,3 +262,51 @@ class TestEvseSnapshotFactory:
         evse = SpanEvseSnapshotFactory.create_available()
         assert evse.status == "AVAILABLE"
         assert evse.lock_state == "UNLOCKED"
+
+
+class TestEvseDisplaySuffix:
+    """Test resolve_evse_display_suffix helper."""
+
+    def test_friendly_names_uses_circuit_name(self):
+        circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")
+        evse = SpanEvseSnapshotFactory.create(feed_circuit_id="c1")
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"c1": circuit}, evse={"evse-0": evse}
+        )
+        result = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers=False)
+        assert result == "Garage"
+
+    def test_circuit_numbers_uses_serial(self):
+        evse = SpanEvseSnapshotFactory.create(serial_number="SN-001")
+        snapshot = SpanPanelSnapshotFactory.create(evse={"evse-0": evse})
+        result = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers=True)
+        assert result == "SN-001"
+
+    def test_friendly_names_no_circuit_name_returns_none(self):
+        circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="")
+        evse = SpanEvseSnapshotFactory.create(feed_circuit_id="c1")
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"c1": circuit}, evse={"evse-0": evse}
+        )
+        result = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers=False)
+        assert result is None
+
+    def test_friendly_names_no_circuit_returns_none(self):
+        evse = SpanEvseSnapshotFactory.create(feed_circuit_id="nonexistent")
+        snapshot = SpanPanelSnapshotFactory.create(evse={"evse-0": evse})
+        result = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers=False)
+        assert result is None
+
+    def test_circuit_numbers_no_serial_returns_none(self):
+        evse = SpanEvseSnapshotFactory.create(serial_number=None)
+        snapshot = SpanPanelSnapshotFactory.create(evse={"evse-0": evse})
+        result = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers=True)
+        assert result is None
+
+
+class TestEvseUniqueIdHelpers:
+    """Test EVSE unique ID helper functions."""
+
+    def test_build_evse_unique_id(self):
+        result = build_evse_unique_id("serial", "evse-0", "evse_status")
+        assert result == "span_serial_evse_evse-0_evse_status"

@@ -212,6 +212,21 @@ Applies to Main Meter and Feed Through energy sensors.
 Created automatically when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via
 `via_device`. Vendor, product, serial number, and software version are surfaced as device info attributes — not separate entities.
 
+#### EVSE Device Naming
+
+The EVSE device name includes the panel device name prefix for collision avoidance across multi-panel installations and to support HA's bulk device rename
+feature. A display suffix differentiates multiple chargers on the same panel:
+
+- **Friendly names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
+- **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): suffix is the EVSE serial number (e.g., "SN-EVSE-001")
+- **No suffix available**: the display suffix is omitted entirely (no empty parentheses)
+
+| Naming Mode     | Example Device Name                   | Example Entity ID                                         |
+| --------------- | ------------------------------------- | --------------------------------------------------------- |
+| Friendly names  | `Main House SPAN Drive (Garage)`      | `sensor.main_house_span_drive_garage_charger_status`      |
+| Circuit numbers | `Main House SPAN Drive (SN-EVSE-001)` | `sensor.main_house_span_drive_sn_evse_001_charger_status` |
+| No suffix       | `Main House SPAN Drive`               | `sensor.main_house_span_drive_charger_status`             |
+
 #### EVSE Sensors (per charger)
 
 | Sensor             | Device Class | Unit | Notes                                                                            |

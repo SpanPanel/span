@@ -9,15 +9,15 @@ exposed no EVSE data. The v2 eBus/MQTT API now exposes a full `energy.ebus.devic
 
 ```yaml
 energy.ebus.device.evse:
-  vendor-name:        string
-  product-name:       string
-  part-number:        string
-  serial-number:      string
-  software-version:   string
-  feed:               enum        # Circuit ID the EVSE is connected to
-  lock-state:         enum        # UNKNOWN | LOCKED | UNLOCKED
-  status:             enum        # OCPP-based charger status (10 values)
-  advertised-current: float (A)   # Current being offered to the EV
+  vendor-name: string
+  product-name: string
+  part-number: string
+  serial-number: string
+  software-version: string
+  feed: enum # Circuit ID the EVSE is connected to
+  lock-state: enum # UNKNOWN | LOCKED | UNLOCKED
+  status: enum # OCPP-based charger status (10 values)
+  advertised-current: float (A) # Current being offered to the EV
 ```
 
 **Status enum values** (OCPP-derived): `UNKNOWN`, `AVAILABLE`, `PREPARING`, `CHARGING`, `SUSPENDED_EV`, `SUSPENDED_EVSE`, `FINISHING`, `RESERVED`, `FAULTED`,
@@ -70,7 +70,7 @@ Instead of creating 5 diagnostic entities, we map EVSE metadata into HA's Device
 ```python
 DeviceInfo(
     identifiers={(DOMAIN, f"{panel_id}_evse_{evse_node_id}")},
-    name=product_name or "EV Charger",
+    name=f"{panel_name} {base_name} ({display_suffix})",
     manufacturer=vendor_name or "SPAN",
     model=product_name or "SPAN Drive",
     serial_number=serial_number,
@@ -81,6 +81,30 @@ DeviceInfo(
 
 The HA device page shows manufacturer, model, serial, and firmware natively. `via_device` creates the parent-child hierarchy in the device registry.
 `part_number` goes into `extra_state_attributes` on the status sensor since DeviceInfo has no part_number field.
+
+#### Device Name Architecture
+
+HA does not incorporate the parent device name (`via_device`) into child device entity IDs — entity IDs are derived solely from the child device's own name. To
+avoid entity ID collisions across multi-panel installations and to support HA's bulk device rename feature, the EVSE device name includes:
+
+1. **Panel device name prefix** — e.g., "Main House", "Museum Garage"
+2. **Base name** — `product_name` or "EV Charger" fallback
+3. **Display suffix** (optional) — differentiates multiple chargers on the same panel
+
+The display suffix is resolved by `resolve_evse_display_suffix()` in `helpers.py`:
+
+- **Friendly names** (`USE_CIRCUIT_NUMBERS=False`): uses the fed circuit's panel name (e.g., "Garage")
+- **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): uses the EVSE serial number (e.g., "SN-EVSE-001")
+- Returns `None` when no meaningful suffix is available (no empty parentheses)
+
+Example device names for a two-panel installation:
+
+| Panel         | Circuit  | Device Name                        |
+| ------------- | -------- | ---------------------------------- |
+| Main House    | Garage   | `Main House SPAN Drive (Garage)`   |
+| Main House    | Driveway | `Main House SPAN Drive (Driveway)` |
+| Museum Garage | Bay 1    | `Museum Garage SPAN Drive (Bay 1)` |
+| Museum Garage | Bay 2    | `Museum Garage SPAN Drive (Bay 2)` |
 
 ---
 
@@ -198,8 +222,15 @@ Export `SpanEvseSnapshot` from the library's public API.
 
 ### util.py — `evse_device_info()`
 
-New helper creating `DeviceInfo` with `via_device` linking to the parent panel. Maps vendor/product/serial/version from EVSE metadata into native DeviceInfo
-fields.
+New helper creating `DeviceInfo` with `via_device` linking to the parent panel. Accepts `panel_name` (prepended for entity ID namespacing) and optional
+`display_suffix` (from `resolve_evse_display_suffix()` in `helpers.py`) to differentiate multiple chargers. Maps vendor/product/serial/version from EVSE
+metadata into native DeviceInfo fields.
+
+### helpers.py — EVSE helpers
+
+- `build_evse_unique_id(serial, evse_id, description_key)` — pure function returning `span_{serial}_evse_{evse_id}_{key}`
+- `build_evse_unique_id_for_entry(coordinator, snapshot, evse_id, description_key, device_name)` — `_for_entry` wrapper handling simulators
+- `resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)` — resolves display suffix from naming option
 
 ### sensor_definitions.py
 
@@ -291,7 +322,8 @@ Entity names and enum state translations in all 6 language files. Status states 
 
 | File                                                 | Change                                                         |
 | ---------------------------------------------------- | -------------------------------------------------------------- |
-| `custom_components/span_panel/util.py`               | Add `evse_device_info()`                                       |
+| `custom_components/span_panel/util.py`               | Add `evse_device_info()` with `panel_name` + `display_suffix`  |
+| `custom_components/span_panel/helpers.py`            | Add EVSE unique ID helpers + `resolve_evse_display_suffix()`   |
 | `custom_components/span_panel/sensor_definitions.py` | Add EVSE sensor descriptions                                   |
 | `custom_components/span_panel/sensors/evse.py`       | **New** — EVSE sensor entity class                             |
 | `custom_components/span_panel/sensors/factory.py`    | Add `has_evse()`, `create_evse_sensors()`, update capabilities |

@@ -43,11 +43,16 @@ def snapshot_to_device_info(
 def evse_device_info(
     panel_identifier: str,
     evse: SpanEvseSnapshot,
+    panel_name: str,
+    display_suffix: str | None = None,
 ) -> DeviceInfo:
     """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
+    base_name = evse.product_name or "EV Charger"
+    name = f"{base_name} ({display_suffix})" if display_suffix else base_name
+    name = f"{panel_name} {name}"
     return DeviceInfo(
         identifiers={(DOMAIN, f"{panel_identifier}_evse_{evse.node_id}")},
-        name=evse.product_name or "EV Charger",
+        name=name,
         manufacturer=evse.vendor_name or "SPAN",
         model=evse.product_name or "SPAN Drive",
         serial_number=evse.serial_number,

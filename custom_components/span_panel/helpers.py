@@ -11,7 +11,7 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
-from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanCircuitSnapshot, SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
 from .util import snapshot_to_device_info
@@ -571,6 +571,35 @@ def build_select_unique_id(serial: str, select_id: str) -> str:
     return f"span_{serial}_select_{select_id}"
 
 
+def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str:
+    """Build unique ID for EVSE sensor/binary_sensor entities (pure function).
+
+    Returns: "span_{serial}_evse_{evse_id}_{description_key}"
+    """
+    return f"span_{serial}_evse_{evse_id}_{description_key}"
+
+
+def resolve_evse_display_suffix(
+    evse: SpanEvseSnapshot,
+    snapshot: SpanPanelSnapshot,
+    use_circuit_numbers: bool,
+) -> str | None:
+    """Resolve the display suffix for an EVSE device name.
+
+    Friendly names mode: returns the fed circuit's panel name (e.g., "Garage").
+    Circuit numbers mode: returns the EVSE serial number (e.g., "SN-EVSE-001").
+    Returns None when no meaningful suffix is available (prevents empty parens).
+    """
+    if use_circuit_numbers:
+        serial: str | None = evse.serial_number
+        return serial
+    fed_circuit = snapshot.circuits.get(evse.feed_circuit_id)
+    if fed_circuit and fed_circuit.name:
+        name: str = fed_circuit.name
+        return name
+    return None
+
+
 def construct_synthetic_unique_id(serial: str, sensor_name: str) -> str:
     """Build unique ID for synthetic sensors using consistent pattern (pure function).
 
@@ -714,6 +743,18 @@ def construct_synthetic_unique_id_for_entry(
     """Build synthetic sensor unique_id using per-entry identifier (handles simulators)."""
     identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return construct_synthetic_unique_id(identifier, sensor_name)
+
+
+def build_evse_unique_id_for_entry(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    evse_id: str,
+    description_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Build EVSE unique_id using per-entry identifier (handles simulators)."""
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
+    return build_evse_unique_id(identifier, evse_id, description_key)
 
 
 def get_device_identifier_for_entry(
