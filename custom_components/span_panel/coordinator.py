@@ -43,6 +43,20 @@ from .options import ENERGY_REPORTING_GRACE_PERIOD
 
 _LOGGER = logging.getLogger(__name__)
 
+# Suppress the noisy "Manually updated span_panel data" DEBUG message that
+# HA's DataUpdateCoordinator emits on every async_set_updated_data() call.
+# In push/streaming mode this fires every ~1s and drowns out useful debug logs.
+
+
+class _SuppressManualUpdateFilter(logging.Filter):
+    """Filter out the HA DataUpdateCoordinator 'Manually updated' noise."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "Manually updated" not in record.getMessage()
+
+
+_LOGGER.addFilter(_SuppressManualUpdateFilter())
+
 # Fallback poll interval for MQTT streaming mode (push is the primary update path)
 _STREAMING_FALLBACK_INTERVAL = timedelta(seconds=60)
 
