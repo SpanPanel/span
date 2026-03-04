@@ -140,18 +140,17 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Battery Power Sensor Attributes
 
-| Attribute                | Type   | Notes                                  |
-| ------------------------ | ------ | -------------------------------------- |
-| `voltage`                | string | Nominal panel voltage ("240")          |
-| `amperage`               | string | Calculated current (power / voltage)   |
-| `vendor_name`            | string | BESS vendor name                       |
-| `product_name`           | string | BESS product name                      |
-| `model`                  | string | BESS model identifier                  |
-| `serial_number`          | string | BESS serial number                     |
-| `software_version`       | string | BESS firmware version                  |
-| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh          |
-| `soe_kwh`                | float  | Current stored energy in kWh           |
-| `connected`              | bool   | Whether the backup system is reachable |
+| Attribute                | Type   | Notes                                |
+| ------------------------ | ------ | ------------------------------------ |
+| `voltage`                | string | Nominal panel voltage ("240")        |
+| `amperage`               | string | Calculated current (power / voltage) |
+| `vendor_name`            | string | BESS vendor name                     |
+| `product_name`           | string | BESS product name                    |
+| `model`                  | string | BESS model identifier                |
+| `serial_number`          | string | BESS serial number                   |
+| `software_version`       | string | BESS firmware version                |
+| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh        |
+| `soe_kwh`                | float  | Current stored energy in kWh         |
 
 ### Software Version Sensor Attributes
 
@@ -251,12 +250,13 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 
 ### Binary Sensors
 
-| Sensor        | Device Class | Notes                        |
-| ------------- | ------------ | ---------------------------- |
-| Door State    | Tamper       | Panel door open/closed       |
-| Ethernet Link | Connectivity | Wired network status         |
-| Wi-Fi Link    | Connectivity | Wireless network status      |
-| Panel Status  | Connectivity | Overall panel online/offline |
+| Sensor         | Device Class | Notes                                                                                                                                |
+| -------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Door State     | Tamper       | Panel door open/closed                                                                                                               |
+| Ethernet Link  | Connectivity | Wired network status                                                                                                                 |
+| Wi-Fi Link     | Connectivity | Wireless network status                                                                                                              |
+| Panel Status   | Connectivity | Overall panel online/offline                                                                                                         |
+| BESS Connected | Connectivity | (v2) Whether the battery system is communicating with the panel. See [Dominant Power Source Control](#dominant-power-source-control) |
 
 **Removed from binary sensors:**
 
@@ -280,6 +280,63 @@ Labels match the SPAN Home On-Premise app. Translations are provided for all sup
 | `never`         | Stays on in an outage            | NEVER         |
 | `soc_threshold` | Stays on until battery threshold | SOC_THRESHOLD |
 | `off_grid`      | Turns off in an outage           | OFF_GRID      |
+
+### Panel Controls
+
+| Entity                | Type   | Notes                                                                                            |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| Dominant Power Source | Select | (v2) Override the panel's power source setting. Only present on MQTT-connected panels. See below |
+
+### Dominant Power Source Control
+
+The SPAN panel tracks which power source is currently dominant — Grid, Battery, Generator, or PV (solar). This Dominant Power Source (DPS) setting drives
+circuit load shedding. When DPS is Grid, all circuits remain on. Any other value triggers shedding based on each circuit's configured shed priority.
+
+When a battery system (BESS) is installed, the panel relies on the BESS to determine whether the grid is online and to set the DPS accordingly. If BESS
+communication is lost, the DPS value becomes stale — it may show Battery when the grid is actually up (causing unnecessary shedding), or Grid when the grid is
+actually down (preventing shedding and draining the battery faster).
+
+This integration provides three entities that surface this condition and give the user the tools to respond:
+
+- **DSM State** (`sensor.{device_name}_dsm_state`) — A read-only sensor that combines multiple independent signals to determine grid status, including the
+  panel's own power flow measurements which remain available even when the battery system is offline.
+- **BESS Connected** (`binary_sensor.{device_name}_bess_connected`) — Indicates whether the battery system is communicating with the panel. When this turns off,
+  the DPS may be stale.
+- **Dominant Power Source** (`select.{device_name}_dominant_power_source`) — Allows overriding the panel's power source setting.
+
+| Value       | When to override                                 |
+| ----------- | ------------------------------------------------ |
+| Grid        | Grid is confirmed up but panel is stuck shedding |
+| Battery     | Grid is confirmed down but panel is not shedding |
+| Generator\* | System is running on generator backup            |
+| PV\*        | System is running on solar only                  |
+
+\*Currently only Grid and Battery affect shedding behavior. Generator and PV are treated as off-grid (same as Battery) but are provided for future panel
+firmware enhancements.
+
+#### Automation Example
+
+A typical automation monitors the battery connection and grid state together:
+
+**Grid restored but panel still shedding:**
+
+- Trigger: `bess_connected` = off for 30 seconds
+- Condition: `dsm_state` = on-grid
+- Action: Set Dominant Power Source to Grid
+
+**Grid lost but panel not shedding:**
+
+- Trigger: `bess_connected` = off for 30 seconds
+- Condition: `dsm_state` = off-grid
+- Action: Set Dominant Power Source to Battery
+
+**Battery system reconnected:**
+
+- Trigger: `bess_connected` = on
+- Action: No action needed — firmware resumes normal management
+
+Setting the Dominant Power Source to Grid when actually off-grid will prevent shedding and drain the battery faster. Pair any Battery-to-Grid transition with a
+check that grid power flow is non-zero.
 
 ## Configuration Options
 

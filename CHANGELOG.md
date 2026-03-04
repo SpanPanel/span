@@ -29,6 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   (`energy_offset`, `last_dip_delta`) for diagnostics. See [design doc](docs/dev/energy_dip_compensation.md) for details.
 - Real-time MQTT push via eBus broker — no more polling intervals
 - `Dominant Power Source` sensor (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN)
+- **Dominant Power Source select** — allows overriding the panel's power source setting (Grid, Battery, Generator, PV). Only present on MQTT-connected panels.
+  Enables automations to correct stale shedding when the battery system loses communication. See
+  [Dominant Power Source Control](README.md#dominant-power-source-control) for details and automation examples
+- **BESS Connected binary sensor** — indicates whether the battery system is communicating with the panel. Promoted from an attribute on the Battery Power
+  sensor to a first-class entity for easier automation
 - `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)
 - `PV Power` sensor with inverter metadata attributes (vendor, product, nameplate capacity)
 - `Site Power` sensor (grid + PV + battery from power-flows node)

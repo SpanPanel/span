@@ -199,6 +199,9 @@
       }
     },
     "binary_sensor": {
+      "bess_connected": {
+        "name": "BESS接続済み"
+      },
       "evse_charging": {
         "name": "充電中"
       },
@@ -212,6 +215,15 @@
           "never": "停電時もオンのまま",
           "soc_threshold": "バッテリーしきい値までオンのまま",
           "off_grid": "停電時にオフになる"
+        }
+      },
+      "dominant_power_source": {
+        "name": "主要電源",
+        "state": {
+          "GRID": "系統電力",
+          "BATTERY": "バッテリー",
+          "GENERATOR": "発電機",
+          "PV": "太陽光"
         }
       }
     }

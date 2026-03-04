@@ -225,8 +225,6 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             attributes["nameplate_capacity_kwh"] = batt.nameplate_capacity_kwh
         if batt.soe_kwh is not None:
             attributes["soe_kwh"] = batt.soe_kwh
-        if batt.connected is not None:
-            attributes["connected"] = batt.connected
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

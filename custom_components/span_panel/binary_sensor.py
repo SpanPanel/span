@@ -40,6 +40,7 @@ from .helpers import (
     build_evse_unique_id,
     resolve_evse_display_suffix,
 )
+from .sensors.factory import has_bess
 from .util import evse_device_info, snapshot_to_device_info
 
 # pylint: disable=invalid-overridden-method
@@ -99,6 +100,13 @@ BINARY_SENSORS: tuple[
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda s: True,  # Placeholder - actual logic handled in sensor class
     ),
+)
+
+BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
+    key="bess_connected",
+    name="BESS Connected",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    value_fn=lambda s: s.battery.connected,
 )
 
 T = TypeVar("T", bound=SpanPanelBinarySensorEntityDescription)
@@ -359,8 +367,12 @@ async def async_setup_entry(
     for description in BINARY_SENSORS:
         entities.append(SpanPanelBinarySensor(coordinator, description))
 
-    # Add EVSE binary sensors for each commissioned charger
+    # Add BESS connected sensor when battery is commissioned
     snapshot: SpanPanelSnapshot = coordinator.data
+    if has_bess(snapshot):
+        entities.append(SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR))
+
+    # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:
         for evse_id in snapshot.evse:
             for evse_desc in EVSE_BINARY_SENSORS:

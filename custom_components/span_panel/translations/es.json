@@ -177,6 +177,15 @@
           "soc_threshold": "Permanece encendido hasta el umbral de batería",
           "off_grid": "Se apaga en un apagón"
         }
+      },
+      "dominant_power_source": {
+        "name": "Fuente de Energía Dominante",
+        "state": {
+          "GRID": "Red",
+          "BATTERY": "Batería",
+          "GENERATOR": "Generador",
+          "PV": "PV"
+        }
       }
     },
     "sensor": {
@@ -208,6 +217,9 @@
       }
     },
     "binary_sensor": {
+      "bess_connected": {
+        "name": "BESS Conectado"
+      },
       "evse_charging": {
         "name": "Cargando"
       },

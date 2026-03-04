@@ -177,6 +177,15 @@
           "soc_threshold": "Reste allumé jusqu'au seuil de batterie",
           "off_grid": "S'éteint en cas de panne"
         }
+      },
+      "dominant_power_source": {
+        "name": "Source d'Énergie Dominante",
+        "state": {
+          "GRID": "Réseau",
+          "BATTERY": "Batterie",
+          "GENERATOR": "Générateur",
+          "PV": "PV"
+        }
       }
     },
     "sensor": {
@@ -208,6 +217,9 @@
       }
     },
     "binary_sensor": {
+      "bess_connected": {
+        "name": "BESS Connecté"
+      },
       "evse_charging": {
         "name": "En charge"
       },

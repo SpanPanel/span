@@ -12,15 +12,15 @@ from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanCircuitSnapshot, SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
 from .const import (
     CONF_API_VERSION,
+    CONF_DEVICE_NAME,
     COORDINATOR,
     DOMAIN,
     USE_CIRCUIT_NUMBERS,
-    USE_DEVICE_PREFIX,
     CircuitPriority,
 )
 from .coordinator import SpanPanelCoordinator
@@ -28,6 +28,7 @@ from .helpers import (
     async_create_span_notification,
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
+    construct_panel_unique_id_for_entry,
 )
 from .util import snapshot_to_device_info
 
@@ -268,51 +269,82 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
         """Construct unique ID for select entities."""
         return build_select_unique_id_for_entry(coordinator, snapshot, select_id, self._device_name)
 
-    def _construct_select_entity_id(
+
+DPS_OPTIONS: Final[list[str]] = ["GRID", "BATTERY", "GENERATOR", "PV"]
+
+DPS_DESCRIPTION: Final = SelectEntityDescription(
+    key="dominant_power_source",
+    name="Dominant Power Source",
+    icon="mdi:transmission-tower",
+    translation_key="dominant_power_source",
+)
+
+
+class SpanPanelDPSSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEntity):
+    """Select entity for overriding the panel's dominant power source."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
         self,
         coordinator: SpanPanelCoordinator,
-        circuit_name: str,
-        circuit_number: int | str,
-        suffix: str,
-        unique_id: str | None = None,
-    ) -> str | None:
-        """Construct entity ID for select entities."""
-        if unique_id is not None:
-            entity_registry = er.async_get(coordinator.hass)
-            existing_entity_id = entity_registry.async_get_entity_id("select", DOMAIN, unique_id)
+    ) -> None:
+        """Initialize the DPS select."""
+        super().__init__(coordinator)
+        snapshot: SpanPanelSnapshot = coordinator.data
 
-            if existing_entity_id:
-                return existing_entity_id
+        self.entity_description = DPS_DESCRIPTION
+        device_name = coordinator.config_entry.data.get(
+            CONF_DEVICE_NAME, coordinator.config_entry.title
+        )
 
-        config_entry = coordinator.config_entry
+        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+        host = coordinator.config_entry.data.get(CONF_HOST)
+        self._attr_device_info = snapshot_to_device_info(snapshot, device_name, is_simulator, host)
 
-        if not self._device_name:
-            return None
+        self._attr_unique_id = construct_panel_unique_id_for_entry(
+            coordinator, snapshot, "dominant_power_source", device_name
+        )
+        self._attr_options = DPS_OPTIONS
+        self._attr_current_option = snapshot.dominant_power_source or "GRID"
 
-        use_circuit_numbers = config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
+    async def async_select_option(self, option: str) -> None:
+        """Set the dominant power source on the panel."""
+        client = self.coordinator.client
+        if not hasattr(client, "set_dominant_power_source"):
+            _LOGGER.warning("Dominant power source control not available in simulation mode")
+            return
 
-        parts = []
+        try:
+            await client.set_dominant_power_source(option)
+            await self.coordinator.async_request_refresh()
+        except SpanPanelServerError:
+            warning_msg = (
+                f"SPAN API returned a server error attempting "
+                f"to set dominant power source to {option}."
+            )
+            _LOGGER.warning(warning_msg)
+            await async_create_span_notification(
+                self.hass,
+                message=warning_msg,
+                title="SPAN API Error",
+                notification_id="span_panel_dps_error",
+            )
 
-        if use_device_prefix:
-            parts.append(self._device_name.lower().replace(" ", "_"))
+    @property
+    def available(self) -> bool:
+        """Return entity availability."""
+        if getattr(self.coordinator, "panel_offline", False):
+            return False
+        return super().available
 
-        if use_circuit_numbers:
-            parts.append(f"circuit_{circuit_number}")
-        else:
-            circuit_name_slug = circuit_name.lower().replace(" ", "_")
-            parts.append(circuit_name_slug)
-
-        if suffix:
-            circuit_name_words = circuit_name.lower().split()
-            last_word = circuit_name_words[-1] if circuit_name_words else ""
-            last_word_normalized = last_word.replace(" ", "_")
-
-            if suffix != last_word_normalized:
-                parts.append(suffix)
-
-        entity_id = f"select.{'_'.join(parts)}"
-        return entity_id
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        snapshot: SpanPanelSnapshot = self.coordinator.data
+        dps = snapshot.dominant_power_source
+        if dps and dps in DPS_OPTIONS:
+            self._attr_current_option = dps
+        super()._handle_coordinator_update()
 
 
 async def async_setup_entry(
@@ -331,7 +363,11 @@ async def async_setup_entry(
     # Get device name from config entry data
     device_name = config_entry.data.get("device_name", config_entry.title)
 
-    entities: list[SpanPanelCircuitsSelect] = []
+    entities: list[SpanPanelCircuitsSelect | SpanPanelDPSSelect] = []
+
+    # Add DPS select when MQTT transport is active (v2 only)
+    if isinstance(coordinator.client, SpanMqttClient):
+        entities.append(SpanPanelDPSSelect(coordinator))
 
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_data.is_user_controllable:
