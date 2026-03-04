@@ -192,11 +192,6 @@ class SpanPanelBinarySensor(
         if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
             self._attr_is_on = not self.coordinator.panel_offline
             self._attr_available = True
-            _LOGGER.debug(
-                "PANEL_STATUS_DEBUG: Set is_on=%s, available=%s",
-                self._attr_is_on,
-                self._attr_available,
-            )
             super()._handle_coordinator_update()
             return
 
