@@ -336,10 +336,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         # Check for pending naming pattern migration
         if self.config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
-            _LOGGER.debug(
-                "Checking for pending_naming_migration flag: %s",
-                self.config_entry.options.get("pending_naming_migration", False),
-            )
             if self.config_entry.options.get("pending_naming_migration", False):
                 _LOGGER.info(
                     "Found pending naming migration flag in coordinator update, performing migration"
