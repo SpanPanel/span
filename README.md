@@ -19,6 +19,11 @@ The software is provided as-is with no warranty or guarantee of performance or s
 This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
 circuits.
 
+This integration communicates with the SPAN Panel over your local network using SPAN's official
+[Electrification Bus (eBus)](https://github.com/spanio/SPAN-API-Client-Docs) framework — an open, multi-vendor integration standard for home energy
+infrastructure. eBus uses the [Homie Convention](https://homieiot.github.io/) for MQTT topics and messages, with the panel's built-in MQTT broker delivering
+real-time state updates without polling.
+
 ## 1.1.x Integration Sunset (v1)
 
 Users MUST upgrade by the end 2026 to avoid disruption.
