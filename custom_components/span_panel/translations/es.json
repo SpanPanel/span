@@ -177,15 +177,11 @@
           "soc_threshold": "Permanece encendido hasta el umbral de batería",
           "off_grid": "Se apaga en un apagón"
         }
-      },
-      "dominant_power_source": {
-        "name": "Fuente de Energía Dominante",
-        "state": {
-          "GRID": "Red",
-          "BATTERY": "Batería",
-          "GENERATOR": "Generador",
-          "PV": "PV"
-        }
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "name": "Anulación GFE: Conectado a Red"
       }
     },
     "sensor": {

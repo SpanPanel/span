@@ -1,4 +1,4 @@
-"""Tests for DPS select entity and BESS connected binary sensor."""
+"""Tests for GFE override buttons and BESS connected binary sensor."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,7 +18,7 @@ class TestBessConnectedBinarySensor:
     """Tests for the bess_connected binary sensor."""
 
     def test_bess_connected_true(self) -> None:
-        """Connected=True → is_on=True."""
+        """Connected=True -> is_on=True."""
         from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
 
         snapshot = SpanPanelSnapshotFactory.create(
@@ -27,7 +27,7 @@ class TestBessConnectedBinarySensor:
         assert BESS_CONNECTED_SENSOR.value_fn(snapshot) is True
 
     def test_bess_connected_false(self) -> None:
-        """Connected=False → is_on=False."""
+        """Connected=False -> is_on=False."""
         from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
 
         snapshot = SpanPanelSnapshotFactory.create(
@@ -36,7 +36,7 @@ class TestBessConnectedBinarySensor:
         assert BESS_CONNECTED_SENSOR.value_fn(snapshot) is False
 
     def test_bess_connected_none(self) -> None:
-        """Connected=None → is_on=None."""
+        """Connected=None -> is_on=None."""
         from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
 
         snapshot = SpanPanelSnapshotFactory.create(
@@ -45,7 +45,7 @@ class TestBessConnectedBinarySensor:
         assert BESS_CONNECTED_SENSOR.value_fn(snapshot) is None
 
     def test_bess_sensor_not_created_without_bess(self) -> None:
-        """No BESS (soe_percentage=None) → has_bess returns False."""
+        """No BESS (soe_percentage=None) -> has_bess returns False."""
         from custom_components.span_panel.sensors.factory import has_bess
 
         snapshot = SpanPanelSnapshotFactory.create(
@@ -54,7 +54,7 @@ class TestBessConnectedBinarySensor:
         assert not has_bess(snapshot)
 
     def test_bess_sensor_created_with_bess(self) -> None:
-        """BESS present (soe_percentage set) → has_bess returns True."""
+        """BESS present (soe_percentage set) -> has_bess returns True."""
         from custom_components.span_panel.sensors.factory import has_bess
 
         snapshot = SpanPanelSnapshotFactory.create(
@@ -64,16 +64,18 @@ class TestBessConnectedBinarySensor:
 
 
 # ---------------------------------------------------------------------------
-# DPS Select Entity
+# GFE Override Buttons
 # ---------------------------------------------------------------------------
 
 
-def _make_dps_coordinator(
+def _make_gfe_coordinator(
     dominant_power_source: str | None = "GRID",
+    battery: SpanBatterySnapshot | None = None,
 ) -> MagicMock:
-    """Build a mock coordinator for DPS select tests."""
+    """Build a mock coordinator for GFE button tests."""
     snapshot = SpanPanelSnapshotFactory.create(
         dominant_power_source=dominant_power_source,
+        battery=battery if battery is not None else SpanBatterySnapshot(),
     )
 
     coordinator = MagicMock()
@@ -86,128 +88,159 @@ def _make_dps_coordinator(
     return coordinator
 
 
-class TestDPSSelect:
-    """Tests for the dominant power source select entity."""
+class TestGFEOverrideButtons:
+    """Tests for the GFE override button entities."""
 
-    def test_dps_options(self) -> None:
-        """Select has the expected options."""
-        from custom_components.span_panel.select import DPS_OPTIONS
+    def test_grid_button_unique_id(self) -> None:
+        """Grid override button has expected unique ID."""
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
 
-        assert DPS_OPTIONS == ["GRID", "BATTERY", "GENERATOR", "PV"]
-
-    def test_dps_select_init_current_option(self) -> None:
-        """Select reads current DPS from snapshot."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
-
-        coordinator = _make_dps_coordinator(dominant_power_source="BATTERY")
-        select = SpanPanelDPSSelect(coordinator)
-        assert select._attr_current_option == "BATTERY"
-
-    def test_dps_select_init_defaults_to_grid(self) -> None:
-        """Select defaults to GRID when snapshot has no DPS."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
-
-        coordinator = _make_dps_coordinator(dominant_power_source=None)
-        # dominant_power_source=None in factory passes through as None
-        coordinator.data = SpanPanelSnapshotFactory.create(dominant_power_source=None)
-        select = SpanPanelDPSSelect(coordinator)
-        assert select._attr_current_option == "GRID"
+        coordinator = _make_gfe_coordinator()
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+        )
+        assert button._attr_unique_id is not None
+        assert "gfe_override" in str(button._attr_unique_id)
 
     @pytest.mark.asyncio
-    async def test_dps_select_set_option(self) -> None:
-        """Setting an option calls set_dominant_power_source on the client."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
+    async def test_grid_button_press_publishes_grid(self) -> None:
+        """Pressing the grid button calls set_dominant_power_source with GRID."""
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
 
-        coordinator = _make_dps_coordinator()
-        select = SpanPanelDPSSelect(coordinator)
-        select.hass = MagicMock()
+        coordinator = _make_gfe_coordinator()
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+        )
+        button.hass = MagicMock()
 
         coordinator.client = AsyncMock()
         coordinator.client.set_dominant_power_source = AsyncMock()
 
-        await select.async_select_option("BATTERY")
+        await button.async_press()
 
-        coordinator.client.set_dominant_power_source.assert_called_once_with("BATTERY")
+        coordinator.client.set_dominant_power_source.assert_called_once_with("GRID")
         coordinator.async_request_refresh.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_dps_select_simulation_mode(self) -> None:
+    async def test_button_simulation_mode(self) -> None:
         """Simulation mode (no set_dominant_power_source method) logs warning."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
 
-        coordinator = _make_dps_coordinator()
-        select = SpanPanelDPSSelect(coordinator)
-        select.hass = MagicMock()
+        coordinator = _make_gfe_coordinator()
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+        )
+        button.hass = MagicMock()
 
         # Simulation client without set_dominant_power_source
         coordinator.client = MagicMock(spec=[])
 
-        await select.async_select_option("BATTERY")
+        await button.async_press()
 
         # Should not raise, just log
         coordinator.async_request_refresh.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_dps_select_server_error(self) -> None:
+    async def test_button_server_error(self) -> None:
         """SpanPanelServerError triggers a notification."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
 
-        coordinator = _make_dps_coordinator()
+        coordinator = _make_gfe_coordinator()
 
         with patch(
-            "custom_components.span_panel.select.async_create_span_notification",
+            "custom_components.span_panel.button.async_create_span_notification",
             new_callable=AsyncMock,
         ) as mock_notification:
-            select = SpanPanelDPSSelect(coordinator)
-            select.hass = MagicMock()
+            button = SpanPanelGFEOverrideButton(
+                coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+            )
+            button.hass = MagicMock()
 
             coordinator.client = AsyncMock()
             coordinator.client.set_dominant_power_source = AsyncMock(
                 side_effect=SpanPanelServerError("test error")
             )
 
-            await select.async_select_option("BATTERY")
+            await button.async_press()
 
             mock_notification.assert_called_once()
 
-    def test_dps_select_coordinator_update(self) -> None:
-        """Coordinator update updates current_option from snapshot."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
+    def test_available_when_bess_offline_and_not_grid(self) -> None:
+        """Button is available when BESS is offline and GFE is not GRID."""
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
 
-        coordinator = _make_dps_coordinator(dominant_power_source="GRID")
-        select = SpanPanelDPSSelect(coordinator)
-        select.hass = MagicMock()
-        assert select._attr_current_option == "GRID"
-
-        # Simulate coordinator update with new DPS
-        coordinator.data = SpanPanelSnapshotFactory.create(
+        coordinator = _make_gfe_coordinator(
             dominant_power_source="BATTERY",
+            battery=SpanBatterySnapshot(soe_percentage=50.0, connected=False),
         )
-        with patch.object(select, "async_write_ha_state"):
-            select._handle_coordinator_update()
-        assert select._attr_current_option == "BATTERY"
-
-    def test_dps_select_coordinator_update_ignores_unknown(self) -> None:
-        """Coordinator update ignores DPS values not in options list."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
-
-        coordinator = _make_dps_coordinator(dominant_power_source="GRID")
-        select = SpanPanelDPSSelect(coordinator)
-        select.hass = MagicMock()
-
-        # Simulate coordinator update with unexpected DPS value
-        coordinator.data = SpanPanelSnapshotFactory.create(
-            dominant_power_source="UNKNOWN",
+        coordinator.panel_offline = False
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
         )
-        with patch.object(select, "async_write_ha_state"):
-            select._handle_coordinator_update()
-        # Should keep previous value
-        assert select._attr_current_option == "GRID"
+        assert button.available is True
 
-    def test_dps_select_unique_id(self) -> None:
-        """Unique ID follows expected pattern."""
-        from custom_components.span_panel.select import SpanPanelDPSSelect
+    def test_unavailable_when_bess_online(self) -> None:
+        """Button is unavailable when BESS is communicating."""
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
 
-        coordinator = _make_dps_coordinator()
-        select = SpanPanelDPSSelect(coordinator)
-        assert select._attr_unique_id == "span_sp3-242424-001_dominant_power_source"
+        coordinator = _make_gfe_coordinator(
+            dominant_power_source="BATTERY",
+            battery=SpanBatterySnapshot(soe_percentage=50.0, connected=True),
+        )
+        coordinator.panel_offline = False
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+        )
+        assert button.available is False
+
+    def test_unavailable_when_gfe_is_grid(self) -> None:
+        """Button is unavailable when GFE is already GRID."""
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
+
+        coordinator = _make_gfe_coordinator(
+            dominant_power_source="GRID",
+            battery=SpanBatterySnapshot(soe_percentage=50.0, connected=False),
+        )
+        coordinator.panel_offline = False
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+        )
+        assert button.available is False
+
+    def test_available_when_no_bess(self) -> None:
+        """Button is available when no BESS is commissioned and GFE is not GRID."""
+        from custom_components.span_panel.button import (
+            GFE_OVERRIDE_DESCRIPTION,
+            SpanPanelGFEOverrideButton,
+        )
+
+        coordinator = _make_gfe_coordinator(
+            dominant_power_source="BATTERY",
+            battery=SpanBatterySnapshot(),
+        )
+        coordinator.panel_offline = False
+        button = SpanPanelGFEOverrideButton(
+            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
+        )
+        assert button.available is True

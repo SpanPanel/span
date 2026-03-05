@@ -74,12 +74,12 @@ class TestPanelSensors:
                 f"Expected {expected_output} for input {input_state}, got {sensor_value}"
             )
 
-    def test_dominant_power_source_sensor(self) -> None:
-        """Test the dominant power source sensor."""
+    def test_grid_forming_entity_sensor(self) -> None:
+        """Test the grid forming entity sensor."""
         from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
 
         description = next(
-            d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dominant_power_source"
+            d for d in PANEL_DATA_STATUS_SENSORS if d.key == "grid_forming_entity"
         )
 
         for source in ["GRID", "BATTERY", "PV", "GENERATOR", "NONE"]:

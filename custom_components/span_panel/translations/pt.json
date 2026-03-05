@@ -216,15 +216,11 @@
           "soc_threshold": "Permanece ligado até o limite da bateria",
           "off_grid": "Desliga em caso de falha"
         }
-      },
-      "dominant_power_source": {
-        "name": "Fonte de Energia Dominante",
-        "state": {
-          "GRID": "Rede",
-          "BATTERY": "Bateria",
-          "GENERATOR": "Gerador",
-          "PV": "PV"
-        }
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "name": "Substituição GFE: Conectado à Rede"
       }
     }
   },

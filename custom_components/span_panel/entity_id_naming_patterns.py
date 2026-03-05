@@ -495,7 +495,7 @@ class EntityIdMigrationManager:
             "dsm_grid_state",
             "current_run_config",
             "main_relay_state",
-            "dominant_power_source",
+            "grid_forming_entity",
             "vendor_cloud",
             # Hardware status sensors (from STATUS_SENSORS)
             "software_version",

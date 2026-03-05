@@ -224,15 +224,11 @@
           "soc_threshold": "Stays on until battery threshold",
           "off_grid": "Turns off in an outage"
         }
-      },
-      "dominant_power_source": {
-        "name": "Dominant Power Source",
-        "state": {
-          "GRID": "Grid",
-          "BATTERY": "Battery",
-          "GENERATOR": "Generator",
-          "PV": "PV"
-        }
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "name": "GFE Override: Grid Connected"
       }
     }
   },

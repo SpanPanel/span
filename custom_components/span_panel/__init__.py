@@ -56,6 +56,7 @@ from .util import snapshot_to_device_info
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,

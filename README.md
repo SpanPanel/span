@@ -16,6 +16,12 @@ monitoring and control of your home's electrical system.
 
 The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
+**IMPORTANT:** This integration controls real electrical equipment. Circuit switches open and close physical relays. The GFE override button changes how the
+panel manages load shedding during power outages. These actions carry the same consequences as operating the panel manually — because they are. Automations can
+execute these actions without user presence; design them with the same care you would apply to any unattended electrical control. This integration is not a
+safety device and must not be relied upon for life-safety applications. Use this software at your own risk. If you cannot accept that risk, do not use this
+software. See [LICENSE](LICENSE) for the full warranty disclaimer.
+
 This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
 circuits.
 
@@ -99,7 +105,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
 | DSM State                    | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN. Derived from multiple eBus signals                     |
 | Current Run Config           | —            | —    | PANEL_ON_GRID (grid connected), PANEL_OFF_GRID (islanded on PV/generator), PANEL_BACKUP (islanded on battery), UNKNOWN |
-| Dominant Power Source        | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN                                                                       |
+| Grid Forming Entity          | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See [Grid Forming Entity](#grid-forming-entity)                      |
 | Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                   |
 | Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                   |
 | Software Version             | —            | —    | Firmware version string                                                                                                |
@@ -255,13 +261,13 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 
 ### Binary Sensors
 
-| Sensor         | Device Class | Notes                                                                                                                                |
-| -------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Door State     | Tamper       | Panel door open/closed                                                                                                               |
-| Ethernet Link  | Connectivity | Wired network status                                                                                                                 |
-| Wi-Fi Link     | Connectivity | Wireless network status                                                                                                              |
-| Panel Status   | Connectivity | Overall panel online/offline                                                                                                         |
-| BESS Connected | Connectivity | (v2) Whether the battery system is communicating with the panel. See [Dominant Power Source Control](#dominant-power-source-control) |
+| Sensor         | Device Class | Notes                                                                                                            |
+| -------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Door State     | Tamper       | Panel door open/closed                                                                                           |
+| Ethernet Link  | Connectivity | Wired network status                                                                                             |
+| Wi-Fi Link     | Connectivity | Wireless network status                                                                                          |
+| Panel Status   | Connectivity | Overall panel online/offline                                                                                     |
+| BESS Connected | Connectivity | (v2) Whether the battery system is communicating with the panel. See [Grid Forming Entity](#grid-forming-entity) |
 
 **Removed from binary sensors:**
 
@@ -288,60 +294,41 @@ Labels match the SPAN Home On-Premise app. Translations are provided for all sup
 
 ### Panel Controls
 
-| Entity                | Type   | Notes                                                                                            |
-| --------------------- | ------ | ------------------------------------------------------------------------------------------------ |
-| Dominant Power Source | Select | (v2) Override the panel's power source setting. Only present on MQTT-connected panels. See below |
+| Entity                       | Type   | Notes                                                                                |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| GFE Override: Grid Connected | Button | (v2) Tell the panel the grid is up. Only present on MQTT-connected panels. See below |
 
-### Dominant Power Source Control
+### Grid Forming Entity
 
-The SPAN panel tracks which power source is currently dominant — Grid, Battery, Generator, or PV (solar). This Dominant Power Source (DPS) setting drives
-circuit load shedding. When DPS is Grid, all circuits remain on. Any other value triggers shedding based on each circuit's configured shed priority.
+The Grid Forming Entity (GFE) identifies which power source provides the frequency and voltage reference for the home. When GFE is Grid, the utility grid sets
+the reference and all circuits remain on. When GFE is Battery, the battery inverter is the reference and circuits are shed based on each circuit's configured
+shed priority.
 
-When a battery system (BESS) is installed, the panel relies on the BESS to determine whether the grid is online and to set the DPS accordingly. If BESS
-communication is lost, the DPS value becomes stale — it may show Battery when the grid is actually up (causing unnecessary shedding), or Grid when the grid is
-actually down (preventing shedding and draining the battery faster).
+When a battery system (BESS) is installed, the panel relies on the BESS to determine whether the grid is online and to set the GFE accordingly. If BESS
+communication is lost while the panel is islanded, the GFE value becomes stale — it may show Battery when the grid has actually been restored, causing
+unnecessary shedding to continue.
 
-This integration provides three entities that surface this condition and give the user the tools to respond:
+The panel cannot detect grid restoration while islanded because the Microgrid Interconnect Device (MID) is open. The panel's power sensors are on the home side
+of the open switch and measure only battery-supplied power — grid restoration on the utility side is invisible to any panel-side measurement. This is a physical
+limitation, not a software gap. The `DSM State` sensor inherits the same blind spot for the same reason.
 
-- **DSM State** (`sensor.{device_name}_dsm_state`) — A read-only sensor that combines multiple independent signals to determine grid status, including the
-  panel's own power flow measurements which remain available even when the battery system is offline.
-- **BESS Connected** (`binary_sensor.{device_name}_bess_connected`) — Indicates whether the battery system is communicating with the panel. When this turns off,
-  the DPS may be stale.
-- **Dominant Power Source** (`select.{device_name}_dominant_power_source`) — Allows overriding the panel's power source setting.
+The **GFE Override: Grid Connected** button exists for this scenario. It publishes a temporary `GRID` command to the panel telling it the grid is back and
+shedding can stop. When the BESS restores communication, it automatically reclaims control and the override is superseded.
 
-| Value       | When to override                                 |
-| ----------- | ------------------------------------------------ |
-| Grid        | Grid is confirmed up but panel is stuck shedding |
-| Battery     | Grid is confirmed down but panel is not shedding |
-| Generator\* | System is running on generator backup            |
-| PV\*        | System is running on solar only                  |
+#### Detecting grid restoration
 
-\*Currently only Grid and Battery affect shedding behavior. Generator and PV are treated as off-grid (same as Battery) but are provided for future panel
-firmware enhancements.
+The panel requires an external signal to know the grid is back while islanded. Options include:
 
-#### Automation Example
+- An Automatic Transfer Switch (ATS) or Manual Transfer Switch (MTS) with a utility-side contact closure, integrated into Home Assistant as a binary sensor
+- Utility notification, neighbor confirmation, or physical observation
 
-A typical automation monitors the battery connection and grid state together:
+**WARNING** - Do _not_ automate the GFE override button based on `dsm_state` — it will read `DSM_OFF_GRID` even after the grid is restored because the panel's
+sensors cannot see past the open MID. Manual confirmation or an external sensor is required before pressing the button.
 
-**Grid restored but panel still shedding:**
+Pressing "GFE Override: Grid Connected" when actually off-grid will prevent shedding and drain the battery faster. The battery protects itself by disconnecting
+when depleted, so there is no overload risk, but runtime will be reduced.
 
-- Trigger: `bess_connected` = off for 30 seconds
-- Condition: `dsm_state` = on-grid
-- Action: Set Dominant Power Source to Grid
-
-**Grid lost but panel not shedding:**
-
-- Trigger: `bess_connected` = off for 30 seconds
-- Condition: `dsm_state` = off-grid
-- Action: Set Dominant Power Source to Battery
-
-**Battery system reconnected:**
-
-- Trigger: `bess_connected` = on
-- Action: No action needed — firmware resumes normal management
-
-Setting the Dominant Power Source to Grid when actually off-grid will prevent shedding and drain the battery faster. Pair any Battery-to-Grid transition with a
-check that grid power flow is non-zero.
+When `bess_connected` returns to on, no action is needed — firmware resumes normal GFE management automatically.
 
 ## Configuration Options
 

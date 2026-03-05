@@ -177,15 +177,11 @@
           "soc_threshold": "Reste allumé jusqu'au seuil de batterie",
           "off_grid": "S'éteint en cas de panne"
         }
-      },
-      "dominant_power_source": {
-        "name": "Source d'Énergie Dominante",
-        "state": {
-          "GRID": "Réseau",
-          "BATTERY": "Batterie",
-          "GENERATOR": "Générateur",
-          "PV": "PV"
-        }
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "name": "Forçage GFE : Connecté au Réseau"
       }
     },
     "sensor": {

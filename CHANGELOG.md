@@ -28,10 +28,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   default for new installs; existing installs can enable via General Options. Includes persistent notification when dips are detected and sensor attributes
   (`energy_offset`, `last_dip_delta`) for diagnostics. See [design doc](docs/dev/energy_dip_compensation.md) for details.
 - Real-time MQTT push via eBus broker — no more polling intervals
-- `Dominant Power Source` sensor (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN)
-- **Dominant Power Source select** — allows overriding the panel's power source setting (Grid, Battery, Generator, PV). Only present on MQTT-connected panels.
-  Enables automations to correct stale shedding when the battery system loses communication. See
-  [Dominant Power Source Control](README.md#dominant-power-source-control) for details and automation examples
+- **Grid Forming Entity (GFE) sensor** — read-only sensor showing the panel's current grid-forming power source (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN).
+  The GFE identifies which source provides the frequency and voltage reference, not which produces the most watts. Reported as `dominant-power-source` in the
+  eBus MQTT schema
+- **GFE Override button** — publishes a temporary `GRID` override to the panel when the battery system (BESS) loses communication and the GFE value becomes
+  stale. The BESS automatically reclaims control when communication is restored. Only present on MQTT-connected panels. See
+  [Grid Forming Entity](README.md#grid-forming-entity) for details
 - **BESS Connected binary sensor** — indicates whether the battery system is communicating with the panel. Promoted from an attribute on the Battery Power
   sensor to a first-class entity for easier automation
 - `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)

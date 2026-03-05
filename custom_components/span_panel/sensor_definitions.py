@@ -112,8 +112,8 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         value_fn=lambda s: s.main_relay_state,
     ),
     SpanPanelDataSensorEntityDescription(
-        key="dominant_power_source",
-        name="Dominant Power Source",
+        key="grid_forming_entity",
+        name="Grid Forming Entity",
         value_fn=lambda s: s.dominant_power_source or "UNKNOWN",
     ),
     SpanPanelDataSensorEntityDescription(
