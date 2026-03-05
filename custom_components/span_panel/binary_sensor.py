@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -109,11 +109,9 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     value_fn=lambda s: s.battery.connected,
 )
 
-T = TypeVar("T", bound=SpanPanelBinarySensorEntityDescription)
 
-
-class SpanPanelBinarySensor(
-    CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity, Generic[T]
+class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
+    CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity
 ):
     """Binary Sensor status entity."""
 
