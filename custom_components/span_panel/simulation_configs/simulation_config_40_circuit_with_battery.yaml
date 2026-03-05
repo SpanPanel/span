@@ -15,7 +15,7 @@ circuit_templates:
       typical_power: 25.0
       power_variation: 0.15
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   outlets:
     energy_profile:
@@ -24,7 +24,7 @@ circuit_templates:
       typical_power: 150.0
       power_variation: 0.4
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   # EV charger (SPAN Drive) with smart grid response
   ev_charger:
@@ -34,7 +34,7 @@ circuit_templates:
       typical_power: 7200.0  # Level 2 charging (240V @ 30A)
       power_variation: 0.05
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
     device_type: "evse"  # Generates EVSE (SPAN Drive) snapshot
     smart_behavior:
       responds_to_grid: true
@@ -47,7 +47,7 @@ circuit_templates:
       typical_power: 1500.0
       power_variation: 0.2
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
     cycling_pattern:
       on_duration: 900    # 15 minutes
       off_duration: 1800  # 30 minutes
@@ -59,7 +59,7 @@ circuit_templates:
       typical_power: -4000.0
       power_variation: 0.4
     relay_behavior: "non_controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   battery:
     energy_profile:
@@ -68,7 +68,7 @@ circuit_templates:
       typical_power: 0.0  # Neutral when idle
       power_variation: 0.1
     relay_behavior: "non_controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
     battery_behavior:
       enabled: true
       charge_efficiency: 0.95  # 95% efficient charging
@@ -311,7 +311,7 @@ unmapped_tab_templates:
       typical_power: 150.0
       power_variation: 0.2
     relay_behavior: "non_controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
 simulation_params:
   enable_realistic_behaviors: true
