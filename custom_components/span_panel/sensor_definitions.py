@@ -295,8 +295,9 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda s: (s.main_meter_energy_consumed_wh or 0)
-        - (s.main_meter_energy_produced_wh or 0),
+        value_fn=lambda s: (
+            (s.main_meter_energy_consumed_wh or 0) - (s.main_meter_energy_produced_wh or 0)
+        ),
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
@@ -305,8 +306,9 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda s: (s.feedthrough_energy_consumed_wh or 0)
-        - (s.feedthrough_energy_produced_wh or 0),
+        value_fn=lambda s: (
+            (s.feedthrough_energy_consumed_wh or 0) - (s.feedthrough_energy_produced_wh or 0)
+        ),
     ),
 )
 
@@ -357,9 +359,11 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
-        value_fn=lambda c: (c.produced_energy_wh or 0) - (c.consumed_energy_wh or 0)
-        if c.device_type == "pv"
-        else (c.consumed_energy_wh or 0) - (c.produced_energy_wh or 0),
+        value_fn=lambda c: (
+            (c.produced_energy_wh or 0) - (c.consumed_energy_wh or 0)
+            if c.device_type == "pv"
+            else (c.consumed_energy_wh or 0) - (c.produced_energy_wh or 0)
+        ),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
