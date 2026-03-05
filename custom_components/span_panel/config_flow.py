@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import enum
+from ipaddress import IPv4Address, IPv4Network
 import logging
 from pathlib import Path
 import shutil
@@ -64,6 +65,7 @@ from .const import (
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
+    ZEROCONF_IGNORE_NETWORKS,
     EntityNamingPattern,
 )
 from .helpers import generate_unique_simulator_serial_number
@@ -208,17 +210,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not is_ipv4_address(discovery_info.host):
             return self.async_abort(reason="not_ipv4_address")
 
+        # Ignore addresses on SPAN internal link networks (e.g., 10.42.0.0/16
+        # used for Tesla Powerwall 3 gateway communication). These IPs are
+        # advertised via mDNS but are not reachable from the user's network.
+        host_addr = IPv4Address(discovery_info.host)
+        if any(host_addr in IPv4Network(net) for net in ZEROCONF_IGNORE_NETWORKS):
+            return self.async_abort(reason="internal_link_address")
+
         # Detect whether this is a v2 panel based on zeroconf service type
         svc_type = getattr(discovery_info, "type", "") or ""
         is_v2_service = svc_type in ("_ebus._tcp.local.", "_secure-mqtt._tcp.local.")
 
         if is_v2_service:
             # v2 panels discovered via eBus / secure-mqtt service types
-            self.api_version = "v2"
             detection = await detect_api_version(discovery_info.host)
+            if detection.api_version != "v2" or detection.status_info is None:
+                # The v2 endpoint did not respond — this IP is not a valid
+                # v2 panel (e.g., an internal link address we didn't filter).
+                return self.async_abort(reason="not_span_panel")
+            self.api_version = "v2"
             self.host = discovery_info.host
-            if detection.status_info is not None:
-                self.serial_number = detection.status_info.serial_number
+            self.serial_number = detection.status_info.serial_number
             self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
             self.context = {
                 **self.context,

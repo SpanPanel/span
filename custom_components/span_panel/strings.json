@@ -4,6 +4,7 @@
       "no_devices_found": "No devices found on the network",
       "already_configured": "Span Panel already configured. Only a single configuration is possible.",
       "reauth_successful": "Authentication successful.",
+      "internal_link_address": "Discovered address is on a SPAN internal link network and cannot be used.",
       "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {

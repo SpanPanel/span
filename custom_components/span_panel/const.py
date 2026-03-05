@@ -68,6 +68,11 @@ ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
 
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 
+# Networks used internally by SPAN for downstream device communication
+# (e.g., Tesla Powerwall 3 gateway link). These are not user-accessible
+# and should be ignored during zeroconf discovery.
+ZEROCONF_IGNORE_NETWORKS: Final[tuple[str, ...]] = ("10.42.0.0/16",)
+
 
 class CircuitRelayState(enum.Enum):
     """Enumeration representing the possible relay states for a circuit."""
