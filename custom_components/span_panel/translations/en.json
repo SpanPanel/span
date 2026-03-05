@@ -180,7 +180,6 @@
   "entity": {
     "sensor": {
       "evse_status": {
-        "name": "Charger Status",
         "state": {
           "UNKNOWN": "Unknown",
           "AVAILABLE": "Available",
@@ -195,15 +194,11 @@
         }
       },
       "evse_lock_state": {
-        "name": "Lock State",
         "state": {
           "UNKNOWN": "Unknown",
           "LOCKED": "Locked",
           "UNLOCKED": "Unlocked"
         }
-      },
-      "evse_advertised_current": {
-        "name": "Advertised Current"
       }
     },
     "binary_sensor": {

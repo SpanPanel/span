@@ -172,7 +172,6 @@
   "entity": {
     "sensor": {
       "evse_status": {
-        "name": "充電器ステータス",
         "state": {
           "UNKNOWN": "不明",
           "AVAILABLE": "利用可能",
@@ -187,15 +186,11 @@
         }
       },
       "evse_lock_state": {
-        "name": "ロック状態",
         "state": {
           "UNKNOWN": "不明",
           "LOCKED": "ロック",
           "UNLOCKED": "アンロック"
         }
-      },
-      "evse_advertised_current": {
-        "name": "通知電流"
       }
     },
     "binary_sensor": {

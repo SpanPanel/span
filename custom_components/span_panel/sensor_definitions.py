@@ -405,6 +405,7 @@ EVSE_SENSORS: tuple[
 ] = (
     SpanEvseSensorEntityDescription(
         key="evse_status",
+        name="Charger Status",
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
         options=EVSE_STATUS_OPTIONS,
@@ -412,7 +413,7 @@ EVSE_SENSORS: tuple[
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
-        translation_key="evse_advertised_current",
+        name="Advertised Current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.CURRENT,
@@ -421,6 +422,7 @@ EVSE_SENSORS: tuple[
     ),
     SpanEvseSensorEntityDescription(
         key="evse_lock_state",
+        name="Lock State",
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
         options=EVSE_LOCK_STATE_OPTIONS,

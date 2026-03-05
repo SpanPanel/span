@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.helpers.typing import UNDEFINED
 from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
@@ -73,11 +72,9 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
 
     def _generate_friendly_name(
         self, snapshot: SpanPanelSnapshot, description: SpanEvseSensorEntityDescription
-    ) -> str | None:
+    ) -> str:
         """Generate friendly name for EVSE sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return None
+        return str(description.name)
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanEvseSnapshot:
         """Get the EVSE snapshot for this sensor's charger."""

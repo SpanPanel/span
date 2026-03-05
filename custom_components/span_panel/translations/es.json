@@ -186,7 +186,6 @@
     },
     "sensor": {
       "evse_status": {
-        "name": "Estado del Cargador",
         "state": {
           "UNKNOWN": "Desconocido",
           "AVAILABLE": "Disponible",
@@ -201,15 +200,11 @@
         }
       },
       "evse_lock_state": {
-        "name": "Estado de Bloqueo",
         "state": {
           "UNKNOWN": "Desconocido",
           "LOCKED": "Bloqueado",
           "UNLOCKED": "Desbloqueado"
         }
-      },
-      "evse_advertised_current": {
-        "name": "Corriente Anunciada"
       }
     },
     "binary_sensor": {

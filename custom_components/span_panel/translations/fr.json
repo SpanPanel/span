@@ -186,7 +186,6 @@
     },
     "sensor": {
       "evse_status": {
-        "name": "État du Chargeur",
         "state": {
           "UNKNOWN": "Inconnu",
           "AVAILABLE": "Disponible",
@@ -201,15 +200,11 @@
         }
       },
       "evse_lock_state": {
-        "name": "État du Verrouillage",
         "state": {
           "UNKNOWN": "Inconnu",
           "LOCKED": "Verrouillé",
           "UNLOCKED": "Déverrouillé"
         }
-      },
-      "evse_advertised_current": {
-        "name": "Courant Annoncé"
       }
     },
     "binary_sensor": {

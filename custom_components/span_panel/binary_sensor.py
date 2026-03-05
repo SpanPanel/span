@@ -37,7 +37,7 @@ from .const import (
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
-    build_evse_unique_id,
+    build_evse_unique_id_for_entry,
     resolve_evse_display_suffix,
 )
 from .sensors.factory import has_bess
@@ -326,8 +326,11 @@ class SpanEvseBinarySensor(CoordinatorEntity[SpanPanelCoordinator], BinarySensor
             panel_identifier, evse, panel_name, display_suffix
         )
 
-        self._attr_unique_id = build_evse_unique_id(
-            snapshot.serial_number, evse_id, description.key
+        device_name = data_coordinator.config_entry.data.get(
+            CONF_DEVICE_NAME, data_coordinator.config_entry.title
+        )
+        self._attr_unique_id = build_evse_unique_id_for_entry(
+            data_coordinator, snapshot, evse_id, description.key, device_name
         )
 
     def _handle_coordinator_update(self) -> None:
