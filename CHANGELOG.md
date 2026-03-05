@@ -5,11 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v2 MQTT Integration
+## [2.0.1] - 3/2026
+
+⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade.** ⚠️
 
 ### Breaking Changes
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You should already be on v1.3.1 of the SpanPanel/span integration if upgrading
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 - `DSM Grid State` deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version since it is an
   alias for `DSM State`
@@ -32,8 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   The GFE identifies which source provides the frequency and voltage reference, not which produces the most watts. Reported as `dominant-power-source` in the
   eBus MQTT schema
 - **GFE Override button** — publishes a temporary `GRID` override to the panel when the battery system (BESS) loses communication and the GFE value becomes
-  stale. The BESS automatically reclaims control when communication is restored. Only present on MQTT-connected panels. See
-  [Grid Forming Entity](README.md#grid-forming-entity) for details
+  stale. The BESS automatically reclaims control when communication is restored. See [Grid Forming Entity](README.md#grid-forming-entity) for details
 - **BESS Connected binary sensor** — indicates whether the battery system is communicating with the panel. Promoted from an attribute on the Battery Power
   sensor to a first-class entity for easier automation
 - `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)
