@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import enum
-from ipaddress import IPv4Address, IPv4Network
 import logging
 from pathlib import Path
 import shutil
@@ -65,7 +64,6 @@ from .const import (
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
-    ZEROCONF_IGNORE_NETWORKS,
     EntityNamingPattern,
 )
 from .helpers import generate_unique_simulator_serial_number
@@ -209,13 +207,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Do not probe device if it is not an ipv4 address
         if not is_ipv4_address(discovery_info.host):
             return self.async_abort(reason="not_ipv4_address")
-
-        # Ignore addresses on SPAN internal link networks (e.g., 10.42.0.0/16
-        # used for Tesla Powerwall 3 gateway communication). These IPs are
-        # advertised via mDNS but are not reachable from the user's network.
-        host_addr = IPv4Address(discovery_info.host)
-        if any(host_addr in IPv4Network(net) for net in ZEROCONF_IGNORE_NETWORKS):
-            return self.async_abort(reason="internal_link_address")
 
         # Detect whether this is a v2 panel based on zeroconf service type
         svc_type = getattr(discovery_info, "type", "") or ""
