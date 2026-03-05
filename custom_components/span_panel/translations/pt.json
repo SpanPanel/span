@@ -173,23 +173,23 @@
     "sensor": {
       "evse_status": {
         "state": {
-          "UNKNOWN": "Desconhecido",
-          "AVAILABLE": "Disponível",
-          "PREPARING": "Preparando",
-          "CHARGING": "Carregando",
-          "SUSPENDED_EV": "Suspenso pelo Veículo",
-          "SUSPENDED_EVSE": "Suspenso pelo Carregador",
-          "FINISHING": "Finalizando",
-          "RESERVED": "Reservado",
-          "FAULTED": "Com Defeito",
-          "UNAVAILABLE": "Indisponível"
+          "unknown": "Desconhecido",
+          "available": "Disponível",
+          "preparing": "Preparando",
+          "charging": "Carregando",
+          "suspended_ev": "Suspenso pelo Veículo",
+          "suspended_evse": "Suspenso pelo Carregador",
+          "finishing": "Finalizando",
+          "reserved": "Reservado",
+          "faulted": "Com Defeito",
+          "unavailable": "Indisponível"
         }
       },
       "evse_lock_state": {
         "state": {
-          "UNKNOWN": "Desconhecido",
-          "LOCKED": "Bloqueado",
-          "UNLOCKED": "Desbloqueado"
+          "unknown": "Desconhecido",
+          "locked": "Bloqueado",
+          "unlocked": "Desbloqueado"
         }
       }
     },
@@ -218,11 +218,6 @@
         "name": "Substituição GFE: Conectado à Rede"
       }
     }
-  },
-  "notifications": {
-    "energy_dip_title": "SPAN Panel: Queda de Energia Detectada",
-    "energy_dip_preamble": "Os seguintes sensores de energia reportaram uma diminuição no seu valor acumulado. A compensação de quedas aplicou ajustes automaticamente — nenhuma ação é necessária para os novos dados. Para corrigir dados históricos registrados antes de ativar a compensação, use o serviço `span_panel.cleanup_energy_spikes`.",
-    "energy_dip_sensor_line": "- **{entity_id}**: queda {delta} Wh (compensação acumulada {offset} Wh)"
   },
   "selector": {
     "entity_naming_pattern": {

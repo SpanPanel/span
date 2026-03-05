@@ -384,19 +384,19 @@ class SpanEvseSensorEntityDescription(SensorEntityDescription, SpanEvseRequiredK
 
 
 EVSE_STATUS_OPTIONS: list[str] = [
-    "UNKNOWN",
-    "AVAILABLE",
-    "PREPARING",
-    "CHARGING",
-    "SUSPENDED_EV",
-    "SUSPENDED_EVSE",
-    "FINISHING",
-    "RESERVED",
-    "FAULTED",
-    "UNAVAILABLE",
+    "unknown",
+    "available",
+    "preparing",
+    "charging",
+    "suspended_ev",
+    "suspended_evse",
+    "finishing",
+    "reserved",
+    "faulted",
+    "unavailable",
 ]
 
-EVSE_LOCK_STATE_OPTIONS: list[str] = ["UNKNOWN", "LOCKED", "UNLOCKED"]
+EVSE_LOCK_STATE_OPTIONS: list[str] = ["unknown", "locked", "unlocked"]
 
 EVSE_SENSORS: tuple[
     SpanEvseSensorEntityDescription,
@@ -409,7 +409,7 @@ EVSE_SENSORS: tuple[
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
         options=EVSE_STATUS_OPTIONS,
-        value_fn=lambda e: e.status,
+        value_fn=lambda e: e.status.lower() if e.status else "unknown",
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
@@ -426,6 +426,6 @@ EVSE_SENSORS: tuple[
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
         options=EVSE_LOCK_STATE_OPTIONS,
-        value_fn=lambda e: e.lock_state,
+        value_fn=lambda e: e.lock_state.lower() if e.lock_state else "unknown",
     ),
 )

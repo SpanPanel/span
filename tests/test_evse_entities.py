@@ -103,12 +103,12 @@ class TestEvseSensorDefinitions:
     def test_evse_status_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(status="CHARGING")
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
-        assert status_desc.value_fn(evse) == "CHARGING"
+        assert status_desc.value_fn(evse) == "charging"
 
     def test_evse_lock_state_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(lock_state="LOCKED")
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
-        assert lock_desc.value_fn(evse) == "LOCKED"
+        assert lock_desc.value_fn(evse) == "locked"
 
     def test_evse_advertised_current_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(advertised_current_a=32.0)
@@ -211,14 +211,14 @@ class TestEvseStatusOptions:
 
     def test_status_options_include_all_ocpp_states(self):
         expected = {
-            "UNKNOWN", "AVAILABLE", "PREPARING", "CHARGING",
-            "SUSPENDED_EV", "SUSPENDED_EVSE", "FINISHING",
-            "RESERVED", "FAULTED", "UNAVAILABLE",
+            "unknown", "available", "preparing", "charging",
+            "suspended_ev", "suspended_evse", "finishing",
+            "reserved", "faulted", "unavailable",
         }
         assert set(EVSE_STATUS_OPTIONS) == expected
 
     def test_lock_state_options(self):
-        assert set(EVSE_LOCK_STATE_OPTIONS) == {"UNKNOWN", "LOCKED", "UNLOCKED"}
+        assert set(EVSE_LOCK_STATE_OPTIONS) == {"unknown", "locked", "unlocked"}
 
 
 class TestEvseMultipleDevices:

@@ -16,7 +16,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
-from homeassistant.helpers import entity_registry as er, translation
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import (
     DynamicSimulationEngine,
@@ -178,38 +178,19 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         events = self._pending_dip_events
         self._pending_dip_events = []
 
-        # Load translated strings for the current language
-        lang = self.hass.config.language
-        translations = await translation.async_get_translations(
-            self.hass, lang, "notifications", {DOMAIN}
-        )
-        prefix = f"component.{DOMAIN}.notifications"
-
-        title = translations.get(
-            f"{prefix}.energy_dip_title",
-            "SPAN Panel: Energy Dip Detected",
-        )
-        preamble = translations.get(
-            f"{prefix}.energy_dip_preamble",
+        title = "SPAN Panel: Energy Dip Detected"
+        preamble = (
             "The following energy sensors reported a decrease in their "
             "counter value. Dip compensation has automatically applied "
             "offsets — no action is required for new data. To fix "
             "historical data recorded before compensation was enabled, "
-            "use the `span_panel.cleanup_energy_spikes` service.",
-        )
-        line_template = translations.get(
-            f"{prefix}.energy_dip_sensor_line",
-            "- **{entity_id}**: dip {delta} Wh (cumulative offset {offset} Wh)",
+            "use the `span_panel.cleanup_energy_spikes` service."
         )
 
         lines: list[str] = []
         for entity_id, delta, offset in events:
             lines.append(
-                line_template.format(
-                    entity_id=entity_id,
-                    delta=f"{delta:.1f}",
-                    offset=f"{offset:.1f}",
-                )
+                f"- **{entity_id}**: dip {delta:.1f} Wh (cumulative offset {offset:.1f} Wh)"
             )
 
         body = preamble + "\n\n" + "\n".join(lines)

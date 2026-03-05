@@ -262,7 +262,7 @@ class SpanEvseBinarySensorEntityDescription(
 
 
 _EV_CONNECTED_STATUSES: frozenset[str] = frozenset(
-    {"PREPARING", "CHARGING", "SUSPENDED_EV", "SUSPENDED_EVSE", "FINISHING"}
+    {"preparing", "charging", "suspended_ev", "suspended_evse", "finishing"}
 )
 
 EVSE_BINARY_SENSORS: tuple[
@@ -273,13 +273,13 @@ EVSE_BINARY_SENSORS: tuple[
         key="evse_charging",
         translation_key="evse_charging",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
-        value_fn=lambda e: e.status == "CHARGING",
+        value_fn=lambda e: (e.status or "").lower() == "charging",
     ),
     SpanEvseBinarySensorEntityDescription(
         key="evse_ev_connected",
         translation_key="evse_ev_connected",
         device_class=BinarySensorDeviceClass.PLUG,
-        value_fn=lambda e: e.status in _EV_CONNECTED_STATUSES,
+        value_fn=lambda e: (e.status or "").lower() in _EV_CONNECTED_STATUSES,
     ),
 )
 

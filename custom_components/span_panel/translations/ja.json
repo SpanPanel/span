@@ -173,23 +173,23 @@
     "sensor": {
       "evse_status": {
         "state": {
-          "UNKNOWN": "不明",
-          "AVAILABLE": "利用可能",
-          "PREPARING": "準備中",
-          "CHARGING": "充電中",
-          "SUSPENDED_EV": "車両により一時停止",
-          "SUSPENDED_EVSE": "充電器により一時停止",
-          "FINISHING": "終了処理中",
-          "RESERVED": "予約済み",
-          "FAULTED": "故障",
-          "UNAVAILABLE": "利用不可"
+          "unknown": "不明",
+          "available": "利用可能",
+          "preparing": "準備中",
+          "charging": "充電中",
+          "suspended_ev": "車両により一時停止",
+          "suspended_evse": "充電器により一時停止",
+          "finishing": "終了処理中",
+          "reserved": "予約済み",
+          "faulted": "故障",
+          "unavailable": "利用不可"
         }
       },
       "evse_lock_state": {
         "state": {
-          "UNKNOWN": "不明",
-          "LOCKED": "ロック",
-          "UNLOCKED": "アンロック"
+          "unknown": "不明",
+          "locked": "ロック",
+          "unlocked": "アンロック"
         }
       }
     },
@@ -218,11 +218,6 @@
         "name": "GFEオーバーライド：系統接続"
       }
     }
-  },
-  "notifications": {
-    "energy_dip_title": "SPAN Panel：エネルギー低下を検出",
-    "energy_dip_preamble": "以下のエネルギーセンサーで累積値の低下が報告されました。低下補正により自動的にオフセットが適用されました — 新しいデータに対する操作は不要です。補正を有効にする前に記録された過去のデータを修正するには、`span_panel.cleanup_energy_spikes` サービスを使用してください。",
-    "energy_dip_sensor_line": "- **{entity_id}**：低下 {delta} Wh（累積オフセット {offset} Wh）"
   },
   "selector": {
     "entity_naming_pattern": {
