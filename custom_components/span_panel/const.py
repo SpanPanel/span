@@ -1,6 +1,5 @@
 """Constants for the Span Panel integration."""
 
-from datetime import timedelta
 import enum
 from typing import Final
 
@@ -67,8 +66,7 @@ ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
 ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
 
-DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)
-DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 1.0
+DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 
 
 class CircuitRelayState(enum.Enum):

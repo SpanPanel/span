@@ -437,6 +437,14 @@ The spike cleanup service looks at the energy usage just after the spike to extr
 
 **Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.
 
+### High CPU Usage
+
+The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default: 5 seconds). On low-power hardware such as a Raspberry Pi,
+this can contribute to elevated CPU usage.
+
+To reduce CPU load, increase the **Snapshot Update Interval** in **General Options**. A value of 10–15 seconds is recommended for resource-constrained systems.
+Setting the interval to 0 disables debouncing entirely and rebuilds on every MQTT message, which is not recommended for most setups.
+
 ### Common Issues
 
 1. **Door Sensor Unavailable** - The SPAN API may return UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API — we

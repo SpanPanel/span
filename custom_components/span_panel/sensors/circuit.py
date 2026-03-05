@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import logging
 from typing import Any
 
+from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS
@@ -86,10 +87,12 @@ class SpanCircuitPowerSensor(
         description: SpanPanelCircuitsSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
         circuit_id: str,
+        device_info_override: DeviceInfo | None = None,
     ) -> None:
         """Initialize the enhanced circuit power sensor."""
         self.circuit_id = circuit_id
         self.original_key = description.key
+        self._is_sub_device = device_info_override is not None
 
         # Override the description key to use the circuit_id for data lookup
         description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
@@ -105,6 +108,9 @@ class SpanCircuitPowerSensor(
         )
 
         super().__init__(data_coordinator, description_with_circuit, snapshot)
+
+        if device_info_override is not None:
+            self._attr_device_info = device_info_override
 
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
@@ -123,7 +129,12 @@ class SpanCircuitPowerSensor(
 
         Returns None when circuit has no name in friendly-name mode,
         matching v1 behavior where HA handles default naming.
+        For sub-device sensors (EVSE), returns just the description name
+        since the device name already provides circuit context.
         """
+        if self._is_sub_device:
+            return str(description.name or "Sensor")
+
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
             return construct_unmapped_friendly_name(
@@ -141,6 +152,9 @@ class SpanCircuitPowerSensor(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
         """Generate panel name for circuit sensors (always uses panel circuit name)."""
+        if self._is_sub_device:
+            return str(description.name or "Sensor")
+
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
             return construct_unmapped_friendly_name(
@@ -225,10 +239,12 @@ class SpanCircuitEnergySensor(
         description: SpanPanelCircuitsSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
         circuit_id: str,
+        device_info_override: DeviceInfo | None = None,
     ) -> None:
         """Initialize the circuit energy sensor."""
         self.circuit_id = circuit_id
         self.original_key = description.key
+        self._is_sub_device = device_info_override is not None
 
         # Override the description key to use the circuit_id for data lookup
         description_with_circuit = SpanPanelCircuitsSensorEntityDescription(
@@ -244,6 +260,9 @@ class SpanCircuitEnergySensor(
         )
 
         super().__init__(data_coordinator, description_with_circuit, snapshot)
+
+        if device_info_override is not None:
+            self._attr_device_info = device_info_override
 
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
@@ -267,7 +286,12 @@ class SpanCircuitEnergySensor(
 
         Returns None when circuit has no name in friendly-name mode,
         matching v1 behavior where HA handles default naming.
+        For sub-device sensors (EVSE), returns just the description name
+        since the device name already provides circuit context.
         """
+        if self._is_sub_device:
+            return str(description.name)
+
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
             return f"Circuit {self.circuit_id} {description.name}"
@@ -283,6 +307,9 @@ class SpanCircuitEnergySensor(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
         """Generate panel name for circuit energy sensors (always uses panel circuit name)."""
+        if self._is_sub_device:
+            return str(description.name)
+
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
             return f"Circuit {self.circuit_id} {description.name}"

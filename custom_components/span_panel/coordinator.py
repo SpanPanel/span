@@ -9,7 +9,6 @@ from time import time as _epoch_time
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -32,7 +31,6 @@ from span_panel_api.exceptions import (
 )
 
 from .const import (
-    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
@@ -60,6 +58,9 @@ _LOGGER.addFilter(_SuppressManualUpdateFilter())
 # Fallback poll interval for MQTT streaming mode (push is the primary update path)
 _STREAMING_FALLBACK_INTERVAL = timedelta(seconds=60)
 
+# Poll interval for simulation mode (no streaming, coordinator polls get_snapshot)
+_SIMULATION_POLL_INTERVAL = timedelta(seconds=5)
+
 
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     """Coordinator for managing Span Panel data updates and entity migrations."""
@@ -69,12 +70,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         hass: HomeAssistant,
         client: SpanMqttClient | DynamicSimulationEngine,
         config_entry: ConfigEntry,
-        is_streaming: bool = False,
     ) -> None:
         """Initialize the coordinator."""
         self._client = client
         self.config_entry = config_entry
-        self._is_streaming = is_streaming
         self._migration_manager = EntityIdMigrationManager(hass, config_entry.entry_id)
         # Track last tick for visibility into cadence
         self._last_tick_epoch: float | None = None
@@ -100,39 +99,16 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # drained and surfaced as a persistent notification after each cycle.
         self._pending_dip_events: list[tuple[str, float, float]] = []
 
-        # Determine update interval based on transport mode
-        if is_streaming:
+        # MQTT streaming: push is the primary update path; poll is a safety net.
+        # Simulation: poll is the only update path; use the snapshot interval.
+        if isinstance(client, SpanMqttClient):
             update_interval = _STREAMING_FALLBACK_INTERVAL
         else:
-            raw_scan_interval = config_entry.options.get(
-                CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds())
-            )
-
-            try:
-                scan_interval_seconds = int(float(raw_scan_interval))
-            except (TypeError, ValueError):
-                scan_interval_seconds = int(DEFAULT_SCAN_INTERVAL.total_seconds())
-
-            if scan_interval_seconds < 5:
-                _LOGGER.debug(
-                    "Configured scan interval %s is below minimum; clamping to 5 seconds",
-                    scan_interval_seconds,
-                )
-                scan_interval_seconds = 5
-
-            if str(raw_scan_interval) != str(scan_interval_seconds):
-                _LOGGER.debug(
-                    "Coerced scan interval option from raw=%s to %s seconds",
-                    raw_scan_interval,
-                    scan_interval_seconds,
-                )
-
-            update_interval = timedelta(seconds=scan_interval_seconds)
+            update_interval = _SIMULATION_POLL_INTERVAL
 
         _LOGGER.info(
-            "Span Panel coordinator: update interval set to %s seconds (streaming=%s)",
+            "Span Panel coordinator: poll interval %s seconds",
             update_interval.total_seconds(),
-            is_streaming,
         )
 
         super().__init__(

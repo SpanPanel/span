@@ -292,7 +292,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await client.close()
                 raise ConfigEntryNotReady(f"Failed to connect to SPAN panel: {err}") from err
 
-            coordinator = SpanPanelCoordinator(hass, client, entry, is_streaming=True)
+            coordinator = SpanPanelCoordinator(hass, client, entry)
             await coordinator.async_config_entry_first_refresh()
             await coordinator.async_setup_streaming()
 
@@ -326,7 +326,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         e,
                     )
 
-            coordinator = SpanPanelCoordinator(hass, engine, entry, is_streaming=False)
+            coordinator = SpanPanelCoordinator(hass, engine, entry)
             await coordinator.async_config_entry_first_refresh()
 
             # Apply simulation offline mode if configured

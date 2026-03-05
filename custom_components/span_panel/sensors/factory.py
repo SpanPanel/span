@@ -8,13 +8,19 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.util import slugify
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel.const import (
+    CONF_API_VERSION,
+    CONF_DEVICE_NAME,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
+    USE_CIRCUIT_NUMBERS,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.helpers import resolve_evse_display_suffix
 from custom_components.span_panel.sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
@@ -28,6 +34,7 @@ from custom_components.span_panel.sensor_definitions import (
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
 )
+from custom_components.span_panel.util import evse_device_info
 
 from .circuit import SpanCircuitEnergySensor, SpanCircuitPowerSensor, SpanUnmappedCircuitSensor
 from .evse import SpanEvseSensor
@@ -77,17 +84,54 @@ def create_panel_sensors(
     return entities
 
 
+def _build_evse_device_info_map(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> dict[str, DeviceInfo]:
+    """Build a mapping of EVSE feed circuit IDs to their EVSE DeviceInfo.
+
+    Circuit sensors for EVSE feed circuits are assigned to the EVSE sub-device
+    instead of the panel device, keeping all charger-related entities together.
+    """
+    if not snapshot.evse:
+        return {}
+
+    is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+    panel_name = (
+        coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
+        or "Span Panel"
+    )
+    if is_simulator:
+        panel_identifier = slugify(panel_name)
+    else:
+        panel_identifier = snapshot.serial_number
+
+    use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+
+    mapping: dict[str, DeviceInfo] = {}
+    for _evse_id, evse in snapshot.evse.items():
+        display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
+        info = evse_device_info(panel_identifier, evse, panel_name, display_suffix)
+        mapping[evse.feed_circuit_id] = info
+
+    return mapping
+
+
 def create_circuit_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, config_entry: ConfigEntry
 ) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor]:
     """Create circuit-level sensors for named circuits."""
     entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor] = []
 
+    # Build EVSE device info so feed circuit sensors land on the charger device
+    evse_device_map = _build_evse_device_info_map(coordinator, snapshot)
+
     # Add circuit sensors for all named circuits
     named_circuits = [cid for cid in snapshot.circuits if not cid.startswith("unmapped_tab_")]
     circuit_net_energy_enabled = config_entry.options.get(ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True)
 
     for circuit_id in named_circuits:
+        device_override = evse_device_map.get(circuit_id)
+
         for circuit_description in CIRCUIT_SENSORS:
             # Skip net energy sensors if disabled
             is_net_energy_sensor = (
@@ -98,14 +142,24 @@ def create_circuit_sensors(
                 continue
 
             if circuit_description.key == "circuit_power":
-                # Use enhanced power sensor for power measurements
                 entities.append(
-                    SpanCircuitPowerSensor(coordinator, circuit_description, snapshot, circuit_id)
+                    SpanCircuitPowerSensor(
+                        coordinator,
+                        circuit_description,
+                        snapshot,
+                        circuit_id,
+                        device_info_override=device_override,
+                    )
                 )
             else:
-                # Use energy sensor with grace period tracking for energy measurements
                 entities.append(
-                    SpanCircuitEnergySensor(coordinator, circuit_description, snapshot, circuit_id)
+                    SpanCircuitEnergySensor(
+                        coordinator,
+                        circuit_description,
+                        snapshot,
+                        circuit_id,
+                        device_info_override=device_override,
+                    )
                 )
 
     return entities

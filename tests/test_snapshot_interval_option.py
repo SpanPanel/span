@@ -16,8 +16,8 @@ class TestSnapshotIntervalOption:
         assert SNAPSHOT_UPDATE_INTERVAL == "snapshot_update_interval"
 
     def test_default_snapshot_interval(self) -> None:
-        """Test that the default interval is 1.0 seconds."""
-        assert DEFAULT_SNAPSHOT_INTERVAL == 1.0
+        """Test that the default interval is 5.0 seconds."""
+        assert DEFAULT_SNAPSHOT_INTERVAL == 5.0
 
     def test_snapshot_interval_in_options_schema(self) -> None:
         """Test that snapshot interval is in the OPTIONS_SCHEMA."""
@@ -89,4 +89,4 @@ class TestSnapshotIntervalOption:
             SNAPSHOT_UPDATE_INTERVAL, DEFAULT_SNAPSHOT_INTERVAL
         )
         assert interval == DEFAULT_SNAPSHOT_INTERVAL
-        assert interval == 1.0
+        assert interval == 5.0
