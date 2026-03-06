@@ -181,23 +181,47 @@
     "sensor": {
       "evse_status": {
         "state": {
-          "unknown": "Unknown",
-          "available": "Available",
-          "preparing": "Preparing",
-          "charging": "Charging",
-          "suspended_ev": "Suspended by Vehicle",
-          "suspended_evse": "Suspended by Charger",
-          "finishing": "Finishing",
-          "reserved": "Reserved",
-          "faulted": "Faulted",
-          "unavailable": "Unavailable"
+          "UNKNOWN": "Unknown",
+          "AVAILABLE": "Available",
+          "PREPARING": "Preparing",
+          "CHARGING": "Charging",
+          "SUSPENDED_EV": "Suspended by Vehicle",
+          "SUSPENDED_EVSE": "Suspended by Charger",
+          "FINISHING": "Finishing",
+          "RESERVED": "Reserved",
+          "FAULTED": "Faulted",
+          "UNAVAILABLE": "Unavailable"
         }
       },
       "evse_lock_state": {
         "state": {
-          "unknown": "Unknown",
-          "locked": "Locked",
-          "unlocked": "Unlocked"
+          "UNKNOWN": "Unknown",
+          "LOCKED": "Locked",
+          "UNLOCKED": "Unlocked"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "UNKNOWN": "Unknown",
+          "OPEN": "Open",
+          "CLOSED": "Closed"
+        }
+      },
+      "grid_forming_entity": {
+        "state": {
+          "UNKNOWN": "Unknown",
+          "GRID": "Grid",
+          "BATTERY": "Battery",
+          "PV": "PV",
+          "GENERATOR": "Generator",
+          "NONE": "None"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "UNKNOWN": "Unknown",
+          "UNCONNECTED": "Unconnected",
+          "CONNECTED": "Connected"
         }
       }
     },
