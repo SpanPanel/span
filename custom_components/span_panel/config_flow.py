@@ -208,6 +208,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not is_ipv4_address(discovery_info.host):
             return self.async_abort(reason="not_ipv4_address")
 
+        # Set a preliminary unique_id from the host to prevent duplicate
+        # in-progress discovery flows when mDNS fires repeatedly for the
+        # same IP. The default raise_on_progress=True causes subsequent
+        # flows for the same host to abort immediately with
+        # "already_in_progress". This is replaced with the serial number
+        # in ensure_not_already_configured() once the device is validated.
+        await self.async_set_unique_id(discovery_info.host)
+
         # Detect whether this is a v2 panel based on zeroconf service type
         svc_type = getattr(discovery_info, "type", "") or ""
         is_v2_service = svc_type in ("_ebus._tcp.local.", "_secure-mqtt._tcp.local.")
