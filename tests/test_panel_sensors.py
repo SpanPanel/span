@@ -86,9 +86,9 @@ class TestPanelSensors:
             snapshot = SpanPanelSnapshotFactory.create(dominant_power_source=source)
             assert description.value_fn(snapshot) == source
 
-        # None defaults to "UNKNOWN"
+        # None defaults to "unknown"
         snapshot_none = SpanPanelSnapshotFactory.create(dominant_power_source=None)
-        assert description.value_fn(snapshot_none) == "UNKNOWN"
+        assert description.value_fn(snapshot_none) == "unknown"
 
     def test_vendor_cloud_sensor(self) -> None:
         """Test the vendor cloud sensor."""

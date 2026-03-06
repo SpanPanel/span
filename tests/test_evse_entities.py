@@ -85,13 +85,13 @@ class TestEvseSensorDefinitions:
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
         assert status_desc.device_class is not None
         assert status_desc.device_class.value == "enum"
-        assert status_desc.options == ["UNKNOWN"]
+        assert status_desc.options == ["unknown"]
 
     def test_evse_lock_state_sensor_is_enum(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
         assert lock_desc.device_class is not None
         assert lock_desc.device_class.value == "enum"
-        assert lock_desc.options == ["UNKNOWN"]
+        assert lock_desc.options == ["unknown"]
 
     def test_evse_advertised_current_is_measurement(self):
         current_desc = next(d for d in EVSE_SENSORS if d.key == "evse_advertised_current")
@@ -209,11 +209,11 @@ class TestEvseStatusOptions:
 
     def test_status_options_seed_with_unknown(self):
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
-        assert status_desc.options == ["UNKNOWN"]
+        assert status_desc.options == ["unknown"]
 
     def test_lock_state_options_seed_with_unknown(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
-        assert lock_desc.options == ["UNKNOWN"]
+        assert lock_desc.options == ["unknown"]
 
 
 class TestEvseMultipleDevices:

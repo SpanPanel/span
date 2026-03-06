@@ -358,10 +358,11 @@ class SpanSensorBase[T: SensorEntityDescription, D](
             # For enum sensors, ensure the value is in the options list before
             # setting it — HA raises ValueError if the state is not in options.
             # Options are built dynamically from observed MQTT values.
-            # Values are normalized to uppercase to match the Homie schema
-            # convention and preserve backward compatibility with v1 automations.
+            # Values are normalized to lowercase to satisfy HA's translation
+            # key requirement ([a-z0-9-_]+). HA uses the state value directly
+            # as the translation key lookup.
             if self._attr_device_class is SensorDeviceClass.ENUM:
-                str_value = str_value.upper()
+                str_value = str_value.lower()
                 if not hasattr(self, "_attr_options") or self._attr_options is None:
                     self._attr_options = []
                 if str_value not in self._attr_options:

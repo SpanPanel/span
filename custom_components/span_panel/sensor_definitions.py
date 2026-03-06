@@ -109,9 +109,6 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="main_relay_state",
         name="Main Relay State",
-        translation_key="main_relay_state",
-        device_class=SensorDeviceClass.ENUM,
-        options=["UNKNOWN"],
         value_fn=lambda s: s.main_relay_state,
     ),
     SpanPanelDataSensorEntityDescription(
@@ -119,15 +116,12 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         name="Grid Forming Entity",
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
-        options=["UNKNOWN"],
-        value_fn=lambda s: s.dominant_power_source or "UNKNOWN",
+        options=["unknown"],
+        value_fn=lambda s: s.dominant_power_source or "unknown",
     ),
     SpanPanelDataSensorEntityDescription(
         key="vendor_cloud",
         name="Vendor Cloud",
-        translation_key="vendor_cloud",
-        device_class=SensorDeviceClass.ENUM,
-        options=["UNKNOWN"],
         value_fn=lambda s: s.vendor_cloud or "UNKNOWN",
     ),
 )
@@ -406,8 +400,8 @@ EVSE_SENSORS: tuple[
         name="Charger Status",
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
-        options=["UNKNOWN"],
-        value_fn=lambda e: e.status if e.status else "UNKNOWN",
+        options=["unknown"],
+        value_fn=lambda e: e.status if e.status else "unknown",
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
@@ -423,7 +417,7 @@ EVSE_SENSORS: tuple[
         name="Lock State",
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
-        options=["UNKNOWN"],
-        value_fn=lambda e: e.lock_state if e.lock_state else "UNKNOWN",
+        options=["unknown"],
+        value_fn=lambda e: e.lock_state if e.lock_state else "unknown",
     ),
 )
