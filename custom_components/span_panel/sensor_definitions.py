@@ -109,16 +109,25 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="main_relay_state",
         name="Main Relay State",
+        translation_key="main_relay_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=["UNKNOWN"],
         value_fn=lambda s: s.main_relay_state,
     ),
     SpanPanelDataSensorEntityDescription(
         key="grid_forming_entity",
         name="Grid Forming Entity",
+        translation_key="grid_forming_entity",
+        device_class=SensorDeviceClass.ENUM,
+        options=["UNKNOWN"],
         value_fn=lambda s: s.dominant_power_source or "UNKNOWN",
     ),
     SpanPanelDataSensorEntityDescription(
         key="vendor_cloud",
         name="Vendor Cloud",
+        translation_key="vendor_cloud",
+        device_class=SensorDeviceClass.ENUM,
+        options=["UNKNOWN"],
         value_fn=lambda s: s.vendor_cloud or "UNKNOWN",
     ),
 )
@@ -387,21 +396,6 @@ class SpanEvseSensorEntityDescription(SensorEntityDescription, SpanEvseRequiredK
     """Describes an EVSE sensor entity."""
 
 
-EVSE_STATUS_OPTIONS: list[str] = [
-    "unknown",
-    "available",
-    "preparing",
-    "charging",
-    "suspended_ev",
-    "suspended_evse",
-    "finishing",
-    "reserved",
-    "faulted",
-    "unavailable",
-]
-
-EVSE_LOCK_STATE_OPTIONS: list[str] = ["unknown", "locked", "unlocked"]
-
 EVSE_SENSORS: tuple[
     SpanEvseSensorEntityDescription,
     SpanEvseSensorEntityDescription,
@@ -412,8 +406,8 @@ EVSE_SENSORS: tuple[
         name="Charger Status",
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
-        options=EVSE_STATUS_OPTIONS,
-        value_fn=lambda e: e.status.lower() if e.status else "unknown",
+        options=["UNKNOWN"],
+        value_fn=lambda e: e.status if e.status else "UNKNOWN",
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
@@ -429,7 +423,7 @@ EVSE_SENSORS: tuple[
         name="Lock State",
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
-        options=EVSE_LOCK_STATE_OPTIONS,
-        value_fn=lambda e: e.lock_state.lower() if e.lock_state else "unknown",
+        options=["UNKNOWN"],
+        value_fn=lambda e: e.lock_state if e.lock_state else "UNKNOWN",
     ),
 )

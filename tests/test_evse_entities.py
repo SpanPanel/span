@@ -26,9 +26,7 @@ from custom_components.span_panel.helpers import (
     resolve_evse_display_suffix,
 )
 from custom_components.span_panel.sensor_definitions import (
-    EVSE_LOCK_STATE_OPTIONS,
     EVSE_SENSORS,
-    EVSE_STATUS_OPTIONS,
 )
 from custom_components.span_panel.sensors.factory import (
     detect_capabilities,
@@ -87,13 +85,13 @@ class TestEvseSensorDefinitions:
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
         assert status_desc.device_class is not None
         assert status_desc.device_class.value == "enum"
-        assert status_desc.options == EVSE_STATUS_OPTIONS
+        assert status_desc.options == ["UNKNOWN"]
 
     def test_evse_lock_state_sensor_is_enum(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
         assert lock_desc.device_class is not None
         assert lock_desc.device_class.value == "enum"
-        assert lock_desc.options == EVSE_LOCK_STATE_OPTIONS
+        assert lock_desc.options == ["UNKNOWN"]
 
     def test_evse_advertised_current_is_measurement(self):
         current_desc = next(d for d in EVSE_SENSORS if d.key == "evse_advertised_current")
@@ -103,12 +101,12 @@ class TestEvseSensorDefinitions:
     def test_evse_status_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(status="CHARGING")
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
-        assert status_desc.value_fn(evse) == "charging"
+        assert status_desc.value_fn(evse) == "CHARGING"
 
     def test_evse_lock_state_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(lock_state="LOCKED")
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
-        assert lock_desc.value_fn(evse) == "locked"
+        assert lock_desc.value_fn(evse) == "LOCKED"
 
     def test_evse_advertised_current_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(advertised_current_a=32.0)
@@ -207,18 +205,15 @@ class TestEvseDeviceInfo:
 
 
 class TestEvseStatusOptions:
-    """Test EVSE enum options match expected values."""
+    """Test EVSE enum options seed with 'unknown' only."""
 
-    def test_status_options_include_all_ocpp_states(self):
-        expected = {
-            "unknown", "available", "preparing", "charging",
-            "suspended_ev", "suspended_evse", "finishing",
-            "reserved", "faulted", "unavailable",
-        }
-        assert set(EVSE_STATUS_OPTIONS) == expected
+    def test_status_options_seed_with_unknown(self):
+        status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
+        assert status_desc.options == ["UNKNOWN"]
 
-    def test_lock_state_options(self):
-        assert set(EVSE_LOCK_STATE_OPTIONS) == {"unknown", "locked", "unlocked"}
+    def test_lock_state_options_seed_with_unknown(self):
+        lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
+        assert lock_desc.options == ["UNKNOWN"]
 
 
 class TestEvseMultipleDevices:

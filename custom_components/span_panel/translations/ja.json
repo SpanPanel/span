@@ -173,23 +173,47 @@
     "sensor": {
       "evse_status": {
         "state": {
-          "unknown": "不明",
-          "available": "利用可能",
-          "preparing": "準備中",
-          "charging": "充電中",
-          "suspended_ev": "車両により一時停止",
-          "suspended_evse": "充電器により一時停止",
-          "finishing": "終了処理中",
-          "reserved": "予約済み",
-          "faulted": "故障",
-          "unavailable": "利用不可"
+          "UNKNOWN": "不明",
+          "AVAILABLE": "利用可能",
+          "PREPARING": "準備中",
+          "CHARGING": "充電中",
+          "SUSPENDED_EV": "車両により一時停止",
+          "SUSPENDED_EVSE": "充電器により一時停止",
+          "FINISHING": "終了処理中",
+          "RESERVED": "予約済み",
+          "FAULTED": "故障",
+          "UNAVAILABLE": "利用不可"
         }
       },
       "evse_lock_state": {
         "state": {
-          "unknown": "不明",
-          "locked": "ロック",
-          "unlocked": "アンロック"
+          "UNKNOWN": "不明",
+          "LOCKED": "ロック",
+          "UNLOCKED": "アンロック"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "UNKNOWN": "不明",
+          "OPEN": "開",
+          "CLOSED": "閉"
+        }
+      },
+      "grid_forming_entity": {
+        "state": {
+          "UNKNOWN": "不明",
+          "GRID": "系統",
+          "BATTERY": "バッテリー",
+          "PV": "PV",
+          "GENERATOR": "発電機",
+          "NONE": "なし"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "UNKNOWN": "不明",
+          "UNCONNECTED": "未接続",
+          "CONNECTED": "接続済み"
         }
       }
     },

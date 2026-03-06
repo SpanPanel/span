@@ -12,6 +12,7 @@ from typing import Any, Self
 
 from homeassistant.components.sensor import (
     RestoreSensor,
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
     SensorStateClass,
@@ -83,6 +84,9 @@ class SpanSensorBase[T: SensorEntityDescription, D](
 
         if hasattr(description, "device_class"):
             self._attr_device_class = description.device_class
+
+        if hasattr(description, "options") and description.options:
+            self._attr_options = list(description.options)
 
         # Get device name from config entry data
         self._device_name = data_coordinator.config_entry.data.get(
@@ -350,8 +354,24 @@ class SpanSensorBase[T: SensorEntityDescription, D](
         elif isinstance(raw_value, float | int):
             self._attr_native_value = float(raw_value)
         else:
-            # For string values, keep as string - this is valid for Home Assistant sensors
-            self._attr_native_value = str(raw_value)
+            str_value = str(raw_value)
+            # For enum sensors, ensure the value is in the options list before
+            # setting it — HA raises ValueError if the state is not in options.
+            # Options are built dynamically from observed MQTT values.
+            # Values are normalized to uppercase to match the Homie schema
+            # convention and preserve backward compatibility with v1 automations.
+            if self._attr_device_class is SensorDeviceClass.ENUM:
+                str_value = str_value.upper()
+                if not hasattr(self, "_attr_options") or self._attr_options is None:
+                    self._attr_options = []
+                if str_value not in self._attr_options:
+                    self._attr_options.append(str_value)
+                    _LOGGER.debug(
+                        "Added enum option '%s' for %s",
+                        str_value,
+                        self._attr_name,
+                    )
+            self._attr_native_value = str_value
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> D:
         """Get the data source for the sensor."""
