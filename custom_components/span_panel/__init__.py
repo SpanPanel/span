@@ -389,17 +389,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     """Unload a config entry."""
     _LOGGER.debug("Unloading SPAN Panel integration")
 
-    await entry.runtime_data.coordinator.async_shutdown()
+    if hasattr(entry, "runtime_data") and entry.runtime_data is not None:
+        await entry.runtime_data.coordinator.async_shutdown()
 
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-
-async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
-    """Remove a config entry and clean up all associated data."""
-    _LOGGER.debug("Removing SPAN Panel integration entry: %s", entry.entry_id)
-
-    if entry.state.recoverable:
-        await async_unload_entry(hass, entry)
 
 
 async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
