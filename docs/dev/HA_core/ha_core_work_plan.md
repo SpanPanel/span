@@ -15,13 +15,18 @@ The integration already satisfies several core requirements:
 - Config flow with zeroconf discovery and reauth
 - Coordinator pattern in `coordinator.py`
 - Consistent entity unique IDs
-- `has_entity_name = True` on all entities
+- `has_entity_name = True` on all entities (via `SpanPanelEntity` base)
 - Push streaming (`local_push` IoT class)
-- Device info construction
+- Device info construction (consolidated in `entity.py`)
 - Translations in `strings.json`
 - Strict typing (mypy strict, pyright)
 - Config version migration (v1 through v5)
 - Good test coverage (41 test files)
+- Typed `runtime_data` (`SpanPanelRuntimeData` / `SpanPanelConfigEntry`)
+- `PARALLEL_UPDATES` on all platforms
+- `entity.py` shared base class (`common-modules`)
+- No service actions registered (`action-setup`)
+- Flat directory structure (no subdirectory packages)
 
 ---
 
@@ -47,17 +52,7 @@ Remove all simulation-related code paths and files:
 - Simulation-related constants (`CONF_SIMULATION_CONFIG`, `CONF_SIMULATION_START_TIME`, `CONF_SIMULATION_OFFLINE_MINUTES`)
 - Simulation-related options in `options.py`
 
-### 1.2 Flatten Remaining Directory Structure
-
-The `sensors/` package has been flattened into root-level modules (`sensor_base.py`, `sensor_panel.py`, `sensor_circuit.py`, `sensor_evse.py`) and factory
-logic merged into `sensor.py`. Capability detection functions (`has_bess`, `has_pv`, etc.) moved to `helpers.py`. Remaining work:
-
-#### Shared base entity
-
-Create `entity.py` containing `SpanPanelEntity(CoordinatorEntity)` — the shared base class for all platforms (sensor, binary_sensor, switch, select, button).
-Handles coordinator binding, device info construction, and common availability logic. This satisfies the `common-modules` Bronze rule (§2.3).
-
-#### Config flow utils
+### 1.2 Inline Config Flow Utils
 
 After simulation removal (§1.1), only `options.py` (171 lines) and `validation.py` (125 lines) remain (~296 lines total). Inline into `config_flow.py`.
 
@@ -77,34 +72,7 @@ After simulation removal (§1.1), only `options.py` (171 lines) and `validation.
 
 These changes bring the integration into compliance with the 19 Bronze-tier rules required for all new core integrations.
 
-### 2.1 ~~Switch to `runtime_data`~~ ✅
-
-Completed. `SpanPanelRuntimeData` dataclass and `SpanPanelConfigEntry` type alias defined in `__init__.py`. All platform `async_setup_entry` functions use
-`config_entry.runtime_data.coordinator` instead of `hass.data[DOMAIN]`.
-
-### 2.2 ~~Move Service Registration to `async_setup`~~ ✅
-
-Already satisfied — no service actions are registered. The `cleanup_energy_spikes` and `undo_stats_adjustments` services were removed in a prior commit.
-
-### 2.3 ~~Verify `entity.py` Base Entity~~ ✅
-
-Completed. `entity.py` contains `SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator])` with `_attr_has_entity_name = True` and `_build_device_info()` static
-helper. All platform entities inherit from it: `SpanSensorBase`, `SpanPanelBinarySensor`, `SpanEvseBinarySensor`, `SpanPanelCircuitsSwitch`,
-`SpanPanelCircuitsSelect`, `SpanPanelGFEOverrideButton`.
-
-### 2.4 ~~Add `PARALLEL_UPDATES` to All Platforms~~ ✅
-
-Completed.
-
-| Platform           | Value | Reason                       |
-| ------------------ | ----- | ---------------------------- |
-| `sensor.py`        | `0`   | Read-only, coordinator-based |
-| `binary_sensor.py` | `0`   | Read-only, coordinator-based |
-| `switch.py`        | `1`   | Sends commands to device     |
-| `select.py`        | `1`   | Sends commands to device     |
-| `button.py`        | `1`   | Sends commands to device     |
-
-### 2.5 Ensure Dependency Transparency
+### 2.1 Ensure Dependency Transparency
 
 **Rule:** `dependency-transparency`
 
@@ -117,7 +85,7 @@ The `span-panel-api` library must satisfy all four requirements:
 
 Additionally for Platinum (`strict-typing`): the library must include a `py.typed` marker file (PEP 561).
 
-### 2.6 Verify Config Flow Test Coverage
+### 2.2 Verify Config Flow Test Coverage
 
 **Rule:** `config-flow-test-coverage`
 
@@ -130,20 +98,17 @@ Additionally for Platinum (`strict-typing`): the library must include a `py.type
 - Reauth flow
 - All auth method paths (passphrase, proximity, token)
 
-### 2.7 Verify Remaining Bronze Rules
+### 2.3 Verify Remaining Bronze Rules
 
 | Rule                             | Action                                                                                  |
 | -------------------------------- | --------------------------------------------------------------------------------------- |
 | `appropriate-polling`            | Verify `update_interval` is reasonable (60s fallback is fine)                           |
 | `brands`                         | Submit branding to `home-assistant/brands` repository                                   |
-| `config-flow`                    | Already satisfied                                                                       |
 | `docs-actions`                   | Document remaining service actions                                                      |
 | `docs-high-level-description`    | Write integration overview for HA docs site                                             |
 | `docs-installation-instructions` | Write setup guide                                                                       |
 | `docs-removal-instructions`      | Write uninstall steps                                                                   |
 | `entity-event-setup`             | Audit: subscriptions in `async_added_to_hass`, cleanup in `async_will_remove_from_hass` |
-| `entity-unique-id`               | Already satisfied                                                                       |
-| `has-entity-name`                | Already satisfied                                                                       |
 | `test-before-configure`          | Verify connectivity tested during config flow before entry creation                     |
 | `test-before-setup`              | Verify `ConfigEntryNotReady` / `ConfigEntryAuthFailed` raised from `async_setup_entry`  |
 | `unique-config-entry`            | Verify duplicate prevention via unique ID                                               |
@@ -154,14 +119,7 @@ Additionally for Platinum (`strict-typing`): the library must include a `py.type
 
 Silver adds 10 rules on top of Bronze. These improve reliability and maintainability.
 
-### 3.1 Exception Handling in Services
-
-**Rule:** `action-exceptions`
-
-Any remaining service actions must raise `ServiceValidationError` for invalid user input and `HomeAssistantError` for operational failures. Never raise
-`ValueError` or generic exceptions from service handlers.
-
-### 3.2 Config Entry Unloading
+### 3.1 Config Entry Unloading
 
 **Rule:** `config-entry-unloading`
 
@@ -172,27 +130,27 @@ Audit `async_unload_entry` to confirm all resources are cleaned up:
 - Coordinator shutdown
 - Platform unloading
 
-### 3.3 Reauthentication Flow
+### 3.2 Reauthentication Flow
 
 **Rule:** `reauthentication-flow`
 
 Already implemented. Verify complete coverage of all auth failure scenarios and that credentials are validated before saving.
 
-### 3.4 Entity Unavailability
+### 3.3 Entity Unavailability
 
 **Rule:** `entity-unavailable`
 
 Verify coordinator-based entities correctly report unavailable when data fetch fails. The existing offline handling logic should cover this but needs an audit
 post-simplification.
 
-### 3.5 Unavailability Logging
+### 3.4 Unavailability Logging
 
 **Rule:** `log-when-unavailable`
 
 Log exactly once at `info` level when the panel becomes unreachable, and exactly once when it comes back online. If the coordinator's built-in `UpdateFailed`
 handling is used, this is automatic.
 
-### 3.6 Test Coverage
+### 3.5 Test Coverage
 
 **Rule:** `test-coverage`
 
@@ -202,7 +160,7 @@ Achieve >95% test coverage across all integration modules. Measure with:
 pytest tests/ --cov=custom_components.span_panel --cov-report term-missing
 ```
 
-### 3.7 Documentation
+### 3.6 Documentation
 
 **Rules:** `docs-configuration-parameters`, `docs-installation-parameters`, `integration-owner`
 
@@ -294,8 +252,6 @@ automatic names can omit the translation key.
 
 | Rule                       | Action                                                |
 | -------------------------- | ----------------------------------------------------- |
-| `devices`                  | Already satisfied — device info constructed           |
-| `discovery`                | Already satisfied — zeroconf                          |
 | `discovery-update-info`    | Update device network info from discovery data        |
 | `dynamic-devices`          | Auto-add entities for circuits appearing after setup  |
 | `stale-devices`            | Remove devices for circuits that disappear            |
@@ -395,7 +351,7 @@ custom_components/span_panel/
 ├── entity_summary.py               # Naming support
 ├── migration.py                    # Naming migration
 ├── migration_utils.py              # Naming migration
-├── config_flow_utils/              # Flatten into config_flow.py (§1.2)
+├── config_flow_utils/              # Inline into config_flow.py (§1.2)
 │   ├── __init__.py
 │   ├── simulation.py               # Simulation (§1.1)
 │   ├── options.py                   # Inline into config_flow.py
@@ -409,11 +365,11 @@ custom_components/span_panel/
 
 ## Estimated Scope
 
-| Phase   | Effort | Description                                               |
-| ------- | ------ | --------------------------------------------------------- |
-| Phase 1 | Large  | Strip ~4000 lines, restructure directories                |
-| Phase 2 | Medium | Architectural changes, runtime_data, service registration |
-| Phase 3 | Small  | Audit and fix coverage gaps                               |
-| Phase 4 | Medium | Diagnostics, reconfigure flow, icons.json, translations   |
-| Phase 5 | Small  | Library compliance, strict typing                         |
-| Phase 6 | Medium | Docs, branding, validation, PR                            |
+| Phase   | Effort | Description                                             |
+| ------- | ------ | ------------------------------------------------------- |
+| Phase 1 | Large  | Strip ~4000 lines of simulation code                    |
+| Phase 2 | Small  | Dependency transparency, config flow tests, Bronze audit |
+| Phase 3 | Small  | Audit and fix coverage gaps                             |
+| Phase 4 | Medium | Diagnostics, reconfigure flow, icons.json, translations |
+| Phase 5 | Small  | Library compliance, strict typing                       |
+| Phase 6 | Medium | Docs, branding, validation, PR                          |
