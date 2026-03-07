@@ -95,9 +95,6 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | ---------------------------- | ------------ | ---- | ---------------------------------------------------------------------------------------------------------------------- |
 | Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                 |
 | Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                        |
-| Battery Power                | Power        | W    | (v2) Battery charge/discharge (+discharge, -charge). Only present when BESS is commissioned                            |
-| PV Power                     | Power        | W    | (v2) PV generation (+producing). Only present when PV is commissioned                                                  |
-| Site Power                   | Power        | W    | (v2) Total site power (grid + PV + battery). Only present when power-flows node is active                              |
 | Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                   |
 | Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                   |
 | Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                |
@@ -110,7 +107,34 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                   |
 | Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                   |
 | Software Version             | —            | —    | Firmware version string                                                                                                |
-| Battery Level                | Battery      | %    | Battery state of energy (only present when BESS is commissioned). Attr: `soe_kwh`                                      |
+
+### Panel Diagnostic Sensors (v2 only)
+
+| Sensor                | Device Class | Unit | Notes                      |
+| --------------------- | ------------ | ---- | -------------------------- |
+| L1 Voltage            | Voltage      | V    | L1 leg actual voltage      |
+| L2 Voltage            | Voltage      | V    | L2 leg actual voltage      |
+| Upstream L1 Current   | Current      | A    | Upstream lugs L1 current   |
+| Upstream L2 Current   | Current      | A    | Upstream lugs L2 current   |
+| Downstream L1 Current | Current      | A    | Downstream lugs L1 current |
+| Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
+| Main Breaker Rating   | Current      | A    | Main breaker amperage      |
+
+### Power Flow Sensors (v2 only, conditional)
+
+| Sensor        | Device Class | Unit | Notes                                                                       |
+| ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
+| Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
+| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery). Only when power-flows node active   |
+
+### PV Metadata Sensors (v2 only, on main panel device)
+
+| Sensor             | Device Class | Unit | Notes                                         |
+| ------------------ | ------------ | ---- | --------------------------------------------- |
+| PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other") |
+| PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")            |
+| Nameplate Capacity | Power        | kW   | Rated inverter capacity                       |
 
 **Deprecated:**
 
@@ -118,51 +142,14 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | DSM Grid State | Deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version |
 
-### Current Power Sensor Attributes
+### Power Sensor Attributes
 
-| Attribute             | Type   | Notes                                |
-| --------------------- | ------ | ------------------------------------ |
-| `voltage`             | string | Nominal panel voltage ("240")        |
-| `amperage`            | string | Calculated current (power / voltage) |
-| `l1_voltage`          | float  | L1 leg actual voltage                |
-| `l2_voltage`          | float  | L2 leg actual voltage                |
-| `l1_amperage`         | float  | Upstream lugs L1 current             |
-| `l2_amperage`         | float  | Upstream lugs L2 current             |
-| `main_breaker_rating` | int    | Main breaker amperage                |
-| `grid_islandable`     | bool   | Whether panel supports islanding     |
+Applies to Current Power, Feed Through Power, Battery Power, PV Power, and Site Power sensors.
 
-### Feed Through Power Sensor Attributes
-
-| Attribute     | Type   | Notes                                |
-| ------------- | ------ | ------------------------------------ |
-| `voltage`     | string | Nominal panel voltage ("240")        |
-| `amperage`    | string | Calculated current (power / voltage) |
-| `l1_amperage` | float  | Downstream lugs L1 current           |
-| `l2_amperage` | float  | Downstream lugs L2 current           |
-
-### PV Power Sensor Attributes
-
-| Attribute               | Type   | Notes                                         |
-| ----------------------- | ------ | --------------------------------------------- |
-| `voltage`               | string | Nominal panel voltage ("240")                 |
-| `amperage`              | string | Calculated current (power / voltage)          |
-| `vendor_name`           | string | PV inverter vendor (e.g., "Enphase", "Other") |
-| `product_name`          | string | PV inverter product (e.g., "IQ8+")            |
-| `nameplate_capacity_kw` | float  | Rated inverter capacity in kW                 |
-
-### Battery Power Sensor Attributes
-
-| Attribute                | Type   | Notes                                |
-| ------------------------ | ------ | ------------------------------------ |
-| `voltage`                | string | Nominal panel voltage ("240")        |
-| `amperage`               | string | Calculated current (power / voltage) |
-| `vendor_name`            | string | BESS vendor name                     |
-| `product_name`           | string | BESS product name                    |
-| `model`                  | string | BESS model identifier                |
-| `serial_number`          | string | BESS serial number                   |
-| `software_version`       | string | BESS firmware version                |
-| `nameplate_capacity_kwh` | float  | Rated battery capacity in kWh        |
-| `soe_kwh`                | float  | Current stored energy in kWh         |
+| Attribute  | Type   | Notes                                |
+| ---------- | ------ | ------------------------------------ |
+| `voltage`  | string | Nominal panel voltage ("240")        |
+| `amperage` | string | Calculated current (power / voltage) |
 
 ### Software Version Sensor Attributes
 
@@ -171,11 +158,29 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
 | `wifi_ssid`  | string | Current Wi-Fi network               |
 
-### Battery Level Sensor Attributes
+### BESS Sub-Device (v2 only, conditional)
 
-| Attribute | Type  | Notes                        |
-| --------- | ----- | ---------------------------- |
-| `soe_kwh` | float | Current stored energy in kWh |
+When a Battery Energy Storage System (BESS) is commissioned, the integration creates a separate BESS sub-device linked to the panel via `via_device`. The BESS
+device uses manufacturer, model, serial number, and software version from battery metadata as device info attributes.
+
+#### BESS Sensors
+
+| Sensor             | Device Class   | Unit | Notes                                     |
+| ------------------ | -------------- | ---- | ----------------------------------------- |
+| Battery Level      | Battery        | %    | State of energy as percentage             |
+| Battery Power      | Power          | W    | Charge/discharge (+discharge, -charge)    |
+| BESS Vendor        | —              | —    | Battery system vendor (diagnostic)        |
+| BESS Model         | —              | —    | Battery system model (diagnostic)         |
+| BESS Serial Number | —              | —    | Battery system serial number (diagnostic) |
+| BESS Firmware      | —              | —    | Battery system firmware (diagnostic)      |
+| Nameplate Capacity | Energy Storage | kWh  | Rated battery capacity (diagnostic)       |
+| Stored Energy      | Energy Storage | kWh  | Current stored energy (diagnostic)        |
+
+#### BESS Binary Sensors
+
+| Sensor         | Device Class | Notes                                        |
+| -------------- | ------------ | -------------------------------------------- |
+| BESS Connected | Connectivity | Whether the BESS is communicating with panel |
 
 ### Panel Energy Sensor Attributes
 
@@ -193,6 +198,8 @@ Applies to Main Meter and Feed Through energy sensors.
 | Produced Energy | Energy       | Wh   | Cumulative energy produced                                            |
 | Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                            |
 | Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert)         |
+| Current         | Current      | A    | (v2) Measured circuit current. Only when panel reports `current_a`    |
+| Breaker Rating  | Current      | A    | (v2) Circuit breaker amperage (diagnostic). Only when reported        |
 
 ### Circuit Power Sensor Attributes
 
@@ -200,8 +207,6 @@ Applies to Main Meter and Feed Through energy sensors.
 | ----------------- | ------ | ----------------------------------------------------- |
 | `tabs`            | string | Breaker slot position(s)                              |
 | `voltage`         | string | 120 or 240 (derived from tab count)                   |
-| `amperage`        | string | Measured current, or calculated from power            |
-| `breaker_rating`  | int    | Circuit breaker amperage                              |
 | `device_type`     | string | "circuit", "pv", or "evse"                            |
 | `always_on`       | bool   | Whether circuit is always-on                          |
 | `relay_state`     | string | OPEN / CLOSED / UNKNOWN                               |
@@ -262,13 +267,13 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 
 ### Binary Sensors
 
-| Sensor         | Device Class | Notes                                                                                                            |
-| -------------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Door State     | Tamper       | Panel door open/closed                                                                                           |
-| Ethernet Link  | Connectivity | Wired network status                                                                                             |
-| Wi-Fi Link     | Connectivity | Wireless network status                                                                                          |
-| Panel Status   | Connectivity | Overall panel online/offline                                                                                     |
-| BESS Connected | Connectivity | (v2) Whether the battery system is communicating with the panel. See [Grid Forming Entity](#grid-forming-entity) |
+| Sensor          | Device Class | Notes                                                               |
+| --------------- | ------------ | ------------------------------------------------------------------- |
+| Door State      | Tamper       | Panel door open/closed                                              |
+| Ethernet Link   | Connectivity | Wired network status                                                |
+| Wi-Fi Link      | Connectivity | Wireless network status                                             |
+| Panel Status    | Connectivity | Overall panel online/offline                                        |
+| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported |
 
 **Removed from binary sensors:**
 

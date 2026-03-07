@@ -46,14 +46,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   stale. The BESS automatically reclaims control when communication is restored. See [Grid Forming Entity](README.md#grid-forming-entity) for details
 - **BESS Connected binary sensor** — indicates whether the battery system is communicating with the panel. Promoted from an attribute on the Battery Power
   sensor to a first-class entity for easier automation
-- `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)
-- `PV Power` sensor with inverter metadata attributes (vendor, product, nameplate capacity)
+- `Battery Power` sensor on BESS sub-device (charge/discharge power)
 - `Site Power` sensor (grid + PV + battery from power-flows node)
+- **BESS sub-device**: Battery Level and Battery Power now live on a dedicated BESS sub-device (linked via `via_device`). BESS metadata sensors (Vendor, Model,
+  Serial Number, Firmware Version, Nameplate Capacity, Stored Energy) and BESS Connected binary sensor are also on this device
+- **Panel diagnostic sensors**: L1/L2 Voltage, Upstream/Downstream L1/L2 Current, Main Breaker Rating — promoted from attributes to dedicated diagnostic
+  entities
+- **Circuit Current and Breaker Rating sensors**: promoted from circuit power sensor attributes to dedicated per-circuit entities (conditionally created when
+  the panel reports the data)
+- **PV metadata sensors**: PV Vendor, PV Product, Nameplate Capacity — on the main panel device (conditionally created when PV is commissioned)
+- **Grid Islandable binary sensor**: indicates whether the panel can island from the grid (conditionally created)
+- `PV Power` sensor with inverter metadata attributes (vendor, product, nameplate capacity)
 - **Reconfigure flow** — update the panel host/IP address without removing and re-adding the integration. Validates the new host is reachable and running v2
   firmware, and prevents switching to a different panel by verifying the serial number matches. Access via the integration's three-dot menu → Reconfigure
 - Circuit Shed Priority select — controls off-grid shedding (NEVER / SOC_THRESHOLD / OFF_GRID)
-- Per-leg voltages and amperage (upstream and downstream lugs)
-- Breaker ratings, device types, relay states, shed priorities as circuit attributes
 - Panel size and Wi-Fi SSID as software version attributes
 
 ### Improvements
