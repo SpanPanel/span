@@ -8,34 +8,34 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 import logging
-from typing import Any, Generic, Self, TypeVar
+from typing import Any, Self
 
 from homeassistant.components.sensor import (
     RestoreSensor,
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.restore_state import ExtraStoredData
 from homeassistant.helpers.typing import StateType
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from span_panel_api import SpanPanelSnapshot
 
-from custom_components.span_panel.const import DOMAIN
-from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
-from custom_components.span_panel.span_panel import SpanPanel
-from custom_components.span_panel.util import panel_to_device_info
+from .const import (
+    DOMAIN,
+    ENABLE_ENERGY_DIP_COMPENSATION,
+)
+from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
+from .options import ENERGY_REPORTING_GRACE_PERIOD
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
-
-T = TypeVar("T", bound=SensorEntityDescription)
-D = TypeVar("D")  # For the type returned by get_data_source
 
 
 def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | None]:
@@ -60,7 +60,7 @@ def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | 
     return value, last_changed
 
 
-class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Generic[T, D], ABC):
+class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntity, ABC):
     """Abstract base class for Span Panel Sensors with overrideable methods."""
 
     _attr_has_entity_name = True
@@ -69,7 +69,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
-        span_panel: SpanPanel,
+        snapshot: SpanPanelSnapshot,
     ) -> None:
         """Initialize Span Panel Sensor base entity."""
         super().__init__(data_coordinator, context=description)
@@ -80,35 +80,38 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if hasattr(description, "device_class"):
             self._attr_device_class = description.device_class
 
+        if hasattr(description, "options") and description.options:
+            self._attr_options = list(description.options)
+
         # Get device name from config entry data
         self._device_name = data_coordinator.config_entry.data.get(
             "device_name", data_coordinator.config_entry.title
         )
 
-        device_info: DeviceInfo = panel_to_device_info(span_panel, self._device_name)
-        self._attr_device_info = device_info  # Re-enable device info
+        self._attr_device_info = self._build_device_info(data_coordinator, snapshot)
 
         # Check if entity already exists in registry for name sync
-        if span_panel.status.serial_number and description.key:
-            self._attr_unique_id = self._generate_unique_id(span_panel, description)
+        if snapshot.serial_number and description.key:
+            self._attr_unique_id = self._generate_unique_id(snapshot, description)
 
-            # Check if entity exists for name sync logic
-            entity_registry = er.async_get(data_coordinator.hass)
-            existing_entity_id = entity_registry.async_get_entity_id(
-                "sensor", DOMAIN, self._attr_unique_id
-            )
+            # Entities with translation_key get their name from translations/en.json.
+            # Only set _attr_name for entities without translation_key (e.g.,
+            # circuit sensors whose names include the dynamic circuit name).
+            if not getattr(description, "translation_key", None):
+                entity_registry = er.async_get(data_coordinator.hass)
+                existing_entity_id = entity_registry.async_get_entity_id(
+                    "sensor", DOMAIN, self._attr_unique_id
+                )
 
-            if existing_entity_id:
-                # Entity exists - use panel name for sync
-                self._attr_name = self._generate_panel_name(span_panel, description)
-            else:
-                # Initial install - use flag-based name
-                self._attr_name = self._generate_friendly_name(span_panel, description)
+                if existing_entity_id:
+                    # Entity exists - use panel name for sync
+                    self._attr_name = self._generate_panel_name(snapshot, description)
+                else:
+                    # Initial install - use flag-based name
+                    self._attr_name = self._generate_friendly_name(snapshot, description)
         else:
             # Fallback for entities without unique_id
-            self._attr_name = self._generate_friendly_name(span_panel, description)
-
-        self._attr_icon = "mdi:flash"
+            self._attr_name = self._generate_friendly_name(snapshot, description)
 
         # Set entity registry defaults if they exist in the description
         if hasattr(description, "entity_registry_enabled_default"):
@@ -118,7 +121,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         # Initialize name sync tracking
         # Use sentinel to distinguish "never synced" from "circuit name is None"
-        if span_panel.status.serial_number and description.key and self._attr_unique_id:
+        if snapshot.serial_number and description.key and self._attr_unique_id:
             entity_registry = er.async_get(data_coordinator.hass)
             existing_entity_id = entity_registry.async_get_entity_id(
                 "sensor", DOMAIN, self._attr_unique_id
@@ -128,7 +131,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             else:
                 # Entity exists, get current circuit name for comparison
                 if hasattr(self, "circuit_id"):
-                    circuit = span_panel.circuits.get(getattr(self, "circuit_id", ""))
+                    circuit = snapshot.circuits.get(getattr(self, "circuit_id", ""))
                     self._previous_circuit_name = circuit.name if circuit else None
                 else:
                     self._previous_circuit_name = None
@@ -139,13 +142,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         # when coordinator data changes
 
     @abstractmethod
-    def _generate_unique_id(self, span_panel: SpanPanel, description: T) -> str:
+    def _generate_unique_id(self, snapshot: SpanPanelSnapshot, description: T) -> str:
         """Generate unique ID for the sensor.
 
         Subclasses must implement this to define their unique ID strategy.
 
         Args:
-            span_panel: The span panel data
+            snapshot: The panel snapshot data
             description: The sensor description
 
         Returns:
@@ -154,13 +157,13 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """
 
     @abstractmethod
-    def _generate_friendly_name(self, span_panel: SpanPanel, description: T) -> str | None:
+    def _generate_friendly_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate friendly name for the sensor.
 
         Subclasses must implement this to define their naming strategy.
 
         Args:
-            span_panel: The span panel data
+            snapshot: The panel snapshot data
             description: The sensor description
 
         Returns:
@@ -168,14 +171,14 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
         """
 
-    def _generate_panel_name(self, span_panel: SpanPanel, description: T) -> str | None:
+    def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate panel name for the sensor (always uses panel circuit name).
 
         This method is used for name sync - it always uses the panel circuit name
         regardless of user preferences.
 
         Args:
-            span_panel: The span panel data
+            snapshot: The panel snapshot data
             description: The sensor description
 
         Returns:
@@ -184,7 +187,7 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         """
         # This should be implemented by subclasses that need name sync
         # For now, fall back to friendly name
-        return self._generate_friendly_name(span_panel, description)
+        return self._generate_friendly_name(snapshot, description)
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -252,6 +255,27 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             _LOGGER.debug("Availability check: unexpected error: %s", err)
         return super().available
 
+    @property
+    def _expects_numeric(self) -> bool:
+        """Return True if HA expects this sensor to have a numeric value.
+
+        HA raises ValueError when a sensor with a numeric device_class,
+        state_class, or native_unit_of_measurement reports a string state
+        like STATE_UNKNOWN.  These sensors must use None instead.
+        """
+        if getattr(self.entity_description, "state_class", None) is not None:
+            return True
+        if getattr(self.entity_description, "native_unit_of_measurement", None) is not None:
+            return True
+        dc = getattr(self.entity_description, "device_class", None)
+        if dc is not None and dc != SensorDeviceClass.ENUM:
+            return True
+        return False
+
+    def _unknown_value(self) -> StateType:
+        """Return the appropriate 'unknown' value for this sensor."""
+        return None if self._expects_numeric else STATE_UNKNOWN
+
     def _update_native_value(self) -> None:
         """Update the native value of the sensor."""
         if self.coordinator.panel_offline:
@@ -262,23 +286,17 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
 
     def _handle_offline_state(self) -> None:
         """Handle sensor state when panel is offline."""
-        _LOGGER.debug("STATUS_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
+        _LOGGER.debug(
+            "STATUS_SENSOR_DEBUG: Panel is offline for %s", self.entity_id or self._attr_unique_id
+        )
 
-        # For power sensors, set to 0.0 when offline (instantaneous values)
-        # For energy sensors, set to None when offline (HA will report as unknown)
-        # For numeric sensors (battery, etc.), set to None when offline (HA will report as unknown)
-        # For other sensors, set to STATE_UNKNOWN when offline
         device_class = getattr(self.entity_description, "device_class", None)
-        state_class = getattr(self.entity_description, "state_class", None)
-        if device_class == "power":
+        if device_class == SensorDeviceClass.POWER:
             self._attr_native_value = 0.0
-        elif device_class == "energy":
-            self._attr_native_value = None
-        elif state_class is not None:
-            # Any sensor with a state_class (measurement, total, etc.) expects numeric values
+        elif device_class == SensorDeviceClass.ENERGY:
             self._attr_native_value = None
         else:
-            self._attr_native_value = STATE_UNKNOWN
+            self._attr_native_value = self._unknown_value()
 
     def _handle_online_state(self) -> None:
         """Handle sensor state when panel is online."""
@@ -286,11 +304,11 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self.entity_description, "value_fn", None
         )
         if value_function is None:
-            _LOGGER.debug("STATUS_SENSOR_DEBUG: No value_function for %s", self._attr_name)
-            # For sensors with state_class, use None (HA reports as unknown)
-            # For other sensors, use STATE_UNKNOWN string
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+            _LOGGER.debug(
+                "STATUS_SENSOR_DEBUG: No value_function for %s",
+                self.entity_id or self._attr_unique_id,
+            )
+            self._attr_native_value = self._unknown_value()
             return
 
         try:
@@ -298,20 +316,22 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
             self._log_debug_info(data_source)
             raw_value: float | int | str | None = value_function(data_source)
             self._process_raw_value(raw_value)
-        except (AttributeError, KeyError, IndexError):
-            # For sensors with state_class, use None (HA reports as unknown)
-            # For other sensors, use STATE_UNKNOWN string
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+        except (AttributeError, KeyError, IndexError) as err:
+            _LOGGER.debug(
+                "Value lookup failed for %s (%s): %s",
+                self.entity_id or self._attr_unique_id,
+                getattr(self.entity_description, "key", "?"),
+                err,
+            )
+            self._attr_native_value = self._unknown_value()
         except Exception as err:  # pragma: no cover - defensive
             # Avoid noisy stack traces from value functions; fall back to unknown
             _LOGGER.warning(
                 "Value function failed for %s (%s); reporting unknown",
-                self._attr_name,
+                self.entity_id or self._attr_unique_id,
                 err,
             )
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+            self._attr_native_value = self._unknown_value()
 
     def _log_debug_info(self, data_source: D) -> None:
         """Log debug information for circuit sensors."""
@@ -319,10 +339,10 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
         if (
             not self.coordinator.panel_offline
             and hasattr(self, "id")
-            and hasattr(data_source, "instant_power")
+            and hasattr(data_source, "instant_power_w")
         ):
             circuit_id = getattr(self, "id", STATE_UNKNOWN)
-            instant_power = getattr(data_source, "instant_power", None)
+            instant_power = getattr(data_source, "instant_power_w", None)
             description_key = getattr(self.entity_description, "key", STATE_UNKNOWN)
             _LOGGER.debug(
                 "CIRCUIT_POWER_DEBUG: Circuit %s, sensor %s, instant_power=%s, data_source type=%s",
@@ -335,17 +355,31 @@ class SpanSensorBase(CoordinatorEntity[SpanPanelCoordinator], SensorEntity, Gene
     def _process_raw_value(self, raw_value: float | int | str | None) -> None:
         """Process the raw value from the value function."""
         if raw_value is None:
-            # For sensors with state_class, use None (HA reports as unknown)
-            # For other sensors, use STATE_UNKNOWN string
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+            self._attr_native_value = self._unknown_value()
         elif isinstance(raw_value, float | int):
             self._attr_native_value = float(raw_value)
         else:
-            # For string values, keep as string - this is valid for Home Assistant sensors
-            self._attr_native_value = str(raw_value)
+            str_value = str(raw_value)
+            # For enum sensors, ensure the value is in the options list before
+            # setting it — HA raises ValueError if the state is not in options.
+            # Options are built dynamically from observed MQTT values.
+            # Values are normalized to lowercase to satisfy HA's translation
+            # key requirement ([a-z0-9-_]+). HA uses the state value directly
+            # as the translation key lookup.
+            if self._attr_device_class is SensorDeviceClass.ENUM:
+                str_value = str_value.lower()
+                if not hasattr(self, "_attr_options") or self._attr_options is None:
+                    self._attr_options = []
+                if str_value not in self._attr_options:
+                    self._attr_options.append(str_value)
+                    _LOGGER.debug(
+                        "Added enum option '%s' for %s",
+                        str_value,
+                        self.entity_id or self._attr_unique_id,
+                    )
+            self._attr_native_value = str_value
 
-    def get_data_source(self, span_panel: SpanPanel) -> D:
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> D:
         """Get the data source for the sensor."""
         raise NotImplementedError("Subclasses must implement this method")
 
@@ -363,6 +397,9 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
     native_unit_of_measurement: str | None
     last_valid_state: float | None
     last_valid_changed: str | None  # ISO format datetime string
+    energy_offset: float | None = None
+    last_panel_reading: float | None = None
+    last_dip_delta: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dict representation of the extra data."""
@@ -371,6 +408,9 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
             "native_unit_of_measurement": self.native_unit_of_measurement,
             "last_valid_state": self.last_valid_state,
             "last_valid_changed": self.last_valid_changed,
+            "energy_offset": self.energy_offset,
+            "last_panel_reading": self.last_panel_reading,
+            "last_dip_delta": self.last_dip_delta,
         }
 
     @classmethod
@@ -390,12 +430,15 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
                 native_unit_of_measurement=restored.get("native_unit_of_measurement"),
                 last_valid_state=restored.get("last_valid_state"),
                 last_valid_changed=restored.get("last_valid_changed"),
+                energy_offset=restored.get("energy_offset"),
+                last_panel_reading=restored.get("last_panel_reading"),
+                last_dip_delta=restored.get("last_dip_delta"),
             )
         except (KeyError, TypeError):
             return None
 
 
-class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
+class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], RestoreSensor, ABC):
     """Base class for energy sensors that includes grace period tracking.
 
     This class extends SpanSensorBase with:
@@ -408,10 +451,10 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
-        span_panel: SpanPanel,
+        snapshot: SpanPanelSnapshot,
     ) -> None:
         """Initialize the energy sensor with grace period tracking."""
-        super().__init__(data_coordinator, description, span_panel)
+        super().__init__(data_coordinator, description, snapshot)
         self._last_valid_state: float | None = None
         self._last_valid_changed: datetime | None = None
         self._grace_period_minutes = data_coordinator.config_entry.options.get(
@@ -419,6 +462,39 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         )
         # Track if we've restored data (used for logging)
         self._restored_from_storage: bool = False
+
+        # Energy dip compensation state
+        self._energy_offset: float = 0.0
+        self._last_panel_reading: float | None = None
+        self._last_dip_delta: float | None = None
+        self._is_total_increasing: bool = (
+            getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
+        )
+        self._dip_compensation_enabled: bool = data_coordinator.config_entry.options.get(
+            ENABLE_ENERGY_DIP_COMPENSATION, False
+        )
+
+    def _process_raw_value(self, raw_value: float | int | str | None) -> None:
+        """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
+        if (
+            self._dip_compensation_enabled
+            and self._is_total_increasing
+            and isinstance(raw_value, float | int)
+        ):
+            raw_float = float(raw_value)
+            if self._last_panel_reading is not None and self._last_panel_reading - raw_float >= 1.0:
+                dip = self._last_panel_reading - raw_float
+                self._energy_offset += dip
+                self._last_dip_delta = dip
+                self.coordinator.report_energy_dip(
+                    self.entity_id or self._attr_unique_id or "unknown",
+                    dip,
+                    self._energy_offset,
+                )
+            self._last_panel_reading = raw_float
+            super()._process_raw_value(raw_float + self._energy_offset)
+        else:
+            super()._process_raw_value(raw_value)
 
     async def async_added_to_hass(self) -> None:
         """Restore grace period state when entity is added to Home Assistant.
@@ -457,6 +533,23 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
                             self.entity_id or self._attr_unique_id,
                             e,
                         )
+
+                # Restore energy dip compensation state (only when enabled)
+                if self._dip_compensation_enabled and self._is_total_increasing:
+                    if restored.energy_offset is not None:
+                        self._energy_offset = restored.energy_offset
+                    if restored.last_panel_reading is not None:
+                        self._last_panel_reading = restored.last_panel_reading
+                    if restored.last_dip_delta is not None:
+                        self._last_dip_delta = restored.last_dip_delta
+                    _LOGGER.debug(
+                        "Restored energy dip compensation for %s: "
+                        "offset=%s, last_reading=%s, last_dip=%s",
+                        self.entity_id or self._attr_unique_id,
+                        self._energy_offset,
+                        self._last_panel_reading,
+                        self._last_dip_delta,
+                    )
 
         # Seed grace period tracking from the last stored HA state when extra data
         # is missing (e.g., after first install or early offline event).
@@ -511,6 +604,9 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
             last_valid_changed=(
                 self._last_valid_changed.isoformat() if self._last_valid_changed else None
             ),
+            energy_offset=self._energy_offset if self._energy_offset else None,
+            last_panel_reading=self._last_panel_reading,
+            last_dip_delta=self._last_dip_delta,
         )
 
     def _update_native_value(self) -> None:
@@ -579,6 +675,11 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
         # Update grace period from options in case it changed
         self._grace_period_minutes = self.coordinator.config_entry.options.get(
             ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
+
+        # Update dip compensation flag from options in case it changed
+        self._dip_compensation_enabled = self.coordinator.config_entry.options.get(
+            ENABLE_ENERGY_DIP_COMPENSATION, False
         )
 
         # Use the overridden _update_native_value method which handles grace period
@@ -660,5 +761,12 @@ class SpanEnergySensorBase(SpanSensorBase[T, D], RestoreSensor, ABC):
                 panel_offline = getattr(self.coordinator, "panel_offline", False)
                 if panel_offline and remaining_seconds > 0:
                     attributes["using_grace_period"] = "True"
+
+        # Energy dip compensation attributes (only when enabled and meaningful)
+        if self._dip_compensation_enabled and self._is_total_increasing:
+            if self._energy_offset > 0:
+                attributes["energy_offset"] = str(round(self._energy_offset, 1))
+            if self._last_dip_delta is not None:
+                attributes["last_dip_delta"] = str(round(self._last_dip_delta, 1))
 
         return attributes if attributes else None

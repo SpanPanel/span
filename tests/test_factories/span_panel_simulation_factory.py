@@ -5,12 +5,21 @@ to generate realistic SPAN panel data that exactly matches what the integration 
 using actual SPAN panel response structures.
 """
 
-import asyncio
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
 
-from span_panel_api import SpanPanelClient
+import asyncio
+import os
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
 import yaml
+
+if TYPE_CHECKING or os.environ.get("SPAN_USE_REAL_SIMULATION", "").lower() in (
+    "1",
+    "true",
+    "yes",
+):
+    from span_panel_api import SpanPanelClient
 
 
 class SpanPanelSimulationFactory:
