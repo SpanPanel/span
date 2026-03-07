@@ -4,31 +4,29 @@ import logging
 from typing import Any, Literal
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
+from . import SpanPanelConfigEntry
 from .const import (
-    CONF_API_VERSION,
-    COORDINATOR,
     DOMAIN,
     USE_CIRCUIT_NUMBERS,
     CircuitRelayState,
 )
 from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
 from .helpers import (
     build_switch_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
 )
-from .util import snapshot_to_device_info
 
 ICON: Literal["mdi:toggle-switch"] = "mdi:toggle-switch"
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 1
 
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
@@ -44,10 +42,8 @@ def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> s
     return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 
 
-class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEntity):
+class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     """Represent a switch entity."""
-
-    _attr_has_entity_name = True
 
     def __init__(
         self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str, device_name: str
@@ -64,9 +60,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
         self._attr_icon = "mdi:toggle-switch"
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, snapshot, circuit_id)
 
-        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        host = coordinator.config_entry.data.get(CONF_HOST)
-        self._attr_device_info = snapshot_to_device_info(snapshot, device_name, is_simulator, host)
+        self._attr_device_info = self._build_device_info(coordinator, snapshot)
 
         # Check if entity already exists in registry
         entity_registry = er.async_get(coordinator.hass)
@@ -224,14 +218,12 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SpanPanelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor platform."""
 
-    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
-
-    coordinator: SpanPanelCoordinator = data[COORDINATOR]
+    coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data
 
     # Get device name from config entry data

@@ -17,23 +17,20 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.restore_state import ExtraStoredData
 from homeassistant.helpers.typing import StateType
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanPanelSnapshot
 
 from .const import (
-    CONF_API_VERSION,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
 )
 from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
 from .options import ENERGY_REPORTING_GRACE_PERIOD
-from .util import snapshot_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -63,9 +60,7 @@ def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | 
     return value, last_changed
 
 
-class SpanSensorBase[T: SensorEntityDescription, D](
-    CoordinatorEntity[SpanPanelCoordinator], SensorEntity, ABC
-):
+class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntity, ABC):
     """Abstract base class for Span Panel Sensors with overrideable methods."""
 
     _attr_has_entity_name = True
@@ -93,12 +88,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](
             "device_name", data_coordinator.config_entry.title
         )
 
-        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        host = data_coordinator.config_entry.data.get(CONF_HOST)
-        device_info: DeviceInfo = snapshot_to_device_info(
-            snapshot, self._device_name, is_simulator, host
-        )
-        self._attr_device_info = device_info
+        self._attr_device_info = self._build_device_info(data_coordinator, snapshot)
 
         # Check if entity already exists in registry for name sync
         if snapshot.serial_number and description.key:

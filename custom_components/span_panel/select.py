@@ -2,33 +2,29 @@
 
 from collections.abc import Callable
 import logging
-from typing import Any, Final
+from typing import Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
+from . import SpanPanelConfigEntry
 from .const import (
-    CONF_API_VERSION,
-    COORDINATOR,
     DOMAIN,
     USE_CIRCUIT_NUMBERS,
     CircuitPriority,
 )
 from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
 from .helpers import (
     async_create_span_notification,
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
 )
-from .util import snapshot_to_device_info
 
 ICON = "mdi:chevron-down"
 
@@ -44,6 +40,8 @@ def _unnamed_select_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> s
 
 
 _LOGGER = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 1
 
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
@@ -84,10 +82,8 @@ CIRCUIT_PRIORITY_DESCRIPTION: Final = SpanPanelSelectEntityDescriptionWrapper(
 )
 
 
-class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEntity):
+class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
     """Represent a select entity for Span Panel circuits."""
-
-    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -112,9 +108,7 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
 
         self._attr_unique_id = self._construct_select_unique_id(coordinator, snapshot, self.id)
 
-        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        host = coordinator.config_entry.data.get(CONF_HOST)
-        self._attr_device_info = snapshot_to_device_info(snapshot, device_name, is_simulator, host)
+        self._attr_device_info = self._build_device_info(coordinator, snapshot)
 
         # Check if entity already exists in registry
         entity_registry = er.async_get(coordinator.hass)
@@ -270,15 +264,14 @@ class SpanPanelCircuitsSelect(CoordinatorEntity[SpanPanelCoordinator], SelectEnt
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SpanPanelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up select entities for Span Panel."""
 
     _LOGGER.debug("ASYNC SETUP ENTRY SELECT")
-    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
 
-    coordinator: SpanPanelCoordinator = data[COORDINATOR]
+    coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data
 
     # Get device name from config entry data

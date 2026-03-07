@@ -13,11 +13,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 from span_panel_api import SpanPanelSnapshot
 
+from . import SpanPanelConfigEntry
 from .const import (
     CONF_API_VERSION,
     CONF_DEVICE_NAME,
-    COORDINATOR,
-    DOMAIN,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     USE_CIRCUIT_NUMBERS,
@@ -69,18 +68,19 @@ __all__ = [
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 0
+
 ICON = "mdi:flash"
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SpanPanelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor platform."""
     try:
-        data = hass.data[DOMAIN][config_entry.entry_id]
-        coordinator: SpanPanelCoordinator = data[COORDINATOR]
+        coordinator = config_entry.runtime_data.coordinator
         snapshot: SpanPanelSnapshot = coordinator.data
 
         # Create all native sensors (panel, circuit, and battery sensors)

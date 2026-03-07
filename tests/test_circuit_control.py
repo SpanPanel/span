@@ -89,15 +89,8 @@ async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom
     mock_config_entry.entry_id = "test_entry"
     mock_config_entry.title = "SPAN Panel"  # Provide string title
     mock_config_entry.data = {}  # Empty data dict for device_name fallback to title
-
-    # Mock hass data
-    hass.data = {
-        "span_panel": {
-            "test_entry": {
-                "coordinator": mock_coordinator,
-            }
-        }
-    }
+    mock_config_entry.runtime_data = MagicMock()
+    mock_config_entry.runtime_data.coordinator = mock_coordinator
 
     await async_setup_entry(hass, mock_config_entry, mock_add_entities)
 

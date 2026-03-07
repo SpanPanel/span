@@ -5,27 +5,21 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
-from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
+from . import SpanPanelConfigEntry
 from .const import (
     CONF_API_VERSION,
     CONF_DEVICE_NAME,
-    COORDINATOR,
-    DOMAIN,
     PANEL_STATUS,
     SYSTEM_DOOR_STATE,
     SYSTEM_DOOR_STATE_CLOSED,
@@ -35,18 +29,21 @@ from .const import (
     USE_CIRCUIT_NUMBERS,
 )
 from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
     has_bess,
     resolve_evse_display_suffix,
 )
-from .util import evse_device_info, snapshot_to_device_info
+from .util import evse_device_info
 
 # pylint: disable=invalid-overridden-method
 
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 0
 
 
 @dataclass(frozen=True)
@@ -111,11 +108,10 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 
 class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
-    CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity
+    SpanPanelEntity, BinarySensorEntity
 ):
     """Binary Sensor status entity."""
 
-    _attr_has_entity_name = True
     _attr_icon: str | None = "mdi:flash"
 
     def __init__(
@@ -127,30 +123,16 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         super().__init__(data_coordinator, context=description)
         snapshot: SpanPanelSnapshot = data_coordinator.data
 
-        # See developer_attrtribute_readme.md for why we use
-        # entity_description instead of _attr_entity_description
         self.entity_description = description
         self._attr_device_class = description.device_class
-
-        # Store direct reference to the value_fn so we don't need to access through
-        # entity_description later, avoiding type issues
         self._value_fn = description.value_fn
 
-        # Consistent device name logic (matches switch)
         self._device_name = data_coordinator.config_entry.data.get(
             CONF_DEVICE_NAME, data_coordinator.config_entry.title
         )
 
-        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        host = data_coordinator.config_entry.data.get(CONF_HOST)
-        device_info: DeviceInfo = snapshot_to_device_info(
-            snapshot, self._device_name, is_simulator, host
-        )
-        self._attr_device_info = device_info
-        base_name: str | None = f"{description.name}"
-
-        # Set entity name for HA automatic naming
-        self._attr_name = base_name or ""
+        self._attr_device_info = self._build_device_info(data_coordinator, snapshot)
+        self._attr_name = f"{description.name}" or ""
 
         self._attr_unique_id = self._construct_binary_sensor_unique_id(
             data_coordinator, snapshot, description.key
@@ -285,10 +267,8 @@ EVSE_BINARY_SENSORS: tuple[
 _EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
 
 
-class SpanEvseBinarySensor(CoordinatorEntity[SpanPanelCoordinator], BinarySensorEntity):
+class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
     """EVSE (EV charger) binary sensor entity."""
-
-    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -346,15 +326,14 @@ class SpanEvseBinarySensor(CoordinatorEntity[SpanPanelCoordinator], BinarySensor
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SpanPanelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up status sensor platform."""
 
     _LOGGER.debug("ASYNC SETUP ENTRY BINARYSENSOR")
 
-    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator: SpanPanelCoordinator = data[COORDINATOR]
+    coordinator = config_entry.runtime_data.coordinator
 
     entities: list[
         SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanEvseBinarySensor

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime
 import logging
 import os
@@ -39,15 +40,23 @@ from .const import (
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
-    COORDINATOR,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
-    NAME,
 )
 from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_sensors
 from .options import SNAPSHOT_UPDATE_INTERVAL
 from .util import snapshot_to_device_info
+
+
+@dataclass
+class SpanPanelRuntimeData:
+    """Runtime data for a Span Panel config entry."""
+
+    coordinator: SpanPanelCoordinator
+
+
+type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -225,7 +234,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
 
@@ -336,11 +345,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         entry.async_on_unload(entry.add_update_listener(update_listener))
 
-        hass.data.setdefault(DOMAIN, {})
-        hass.data[DOMAIN][entry.entry_id] = {
-            COORDINATOR: coordinator,
-            NAME: "SpanPanel",
-        }
+        entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator)
 
         snapshot: SpanPanelSnapshot = coordinator.data
         serial_number = snapshot.serial_number
@@ -380,24 +385,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.debug("Unloading SPAN Panel integration")
 
-    coordinator_data = hass.data[DOMAIN].get(entry.entry_id)
-    if coordinator_data and COORDINATOR in coordinator_data:
-        coordinator: SpanPanelCoordinator = coordinator_data[COORDINATOR]
-        await coordinator.async_shutdown()
+    await entry.runtime_data.coordinator.async_shutdown()
 
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-
-    return bool(unload_ok)
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Remove a config entry and clean up all associated data."""
     _LOGGER.debug("Removing SPAN Panel integration entry: %s", entry.entry_id)
 
@@ -405,7 +402,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await async_unload_entry(hass, entry)
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
     """Handle options updates."""
     _LOGGER.debug("Configuration options changed for entry: %s", entry.entry_id)
 
@@ -413,19 +410,17 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if hass.state is not CoreState.running:
             return
 
-        coordinator_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-        coordinator: SpanPanelCoordinator | None = coordinator_data.get(COORDINATOR)
+        coordinator = entry.runtime_data.coordinator
 
-        if coordinator:
-            # Update simulation offline mode if this is a simulation entry
-            api_version = entry.data.get(CONF_API_VERSION)
-            if api_version == "simulation":
-                simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
-                _LOGGER.info(
-                    "Update listener: processing simulation_offline_minutes = %s",
-                    simulation_offline_minutes,
-                )
-                coordinator.set_simulation_offline_mode(simulation_offline_minutes)
+        # Update simulation offline mode if this is a simulation entry
+        api_version = entry.data.get(CONF_API_VERSION)
+        if api_version == "simulation":
+            simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
+            _LOGGER.info(
+                "Update listener: processing simulation_offline_minutes = %s",
+                simulation_offline_minutes,
+            )
+            coordinator.set_simulation_offline_mode(simulation_offline_minutes)
 
         if hass.state is not CoreState.running:
             return
@@ -456,7 +451,7 @@ def _requires_full_reload(entry: ConfigEntry) -> bool:
 
 async def ensure_device_registered(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: SpanPanelConfigEntry,
     snapshot: SpanPanelSnapshot,
     device_name: str,
 ) -> None:

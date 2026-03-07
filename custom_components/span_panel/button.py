@@ -1,32 +1,27 @@
 """Button entities for the Span Panel."""
 
 import logging
-from typing import Any, Final
+from typing import Final
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
-from .const import (
-    CONF_API_VERSION,
-    CONF_DEVICE_NAME,
-    COORDINATOR,
-    DOMAIN,
-)
+from . import SpanPanelConfigEntry
+from .const import CONF_DEVICE_NAME
 from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
 from .helpers import (
     async_create_span_notification,
     construct_panel_unique_id_for_entry,
     has_bess,
 )
-from .util import snapshot_to_device_info
 
 _LOGGER = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 1
 
 
 GFE_OVERRIDE_DESCRIPTION: Final = ButtonEntityDescription(
@@ -37,7 +32,7 @@ GFE_OVERRIDE_DESCRIPTION: Final = ButtonEntityDescription(
 )
 
 
-class SpanPanelGFEOverrideButton(CoordinatorEntity[SpanPanelCoordinator], ButtonEntity):
+class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
     """Button entity for overriding the panel's grid-forming entity.
 
     The SPAN panel's GFE (dominant-power-source) is normally managed by the
@@ -46,8 +41,6 @@ class SpanPanelGFEOverrideButton(CoordinatorEntity[SpanPanelCoordinator], Button
     temporary override via the eBus MQTT /set topic. The BESS automatically
     reclaims control when communication is restored.
     """
-
-    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -62,14 +55,11 @@ class SpanPanelGFEOverrideButton(CoordinatorEntity[SpanPanelCoordinator], Button
         self.entity_description = description
         self._override_value = override_value
 
+        self._attr_device_info = self._build_device_info(coordinator, snapshot)
+
         device_name = coordinator.config_entry.data.get(
             CONF_DEVICE_NAME, coordinator.config_entry.title
         )
-
-        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
-        host = coordinator.config_entry.data.get(CONF_HOST)
-        self._attr_device_info = snapshot_to_device_info(snapshot, device_name, is_simulator, host)
-
         self._attr_unique_id = construct_panel_unique_id_for_entry(
             coordinator, snapshot, description.key, device_name
         )
@@ -122,12 +112,11 @@ class SpanPanelGFEOverrideButton(CoordinatorEntity[SpanPanelCoordinator], Button
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SpanPanelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up button entities for Span Panel."""
-    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator: SpanPanelCoordinator = data[COORDINATOR]
+    coordinator = config_entry.runtime_data.coordinator
 
     entities: list[SpanPanelGFEOverrideButton] = []
 

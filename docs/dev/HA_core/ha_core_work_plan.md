@@ -77,39 +77,24 @@ After simulation removal (§1.1), only `options.py` (171 lines) and `validation.
 
 These changes bring the integration into compliance with the 19 Bronze-tier rules required for all new core integrations.
 
-### 2.1 Switch to `runtime_data`
+### 2.1 ~~Switch to `runtime_data`~~ ✅
 
-**Rule:** `runtime-data`
+Completed. `SpanPanelRuntimeData` dataclass and `SpanPanelConfigEntry` type alias defined in `__init__.py`. All platform `async_setup_entry` functions use
+`config_entry.runtime_data.coordinator` instead of `hass.data[DOMAIN]`.
 
-Replace `hass.data[DOMAIN]` with typed `entry.runtime_data`.
+### 2.2 ~~Move Service Registration to `async_setup`~~ ✅
 
-```python
-@dataclass
-class SpanPanelRuntimeData:
-    coordinator: SpanPanelCoordinator
+Already satisfied — no service actions are registered. The `cleanup_energy_spikes` and `undo_stats_adjustments` services were removed in a prior commit.
 
-type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
-```
+### 2.3 ~~Verify `entity.py` Base Entity~~ ✅
 
-Use `SpanPanelConfigEntry` consistently throughout the integration wherever a config entry is referenced.
+Completed. `entity.py` contains `SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator])` with `_attr_has_entity_name = True` and `_build_device_info()` static
+helper. All platform entities inherit from it: `SpanSensorBase`, `SpanPanelBinarySensor`, `SpanEvseBinarySensor`, `SpanPanelCircuitsSwitch`,
+`SpanPanelCircuitsSelect`, `SpanPanelGFEOverrideButton`.
 
-### 2.2 Move Service Registration to `async_setup`
+### 2.4 ~~Add `PARALLEL_UPDATES` to All Platforms~~ ✅
 
-**Rule:** `action-setup`
-
-Service actions must be registered in `async_setup()`, not `async_setup_entry()`. This allows HA to validate automations referencing these services even when
-the config entry is not loaded. Inside the handler, validate that the referenced config entry exists and is loaded before executing.
-
-### 2.3 Verify `entity.py` Base Entity
-
-**Rule:** `common-modules`
-
-`entity.py` is created as part of the directory flattening (§1.2). Verify that all platform entities (`sensor`, `binary_sensor`, `switch`, `select`, `button`)
-inherit from `SpanPanelEntity` and that coordinator binding, device info construction, and availability logic are consolidated in the base class.
-
-### 2.4 Add `PARALLEL_UPDATES` to All Platforms
-
-**Rule:** `parallel-updates`
+Completed.
 
 | Platform           | Value | Reason                       |
 | ------------------ | ----- | ---------------------------- |
@@ -117,6 +102,7 @@ inherit from `SpanPanelEntity` and that coordinator binding, device info constru
 | `binary_sensor.py` | `0`   | Read-only, coordinator-based |
 | `switch.py`        | `1`   | Sends commands to device     |
 | `select.py`        | `1`   | Sends commands to device     |
+| `button.py`        | `1`   | Sends commands to device     |
 
 ### 2.5 Ensure Dependency Transparency
 
