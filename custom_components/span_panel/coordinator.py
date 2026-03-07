@@ -152,9 +152,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         preamble = (
             "The following energy sensors reported a decrease in their "
             "counter value. Dip compensation has automatically applied "
-            "offsets — no action is required for new data. To fix "
-            "historical data recorded before compensation was enabled, "
-            "use the `span_panel.cleanup_energy_spikes` service."
+            "offsets — no action is required for new data."
         )
 
         lines: list[str] = []

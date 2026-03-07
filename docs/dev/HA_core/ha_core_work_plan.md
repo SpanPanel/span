@@ -47,26 +47,7 @@ Remove all simulation-related code paths and files:
 - Simulation-related constants (`CONF_SIMULATION_CONFIG`, `CONF_SIMULATION_START_TIME`, `CONF_SIMULATION_OFFLINE_MINUTES`)
 - Simulation-related options in `options.py`
 
-### 1.2 Remove Energy Spike Cleanup Services
-
-The `cleanup_energy_spikes` and `undo_stats_adjustments` services directly manipulate the HA statistics database. This is maintenance tooling, not device
-integration functionality.
-
-Remove:
-
-- `services/cleanup_energy_spikes.py` (1068 lines)
-- `services/undo_stats_adjustments.py` (467 lines)
-- `services/main_meter_monitoring.py` (178 lines)
-- `services/__init__.py`
-- Associated service definitions in `services.yaml`
-- Associated strings in `strings.json`
-- Associated test files
-
-The `export_synthetic_config` service should also be removed.
-
-These services can continue to live in a companion custom component for users who need them.
-
-### 1.3 Flatten Directory Structure
+### 1.2 Flatten Directory Structure
 
 Core integrations use a flat directory structure with no subdirectories for platform code. Restructure:
 
@@ -81,7 +62,7 @@ Core integrations use a flat directory structure with no subdirectories for plat
 | `services/`           | Remove (see 1.2)             |
 | `simulation_configs/` | Remove (see 1.1)             |
 
-### 1.4 Manifest Adjustments
+### 1.3 Manifest Adjustments
 
 | Change                           | Reason                                  |
 | -------------------------------- | --------------------------------------- |
@@ -432,11 +413,6 @@ custom_components/span_panel/
 ├── entity_summary.py              # Naming support
 ├── migration.py                   # Naming migration
 ├── migration_utils.py             # Naming migration
-├── services/                      # Energy spike services
-│   ├── __init__.py
-│   ├── cleanup_energy_spikes.py
-│   ├── main_meter_monitoring.py
-│   └── undo_stats_adjustments.py
 ├── config_flow_utils/simulation.py # Simulation
 ├── sensors/                       # Flatten into sensor.py + entity.py
 │   ├── __init__.py

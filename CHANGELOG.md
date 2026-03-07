@@ -64,6 +64,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   via panel capabilities)
 - Removed post-install entity naming pattern switching — the naming pattern is now set once during initial setup and cannot be changed afterward. The
   `EntityIdMigrationManager` and all associated migration machinery have been removed
+- Removed `cleanup_energy_spikes` and `undo_stats_adjustments` services — energy dip compensation handles counter dips automatically. For existing historical
+  spikes, use Developer Tools > Statistics to adjust individual entries
 
 ## [1.3.1] - 2026-01-19
 

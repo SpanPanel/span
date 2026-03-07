@@ -47,11 +47,6 @@ from .const import (
 from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_sensors
 from .options import SNAPSHOT_UPDATE_INTERVAL
-from .services import (
-    async_setup_cleanup_energy_spikes_service,
-    async_setup_main_meter_monitoring,
-    async_setup_undo_stats_adjustments_service,
-)
 from .util import snapshot_to_device_info
 
 PLATFORMS: list[Platform] = [
@@ -376,15 +371,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await ensure_device_registered(hass, entry, snapshot, smart_device_name)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-        # Register services
-        await async_setup_cleanup_energy_spikes_service(hass)
-        await async_setup_undo_stats_adjustments_service(hass)
-
-        # Set up main meter monitoring for firmware reset detection
-        unsub_main_meter = await async_setup_main_meter_monitoring(hass, entry.entry_id)
-        if unsub_main_meter:
-            entry.async_on_unload(unsub_main_meter)
 
         return True
 

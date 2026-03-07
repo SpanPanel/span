@@ -375,8 +375,7 @@ increasing value.
 - **Threshold:** 1.0 Wh minimum to avoid false triggers from float precision noise
 - **Disabling:** Clears all accumulated offsets (starts fresh if re-enabled)
 
-When a dip is detected, a persistent notification lists the affected sensors and their dip amounts. The notification also references the `cleanup_energy_spikes`
-service for fixing historical data.
+When a dip is detected, a persistent notification lists the affected sensors and their dip amounts.
 
 **Diagnostic attributes** (visible when compensation is active):
 
@@ -416,24 +415,8 @@ Assistant's statistics engine. See [Energy Dip Compensation](#energy-dip-compens
 
 **Solution for existing spikes:**
 
-Use the Developer Tools to adjust individual statistics. This method allows you greater control.
-
-OR
-
-Use the cleanup service to adjust negative statistics in `TOTAL_INCREASING` entries (Beta):
-
-1. **Backup the system** - Create a backup of your Home Assistant instance before making any changes.
-2. **Verify the spike** - Go to **Developer Tools > Statistics** and search for the main meter consumed energy sensor
-   (`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike caused by negative value and note the timestamp
-3. Go to **Developer Tools > Actions**
-4. Search for `span_panel.cleanup_energy_spikes`
-5. Set `start_time` and `end_time` to cover the time range where the spike occurred (use the timestamp from step 2)
-6. First run with `dry_run: true` to preview what will be adjusted (important, save the JSON in case you need to undo with undo_stats_adjustment)
-7. Review the persistent notification showing affected timestamps in the JSON
-8. Run again with `dry_run: false` to adjust the problematic entries (uses the negative delta in each sensor's sum to adjust stats upward)
-9. Fine tune using the statistics adjustments if necessary
-
-The spike cleanup service looks at the energy usage just after the spike to extrapolate energy usage over any previous down time prior to the spike.
+Use **Developer Tools > Statistics** to find and adjust individual statistics entries. Search for the affected sensor
+(e.g., `sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike and use the "Adjust sum" option to correct it.
 
 **Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.
 
