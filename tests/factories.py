@@ -167,11 +167,23 @@ class SpanBatterySnapshotFactory:
     def create(
         soe_percentage: float | None = 85.0,
         soe_kwh: float | None = None,
+        vendor_name: str | None = None,
+        product_name: str | None = None,
+        serial_number: str | None = None,
+        software_version: str | None = None,
+        nameplate_capacity_kwh: float | None = None,
+        connected: bool | None = None,
     ) -> SpanBatterySnapshot:
         """Create a SpanBatterySnapshot with reasonable defaults."""
         return SpanBatterySnapshot(
             soe_percentage=soe_percentage,
             soe_kwh=soe_kwh,
+            vendor_name=vendor_name,
+            product_name=product_name,
+            serial_number=serial_number,
+            software_version=software_version,
+            nameplate_capacity_kwh=nameplate_capacity_kwh,
+            connected=connected,
         )
 
 

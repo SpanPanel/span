@@ -85,6 +85,54 @@
           "locked": "mdi:lock",
           "unlocked": "mdi:lock-open"
         }
+      },
+      "l1_voltage": {
+        "default": "mdi:sine-wave"
+      },
+      "l2_voltage": {
+        "default": "mdi:sine-wave"
+      },
+      "upstream_l1_current": {
+        "default": "mdi:current-ac"
+      },
+      "upstream_l2_current": {
+        "default": "mdi:current-ac"
+      },
+      "downstream_l1_current": {
+        "default": "mdi:current-ac"
+      },
+      "downstream_l2_current": {
+        "default": "mdi:current-ac"
+      },
+      "main_breaker_rating": {
+        "default": "mdi:fuse"
+      },
+      "bess_vendor": {
+        "default": "mdi:domain"
+      },
+      "bess_model": {
+        "default": "mdi:battery-outline"
+      },
+      "bess_serial_number": {
+        "default": "mdi:identifier"
+      },
+      "bess_firmware_version": {
+        "default": "mdi:chip"
+      },
+      "bess_nameplate_capacity": {
+        "default": "mdi:battery-high"
+      },
+      "bess_soe_kwh": {
+        "default": "mdi:battery-charging"
+      },
+      "pv_vendor": {
+        "default": "mdi:domain"
+      },
+      "pv_product": {
+        "default": "mdi:solar-panel"
+      },
+      "pv_nameplate_capacity": {
+        "default": "mdi:solar-power"
       }
     },
     "binary_sensor": {
@@ -107,6 +155,9 @@
           "on": "mdi:lan-connect",
           "off": "mdi:lan-disconnect"
         }
+      },
+      "grid_islandable": {
+        "default": "mdi:island"
       },
       "bess_connected": {
         "default": "mdi:battery-check"

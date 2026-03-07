@@ -12,6 +12,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
@@ -37,7 +38,7 @@ from .helpers import (
     has_bess,
     resolve_evse_display_suffix,
 )
-from .util import evse_device_info
+from .util import bess_device_info, evse_device_info
 
 # pylint: disable=invalid-overridden-method
 
@@ -104,6 +105,14 @@ BINARY_SENSORS: tuple[
     ),
 )
 
+GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
+    key="grid_islandable",
+    translation_key="grid_islandable",
+    device_class=BinarySensorDeviceClass.POWER,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda s: s.grid_islandable,
+)
+
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
     translation_key="bess_connected",
@@ -122,6 +131,7 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         self,
         data_coordinator: SpanPanelCoordinator,
         description: T,
+        device_info_override: DeviceInfo | None = None,
     ) -> None:
         """Initialize Span Panel Circuit entity."""
         super().__init__(data_coordinator, context=description)
@@ -135,7 +145,10 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
             CONF_DEVICE_NAME, data_coordinator.config_entry.title
         )
 
-        self._attr_device_info = self._build_device_info(data_coordinator, snapshot)
+        if device_info_override is not None:
+            self._attr_device_info = device_info_override
+        else:
+            self._attr_device_info = self._build_device_info(data_coordinator, snapshot)
 
         self._attr_unique_id = self._construct_binary_sensor_unique_id(
             data_coordinator, snapshot, description.key
@@ -345,10 +358,29 @@ async def async_setup_entry(
     for description in BINARY_SENSORS:
         entities.append(SpanPanelBinarySensor(coordinator, description))
 
-    # Add BESS connected sensor when battery is commissioned
+    # Add grid islandable binary sensor when v2 data is available
     snapshot: SpanPanelSnapshot = coordinator.data
+    if snapshot.grid_islandable is not None:
+        entities.append(SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR))
+
+    # Add BESS connected sensor on the BESS sub-device when battery is commissioned
     if has_bess(snapshot):
-        entities.append(SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR))
+        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+        panel_name = (
+            coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
+            or "Span Panel"
+        )
+        if is_simulator:
+            panel_identifier = slugify(panel_name)
+        else:
+            panel_identifier = snapshot.serial_number
+
+        bess_info = bess_device_info(panel_identifier, snapshot.battery, panel_name)
+        entities.append(
+            SpanPanelBinarySensor(
+                coordinator, BESS_CONNECTED_SENSOR, device_info_override=bess_info
+            )
+        )
 
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:

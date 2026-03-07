@@ -94,9 +94,9 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         if snapshot.serial_number and description.key:
             self._attr_unique_id = self._generate_unique_id(snapshot, description)
 
-            # Entities with translation_key get their name from strings.json.
+            # Entities with translation_key get their name from translations/en.json.
             # Only set _attr_name for entities without translation_key (e.g.,
-            # circuit sensors whose names include the circuit name).
+            # circuit sensors whose names include the dynamic circuit name).
             if not getattr(description, "translation_key", None):
                 entity_registry = er.async_get(data_coordinator.hass)
                 existing_entity_id = entity_registry.async_get_entity_id(
@@ -255,6 +255,27 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             _LOGGER.debug("Availability check: unexpected error: %s", err)
         return super().available
 
+    @property
+    def _expects_numeric(self) -> bool:
+        """Return True if HA expects this sensor to have a numeric value.
+
+        HA raises ValueError when a sensor with a numeric device_class,
+        state_class, or native_unit_of_measurement reports a string state
+        like STATE_UNKNOWN.  These sensors must use None instead.
+        """
+        if getattr(self.entity_description, "state_class", None) is not None:
+            return True
+        if getattr(self.entity_description, "native_unit_of_measurement", None) is not None:
+            return True
+        dc = getattr(self.entity_description, "device_class", None)
+        if dc is not None and dc != SensorDeviceClass.ENUM:
+            return True
+        return False
+
+    def _unknown_value(self) -> StateType:
+        """Return the appropriate 'unknown' value for this sensor."""
+        return None if self._expects_numeric else STATE_UNKNOWN
+
     def _update_native_value(self) -> None:
         """Update the native value of the sensor."""
         if self.coordinator.panel_offline:
@@ -265,23 +286,17 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
     def _handle_offline_state(self) -> None:
         """Handle sensor state when panel is offline."""
-        _LOGGER.debug("STATUS_SENSOR_DEBUG: Panel is offline for %s", self._attr_name)
+        _LOGGER.debug(
+            "STATUS_SENSOR_DEBUG: Panel is offline for %s", self.entity_id or self._attr_unique_id
+        )
 
-        # For power sensors, set to 0.0 when offline (instantaneous values)
-        # For energy sensors, set to None when offline (HA will report as unknown)
-        # For numeric sensors (battery, etc.), set to None when offline (HA will report as unknown)
-        # For other sensors, set to STATE_UNKNOWN when offline
         device_class = getattr(self.entity_description, "device_class", None)
-        state_class = getattr(self.entity_description, "state_class", None)
-        if device_class == "power":
+        if device_class == SensorDeviceClass.POWER:
             self._attr_native_value = 0.0
-        elif device_class == "energy":
-            self._attr_native_value = None
-        elif state_class is not None:
-            # Any sensor with a state_class (measurement, total, etc.) expects numeric values
+        elif device_class == SensorDeviceClass.ENERGY:
             self._attr_native_value = None
         else:
-            self._attr_native_value = STATE_UNKNOWN
+            self._attr_native_value = self._unknown_value()
 
     def _handle_online_state(self) -> None:
         """Handle sensor state when panel is online."""
@@ -289,11 +304,11 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             self.entity_description, "value_fn", None
         )
         if value_function is None:
-            _LOGGER.debug("STATUS_SENSOR_DEBUG: No value_function for %s", self._attr_name)
-            # For sensors with state_class, use None (HA reports as unknown)
-            # For other sensors, use STATE_UNKNOWN string
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+            _LOGGER.debug(
+                "STATUS_SENSOR_DEBUG: No value_function for %s",
+                self.entity_id or self._attr_unique_id,
+            )
+            self._attr_native_value = self._unknown_value()
             return
 
         try:
@@ -301,20 +316,22 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             self._log_debug_info(data_source)
             raw_value: float | int | str | None = value_function(data_source)
             self._process_raw_value(raw_value)
-        except (AttributeError, KeyError, IndexError):
-            # For sensors with state_class, use None (HA reports as unknown)
-            # For other sensors, use STATE_UNKNOWN string
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+        except (AttributeError, KeyError, IndexError) as err:
+            _LOGGER.debug(
+                "Value lookup failed for %s (%s): %s",
+                self.entity_id or self._attr_unique_id,
+                getattr(self.entity_description, "key", "?"),
+                err,
+            )
+            self._attr_native_value = self._unknown_value()
         except Exception as err:  # pragma: no cover - defensive
             # Avoid noisy stack traces from value functions; fall back to unknown
             _LOGGER.warning(
                 "Value function failed for %s (%s); reporting unknown",
-                self._attr_name,
+                self.entity_id or self._attr_unique_id,
                 err,
             )
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+            self._attr_native_value = self._unknown_value()
 
     def _log_debug_info(self, data_source: D) -> None:
         """Log debug information for circuit sensors."""
@@ -338,10 +355,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
     def _process_raw_value(self, raw_value: float | int | str | None) -> None:
         """Process the raw value from the value function."""
         if raw_value is None:
-            # For sensors with state_class, use None (HA reports as unknown)
-            # For other sensors, use STATE_UNKNOWN string
-            state_class = getattr(self.entity_description, "state_class", None)
-            self._attr_native_value = None if state_class is not None else STATE_UNKNOWN
+            self._attr_native_value = self._unknown_value()
         elif isinstance(raw_value, float | int):
             self._attr_native_value = float(raw_value)
         else:
@@ -361,7 +375,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     _LOGGER.debug(
                         "Added enum option '%s' for %s",
                         str_value,
-                        self._attr_name,
+                        self.entity_id or self._attr_unique_id,
                     )
             self._attr_native_value = str_value
 

@@ -4,7 +4,7 @@ import logging
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import slugify
-from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanBatterySnapshot, SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import DOMAIN
 
@@ -37,6 +37,24 @@ def snapshot_to_device_info(
         name=device_name or "Span Panel",
         sw_version=snapshot.firmware_version,
         configuration_url=configuration_url,
+    )
+
+
+def bess_device_info(
+    panel_identifier: str,
+    battery: SpanBatterySnapshot,
+    panel_name: str,
+) -> DeviceInfo:
+    """Create DeviceInfo for a BESS sub-device linked to the parent panel."""
+    name = f"{panel_name} Battery"
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{panel_identifier}_bess")},
+        name=name,
+        manufacturer=battery.vendor_name or "Unknown",
+        model=battery.product_name or "Battery Storage",
+        serial_number=battery.serial_number,
+        sw_version=battery.software_version,
+        via_device=(DOMAIN, panel_identifier),
     )
 
 

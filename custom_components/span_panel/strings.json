@@ -306,6 +306,54 @@
           "locked": "Locked",
           "unlocked": "Unlocked"
         }
+      },
+      "l1_voltage": {
+        "name": "L1 Voltage"
+      },
+      "l2_voltage": {
+        "name": "L2 Voltage"
+      },
+      "upstream_l1_current": {
+        "name": "Upstream L1 Current"
+      },
+      "upstream_l2_current": {
+        "name": "Upstream L2 Current"
+      },
+      "downstream_l1_current": {
+        "name": "Downstream L1 Current"
+      },
+      "downstream_l2_current": {
+        "name": "Downstream L2 Current"
+      },
+      "main_breaker_rating": {
+        "name": "Main Breaker Rating"
+      },
+      "bess_vendor": {
+        "name": "Vendor"
+      },
+      "bess_model": {
+        "name": "Model"
+      },
+      "bess_serial_number": {
+        "name": "Serial Number"
+      },
+      "bess_firmware_version": {
+        "name": "Firmware Version"
+      },
+      "bess_nameplate_capacity": {
+        "name": "Nameplate Capacity"
+      },
+      "bess_soe_kwh": {
+        "name": "State of Energy"
+      },
+      "pv_vendor": {
+        "name": "PV Vendor"
+      },
+      "pv_product": {
+        "name": "PV Product"
+      },
+      "pv_nameplate_capacity": {
+        "name": "PV Nameplate Capacity"
       }
     },
     "binary_sensor": {
@@ -320,6 +368,9 @@
       },
       "panel_status": {
         "name": "Panel Status"
+      },
+      "grid_islandable": {
+        "name": "Grid Islandable"
       },
       "bess_connected": {
         "name": "BESS Connected"

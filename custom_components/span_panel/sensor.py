@@ -32,25 +32,38 @@ from .sensor_circuit import (
 from .sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
+    BESS_METADATA_SENSORS,
+    CIRCUIT_BREAKER_RATING_SENSOR,
+    CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
+    DOWNSTREAM_L1_CURRENT_SENSOR,
+    DOWNSTREAM_L2_CURRENT_SENSOR,
     EVSE_SENSORS,
+    L1_VOLTAGE_SENSOR,
+    L2_VOLTAGE_SENSOR,
+    MAIN_BREAKER_RATING_SENSOR,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
     PANEL_POWER_SENSORS,
+    PV_METADATA_SENSORS,
     PV_POWER_SENSOR,
     SITE_POWER_SENSOR,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
+    UPSTREAM_L1_CURRENT_SENSOR,
+    UPSTREAM_L2_CURRENT_SENSOR,
 )
 from .sensor_evse import SpanEvseSensor
 from .sensor_panel import (
+    SpanBessMetadataSensor,
     SpanPanelBattery,
     SpanPanelEnergySensor,
     SpanPanelPanelStatus,
     SpanPanelPowerSensor,
     SpanPanelStatus,
+    SpanPVMetadataSensor,
 )
-from .util import evse_device_info
+from .util import bess_device_info, evse_device_info
 
 # Export the sensor classes for backward compatibility with tests
 __all__ = [
@@ -64,6 +77,8 @@ __all__ = [
     "SpanCircuitPowerSensor",
     "SpanCircuitEnergySensor",
     "SpanUnmappedCircuitSensor",
+    "SpanBessMetadataSensor",
+    "SpanPVMetadataSensor",
 ]
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -131,6 +146,22 @@ def create_panel_sensors(
     for description_ss in STATUS_SENSORS:
         entities.append(SpanPanelStatus(coordinator, description_ss, snapshot))
 
+    # Add v2 diagnostic sensors (conditionally created when data is available)
+    if snapshot.l1_voltage is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, L1_VOLTAGE_SENSOR, snapshot))
+    if snapshot.l2_voltage is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, L2_VOLTAGE_SENSOR, snapshot))
+    if snapshot.upstream_l1_current_a is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, UPSTREAM_L1_CURRENT_SENSOR, snapshot))
+    if snapshot.upstream_l2_current_a is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, UPSTREAM_L2_CURRENT_SENSOR, snapshot))
+    if snapshot.downstream_l1_current_a is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, DOWNSTREAM_L1_CURRENT_SENSOR, snapshot))
+    if snapshot.downstream_l2_current_a is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, DOWNSTREAM_L2_CURRENT_SENSOR, snapshot))
+    if snapshot.main_breaker_rating_a is not None:
+        entities.append(SpanPanelPanelStatus(coordinator, MAIN_BREAKER_RATING_SENSOR, snapshot))
+
     return entities
 
 
@@ -181,6 +212,7 @@ def create_circuit_sensors(
 
     for circuit_id in named_circuits:
         device_override = evse_device_map.get(circuit_id)
+        circuit_data = snapshot.circuits.get(circuit_id)
 
         for circuit_description in CIRCUIT_SENSORS:
             # Skip net energy sensors if disabled
@@ -212,6 +244,30 @@ def create_circuit_sensors(
                     )
                 )
 
+        # Per-circuit current sensor (v2 only)
+        if circuit_data and circuit_data.current_a is not None:
+            entities.append(
+                SpanCircuitPowerSensor(
+                    coordinator,
+                    CIRCUIT_CURRENT_SENSOR,
+                    snapshot,
+                    circuit_id,
+                    device_info_override=device_override,
+                )
+            )
+
+        # Per-circuit breaker rating sensor (v2 only)
+        if circuit_data and circuit_data.breaker_rating_a is not None:
+            entities.append(
+                SpanCircuitPowerSensor(
+                    coordinator,
+                    CIRCUIT_BREAKER_RATING_SENSOR,
+                    snapshot,
+                    circuit_id,
+                    device_info_override=device_override,
+                )
+            )
+
     return entities
 
 
@@ -233,34 +289,67 @@ def create_unmapped_circuit_sensors(
     return entities
 
 
+def _build_bess_device_info(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> DeviceInfo:
+    """Build BESS sub-device info, resolving the panel identifier."""
+    is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
+    panel_name = (
+        coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
+        or "Span Panel"
+    )
+    if is_simulator:
+        panel_identifier = slugify(panel_name)
+    else:
+        panel_identifier = snapshot.serial_number
+
+    return bess_device_info(panel_identifier, snapshot.battery, panel_name)
+
+
 def create_battery_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
-) -> list[SpanPanelBattery | SpanPanelPowerSensor]:
+) -> list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor]:
     """Create battery sensors when BESS is commissioned.
 
     Auto-detected from soe_percentage — only a commissioned BESS reports SoE.
+    All BESS sensors live on the BESS sub-device.
     """
     if not has_bess(snapshot):
         return []
 
-    return [
-        SpanPanelPowerSensor(coordinator, BATTERY_POWER_SENSOR, snapshot),
-        SpanPanelBattery(coordinator, BATTERY_SENSOR, snapshot),
+    bess_info = _build_bess_device_info(coordinator, snapshot)
+
+    entities: list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor] = [
+        SpanPanelPowerSensor(
+            coordinator, BATTERY_POWER_SENSOR, snapshot, device_info_override=bess_info
+        ),
+        SpanPanelBattery(coordinator, BATTERY_SENSOR, snapshot, device_info_override=bess_info),
     ]
+
+    # Add BESS metadata sensors
+    for desc in BESS_METADATA_SENSORS:
+        entities.append(SpanBessMetadataSensor(coordinator, desc, snapshot, bess_info))
+
+    return entities
 
 
 def create_power_flow_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
-) -> list[SpanPanelPowerSensor]:
+) -> list[SpanPanelPowerSensor | SpanPVMetadataSensor]:
     """Create power-flow sensors that are conditional on hardware presence.
 
     PV Power — only when PV is commissioned.
     Site Power — only when the power-flows node is publishing.
+    PV metadata sensors — only when PV is commissioned.
     """
-    entities: list[SpanPanelPowerSensor] = []
+    entities: list[SpanPanelPowerSensor | SpanPVMetadataSensor] = []
 
     if has_pv(snapshot):
         entities.append(SpanPanelPowerSensor(coordinator, PV_POWER_SENSOR, snapshot))
+
+        # PV metadata sensors on the main panel device
+        for desc in PV_METADATA_SENSORS:
+            entities.append(SpanPVMetadataSensor(coordinator, desc, snapshot))
 
     if has_power_flows(snapshot):
         entities.append(SpanPanelPowerSensor(coordinator, SITE_POWER_SENSOR, snapshot))
@@ -292,6 +381,8 @@ def create_native_sensors(
     | SpanCircuitEnergySensor
     | SpanUnmappedCircuitSensor
     | SpanPanelBattery
+    | SpanBessMetadataSensor
+    | SpanPVMetadataSensor
     | SpanEvseSensor
 ]:
     """Create all native sensors for the platform."""
@@ -304,6 +395,8 @@ def create_native_sensors(
         | SpanCircuitEnergySensor
         | SpanUnmappedCircuitSensor
         | SpanPanelBattery
+        | SpanBessMetadataSensor
+        | SpanPVMetadataSensor
         | SpanEvseSensor
     ] = []
 

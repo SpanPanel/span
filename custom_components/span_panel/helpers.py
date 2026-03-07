@@ -35,6 +35,8 @@ CIRCUIT_SUFFIX_MAPPING = {
     "importedEnergyWh": "energy_imported",
     "exportedEnergyWh": "energy_exported",
     "circuit_priority": "priority",
+    "current": "current",
+    "breaker_rating": "breaker_rating",
 }
 
 # Panel sensor API field mappings (used by get_user_friendly_suffix)
@@ -571,6 +573,14 @@ def build_select_unique_id(serial: str, select_id: str) -> str:
     return f"span_{serial}_select_{select_id}"
 
 
+def build_bess_unique_id(serial: str, description_key: str) -> str:
+    """Build unique ID for BESS sensor entities (pure function).
+
+    Returns: "span_{serial}_bess_{description_key}"
+    """
+    return f"span_{serial}_bess_{description_key}"
+
+
 def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str:
     """Build unique ID for EVSE sensor/binary_sensor entities (pure function).
 
@@ -755,6 +765,17 @@ def build_evse_unique_id_for_entry(
     """Build EVSE unique_id using per-entry identifier (handles simulators)."""
     identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_evse_unique_id(identifier, evse_id, description_key)
+
+
+def build_bess_unique_id_for_entry(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    description_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Build BESS unique_id using per-entry identifier (handles simulators)."""
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
+    return build_bess_unique_id(identifier, description_key)
 
 
 def get_device_identifier_for_entry(

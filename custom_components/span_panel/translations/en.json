@@ -4,14 +4,16 @@
       "no_devices_found": "No devices found on the network",
       "already_configured": "Span Panel already configured. Only a single configuration is possible.",
       "reauth_successful": "Authentication successful.",
+      "reconfigure_successful": "Host updated successfully.",
+      "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
       "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
+      "host_required": "Host is required for non-simulator mode",
       "invalid_auth": "Invalid authentication",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
-      "unknown": "Unexpected error",
-      "host_required": "Host is required for live panel connections"
+      "unknown": "Unexpected error"
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -28,13 +30,13 @@
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips"
         },
         "data_description": {
-          "host": "IP address or hostname of SPAN Panel (required for live panels, optional for simulation)",
-          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host can be left empty for default simulation.",
+          "host": "IP address or hostname of SPAN Panel (required for real hardware, optional for simulation mode)",
+          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled.",
           "power_display_precision": "Number of decimal places for power values (0-3)",
           "energy_display_precision": "Number of decimal places for energy values (0-3)",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings, preventing spikes in the energy dashboard."
         },
-        "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and leave host empty (or enter a custom serial number).",
+        "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and the host field becomes optional.",
         "title": "Connect to the Span Panel"
       },
       "choose_auth_type": {
@@ -50,7 +52,7 @@
       },
       "auth_token": {
         "title": "Manual Token Authentication",
-        "description": "Please enter your access token (Empty to start over)",
+        "description": "Please enter your access token (empty to start over):",
         "data": {
           "access_token": "Access Token"
         }
@@ -72,18 +74,28 @@
           "hop_passphrase": "The passphrase used to authenticate with the SPAN Panel v2 API"
         }
       },
+      "reconfigure": {
+        "title": "Reconfigure SPAN Panel",
+        "description": "Update the host address for this SPAN Panel. The panel serial number must match.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the SPAN Panel"
+        }
+      },
       "simulator_config": {
         "title": "Simulator Configuration",
-        "description": "Choose the simulation configuration for your SPAN Panel. This determines the number of circuits and behaviors. {config_count} configurations are available.",
+        "description": "Select a simulation configuration and optionally set a custom start time. {config_count} configurations available.",
         "data": {
           "simulation_config": "Simulation Configuration",
-          "host": "Custom Serial Number (optional)",
+          "host": "Host (Serial Number)",
           "simulation_start_time": "Simulation Start Time (Optional)",
           "entity_naming_pattern": "Entity Naming Pattern"
         },
         "data_description": {
-          "simulation_config": "Select the panel configuration to simulate",
-          "host": "Leave empty to use the default serial number from the selected configuration",
+          "simulation_config": "Choose a simulation configuration that defines circuit templates and energy profiles",
+          "host": "Custom serial number for the simulated panel (optional, will use config default if empty)",
           "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time.",
           "entity_naming_pattern": "Choose how circuit entities are named in the simulation"
         }
@@ -93,7 +105,7 @@
   "options": {
     "error": {
       "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Invalid time format. Use HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS)",
-      "directory": "File path is required",
+      "directory": "Directory path is required",
       "base": "Export failed: {error}"
     },
     "step": {
@@ -124,16 +136,6 @@
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets."
         }
       },
-      "export_config": {
-        "title": "Export Synthetic Sensor Config",
-        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: {filename}",
-        "data": {
-          "directory": "File Path"
-        },
-        "data_description": {
-          "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
-        }
-      },
       "simulation_start_time": {
         "title": "Simulation Start Time",
         "description": "Configure the simulation start time. Changes to simulation time will reload the integration to apply the new time.",
@@ -153,12 +155,134 @@
         "data_description": {
           "simulation_offline_minutes": "Number of minutes the panel should appear offline during simulation. Set to 0 to disable offline simulation."
         }
+      },
+      "export_config": {
+        "title": "Export Synthetic Sensor Config",
+        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: {filename}",
+        "data": {
+          "directory": "File Path"
+        },
+        "data_description": {
+          "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
+        }
       }
+    }
+  },
+  "exceptions": {
+    "panel_auth_failed": {
+      "message": "Authentication with the SPAN Panel failed. Please reauthenticate."
+    },
+    "panel_connection_failed": {
+      "message": "Failed to connect to the SPAN Panel at {host}."
+    },
+    "panel_not_ready": {
+      "message": "The SPAN Panel is not ready. Please check that the panel is online."
+    },
+    "circuit_priority_failed": {
+      "message": "Failed to set circuit priority for {circuit}."
+    },
+    "circuit_relay_failed": {
+      "message": "Failed to set circuit relay state for {circuit}."
+    },
+    "gfe_override_failed": {
+      "message": "Failed to send GFE override to the panel."
     }
   },
   "entity": {
     "sensor": {
+      "dsm_state": {
+        "name": "DSM State",
+        "state": {
+          "unknown": "Unknown",
+          "dsm_on_grid": "On Grid",
+          "dsm_off_grid": "Off Grid"
+        }
+      },
+      "dsm_grid_state": {
+        "name": "DSM Grid State",
+        "state": {
+          "unknown": "Unknown",
+          "dsm_on_grid": "On Grid",
+          "dsm_off_grid": "Off Grid"
+        }
+      },
+      "current_run_config": {
+        "name": "Current Run Config",
+        "state": {
+          "unknown": "Unknown",
+          "panel_on_grid": "On Grid",
+          "panel_off_grid": "Off Grid",
+          "panel_backup": "Backup"
+        }
+      },
+      "main_relay_state": {
+        "name": "Main Relay State",
+        "state": {
+          "unknown": "Unknown",
+          "closed": "Closed",
+          "open": "Open"
+        }
+      },
+      "grid_forming_entity": {
+        "name": "Grid Forming Entity",
+        "state": {
+          "unknown": "Unknown",
+          "grid": "Grid",
+          "battery": "Battery",
+          "pv": "PV",
+          "generator": "Generator",
+          "none": "None"
+        }
+      },
+      "vendor_cloud": {
+        "name": "Vendor Cloud",
+        "state": {
+          "unknown": "Unknown",
+          "connected": "Connected",
+          "unconnected": "Disconnected"
+        }
+      },
+      "software_version": {
+        "name": "Software Version"
+      },
+      "instant_grid_power": {
+        "name": "Current Power"
+      },
+      "feedthrough_power": {
+        "name": "Feed Through Power"
+      },
+      "battery_power": {
+        "name": "Battery Power"
+      },
+      "pv_power": {
+        "name": "PV Power"
+      },
+      "site_power": {
+        "name": "Site Power"
+      },
+      "main_meter_produced_energy": {
+        "name": "Main Meter Produced Energy"
+      },
+      "main_meter_consumed_energy": {
+        "name": "Main Meter Consumed Energy"
+      },
+      "feedthrough_produced_energy": {
+        "name": "Feed Through Produced Energy"
+      },
+      "feedthrough_consumed_energy": {
+        "name": "Feed Through Consumed Energy"
+      },
+      "main_meter_net_energy": {
+        "name": "Main Meter Net Energy"
+      },
+      "feedthrough_net_energy": {
+        "name": "Feed Through Net Energy"
+      },
+      "battery_level": {
+        "name": "Battery Level"
+      },
       "evse_status": {
+        "name": "Charger Status",
         "state": {
           "unknown": "Unknown",
           "available": "Available",
@@ -172,61 +296,82 @@
           "unavailable": "Unavailable"
         }
       },
+      "evse_advertised_current": {
+        "name": "Advertised Current"
+      },
       "evse_lock_state": {
+        "name": "Lock State",
         "state": {
           "unknown": "Unknown",
           "locked": "Locked",
           "unlocked": "Unlocked"
         }
       },
-      "dsm_state": {
-        "state": {
-          "unknown": "Unknown",
-          "dsm_on_grid": "On Grid",
-          "dsm_off_grid": "Off Grid"
-        }
+      "l1_voltage": {
+        "name": "L1 Voltage"
       },
-      "dsm_grid_state": {
-        "state": {
-          "unknown": "Unknown",
-          "dsm_on_grid": "On Grid",
-          "dsm_off_grid": "Off Grid"
-        }
+      "l2_voltage": {
+        "name": "L2 Voltage"
       },
-      "current_run_config": {
-        "state": {
-          "unknown": "Unknown",
-          "panel_on_grid": "On Grid",
-          "panel_off_grid": "Off Grid",
-          "panel_backup": "Backup"
-        }
+      "upstream_l1_current": {
+        "name": "Upstream L1 Current"
       },
-      "main_relay_state": {
-        "state": {
-          "unknown": "Unknown",
-          "closed": "Closed",
-          "open": "Open"
-        }
+      "upstream_l2_current": {
+        "name": "Upstream L2 Current"
       },
-      "vendor_cloud": {
-        "state": {
-          "unknown": "Unknown",
-          "connected": "Connected",
-          "unconnected": "Disconnected"
-        }
+      "downstream_l1_current": {
+        "name": "Downstream L1 Current"
       },
-      "grid_forming_entity": {
-        "state": {
-          "unknown": "Unknown",
-          "grid": "Grid",
-          "battery": "Battery",
-          "pv": "PV",
-          "generator": "Generator",
-          "none": "None"
-        }
+      "downstream_l2_current": {
+        "name": "Downstream L2 Current"
+      },
+      "main_breaker_rating": {
+        "name": "Main Breaker Rating"
+      },
+      "bess_vendor": {
+        "name": "Vendor"
+      },
+      "bess_model": {
+        "name": "Model"
+      },
+      "bess_serial_number": {
+        "name": "Serial Number"
+      },
+      "bess_firmware_version": {
+        "name": "Firmware Version"
+      },
+      "bess_nameplate_capacity": {
+        "name": "Nameplate Capacity"
+      },
+      "bess_soe_kwh": {
+        "name": "State of Energy"
+      },
+      "pv_vendor": {
+        "name": "PV Vendor"
+      },
+      "pv_product": {
+        "name": "PV Product"
+      },
+      "pv_nameplate_capacity": {
+        "name": "PV Nameplate Capacity"
       }
     },
     "binary_sensor": {
+      "door_state": {
+        "name": "Door State"
+      },
+      "ethernet_link": {
+        "name": "Ethernet Link"
+      },
+      "wifi_link": {
+        "name": "Wi-Fi Link"
+      },
+      "panel_status": {
+        "name": "Panel Status"
+      },
+      "grid_islandable": {
+        "name": "Grid Islandable"
+      },
       "bess_connected": {
         "name": "BESS Connected"
       },
@@ -239,6 +384,7 @@
     },
     "select": {
       "circuit_priority": {
+        "name": "Circuit Priority",
         "state": {
           "never": "Stays on in an outage",
           "soc_threshold": "Stays on until battery threshold",

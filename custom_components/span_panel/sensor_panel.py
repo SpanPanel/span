@@ -5,20 +5,24 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import UNDEFINED
 from span_panel_api import SpanBatterySnapshot, SpanPanelSnapshot
 
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
+    build_bess_unique_id_for_entry,
     construct_panel_unique_id_for_entry,
     construct_synthetic_unique_id_for_entry,
     get_panel_entity_suffix,
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import (
+    SpanBessMetadataSensorEntityDescription,
     SpanPanelBatterySensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelStatusSensorEntityDescription,
+    SpanPVMetadataSensorEntityDescription,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -116,9 +120,13 @@ class SpanPanelBattery(
         data_coordinator: SpanPanelCoordinator,
         description: SpanPanelBatterySensorEntityDescription,
         snapshot: SpanPanelSnapshot,
+        device_info_override: DeviceInfo | None = None,
     ) -> None:
         """Initialize the Span Panel battery sensor."""
         super().__init__(data_coordinator, description, snapshot)
+
+        if device_info_override is not None:
+            self._attr_device_info = device_info_override
 
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelBatterySensorEntityDescription
@@ -140,33 +148,23 @@ class SpanPanelBattery(
         """Get the data source for the battery sensor."""
         return snapshot.battery
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return additional state attributes for the battery sensor."""
-        if not self.coordinator.last_update_success or not self.coordinator.data:
-            return None
-
-        battery = self.coordinator.data.battery
-        attributes: dict[str, Any] = {}
-
-        if battery.soe_kwh is not None:
-            attributes["soe_kwh"] = battery.soe_kwh
-
-        return attributes if attributes else None
-
 
 class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
-    """Enhanced panel power sensor with amperage attribute calculation."""
+    """Panel power sensor with calculated amperage attribute."""
 
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
         description: SpanPanelDataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
+        device_info_override: DeviceInfo | None = None,
     ) -> None:
         """Initialize the enhanced panel power sensor."""
         self._description_key = description.key
         super().__init__(data_coordinator, description, snapshot)
+
+        if device_info_override is not None:
+            self._attr_device_info = device_info_override
 
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
@@ -190,48 +188,12 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         """Get the data source for the panel power sensor."""
         return snapshot
 
-    def _add_grid_power_attributes(
-        self, attributes: dict[str, Any], snapshot: SpanPanelSnapshot
-    ) -> None:
-        """Add upstream lug attributes for the main grid power sensor."""
-        if snapshot.l1_voltage is not None:
-            attributes["l1_voltage"] = snapshot.l1_voltage
-        if snapshot.l2_voltage is not None:
-            attributes["l2_voltage"] = snapshot.l2_voltage
-        if snapshot.upstream_l1_current_a is not None:
-            attributes["l1_amperage"] = snapshot.upstream_l1_current_a
-        if snapshot.upstream_l2_current_a is not None:
-            attributes["l2_amperage"] = snapshot.upstream_l2_current_a
-        if snapshot.main_breaker_rating_a is not None:
-            attributes["main_breaker_rating"] = snapshot.main_breaker_rating_a
-        if snapshot.grid_islandable is not None:
-            attributes["grid_islandable"] = snapshot.grid_islandable
-
-    def _add_bess_attributes(self, attributes: dict[str, Any], snapshot: SpanPanelSnapshot) -> None:
-        """Add BESS metadata attributes for the battery power sensor."""
-        batt = snapshot.battery
-        if batt.vendor_name is not None:
-            attributes["vendor_name"] = batt.vendor_name
-        if batt.product_name is not None:
-            attributes["product_name"] = batt.product_name
-        if batt.model is not None:
-            attributes["model"] = batt.model
-        if batt.serial_number is not None:
-            attributes["serial_number"] = batt.serial_number
-        if batt.software_version is not None:
-            attributes["software_version"] = batt.software_version
-        if batt.nameplate_capacity_kwh is not None:
-            attributes["nameplate_capacity_kwh"] = batt.nameplate_capacity_kwh
-        if batt.soe_kwh is not None:
-            attributes["soe_kwh"] = batt.soe_kwh
-
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes including amperage calculation."""
         if not self.coordinator.last_update_success or not self.coordinator.data:
             return None
 
-        snapshot = self.coordinator.data
         attributes: dict[str, Any] = {}
 
         # Add voltage attribute (standard panel voltage)
@@ -246,30 +208,6 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
                 attributes["amperage"] = "0.0"
         else:
             attributes["amperage"] = "0.0"
-
-        # v2 attributes for main grid power sensor (upstream lugs)
-        if self._description_key == "instantGridPowerW":
-            self._add_grid_power_attributes(attributes, snapshot)
-
-        # v2 attributes for feedthrough power sensor (downstream lugs)
-        if self._description_key == "feedthroughPowerW":
-            if snapshot.downstream_l1_current_a is not None:
-                attributes["l1_amperage"] = snapshot.downstream_l1_current_a
-            if snapshot.downstream_l2_current_a is not None:
-                attributes["l2_amperage"] = snapshot.downstream_l2_current_a
-
-        # PV inverter metadata
-        if self._description_key == "pvPowerW":
-            if snapshot.pv.vendor_name is not None:
-                attributes["vendor_name"] = snapshot.pv.vendor_name
-            if snapshot.pv.product_name is not None:
-                attributes["product_name"] = snapshot.pv.product_name
-            if snapshot.pv.nameplate_capacity_kw is not None:
-                attributes["nameplate_capacity_kw"] = snapshot.pv.nameplate_capacity_kw
-
-        # BESS metadata
-        if self._description_key == "batteryPowerW":
-            self._add_bess_attributes(attributes, snapshot)
 
         return attributes
 
@@ -320,3 +258,75 @@ class SpanPanelEnergySensor(
         attributes["voltage"] = "240"
 
         return attributes if attributes else None
+
+
+class SpanBessMetadataSensor(
+    SpanSensorBase[SpanBessMetadataSensorEntityDescription, SpanBatterySnapshot]
+):
+    """BESS metadata sensor entity on the BESS sub-device."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanBessMetadataSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+        device_info_override: DeviceInfo,
+    ) -> None:
+        """Initialize the BESS metadata sensor."""
+        super().__init__(data_coordinator, description, snapshot)
+        self._attr_device_info = device_info_override
+
+    def _generate_unique_id(
+        self, snapshot: SpanPanelSnapshot, description: SpanBessMetadataSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for BESS metadata sensors."""
+        return build_bess_unique_id_for_entry(
+            self.coordinator, snapshot, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, snapshot: SpanPanelSnapshot, description: SpanBessMetadataSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for BESS metadata sensors."""
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "BESS Sensor"
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanBatterySnapshot:
+        """Get the data source for the BESS metadata sensor."""
+        return snapshot.battery
+
+
+class SpanPVMetadataSensor(
+    SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPanelSnapshot]
+):
+    """PV metadata sensor entity on the main panel device."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPVMetadataSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+    ) -> None:
+        """Initialize the PV metadata sensor."""
+        super().__init__(data_coordinator, description, snapshot)
+
+    def _generate_unique_id(
+        self, snapshot: SpanPanelSnapshot, description: SpanPVMetadataSensorEntityDescription
+    ) -> str:
+        """Generate unique ID for PV metadata sensors."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, snapshot, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self, snapshot: SpanPanelSnapshot, description: SpanPVMetadataSensorEntityDescription
+    ) -> str:
+        """Generate friendly name for PV metadata sensors."""
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "PV Sensor"
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
+        """Get the data source for the PV metadata sensor."""
+        return snapshot

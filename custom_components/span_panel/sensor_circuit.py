@@ -78,7 +78,7 @@ def _resolve_circuit_identifier_for_sync(circuit: SpanCircuitSnapshot, circuit_i
 class SpanCircuitPowerSensor(
     SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanCircuitSnapshot]
 ):
-    """Enhanced circuit power sensor with amperage and tabs attributes."""
+    """Circuit power/current/breaker-rating sensor with extra state attributes."""
 
     def __init__(
         self,
@@ -104,6 +104,7 @@ class SpanCircuitPowerSensor(
             value_fn=description.value_fn,
             entity_registry_enabled_default=description.entity_registry_enabled_default,
             entity_registry_visible_default=description.entity_registry_visible_default,
+            entity_category=description.entity_category,
         )
 
         super().__init__(data_coordinator, description_with_circuit, snapshot)
@@ -111,12 +112,18 @@ class SpanCircuitPowerSensor(
         if device_info_override is not None:
             self._attr_device_info = device_info_override
 
+    # Map original description keys to API keys for unique ID generation
+    _API_KEY_MAP: dict[str, str] = {
+        "circuit_power": "instantPowerW",
+        "circuit_current": "current",
+        "circuit_breaker_rating": "breaker_rating",
+    }
+
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
         """Generate unique ID for circuit power sensors."""
-        # Use the original API key that migration normalized from
-        api_key = "instantPowerW"  # This maps to "power" suffix
+        api_key = self._API_KEY_MAP.get(self.original_key, self.original_key)
         return construct_circuit_unique_id_for_entry(
             self.coordinator, snapshot, self.circuit_id, api_key, self._device_name
         )
@@ -172,7 +179,7 @@ class SpanCircuitPowerSensor(
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return additional state attributes including amperage and tabs."""
+        """Return additional state attributes."""
         if not self.coordinator.last_update_success or not self.coordinator.data:
             return None
 
@@ -191,21 +198,6 @@ class SpanCircuitPowerSensor(
         voltage = construct_voltage_attribute(circuit) or 240
         attributes["voltage"] = str(voltage)
 
-        # Prefer measured current when available, otherwise calculate from power
-        if circuit.current_a is not None:
-            attributes["amperage"] = str(round(circuit.current_a, 2))
-        elif self.native_value is not None and isinstance(self.native_value, int | float):
-            try:
-                amperage = float(self.native_value) / float(voltage)
-                attributes["amperage"] = str(round(amperage, 2))
-            except (ValueError, ZeroDivisionError):
-                attributes["amperage"] = "0.0"
-        else:
-            attributes["amperage"] = "0.0"
-
-        # v2 circuit attributes
-        if circuit.breaker_rating_a is not None:
-            attributes["breaker_rating"] = circuit.breaker_rating_a
         device_type = getattr(circuit, "device_type", "circuit") or "circuit"
         attributes["device_type"] = device_type
         attributes["always_on"] = circuit.always_on
@@ -213,16 +205,6 @@ class SpanCircuitPowerSensor(
         attributes["relay_requester"] = circuit.relay_requester
         attributes["shed_priority"] = circuit.priority
         attributes["is_sheddable"] = circuit.is_sheddable
-
-        # PV inverter metadata for PV circuits
-        snapshot = self.coordinator.data
-        if device_type == "pv":
-            if snapshot.pv.vendor_name is not None:
-                attributes["vendor_name"] = snapshot.pv.vendor_name
-            if snapshot.pv.product_name is not None:
-                attributes["product_name"] = snapshot.pv.product_name
-            if snapshot.pv.nameplate_capacity_kw is not None:
-                attributes["nameplate_capacity_kw"] = snapshot.pv.nameplate_capacity_kw
 
         return attributes
 
