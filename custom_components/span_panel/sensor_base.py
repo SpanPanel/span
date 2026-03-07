@@ -26,14 +26,14 @@ from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanPanelSnapshot
 
-from custom_components.span_panel.const import (
+from .const import (
     CONF_API_VERSION,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
 )
-from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
-from custom_components.span_panel.util import snapshot_to_device_info
+from .coordinator import SpanPanelCoordinator
+from .options import ENERGY_REPORTING_GRACE_PERIOD
+from .util import snapshot_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 

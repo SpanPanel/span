@@ -22,8 +22,8 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     async_create_span_notification,
     construct_panel_unique_id_for_entry,
+    has_bess,
 )
-from .sensors.factory import has_bess
 from .util import snapshot_to_device_info
 
 _LOGGER = logging.getLogger(__name__)

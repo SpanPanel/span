@@ -7,20 +7,19 @@ import logging
 from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.const import (
+from .const import (
     CONF_API_VERSION,
     CONF_DEVICE_NAME,
     USE_CIRCUIT_NUMBERS,
 )
-from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.helpers import (
+from .coordinator import SpanPanelCoordinator
+from .helpers import (
     build_evse_unique_id_for_entry,
     resolve_evse_display_suffix,
 )
-from custom_components.span_panel.sensor_definitions import SpanEvseSensorEntityDescription
-from custom_components.span_panel.util import evse_device_info
-
-from .base import SpanSensorBase
+from .sensor_base import SpanSensorBase
+from .sensor_definitions import SpanEvseSensorEntityDescription
+from .util import evse_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 

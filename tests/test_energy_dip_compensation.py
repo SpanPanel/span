@@ -7,7 +7,7 @@ from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
-from custom_components.span_panel.sensors.base import (
+from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
     SpanEnergySensorBase,
 )

@@ -9,18 +9,17 @@ from typing import Any
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS
-from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.helpers import (
+from .const import USE_CIRCUIT_NUMBERS
+from .coordinator import SpanPanelCoordinator
+from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
     construct_tabs_attribute,
     construct_unmapped_friendly_name,
     construct_voltage_attribute,
 )
-from custom_components.span_panel.sensor_definitions import SpanPanelCircuitsSensorEntityDescription
-
-from .base import SpanEnergySensorBase, SpanSensorBase
+from .sensor_base import SpanEnergySensorBase, SpanSensorBase
+from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 

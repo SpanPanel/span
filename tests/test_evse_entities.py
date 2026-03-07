@@ -28,7 +28,7 @@ from custom_components.span_panel.helpers import (
 from custom_components.span_panel.sensor_definitions import (
     EVSE_SENSORS,
 )
-from custom_components.span_panel.sensors.factory import (
+from custom_components.span_panel.helpers import (
     detect_capabilities,
     has_evse,
 )

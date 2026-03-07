@@ -46,7 +46,7 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_sensor_not_created_without_bess(self) -> None:
         """No BESS (soe_percentage=None) -> has_bess returns False."""
-        from custom_components.span_panel.sensors.factory import has_bess
+        from custom_components.span_panel.helpers import has_bess
 
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(),
@@ -55,7 +55,7 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_sensor_created_with_bess(self) -> None:
         """BESS present (soe_percentage set) -> has_bess returns True."""
-        from custom_components.span_panel.sensors.factory import has_bess
+        from custom_components.span_panel.helpers import has_bess
 
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(soe_percentage=85.0, connected=True),

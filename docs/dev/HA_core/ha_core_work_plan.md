@@ -49,18 +49,43 @@ Remove all simulation-related code paths and files:
 
 ### 1.2 Flatten Directory Structure
 
-Core integrations use a flat directory structure with no subdirectories for platform code. Restructure:
+Core integrations use a flat directory structure — no subdirectory packages for platform code. The `sensors/` package and `config_flow_utils/` package must be
+unwrapped into root-level files. Inlining everything into `sensor.py` would create a ~2000-line monolith, so we preserve modularity via flat files with clear
+naming.
 
-| Current               | Target                       |
-| --------------------- | ---------------------------- |
-| `sensors/base.py`     | `entity.py` (base class)     |
-| `sensors/panel.py`    | Inline into `sensor.py`      |
-| `sensors/circuit.py`  | Inline into `sensor.py`      |
-| `sensors/evse.py`     | Inline into `sensor.py`      |
-| `sensors/factory.py`  | Inline into `sensor.py`      |
-| `config_flow_utils/`  | Inline into `config_flow.py` |
-| `services/`           | Remove (see 1.2)             |
-| `simulation_configs/` | Remove (see 1.1)             |
+#### Sensor modules
+
+Unwrap the `sensors/` package into root-level files:
+
+| Current               | Target              | Rationale                                                       |
+| --------------------- | ------------------- | --------------------------------------------------------------- |
+| `sensors/base.py`     | `sensor_base.py`    | Sensor-specific bases (energy restore, name sync) — 767 lines   |
+| `sensors/panel.py`    | `sensor_panel.py`   | Panel-level sensor entities — 323 lines                         |
+| `sensors/circuit.py`  | `sensor_circuit.py` | Circuit sensor entities — 398 lines                             |
+| `sensors/evse.py`     | `sensor_evse.py`    | EVSE sensor entities — 81 lines                                 |
+| `sensors/factory.py`  | Merge into `sensor.py` | Platform setup + factory is natural together (~400 lines combined) |
+| `sensors/__init__.py` | Remove              | Re-export shim no longer needed with flat imports               |
+
+#### Shared base entity
+
+Create `entity.py` containing `SpanPanelEntity(CoordinatorEntity)` — the shared base class for all platforms (sensor, binary_sensor, switch, select, button).
+Handles coordinator binding, device info construction, and common availability logic. This satisfies the `common-modules` Bronze rule (§2.3) and is done here
+because it is a prerequisite for the sensor flattening (sensor base classes extend it).
+
+#### Utility relocation
+
+Move `has_bess()` from `sensors/factory.py` to `helpers.py` — it is a capability check used by `binary_sensor.py` and `button.py`, not a sensor factory
+concern.
+
+#### Config flow utils
+
+After simulation removal (§1.1), only `options.py` (171 lines) and `validation.py` (125 lines) remain (~296 lines total). Inline into `config_flow.py`.
+
+#### Other removals
+
+| Current               | Action            |
+| --------------------- | ----------------- |
+| `simulation_configs/` | Remove (see §1.1) |
 
 ### 1.3 Manifest Adjustments
 
@@ -101,15 +126,12 @@ Use `SpanPanelConfigEntry` consistently throughout the integration wherever a co
 Service actions must be registered in `async_setup()`, not `async_setup_entry()`. This allows HA to validate automations referencing these services even when
 the config entry is not loaded. Inside the handler, validate that the referenced config entry exists and is loaded before executing.
 
-### 2.3 Create `entity.py` Base Entity
+### 2.3 Verify `entity.py` Base Entity
 
 **Rule:** `common-modules`
 
-Create `entity.py` containing the shared `SpanPanelEntity` base class that all platform entities inherit from. This base class should handle:
-
-- Coordinator entity binding
-- Device info construction
-- Common availability logic
+`entity.py` is created as part of the directory flattening (§1.2). Verify that all platform entities (`sensor`, `binary_sensor`, `switch`, `select`, `button`)
+inherit from `SpanPanelEntity` and that coordinator binding, device info construction, and availability logic are consolidated in the base class.
 
 ### 2.4 Add `PARALLEL_UPDATES` to All Platforms
 
@@ -406,23 +428,27 @@ Open PR to `home-assistant/core` following the [integration PR template][pr-temp
 
 ```text
 custom_components/span_panel/
-├── simulation_factory.py          # Simulation
-├── simulation_generator.py        # Simulation
-├── simulation_utils.py            # Simulation
-├── simulation_configs/            # Simulation
-├── entity_summary.py              # Naming support
-├── migration.py                   # Naming migration
-├── migration_utils.py             # Naming migration
-├── config_flow_utils/simulation.py # Simulation
-├── sensors/                       # Flatten into sensor.py + entity.py
+├── simulation_factory.py           # Simulation (§1.1)
+├── simulation_generator.py         # Simulation (§1.1)
+├── simulation_utils.py             # Simulation (§1.1)
+├── simulation_configs/             # Simulation (§1.1)
+├── entity_summary.py               # Naming support
+├── migration.py                    # Naming migration
+├── migration_utils.py              # Naming migration
+├── config_flow_utils/              # Flatten into config_flow.py (§1.2)
 │   ├── __init__.py
-│   ├── base.py
-│   ├── circuit.py
-│   ├── evse.py
-│   ├── factory.py
-│   ├── panel.py
-│   └── solar.py
-└── translations/                  # Non-English (HA handles translations)
+│   ├── simulation.py               # Simulation (§1.1)
+│   ├── options.py                   # Inline into config_flow.py
+│   └── validation.py               # Inline into config_flow.py
+├── sensors/                        # Flatten to root-level files (§1.2)
+│   ├── __init__.py                  # Remove (re-export shim)
+│   ├── base.py                      # → sensor_base.py
+│   ├── circuit.py                   # → sensor_circuit.py
+│   ├── evse.py                      # → sensor_evse.py
+│   ├── factory.py                   # → merge into sensor.py
+│   ├── panel.py                     # → sensor_panel.py
+│   └── solar.py                     # Remove if dead
+└── translations/                   # Non-English (HA handles translations)
     ├── es.json
     ├── fr.json
     ├── ja.json

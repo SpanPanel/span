@@ -38,9 +38,9 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
+    has_bess,
     resolve_evse_display_suffix,
 )
-from .sensors.factory import has_bess
 from .util import evse_device_info, snapshot_to_device_info
 
 # pylint: disable=invalid-overridden-method

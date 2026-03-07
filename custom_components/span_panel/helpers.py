@@ -1464,3 +1464,47 @@ def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
             len(circuit.tabs),
         )
         return None
+
+
+def has_bess(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether a BESS (battery energy storage system) is commissioned.
+
+    Only soe_percentage is a reliable signal — the power-flows node publishes
+    battery=0.0 even on panels without a commissioned BESS.
+    """
+    return snapshot.battery.soe_percentage is not None
+
+
+def has_pv(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether PV (solar) is commissioned."""
+    return snapshot.power_flow_pv is not None or any(
+        c.device_type == "pv" for c in snapshot.circuits.values()
+    )
+
+
+def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the power-flows node is publishing data."""
+    return snapshot.power_flow_site is not None
+
+
+def has_evse(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether an EVSE (EV charger) is commissioned."""
+    return len(snapshot.evse) > 0
+
+
+def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
+    """Derive the set of optional capabilities present in the snapshot.
+
+    Used by the coordinator to detect when new hardware (BESS, PV, EVSE) appears
+    and trigger a reload so new sensors are created.
+    """
+    caps: set[str] = set()
+    if has_bess(snapshot):
+        caps.add("bess")
+    if has_pv(snapshot):
+        caps.add("pv")
+    if has_power_flows(snapshot):
+        caps.add("power_flows")
+    if has_evse(snapshot):
+        caps.add("evse")
+    return frozenset(caps)
