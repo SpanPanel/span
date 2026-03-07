@@ -295,6 +295,49 @@ Apply `_attr_device_class` on every entity where a matching device class exists.
 | Battery SOC          | `SensorDeviceClass.BATTERY`            |
 | EV charger current   | `SensorDeviceClass.CURRENT`            |
 
+#### 4.3.1 Enum Sensor Migration (Breaking Change)
+
+HA core requires all sensors with discrete string states to use
+`device_class=SensorDeviceClass.ENUM` with lowercase options and
+`translation_key` for localized display. The integration currently has
+five string sensors that pass through raw uppercase values without enum
+classification. These must be converted but represent a **breaking
+change** for automations.
+
+**Already converted** (done in `ebus_integration`, issue #180):
+
+| Sensor                | Options seed    | Notes                              |
+| --------------------- | --------------- | ---------------------------------- |
+| `grid_forming_entity` | `["unknown"]`   | Dynamic options, lowercase values  |
+| `evse_status`         | `["unknown"]`   | Dynamic options, lowercase values  |
+| `evse_lock_state`     | `["unknown"]`   | Dynamic options, lowercase values  |
+
+**Still need conversion** — currently plain string sensors with uppercase values:
+
+| Sensor              | Current values                              | Lowercase options needed                           | Translation display                       |
+| ------------------- | ------------------------------------------- | -------------------------------------------------- | ----------------------------------------- |
+| `main_relay_state`  | `CLOSED`, `OPEN`                            | `closed`, `open`                                   | "Closed", "Open"                          |
+| `vendor_cloud`      | `CONNECTED`, `UNCONNECTED`, `UNKNOWN`       | `connected`, `unconnected`, `unknown`              | "Connected", "Unconnected", "Unknown"     |
+| `dsm_state`         | `DSM_ON_GRID`, `DSM_OFF_GRID`              | `dsm_on_grid`, `dsm_off_grid`                     | "On Grid", "Off Grid"                     |
+| `dsm_grid_state`    | `DSM_ON_GRID`, `DSM_OFF_GRID`              | Remove — deprecated alias of `dsm_state`           | N/A                                       |
+| `current_run_config`| `PANEL_ON_GRID`, `PANEL_OFF_GRID`          | `panel_on_grid`, `panel_off_grid`                  | "On Grid", "Off Grid"                     |
+
+**Migration approach:**
+
+1. Convert each sensor to `device_class=SensorDeviceClass.ENUM` with `translation_key` and `options` seed
+2. The existing `_process_raw_value()` in `sensors/base.py` handles `.lower()` normalization and dynamic option appending — no new machinery needed
+3. Add state translations to `strings.json` and all language files (`en`, `es`, `fr`, `ja`, `pt`)
+4. Remove the deprecated `dsm_grid_state` sensor (or mark `entity_registry_enabled_default=False`)
+5. Document the breaking change: automation conditions checking `== 'DSM_ON_GRID'` must change to `== 'dsm_on_grid'`, etc.
+6. Consider a major version bump to signal the breaking change
+
+**Why these were deferred:** These sensors existed in v1 with uppercase
+values. Existing user automations match on the raw state
+(`states('sensor.span_panel_dsm_state') == 'DSM_ON_GRID'`). Converting
+to lowercase enums breaks those automations. For the custom integration
+this was deemed too disruptive without a coordinated migration, but HA
+core submission requires it.
+
 ### 4.4 Entity Category Audit
 
 **Rule:** `entity-category`
@@ -340,6 +383,26 @@ All `HomeAssistantError` and `ServiceValidationError` messages must use `transla
 
 Ensure all entity names are defined via `translation_key` in `strings.json` rather than hardcoded English strings. Entities with device classes that provide
 automatic names can omit the translation key.
+
+This includes the state translations for all enum sensors (see §4.3.1).
+Each enum sensor needs a `translation_key` and corresponding `state`
+entries in `strings.json`. The following translations are **already
+done**:
+
+- `grid_forming_entity` — 6 states across all 5 languages
+- `evse_status` — 10 states across all 5 languages
+- `evse_lock_state` — 3 states across all 5 languages
+
+The following translations are **needed** when the remaining string sensors are converted to enums (§4.3.1):
+
+| Sensor              | States to translate                                 |
+| ------------------- | --------------------------------------------------- |
+| `main_relay_state`  | `closed`, `open`                                    |
+| `vendor_cloud`      | `connected`, `unconnected`, `unknown`               |
+| `dsm_state`         | `dsm_on_grid`, `dsm_off_grid`                      |
+| `current_run_config`| `panel_on_grid`, `panel_off_grid`                   |
+
+Each must be added to `strings.json` (English) and the four additional language files (`es`, `fr`, `ja`, `pt`).
 
 ### 4.9 Additional Gold Rules
 
