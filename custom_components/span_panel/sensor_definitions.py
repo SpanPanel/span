@@ -94,21 +94,33 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="dsm_state",
         name="DSM State",
+        translation_key="dsm_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=["unknown"],
         value_fn=lambda s: s.dsm_state,
     ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
         name="DSM Grid State",
+        translation_key="dsm_grid_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=["unknown"],
         value_fn=lambda s: s.dsm_state,  # deprecated alias — reads dsm_state
     ),
     SpanPanelDataSensorEntityDescription(
         key="current_run_config",
         name="Current Run Config",
+        translation_key="current_run_config",
+        device_class=SensorDeviceClass.ENUM,
+        options=["unknown"],
         value_fn=lambda s: s.current_run_config,
     ),
     SpanPanelDataSensorEntityDescription(
         key="main_relay_state",
         name="Main Relay State",
+        translation_key="main_relay_state",
+        device_class=SensorDeviceClass.ENUM,
+        options=["unknown"],
         value_fn=lambda s: s.main_relay_state,
     ),
     SpanPanelDataSensorEntityDescription(
@@ -122,7 +134,10 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="vendor_cloud",
         name="Vendor Cloud",
-        value_fn=lambda s: s.vendor_cloud or "UNKNOWN",
+        translation_key="vendor_cloud",
+        device_class=SensorDeviceClass.ENUM,
+        options=["unknown"],
+        value_fn=lambda s: s.vendor_cloud or "unknown",
     ),
 )
 

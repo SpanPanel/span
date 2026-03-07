@@ -93,8 +93,6 @@
         "title": "オプションメニュー",
         "menu_options": {
           "general_options": "一般オプション",
-          "entity_naming_options": "エンティティ命名オプション",
-          "entity_naming": "エンティティ命名パターン",
           "export_config": "合成センサー設定をエクスポート",
           "simulation_start_time": "シミュレーション開始時刻",
           "simulation_offline_minutes": "シミュレーションオフラインミニッツ"
@@ -116,25 +114,6 @@
           "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
           "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
           "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正します。無効にすると、蓄積されたすべてのオフセットがクリアされます。"
-        }
-      },
-      "entity_naming_options": {
-        "title": "エンティティ命名オプション",
-        "description": "エンティティIDの命名方法を設定します。フレンドリ名（例：kitchen_outlets_power）または回路タブ番号（例：circuit_15_power）を選択してください。",
-        "data": {
-          "legacy_upgrade_to_friendly": "レガシーインストールをフレンドリ名にアップグレード",
-          "entity_naming_pattern": "エンティティ命名パターン"
-        },
-        "data_description": {
-          "legacy_upgrade_to_friendly": "このレガシーインストールをデバイスプレフィックス付きのフレンドリエンティティ名にアップグレードします。これにより既存のすべてのエンティティが名前変更されます。",
-          "entity_naming_pattern": "エンティティIDの構築方法を選択してください。フレンドリ名は回路名を使用し（例：kitchen_outlets_power）、回路番号はタブ位置を使用します（例：circuit_15_power）。"
-        }
-      },
-      "entity_naming": {
-        "title": "エンティティ命名パターン",
-        "description": "回路エンティティの命名方法を選択してください。**これを変更すると既存のエンティティが名前変更されます。**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **重要**: \n• エンティティ履歴は名前変更中に保持されます\n• 続行する前に設定のバックアップを検討してください\n• 自動化とスクリプトは新しいエンティティIDを使用するために手動更新が必要な場合があります",
-        "data": {
-          "entity_naming_pattern": "エンティティ命名パターン"
         }
       },
       "export_config": {
@@ -190,6 +169,42 @@
           "unknown": "不明",
           "locked": "ロック",
           "unlocked": "アンロック"
+        }
+      },
+      "dsm_state": {
+        "state": {
+          "unknown": "不明",
+          "dsm_on_grid": "系統連系",
+          "dsm_off_grid": "系統切離"
+        }
+      },
+      "dsm_grid_state": {
+        "state": {
+          "unknown": "不明",
+          "dsm_on_grid": "系統連系",
+          "dsm_off_grid": "系統切離"
+        }
+      },
+      "current_run_config": {
+        "state": {
+          "unknown": "不明",
+          "panel_on_grid": "系統連系",
+          "panel_off_grid": "系統切離",
+          "panel_backup": "バックアップ"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "unknown": "不明",
+          "closed": "閉",
+          "open": "開"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "unknown": "不明",
+          "connected": "接続済み",
+          "unconnected": "未接続"
         }
       },
       "grid_forming_entity": {

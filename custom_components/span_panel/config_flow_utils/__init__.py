@@ -2,15 +2,12 @@
 
 from .options import (
     build_general_options_schema,
-    entities_have_device_prefix,
     get_current_naming_pattern,
-    get_entity_naming_schema,
     get_general_options_defaults,
     get_simulation_offline_minutes_defaults,
     get_simulation_offline_minutes_schema,
     get_simulation_start_time_defaults,
     get_simulation_start_time_schema,
-    pattern_to_flags,
     process_general_options_input,
 )
 from .simulation import (
@@ -43,14 +40,11 @@ __all__ = [
     "validate_yaml_config",
     # Options
     "build_general_options_schema",
-    "entities_have_device_prefix",
     "get_current_naming_pattern",
-    "get_entity_naming_schema",
     "get_general_options_defaults",
     "get_simulation_offline_minutes_defaults",
     "get_simulation_offline_minutes_schema",
     "get_simulation_start_time_defaults",
     "get_simulation_start_time_schema",
-    "pattern_to_flags",
     "process_general_options_input",
 ]

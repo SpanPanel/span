@@ -100,9 +100,9 @@ class TestPanelSensors:
             snapshot = SpanPanelSnapshotFactory.create(vendor_cloud=state)
             assert description.value_fn(snapshot) == state
 
-        # None defaults to "UNKNOWN"
+        # None defaults to "unknown"
         snapshot_none = SpanPanelSnapshotFactory.create(vendor_cloud=None)
-        assert description.value_fn(snapshot_none) == "UNKNOWN"
+        assert description.value_fn(snapshot_none) == "unknown"
 
     def test_software_version_sensor(self) -> None:
         """Test the software version sensor."""

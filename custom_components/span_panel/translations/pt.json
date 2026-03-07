@@ -93,8 +93,6 @@
         "title": "Menu de Opções",
         "menu_options": {
           "general_options": "Opções Gerais",
-          "entity_naming_options": "Opções de Nomenclatura de Entidades",
-          "entity_naming": "Padrão de Nomenclatura de Entidades",
           "export_config": "Exportar Configuração de Sensores Sintéticos",
           "simulation_start_time": "Horário de Início da Simulação",
           "simulation_offline_minutes": "Minutos Offline da Simulação"
@@ -116,25 +114,6 @@
           "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos.",
           "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
           "enable_energy_dip_compensation": "Compensar automaticamente quando o painel reporta leituras de energia mais baixas. Ao desativar, todas as compensações acumuladas são apagadas."
-        }
-      },
-      "entity_naming_options": {
-        "title": "Opções de Nomenclatura de Entidades",
-        "description": "Configure como os IDs de entidade são nomeados. Escolha entre nomes amigáveis (ex., kitchen_outlets_power) ou números de abas de circuito (ex., circuit_15_power).",
-        "data": {
-          "legacy_upgrade_to_friendly": "Atualizar Instalação Legacy para Nomes Amigáveis",
-          "entity_naming_pattern": "Padrão de Nomenclatura de Entidades"
-        },
-        "data_description": {
-          "legacy_upgrade_to_friendly": "Atualizar esta instalação legacy para usar nomes de entidade amigáveis com prefixo de dispositivo. Isso renomeará todas as entidades existentes.",
-          "entity_naming_pattern": "Escolha como os IDs de entidade são construídos. Nomes amigáveis usam nomes de circuito (ex., kitchen_outlets_power), enquanto números de circuito usam posições de aba (ex., circuit_15_power)."
-        }
-      },
-      "entity_naming": {
-        "title": "Padrão de Nomenclatura de Entidades",
-        "description": "Escolha como as entidades de circuito são nomeadas. **Alterar isto irá renomear as suas entidades existentes.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Importante**: \n• O histórico das entidades será preservado durante a renomeação\n• Considere fazer backup da sua configuração antes de prosseguir\n• Automações e scripts podem precisar de atualizações manuais para usar os novos IDs de entidade",
-        "data": {
-          "entity_naming_pattern": "Padrão de Nomenclatura de Entidades"
         }
       },
       "export_config": {
@@ -190,6 +169,42 @@
           "unknown": "Desconhecido",
           "locked": "Bloqueado",
           "unlocked": "Desbloqueado"
+        }
+      },
+      "dsm_state": {
+        "state": {
+          "unknown": "Desconhecido",
+          "dsm_on_grid": "Na Rede",
+          "dsm_off_grid": "Fora da Rede"
+        }
+      },
+      "dsm_grid_state": {
+        "state": {
+          "unknown": "Desconhecido",
+          "dsm_on_grid": "Na Rede",
+          "dsm_off_grid": "Fora da Rede"
+        }
+      },
+      "current_run_config": {
+        "state": {
+          "unknown": "Desconhecido",
+          "panel_on_grid": "Na Rede",
+          "panel_off_grid": "Fora da Rede",
+          "panel_backup": "Reserva"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "unknown": "Desconhecido",
+          "closed": "Fechado",
+          "open": "Aberto"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "unknown": "Desconhecido",
+          "connected": "Conectado",
+          "unconnected": "Desconectado"
         }
       },
       "grid_forming_entity": {

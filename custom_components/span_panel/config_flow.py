@@ -17,11 +17,9 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import callback
 from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-from homeassistant.util import slugify
 from homeassistant.util.network import is_ipv4_address
 from span_panel_api import V2AuthResponse, detect_api_version
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
@@ -32,20 +30,13 @@ import yaml
 from .config_flow_utils import (
     build_general_options_schema,
     get_available_simulation_configs,
-    get_current_naming_pattern,
     get_general_options_defaults,
-    pattern_to_flags,
     process_general_options_input,
     validate_auth_token,
     validate_host,
     validate_simulation_time,
     validate_v2_passphrase,
     validate_v2_proximity,
-)
-from .config_flow_utils.options import (
-    build_entity_naming_options_schema,
-    get_entity_naming_options_defaults,
-    process_entity_naming_options_input,
 )
 from .const import (
     CONF_API_VERSION,
@@ -58,7 +49,6 @@ from .const import (
     CONF_SIMULATION_CONFIG,
     CONF_SIMULATION_OFFLINE_MINUTES,
     CONF_SIMULATION_START_TIME,
-    COORDINATOR,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
@@ -865,10 +855,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 "general_options": "General Options",
             }
 
-            # Add entity naming options only for live panels (not simulations)
-            if not self.config_entry.data.get("simulation_mode", False):
-                menu_options["entity_naming_options"] = "Entity Naming Options"
-
             # Add simulation options if this is a simulation mode integration
             if self.config_entry.data.get("simulation_mode", False):
                 menu_options["simulation_start_time"] = "Simulation Start Time"
@@ -907,159 +893,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="general_options",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
-        )
-
-    async def async_step_entity_naming_options(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Manage entity naming options including legacy upgrade and naming patterns."""
-        if user_input is not None:
-            # Process the user input for entity naming options
-            filtered_input, errors = process_entity_naming_options_input(
-                self.config_entry, user_input
-            )
-
-            # If no errors, proceed with saving options
-            if not errors:
-                # Check if there are pending migrations that need to be handled by coordinator
-                if filtered_input.get("pending_legacy_migration", False) or filtered_input.get(
-                    "pending_naming_migration", False
-                ):
-                    # Merge with existing options to preserve all settings
-                    merged_options = dict(self.config_entry.options)
-                    merged_options.update(filtered_input)
-
-                    # Log the migration flags for debugging
-                    _LOGGER.info(
-                        "Setting migration flags: pending_naming_migration=%s, old_flags=(%s,%s), new_flags=(%s,%s)",
-                        merged_options.get("pending_naming_migration", False),
-                        merged_options.get("old_use_circuit_numbers", "None"),
-                        merged_options.get("old_use_device_prefix", "None"),
-                        merged_options.get(USE_CIRCUIT_NUMBERS, "None"),
-                        merged_options.get(USE_DEVICE_PREFIX, "None"),
-                    )
-
-                    # Return the merged options to trigger reload with migration flags
-                    return self.async_create_entry(title="", data=merged_options)
-                else:
-                    # No pending migrations, proceed with normal reload
-                    # Merge with existing options to preserve all settings
-                    merged_options = dict(self.config_entry.options)
-                    merged_options.update(filtered_input)
-                    return self.async_create_entry(title="", data=merged_options)
-        else:
-            errors = {}
-
-        # Build the entity naming options schema
-        schema = build_entity_naming_options_schema(self.config_entry)
-        defaults = get_entity_naming_options_defaults(self.config_entry)
-
-        return self.async_show_form(
-            step_id="entity_naming_options",
-            data_schema=self.add_suggested_values_to_schema(schema, defaults),
-            errors=errors,
-        )
-
-    async def async_step_entity_naming(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Manage entity naming pattern options."""
-        if user_input is not None:
-            # Check if entity naming pattern changed
-            current_pattern = self._get_current_naming_pattern()
-            new_pattern = user_input.get(ENTITY_NAMING_PATTERN, current_pattern)
-
-            # For legacy installations, treat the selection as a change even
-            # if it matches the default since we default to Friendly Names
-            # for display but the actual pattern is Legacy
-            pattern_changed = False
-            if current_pattern == EntityNamingPattern.LEGACY_NAMES.value:
-                # Pre-1.0.4 installation - any selection is a migration
-                # But only if they actually selected something (not just submitted
-                # with defaults)
-                if ENTITY_NAMING_PATTERN in user_input:
-                    pattern_changed = True
-            else:
-                # Modern installation - only migrate if pattern actually changed
-                pattern_changed = new_pattern != current_pattern
-
-            if pattern_changed:
-                # Entity naming pattern changed - update the configuration flags
-                naming_options = {}
-                if new_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value:
-                    naming_options[USE_CIRCUIT_NUMBERS] = True
-                    naming_options[USE_DEVICE_PREFIX] = True
-                elif new_pattern == EntityNamingPattern.FRIENDLY_NAMES.value:
-                    naming_options[USE_CIRCUIT_NUMBERS] = False
-                    naming_options[USE_DEVICE_PREFIX] = True
-
-                _LOGGER.info(
-                    "Pattern change: %s -> %s, setting flags: USE_CIRCUIT_NUMBERS=%s, USE_DEVICE_PREFIX=%s",
-                    current_pattern,
-                    new_pattern,
-                    naming_options.get(USE_CIRCUIT_NUMBERS),
-                    naming_options.get(USE_DEVICE_PREFIX),
-                )
-
-                # Entity ID migration will be handled after reload via pending_legacy_migration flag
-
-                # Update only the naming-related options, preserve ALL other options
-                current_options = dict(self.config_entry.options)
-
-                # Only update the specific naming flags, preserve everything else
-                current_options[USE_CIRCUIT_NUMBERS] = naming_options[USE_CIRCUIT_NUMBERS]
-                current_options[USE_DEVICE_PREFIX] = naming_options[USE_DEVICE_PREFIX]
-
-                _LOGGER.debug("All options after update: %s", current_options)
-
-                # Schedule reload after the options flow completes
-                async def reload_after_options_complete() -> None:
-                    # Wait for the options flow to complete first
-                    await self.hass.async_block_till_done()
-                    _LOGGER.info("Reloading integration after entity naming pattern change")
-                    await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-
-                self.hass.async_create_task(reload_after_options_complete())
-
-                # Return success with the updated options - this will update the config entry
-                _LOGGER.debug("Returning updated options to complete the flow")
-                return self.async_create_entry(title="", data=current_options)
-            else:
-                # No pattern change - just return success
-                return self.async_create_entry(title="", data={})
-
-        # Show entity naming form
-        current_pattern = self._get_current_naming_pattern()
-
-        # For legacy installations, default to Friendly Names but allow user to choose
-        # For modern installations, show the current pattern
-        if current_pattern == EntityNamingPattern.LEGACY_NAMES.value:
-            display_pattern = EntityNamingPattern.FRIENDLY_NAMES.value
-        else:
-            display_pattern = current_pattern
-
-        defaults: dict[str, Any] = {
-            ENTITY_NAMING_PATTERN: display_pattern,
-        }
-
-        # Provide placeholders for the translation system
-        description_placeholders = {
-            "friendly_example": "**Friendly Names Example**: span_panel_kitchen_outlets_power",
-            "circuit_example": "**Circuit Numbers Example**: span_panel_circuit_15_power",
-        }
-
-        _LOGGER.debug("Entity naming step - current pattern: %s", current_pattern)
-        _LOGGER.debug(
-            "Entity naming step - description placeholders: %s",
-            description_placeholders,
-        )
-
-        return self.async_show_form(
-            step_id="entity_naming",
-            data_schema=self.add_suggested_values_to_schema(
-                self._get_entity_naming_schema(), defaults
-            ),
-            description_placeholders=description_placeholders,
         )
 
     async def async_step_simulation_start_time(
@@ -1384,108 +1217,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ),
         }
 
-    def _get_entity_naming_schema(self) -> vol.Schema:
-        """Get the entity naming options schema."""
-        current_pattern = self._get_current_naming_pattern()
-
-        # Legacy installations can only migrate to friendly names first
-        if current_pattern == EntityNamingPattern.LEGACY_NAMES.value:
-            pattern_options = {
-                EntityNamingPattern.FRIENDLY_NAMES.value: "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
-            }
-        else:
-            # Modern installations can switch between the two modern patterns
-            pattern_options = {
-                EntityNamingPattern.FRIENDLY_NAMES.value: "Friendly Names (e.g., span_panel_kitchen_outlets_power)",
-                EntityNamingPattern.CIRCUIT_NUMBERS.value: "Circuit Numbers (e.g., span_panel_circuit_15_power)",
-            }
-
-        return vol.Schema(
-            {
-                vol.Optional(ENTITY_NAMING_PATTERN): vol.In(pattern_options),
-            }
-        )
-
-    def _get_current_naming_pattern(self) -> str:
-        """Determine the current entity naming pattern from configuration flags."""
-        return get_current_naming_pattern(self.config_entry)
-
-    async def _migrate_entity_ids(self, old_pattern: str, new_pattern: str) -> None:
-        """Migrate entity IDs when naming pattern changes."""
-        _LOGGER.info("Starting entity ID migration from %s to %s", old_pattern, new_pattern)
-
-        # Get the coordinator to handle migration using actual entity objects
-        coordinator_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id, {})
-        coordinator = coordinator_data.get(COORDINATOR)
-
-        if not coordinator:
-            _LOGGER.error("Cannot migrate entities: coordinator not found")
-            return
-
-        # Determine old and new flags based on patterns
-        old_flags = self._pattern_to_flags(old_pattern)
-        new_flags = self._pattern_to_flags(new_pattern)
-
-        # Perform the migration using the coordinator with old and new flags
-        success = await coordinator.migrate_entity_ids(old_flags, new_flags)
-
-        if success:
-            _LOGGER.debug("Entity migration completed successfully")
-        else:
-            _LOGGER.error("Entity migration failed")
-
-    @staticmethod
-    def _entities_have_device_prefix(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-        """Best-effort detection if entities already use the device prefix.
-
-        Checks the entity registry for any entity belonging to this config entry where
-        the object_id starts with the device name prefix. Both FRIENDLY_NAMES and CIRCUIT_NUMBERS
-        patterns include the device name prefix; only LEGACY lacks it.
-        """
-        registry = er.async_get(hass)
-
-        # Get the device name from config entry and sanitize it
-        device_name = config_entry.data.get("device_name", config_entry.title)
-        if not device_name:
-            return False
-
-        sanitized_device_name = slugify(device_name)
-        for entry in registry.entities.values():
-            try:
-                if entry.config_entry_id != config_entry.entry_id:
-                    continue
-                object_id = entry.entity_id.split(".", 1)[1]
-                # Check if the object_id starts with the device name followed by underscore
-                if object_id.startswith(f"{sanitized_device_name}_"):
-                    return True
-            except (IndexError, AttributeError):
-                continue
-        return False
-
-    def _pattern_to_flags(self, pattern: str) -> dict[str, bool]:
-        """Convert entity naming pattern to configuration flags."""
-        return pattern_to_flags(pattern)
-
-    def _mark_for_legacy_migration(self) -> None:
-        """Mark the config entry for legacy migration after reload.
-
-        This method stores a flag in the config entry data that indicates a legacy
-        migration is needed. The integration will check for this flag after startup
-        but before the first update.
-        """
-        _LOGGER.info("Marking config entry for legacy migration after reload")
-
-        # Update the config entry data to include the migration flag
-        current_data = dict(self.config_entry.data)
-        current_data["pending_legacy_migration"] = True
-
-        _LOGGER.info("Setting pending_legacy_migration flag in config entry data: %s", current_data)
-
-        # Update the config entry with the migration flag
-        self.hass.config_entries.async_update_entry(self.config_entry, data=current_data)
-
-
-# Export commonly used items for backward compatibility
 
 # Register the config flow handler
 config_entries.HANDLERS.register(DOMAIN)(SpanPanelConfigFlow)

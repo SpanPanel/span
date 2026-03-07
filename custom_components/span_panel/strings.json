@@ -101,8 +101,6 @@
         "title": "Options Menu",
         "menu_options": {
           "general_options": "General Options",
-          "entity_naming_options": "Entity Naming Options",
-          "entity_naming": "Entity Naming Pattern",
           "export_config": "Export Synthetic Sensor Config",
           "simulation_start_time": "Simulation Start Time",
           "simulation_offline_minutes": "Simulation Offline Minutes"
@@ -124,18 +122,6 @@
           "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
           "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets."
-        }
-      },
-      "entity_naming_options": {
-        "title": "Entity Naming Options",
-        "description": "Configure how entity IDs are named. Choose between friendly names (e.g., kitchen_outlets_power) or circuit tab numbers (e.g., circuit_15_power).",
-        "data": {
-          "legacy_upgrade_to_friendly": "Upgrade Legacy Installation to Friendly Names",
-          "entity_naming_pattern": "Entity Naming Pattern"
-        },
-        "data_description": {
-          "legacy_upgrade_to_friendly": "Upgrade this legacy installation to use friendly entity names with device prefix. This will rename all existing entities.",
-          "entity_naming_pattern": "Choose how entity IDs are constructed. Friendly names use circuit names (e.g., kitchen_outlets_power), while circuit numbers use tab positions (e.g., circuit_15_power)."
         }
       },
       "simulation_start_time": {
@@ -167,13 +153,6 @@
         "data_description": {
           "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
         }
-      },
-      "entity_naming": {
-        "title": "Entity Naming Pattern",
-        "description": "Choose how circuit entities are named. **Changing this will rename your existing entities.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Important**: \n• Entity history will be preserved during renaming\n• Consider backing up your configuration before proceeding\n• Automations and scripts may need manual updates to use new entity IDs",
-        "data": {
-          "entity_naming_pattern": "Entity Naming Pattern"
-        }
       }
     }
   },
@@ -198,6 +177,52 @@
           "unknown": "Unknown",
           "locked": "Locked",
           "unlocked": "Unlocked"
+        }
+      },
+      "dsm_state": {
+        "state": {
+          "unknown": "Unknown",
+          "dsm_on_grid": "On Grid",
+          "dsm_off_grid": "Off Grid"
+        }
+      },
+      "dsm_grid_state": {
+        "state": {
+          "unknown": "Unknown",
+          "dsm_on_grid": "On Grid",
+          "dsm_off_grid": "Off Grid"
+        }
+      },
+      "current_run_config": {
+        "state": {
+          "unknown": "Unknown",
+          "panel_on_grid": "On Grid",
+          "panel_off_grid": "Off Grid",
+          "panel_backup": "Backup"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "unknown": "Unknown",
+          "closed": "Closed",
+          "open": "Open"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "unknown": "Unknown",
+          "connected": "Connected",
+          "unconnected": "Disconnected"
+        }
+      },
+      "grid_forming_entity": {
+        "state": {
+          "unknown": "Unknown",
+          "grid": "Grid",
+          "battery": "Battery",
+          "pv": "PV",
+          "generator": "Generator",
+          "none": "None"
         }
       }
     },

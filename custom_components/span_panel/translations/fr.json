@@ -93,8 +93,6 @@
         "title": "Menu des Options",
         "menu_options": {
           "general_options": "Options Générales",
-          "entity_naming_options": "Options de Nommage des Entités",
-          "entity_naming": "Modèle de Nommage des Entités",
           "export_config": "Exporter la Configuration des Capteurs Synthétiques",
           "simulation_start_time": "Heure de Début de Simulation",
           "simulation_offline_minutes": "Minutes Hors Ligne de Simulation"
@@ -116,25 +114,6 @@
           "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs.",
           "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
           "enable_energy_dip_compensation": "Compenser automatiquement lorsque le panneau signale des lectures d'énergie inférieures. La désactivation efface toutes les compensations accumulées."
-        }
-      },
-      "entity_naming_options": {
-        "title": "Options de Nommage des Entités",
-        "description": "Configurez comment les IDs d'entité sont nommés. Choisissez entre des noms conviviaux (ex., kitchen_outlets_power) ou des numéros d'onglets de circuit (ex., circuit_15_power).",
-        "data": {
-          "legacy_upgrade_to_friendly": "Mettre à niveau l'Installation Legacy vers les Noms Conviviaux",
-          "entity_naming_pattern": "Modèle de Nommage des Entités"
-        },
-        "data_description": {
-          "legacy_upgrade_to_friendly": "Mettre à niveau cette installation legacy pour utiliser des noms d'entité conviviaux avec préfixe de dispositif. Cela renommera toutes les entités existantes.",
-          "entity_naming_pattern": "Choisissez comment les IDs d'entité sont construits. Les noms conviviaux utilisent les noms de circuit (ex., kitchen_outlets_power), tandis que les numéros de circuit utilisent les positions d'onglet (ex., circuit_15_power)."
-        }
-      },
-      "entity_naming": {
-        "title": "Modèle de Nommage des Entités",
-        "description": "Choisissez comment les entités de circuit sont nommées. **Changer ceci renommera vos entités existantes.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Important**: \n• L'historique des entités sera préservé pendant le renommage\n• Considérez sauvegarder votre configuration avant de procéder\n• Les automatisations et scripts peuvent nécessiter des mises à jour manuelles pour utiliser les nouveaux IDs d'entité",
-        "data": {
-          "entity_naming_pattern": "Modèle de Nommage des Entités"
         }
       },
       "export_config": {
@@ -204,6 +183,42 @@
           "unknown": "Inconnu",
           "locked": "Verrouillé",
           "unlocked": "Déverrouillé"
+        }
+      },
+      "dsm_state": {
+        "state": {
+          "unknown": "Inconnu",
+          "dsm_on_grid": "Sur Réseau",
+          "dsm_off_grid": "Hors Réseau"
+        }
+      },
+      "dsm_grid_state": {
+        "state": {
+          "unknown": "Inconnu",
+          "dsm_on_grid": "Sur Réseau",
+          "dsm_off_grid": "Hors Réseau"
+        }
+      },
+      "current_run_config": {
+        "state": {
+          "unknown": "Inconnu",
+          "panel_on_grid": "Sur Réseau",
+          "panel_off_grid": "Hors Réseau",
+          "panel_backup": "Secours"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "unknown": "Inconnu",
+          "closed": "Fermé",
+          "open": "Ouvert"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "unknown": "Inconnu",
+          "connected": "Connecté",
+          "unconnected": "Déconnecté"
         }
       },
       "grid_forming_entity": {
