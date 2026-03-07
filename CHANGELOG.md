@@ -49,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `Battery Power` sensor with BESS metadata attributes (vendor, product, nameplate capacity)
 - `PV Power` sensor with inverter metadata attributes (vendor, product, nameplate capacity)
 - `Site Power` sensor (grid + PV + battery from power-flows node)
+- **Reconfigure flow** — update the panel host/IP address without removing and re-adding the integration. Validates the new host is reachable and running v2
+  firmware, and prevents switching to a different panel by verifying the serial number matches. Access via the integration's three-dot menu → Reconfigure
 - Circuit Shed Priority select — controls off-grid shedding (NEVER / SOC_THRESHOLD / OFF_GRID)
 - Per-leg voltages and amperage (upstream and downstream lugs)
 - Breaker ratings, device types, relay states, shed priorities as circuit attributes
