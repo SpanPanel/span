@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Breaking Changes
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You should already be on v1.3.1 of the SpanPanel/span integration if upgrading
+- You _must_ already be on v1.3.1 of the SpanPanel/span integration if upgrading
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 - `DSM Grid State` deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version since it is an
   alias for `DSM State`
