@@ -825,6 +825,53 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             raise ConfigFlowError("Missing required parameters during entry creation")
         return self.create_new_entry(self.host, self.serial_number, self.access_token)
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of the integration (e.g. host change)."""
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        if user_input is None:
+            current_host = reconfigure_entry.data.get(CONF_HOST, "")
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=current_host): str}),
+            )
+
+        host = user_input[CONF_HOST].strip()
+        if not host:
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=""): str}),
+                errors={"base": "host_required"},
+            )
+
+        # Validate the host is reachable and is a v2 panel
+        try:
+            detection = await detect_api_version(host)
+        except (SpanPanelConnectionError, Exception):
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                errors={"base": "cannot_connect"},
+            )
+
+        if detection.api_version != "v2" or detection.status_info is None:
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                errors={"base": "cannot_connect"},
+            )
+
+        # Ensure the serial number matches — prevent switching to a different panel
+        await self.async_set_unique_id(detection.status_info.serial_number)
+        self._abort_if_unique_id_mismatch(reason="unique_id_mismatch")
+
+        return self.async_update_reload_and_abort(
+            reconfigure_entry,
+            data_updates={CONF_HOST: host},
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(

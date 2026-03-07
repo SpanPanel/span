@@ -4,6 +4,8 @@
       "no_devices_found": "No devices found on the network",
       "already_configured": "Span Panel already configured. Only a single configuration is possible.",
       "reauth_successful": "Authentication successful.",
+      "reconfigure_successful": "Host updated successfully.",
+      "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
       "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
@@ -70,6 +72,16 @@
         },
         "data_description": {
           "hop_passphrase": "The passphrase used to authenticate with the SPAN Panel v2 API"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure SPAN Panel",
+        "description": "Update the host address for this SPAN Panel. The panel serial number must match.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the SPAN Panel"
         }
       },
       "simulator_config": {

@@ -27,6 +27,12 @@ The integration already satisfies several core requirements:
 - `entity.py` shared base class (`common-modules`)
 - No service actions registered (`action-setup`)
 - Flat directory structure (no subdirectory packages)
+- Appropriate polling (`appropriate-polling`): 60s fallback, push is primary
+- Entity event setup (`entity-event-setup`): coordinator manages streaming lifecycle
+- Test before configure (`test-before-configure`): host validated before entry creation
+- Test before setup (`test-before-setup`): `ConfigEntryNotReady` / `ConfigEntryAuthFailed` raised
+- Unique config entry (`unique-config-entry`): serial-based unique ID with abort on duplicate
+- Reconfiguration flow (`reconfiguration-flow`): host update with serial number mismatch guard
 
 ---
 
@@ -89,29 +95,19 @@ Additionally for Platinum (`strict-typing`): the library must include a `py.type
 
 **Rule:** `config-flow-test-coverage`
 
-100% test coverage of `config_flow.py` including:
-
-- User-initiated setup (happy path)
-- Zeroconf discovery
-- Error recovery (can complete setup after errors)
-- Duplicate entry prevention
-- Reauth flow
-- All auth method paths (passphrase, proximity, token)
+v2 config flow paths are fully tested (33 tests). Remaining uncovered lines are
+simulation and v1 code paths that will be removed in Phase 1. Coverage will reach
+100% after simulation stripping.
 
 ### 2.3 Verify Remaining Bronze Rules
 
 | Rule                             | Action                                                                                  |
 | -------------------------------- | --------------------------------------------------------------------------------------- |
-| `appropriate-polling`            | Verify `update_interval` is reasonable (60s fallback is fine)                           |
 | `brands`                         | Submit branding to `home-assistant/brands` repository                                   |
 | `docs-actions`                   | Document remaining service actions                                                      |
 | `docs-high-level-description`    | Write integration overview for HA docs site                                             |
 | `docs-installation-instructions` | Write setup guide                                                                       |
 | `docs-removal-instructions`      | Write uninstall steps                                                                   |
-| `entity-event-setup`             | Audit: subscriptions in `async_added_to_hass`, cleanup in `async_will_remove_from_hass` |
-| `test-before-configure`          | Verify connectivity tested during config flow before entry creation                     |
-| `test-before-setup`              | Verify `ConfigEntryNotReady` / `ConfigEntryAuthFailed` raised from `async_setup_entry`  |
-| `unique-config-entry`            | Verify duplicate prevention via unique ID                                               |
 
 ---
 
@@ -180,14 +176,7 @@ Gold adds 24 rules. These represent a polished, production-quality integration.
 Implement `diagnostics.py` with `async_get_config_entry_diagnostics()`. Redact sensitive data (MQTT credentials, tokens, passphrases) using
 `async_redact_data()`.
 
-### 4.2 Reconfiguration Flow
-
-**Rule:** `reconfiguration-flow`
-
-Implement `async_step_reconfigure` to allow updating host/port without removing the config entry. Use `_abort_if_unique_id_mismatch` to prevent account
-switching.
-
-### 4.3 Entity Device Class Audit
+### 4.2 Entity Device Class Audit
 
 **Rule:** `entity-device-class`
 
@@ -202,7 +191,7 @@ Apply `_attr_device_class` on every entity where a matching device class exists.
 | Battery SOC          | `SensorDeviceClass.BATTERY`            |
 | EV charger current   | `SensorDeviceClass.CURRENT`            |
 
-### 4.4 Entity Category Audit
+### 4.3 Entity Category Audit
 
 **Rule:** `entity-category`
 
@@ -217,7 +206,7 @@ Mark configuration entities with `EntityCategory.CONFIG`:
 
 - Circuit priority select
 
-### 4.5 Entity Disabled by Default
+### 4.4 Entity Disabled by Default
 
 **Rule:** `entity-disabled-by-default`
 
@@ -228,27 +217,27 @@ Set `_attr_entity_registry_enabled_default = False` on noisy or supplementary en
 - Unmapped circuit backing data sensors
 - Tab attribute sensors
 
-### 4.6 Icon Translations
+### 4.5 Icon Translations
 
 **Rule:** `icon-translations`
 
 Create `icons.json` defining all entity icons. Remove any `@property` based icon overrides from entity classes. Support state-based icon selection where
 appropriate (e.g., door open vs closed).
 
-### 4.7 Exception Translations
+### 4.6 Exception Translations
 
 **Rule:** `exception-translations`
 
 All `HomeAssistantError` and `ServiceValidationError` messages must use `translation_domain` and `translation_key` with corresponding entries in `strings.json`.
 
-### 4.8 Entity Translations
+### 4.7 Entity Translations
 
 **Rule:** `entity-translations`
 
 Ensure all entity names are defined via `translation_key` in `strings.json` rather than hardcoded English strings. Entities with device classes that provide
 automatic names can omit the translation key.
 
-### 4.9 Additional Gold Rules
+### 4.8 Additional Gold Rules
 
 | Rule                       | Action                                                |
 | -------------------------- | ----------------------------------------------------- |
