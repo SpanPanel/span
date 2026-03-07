@@ -20,6 +20,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, UnitOfElectricCurrent, UnitOfEnergy, UnitOfPower
+from homeassistant.helpers.entity import EntityCategory
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
@@ -93,49 +94,49 @@ PANEL_DATA_STATUS_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="dsm_state",
-        name="DSM State",
         translation_key="dsm_state",
         device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
         options=["unknown"],
         value_fn=lambda s: s.dsm_state,
     ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
-        name="DSM Grid State",
         translation_key="dsm_grid_state",
         device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
         options=["unknown"],
         value_fn=lambda s: s.dsm_state,  # deprecated alias — reads dsm_state
     ),
     SpanPanelDataSensorEntityDescription(
         key="current_run_config",
-        name="Current Run Config",
         translation_key="current_run_config",
         device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
         options=["unknown"],
         value_fn=lambda s: s.current_run_config,
     ),
     SpanPanelDataSensorEntityDescription(
         key="main_relay_state",
-        name="Main Relay State",
         translation_key="main_relay_state",
         device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
         options=["unknown"],
         value_fn=lambda s: s.main_relay_state,
     ),
     SpanPanelDataSensorEntityDescription(
         key="grid_forming_entity",
-        name="Grid Forming Entity",
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
         options=["unknown"],
         value_fn=lambda s: s.dominant_power_source or "unknown",
     ),
     SpanPanelDataSensorEntityDescription(
         key="vendor_cloud",
-        name="Vendor Cloud",
         translation_key="vendor_cloud",
         device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
         options=["unknown"],
         value_fn=lambda s: s.vendor_cloud or "unknown",
     ),
@@ -145,7 +146,8 @@ PANEL_DATA_STATUS_SENSORS: tuple[
 STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription,] = (
     SpanPanelStatusSensorEntityDescription(
         key="software_version",
-        name="Software Version",
+        translation_key="software_version",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.firmware_version,
     ),
 )
@@ -195,7 +197,7 @@ UNMAPPED_SENSORS: tuple[
 # Battery sensor definition (conditionally created when battery data available)
 BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensorEntityDescription(
     key="storage_battery_percentage",
-    name="Battery Level",
+    translation_key="battery_level",
     native_unit_of_measurement=PERCENTAGE,
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
@@ -210,7 +212,7 @@ PANEL_POWER_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="instantGridPowerW",
-        name="Current Power",
+        translation_key="instant_grid_power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
@@ -219,7 +221,7 @@ PANEL_POWER_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
-        name="Feed Through Power",
+        translation_key="feedthrough_power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
@@ -231,7 +233,7 @@ PANEL_POWER_SENSORS: tuple[
 # Battery power sensor (conditionally created when BESS is commissioned)
 BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="batteryPowerW",
-    name="Battery Power",
+    translation_key="battery_power",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
@@ -242,7 +244,7 @@ BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensor
 # PV power sensor (conditionally created when PV is commissioned)
 PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="pvPowerW",
-    name="PV Power",
+    translation_key="pv_power",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
@@ -253,7 +255,7 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
 # Site power sensor (conditionally created when power-flows data is available)
 SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="sitePowerW",
-    name="Site Power",
+    translation_key="site_power",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
@@ -272,7 +274,7 @@ PANEL_ENERGY_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyProducedWh",
-        name="Main Meter Produced Energy",
+        translation_key="main_meter_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -281,7 +283,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyConsumedWh",
-        name="Main Meter Consumed Energy",
+        translation_key="main_meter_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -290,7 +292,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyProducedWh",
-        name="Feed Through Produced Energy",
+        translation_key="feedthrough_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
@@ -299,7 +301,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyConsumedWh",
-        name="Feed Through Consumed Energy",
+        translation_key="feedthrough_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
@@ -308,7 +310,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterNetEnergyWh",
-        name="Main Meter Net Energy",
+        translation_key="main_meter_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
@@ -319,7 +321,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
-        name="Feed Through Net Energy",
+        translation_key="feedthrough_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
@@ -412,7 +414,6 @@ EVSE_SENSORS: tuple[
 ] = (
     SpanEvseSensorEntityDescription(
         key="evse_status",
-        name="Charger Status",
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
         options=["unknown"],
@@ -420,7 +421,7 @@ EVSE_SENSORS: tuple[
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
-        name="Advertised Current",
+        translation_key="evse_advertised_current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.CURRENT,
@@ -429,7 +430,6 @@ EVSE_SENSORS: tuple[
     ),
     SpanEvseSensorEntityDescription(
         key="evse_lock_state",
-        name="Lock State",
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
         options=["unknown"],

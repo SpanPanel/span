@@ -141,8 +141,10 @@ class TestPanelSensors:
         )
         assert sensor.unique_id == expected_unique_id
 
-    def test_sensor_names(self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot) -> None:
-        """Test that sensors have correct names."""
+    def test_sensor_translation_keys(
+        self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot
+    ) -> None:
+        """Test that panel sensors have translation keys set."""
         from custom_components.span_panel.sensor import SpanPanelPanelStatus, SpanPanelStatus
         from custom_components.span_panel.sensor_definitions import (
             PANEL_DATA_STATUS_SENSORS,
@@ -151,11 +153,13 @@ class TestPanelSensors:
 
         for description in PANEL_DATA_STATUS_SENSORS:
             sensor = SpanPanelPanelStatus(mock_coordinator, description, mock_snapshot)
-            assert str(description.name) in str(sensor.name)
+            assert description.translation_key is not None
+            assert sensor.entity_description.translation_key == description.translation_key
 
         for description in STATUS_SENSORS:
             sensor = SpanPanelStatus(mock_coordinator, description, mock_snapshot)
-            assert str(description.name) in str(sensor.name)
+            assert description.translation_key is not None
+            assert sensor.entity_description.translation_key == description.translation_key
 
     def test_main_relay_state_with_real_data(self) -> None:
         """Test main relay state sensor with real snapshot data."""

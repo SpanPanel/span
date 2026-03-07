@@ -1,7 +1,7 @@
 """Control switches."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
@@ -21,8 +21,6 @@ from .helpers import (
     build_switch_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
 )
-
-ICON: Literal["mdi:toggle-switch"] = "mdi:toggle-switch"
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -57,7 +55,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
         self._circuit_id: str = circuit_id
         self._device_name = device_name
-        self._attr_icon = "mdi:toggle-switch"
         self._attr_unique_id = self._construct_switch_unique_id(coordinator, snapshot, circuit_id)
 
         self._attr_device_info = self._build_device_info(coordinator, snapshot)

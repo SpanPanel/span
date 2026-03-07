@@ -16,8 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 - `DSM Grid State` deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version since it is an
   alias for `DSM State`
-- **Sensor state values are now lowercase** — The following sensors now report lowercase state values with translated display names. Automations or scripts
-  that compare against the old uppercase values must be updated:
+- **Sensor state values are now lowercase** — The following sensors now report lowercase state values with translated display names. Automations or scripts that
+  compare against the old uppercase values must be updated:
   - `DSM State`: `DSM_ON_GRID` → `dsm_on_grid`, `DSM_OFF_GRID` → `dsm_off_grid`
   - `DSM Grid State`: same as DSM State (deprecated alias)
   - `Current Run Config`: `PANEL_ON_GRID` → `panel_on_grid`, `PANEL_OFF_GRID` → `panel_off_grid`

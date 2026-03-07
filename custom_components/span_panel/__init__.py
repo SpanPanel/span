@@ -13,7 +13,11 @@ from homeassistant.components.persistent_notification import async_create as pn_
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import CoreState, HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import slugify
 from span_panel_api import (
@@ -33,6 +37,7 @@ from span_panel_api.mqtt.models import MqttClientConfig
 from . import config_flow  # noqa: F401  # type: ignore[misc]
 from .const import (
     CONF_API_VERSION,
+    CONF_DEVICE_NAME,
     CONF_EBUS_BROKER_HOST,
     CONF_EBUS_BROKER_PASSWORD,
     CONF_EBUS_BROKER_PORT,
@@ -339,7 +344,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 coordinator.set_simulation_offline_mode(simulation_offline_minutes)
 
         else:
-            raise ConfigEntryNotReady(f"Unknown api_version: {api_version}")
+            raise ConfigEntryError(f"Unknown api_version: {api_version}")
 
         # --- Common setup for all transport modes ---
 
@@ -393,6 +398,36 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         await entry.runtime_data.coordinator.async_shutdown()
 
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: SpanPanelConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Allow manual removal of a device (e.g., stale EVSE sub-device).
+
+    The main panel device cannot be removed — only sub-devices (like EVSE
+    chargers) that are no longer present can be removed by the user.
+    """
+    if not hasattr(config_entry, "runtime_data") or config_entry.runtime_data is None:
+        return True
+
+    coordinator = config_entry.runtime_data.coordinator
+    snapshot = coordinator.data
+
+    # Identify the main panel device identifier
+    serial_number = snapshot.serial_number
+    is_simulator = config_entry.data.get(CONF_API_VERSION) == "simulation"
+    device_name = config_entry.data.get(CONF_DEVICE_NAME, config_entry.title)
+    panel_identifier = slugify(device_name) if is_simulator and device_name else serial_number
+
+    # Prevent removal of the main panel device
+    for identifier in device_entry.identifiers:
+        if identifier == (DOMAIN, panel_identifier):
+            return False
+
+    return True
 
 
 async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:

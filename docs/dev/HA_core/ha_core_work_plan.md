@@ -30,12 +30,18 @@ The integration already satisfies these core requirements:
 - Appropriate polling (`appropriate-polling`): 60s fallback, push is primary
 - Entity event setup (`entity-event-setup`): coordinator manages streaming lifecycle
 - Test before configure (`test-before-configure`): host validated before entry creation
-- Test before setup (`test-before-setup`): `ConfigEntryNotReady` / `ConfigEntryAuthFailed` raised
+- Test before setup (`test-before-setup`): `ConfigEntryNotReady` / `ConfigEntryAuthFailed` / `ConfigEntryError` raised
 - Unique config entry (`unique-config-entry`): serial-based unique ID with abort on duplicate
 - Reconfiguration flow (`reconfiguration-flow`): host update with serial number mismatch guard
 - Config entry unloading (`config-entry-unloading`): MQTT disconnect, streaming cleanup, coordinator shutdown
 - Reauthentication flow (`reauthentication-flow`): v2 passphrase and proximity reauth tested
 - Device classes applied (`entity-device-class`): power, energy, battery, current, connectivity, tamper, plug, charging
+- Entity translations (`entity-translations`): all panel/status sensor names via `translation_key` in `strings.json`
+- Icon translations (`icon-translations`): `icons.json` with state-based icons, no hardcoded Python icons
+- Entity categories (`entity-category`): `DIAGNOSTIC` on status/monitoring sensors, `CONFIG` on circuit priority
+- Diagnostics (`diagnostics`): `diagnostics.py` with `async_redact_data()` for credentials
+- Exception translations (`exception-translations`): `strings.json` `exceptions` section for error messages
+- Stale devices (`stale-devices`): `async_remove_config_entry_device` for manual sub-device removal
 
 ---
 
@@ -67,12 +73,12 @@ After simulation removal (§1.1), only `options.py` (171 lines) and `validation.
 
 ### 1.3 Manifest Adjustments
 
-| Change                           | Reason                                  |
-| -------------------------------- | --------------------------------------- |
-| Remove `version`                 | Not used in core integrations           |
-| Remove `issue_tracker`           | Not used in core integrations           |
-| Add `quality_scale: "bronze"`    | Initial submission target               |
-| Add `loggers` array              | List logger names from `span-panel-api` |
+| Change                        | Reason                                  |
+| ----------------------------- | --------------------------------------- |
+| Remove `version`              | Not used in core integrations           |
+| Remove `issue_tracker`        | Not used in core integrations           |
+| Add `quality_scale: "bronze"` | Initial submission target               |
+| Add `loggers` array           | List logger names from `span-panel-api` |
 
 ---
 
@@ -144,29 +150,7 @@ pytest tests/ --cov=custom_components.span_panel --cov-report term-missing
 
 Gold adds 24 rules. These represent a polished, production-quality integration.
 
-### 4.1 Diagnostics
-
-**Rule:** `diagnostics`
-
-Implement `diagnostics.py` with `async_get_config_entry_diagnostics()`. Redact sensitive data (MQTT credentials, tokens, passphrases) using
-`async_redact_data()`.
-
-### 4.2 Entity Category Audit
-
-**Rule:** `entity-category`
-
-Mark diagnostic entities with `EntityCategory.DIAGNOSTIC`:
-
-- Software version
-- DSM state, grid state, run configuration
-- Vendor cloud connectivity
-- Ethernet/WiFi/cellular link status
-
-Mark configuration entities with `EntityCategory.CONFIG`:
-
-- Circuit priority select
-
-### 4.3 Entity Disabled by Default
+### 4.1 Entity Disabled by Default
 
 **Rule:** `entity-disabled-by-default`
 
@@ -177,33 +161,12 @@ Set `_attr_entity_registry_enabled_default = False` on noisy or supplementary en
 - Unmapped circuit backing data sensors
 - Tab attribute sensors
 
-### 4.4 Icon Translations
-
-**Rule:** `icon-translations`
-
-Create `icons.json` defining all entity icons. Remove any `@property` based icon overrides from entity classes. Support state-based icon selection where
-appropriate (e.g., door open vs closed).
-
-### 4.5 Exception Translations
-
-**Rule:** `exception-translations`
-
-All `HomeAssistantError` and `ServiceValidationError` messages must use `translation_domain` and `translation_key` with corresponding entries in `strings.json`.
-
-### 4.6 Entity Translations
-
-**Rule:** `entity-translations`
-
-Ensure all entity names are defined via `translation_key` in `strings.json` rather than hardcoded English strings. Entities with device classes that provide
-automatic names can omit the translation key.
-
-### 4.7 Additional Gold Rules
+### 4.2 Additional Gold Rules
 
 | Rule                       | Action                                                |
 | -------------------------- | ----------------------------------------------------- |
 | `discovery-update-info`    | Update device network info from discovery data        |
 | `dynamic-devices`          | Auto-add entities for circuits appearing after setup  |
-| `stale-devices`            | Remove devices for circuits that disappear            |
 | `repair-issues`            | Use `ir.async_create_issue()` for actionable problems |
 | `docs-data-update`         | Document push streaming data refresh model            |
 | `docs-examples`            | Provide automation examples                           |
@@ -318,7 +281,7 @@ custom_components/span_panel/
 | ------- | ------ | ------------------------------------------------------ |
 | Phase 1 | Large  | Strip ~4000 lines of simulation code                   |
 | Phase 2 | Small  | Dependency transparency, external submissions          |
-| Phase 3 | Small  | Audit unavailability, logging, coverage gaps            |
-| Phase 4 | Medium | Diagnostics, icons.json, entity categories/translations |
+| Phase 3 | Small  | Audit unavailability, logging, coverage gaps           |
+| Phase 4 | Small  | Entity disabled-by-default, discovery, dynamic-devices |
 | Phase 5 | Small  | Library compliance, strict typing                      |
 | Phase 6 | Medium | Docs, branding, validation, PR                         |

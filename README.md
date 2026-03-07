@@ -415,8 +415,8 @@ Assistant's statistics engine. See [Energy Dip Compensation](#energy-dip-compens
 
 **Solution for existing spikes:**
 
-Use **Developer Tools > Statistics** to find and adjust individual statistics entries. Search for the affected sensor
-(e.g., `sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike and use the "Adjust sum" option to correct it.
+Use **Developer Tools > Statistics** to find and adjust individual statistics entries. Search for the affected sensor (e.g.,
+`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike and use the "Adjust sum" option to correct it.
 
 **Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.
 

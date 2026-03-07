@@ -8,6 +8,7 @@ from homeassistant.components.select import SelectEntity, SelectEntityDescriptio
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
@@ -25,8 +26,6 @@ from .helpers import (
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
 )
-
-ICON = "mdi:chevron-down"
 
 # Device types that use "Solar" as the fallback identifier when unnamed.
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
@@ -59,14 +58,13 @@ class SpanPanelSelectEntityDescriptionWrapper:
         self,
         key: str,
         name: str,
-        icon: str,
         options_fn: Callable[[SpanCircuitSnapshot], list[str]] = lambda _: [],
         current_option_fn: Callable[[SpanCircuitSnapshot], str | None] = lambda _: None,
         select_option_fn: Callable[[SpanCircuitSnapshot, str], None] | None = None,
     ) -> None:
         """Initialize the select entity description wrapper."""
         self.entity_description = SelectEntityDescription(
-            key=key, name=name, icon=icon, translation_key=key
+            key=key, name=name, translation_key=key, entity_category=EntityCategory.CONFIG
         )
         self.options_fn = options_fn
         self.current_option_fn = current_option_fn
@@ -76,7 +74,6 @@ class SpanPanelSelectEntityDescriptionWrapper:
 CIRCUIT_PRIORITY_DESCRIPTION: Final = SpanPanelSelectEntityDescriptionWrapper(
     key="circuit_priority",
     name="Circuit Priority",
-    icon=ICON,
     options_fn=lambda _: [e.value for e in CircuitPriority if e != CircuitPriority.UNKNOWN],
     current_option_fn=lambda circuit: CircuitPriority[circuit.priority].value,
 )

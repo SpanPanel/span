@@ -94,23 +94,24 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         if snapshot.serial_number and description.key:
             self._attr_unique_id = self._generate_unique_id(snapshot, description)
 
-            # Check if entity exists for name sync logic
-            entity_registry = er.async_get(data_coordinator.hass)
-            existing_entity_id = entity_registry.async_get_entity_id(
-                "sensor", DOMAIN, self._attr_unique_id
-            )
+            # Entities with translation_key get their name from strings.json.
+            # Only set _attr_name for entities without translation_key (e.g.,
+            # circuit sensors whose names include the circuit name).
+            if not getattr(description, "translation_key", None):
+                entity_registry = er.async_get(data_coordinator.hass)
+                existing_entity_id = entity_registry.async_get_entity_id(
+                    "sensor", DOMAIN, self._attr_unique_id
+                )
 
-            if existing_entity_id:
-                # Entity exists - use panel name for sync
-                self._attr_name = self._generate_panel_name(snapshot, description)
-            else:
-                # Initial install - use flag-based name
-                self._attr_name = self._generate_friendly_name(snapshot, description)
+                if existing_entity_id:
+                    # Entity exists - use panel name for sync
+                    self._attr_name = self._generate_panel_name(snapshot, description)
+                else:
+                    # Initial install - use flag-based name
+                    self._attr_name = self._generate_friendly_name(snapshot, description)
         else:
             # Fallback for entities without unique_id
             self._attr_name = self._generate_friendly_name(snapshot, description)
-
-        self._attr_icon = "mdi:flash"
 
         # Set entity registry defaults if they exist in the description
         if hasattr(description, "entity_registry_enabled_default"):

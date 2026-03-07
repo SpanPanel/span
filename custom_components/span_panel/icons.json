@@ -1,0 +1,132 @@
+{
+  "entity": {
+    "sensor": {
+      "dsm_state": {
+        "default": "mdi:transmission-tower",
+        "state": {
+          "dsm_on_grid": "mdi:transmission-tower",
+          "dsm_off_grid": "mdi:transmission-tower-off"
+        }
+      },
+      "dsm_grid_state": {
+        "default": "mdi:transmission-tower",
+        "state": {
+          "dsm_on_grid": "mdi:transmission-tower",
+          "dsm_off_grid": "mdi:transmission-tower-off"
+        }
+      },
+      "current_run_config": {
+        "default": "mdi:cog",
+        "state": {
+          "panel_on_grid": "mdi:cog",
+          "panel_off_grid": "mdi:cog-off",
+          "panel_backup": "mdi:battery-arrow-up"
+        }
+      },
+      "main_relay_state": {
+        "default": "mdi:electric-switch",
+        "state": {
+          "closed": "mdi:electric-switch-closed",
+          "open": "mdi:electric-switch"
+        }
+      },
+      "grid_forming_entity": {
+        "default": "mdi:lightning-bolt-circle",
+        "state": {
+          "grid": "mdi:transmission-tower",
+          "battery": "mdi:battery",
+          "pv": "mdi:solar-power",
+          "generator": "mdi:engine",
+          "none": "mdi:lightning-bolt-circle"
+        }
+      },
+      "vendor_cloud": {
+        "default": "mdi:cloud",
+        "state": {
+          "connected": "mdi:cloud-check",
+          "unconnected": "mdi:cloud-off-outline"
+        }
+      },
+      "software_version": {
+        "default": "mdi:information"
+      },
+      "instant_grid_power": {
+        "default": "mdi:flash"
+      },
+      "feedthrough_power": {
+        "default": "mdi:flash"
+      },
+      "battery_power": {
+        "default": "mdi:battery-charging"
+      },
+      "pv_power": {
+        "default": "mdi:solar-power"
+      },
+      "site_power": {
+        "default": "mdi:home-lightning-bolt"
+      },
+      "battery_level": {
+        "default": "mdi:battery"
+      },
+      "evse_status": {
+        "default": "mdi:ev-station",
+        "state": {
+          "charging": "mdi:ev-station",
+          "available": "mdi:ev-plug-type2",
+          "faulted": "mdi:alert-circle"
+        }
+      },
+      "evse_advertised_current": {
+        "default": "mdi:current-ac"
+      },
+      "evse_lock_state": {
+        "default": "mdi:lock",
+        "state": {
+          "locked": "mdi:lock",
+          "unlocked": "mdi:lock-open"
+        }
+      }
+    },
+    "binary_sensor": {
+      "door_state": {
+        "default": "mdi:door-closed",
+        "state": {
+          "on": "mdi:door-open",
+          "off": "mdi:door-closed"
+        }
+      },
+      "ethernet_link": {
+        "default": "mdi:ethernet"
+      },
+      "wifi_link": {
+        "default": "mdi:wifi"
+      },
+      "panel_status": {
+        "default": "mdi:lan-connect",
+        "state": {
+          "on": "mdi:lan-connect",
+          "off": "mdi:lan-disconnect"
+        }
+      },
+      "bess_connected": {
+        "default": "mdi:battery-check"
+      },
+      "evse_charging": {
+        "default": "mdi:ev-station"
+      },
+      "evse_ev_connected": {
+        "default": "mdi:ev-plug-type2"
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "default": "mdi:transmission-tower"
+      }
+    },
+    "select": {
+      "circuit_priority": {
+        "default": "mdi:priority-high"
+      }
+    }
+  }
+}

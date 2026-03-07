@@ -12,6 +12,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
@@ -71,8 +72,9 @@ BINARY_SENSORS: tuple[
 ] = (
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_DOOR_STATE,
-        name="Door State",
+        translation_key="door_state",
         device_class=BinarySensorDeviceClass.TAMPER,
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: (
             None
             if s.door_state not in [SYSTEM_DOOR_STATE_CLOSED, SYSTEM_DOOR_STATE_OPEN]
@@ -81,28 +83,32 @@ BINARY_SENSORS: tuple[
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_ETHERNET_LINK,
-        name="Ethernet Link",
+        translation_key="ethernet_link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.eth0_link,
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_WIFI_LINK,
-        name="Wi-Fi Link",
+        translation_key="wifi_link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.wlan_link,
     ),
     SpanPanelBinarySensorEntityDescription(
         key=PANEL_STATUS,
-        name="Panel Status",
+        translation_key="panel_status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: True,  # Placeholder - actual logic handled in sensor class
     ),
 )
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
-    name="BESS Connected",
+    translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
     value_fn=lambda s: s.battery.connected,
 )
 
@@ -111,8 +117,6 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
     SpanPanelEntity, BinarySensorEntity
 ):
     """Binary Sensor status entity."""
-
-    _attr_icon: str | None = "mdi:flash"
 
     def __init__(
         self,
@@ -132,7 +136,6 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         )
 
         self._attr_device_info = self._build_device_info(data_coordinator, snapshot)
-        self._attr_name = f"{description.name}" or ""
 
         self._attr_unique_id = self._construct_binary_sensor_unique_id(
             data_coordinator, snapshot, description.key

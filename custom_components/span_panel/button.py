@@ -26,8 +26,6 @@ PARALLEL_UPDATES = 1
 
 GFE_OVERRIDE_DESCRIPTION: Final = ButtonEntityDescription(
     key="gfe_override",
-    name="GFE Override: Grid Connected",
-    icon="mdi:transmission-tower",
     translation_key="gfe_override",
 )
 

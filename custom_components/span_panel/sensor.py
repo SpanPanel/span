@@ -70,8 +70,6 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 0
 
-ICON = "mdi:flash"
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
