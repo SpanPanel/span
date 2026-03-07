@@ -66,21 +66,7 @@ The `export_synthetic_config` service should also be removed.
 
 These services can continue to live in a companion custom component for users who need them.
 
-### 1.3 Remove Custom Entity Naming Pattern System
-
-Core integrations use `translation_key` + `strings.json` for entity names. Users customize names via the HA entity registry UI. The custom naming pattern system
-(friendly names vs circuit numbers vs legacy) with bulk migration is not how core integrations work.
-
-Remove:
-
-- `entity_id_naming_patterns.py` (995 lines)
-- Naming pattern options (`USE_DEVICE_PREFIX`, `USE_CIRCUIT_NUMBERS`)
-- `EntityIdMigrationManager` and all naming migration logic
-- Associated test files
-
-Replace with standard `translation_key` based naming on all entities.
-
-### 1.4 Flatten Directory Structure
+### 1.3 Flatten Directory Structure
 
 Core integrations use a flat directory structure with no subdirectories for platform code. Restructure:
 
@@ -95,7 +81,7 @@ Core integrations use a flat directory structure with no subdirectories for plat
 | `services/`           | Remove (see 1.2)             |
 | `simulation_configs/` | Remove (see 1.1)             |
 
-### 1.5 Manifest Adjustments
+### 1.4 Manifest Adjustments
 
 | Change                           | Reason                                  |
 | -------------------------------- | --------------------------------------- |
@@ -443,7 +429,6 @@ custom_components/span_panel/
 ├── simulation_generator.py        # Simulation
 ├── simulation_utils.py            # Simulation
 ├── simulation_configs/            # Simulation
-├── entity_id_naming_patterns.py   # Custom naming
 ├── entity_summary.py              # Naming support
 ├── migration.py                   # Naming migration
 ├── migration_utils.py             # Naming migration
