@@ -47,45 +47,19 @@ Remove all simulation-related code paths and files:
 - Simulation-related constants (`CONF_SIMULATION_CONFIG`, `CONF_SIMULATION_START_TIME`, `CONF_SIMULATION_OFFLINE_MINUTES`)
 - Simulation-related options in `options.py`
 
-### 1.2 Flatten Directory Structure
+### 1.2 Flatten Remaining Directory Structure
 
-Core integrations use a flat directory structure — no subdirectory packages for platform code. The `sensors/` package and `config_flow_utils/` package must be
-unwrapped into root-level files. Inlining everything into `sensor.py` would create a ~2000-line monolith, so we preserve modularity via flat files with clear
-naming.
-
-#### Sensor modules
-
-Unwrap the `sensors/` package into root-level files:
-
-| Current               | Target              | Rationale                                                       |
-| --------------------- | ------------------- | --------------------------------------------------------------- |
-| `sensors/base.py`     | `sensor_base.py`    | Sensor-specific bases (energy restore, name sync) — 767 lines   |
-| `sensors/panel.py`    | `sensor_panel.py`   | Panel-level sensor entities — 323 lines                         |
-| `sensors/circuit.py`  | `sensor_circuit.py` | Circuit sensor entities — 398 lines                             |
-| `sensors/evse.py`     | `sensor_evse.py`    | EVSE sensor entities — 81 lines                                 |
-| `sensors/factory.py`  | Merge into `sensor.py` | Platform setup + factory is natural together (~400 lines combined) |
-| `sensors/__init__.py` | Remove              | Re-export shim no longer needed with flat imports               |
+The `sensors/` package has been flattened into root-level modules (`sensor_base.py`, `sensor_panel.py`, `sensor_circuit.py`, `sensor_evse.py`) and factory
+logic merged into `sensor.py`. Capability detection functions (`has_bess`, `has_pv`, etc.) moved to `helpers.py`. Remaining work:
 
 #### Shared base entity
 
 Create `entity.py` containing `SpanPanelEntity(CoordinatorEntity)` — the shared base class for all platforms (sensor, binary_sensor, switch, select, button).
-Handles coordinator binding, device info construction, and common availability logic. This satisfies the `common-modules` Bronze rule (§2.3) and is done here
-because it is a prerequisite for the sensor flattening (sensor base classes extend it).
-
-#### Utility relocation
-
-Move `has_bess()` from `sensors/factory.py` to `helpers.py` — it is a capability check used by `binary_sensor.py` and `button.py`, not a sensor factory
-concern.
+Handles coordinator binding, device info construction, and common availability logic. This satisfies the `common-modules` Bronze rule (§2.3).
 
 #### Config flow utils
 
 After simulation removal (§1.1), only `options.py` (171 lines) and `validation.py` (125 lines) remain (~296 lines total). Inline into `config_flow.py`.
-
-#### Other removals
-
-| Current               | Action            |
-| --------------------- | ----------------- |
-| `simulation_configs/` | Remove (see §1.1) |
 
 ### 1.3 Manifest Adjustments
 
@@ -440,14 +414,6 @@ custom_components/span_panel/
 │   ├── simulation.py               # Simulation (§1.1)
 │   ├── options.py                   # Inline into config_flow.py
 │   └── validation.py               # Inline into config_flow.py
-├── sensors/                        # Flatten to root-level files (§1.2)
-│   ├── __init__.py                  # Remove (re-export shim)
-│   ├── base.py                      # → sensor_base.py
-│   ├── circuit.py                   # → sensor_circuit.py
-│   ├── evse.py                      # → sensor_evse.py
-│   ├── factory.py                   # → merge into sensor.py
-│   ├── panel.py                     # → sensor_panel.py
-│   └── solar.py                     # Remove if dead
 └── translations/                   # Non-English (HA handles translations)
     ├── es.json
     ├── fr.json
