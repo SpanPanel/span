@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 import shutil
 from time import time
-from typing import Any
+from typing import Any, cast
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
@@ -1113,7 +1113,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                     loaded_yaml = await self.hass.async_add_executor_job(load_yaml_file)
                     # Use DynamicSimulationEngine internal validation
-                    config = SimulationConfig(**loaded_yaml)
+                    config: SimulationConfig = cast(SimulationConfig, loaded_yaml)
                     engine = DynamicSimulationEngine(config_data=config)
                     await engine.initialize_async()
 
