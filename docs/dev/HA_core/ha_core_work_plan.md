@@ -10,9 +10,9 @@ against HA's [Integration Quality Scale][quality-scale] and [developer documenta
 
 ## Current Alignment
 
-The integration already satisfies several core requirements:
+The integration already satisfies these core requirements:
 
-- Config flow with zeroconf discovery and reauth
+- Config flow with zeroconf discovery, reauth, and reconfigure
 - Coordinator pattern in `coordinator.py`
 - Consistent entity unique IDs
 - `has_entity_name = True` on all entities (via `SpanPanelEntity` base)
@@ -21,7 +21,7 @@ The integration already satisfies several core requirements:
 - Translations in `strings.json`
 - Strict typing (mypy strict, pyright)
 - Config version migration (v1 through v5)
-- Good test coverage (41 test files)
+- Good test coverage (41 test files, 267 tests)
 - Typed `runtime_data` (`SpanPanelRuntimeData` / `SpanPanelConfigEntry`)
 - `PARALLEL_UPDATES` on all platforms
 - `entity.py` shared base class (`common-modules`)
@@ -33,6 +33,9 @@ The integration already satisfies several core requirements:
 - Test before setup (`test-before-setup`): `ConfigEntryNotReady` / `ConfigEntryAuthFailed` raised
 - Unique config entry (`unique-config-entry`): serial-based unique ID with abort on duplicate
 - Reconfiguration flow (`reconfiguration-flow`): host update with serial number mismatch guard
+- Config entry unloading (`config-entry-unloading`): MQTT disconnect, streaming cleanup, coordinator shutdown
+- Reauthentication flow (`reauthentication-flow`): v2 passphrase and proximity reauth tested
+- Device classes applied (`entity-device-class`): power, energy, battery, current, connectivity, tamper, plug, charging
 
 ---
 
@@ -68,15 +71,12 @@ After simulation removal (§1.1), only `options.py` (171 lines) and `validation.
 | -------------------------------- | --------------------------------------- |
 | Remove `version`                 | Not used in core integrations           |
 | Remove `issue_tracker`           | Not used in core integrations           |
-| Add `integration_type: "device"` | Required field                          |
 | Add `quality_scale: "bronze"`    | Initial submission target               |
 | Add `loggers` array              | List logger names from `span-panel-api` |
 
 ---
 
-## Phase 2: Architectural Alignment (Bronze)
-
-These changes bring the integration into compliance with the 19 Bronze-tier rules required for all new core integrations.
+## Phase 2: Remaining Bronze / External Items
 
 ### 2.1 Ensure Dependency Transparency
 
@@ -91,23 +91,15 @@ The `span-panel-api` library must satisfy all four requirements:
 
 Additionally for Platinum (`strict-typing`): the library must include a `py.typed` marker file (PEP 561).
 
-### 2.2 Verify Config Flow Test Coverage
+### 2.2 External Submissions
 
-**Rule:** `config-flow-test-coverage`
-
-v2 config flow paths are fully tested (33 tests). Remaining uncovered lines are
-simulation and v1 code paths that will be removed in Phase 1. Coverage will reach
-100% after simulation stripping.
-
-### 2.3 Verify Remaining Bronze Rules
-
-| Rule                             | Action                                                                                  |
-| -------------------------------- | --------------------------------------------------------------------------------------- |
-| `brands`                         | Submit branding to `home-assistant/brands` repository                                   |
-| `docs-actions`                   | Document remaining service actions                                                      |
-| `docs-high-level-description`    | Write integration overview for HA docs site                                             |
-| `docs-installation-instructions` | Write setup guide                                                                       |
-| `docs-removal-instructions`      | Write uninstall steps                                                                   |
+| Rule                             | Action                                                |
+| -------------------------------- | ----------------------------------------------------- |
+| `brands`                         | Submit branding to `home-assistant/brands` repository |
+| `docs-actions`                   | Document remaining service actions                    |
+| `docs-high-level-description`    | Write integration overview for HA docs site           |
+| `docs-installation-instructions` | Write setup guide                                     |
+| `docs-removal-instructions`      | Write uninstall steps                                 |
 
 ---
 
@@ -115,38 +107,21 @@ simulation and v1 code paths that will be removed in Phase 1. Coverage will reac
 
 Silver adds 10 rules on top of Bronze. These improve reliability and maintainability.
 
-### 3.1 Config Entry Unloading
-
-**Rule:** `config-entry-unloading`
-
-Audit `async_unload_entry` to confirm all resources are cleaned up:
-
-- MQTT client disconnection and cleanup
-- Streaming callback unregistration
-- Coordinator shutdown
-- Platform unloading
-
-### 3.2 Reauthentication Flow
-
-**Rule:** `reauthentication-flow`
-
-Already implemented. Verify complete coverage of all auth failure scenarios and that credentials are validated before saving.
-
-### 3.3 Entity Unavailability
+### 3.1 Entity Unavailability
 
 **Rule:** `entity-unavailable`
 
 Verify coordinator-based entities correctly report unavailable when data fetch fails. The existing offline handling logic should cover this but needs an audit
 post-simplification.
 
-### 3.4 Unavailability Logging
+### 3.2 Unavailability Logging
 
 **Rule:** `log-when-unavailable`
 
 Log exactly once at `info` level when the panel becomes unreachable, and exactly once when it comes back online. If the coordinator's built-in `UpdateFailed`
 handling is used, this is automatic.
 
-### 3.5 Test Coverage
+### 3.3 Test Coverage
 
 **Rule:** `test-coverage`
 
@@ -156,7 +131,7 @@ Achieve >95% test coverage across all integration modules. Measure with:
 pytest tests/ --cov=custom_components.span_panel --cov-report term-missing
 ```
 
-### 3.6 Documentation
+### 3.4 Documentation
 
 **Rules:** `docs-configuration-parameters`, `docs-installation-parameters`, `integration-owner`
 
@@ -176,22 +151,7 @@ Gold adds 24 rules. These represent a polished, production-quality integration.
 Implement `diagnostics.py` with `async_get_config_entry_diagnostics()`. Redact sensitive data (MQTT credentials, tokens, passphrases) using
 `async_redact_data()`.
 
-### 4.2 Entity Device Class Audit
-
-**Rule:** `entity-device-class`
-
-Apply `_attr_device_class` on every entity where a matching device class exists. Key mappings:
-
-| Entity               | Device Class                           |
-| -------------------- | -------------------------------------- |
-| Power sensors        | `SensorDeviceClass.POWER`              |
-| Energy sensors       | `SensorDeviceClass.ENERGY`             |
-| Door state           | `BinarySensorDeviceClass.DOOR`         |
-| Connectivity sensors | `BinarySensorDeviceClass.CONNECTIVITY` |
-| Battery SOC          | `SensorDeviceClass.BATTERY`            |
-| EV charger current   | `SensorDeviceClass.CURRENT`            |
-
-### 4.3 Entity Category Audit
+### 4.2 Entity Category Audit
 
 **Rule:** `entity-category`
 
@@ -206,7 +166,7 @@ Mark configuration entities with `EntityCategory.CONFIG`:
 
 - Circuit priority select
 
-### 4.4 Entity Disabled by Default
+### 4.3 Entity Disabled by Default
 
 **Rule:** `entity-disabled-by-default`
 
@@ -217,27 +177,27 @@ Set `_attr_entity_registry_enabled_default = False` on noisy or supplementary en
 - Unmapped circuit backing data sensors
 - Tab attribute sensors
 
-### 4.5 Icon Translations
+### 4.4 Icon Translations
 
 **Rule:** `icon-translations`
 
 Create `icons.json` defining all entity icons. Remove any `@property` based icon overrides from entity classes. Support state-based icon selection where
 appropriate (e.g., door open vs closed).
 
-### 4.6 Exception Translations
+### 4.5 Exception Translations
 
 **Rule:** `exception-translations`
 
 All `HomeAssistantError` and `ServiceValidationError` messages must use `translation_domain` and `translation_key` with corresponding entries in `strings.json`.
 
-### 4.7 Entity Translations
+### 4.6 Entity Translations
 
 **Rule:** `entity-translations`
 
 Ensure all entity names are defined via `translation_key` in `strings.json` rather than hardcoded English strings. Entities with device classes that provide
 automatic names can omit the translation key.
 
-### 4.8 Additional Gold Rules
+### 4.7 Additional Gold Rules
 
 | Rule                       | Action                                                |
 | -------------------------- | ----------------------------------------------------- |
@@ -354,11 +314,11 @@ custom_components/span_panel/
 
 ## Estimated Scope
 
-| Phase   | Effort | Description                                             |
-| ------- | ------ | ------------------------------------------------------- |
-| Phase 1 | Large  | Strip ~4000 lines of simulation code                    |
-| Phase 2 | Small  | Dependency transparency, config flow tests, Bronze audit |
-| Phase 3 | Small  | Audit and fix coverage gaps                             |
-| Phase 4 | Medium | Diagnostics, reconfigure flow, icons.json, translations |
-| Phase 5 | Small  | Library compliance, strict typing                       |
-| Phase 6 | Medium | Docs, branding, validation, PR                          |
+| Phase   | Effort | Description                                            |
+| ------- | ------ | ------------------------------------------------------ |
+| Phase 1 | Large  | Strip ~4000 lines of simulation code                   |
+| Phase 2 | Small  | Dependency transparency, external submissions          |
+| Phase 3 | Small  | Audit unavailability, logging, coverage gaps            |
+| Phase 4 | Medium | Diagnostics, icons.json, entity categories/translations |
+| Phase 5 | Small  | Library compliance, strict typing                      |
+| Phase 6 | Medium | Docs, branding, validation, PR                         |
