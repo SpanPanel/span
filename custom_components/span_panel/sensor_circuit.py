@@ -198,7 +198,6 @@ class SpanCircuitPowerSensor(
         voltage = construct_voltage_attribute(circuit) or 240
         attributes["voltage"] = voltage
 
-        attributes["device_type"] = getattr(circuit, "device_type", "circuit") or "circuit"
         attributes["always_on"] = circuit.always_on
         attributes["relay_state"] = circuit.relay_state
         attributes["relay_requester"] = circuit.relay_requester

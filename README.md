@@ -207,7 +207,6 @@ Applies to Main Meter and Feed Through energy sensors.
 | ----------------- | ------ | ----------------------------------------------------- |
 | `tabs`            | string | Breaker slot position(s)                              |
 | `voltage`         | string | 120 or 240 (derived from tab count)                   |
-| `device_type`     | string | "circuit", "pv", or "evse"                            |
 | `always_on`       | bool   | Whether circuit is always-on                          |
 | `relay_state`     | string | OPEN / CLOSED / UNKNOWN                               |
 | `relay_requester` | string | Who requested relay state                             |

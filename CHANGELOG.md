@@ -62,6 +62,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Circuit Shed Priority select — controls off-grid shedding (NEVER / SOC_THRESHOLD / OFF_GRID)
 - Panel size and Wi-Fi SSID as software version attributes
 
+### Removed
+
+- `device_type` attribute from circuit power sensors — redundant with the entity's own device classification
+
 ### Improvements
 
 - `DSM State` — multi-signal heuristic deriving grid connectivity from battery grid-state, dominant power source, upstream lugs power, and power-flows grid
