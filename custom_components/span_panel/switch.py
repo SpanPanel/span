@@ -1,5 +1,6 @@
 """Control switches."""
 
+from collections.abc import Mapping
 import logging
 from typing import Any
 
@@ -20,6 +21,8 @@ from .entity import SpanPanelEntity
 from .helpers import (
     build_switch_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
+    construct_tabs_attribute,
+    construct_voltage_attribute,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -155,6 +158,27 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         if getattr(self.coordinator, "panel_offline", False):
             return False
         return super().available
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        """Return panel position attributes for this circuit."""
+        if not self.coordinator.data:
+            return None
+
+        circuit = self.coordinator.data.circuits.get(self._circuit_id)
+        if not circuit:
+            return None
+
+        attributes: dict[str, Any] = {}
+
+        tabs_result = construct_tabs_attribute(circuit)
+        if tabs_result is not None:
+            attributes["tabs"] = tabs_result
+
+        voltage = construct_voltage_attribute(circuit) or 240
+        attributes["voltage"] = voltage
+
+        return attributes if attributes else None
 
     def _update_is_on(self) -> None:
         """Update the is_on state based on the circuit state."""

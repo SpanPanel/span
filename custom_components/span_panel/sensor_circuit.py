@@ -178,9 +178,9 @@ class SpanCircuitPowerSensor(
         return circuit
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Return additional state attributes."""
-        if not self.coordinator.last_update_success or not self.coordinator.data:
+        if not self.coordinator.data:
             return None
 
         circuit = self.coordinator.data.circuits.get(self.circuit_id)
@@ -189,17 +189,16 @@ class SpanCircuitPowerSensor(
 
         attributes: dict[str, Any] = {}
 
-        # Add tabs attribute
+        # Panel position (tabs)
         tabs_result = construct_tabs_attribute(circuit)
         if tabs_result is not None:
-            attributes["tabs"] = str(tabs_result)
+            attributes["tabs"] = tabs_result
 
-        # Add voltage attribute
+        # Voltage derived from tab count
         voltage = construct_voltage_attribute(circuit) or 240
-        attributes["voltage"] = str(voltage)
+        attributes["voltage"] = voltage
 
-        device_type = getattr(circuit, "device_type", "circuit") or "circuit"
-        attributes["device_type"] = device_type
+        attributes["device_type"] = getattr(circuit, "device_type", "circuit") or "circuit"
         attributes["always_on"] = circuit.always_on
         attributes["relay_state"] = circuit.relay_state
         attributes["relay_requester"] = circuit.relay_requester
@@ -303,7 +302,7 @@ class SpanCircuitEnergySensor(
         return snapshot.circuits[self.circuit_id]
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any] | None:
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
         """Return additional state attributes including grace period and circuit info."""
         # Get base grace period attributes
         base_attributes = super().extra_state_attributes or {}
@@ -311,17 +310,15 @@ class SpanCircuitEnergySensor(
 
         # Add circuit-specific attributes if we have data
         if self.coordinator.data:
-            snapshot = self.coordinator.data
-            circuit = snapshot.circuits.get(self.circuit_id)
+            circuit = self.coordinator.data.circuits.get(self.circuit_id)
 
             if circuit:
-                # Add tabs and voltage attributes
                 tabs = construct_tabs_attribute(circuit)
                 if tabs is not None:
                     attributes["tabs"] = tabs
 
                 voltage = construct_voltage_attribute(circuit) or 240
-                attributes["voltage"] = str(voltage)
+                attributes["voltage"] = voltage
 
         return attributes if attributes else None
 

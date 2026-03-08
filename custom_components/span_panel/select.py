@@ -1,8 +1,8 @@
 """Select entity for the Span Panel."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 import logging
-from typing import Final
+from typing import Any, Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
@@ -25,6 +25,8 @@ from .helpers import (
     async_create_span_notification,
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
+    construct_tabs_attribute,
+    construct_voltage_attribute,
 )
 
 # Device types that use "Solar" as the fallback identifier when unnamed.
@@ -210,6 +212,27 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         if getattr(self.coordinator, "panel_offline", False):
             return False
         return super().available
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        """Return panel position attributes for this circuit."""
+        if not self.coordinator.data:
+            return None
+
+        circuit = self.coordinator.data.circuits.get(self.id)
+        if not circuit:
+            return None
+
+        attributes: dict[str, Any] = {}
+
+        tabs_result = construct_tabs_attribute(circuit)
+        if tabs_result is not None:
+            attributes["tabs"] = tabs_result
+
+        voltage = construct_voltage_attribute(circuit) or 240
+        attributes["voltage"] = voltage
+
+        return attributes if attributes else None
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

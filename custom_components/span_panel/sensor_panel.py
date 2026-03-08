@@ -96,7 +96,7 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes for the software version sensor."""
-        if not self.coordinator.last_update_success or not self.coordinator.data:
+        if not self.coordinator.data:
             return None
 
         snapshot = self.coordinator.data
@@ -191,7 +191,7 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes including amperage calculation."""
-        if not self.coordinator.last_update_success or not self.coordinator.data:
+        if not self.coordinator.data:
             return None
 
         attributes: dict[str, Any] = {}
