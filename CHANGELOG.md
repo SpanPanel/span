@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## [2.0.1] - 3/2026
 
 ⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on the latest 1.3.x version BEFORE upgrading to
-2.0.x** ⚠️
+2.0. This upgrade migrates to the SPAN official eBus APIx** ⚠️
 
 ### Breaking Changes
 
