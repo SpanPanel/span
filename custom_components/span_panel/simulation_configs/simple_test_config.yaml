@@ -14,7 +14,7 @@ circuit_templates:
       typical_power: 25.0
       power_variation: 0.1
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   outlets:
     energy_profile:
@@ -23,7 +23,7 @@ circuit_templates:
       typical_power: 150.0
       power_variation: 0.3
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   hvac:
     energy_profile:
@@ -32,7 +32,7 @@ circuit_templates:
       typical_power: 2000.0
       power_variation: 0.15
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
   solar:
     energy_profile:
@@ -41,7 +41,7 @@ circuit_templates:
       typical_power: -2500.0
       power_variation: 0.2
     relay_behavior: "non_controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
 circuits:
   - id: "living_room_lights"

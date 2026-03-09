@@ -1,58 +1,72 @@
 """Control switches."""
 
+from collections.abc import Mapping
 import logging
-from typing import Any, Literal
+import time
+from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from custom_components.span_panel.span_panel_circuit import SpanPanelCircuit
-
+from . import SpanPanelConfigEntry
 from .const import (
-    COORDINATOR,
     DOMAIN,
     USE_CIRCUIT_NUMBERS,
     CircuitRelayState,
 )
 from .coordinator import SpanPanelCoordinator
+from .entity import SpanPanelEntity
 from .helpers import (
     build_switch_unique_id_for_entry,
+    construct_circuit_identifier_from_tabs,
+    construct_tabs_attribute,
+    construct_voltage_attribute,
 )
-from .span_panel import SpanPanel
-from .util import panel_to_device_info
-
-ICON: Literal["mdi:toggle-switch"] = "mdi:toggle-switch"
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 1
 
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
 
+# Device types that use "Solar" as the fallback identifier when unnamed.
+_SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
 
-class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEntity):
+# How long (seconds) to hold an optimistic state before allowing the coordinator
+# to overwrite it.  This prevents the UI from bouncing back to stale state when
+# the panel has not yet processed a relay command.
+_OPTIMISTIC_HOLD_SECONDS: float = 10.0
+
+
+def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
+    """Return a descriptive identifier for an unnamed circuit switch."""
+    if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
+        return "Solar"
+    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+
+
+class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     """Represent a switch entity."""
-
-    _attr_has_entity_name = True
 
     def __init__(
         self, coordinator: SpanPanelCoordinator, circuit_id: str, name: str, device_name: str
     ) -> None:
         """Initialize the values."""
-        span_panel: SpanPanel = coordinator.data
+        snapshot: SpanPanelSnapshot = coordinator.data
 
-        circuit = span_panel.circuits.get(circuit_id)
+        circuit = snapshot.circuits.get(circuit_id)
         if not circuit:
             raise ValueError(f"Circuit {circuit_id} not found")
 
         self._circuit_id: str = circuit_id
         self._device_name = device_name
-        self._attr_icon = "mdi:toggle-switch"
-        self._attr_unique_id = self._construct_switch_unique_id(coordinator, span_panel, circuit_id)
-        self._attr_device_info = panel_to_device_info(span_panel, device_name)
+        self._attr_unique_id = self._construct_switch_unique_id(coordinator, snapshot, circuit_id)
+
+        self._attr_device_info = self._build_device_info(coordinator, snapshot)
 
         # Check if entity already exists in registry
         entity_registry = er.async_get(coordinator.hass)
@@ -62,42 +76,36 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
 
         if existing_entity_id:
             # Entity exists - always use panel name for sync
-            # Return None when panel name is None to let HA use default behavior
-            if circuit.name is None:
-                self._attr_name = None
-            else:
+            if circuit.name:
                 self._attr_name = f"{circuit.name} Breaker"
+            else:
+                fallback = _unnamed_switch_fallback(circuit, circuit_id)
+                self._attr_name = f"{fallback} Breaker"
         else:
             # Initial install - use flag-based name for entity_id generation
             use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
             if use_circuit_numbers:
-                # Use circuit number format: "Circuit 15 Breaker"
-                if circuit.tabs and len(circuit.tabs) == 2:
-                    sorted_tabs = sorted(circuit.tabs)
-                    circuit_identifier = f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
-                elif circuit.tabs and len(circuit.tabs) == 1:
-                    circuit_identifier = f"Circuit {circuit.tabs[0]}"
-                else:
-                    circuit_identifier = f"Circuit {circuit_id}"
+                circuit_identifier = construct_circuit_identifier_from_tabs(
+                    circuit.tabs, circuit_id
+                )
                 self._attr_name = f"{circuit_identifier} Breaker"
+            elif name:
+                self._attr_name = f"{name} Breaker"
             else:
-                # Use friendly name format: "Kitchen Outlets Breaker"
-                # Return None when panel name is None to let HA use default behavior
-                if name is None:
-                    self._attr_name = None
-                else:
-                    self._attr_name = f"{name} Breaker"
+                # v1 behavior: None lets HA handle default naming
+                self._attr_name = None
 
         super().__init__(coordinator)
 
+        # Optimistic state: set when the user toggles the switch so that
+        # coordinator refreshes don't overwrite it until confirmed or timed out.
+        self._optimistic_state: bool | None = None
+        self._optimistic_set_at: float = 0.0
+
         self._update_is_on()
 
-        # Use standard coordinator pattern - entities will update automatically
-        # when coordinator data changes
-
         # Store initial circuit name for change detection in auto-sync
-        # Use sentinel to distinguish "never synced" from "circuit name is None"
         if not existing_entity_id:
             self._previous_circuit_name: str | None | object = _NAME_UNSET
             _LOGGER.info("Switch entity not in registry, will sync on first update")
@@ -109,19 +117,16 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up when entity is removed."""
-        # Call parent cleanup
         await super().async_will_remove_from_hass()
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # Check for circuit name changes
-        span_panel: SpanPanel = self.coordinator.data
-        circuit = span_panel.circuits.get(self._circuit_id)
+        snapshot: SpanPanelSnapshot = self.coordinator.data
+        circuit = snapshot.circuits.get(self._circuit_id)
         if circuit:
             current_circuit_name = circuit.name
 
             # Check if user has customized the name in HA registry
-            # If so, skip sync - user's customization takes precedence
             user_has_override = False
             if self.entity_id:
                 entity_registry = er.async_get(self.hass)
@@ -134,17 +139,13 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
                     )
 
             if user_has_override:
-                # Track panel name for future comparisons but don't trigger reload
                 self._previous_circuit_name = current_circuit_name
             elif self._previous_circuit_name is _NAME_UNSET:
-                # First update - sync to panel name
                 _LOGGER.info(
                     "First update: syncing entity name to panel name '%s' for switch, requesting reload",
                     current_circuit_name,
                 )
-                # Update stored previous name for next comparison
                 self._previous_circuit_name = current_circuit_name
-                # Request integration reload to persist name change
                 self.coordinator.request_reload()
             elif current_circuit_name != self._previous_circuit_name:
                 _LOGGER.info(
@@ -153,11 +154,7 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
                     self._previous_circuit_name,
                     current_circuit_name,
                 )
-
-                # Update stored previous name for next comparison
                 self._previous_circuit_name = current_circuit_name
-
-                # Request integration reload for next update cycle
                 self.coordinator.request_reload()
 
         self._update_is_on()
@@ -173,22 +170,68 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
             return False
         return super().available
 
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        """Return panel position attributes for this circuit."""
+        if not self.coordinator.data:
+            return None
+
+        circuit = self.coordinator.data.circuits.get(self._circuit_id)
+        if not circuit:
+            return None
+
+        attributes: dict[str, Any] = {}
+
+        tabs_result = construct_tabs_attribute(circuit)
+        if tabs_result is not None:
+            attributes["tabs"] = tabs_result
+
+        voltage = construct_voltage_attribute(circuit) or 240
+        attributes["voltage"] = voltage
+
+        return attributes if attributes else None
+
     def _update_is_on(self) -> None:
-        """Update the is_on state based on the circuit state."""
-        span_panel: SpanPanel = self.coordinator.data
-        # Get atomic snapshot of circuits data
-        circuits: dict[str, SpanPanelCircuit] = span_panel.circuits
-        circuit: SpanPanelCircuit | None = circuits.get(self._circuit_id)
-        if circuit:
-            # Use copy to ensure atomic state
-            circuit = circuit.copy()
-            self._attr_is_on = circuit.relay_state == CircuitRelayState.CLOSED.name
-        else:
+        """Update the is_on state based on the circuit state.
+
+        When an optimistic state is active (user recently toggled the switch),
+        we keep using it until the panel confirms the expected state or the
+        hold period expires.  This eliminates the visible bounce caused by
+        a coordinator refresh returning stale data before the relay settles.
+        """
+        snapshot: SpanPanelSnapshot = self.coordinator.data
+        circuit = snapshot.circuits.get(self._circuit_id)
+        if not circuit:
+            self._optimistic_state = None
             self._attr_is_on = None
+            return
+
+        actual_is_on = circuit.relay_state == CircuitRelayState.CLOSED.name
+
+        if self._optimistic_state is not None:
+            elapsed = time.monotonic() - self._optimistic_set_at
+            if actual_is_on == self._optimistic_state:
+                # Panel confirmed the expected state — clear the hold.
+                self._optimistic_state = None
+                self._attr_is_on = actual_is_on
+            elif elapsed < _OPTIMISTIC_HOLD_SECONDS:
+                # Still within the hold window — keep the optimistic value.
+                self._attr_is_on = self._optimistic_state
+            else:
+                # Hold expired and the panel never confirmed — accept reality.
+                _LOGGER.debug(
+                    "Optimistic hold expired for circuit %s; expected %s, actual %s",
+                    self._circuit_id,
+                    self._optimistic_state,
+                    actual_is_on,
+                )
+                self._optimistic_state = None
+                self._attr_is_on = actual_is_on
+        else:
+            self._attr_is_on = actual_is_on
 
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-
         self.hass.create_task(self.async_turn_on(**kwargs))
 
     def turn_off(self, **kwargs: Any) -> None:
@@ -197,74 +240,73 @@ class SpanPanelCircuitsSwitch(CoordinatorEntity[SpanPanelCoordinator], SwitchEnt
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        span_panel: SpanPanel = self.coordinator.data
-        circuits: dict[str, SpanPanelCircuit] = (
-            span_panel.circuits
-        )  # Get atomic snapshot of circuits
-        if self._circuit_id in circuits:
-            # Create a copy of the circuit for the operation
-            curr_circuit: SpanPanelCircuit = circuits[self._circuit_id].copy()
-            # Perform the state change
-            await span_panel.api.set_relay(curr_circuit, CircuitRelayState.CLOSED)
-            # Optimistically update local state to prevent UI bouncing
-            self._attr_is_on = True
-            if self.hass is not None:
-                self.async_write_ha_state()
-            # Request refresh to get the actual new state from panel
-            await self.coordinator.async_request_refresh()
+        client = self.coordinator.client
+        if not hasattr(client, "set_circuit_relay"):
+            _LOGGER.warning("Circuit relay control not available in simulation mode")
+            return
+
+        await client.set_circuit_relay(self._circuit_id, "CLOSED")
+        self._set_optimistic_state(True)
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        span_panel: SpanPanel = self.coordinator.data
-        circuits: dict[str, SpanPanelCircuit] = (
-            span_panel.circuits
-        )  # Get atomic snapshot of circuits
-        if self._circuit_id in circuits:
-            # Create a copy of the circuit for the operation
-            curr_circuit: SpanPanelCircuit = circuits[self._circuit_id].copy()
-            # Perform the state change
-            await span_panel.api.set_relay(curr_circuit, CircuitRelayState.OPEN)
-            # Optimistically update local state to prevent UI bouncing
-            self._attr_is_on = False
-            # Only write state if hass is available
-            if self.hass is not None:
-                self.async_write_ha_state()
-            # Request refresh to get the actual new state from panel
-            await self.coordinator.async_request_refresh()
+        client = self.coordinator.client
+        if not hasattr(client, "set_circuit_relay"):
+            _LOGGER.warning("Circuit relay control not available in simulation mode")
+            return
+
+        await client.set_circuit_relay(self._circuit_id, "OPEN")
+        self._set_optimistic_state(False)
+        await self.coordinator.async_request_refresh()
+
+    def _set_optimistic_state(self, target: bool) -> None:
+        """Set the optimistic state and immediately push it to HA."""
+        self._optimistic_state = target
+        self._optimistic_set_at = time.monotonic()
+        self._attr_is_on = target
+        if self.hass is not None:
+            self.async_write_ha_state()
 
     def _construct_switch_unique_id(
         self,
         coordinator: SpanPanelCoordinator,
-        span_panel: SpanPanel,
+        snapshot: SpanPanelSnapshot,
         circuit_id: str,
     ) -> str:
         """Construct unique ID for switch entities."""
         return build_switch_unique_id_for_entry(
-            coordinator, span_panel, circuit_id, self._device_name
+            coordinator, snapshot, circuit_id, self._device_name
         )
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    config_entry: SpanPanelConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up sensor platform."""
 
-    data: dict[str, Any] = hass.data[DOMAIN][config_entry.entry_id]
-
-    coordinator: SpanPanelCoordinator = data[COORDINATOR]
-    span_panel: SpanPanel = coordinator.data
+    coordinator = config_entry.runtime_data.coordinator
+    snapshot: SpanPanelSnapshot = coordinator.data
 
     # Get device name from config entry data
     _device_name = config_entry.data.get("device_name", config_entry.title)
 
     entities: list[SpanPanelCircuitsSwitch] = []
 
-    for circuit_id, circuit_data in span_panel.circuits.items():
-        if circuit_data.is_user_controllable:
-            entities.append(
-                SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name, _device_name)
-            )
+    for circuit_id, circuit_data in snapshot.circuits.items():
+        if not circuit_data.is_user_controllable:
+            continue
+        # PV/EVSE circuits only get switches if they have a physical breaker
+        # (relative_position == "DOWNSTREAM" means connected at a breaker slot)
+        if (
+            circuit_data.device_type in ("pv", "evse")
+            and circuit_data.relative_position != "DOWNSTREAM"
+        ):
+            continue
+        entities.append(
+            SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name, _device_name)
+        )
 
     async_add_entities(entities)

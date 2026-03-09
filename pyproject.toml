@@ -18,16 +18,16 @@ span-panel-api = {path = "../span-panel-api", develop = true}
 homeassistant-stubs = "2026.2.2"
 types-requests = "*"
 types-PyYAML = "*"
-mypy = "*"
-pyright = "*"
-ruff = "*"
-bandit = "*"
-pre-commit = "*"
+mypy = "==1.19.1"
+pyright = "==1.1.405"
+ruff = "==0.15.1"
+bandit = "==1.8.6"
+pre-commit = "==4.3.0"
 voluptuous-stubs = "*"
 python-direnv = "*"
 prettier = "*"
-radon = "*"
-pylint = "*"  # For import-outside-toplevel checks
+radon = "==6.0.1"
+pylint = "==4.0.5"  # For import-outside-toplevel checks
 # Testing dependencies
 pytest = "^9.0.0"  # Compatible with Python 3.14
 pytest-homeassistant-custom-component = "^0.13.315"  # Latest version compatible with HA 2026.2.x

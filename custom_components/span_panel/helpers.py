@@ -11,14 +11,13 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
+from span_panel_api import SpanCircuitSnapshot, SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX
-from .span_panel import SpanPanel
-from .util import panel_to_device_info
+from .util import snapshot_to_device_info
 
 if TYPE_CHECKING:
     from .coordinator import SpanPanelCoordinator
-    from .span_panel_circuit import SpanPanelCircuit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +35,8 @@ CIRCUIT_SUFFIX_MAPPING = {
     "importedEnergyWh": "energy_imported",
     "exportedEnergyWh": "energy_exported",
     "circuit_priority": "priority",
+    "current": "current",
+    "breaker_rating": "breaker_rating",
 }
 
 # Panel sensor API field mappings (used by get_user_friendly_suffix)
@@ -43,6 +44,9 @@ CIRCUIT_SUFFIX_MAPPING = {
 PANEL_SUFFIX_MAPPING = {
     "instantGridPowerW": "grid_power",  # Descriptive to differentiate from other power types
     "feedthroughPowerW": "feed_through_power",
+    "batteryPowerW": "battery_power",
+    "pvPowerW": "pv_power",
+    "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_energy_produced",  # Consistent naming
     "mainMeterEnergyConsumedWh": "main_meter_energy_consumed",  # Consistent naming
     "mainMeterNetEnergyWh": "main_meter_energy_net",  # Consistent naming
@@ -50,7 +54,6 @@ PANEL_SUFFIX_MAPPING = {
     "feedthroughEnergyConsumedWh": "feed_through_energy_consumed",  # Consistent naming
     "feedthroughNetEnergyWh": "feed_through_energy_net",  # Consistent naming
     "batteryPercentage": "battery_percentage",
-    "dsmState": "dsm_state",
 }
 
 # Panel entity suffix mappings (used by get_panel_entity_suffix)
@@ -59,6 +62,9 @@ PANEL_SUFFIX_MAPPING = {
 PANEL_ENTITY_SUFFIX_MAPPING = {
     "instantGridPowerW": "current_power",
     "feedthroughPowerW": "feed_through_power",
+    "batteryPowerW": "battery_power",
+    "pvPowerW": "pv_power",
+    "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_produced_energy",
     "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",
     "mainMeterNetEnergyWh": "main_meter_net_energy",
@@ -66,7 +72,6 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
     "feedthroughEnergyConsumedWh": "feed_through_consumed_energy",
     "feedthroughNetEnergyWh": "feed_through_net_energy",
     "batteryPercentage": "battery_level",
-    "dsmState": "dsm_state",
 }
 
 # Combined mapping for general suffix lookup
@@ -164,30 +169,6 @@ def get_suffix_from_sensor_key(sensor_key: str) -> str:
     return name_parts[-1] if name_parts else sensor_name
 
 
-def is_solar_sensor_key(sensor_key: str) -> bool:
-    """Check if a sensor key represents a solar sensor.
-
-    Args:
-        sensor_key: Sensor key to check (e.g., "span_abc123_solar_inverter_power")
-
-    Returns:
-        True if this is a solar sensor key
-
-    Examples:
-        is_solar_sensor_key("span_abc123_solar_inverter_power") → True
-        is_solar_sensor_key("span_abc123_house_total_consumption") → False
-
-    """
-    # Remove device prefix to get the actual sensor name
-    parts = sensor_key.split("_")
-    if len(parts) >= 3 and parts[0] == "span":
-        sensor_name = "_".join(parts[2:])
-    else:
-        sensor_name = sensor_key
-
-    return sensor_name.startswith("solar_inverter_") or "solar" in sensor_name.lower()
-
-
 def is_panel_level_sensor_key(sensor_key: str) -> bool:
     """Check if a sensor key represents a panel-level sensor.
 
@@ -223,71 +204,9 @@ def is_panel_level_sensor_key(sensor_key: str) -> bool:
         return True
 
 
-def extract_solar_info_from_sensor_key(
-    sensor_key: str, sensor_config: dict[str, Any]
-) -> dict[str, Any] | None:
-    """Extract solar sensor information from sensor key and config.
-
-    Args:
-        sensor_key: Solar sensor key like "span_abc123_solar_inverter_instant_power"
-        sensor_config: Sensor configuration dictionary
-
-    Returns:
-        Dictionary with solar info: {"friendly_name": str, "leg1": int, "leg2": int}
-
-    Examples:
-        extract_solar_info_from_sensor_key("span_abc123_solar_inverter_instant_power", config)
-        → {"friendly_name": "Solar Inverter", "leg1": 30, "leg2": 32}
-
-    """
-
-    if not is_solar_sensor_key(sensor_key):
-        return None
-
-    # Extract friendly name from sensor name, removing the suffix
-    name = sensor_config.get("name", "")
-    if name:
-        # Remove common suffixes from the name to get the base friendly name
-        for suffix in [" Instant Power", " Energy Produced", " Energy Consumed", " Power"]:
-            if name.endswith(suffix):
-                name = name[: -len(suffix)]
-                break
-        friendly_name = name
-    else:
-        friendly_name = "Solar Inverter"
-
-    # Extract circuit numbers from variables that reference backing entities
-    leg1 = 0
-    leg2 = 0
-    variables = sensor_config.get("variables", {})
-
-    # Look for patterns like "sensor.span_panel_solar_east_power" or "sensor.span_panel_circuit_30_power"
-    for _var_name, entity_id in variables.items():
-        if isinstance(entity_id, str) and "circuit_" in entity_id:
-            # Extract circuit number from entity_id like "sensor.span_panel_circuit_30_power"
-            parts = entity_id.split("_")
-            for i, part in enumerate(parts):
-                if part == "circuit" and i + 1 < len(parts):
-                    try:
-                        circuit_num = int(parts[i + 1])
-                        if leg1 == 0:
-                            leg1 = circuit_num
-                        elif leg2 == 0:
-                            leg2 = circuit_num
-                        break
-                    except ValueError:
-                        continue
-
-    return {
-        "friendly_name": friendly_name,
-        "leg1": leg1,
-        "leg2": leg2,
-    }
-
-
 def construct_panel_synthetic_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     suffix: str,
     device_name: str,
@@ -297,7 +216,7 @@ def construct_panel_synthetic_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", etc.)
         suffix: Entity-specific suffix ("current_power", etc.)
         device_name: Device name for the panel
@@ -336,7 +255,7 @@ def construct_panel_synthetic_entity_id(
 
 def construct_240v_synthetic_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     suffix: str,
     friendly_name: str,
@@ -348,7 +267,7 @@ def construct_240v_synthetic_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         friendly_name: Descriptive name for this synthetic circuit
@@ -372,7 +291,7 @@ def construct_240v_synthetic_entity_id(
     # Use the multi-circuit helper
     return construct_multi_circuit_entity_id(
         coordinator=coordinator,
-        span_panel=span_panel,
+        snapshot=snapshot,
         platform=platform,
         suffix=suffix,
         circuit_numbers=tab_numbers,
@@ -383,7 +302,7 @@ def construct_240v_synthetic_entity_id(
 
 def construct_120v_synthetic_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     suffix: str,
     friendly_name: str,
@@ -394,7 +313,7 @@ def construct_120v_synthetic_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         friendly_name: Descriptive name for this synthetic circuit
@@ -412,7 +331,7 @@ def construct_120v_synthetic_entity_id(
     # Use the multi-circuit helper with only one tab
     return construct_multi_circuit_entity_id(
         coordinator=coordinator,
-        span_panel=span_panel,
+        snapshot=snapshot,
         platform=platform,
         suffix=suffix,
         circuit_numbers=[tab],
@@ -421,17 +340,18 @@ def construct_120v_synthetic_entity_id(
     )
 
 
-def get_circuit_number(circuit: SpanPanelCircuit) -> int | str:
+def get_circuit_number(circuit: SpanCircuitSnapshot) -> int | str:
     """Extract circuit number (tab position) from circuit object.
 
     Args:
-        circuit: SpanPanelCircuit object
+        circuit: SpanCircuitSnapshot object
 
     Returns:
         Circuit number (tab position) or circuit_id if no tabs
 
     """
-    return circuit.tabs[0] if circuit.tabs else circuit.circuit_id
+    result: int | str = circuit.tabs[0] if circuit.tabs else circuit.circuit_id
+    return result
 
 
 def get_friendly_name_from_registry(
@@ -479,7 +399,7 @@ def get_friendly_name_from_registry(
 
 def construct_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     circuit_name: str,
     circuit_number: int | str,
@@ -495,7 +415,7 @@ def construct_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", "switch", "select")
         circuit_name: Human-readable circuit name
         circuit_number: Circuit number/identifier
@@ -653,6 +573,43 @@ def build_select_unique_id(serial: str, select_id: str) -> str:
     return f"span_{serial}_select_{select_id}"
 
 
+def build_bess_unique_id(serial: str, description_key: str) -> str:
+    """Build unique ID for BESS sensor entities (pure function).
+
+    Returns: "span_{serial}_bess_{description_key}"
+    """
+    return f"span_{serial}_bess_{description_key}"
+
+
+def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str:
+    """Build unique ID for EVSE sensor/binary_sensor entities (pure function).
+
+    Returns: "span_{serial}_evse_{evse_id}_{description_key}"
+    """
+    return f"span_{serial}_evse_{evse_id}_{description_key}"
+
+
+def resolve_evse_display_suffix(
+    evse: SpanEvseSnapshot,
+    snapshot: SpanPanelSnapshot,
+    use_circuit_numbers: bool,
+) -> str | None:
+    """Resolve the display suffix for an EVSE device name.
+
+    Friendly names mode: returns the fed circuit's panel name (e.g., "Garage").
+    Circuit numbers mode: returns the EVSE serial number (e.g., "SN-EVSE-001").
+    Returns None when no meaningful suffix is available (prevents empty parens).
+    """
+    if use_circuit_numbers:
+        serial: str | None = evse.serial_number
+        return serial
+    fed_circuit = snapshot.circuits.get(evse.feed_circuit_id)
+    if fed_circuit and fed_circuit.name:
+        name: str = fed_circuit.name
+        return name
+    return None
+
+
 def construct_synthetic_unique_id(serial: str, sensor_name: str) -> str:
     """Build unique ID for synthetic sensors using consistent pattern (pure function).
 
@@ -719,7 +676,7 @@ def generate_unique_simulator_serial_number(hass: HomeAssistant) -> str:
 
 def _get_device_identifier_for_unique_ids(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     device_name: str | None = None,
 ) -> str:
     """Compute per-entry device identifier for unique_ids.
@@ -727,97 +684,116 @@ def _get_device_identifier_for_unique_ids(
     - Live panels: use true serial number
     - Simulator entries: use serial number from span panel status (which should be sim-nnn format)
     """
-    is_simulator = bool(coordinator.config_entry.data.get("simulation_mode", False))
-    if is_simulator:
-        # For simulators, use the serial number from the span panel status
-        # This should be in the format sim-nnn (e.g., sim-001, sim-002, etc.)
-        return span_panel.status.serial_number
-    return span_panel.status.serial_number
+    serial: str = snapshot.serial_number
+    return serial
 
 
 def construct_panel_unique_id_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     description_key: str,
     device_name: str | None = None,
 ) -> str:
     """Build panel unique_id using per-entry identifier (handles simulators)."""
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_panel_unique_id(identifier, description_key)
 
 
 def construct_circuit_unique_id_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     circuit_id: str,
     description_key: str,
     device_name: str | None = None,
 ) -> str:
     """Build circuit unique_id using per-entry identifier (handles simulators)."""
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_circuit_unique_id(identifier, circuit_id, description_key)
 
 
 def build_switch_unique_id_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     circuit_id: str,
     device_name: str | None = None,
 ) -> str:
     """Build switch unique_id using per-entry identifier (handles simulators)."""
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_switch_unique_id(identifier, circuit_id)
 
 
 def build_select_unique_id_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     select_id: str,
     device_name: str | None = None,
 ) -> str:
     """Build select unique_id using per-entry identifier (handles simulators)."""
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_select_unique_id(identifier, select_id)
 
 
 def build_binary_sensor_unique_id_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     description_key: str,
     device_name: str | None = None,
 ) -> str:
     """Build binary_sensor unique_id using per-entry identifier (handles simulators)."""
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_binary_sensor_unique_id(identifier, description_key)
 
 
 def construct_synthetic_unique_id_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     sensor_name: str,
     device_name: str | None = None,
 ) -> str:
     """Build synthetic sensor unique_id using per-entry identifier (handles simulators)."""
-    identifier = _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return construct_synthetic_unique_id(identifier, sensor_name)
+
+
+def build_evse_unique_id_for_entry(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    evse_id: str,
+    description_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Build EVSE unique_id using per-entry identifier (handles simulators)."""
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
+    return build_evse_unique_id(identifier, evse_id, description_key)
+
+
+def build_bess_unique_id_for_entry(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    description_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Build BESS unique_id using per-entry identifier (handles simulators)."""
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
+    return build_bess_unique_id(identifier, description_key)
 
 
 def get_device_identifier_for_entry(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     device_name: str | None = None,
 ) -> str:
     """Public helper to get the per-entry device identifier used in unique_ids and storage."""
-    return _get_device_identifier_for_unique_ids(coordinator, span_panel, device_name)
+    return _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
 
 
 def construct_circuit_unique_id(
-    span_panel: SpanPanel, circuit_id: str, description_key: str
+    snapshot: SpanPanelSnapshot, circuit_id: str, description_key: str
 ) -> str:
     """Construct unique ID for circuit sensors using consistent pattern.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         circuit_id: Circuit ID from panel API (UUID or tab number)
         description_key: Sensor description key (e.g., "instantPowerW")
 
@@ -829,14 +805,14 @@ def construct_circuit_unique_id(
         span_abc123_circuit_15_energy_produced
 
     """
-    return build_circuit_unique_id(span_panel.status.serial_number, circuit_id, description_key)
+    return build_circuit_unique_id(snapshot.serial_number, circuit_id, description_key)
 
 
-def construct_panel_unique_id(span_panel: SpanPanel, description_key: str) -> str:
+def construct_panel_unique_id(snapshot: SpanPanelSnapshot, description_key: str) -> str:
     """Construct unique ID for panel-level sensors using consistent pattern.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         description_key: Sensor description key (e.g., "instantGridPowerW")
 
     Returns:
@@ -848,14 +824,14 @@ def construct_panel_unique_id(span_panel: SpanPanel, description_key: str) -> st
         span_abc123_dsm_state
 
     """
-    return build_panel_unique_id(span_panel.status.serial_number, description_key)
+    return build_panel_unique_id(snapshot.serial_number, description_key)
 
 
-def construct_switch_unique_id(span_panel: SpanPanel, circuit_id: str) -> str:
+def construct_switch_unique_id(snapshot: SpanPanelSnapshot, circuit_id: str) -> str:
     """Construct unique ID for switch entities using consistent pattern.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         circuit_id: Circuit ID from panel API
 
     Returns:
@@ -865,14 +841,14 @@ def construct_switch_unique_id(span_panel: SpanPanel, circuit_id: str) -> str:
         span_abc123_relay_0dad2f16cd514812ae1807b0457d473e
 
     """
-    return build_switch_unique_id(span_panel.status.serial_number, circuit_id)
+    return build_switch_unique_id(snapshot.serial_number, circuit_id)
 
 
-def construct_binary_sensor_unique_id(span_panel: SpanPanel, description_key: str) -> str:
+def construct_binary_sensor_unique_id(snapshot: SpanPanelSnapshot, description_key: str) -> str:
     """Construct unique ID for binary sensor entities using consistent pattern.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         description_key: Sensor description key (e.g., "doorState")
 
     Returns:
@@ -883,14 +859,14 @@ def construct_binary_sensor_unique_id(span_panel: SpanPanel, description_key: st
         span_abc123_eth0Link
 
     """
-    return build_binary_sensor_unique_id(span_panel.status.serial_number, description_key)
+    return build_binary_sensor_unique_id(snapshot.serial_number, description_key)
 
 
-def construct_select_unique_id(span_panel: SpanPanel, select_id: str) -> str:
+def construct_select_unique_id(snapshot: SpanPanelSnapshot, select_id: str) -> str:
     """Construct unique ID for select entities using consistent pattern.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         select_id: Select entity identifier
 
     Returns:
@@ -900,12 +876,12 @@ def construct_select_unique_id(span_panel: SpanPanel, select_id: str) -> str:
         span_abc123_select_priority_mode
 
     """
-    return build_select_unique_id(span_panel.status.serial_number, select_id)
+    return build_select_unique_id(snapshot.serial_number, select_id)
 
 
 def construct_multi_circuit_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     suffix: str,
     circuit_numbers: list[int],
@@ -916,7 +892,7 @@ def construct_multi_circuit_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_numbers: List of circuit numbers this sensor combines
@@ -1006,10 +982,10 @@ def construct_multi_circuit_entity_id(
 
 def construct_single_circuit_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     suffix: str,
-    circuit_data: SpanPanelCircuit,
+    circuit_data: SpanCircuitSnapshot,
     unique_id: str | None = None,
     device_name: str | None = None,
 ) -> str | None:
@@ -1017,7 +993,7 @@ def construct_single_circuit_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_data: Circuit data object
@@ -1051,7 +1027,7 @@ def construct_single_circuit_entity_id(
         _LOGGER.debug("Circuit helper - no unique_id provided, skipping registry lookup")
 
     # Get device info
-    device_info = panel_to_device_info(span_panel, device_name)
+    device_info = snapshot_to_device_info(snapshot, device_name)
     if not device_info or not device_info.get("name"):
         return None
 
@@ -1102,7 +1078,7 @@ def construct_single_circuit_entity_id(
 
 def construct_panel_entity_id(
     coordinator: SpanPanelCoordinator,
-    span_panel: SpanPanel,
+    snapshot: SpanPanelSnapshot,
     platform: str,
     suffix: str,
     device_name: str,
@@ -1117,7 +1093,7 @@ def construct_panel_entity_id(
 
     Args:
         coordinator: The coordinator instance
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("current_power", "feed_through_power", etc.)
         device_name: Device name for the panel
@@ -1165,21 +1141,21 @@ def construct_panel_entity_id(
 
 
 def construct_unmapped_unique_id(
-    span_panel: SpanPanel, circuit_number: int | str, suffix: str
+    snapshot: SpanPanelSnapshot, circuit_number: int | str, suffix: str
 ) -> str:
     """Construct unique ID for unmapped circuit sensors."""
     # Always use consistent unique ID pattern for unmapped circuits
     # Format: span_{serial}_unmapped_tab_{circuit_number}_{suffix}
-    return f"span_{span_panel.status.serial_number}_unmapped_tab_{circuit_number}_{suffix}"
+    return f"span_{snapshot.serial_number}_unmapped_tab_{circuit_number}_{suffix}"
 
 
 def construct_unmapped_entity_id(
-    span_panel: SpanPanel, circuit_id: str, suffix: str, device_name: str | None = None
+    snapshot: SpanPanelSnapshot, circuit_id: str, suffix: str, device_name: str | None = None
 ) -> str:
     """Construct entity ID for unmapped tab with consistent modern naming.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         circuit_id: Circuit ID (e.g., "unmapped_tab_32")
         suffix: Sensor suffix (e.g., "power", "energy_produced")
         device_name: The device name to use for entity ID construction
@@ -1191,7 +1167,7 @@ def construct_unmapped_entity_id(
     # Always use device prefix for unmapped entities
     # circuit_id is "unmapped_tab_32", add device prefix and suffix to create
     # "sensor.span_panel_unmapped_tab_32_power"
-    device_info = panel_to_device_info(span_panel, device_name)
+    device_info = snapshot_to_device_info(snapshot, device_name)
     device_name_raw = device_info.get("name")
     _LOGGER.debug(
         "construct_unmapped_entity_id: circuit_id=%s, suffix=%s, device_name_raw=%s",
@@ -1212,7 +1188,7 @@ def construct_unmapped_entity_id(
 
 
 def get_unmapped_circuit_entity_id(
-    span_panel: SpanPanel, tab_number: int, suffix: str, device_name: str | None = None
+    snapshot: SpanPanelSnapshot, tab_number: int, suffix: str, device_name: str | None = None
 ) -> str | None:
     """Get entity ID for an unmapped circuit based on tab number.
 
@@ -1221,7 +1197,7 @@ def get_unmapped_circuit_entity_id(
     that need to reference these native entities in formulas.
 
     Args:
-        span_panel: The span panel data
+        snapshot: The panel snapshot data
         tab_number: The tab number (e.g., 30, 32)
         suffix: The sensor suffix (e.g., "power", "energy_produced", "energy_consumed")
         device_name: The device name to use for entity ID construction
@@ -1231,21 +1207,21 @@ def get_unmapped_circuit_entity_id(
         or None if the circuit doesn't exist
 
     Examples:
-        get_unmapped_circuit_entity_id(span_panel, 30, "power")
+        get_unmapped_circuit_entity_id(snapshot, 30, "power")
         # Returns: "sensor.span_panel_unmapped_tab_30_power"
 
-        get_unmapped_circuit_entity_id(span_panel, 32, "energy_produced")
+        get_unmapped_circuit_entity_id(snapshot, 32, "energy_produced")
         # Returns: "sensor.span_panel_unmapped_tab_32_energy_produced"
 
     """
     circuit_id = f"unmapped_tab_{tab_number}"
 
     # Verify the circuit exists in the panel data
-    if circuit_id not in span_panel.circuits:
+    if circuit_id not in snapshot.circuits:
         _LOGGER.debug("Unmapped circuit %s not found in circuits list", circuit_id)
         return None
 
-    result_entity_id = construct_unmapped_entity_id(span_panel, circuit_id, suffix, device_name)
+    result_entity_id = construct_unmapped_entity_id(snapshot, circuit_id, suffix, device_name)
     _LOGGER.debug("Generated unmapped entity ID: %s", result_entity_id)
     return result_entity_id
 
@@ -1337,13 +1313,34 @@ def construct_unmapped_circuit_id(circuit_number: int | str) -> str:
     return f"unmapped_tab_{circuit_number}"
 
 
-def construct_tabs_attribute(circuit: SpanPanelCircuit) -> str | None:
+def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = "") -> str:
+    """Build a human-readable circuit identifier from tab positions.
+
+    Used as a fallback when a circuit has no panel-assigned name.
+
+    Args:
+        tabs: List of tab numbers (1 for 120V, 2 for 240V dipole)
+        circuit_id: Fallback identifier when tabs are unavailable
+
+    Returns:
+        String like "Circuit 30 32" for 240V or "Circuit 15" for 120V
+
+    """
+    if tabs and len(tabs) == 2:
+        sorted_tabs = sorted(tabs)
+        return f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
+    if tabs and len(tabs) == 1:
+        return f"Circuit {tabs[0]}"
+    return f"Circuit {circuit_id}"
+
+
+def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
     """Construct tabs attribute string from circuit data.
 
     For US electrical systems, circuits can only have 1 tab (120V) or 2 tabs (240V).
 
     Args:
-        circuit: SpanPanelCircuit object with tabs information
+        circuit: SpanCircuitSnapshot object with tabs information
 
     Returns:
         Tabs attribute string like "tabs [30:32]" for 240V or "tabs [28]" for 120V,
@@ -1413,13 +1410,13 @@ def parse_tabs_attribute(tabs_attr: str) -> list[int] | None:
         return None
 
 
-def get_circuit_voltage_type(circuit: SpanPanelCircuit) -> str:
+def get_circuit_voltage_type(circuit: SpanCircuitSnapshot) -> str:
     """Determine the voltage type of a circuit based on its tabs.
 
     For US electrical systems, circuits can only be 120V (1 tab) or 240V (2 tabs).
 
     Args:
-        circuit: SpanPanelCircuit object
+        circuit: SpanCircuitSnapshot object
 
     Returns:
         Voltage type: "120V" for single tab, "240V" for two tabs, "unknown" otherwise
@@ -1456,13 +1453,13 @@ def get_panel_voltage_attribute() -> int:
     return 240
 
 
-def construct_voltage_attribute(circuit: SpanPanelCircuit) -> int | None:
+def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
     """Construct voltage attribute for a circuit based on tab count.
 
     For US electrical systems, circuits can only have 1 tab (120V) or 2 tabs (240V).
 
     Args:
-        circuit: SpanPanelCircuit object with tabs information
+        circuit: SpanCircuitSnapshot object with tabs information
 
     Returns:
         Voltage in volts (120 for single tab, 240 for double tab), or None if no tabs information
@@ -1488,3 +1485,47 @@ def construct_voltage_attribute(circuit: SpanPanelCircuit) -> int | None:
             len(circuit.tabs),
         )
         return None
+
+
+def has_bess(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether a BESS (battery energy storage system) is commissioned.
+
+    Only soe_percentage is a reliable signal — the power-flows node publishes
+    battery=0.0 even on panels without a commissioned BESS.
+    """
+    return snapshot.battery.soe_percentage is not None
+
+
+def has_pv(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether PV (solar) is commissioned."""
+    return snapshot.power_flow_pv is not None or any(
+        c.device_type == "pv" for c in snapshot.circuits.values()
+    )
+
+
+def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the power-flows node is publishing data."""
+    return snapshot.power_flow_site is not None
+
+
+def has_evse(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether an EVSE (EV charger) is commissioned."""
+    return len(snapshot.evse) > 0
+
+
+def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
+    """Derive the set of optional capabilities present in the snapshot.
+
+    Used by the coordinator to detect when new hardware (BESS, PV, EVSE) appears
+    and trigger a reload so new sensors are created.
+    """
+    caps: set[str] = set()
+    if has_bess(snapshot):
+        caps.add("bess")
+    if has_pv(snapshot):
+        caps.add("pv")
+    if has_power_flows(snapshot):
+        caps.add("power_flows")
+    if has_evse(snapshot):
+        caps.add("evse")
+    return frozenset(caps)

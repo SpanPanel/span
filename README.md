@@ -14,131 +14,345 @@ monitoring and control of your home's electrical system.
 [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-This integration relies on the OpenAPI interface contract sourced from the SPAN Panel. The integration may break if SPAN changes the API in an incompatible way.
-
 The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
-This integration provides the user with sensors and controls that are useful in understanding an installation's power consumption, energy usage, and the ability
-to control user-manageable panel circuits.
+**IMPORTANT:** This integration controls real electrical equipment. Circuit switches open and close physical relays. The GFE override button changes how the
+panel manages load shedding during power outages. These actions carry the same consequences as operating the panel manually — because they are. Automations can
+execute these actions without user presence; design them with the same care you would apply to any unattended electrical control. This integration is not a
+safety device and must not be relied upon for life-safety applications. Use this software at your own risk. If you cannot accept that risk, do not use this
+software. See [LICENSE](LICENSE) for the full warranty disclaimer.
 
-## Major Upgrade
+This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
+circuits. You can optionally use the [span-card](https://github.com/spanio/span-card) Lovelace card for visualization and switch control.
 
-**Before upgrading to version 1.2.x from a prior version, please backup your Home Assistant configuration and database.**
+This integration communicates with the SPAN Panel over your local network using SPAN's official
+[Electrification Bus (eBus)](https://github.com/spanio/SPAN-API-Client-Docs) framework — an open, multi-vendor integration standard for home energy
+infrastructure. eBus uses the [Homie Convention](https://homieiot.github.io/) for MQTT topics and messages, with the panel's built-in MQTT broker delivering
+real-time state updates without polling.
 
-See the [CHANGELOG.md](CHANGELOG.md) for detailed information about all new features and improvements.
+## 1.1.x Integration Sunset (v1)
 
-## HACS Upgrade Process
+Users MUST upgrade by the end of 2026 to avoid disruption. Upgrade to the latest 1.1.x version BEFORE upgrading to 2.0.x.
 
-When upgrading through HACS, you'll see a notification about the new version. Before clicking "Update":
+## 2.0.x Breaking Changes (v2)
 
-1. **Create a backup** of your Home Assistant configuration and database
-2. **Review the changes** in this README
-3. **Check your automations** to ensure they reference the correct entity IDs
-4. **Update during a quiet period** when you can monitor the upgrade process
+**Do NOT upgrade unless your panel is running firmware `spanos2/r202603/05` or later.**
 
-If you encounter any issues during the upgrade, you can:
+**What you need:**
 
-- Restore from your backup
-- Check the [troubleshooting section](#troubleshooting) below
-- Open an issue on GitHub with details about your installation
+- SPAN Panel firmware `spanos2/r202603/05` or later
+- Panel passphrase (found in the SPAN mobile app, On-premise settings) **or** physical access to the panel door for proof-of-proximity authentication
 
-### Prerequisites
+**Breaking:**
+
+- Requires firmware `spanos2/r202603/05` or later — panels on older firmware will not work
+- `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
+
+> Running older firmware? See [v1 Legacy Documentation](docs/v1-legacy.md).
+
+See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
+
+## Prerequisites
 
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
-- SPAN Panel installed and connected to your network
-- SPAN Panel's IP address
-
-## Features
-
-### Available Devices & Entities
-
-This integration provides a Home Assistant device for your SPAN panel with entities for:
-
-- User Managed Circuits
-  - On/Off Switch (user managed circuits)
-  - Priority Selector (user managed circuits)
-- Power Sensors
-  - Power Usage / Generation (Watts)
-  - Energy Usage / Generation (Wh)
-  - Net Energy (Wh) - Calculated as consumed energy minus produced energy
-- Panel and Grid Status
-  - Main Relay State (e.g., CLOSED)
-  - Current Run Config (e.g., PANEL_ON_GRID)
-  - DSM State (e.g., DSM_GRID_UP)
-  - DSM Grid State (e.g., DSM_ON_GRID)
-  - Network Connectivity Status (Wi-Fi, Wired, & Cellular)
-  - Door State (device class is tamper)
-- Storage Battery
-  - Battery percentage (options configuration)
+- SPAN Panel with firmware `spanos2/r202603/05` or later
+- Span Panel/span integration v1.3.1
+- Panel passphrase (found via the SPAN app) **or** physical access to the panel door
 
 ## Installation
 
 1. Install [HACS](https://hacs.xyz/)
 2. Go to HACS in the left side bar of your Home Assistant installation
 3. Search for "Span"
-4. Open the repository
-5. Click on the "Download" button at the lower right
-6. Restart Home Assistant - You will be prompted for this by a Home Assistant repair notification
-7. In the Home Assistant UI go to `Settings`.
-8. Click `Devices & Services` and you should see this integration.
-9. Click `+ Add Integration`.
-10. Search for "Span". This entry should correspond to this repository and offer the current version.
-11. Enter the IP of your SPAN Panel to begin setup, or select the automatically discovered panel if it shows up or another address if you have multiple panels.
-12. Use the door proximity authentication (see below) and optionally create a token for future configurations. Obtaining a token **_may_** be more durable
-    against network changes, for example, if you change client hostname or IP and don't want to access the panel for authorization.
-13. See post install steps for solar or scan frequency configuration to optionally add additional sensors if applicable.
+4. Open the repository and click "Download"
+5. Restart Home Assistant (you will be prompted by a repair notification)
+6. Go to `Settings` > `Devices & Services`
+7. Click `+ Add Integration` and search for "Span"
+8. Enter the IP address of your SPAN Panel
+9. The integration detects the panel as v2 and presents an authentication choice:
+   - **Enter Panel Passphrase** — type the passphrase found in the SPAN mobile app under On-premise settings
+   - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
+10. Choose your entity naming pattern
+11. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
 
-## Authorization Methods
+### Upgrade Process
 
-### Method 1: Door Proximity Authentication
+When upgrading through HACS:
 
-1. Open your SPAN Panel door
-2. Press the door sensor button at the top 3 times in succession
-3. Wait for the frame lights to blink, indicating the panel is "unlocked" for 15 minutes
-4. Complete the integration setup in Home Assistant
+1. **Create a backup** of your Home Assistant configuration and database
+2. **Review the changes** in this README and CHANGELOG
+3. **Check your automations** — review any references to removed entities
+4. **Update during a quiet period** when you can monitor the upgrade
 
-### Method 2: Authentication Token (Optional)
+If you encounter issues, restore from your backup or check the [troubleshooting section](#troubleshooting) below.
 
-To acquire an authorization token, proceed as follows while the panel is in its unlocked period:
+## Entity Reference
 
-1. To record the token use a tool like the VS code extension 'Rest Client' or curl to make a POST to `{Span_Panel_IP}/api/v1/auth/register` with a JSON body of
-   `{"name": "home-assistant-UNIQUEID", "description": "Home Assistant Local SPAN Integration"}`.
-   - Replace UNIQUEID with your own random unique value. If the name conflicts with one that's already been created, then the request will fail.
-   - Example via CLI:
+### Panel-Level Sensors
 
-     ```bash
-     curl -X POST https://192.168.1.2/api/v1/auth/register \
-       -H 'Content-Type: application/json' \
-       -d '{"name": "home-assistant-123456", "description": "Home Assistant Local SPAN Integration"}'
-     ```
+| Sensor                       | Device Class | Unit | Notes                                                                                                                  |
+| ---------------------------- | ------------ | ---- | ---------------------------------------------------------------------------------------------------------------------- |
+| Current Power                | Power        | W    | Total panel power (grid import/export)                                                                                 |
+| Feed Through Power           | Power        | W    | Feedthrough (non-breaker) power                                                                                        |
+| Main Meter Produced Energy   | Energy       | Wh   | Grid energy exported                                                                                                   |
+| Main Meter Consumed Energy   | Energy       | Wh   | Grid energy imported                                                                                                   |
+| Main Meter Net Energy        | Energy       | Wh   | Consumed minus produced                                                                                                |
+| Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                            |
+| Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                            |
+| Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
+| DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals                     |
+| Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown |
+| Grid Forming Entity          | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See [Grid Forming Entity](#grid-forming-entity)                      |
+| Main Relay State             | —            | —    | closed (power flowing), open (disconnected), unknown                                                                   |
+| Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                   |
+| Software Version             | —            | —    | Firmware version string                                                                                                |
 
-2. If the panel is already "unlocked", you will get a 2xx response to this call containing the `"accessToken"`. If not, then you will be prompted to open and
-   close the door of the panel 3 times, once every two seconds, and then retry the query.
-3. Store the value from the `"accessToken"` property of the response (it will be a long random string of characters). The token can be used with future SPAN
-   integration configurations of the same panel.
-4. If you are calling the SPAN API directly for testing, requests would load the HTTP header `"Authorization: Bearer <your token here>"`
+### Panel Diagnostic Sensors (v2 only)
 
-#### Multiple SPAN Panels
+| Sensor                | Device Class | Unit | Notes                      |
+| --------------------- | ------------ | ---- | -------------------------- |
+| L1 Voltage            | Voltage      | V    | L1 leg actual voltage      |
+| L2 Voltage            | Voltage      | V    | L2 leg actual voltage      |
+| Upstream L1 Current   | Current      | A    | Upstream lugs L1 current   |
+| Upstream L2 Current   | Current      | A    | Upstream lugs L2 current   |
+| Downstream L1 Current | Current      | A    | Downstream lugs L1 current |
+| Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
+| Main Breaker Rating   | Current      | A    | Main breaker amperage      |
 
-If you have multiple SPAN Panels, you will need to repeat this process for each panel, as tokens are only accepted by the panel that generated them.
+### Power Flow Sensors (v2 only, conditional)
 
-If you have this auth token, you can enter it in the "Existing Auth Token" flow in the configuration menu.
+| Sensor        | Device Class | Unit | Notes                                                                       |
+| ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
+| Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
+| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery). Only when power-flows node active   |
+
+### PV Metadata Sensors (v2 only, on main panel device)
+
+| Sensor             | Device Class | Unit | Notes                                         |
+| ------------------ | ------------ | ---- | --------------------------------------------- |
+| PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other") |
+| PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")            |
+| Nameplate Capacity | Power        | kW   | Rated inverter capacity                       |
+
+**Deprecated:**
+
+| Sensor         | Reason                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| DSM Grid State | Deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version |
+
+### Power Sensor Attributes
+
+Applies to Current Power, Feed Through Power, Battery Power, PV Power, and Site Power sensors.
+
+| Attribute  | Type   | Notes                                |
+| ---------- | ------ | ------------------------------------ |
+| `voltage`  | string | Nominal panel voltage ("240")        |
+| `amperage` | string | Calculated current (power / voltage) |
+
+### Software Version Sensor Attributes
+
+| Attribute    | Type   | Notes                               |
+| ------------ | ------ | ----------------------------------- |
+| `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
+| `wifi_ssid`  | string | Current Wi-Fi network               |
+
+### BESS Sub-Device (v2 only, conditional)
+
+When a Battery Energy Storage System (BESS) is commissioned, the integration creates a separate BESS sub-device linked to the panel via `via_device`. The BESS
+device uses manufacturer, model, serial number, and software version from battery metadata as device info attributes.
+
+#### BESS Sensors
+
+| Sensor             | Device Class   | Unit | Notes                                     |
+| ------------------ | -------------- | ---- | ----------------------------------------- |
+| Battery Level      | Battery        | %    | State of energy as percentage             |
+| Battery Power      | Power          | W    | Charge/discharge (+discharge, -charge)    |
+| BESS Vendor        | —              | —    | Battery system vendor (diagnostic)        |
+| BESS Model         | —              | —    | Battery system model (diagnostic)         |
+| BESS Serial Number | —              | —    | Battery system serial number (diagnostic) |
+| BESS Firmware      | —              | —    | Battery system firmware (diagnostic)      |
+| Nameplate Capacity | Energy Storage | kWh  | Rated battery capacity (diagnostic)       |
+| Stored Energy      | Energy Storage | kWh  | Current stored energy (diagnostic)        |
+
+#### BESS Binary Sensors
+
+| Sensor         | Device Class | Notes                                        |
+| -------------- | ------------ | -------------------------------------------- |
+| BESS Connected | Connectivity | Whether the BESS is communicating with panel |
+
+### Panel Energy Sensor Attributes
+
+Applies to Main Meter and Feed Through energy sensors.
+
+| Attribute | Type   | Notes                         |
+| --------- | ------ | ----------------------------- |
+| `voltage` | string | Nominal panel voltage ("240") |
+
+### Circuit-Level Sensors (per circuit)
+
+| Sensor          | Device Class | Unit | Notes                                                                 |
+| --------------- | ------------ | ---- | --------------------------------------------------------------------- |
+| Power           | Power        | W    | Instantaneous circuit power (+producing for PV, +consuming otherwise) |
+| Produced Energy | Energy       | Wh   | Cumulative energy produced                                            |
+| Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                            |
+| Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert)         |
+| Current         | Current      | A    | (v2) Measured circuit current. Only when panel reports `current_a`    |
+| Breaker Rating  | Current      | A    | (v2) Circuit breaker amperage (diagnostic). Only when reported        |
+
+### Circuit Power Sensor Attributes
+
+| Attribute         | Type   | Notes                                                 |
+| ----------------- | ------ | ----------------------------------------------------- |
+| `tabs`            | string | Breaker slot position(s)                              |
+| `voltage`         | string | 120 or 240 (derived from tab count)                   |
+| `always_on`       | bool   | Whether circuit is always-on                          |
+| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                               |
+| `relay_requester` | string | Who requested relay state                             |
+| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
+| `is_sheddable`    | bool   | Whether circuit can be shed                           |
+
+### Circuit Energy Sensor Attributes
+
+| Attribute | Type   | Notes                               |
+| --------- | ------ | ----------------------------------- |
+| `tabs`    | string | Breaker slot position(s)            |
+| `voltage` | string | 120 or 240 (derived from tab count) |
+
+### EVSE (EV Charger) Entities
+
+Created automatically when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via
+`via_device`. Vendor, product, serial number, and software version are surfaced as device info attributes — not separate entities.
+
+#### EVSE Device Naming
+
+The EVSE device name includes the panel device name prefix for collision avoidance across multi-panel installations and to support HA's bulk device rename
+feature. A display suffix differentiates multiple chargers on the same panel:
+
+- **Friendly names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
+- **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): suffix is the EVSE serial number (e.g., "SN-EVSE-001")
+- **No suffix available**: the display suffix is omitted entirely (no empty parentheses)
+
+| Naming Mode     | Example Device Name                   | Example Entity ID                                         |
+| --------------- | ------------------------------------- | --------------------------------------------------------- |
+| Friendly names  | `Main House SPAN Drive (Garage)`      | `sensor.main_house_span_drive_garage_charger_status`      |
+| Circuit numbers | `Main House SPAN Drive (SN-EVSE-001)` | `sensor.main_house_span_drive_sn_evse_001_charger_status` |
+| No suffix       | `Main House SPAN Drive`               | `sensor.main_house_span_drive_charger_status`             |
+
+#### EVSE Sensors (per charger)
+
+| Sensor             | Device Class | Unit | Notes                                                                            |
+| ------------------ | ------------ | ---- | -------------------------------------------------------------------------------- |
+| Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
+| Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
+| Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
+
+#### EVSE Binary Sensors (per charger)
+
+| Sensor       | Device Class     | Notes                                                              |
+| ------------ | ---------------- | ------------------------------------------------------------------ |
+| Charging     | Battery Charging | ON when status is CHARGING                                         |
+| EV Connected | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING |
+
+#### EVSE Device Info Attributes
+
+| Attribute        | Source             |
+| ---------------- | ------------------ |
+| Manufacturer     | `vendor-name`      |
+| Model            | `product-name`     |
+| Serial Number    | `serial-number`    |
+| Software Version | `software-version` |
+
+### Binary Sensors
+
+| Sensor          | Device Class | Notes                                                               |
+| --------------- | ------------ | ------------------------------------------------------------------- |
+| Door State      | Tamper       | Panel door open/closed                                              |
+| Ethernet Link   | Connectivity | Wired network status                                                |
+| Wi-Fi Link      | Connectivity | Wireless network status                                             |
+| Panel Status    | Connectivity | Overall panel online/offline                                        |
+| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported |
+
+**Removed from binary sensors:**
+
+| Sensor          | Reason                                                 |
+| --------------- | ------------------------------------------------------ |
+| Cellular (wwan) | Replaced by `Vendor Cloud` sensor (cloud connectivity) |
+
+### Circuit Controls (per user-controllable circuit)
+
+| Entity                | Type   | Notes                                                                      |
+| --------------------- | ------ | -------------------------------------------------------------------------- |
+| Breaker               | Switch | On/off relay control                                                       |
+| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid (translated, see below) |
+
+### Circuit Shed Priority Options
+
+Labels match the SPAN Home On-Premise app. Translations are provided for all supported languages.
+
+| Option Key      | Display Label (EN)               | API Value     |
+| --------------- | -------------------------------- | ------------- |
+| `never`         | Stays on in an outage            | NEVER         |
+| `soc_threshold` | Stays on until battery threshold | SOC_THRESHOLD |
+| `off_grid`      | Turns off in an outage           | OFF_GRID      |
+
+### Panel Controls
+
+| Entity                       | Type   | Notes                                                                                |
+| ---------------------------- | ------ | ------------------------------------------------------------------------------------ |
+| GFE Override: Grid Connected | Button | (v2) Tell the panel the grid is up. Only present on MQTT-connected panels. See below |
+
+### Grid Forming Entity
+
+The Grid Forming Entity (GFE) identifies which power source provides the frequency and voltage reference for the home. When GFE is Grid, the utility grid sets
+the reference and all circuits remain on. When GFE is Battery, the battery inverter is the reference and circuits are shed based on each circuit's configured
+shed priority.
+
+When a battery system (BESS) is installed, the panel relies on the BESS to determine whether the grid is online and to set the GFE accordingly. If BESS
+communication is lost while the panel is islanded, the GFE value becomes stale — it may show Battery when the grid has actually been restored, causing
+unnecessary shedding to continue.
+
+The panel cannot detect grid restoration while islanded because the Microgrid Interconnect Device (MID) is open. The panel's power sensors are on the home side
+of the open switch and measure only battery-supplied power — grid restoration on the utility side is invisible to any panel-side measurement. This is a physical
+limitation, not a software gap. The `DSM State` sensor inherits the same blind spot for the same reason.
+
+The **GFE Override: Grid Connected** button exists for this scenario. It publishes a temporary `GRID` command to the panel telling it the grid is back and
+shedding can stop. When the BESS restores communication, it automatically reclaims control and the override is superseded.
+
+#### Detecting grid restoration
+
+The panel requires an external signal to know the grid is back while islanded. Options include:
+
+- An Automatic Transfer Switch (ATS) or Manual Transfer Switch (MTS) with a utility-side contact closure, integrated into Home Assistant as a binary sensor
+- Utility notification, neighbor confirmation, or physical observation
+
+**WARNING** - Do _not_ automate the GFE override button based on `dsm_state` — it will read `DSM_OFF_GRID` even after the grid is restored because the panel's
+sensors cannot see past the open MID. Manual confirmation or an external sensor is required before pressing the button.
+
+Pressing "GFE Override: Grid Connected" when actually off-grid will prevent shedding and drain the battery faster. The battery protects itself by disconnecting
+when depleted, so there is no overload risk, but runtime will be reduced.
+
+When `bess_connected` returns to on, no action is needed — firmware resumes normal GFE management automatically.
 
 ## Configuration Options
 
-### Basic Settings
+### Snapshot Update Interval
 
-- Integration scan frequency (default: 15 seconds)
-- Battery storage percentage display
-- Solar inverter mapping
+Controls how often the integration rebuilds the panel snapshot from incoming MQTT data. The SPAN panel publishes high-frequency MQTT messages (~100/second), but
+each individual message is a cheap dictionary write. The expensive operation — rebuilding the full snapshot and dispatching entity updates — is rate-limited by
+this timer.
 
-### Entity Naming Pattern Options
+- **Default:** 1 second
+- **Range:** 0–15 seconds
+- **Set to 0** for no debounce (every MQTT message triggers a snapshot rebuild)
+- **Increase on low-power hardware** (e.g., Raspberry Pi) to reduce CPU usage
 
-The integration provides flexible entity naming patterns to suit different preferences and use cases. You can configure these options through the integration's
-configuration menu when you first install:
+Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`.
 
-#### Available Naming Patterns
+### Entity Naming Pattern
+
+The integration provides flexible entity naming patterns, configured during initial setup:
 
 1. **Friendly Names** (Recommended for new installations)
    - Entity IDs use descriptive circuit names from your SPAN panel
@@ -152,69 +366,49 @@ configuration menu when you first install:
    - Entity IDs remain stable even when circuits are renamed
    - Friendly names still sync from SPAN panel for display
 
-### Solar Configuration
+### Energy Dip Compensation
 
-The solar configuration is only for solar that is directly connected to the panel tabs. SPAN does expose data for inverters otherwise. If the inverter sensors
-are enabled, four sensors are created (power, produced energy, consumed energy, and net energy). The entity naming pattern depends on your configured naming
-pattern:
+SPAN panels occasionally report lower energy readings for cumulative energy sensors after firmware updates or resets. Home Assistant's statistics engine
+interprets any decrease as a counter reset, creating negative spikes in the energy dashboard.
 
-**Circuit Numbers Pattern**:
+When enabled, the integration automatically detects these dips and maintains a cumulative offset per sensor so Home Assistant always sees a monotonically
+increasing value.
 
-```yaml
-sensor.span_panel_circuit_30_32_instant_power    # (watts) - dual circuit
-sensor.span_panel_circuit_30_32_energy_produced  # (Wh) - dual circuit
-sensor.span_panel_circuit_30_32_energy_consumed  # (Wh) - dual circuit
-sensor.span_panel_circuit_30_32_energy_net       # (Wh) - dual circuit
-```
+- **Default for new installs:** ON
+- **Default for existing installs:** OFF (enable via General Options)
+- **Threshold:** 1.0 Wh minimum to avoid false triggers from float precision noise
+- **Disabling:** Clears all accumulated offsets (starts fresh if re-enabled)
 
-**Friendly Names Pattern**:
+When a dip is detected, a persistent notification lists the affected sensors and their dip amounts.
 
-```yaml
-sensor.span_panel_solar_inverter_instant_power   # (watts)
-sensor.span_panel_solar_inverter_energy_produced # (Wh)
-sensor.span_panel_solar_inverter_energy_consumed # (Wh)
-sensor.span_panel_solar_inverter_energy_net      # (Wh)
-```
+**Diagnostic attributes** (visible when compensation is active):
 
-**Note**: For circuit numbers pattern, the numbers in the entity IDs (e.g., `30_32`) correspond to your configured inverter leg circuits. For single-circuit
-configurations, only one number appears (e.g., `circuit_30_instant_power`).
+| Attribute        | Description                                   |
+| ---------------- | --------------------------------------------- |
+| `energy_offset`  | Cumulative Wh compensation applied (when > 0) |
+| `last_dip_delta` | Size of the most recent dip in Wh             |
 
-Disabling the inverter in the configuration removes these specific sensors. No reboot is required to add/remove these inverter sensors.
-
-Although the solar inverter configuration is primarily aimed at installations that don't have a way to monitor their solar directly from their inverter, one
-could use this configuration to monitor any circuit(s) not provided directly by the underlying SPAN API for whatever reason. The two circuits are always added
-together to indicate their combined power if both circuits are enabled.
-
-Adding your own platform integration sensor like so converts to kWh:
-
-```yaml
-sensor
-    - platform: integration
-      source: sensor.span_panel_solar_inverter_instant_power  # Use appropriate entity ID for your installation
-      name: Solar Inverter Produced kWh
-      unique_id: sensor.solar_inverter_produced_kwh
-     unit_prefix: k
-     round: 2
-```
+Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `General Options`.
 
 ### Customizing Entity Precision
 
-The power sensors provided by this add-on report with the exact precision from the SPAN panel, which may be more decimal places than you will want for practical
-purposes. By default the sensors will display with precision 2, for example `0.00`, with the exception of battery percentage. Battery percentage will have
-precision of 0, for example `39`.
+The power sensors report with the exact precision from the SPAN panel, which may be more decimal places than you need. By default, sensors display with
+precision 2 (e.g., `0.00`), except battery percentage which uses precision 0 (e.g., `39`).
 
-You can change the display precision for any entity in Home Assistant via `Settings` -> `Devices & Services` -> `Entities` tab. Find the entity you would like
-to change in the list and click on it, then click on the gear wheel in the top right. Select the precision you prefer from the "Display Precision" menu and then
-press `UPDATE`.
+You can change the display precision for any entity via `Settings` > `Devices & Services` > `Entities` tab. Find the entity, click on it, click the gear wheel,
+and select your preferred precision from the "Display Precision" menu.
 
-## Limitations
+## WebSocket API
 
-The original SPAN Panel MAIN 32 has a standardized OpenAPI endpoint that is leveraged by this integration.
+The integration provides a `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits with their
+breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities.
 
-However, the new SPAN Panel MAIN 40 and MLO 48 that were released in Q2 of 2025 leverage a different hardware/software stack, even going so far as to use a
-different mobile app logins. This stack is not yet publicly documented and as such, we have not had a chance to discern how to support this stack at the time of
-writing this. The underlying software may be the same codebase as the MAIN 32, so in theory, SPAN may provide access that we have yet to discover or that they
-will eventually expose.
+Without this command, a custom card would need to query the device registry, entity registry, and individual entity states separately, then infer which entities
+belong to the same circuit by parsing naming patterns. That correlation is fragile (naming conventions can change, EVSE circuit sensors live on a different
+device than the panel) and requires multiple round-trips. The topology command provides all of these relationships explicitly, keyed by circuit UUID, so the
+card can render the panel layout without guessing.
+
+See [WebSocket API Reference](docs/websocket-api.md) for the full schema, response format, and usage examples.
 
 ## Troubleshooting
 
@@ -224,74 +418,43 @@ When the SPAN panel undergoes a firmware update or reset, it may report decrease
 data. This errant drop causes a massive spike in the Home Assistant Energy Dashboard. This issue is on the SPAN firmware/cloud side and the only remedy we have
 is to adjust Home Assistant statistics for SPAN sensors upward to their previous value. That adjustment is carried forward for all future stat-reporting times.
 
-**Symptoms:**
+**Prevention:**
+
+Enable **Energy Dip Compensation** in General Options (on by default for new installs). This automatically compensates for counter dips so they never reach Home
+Assistant's statistics engine. See [Energy Dip Compensation](#energy-dip-compensation) above.
+
+**Symptoms (if compensation is not enabled):**
 
 - Huge energy consumption spikes appearing after panel firmware updates
 - Charts showing unrealistic untracked values unrelated to a single sensor that dwarf normal usage
 - Negative energy values in statistics
 
-**Solution:**
+**Solution for existing spikes:**
 
-Use the Developer Tools to adjust individual statistics. This method allows you greater control.
-
-OR
-
-Use the cleanup service to adjust negative statistics in `TOTAL_INCREASING` entries (Beta):
-
-1. **Backup the system** - Create a backup of your Home Assistant instance before making any changes.
-2. **Verify the spike** - Go to **Developer Tools → Statistics** and search for the main meter consumed energy sensor
-   (`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike caused by negative value and note the timestamp
-3. Go to **Developer Tools → Actions**
-4. Search for `span_panel.cleanup_energy_spikes`
-5. Set `start_time` and `end_time` to cover the time range where the spike occurred (use the timestamp from step 2)
-6. First run with `dry_run: true` to preview what will be adjusted (important, save the JSON in case you need to undo with undo_stats_adjustment)
-7. Review the persistent notification showing affected timestamps in the JSON
-8. Run again with `dry_run: false` to adjust the problematic entries (uses the negative delta in each sensor's sum to adjust stats upward)
-9. Fine tune using the statistics adjustments if necessary
-
-The spike cleanup service looks at the energy usage just after the spike to extrapolate energy usage over any previous down time prior to the spike.
+Use **Developer Tools > Statistics** to find and adjust individual statistics entries. Search for the affected sensor (e.g.,
+`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike and use the "Adjust sum" option to correct it.
 
 **Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.
 
+### High CPU Usage
+
+The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default: 1 second). On low-power hardware such as a Raspberry Pi,
+this can contribute to elevated CPU usage.
+
+To reduce CPU load, increase the **Snapshot Update Interval** in **General Options**. A value of 10–15 seconds is recommended for resource-constrained systems.
+Setting the interval to 0 disables debouncing entirely and rebuilds on every MQTT message, which is not recommended for most setups.
+
 ### Common Issues
 
-1. Door Sensor Unavailable - We have observed the SPAN API returning UNKNOWN if the cabinet door has not been operated recently. This behavior is a defect in
-   the SPAN API, so we report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door
-   state is classified as a tamper sensor (reflecting 'Detected' or 'Clear') to differentiate the sensor from a normal entry door.
-2. No Switch - If a circuit is set in the SPAN App as one of the "Always on Circuits", then that circuit will not have a switch because the API does not allow
-   the user to control it.
-3. Circuit Priority - The SPAN API doesn't allow the user to set the circuit priority. We leave this dropdown active because SPAN's browser also shows the
-   dropdown. The circuit priority is affected by two settings the user can adjust in the SPAN app - the "Always-on circuits" which define critical or other
-   must-have circuits. The PowerUp circuits are less clear, but what we know is that those at the top of the PowerUp list tend to be "Non-Essential", but this
-   rule is inconsistent with respect to all circuit order, which may indicate a defect in SPAN PowerUp, the API, or indicate something we don't fully
-   understand.
+1. **Door Sensor Unavailable** - The SPAN API may return UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API — we
+   report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door state is classified as
+   a tamper sensor (reflecting "Detected" or "Clear") to differentiate it from a normal entry door.
+2. **No Switch** - If a circuit is set in the SPAN App as one of the "Always on Circuits", it will not have a switch because the API does not allow the user to
+   control it.
 
-## Development Notes
+## Development
 
-### Developer Prerequisites
-
-- Poetry
-- Pre-commit
-- Python 3.13.2+
-
-This project uses [poetry](https://python-poetry.org/) for dependency management. Linting and type checking are accomplished using
-[pre-commit](https://pre-commit.com/) which is installed by poetry.
-
-### Developer Setup
-
-1. Install [poetry](https://python-poetry.org/).
-2. In the project root run `poetry install --with dev` to install dependencies.
-3. Run `poetry run pre-commit install` to install pre-commit hooks.
-4. Optionally use `Tasks: Run Task` from the command palette to run `Run all Pre-commit checks` or `poetry run pre-commit run --all-files` from the terminal to
-   manually run pre-commit hooks on files locally in your environment as you make changes.
-
-The linters may make changes to files when you try to commit, for example to sort imports. Files that are changed or fail tests will be unstaged. After
-reviewing these changes or making corrections, you can re-stage the changes and recommit or rerun the checks. After the pre-commit hook run succeeds, your
-commit can proceed.
-
-### VS Code
-
-See the .vscode/settings.json.example file for starter settings
+See [Developer Documentation](docs/developer.md) for setup instructions, prerequisites, and tooling.
 
 ## License
 

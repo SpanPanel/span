@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "ネットワーク上にデバイスが見つかりません",
       "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
-      "reauth_successful": "認証できました"
+      "reauth_successful": "認証できました",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "スパンパネルへの接続に失敗しました",
@@ -20,17 +21,17 @@
       "user": {
         "data": {
           "host": "ホスト",
-          "use_ssl": "SSLを使用",
           "simulator_mode": "シミュレーターモード",
           "power_display_precision": "電力表示精度",
-          "energy_display_precision": "エネルギー表示精度"
+          "energy_display_precision": "エネルギー表示精度",
+          "enable_energy_dip_compensation": "エネルギー低下を自動補正"
         },
         "data_description": {
           "host": "SPAN PanelのIPアドレスまたはホスト名（シミュレーション用：'sp3-simulation-001'のようなシリアル番号を使用するか、デフォルトの場合は空にしてください）",
-          "use_ssl": "SPAN Panelへの安全なHTTPS接続を有効にします",
           "simulator_mode": "テスト用のシミュレーターモードを有効にします（ハードウェア不要）。デフォルトシミュレーションの場合はホストを空にするか、カスタムシリアル番号を入力してください。",
           "power_display_precision": "電力値の小数点以下の桁数（0-3）",
-          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）"
+          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）",
+          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正し、エネルギーダッシュボードのスパイクを防止します。"
         },
         "description": "SPAN Panelの接続詳細を入力してください。シミュレーターモードの場合は、シミュレーターチェックボックスをチェックし、必要に応じてカスタムシリアル番号を入力してください。",
         "title": "スパンパネルに接続"
@@ -53,6 +54,16 @@
           "access_token": "アクセストークン"
         }
       },
+      "auth_passphrase": {
+        "title": "パネルパスフレーズ",
+        "description": "SPAN Panelのパスフレーズを入力してください。パネルラベルに印刷されているか、パネルオーナーによって設定されています。",
+        "data": {
+          "hop_passphrase": "パスフレーズ"
+        },
+        "data_description": {
+          "hop_passphrase": "SPAN Panel v2 APIでの認証に使用するパスフレーズ"
+        }
+      },
       "simulator_config": {
         "title": "シミュレーター設定",
         "description": "シミュレーション設定を選択し、必要に応じてカスタム開始時刻を設定します。{config_count}の設定が利用可能です。",
@@ -73,6 +84,7 @@
   },
   "options": {
     "error": {
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "日付/時刻の形式が無効です。HH:MM（24時間）、H:MM（12時間）、または完全なISO日時（YYYY-MM-DDTHH:MM:SS）を使用してください",
       "directory": "ファイルパスが必要です",
       "base": "エクスポートに失敗しました：{error}"
     },
@@ -81,8 +93,6 @@
         "title": "オプションメニュー",
         "menu_options": {
           "general_options": "一般オプション",
-          "entity_naming_options": "エンティティ命名オプション",
-          "entity_naming": "エンティティ命名パターン",
           "export_config": "合成センサー設定をエクスポート",
           "simulation_start_time": "シミュレーション開始時刻",
           "simulation_offline_minutes": "シミュレーションオフラインミニッツ"
@@ -90,47 +100,20 @@
       },
       "general_options": {
         "title": "一般オプション",
+        "description": "SPAN Panel統合の設定を構成します。",
         "data": {
-          "scan_interval": "スキャンインターバル(秒)",
-          "enable_battery_percentage": "バッテリーパーセントセンサーを有効にする",
-          "enable_solar_circuit": "ソーラーインバーターセンサーを有効にする",
-          "leg1": "ソーラーレッグ1",
-          "leg2": "ソーラーレッグ2",
-          "api_retries": "APIリトライ回数 (0-10)",
-          "api_retry_timeout": "APIリトライタイムアウト (秒)",
-          "api_retry_backoff_multiplier": "APIリトライバックオフ倍率",
-          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "snapshot_update_interval": "スナップショット更新間隔（秒）",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
           "enable_circuit_net_energy_sensors": "回路正味エネルギー",
-          "enable_solar_net_energy_sensors": "ソーラー正味エネルギー"
+          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
+          "enable_energy_dip_compensation": "エネルギー低下を自動補正"
         },
         "data_description": {
-          "enable_solar_circuit": "ソーラーインバーター監視用の合成センサーを有効にします。反対の電気相の2つの未マップタブの選択が必要です。",
-          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "snapshot_update_interval": "MQTTデータからパネルスナップショットを再構築する頻度。低い値はより速い更新を提供しますが、CPUをより多く使用します。低電力ハードウェア（例：Raspberry Pi）では増加させてください。0に設定するとデバウンスなし。範囲：0〜15秒。",
           "enable_panel_net_energy_sensors": "パネルレベルエネルギー流れ（メインメーターとフィードスルー）の正味エネルギーセンサーを作成します。双方向流れを考慮した真のエネルギー収支を表示します。",
           "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
-          "enable_solar_net_energy_sensors": "ソーラー発電の正味エネルギーセンサーを作成します。ソーラー回路での消費を考慮した正味ソーラー生産量を表示します。"
-        }
-      },
-      "entity_naming_options": {
-        "title": "エンティティ命名オプション",
-        "description": "エンティティIDの命名方法を設定します。フレンドリ名（例：kitchen_outlets_power）または回路タブ番号（例：circuit_15_power）を選択してください。",
-        "data": {
-          "legacy_upgrade_to_friendly": "レガシーインストールをフレンドリ名にアップグレード",
-          "entity_naming_pattern": "エンティティ命名パターン"
-        },
-        "data_description": {
-          "legacy_upgrade_to_friendly": "このレガシーインストールをデバイスプレフィックス付きのフレンドリエンティティ名にアップグレードします。これにより既存のすべてのエンティティが名前変更されます。",
-          "entity_naming_pattern": "エンティティIDの構築方法を選択してください。フレンドリ名は回路名を使用し（例：kitchen_outlets_power）、回路番号はタブ位置を使用します（例：circuit_15_power）。"
-        }
-      },
-      "entity_naming": {
-        "title": "エンティティ命名パターン",
-        "description": "回路エンティティの命名方法を選択してください。**これを変更すると既存のエンティティが名前変更されます。**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **重要**: \n• エンティティ履歴は名前変更中に保持されます\n• 続行する前に設定のバックアップを検討してください\n• 自動化とスクリプトは新しいエンティティIDを使用するために手動更新が必要な場合があります",
-        "data": {
-          "entity_naming_pattern": "エンティティ命名パターン"
+          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
+          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正します。無効にすると、蓄積されたすべてのオフセットがクリアされます。"
         }
       },
       "export_config": {
@@ -162,6 +145,102 @@
         "data_description": {
           "simulation_offline_minutes": "シミュレーション中にパネルがオフラインに表示される分数。オフラインシミュレーションを無効にするには0に設定します。"
         }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "evse_status": {
+        "state": {
+          "unknown": "不明",
+          "available": "利用可能",
+          "preparing": "準備中",
+          "charging": "充電中",
+          "suspended_ev": "車両により一時停止",
+          "suspended_evse": "充電器により一時停止",
+          "finishing": "終了処理中",
+          "reserved": "予約済み",
+          "faulted": "故障",
+          "unavailable": "利用不可"
+        }
+      },
+      "evse_lock_state": {
+        "state": {
+          "unknown": "不明",
+          "locked": "ロック",
+          "unlocked": "アンロック"
+        }
+      },
+      "dsm_state": {
+        "state": {
+          "unknown": "不明",
+          "dsm_on_grid": "系統連系",
+          "dsm_off_grid": "系統切離"
+        }
+      },
+      "dsm_grid_state": {
+        "state": {
+          "unknown": "不明",
+          "dsm_on_grid": "系統連系",
+          "dsm_off_grid": "系統切離"
+        }
+      },
+      "current_run_config": {
+        "state": {
+          "unknown": "不明",
+          "panel_on_grid": "系統連系",
+          "panel_off_grid": "系統切離",
+          "panel_backup": "バックアップ"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "unknown": "不明",
+          "closed": "閉",
+          "open": "開"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "unknown": "不明",
+          "connected": "接続済み",
+          "unconnected": "未接続"
+        }
+      },
+      "grid_forming_entity": {
+        "state": {
+          "unknown": "不明",
+          "grid": "系統",
+          "battery": "バッテリー",
+          "pv": "PV",
+          "generator": "発電機",
+          "none": "なし"
+        }
+      }
+    },
+    "binary_sensor": {
+      "bess_connected": {
+        "name": "BESS接続済み"
+      },
+      "evse_charging": {
+        "name": "充電中"
+      },
+      "evse_ev_connected": {
+        "name": "EV接続済み"
+      }
+    },
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "停電時もオンのまま",
+          "soc_threshold": "バッテリーしきい値までオンのまま",
+          "off_grid": "停電時にオフになる"
+        }
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "name": "GFEオーバーライド：系統接続"
       }
     }
   },

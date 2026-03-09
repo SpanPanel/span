@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.span_panel.config_flow import OptionsFlowHandler
+from custom_components.span_panel.config_flow_utils import get_current_naming_pattern
 from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
@@ -60,137 +61,49 @@ def mock_span_panel():
 class TestUpgradeScenarios:
     """Test upgrade scenarios for different installation types."""
 
-    def test_legacy_installation_preserved_on_upgrade(self, mock_hass, mock_config_entry):
+    def test_legacy_installation_preserved_on_upgrade(self, mock_config_entry):
         """Test that legacy installations (pre-1.0.4) are preserved during upgrades."""
-        # Legacy installation: no device prefix, no circuit numbers
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.LEGACY_NAMES.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly instead of going through the registry
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                # Should detect as legacy pattern
-                current_pattern = flow._get_current_naming_pattern()
-                assert current_pattern == EntityNamingPattern.LEGACY_NAMES.value
-
-    def test_post_104_friendly_names_preserved_on_upgrade(self, mock_hass, mock_config_entry):
+    def test_post_104_friendly_names_preserved_on_upgrade(self, mock_config_entry):
         """Test that post-1.0.4 friendly names installations are preserved during upgrades."""
-        # Post-1.0.4 with friendly names: device prefix enabled, circuit numbers disabled
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.FRIENDLY_NAMES.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                # Should detect as friendly names pattern
-                current_pattern = flow._get_current_naming_pattern()
-                assert current_pattern == EntityNamingPattern.FRIENDLY_NAMES.value
-
-    def test_modern_circuit_numbers_preserved_on_upgrade(self, mock_hass, mock_config_entry):
+    def test_modern_circuit_numbers_preserved_on_upgrade(self, mock_config_entry):
         """Test that modern circuit numbers installations are preserved during upgrades."""
-        # Modern installation: both device prefix and circuit numbers enabled
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                # Should detect as circuit numbers pattern
-                current_pattern = flow._get_current_naming_pattern()
-                assert current_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
-
-    def test_missing_options_default_to_new_installation_behavior(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_missing_options_default_to_new_installation_behavior(self, mock_config_entry):
         """Test that missing options default to existing installation behavior (legacy)."""
-        # Empty options (like an existing installation with missing flags)
         mock_config_entry.options = {}
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.LEGACY_NAMES.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                # Should default to legacy pattern (existing installation behavior)
-                current_pattern = flow._get_current_naming_pattern()
-                assert current_pattern == EntityNamingPattern.LEGACY_NAMES.value
-
-    def test_partial_options_default_correctly(self, mock_hass, mock_config_entry):
+    def test_partial_options_default_correctly(self, mock_config_entry):
         """Test that partial options still work correctly with defaults."""
-        # Only one option set (edge case)
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
-            # USE_CIRCUIT_NUMBERS missing - defaults to False
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.LEGACY_NAMES.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                # With defaults: USE_DEVICE_PREFIX=False, USE_CIRCUIT_NUMBERS=False (default)
-                # This results in legacy pattern
-                current_pattern = flow._get_current_naming_pattern()
-                assert current_pattern == EntityNamingPattern.LEGACY_NAMES.value
-
-    def test_new_installation_gets_modern_defaults(self, mock_hass, mock_config_entry):
+    def test_new_installation_gets_modern_defaults(self, mock_config_entry):
         """Test that new installations get modern defaults (circuit numbers)."""
-        # New installation: explicit modern defaults (as set by create_new_entry)
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                # Should detect as circuit numbers pattern (new installation default)
-                current_pattern = flow._get_current_naming_pattern()
-                assert current_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
 
 class TestEntityIdConstructionUpgradeScenarios:
@@ -198,118 +111,71 @@ class TestEntityIdConstructionUpgradeScenarios:
 
     def test_legacy_entity_id_construction_preserved(self, mock_coordinator, mock_span_panel):
         """Test that legacy entity ID construction is preserved."""
-        # Legacy installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # Legacy format: no device prefix, use circuit name
-            assert entity_id == "sensor.kitchen_outlets_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.kitchen_outlets_power"
 
     def test_post_104_friendly_names_entity_id_construction_preserved(
         self, mock_coordinator, mock_span_panel
     ):
         """Test that post-1.0.4 friendly names entity ID construction is preserved."""
-        # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # Post-1.0.4 format: device prefix + circuit name
-            assert entity_id == "sensor.span_panel_kitchen_outlets_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.span_panel_kitchen_outlets_power"
 
     def test_modern_circuit_numbers_entity_id_construction_preserved(
         self, mock_coordinator, mock_span_panel
     ):
         """Test that modern circuit numbers entity ID construction is preserved."""
-        # Modern circuit numbers installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # Modern format: device prefix + circuit number
-            assert entity_id == "sensor.span_panel_circuit_15_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.span_panel_circuit_15_power"
 
     def test_missing_options_use_new_installation_defaults(self, mock_coordinator, mock_span_panel):
         """Test that new installations with explicit options use modern defaults."""
-        # New installation: explicit modern defaults (as set by create_new_entry)
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "Kitchen Outlets",
-                15,
-                "power",
-            )
-
-            # New installation defaults: device prefix + circuit numbers
-            assert entity_id == "sensor.span_panel_circuit_15_power"
+        entity_id = construct_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "Kitchen Outlets", 15, "power",
+        )
+        assert entity_id == "sensor.span_panel_circuit_15_power"
 
 
 class TestSyntheticEntityUpgradeScenarios:
@@ -322,30 +188,20 @@ class TestSyntheticEntityUpgradeScenarios:
         """Test that legacy synthetic entity construction is preserved."""
         mock_registry.return_value = None
 
-        # Legacy installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
+        mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_multi_circuit_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "power",
-                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
-                friendly_name="Solar Inverter",
-            )
-
-            # Legacy format: no device prefix, use friendly name
-            assert entity_id == "sensor.solar_inverter_power"
+        entity_id = construct_multi_circuit_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "power",
+            circuit_numbers=[30, 32], friendly_name="Solar Inverter",
+        )
+        assert entity_id == "sensor.solar_inverter_power"
 
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_post_104_synthetic_entity_construction_preserved(
@@ -354,31 +210,20 @@ class TestSyntheticEntityUpgradeScenarios:
         """Test that post-1.0.4 synthetic entity construction is preserved."""
         mock_registry.return_value = None
 
-        # Post-1.0.4 friendly names installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_multi_circuit_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "power",
-                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
-                friendly_name="Solar Inverter",
-            )
-
-            # Post-1.0.4 format: device prefix + friendly name
-            assert entity_id == "sensor.span_panel_solar_inverter_power"
+        entity_id = construct_multi_circuit_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "power",
+            circuit_numbers=[30, 32], friendly_name="Solar Inverter",
+        )
+        assert entity_id == "sensor.span_panel_solar_inverter_power"
 
     @patch("custom_components.span_panel.helpers.er.async_get")
     def test_modern_synthetic_entity_construction_preserved(
@@ -387,31 +232,20 @@ class TestSyntheticEntityUpgradeScenarios:
         """Test that modern synthetic entity construction is preserved."""
         mock_registry.return_value = None
 
-        # Modern circuit numbers installation
         mock_config_entry = MagicMock()
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
-        mock_config_entry.title = "Span Panel"  # Provide string title
+        mock_config_entry.title = "Span Panel"
         mock_config_entry.data = {"device_name": "Span Panel"}
         mock_coordinator.config_entry = mock_config_entry
 
-        # Mock device info
-        with patch("custom_components.span_panel.helpers.panel_to_device_info") as mock_device_info:
-            mock_device_info.return_value = {"name": "Span Panel"}
-
-            entity_id = construct_multi_circuit_entity_id(
-                mock_coordinator,
-                mock_span_panel,
-                "sensor",
-                "power",
-                circuit_numbers=[30, 32],  # Solar inverter on circuits 30 and 32
-                friendly_name="Solar Inverter",
-            )
-
-            # Modern format: device prefix + circuit numbers (when USE_CIRCUIT_NUMBERS is True)
-            assert entity_id == "sensor.span_panel_circuit_30_32_power"
+        entity_id = construct_multi_circuit_entity_id(
+            mock_coordinator, mock_span_panel, "sensor", "power",
+            circuit_numbers=[30, 32], friendly_name="Solar Inverter",
+        )
+        assert entity_id == "sensor.span_panel_circuit_30_32_power"
 
 
 class TestGeneralOptionsPreservesNamingFlags:
@@ -543,106 +377,39 @@ class TestGeneralOptionsPreservesNamingFlags:
 class TestUpgradeDocumentationCompliance:
     """Test that upgrade scenarios comply with documentation."""
 
-    def test_readme_compliance_legacy_pattern(self, mock_hass, mock_config_entry):
+    def test_readme_compliance_legacy_pattern(self, mock_config_entry):
         """Test that README examples match actual legacy pattern behavior."""
-        # Legacy installation (pre-1.0.4 or upgraded without options)
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: False,
             USE_CIRCUIT_NUMBERS: False,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.LEGACY_NAMES.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                pattern = flow._get_current_naming_pattern()
-                assert pattern == EntityNamingPattern.LEGACY_NAMES.value
-
-    def test_readme_compliance_friendly_names_pattern(self, mock_hass, mock_config_entry):
+    def test_readme_compliance_friendly_names_pattern(self, mock_config_entry):
         """Test that README examples match actual friendly names pattern behavior."""
-        # Post-1.0.4 installation with friendly names
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: False,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.FRIENDLY_NAMES.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                pattern = flow._get_current_naming_pattern()
-                assert pattern == EntityNamingPattern.FRIENDLY_NAMES.value
-
-    def test_readme_compliance_circuit_numbers_pattern(self, mock_hass, mock_config_entry):
+    def test_readme_compliance_circuit_numbers_pattern(self, mock_config_entry):
         """Test that README examples match actual circuit numbers pattern behavior."""
-        # Post-1.0.9 installation with circuit numbers
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                pattern = flow._get_current_naming_pattern()
-                assert pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
-
-    def test_readme_compliance_new_installation_default(self, mock_hass, mock_config_entry):
+    def test_readme_compliance_new_installation_default(self, mock_config_entry):
         """Test that new installations default to circuit numbers as documented."""
-        # New installation (post-1.0.9) - explicit defaults set by create_new_entry
         mock_config_entry.options = {
             USE_DEVICE_PREFIX: True,
             USE_CIRCUIT_NUMBERS: True,
         }
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.CIRCUIT_NUMBERS.value
 
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                pattern = flow._get_current_naming_pattern()
-                assert pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
-
-    def test_readme_compliance_existing_installation_empty_options(
-        self, mock_hass, mock_config_entry
-    ):
+    def test_readme_compliance_existing_installation_empty_options(self, mock_config_entry):
         """Test that existing installations with empty options default to legacy as documented."""
-        # Existing installation with no options (pre-1.0.4 or upgraded without options)
         mock_config_entry.options = {}
-
-        with patch.object(OptionsFlowHandler, "__init__", return_value=None):
-            flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
-            flow.hass = mock_hass
-
-            # Mock the config_entry property directly
-            with patch.object(
-                OptionsFlowHandler,
-                "config_entry",
-                new_callable=lambda: mock_config_entry,
-            ):
-                pattern = flow._get_current_naming_pattern()
-                assert pattern == EntityNamingPattern.LEGACY_NAMES.value
+        assert get_current_naming_pattern(mock_config_entry) == EntityNamingPattern.LEGACY_NAMES.value

@@ -3,7 +3,8 @@
     "abort": {
       "no_devices_found": "No se hallaron aparatos en la red",
       "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
-      "reauth_successful": "Autenticación exitosa."
+      "reauth_successful": "Autenticación exitosa.",
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
     },
     "error": {
       "cannot_connect": "No se logró establecer conexión con Span Panel",
@@ -20,17 +21,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "use_ssl": "Usar SSL",
           "simulator_mode": "Modo Simulador",
           "power_display_precision": "Precisión de Visualización de Potencia",
-          "energy_display_precision": "Precisión de Visualización de Energía"
+          "energy_display_precision": "Precisión de Visualización de Energía",
+          "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente"
         },
         "data_description": {
           "host": "Dirección IP o nombre de host del SPAN Panel (para simulación: use número de serie como 'sp3-simulation-001' o déjelo vacío para el predeterminado)",
-          "use_ssl": "Habilitar conexión HTTPS segura al SPAN Panel",
           "simulator_mode": "Habilitar modo simulador para pruebas (no se requiere hardware). Deje el host vacío para simulación predeterminada, o ingrese un número de serie personalizado.",
           "power_display_precision": "Número de lugares decimales para valores de potencia (0-3)",
-          "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)"
+          "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)",
+          "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas, evitando picos en el panel de energía."
         },
         "description": "Ingrese los detalles de conexión para su SPAN Panel. Para modo simulador, marque la casilla del simulador y opcionalmente ingrese un número de serie personalizado.",
         "title": "Establecer conexión al Span Panel"
@@ -53,6 +54,16 @@
           "access_token": "Token de Acceso"
         }
       },
+      "auth_passphrase": {
+        "title": "Contraseña del Panel",
+        "description": "Ingrese la contraseña de su SPAN Panel. Está impresa en la etiqueta del panel o establecida por el propietario del panel.",
+        "data": {
+          "hop_passphrase": "Contraseña"
+        },
+        "data_description": {
+          "hop_passphrase": "La contraseña utilizada para autenticar con la API v2 del SPAN Panel"
+        }
+      },
       "simulator_config": {
         "title": "Configuración del Simulador",
         "description": "Seleccione una configuración de simulación y opcionalmente establezca un tiempo de inicio personalizado. {config_count} configuraciones disponibles.",
@@ -73,6 +84,7 @@
   },
   "options": {
     "error": {
+      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Formato de fecha/hora inválido. Use HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS)",
       "directory": "Se requiere la ruta del archivo",
       "base": "Falló la exportación: {error}"
     },
@@ -81,8 +93,6 @@
         "title": "Menú de Opciones",
         "menu_options": {
           "general_options": "Opciones Generales",
-          "entity_naming_options": "Opciones de Nomenclatura de Entidades",
-          "entity_naming": "Patrón de Nomenclatura de Entidades",
           "export_config": "Exportar Configuración de Sensores Sintéticos",
           "simulation_start_time": "Tiempo de Inicio de Simulación",
           "simulation_offline_minutes": "Minutos Sin Conexión de Simulación"
@@ -90,47 +100,20 @@
       },
       "general_options": {
         "title": "Opciones Generales",
+        "description": "Configurar los ajustes de la integración SPAN Panel.",
         "data": {
-          "scan_interval": "Intervalo de escaneo en segundos",
-          "enable_battery_percentage": "Habilitar Sensor de Porcentaje de Batería",
-          "enable_solar_circuit": "Habilitar Sensores de Inversor Solar",
-          "leg1": "Pata solar 1",
-          "leg2": "Pata solar 2",
-          "api_retries": "Reintentos de API (0-10)",
-          "api_retry_timeout": "Tiempo de espera de reintento de API (segundos)",
-          "api_retry_backoff_multiplier": "Multiplicador de retraso de reintento de API",
-          "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
-          "legacy_upgrade_to_friendly": "Add Device Name Prefix to Entity ID's",
+          "snapshot_update_interval": "Intervalo de Actualización de Snapshot (segundos)",
           "enable_panel_net_energy_sensors": "Energía Neta del Panel",
           "enable_circuit_net_energy_sensors": "Energía Neta del Circuito",
-          "enable_solar_net_energy_sensors": "Energía Neta Solar"
+          "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
+          "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente"
         },
         "data_description": {
-          "enable_solar_circuit": "Habilitar sensores sintéticos para monitoreo de inversor solar. Requiere selección de dos pestañas no mapeadas en fases eléctricas opuestas.",
-          "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
-          "legacy_upgrade_to_friendly": "Warning: This irreversible operation will change your circuit entity IDs allowing support for more than one panel",
+          "snapshot_update_interval": "Con qué frecuencia reconstruir el snapshot del panel desde datos MQTT. Valores más bajos dan actualizaciones más rápidas pero usan más CPU. Aumente en hardware de baja potencia (ej., Raspberry Pi). Establezca en 0 para sin debounce. Rango: 0\u201315 segundos.",
           "enable_panel_net_energy_sensors": "Crear sensores de energía neta para flujos de energía a nivel de panel (medidor principal y derivación). Muestra el verdadero balance de energía contabilizando flujos bidireccionales.",
           "enable_circuit_net_energy_sensors": "Crear sensores de energía neta para circuitos individuales. Muestra el verdadero consumo de energía contabilizando potencia reactiva y flujos regenerativos.",
-          "enable_solar_net_energy_sensors": "Crear sensores de energía neta para generación solar. Muestra la producción solar neta contabilizando cualquier consumo en circuitos solares."
-        }
-      },
-      "entity_naming_options": {
-        "title": "Opciones de Nomenclatura de Entidades",
-        "description": "Configure cómo se nombran los IDs de entidad. Elija entre nombres amigables (ej., kitchen_outlets_power) o números de pestañas de circuito (ej., circuit_15_power).",
-        "data": {
-          "legacy_upgrade_to_friendly": "Actualizar Instalación Legacy a Nombres Amigables",
-          "entity_naming_pattern": "Patrón de Nomenclatura de Entidades"
-        },
-        "data_description": {
-          "legacy_upgrade_to_friendly": "Actualizar esta instalación legacy para usar nombres de entidad amigables con prefijo de dispositivo. Esto renombrará todas las entidades existentes.",
-          "entity_naming_pattern": "Elija cómo se construyen los IDs de entidad. Los nombres amigables usan nombres de circuito (ej., kitchen_outlets_power), mientras que los números de circuito usan posiciones de pestaña (ej., circuit_15_power)."
-        }
-      },
-      "entity_naming": {
-        "title": "Patrón de Nomenclatura de Entidades",
-        "description": "Elija cómo se nombran las entidades de circuito. **Cambiar esto renombrará sus entidades existentes.**\n\n{friendly_example}\n\n{circuit_example}\n\n⚠️ **Importante**: \n• El historial de entidades se preservará durante el renombrado\n• Considere hacer una copia de seguridad de su configuración antes de proceder\n• Las automatizaciones y scripts pueden necesitar actualizaciones manuales para usar los nuevos IDs de entidad",
-        "data": {
-          "entity_naming_pattern": "Patrón de Nomenclatura de Entidades"
+          "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
+          "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas. Al deshabilitar se borran todas las compensaciones acumuladas."
         }
       },
       "export_config": {
@@ -162,6 +145,102 @@
         "data_description": {
           "simulation_offline_minutes": "Número de minutos que el panel debe aparecer sin conexión durante la simulación. Establezca en 0 para deshabilitar la simulación sin conexión."
         }
+      }
+    }
+  },
+  "entity": {
+    "select": {
+      "circuit_priority": {
+        "state": {
+          "never": "Permanece encendido en un apagón",
+          "soc_threshold": "Permanece encendido hasta el umbral de batería",
+          "off_grid": "Se apaga en un apagón"
+        }
+      }
+    },
+    "button": {
+      "gfe_override": {
+        "name": "Anulación GFE: Conectado a Red"
+      }
+    },
+    "sensor": {
+      "evse_status": {
+        "state": {
+          "unknown": "Desconocido",
+          "available": "Disponible",
+          "preparing": "Preparando",
+          "charging": "Cargando",
+          "suspended_ev": "Suspendido por Vehículo",
+          "suspended_evse": "Suspendido por Cargador",
+          "finishing": "Finalizando",
+          "reserved": "Reservado",
+          "faulted": "Averiado",
+          "unavailable": "No Disponible"
+        }
+      },
+      "evse_lock_state": {
+        "state": {
+          "unknown": "Desconocido",
+          "locked": "Bloqueado",
+          "unlocked": "Desbloqueado"
+        }
+      },
+      "dsm_state": {
+        "state": {
+          "unknown": "Desconocido",
+          "dsm_on_grid": "Conectado a Red",
+          "dsm_off_grid": "Desconectado de Red"
+        }
+      },
+      "dsm_grid_state": {
+        "state": {
+          "unknown": "Desconocido",
+          "dsm_on_grid": "Conectado a Red",
+          "dsm_off_grid": "Desconectado de Red"
+        }
+      },
+      "current_run_config": {
+        "state": {
+          "unknown": "Desconocido",
+          "panel_on_grid": "Conectado a Red",
+          "panel_off_grid": "Desconectado de Red",
+          "panel_backup": "Respaldo"
+        }
+      },
+      "main_relay_state": {
+        "state": {
+          "unknown": "Desconocido",
+          "closed": "Cerrado",
+          "open": "Abierto"
+        }
+      },
+      "vendor_cloud": {
+        "state": {
+          "unknown": "Desconocido",
+          "connected": "Conectado",
+          "unconnected": "Desconectado"
+        }
+      },
+      "grid_forming_entity": {
+        "state": {
+          "unknown": "Desconocido",
+          "grid": "Red",
+          "battery": "Batería",
+          "pv": "PV",
+          "generator": "Generador",
+          "none": "Ninguno"
+        }
+      }
+    },
+    "binary_sensor": {
+      "bess_connected": {
+        "name": "BESS Conectado"
+      },
+      "evse_charging": {
+        "name": "Cargando"
+      },
+      "evse_ev_connected": {
+        "name": "VE Conectado"
       }
     }
   },

@@ -16,7 +16,7 @@ circuit_templates:
       typical_power: 300.0
       power_variation: 0.05
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
   # Outlet circuits
   outlets:
@@ -26,7 +26,7 @@ circuit_templates:
       typical_power: 150.0
       power_variation: 0.4
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   # Kitchen specific outlets (higher capacity)
   kitchen_outlets:
@@ -36,7 +36,7 @@ circuit_templates:
       typical_power: 300.0
       power_variation: 0.5
     relay_behavior: "controllable"
-    priority: "MUST_HAVE"
+    priority: "NEVER"
 
   # Major appliances
   major_appliance:
@@ -46,7 +46,7 @@ circuit_templates:
       typical_power: 800.0
       power_variation: 0.3
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
   # Large appliances (240V)
   large_appliance_240v:
@@ -56,7 +56,7 @@ circuit_templates:
       typical_power: 2000.0
       power_variation: 0.15
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
   # HVAC/AC systems
   hvac:
@@ -66,7 +66,7 @@ circuit_templates:
       typical_power: 2800.0
       power_variation: 0.25
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
   # EV chargers
   ev_charger:
@@ -76,7 +76,7 @@ circuit_templates:
       typical_power: 7200.0
       power_variation: 0.05
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
   # Special equipment
   special_equipment:
@@ -86,7 +86,7 @@ circuit_templates:
       typical_power: 400.0
       power_variation: 0.2
     relay_behavior: "controllable"
-    priority: "NON_ESSENTIAL"
+    priority: "OFF_GRID"
 
 circuits:
   # Using actual circuit IDs from the registry
