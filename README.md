@@ -23,7 +23,7 @@ safety device and must not be relied upon for life-safety applications. Use this
 software. See [LICENSE](LICENSE) for the full warranty disclaimer.
 
 This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
-circuits. You can optionally use the [span-card](https://github.com/spanio/span-card) Lovelace card for visualization and switch control.
+circuits. You can optionally use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control.
 
 This integration communicates with the SPAN Panel over your local network using SPAN's official
 [Electrification Bus (eBus)](https://github.com/spanio/SPAN-API-Client-Docs) framework — an open, multi-vendor integration standard for home energy
