@@ -21,8 +21,8 @@ All notable changes to this project will be documented in this file.
   - `Current Run Config`: `PANEL_ON_GRID` → `panel_on_grid`, `PANEL_OFF_GRID` → `panel_off_grid`
   - `Main Relay State`: `CLOSED` → `closed`, `OPEN` → `open`
 
-  The UI displays localized names (e.g., `dsm_on_grid` displays as "On Grid"). Automations use the lowercase values shown above. This change was done as
-  preparation to move the integration into HA core.
+  The UI displays localized names (e.g., `dsm_on_grid` displays as "On Grid"). Automations use the lowercase values shown above. This change was made to support
+  translations in enumerations.
 
 ### New Features
 
