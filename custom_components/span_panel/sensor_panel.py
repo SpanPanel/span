@@ -102,8 +102,7 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         snapshot = self.coordinator.data
         attributes: dict[str, Any] = {}
 
-        if snapshot.panel_size is not None:
-            attributes["panel_size"] = snapshot.panel_size
+        attributes["panel_size"] = snapshot.panel_size
         if snapshot.wifi_ssid is not None:
             attributes["wifi_ssid"] = snapshot.wifi_ssid
 
