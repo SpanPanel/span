@@ -74,8 +74,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Improvements
 
-- **Switch optimistic state hold**: Switches now respond instantly in the UI after toggling, with a 10-second hold that prevents the display from bouncing
-  back to stale state while the panel processes the relay command
+- **Switch optimistic state hold**: Switches now respond instantly in the UI after toggling, with a 10-second hold that prevents the display from bouncing back
+  to stale state while the panel processes the relay command
 
 - `DSM State` — multi-signal heuristic deriving grid connectivity from battery grid-state, dominant power source, upstream lugs power, and power-flows grid
 - `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
