@@ -66,7 +66,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - `device_type` attribute from circuit power sensors — redundant with the entity's own device classification
 
+### Developer / Card Support
+
+- **WebSocket Topology API**: New `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits
+  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. Eliminates the need for custom cards to
+  reverse-engineer entity relationships from naming patterns. See [WebSocket API Reference](docs/websocket-api.md) for schema and examples
+
 ### Improvements
+
+- **Switch optimistic state hold**: Switches now respond instantly in the UI after toggling, with a 10-second hold that prevents the display from bouncing
+  back to stale state while the panel processes the relay command
 
 - `DSM State` — multi-signal heuristic deriving grid connectivity from battery grid-state, dominant power source, upstream lugs power, and power-flows grid
 - `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
