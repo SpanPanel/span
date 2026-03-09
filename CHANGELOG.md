@@ -6,12 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` library during connection,
-  replacing a heuristic that could undercount when trailing breaker positions were empty. Previously, panels with unused trailing breaker slots
-  reported a smaller panel size, which understated the unmapped-sensor count and caused the
-  [span-card](https://github.com/SpanPanel/span-card) layout to show fewer slots than physically present. The `panel_size` sensor attribute and
-  WebSocket topology field are now unconditionally populated.
-- Requires `span-panel-api>=2.2.3`
+- **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` Previously some users could see fewer
+  unmapped sensors when trailing breaker positions were empty.
+
+  **Important** 2.0.1 cautions still apply — read those carefully if not on 2.0.1 BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
 ## [2.0.1] - 3/2026
 
