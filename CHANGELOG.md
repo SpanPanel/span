@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
 - You _must_ already be on v1.3.1 of the SpanPanel/span integration if upgrading
+- If you wwere running a beta or RC ensure you reload the integration after upgrade
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 - `DSM Grid State` deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version since it is an
   alias for `DSM State`
