@@ -2,12 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [2.0.1] - 3/2026
 
-⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade.** ⚠️
+⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on the latest 1.3.x version BEFORE upgrading to
+2.0.x** ⚠️
 
 ### Breaking Changes
 
@@ -23,33 +21,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - `Current Run Config`: `PANEL_ON_GRID` → `panel_on_grid`, `PANEL_OFF_GRID` → `panel_off_grid`
   - `Main Relay State`: `CLOSED` → `closed`, `OPEN` → `open`
 
-  The UI displays localized names (e.g., `dsm_on_grid` displays as "On Grid"). Automations use the lowercase values shown above.
+  The UI displays localized names (e.g., `dsm_on_grid` displays as "On Grid"). Automations use the lowercase values shown above. This change was done as
+  preparation to move the integration into HA core.
 
 ### New Features
 
-- **EVSE (SPAN Drive) Support**: Full EV charger entity support when an EVSE is commissioned on the panel. Each charger appears as a separate sub-device with
-  manufacturer, model, serial number, and software version in device info. Device names include the panel name prefix for cross-panel collision avoidance and HA
-  bulk rename support (e.g., "Main House SPAN Drive (Garage)"). Display suffix resolved from circuit name (friendly names mode) or EVSE serial number (circuit
-  numbers mode). Entities created per charger: Charger Status (enum sensor with OCPP states), Advertised Current (measurement sensor), Lock State (enum sensor),
-  Charging (binary sensor), and EV Connected (binary sensor). Includes translated state names in 5 languages (en, es, fr, ja, pt), simulation mode support
-  (32-tab config has 1 SPAN Drive, 40-tab config has 2), and automatic capability detection that triggers a reload when an EVSE first appears. EVSE circuits use
-  "EV Charger" as the fallback name. See [design doc](docs/dev/evse_span_drive_support.md) for details.
-- **Energy Dip Compensation**: Proactively compensates when the SPAN panel reports lower energy readings for `TOTAL_INCREASING` sensors (consumed/produced
-  energy). Maintains a cumulative offset per sensor so Home Assistant never sees a decrease, preventing negative spikes in the energy dashboard. Enabled by
-  default for new installs; existing installs can enable via General Options. Includes persistent notification when dips are detected and sensor attributes
-  (`energy_offset`, `last_dip_delta`) for diagnostics. See [design doc](docs/dev/energy_dip_compensation.md) for details.
+- **EVSE (SPAN Drive) Support**: Each commissioned EV charger appears as a sub-device (e.g., "Main House SPAN Drive (Garage)")
+- **BESS sub-device**: Battery entities live on a dedicated BESS sub-device
+- **Energy Dip Compensation**: Automatically compensates when the panel reports lower energy readings for `TOTAL_INCREASING` sensors, maintaining a cumulative
+  offset to prevent negative spikes in the energy dashboard. Enabled by default for new installs; existing installs can enable via General Options. Includes
+  diagnostic attributes (`energy_offset`, `last_dip_delta`) and persistent notifications.
 - Real-time MQTT push via eBus broker — no more polling intervals
-- **Grid Forming Entity (GFE) sensor** — read-only sensor showing the panel's current grid-forming power source (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN).
-  The GFE identifies which source provides the frequency and voltage reference, not which produces the most watts. Reported as `dominant-power-source` in the
-  eBus MQTT schema
-- **GFE Override button** — publishes a temporary `GRID` override to the panel when the battery system (BESS) loses communication and the GFE value becomes
-  stale. The BESS automatically reclaims control when communication is restored. See [Grid Forming Entity](README.md#grid-forming-entity) for details
-- **BESS Connected binary sensor** — indicates whether the battery system is communicating with the panel. Promoted from an attribute on the Battery Power
-  sensor to a first-class entity for easier automation
-- `Battery Power` sensor on BESS sub-device (charge/discharge power)
+- **Grid Forming Entity (GFE) sensor** — shows the panel's current grid-forming power source (GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN). Identifies which
+  source provides the frequency and voltage reference.
+- **GFE Override button** — publishes a temporary `GRID` override when the battery system (BESS) loses communication and the GFE value becomes stale. The BESS
+  automatically reclaims control when communication is restored. See [Grid Forming Entity](README.md#grid-forming-entity) for details
 - `Site Power` sensor (grid + PV + battery from power-flows node)
-- **BESS sub-device**: Battery Level and Battery Power now live on a dedicated BESS sub-device (linked via `via_device`). BESS metadata sensors (Vendor, Model,
-  Serial Number, Firmware Version, Nameplate Capacity, Stored Energy) and BESS Connected binary sensor are also on this device
 - **Panel diagnostic sensors**: L1/L2 Voltage, Upstream/Downstream L1/L2 Current, Main Breaker Rating — promoted from attributes to dedicated diagnostic
   entities
 - **Circuit Current and Breaker Rating sensors**: promoted from circuit power sensor attributes to dedicated per-circuit entities (conditionally created when
@@ -57,36 +44,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **PV metadata sensors**: PV Vendor, PV Product, Nameplate Capacity — on the main panel device (conditionally created when PV is commissioned)
 - **Grid Islandable binary sensor**: indicates whether the panel can island from the grid (conditionally created)
 - `PV Power` sensor with inverter metadata attributes (vendor, product, nameplate capacity)
-- **Reconfigure flow** — update the panel host/IP address without removing and re-adding the integration. Validates the new host is reachable and running v2
-  firmware, and prevents switching to a different panel by verifying the serial number matches. Access via the integration's three-dot menu → Reconfigure
-- Circuit Shed Priority select — controls off-grid shedding (NEVER / SOC_THRESHOLD / OFF_GRID)
+- **Reconfigure flow** — update the panel host/IP address without removing and re-adding the integration.
+- Circuit Shed Priority select now works — controls off-grid shedding (NEVER / SOC_THRESHOLD / OFF_GRID)
 - Panel size and Wi-Fi SSID as software version attributes
 
 ### Removed
 
-- `device_type` attribute from circuit power sensors — redundant with the entity's own device classification
+- Post-install entity naming pattern switching — the naming pattern is now set once during initial setup. The `EntityIdMigrationManager` and all associated
+  migration machinery have been removed
+- `cleanup_energy_spikes` and `undo_stats_adjustments` services — energy dip compensation handles counter dips automatically. For existing historical spikes,
+  use Developer Tools > Statistics to adjust individual entries
 
 ### Developer / Card Support
 
 - **WebSocket Topology API**: New `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits
-  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. Eliminates the need for custom cards to
-  reverse-engineer entity relationships from naming patterns. See [WebSocket API Reference](docs/websocket-api.md) for schema and examples
+  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. See
+  [WebSocket API Reference](docs/websocket-api.md) for schema and examples
 
 ### Improvements
 
-- **Switch optimistic state hold**: Switches now respond instantly in the UI after toggling, with a 10-second hold that prevents the display from bouncing back
-  to stale state while the panel processes the relay command
-
 - `DSM State` — multi-signal heuristic deriving grid connectivity from battery grid-state, dominant power source, upstream lugs power, and power-flows grid
 - `Current Run Config` — full tri-state derivation (PANEL_ON_GRID / PANEL_OFF_GRID / PANEL_BACKUP)
-- Configurable snapshot update interval (0–15s, default 1s) to rate-limit snapshot rebuilds from high-frequency MQTT messages — reduces CPU on low-power
-  hardware
-- Removed stale v1 options from the configuration UI: `Scan Interval` (no longer applicable with MQTT push) and `Enable Battery Percentage` (now auto-detected
-  via panel capabilities)
-- Removed post-install entity naming pattern switching — the naming pattern is now set once during initial setup and cannot be changed afterward. The
-  `EntityIdMigrationManager` and all associated migration machinery have been removed
-- Removed `cleanup_energy_spikes` and `undo_stats_adjustments` services — energy dip compensation handles counter dips automatically. For existing historical
-  spikes, use Developer Tools > Statistics to adjust individual entries
+- Configurable snapshot update interval (0–15s, default 1s) reduces CPU on low-power hardware
 
 ## [1.3.1] - 2026-01-19
 
@@ -106,7 +85,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Respect user-customized entity names**: When a user has customized an entity's friendly name in Home Assistant, the integration skips name sync for that
   entity. @cayossarian
 
-## [1.30] - 2025-12-31
+## [1.3.0] - 2025-12-31
 
 ### 🔄 Changed
 
@@ -119,14 +98,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **Energy Spike Cleanup Service**: New `span_panel.cleanup_energy_spikes` service to detect and remove negative energy spikes from Home Assistant statistics
   caused by panel firmware updates. Includes dry-run mode for safe preview before deletion.
-- **Firmware Reset Detection (Beta)**: Monitoring of main meter energy sensor to detect errant (negative energy reports over time). Sends a persistent
+- **Firmware Reset Detection (Beta)**: Monitors the main meter energy sensor for errant decreases (negative energy deltas over time). Sends a persistent
   notification when detected, guiding users to adjust statistics if desired.
 
 ### 🔄 Changed
 
 - **Removed Decreasing Energy Protection**: Reverted the TOTAL_INCREASING validation that was ignoring decreasing energy values that were thought to occur a
   limited number of updates but turned out to be permanent under-reporting of SPAN cloud data that manifested during firmware updates. The bug is on the SPAN
-  side and can result in spikes in energy dashbaoards after firmware updates. See the Trouble-Shooting section of the README.md for more information.
+  side and can result in spikes in energy dashboards after firmware updates. See the Trouble-Shooting section of the README.md for more information.
 
 ### 📝 Notes
 
@@ -159,7 +138,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Circuit Naming Logic**: Fixed logic for circuit-naming patterns to ensure proper entity ID generation and panel prefixes (fresh installs only)
 - **Entity ID naming Choices**: Restored the ability to change entity ID naming patterns in live panels (circuit tab-based sensors only, not panel)
 - **Panel Friendly Name Sync**: Fixed regression in panel circuit name synchronization. A new install will sync all friendly names once on the first refresh and
-  anytime a user changes a name in the SPAN App changes the name in the mobile/SPAN App.
+  anytime a user changes a name in the SPAN mobile app.
 - **API Optimization**: Removed unnecessary signal updates to improve performance and reduce overhead
 - **API Dependencies**: Updated span-panel-api OpenAPI package to version 1.1.13 to remove the cache
 - **Resolve Cache Config Entry Defect**: Fixed an issue where a 1.2.5 config entry could attempt to set up a cache window in the underlying OpenAPI library that
@@ -169,7 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### 🔧 Technical Improvements
 
-- **Circuit Based Naming**: Circuit based entity_id naming was not using both tabs in the name. Existing entity_id's are unchnaged except fresh installs.
+- **Circuit Based Naming**: Circuit based entity_id naming was not using both tabs in the name. Existing entity IDs are unchanged except for fresh installs.
 - **Switches and Selects Naming**: were creating proper ID's but not looking up migration names in 1.2.4
 
 ## [1.2.4] - 2025-09-XX

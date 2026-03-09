@@ -32,7 +32,7 @@ real-time state updates without polling.
 
 ## 1.1.x Integration Sunset (v1)
 
-Users MUST upgrade by the end 2026 to avoid disruption.
+Users MUST upgrade by the end of 2026 to avoid disruption. Upgrade to the latest 1.1.x version BEFORE upgrading to 2.0.x.
 
 ## 2.0.x Breaking Changes (v2)
 
@@ -74,7 +74,7 @@ See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
    - **Enter Panel Passphrase** — type the passphrase found in the SPAN mobile app under On-premise settings
    - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
 10. Choose your entity naming pattern
-11. Optionally adjust the scan interval - 0 is realtime, up to 15 seconds based on CPU
+11. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
 
 ### Upgrade Process
 
@@ -101,10 +101,10 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Feed Through Produced Energy | Energy       | Wh   | Feedthrough energy exported                                                                                            |
 | Feed Through Consumed Energy | Energy       | Wh   | Feedthrough energy imported                                                                                            |
 | Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
-| DSM State                    | —            | —    | DSM_ON_GRID (grid connected), DSM_OFF_GRID (islanded), UNKNOWN. Derived from multiple eBus signals                     |
-| Current Run Config           | —            | —    | PANEL_ON_GRID (grid connected), PANEL_OFF_GRID (islanded on PV/generator), PANEL_BACKUP (islanded on battery), UNKNOWN |
+| DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals                     |
+| Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown |
 | Grid Forming Entity          | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See [Grid Forming Entity](#grid-forming-entity)                      |
-| Main Relay State             | —            | —    | CLOSED (power flowing), OPEN (disconnected), UNKNOWN                                                                   |
+| Main Relay State             | —            | —    | closed (power flowing), open (disconnected), unknown                                                                   |
 | Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                   |
 | Software Version             | —            | —    | Firmware version string                                                                                                |
 
@@ -438,7 +438,7 @@ Use **Developer Tools > Statistics** to find and adjust individual statistics en
 
 ### High CPU Usage
 
-The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default: 5 seconds). On low-power hardware such as a Raspberry Pi,
+The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default: 1 second). On low-power hardware such as a Raspberry Pi,
 this can contribute to elevated CPU usage.
 
 To reduce CPU load, increase the **Snapshot Update Interval** in **General Options**. A value of 10–15 seconds is recommended for resource-constrained systems.
