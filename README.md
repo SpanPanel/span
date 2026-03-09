@@ -57,7 +57,7 @@ See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel with firmware `spanos2/r202603/05` or later
-- Span Panel/span integration v1.3.1
+- Span Panel/span integration v1.3.0 or later
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door
 
 ## Installation

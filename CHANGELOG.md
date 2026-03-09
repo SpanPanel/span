@@ -4,13 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.1] - 3/2026
 
-⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on the latest 1.3.x version BEFORE upgrading to
+⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on v1.3.0 or later BEFORE upgrading to
 2.0. This upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 
 ### Breaking Changes
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.1 of the SpanPanel/span integration if upgrading
+- You _must_ already be on v1.3.0 or later of the SpanPanel/span integration if upgrading
 - After upgrading, you must re-authenticate using your **panel passphrase** (found in the SPAN mobile app under On-premise settings) or **proof of proximity**
   (open and close the panel door 3 times). See the [README](README.md) for details.
 - If you were running a beta or RC, ensure you reload the integration after upgrade
