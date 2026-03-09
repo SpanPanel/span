@@ -398,6 +398,18 @@ precision 2 (e.g., `0.00`), except battery percentage which uses precision 0 (e.
 You can change the display precision for any entity via `Settings` > `Devices & Services` > `Entities` tab. Find the entity, click on it, click the gear wheel,
 and select your preferred precision from the "Display Precision" menu.
 
+## WebSocket API
+
+The integration provides a `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits with their
+breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities.
+
+Without this command, a custom card would need to query the device registry, entity registry, and individual entity states separately, then infer which entities
+belong to the same circuit by parsing naming patterns. That correlation is fragile (naming conventions can change, EVSE circuit sensors live on a different
+device than the panel) and requires multiple round-trips. The topology command provides all of these relationships explicitly, keyed by circuit UUID, so the
+card can render the panel layout without guessing.
+
+See [WebSocket API Reference](docs/websocket-api.md) for the full schema, response format, and usage examples.
+
 ## Troubleshooting
 
 ### Energy Dashboard Spikes After Firmware Updates

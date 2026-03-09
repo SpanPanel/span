@@ -52,6 +52,7 @@ from .coordinator import SpanPanelCoordinator
 from .migration import migrate_config_entry_sensors
 from .options import SNAPSHOT_UPDATE_INTERVAL
 from .util import snapshot_to_device_info
+from .websocket import async_register_commands
 
 
 @dataclass
@@ -242,6 +243,12 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
+
+    # Register WebSocket commands once per HA instance
+    domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})
+    if not domain_data.get("websocket_registered"):
+        domain_data["websocket_registered"] = True
+        async_register_commands(hass)
 
     config = entry.data
     api_version = config.get(CONF_API_VERSION, "v1")

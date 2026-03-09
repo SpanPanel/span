@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 import logging
+import time
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -34,6 +35,11 @@ _NAME_UNSET: object = object()
 
 # Device types that use "Solar" as the fallback identifier when unnamed.
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
+
+# How long (seconds) to hold an optimistic state before allowing the coordinator
+# to overwrite it.  This prevents the UI from bouncing back to stale state when
+# the panel has not yet processed a relay command.
+_OPTIMISTIC_HOLD_SECONDS: float = 10.0
 
 
 def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> str:
@@ -91,6 +97,11 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
                 self._attr_name = None
 
         super().__init__(coordinator)
+
+        # Optimistic state: set when the user toggles the switch so that
+        # coordinator refreshes don't overwrite it until confirmed or timed out.
+        self._optimistic_state: bool | None = None
+        self._optimistic_set_at: float = 0.0
 
         self._update_is_on()
 
@@ -181,13 +192,43 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         return attributes if attributes else None
 
     def _update_is_on(self) -> None:
-        """Update the is_on state based on the circuit state."""
+        """Update the is_on state based on the circuit state.
+
+        When an optimistic state is active (user recently toggled the switch),
+        we keep using it until the panel confirms the expected state or the
+        hold period expires.  This eliminates the visible bounce caused by
+        a coordinator refresh returning stale data before the relay settles.
+        """
         snapshot: SpanPanelSnapshot = self.coordinator.data
         circuit = snapshot.circuits.get(self._circuit_id)
-        if circuit:
-            self._attr_is_on = circuit.relay_state == CircuitRelayState.CLOSED.name
-        else:
+        if not circuit:
+            self._optimistic_state = None
             self._attr_is_on = None
+            return
+
+        actual_is_on = circuit.relay_state == CircuitRelayState.CLOSED.name
+
+        if self._optimistic_state is not None:
+            elapsed = time.monotonic() - self._optimistic_set_at
+            if actual_is_on == self._optimistic_state:
+                # Panel confirmed the expected state — clear the hold.
+                self._optimistic_state = None
+                self._attr_is_on = actual_is_on
+            elif elapsed < _OPTIMISTIC_HOLD_SECONDS:
+                # Still within the hold window — keep the optimistic value.
+                self._attr_is_on = self._optimistic_state
+            else:
+                # Hold expired and the panel never confirmed — accept reality.
+                _LOGGER.debug(
+                    "Optimistic hold expired for circuit %s; expected %s, actual %s",
+                    self._circuit_id,
+                    self._optimistic_state,
+                    actual_is_on,
+                )
+                self._optimistic_state = None
+                self._attr_is_on = actual_is_on
+        else:
+            self._attr_is_on = actual_is_on
 
     def turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
@@ -205,10 +246,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             return
 
         await client.set_circuit_relay(self._circuit_id, "CLOSED")
-        # Optimistically update local state to prevent UI bouncing
-        self._attr_is_on = True
-        if self.hass is not None:
-            self.async_write_ha_state()
+        self._set_optimistic_state(True)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -219,11 +257,16 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             return
 
         await client.set_circuit_relay(self._circuit_id, "OPEN")
-        # Optimistically update local state to prevent UI bouncing
-        self._attr_is_on = False
+        self._set_optimistic_state(False)
+        await self.coordinator.async_request_refresh()
+
+    def _set_optimistic_state(self, target: bool) -> None:
+        """Set the optimistic state and immediately push it to HA."""
+        self._optimistic_state = target
+        self._optimistic_set_at = time.monotonic()
+        self._attr_is_on = target
         if self.hass is not None:
             self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
 
     def _construct_switch_unique_id(
         self,
