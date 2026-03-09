@@ -190,6 +190,56 @@ class TestPanelSensors:
         snapshot_off = SpanPanelSnapshotFactory.create(dsm_state=DSM_OFF_GRID)
         assert dsm_description.value_fn(snapshot_off) == DSM_OFF_GRID
 
+    def test_software_version_extra_state_attributes_panel_size(
+        self, mock_coordinator: MagicMock
+    ) -> None:
+        """Test that panel_size is always present in extra_state_attributes."""
+        from custom_components.span_panel.sensor import SpanPanelStatus
+        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
+
+        description = next(d for d in STATUS_SENSORS if d.key == "software_version")
+
+        snapshot_with_size = SpanPanelSnapshotFactory.create(panel_size=32)
+        mock_coordinator.data = snapshot_with_size
+        sensor = SpanPanelStatus(mock_coordinator, description, snapshot_with_size)
+        attrs = sensor.extra_state_attributes
+        assert attrs is not None
+        assert attrs["panel_size"] == 32
+
+    def test_software_version_extra_state_attributes_wifi_ssid(
+        self, mock_coordinator: MagicMock
+    ) -> None:
+        """Test that wifi_ssid appears in extra_state_attributes when present."""
+        from custom_components.span_panel.sensor import SpanPanelStatus
+        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
+
+        description = next(d for d in STATUS_SENSORS if d.key == "software_version")
+
+        snapshot = SpanPanelSnapshotFactory.create(panel_size=24, wifi_ssid="MyNetwork")
+        mock_coordinator.data = snapshot
+        sensor = SpanPanelStatus(mock_coordinator, description, snapshot)
+        attrs = sensor.extra_state_attributes
+        assert attrs is not None
+        assert attrs["panel_size"] == 24
+        assert attrs["wifi_ssid"] == "MyNetwork"
+
+    def test_software_version_extra_state_attributes_no_wifi(
+        self, mock_coordinator: MagicMock
+    ) -> None:
+        """Test that wifi_ssid is omitted when None."""
+        from custom_components.span_panel.sensor import SpanPanelStatus
+        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
+
+        description = next(d for d in STATUS_SENSORS if d.key == "software_version")
+
+        snapshot = SpanPanelSnapshotFactory.create(panel_size=16, wifi_ssid=None)
+        mock_coordinator.data = snapshot
+        sensor = SpanPanelStatus(mock_coordinator, description, snapshot)
+        attrs = sensor.extra_state_attributes
+        assert attrs is not None
+        assert "wifi_ssid" not in attrs
+        assert attrs["panel_size"] == 16
+
     def test_dsm_grid_state_deprecated_alias(self) -> None:
         """Test DSM Grid State reads from dsm_state (deprecated alias)."""
         from custom_components.span_panel.const import DSM_ON_GRID
