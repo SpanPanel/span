@@ -5,13 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [2.0.1] - 3/2026
 
 ⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on the latest 1.3.x version BEFORE upgrading to
-2.0. This upgrade migrates to the SPAN official eBus APIx** ⚠️
+2.0. This upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 
 ### Breaking Changes
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
 - You _must_ already be on v1.3.1 of the SpanPanel/span integration if upgrading
-- If you wwere running a beta or RC ensure you reload the integration after upgrade
+- After upgrading, you must re-authenticate using your **panel passphrase** (found in the SPAN mobile app under On-premise settings) or **proof of proximity**
+  (open and close the panel door 3 times). See the [README](README.md) for details.
+- If you were running a beta or RC, ensure you reload the integration after upgrade
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 - `DSM Grid State` deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version since it is an
   alias for `DSM State`
@@ -90,10 +92,10 @@ All notable changes to this project will be documented in this file.
 
 ### 🔄 Changed
 
-- **Bump span-panel-api to v1.1.14**: Recognize panel Keep-Alive at 5 sec, Handle httpx.RemoteProtocolError defensively, Thanks to
+- **Bump span-panel-api to v1.1.14**: Recognize panel Keep-Alive at 5 sec, handle httpx.RemoteProtocolError defensively. Thanks to
   @NickBorgersOnLowSecurityNode.
 
-## [1.29] - 2025-12-25
+## [1.2.9] - 2025-12-25
 
 ### ✨ New Features
 
@@ -104,9 +106,9 @@ All notable changes to this project will be documented in this file.
 
 ### 🔄 Changed
 
-- **Removed Decreasing Energy Protection**: Reverted the TOTAL_INCREASING validation that was ignoring decreasing energy values that were thought to occur a
-  limited number of updates but turned out to be permanent under-reporting of SPAN cloud data that manifested during firmware updates. The bug is on the SPAN
-  side and can result in spikes in energy dashboards after firmware updates. See the Trouble-Shooting section of the README.md for more information.
+- **Removed Decreasing Energy Protection**: Reverted the TOTAL_INCREASING validation that was ignoring decreasing energy values that were thought to occur
+  during a limited number of updates but turned out to be permanent under-reporting of SPAN cloud data that manifested during firmware updates. The bug is on
+  the SPAN side and can result in spikes in energy dashboards after firmware updates. See the Trouble-Shooting section of the README.md for more information.
 
 ### 📝 Notes
 
@@ -150,7 +152,7 @@ All notable changes to this project will be documented in this file.
 ### 🔧 Technical Improvements
 
 - **Circuit Based Naming**: Circuit based entity_id naming was not using both tabs in the name. Existing entity IDs are unchanged except for fresh installs.
-- **Switches and Selects Naming**: were creating proper ID's but not looking up migration names in 1.2.4
+- **Switches and Selects Naming**: were creating proper IDs but not looking up migration names in 1.2.4
 
 ## [1.2.4] - 2025-09-XX
 
@@ -159,10 +161,10 @@ All notable changes to this project will be documented in this file.
 - **Performance**: Revert to native sensors (non-synthetic) to avoid calculation engine for simple math. Features like net energy, OpenAPI, simulation are still
   present. We may reintroduce the synthetic engine later in a modified form to allow users to add attributes, etc.
 - **Fix sensor circuit-based naming**: For new installations with circuit naming provide consistent behavior where all circuits, other than panel have circuit
-  names related to the tab (120V) or tabs (240V). We do not modify entity ID's so if an installation had faulty names from a previous release those must be
+  names related to the tab (120V) or tabs (240V). We do not modify entity IDs, so if an installation had faulty names from a previous release those must be
   renamed manually
 - **Fix Faulty Legacy Single Panel Config**: Provided a repair for a pre-1.0.4 upgraded release where the config entry was missing the device unique ID (serial
-  number) causing the new migration for normalized unique keys to fail. This repair only works for single panel installs because we derive the serial number
+  number), causing the new migration for normalized unique keys to fail. This repair only works for single panel installs because we derive the serial number
   from the entities and if more than one serial number is found we cannot determine which config the serial number would match.
 - **Fixed Unmapped Tab Behavior for Offline Panel**: Unmapped tab sensors reported erroneous values when the panel was offline
 
@@ -181,8 +183,8 @@ we've implemented migration logic to preserve your existing entities and automat
   known good value for a grace period
 - **Voltage and Amperage Attributes**: Added attributes for voltage and amperage to each power sensor for threshold automations
 - **Panel Tabs Attributes**: Added attribute to each sensor to see the specific panel tabs (spaces) associated with sensor
-- **Unmapped Tab Sensors**: Added hidden circuits for tabs that are no part of a circuit reported directly by the panel. The user may make these tabs sensors
-  visisble.
+- **Unmapped Tab Sensors**: Added hidden circuits for tabs that are not part of a circuit reported directly by the panel. The user may make these tab sensors
+  visible.
 - **Panel Offline Sensor**: Added a sensor that indicates whether the panel is offline (cannot return data to the integration)
 - **State Visibility**: Attributes show you the formula used in the sensor calculation for grace periods and net energy
 - **Net Energy Sensors**: New net energy sensors calculate `consumed energy - produced energy` for circuits, panels, and tab-based solar installations,
@@ -244,7 +246,7 @@ we've implemented migration logic to preserve your existing entities and automat
 
 ### 🔄 HACS Upgrade Process
 
-This integration should handle migrating your entities seamlessly. Any entity ID's or names should be retained. We do migrate all the unique keys by properly
+This integration should handle migrating your entities seamlessly. Any entity IDs or names should be retained. We do migrate all the unique keys by properly
 renaming these in the entity registry so the user should not see any difference.
 
 - **Backup Instructions**: Check backup requirements before upgrade
