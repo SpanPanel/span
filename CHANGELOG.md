@@ -9,6 +9,12 @@ All notable changes to this project will be documented in this file.
 - **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` Previously some users could see fewer
   unmapped sensors when trailing breaker positions were empty.
 
+### Fixed
+
+- **Battery power sign inverted** — Battery power sensor now uses the correct sign convention. Previously, charging was reported as positive and discharging as
+  negative, which caused HA energy cards to show the battery discharging when it was actually charging. The panel reports power from its own perspective; the
+  sensor now negates the value to match HA conventions (positive = discharging), consistent with how PV power is already handled. (#184)
+
   **Important** 2.0.1 cautions still apply — read those carefully if not on 2.0.1 BEFORE proceeding:
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)

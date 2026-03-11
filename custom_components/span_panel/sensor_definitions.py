@@ -483,7 +483,7 @@ BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensor
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: s.power_flow_battery if s.power_flow_battery is not None else 0.0,
+    value_fn=lambda s: -s.power_flow_battery if s.power_flow_battery is not None else 0.0,
 )
 
 # PV power sensor (conditionally created when PV is commissioned)
