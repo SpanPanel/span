@@ -149,7 +149,7 @@ These are exposed as attributes on the corresponding power sensors:
 | ----------------------- | ---------------------------- | --------------------------------------------- |
 | `vendor_name`           | `s.pv.vendor_name`           | PV inverter vendor (e.g., "Enphase", "Other") |
 | `product_name`          | `s.pv.product_name`          | PV inverter product (e.g., "IQ8+")            |
-| `nameplate_capacity_kw` | `s.pv.nameplate_capacity_kw` | Rated inverter capacity in kW                 |
+| `nameplate_capacity_w`  | `s.pv.nameplate_capacity_w`  | Rated inverter capacity in W                  |
 
 **Battery Power sensor** (`batteryPowerW`) attributes:
 
@@ -161,7 +161,7 @@ These are exposed as attributes on the corresponding power sensors:
 
 **Library models:**
 
-- `SpanPVSnapshot` (new): `vendor_name`, `product_name`, `nameplate_capacity_kw` — populated from first PV metadata node
+- `SpanPVSnapshot` (new): `vendor_name`, `product_name`, `nameplate_capacity_w` — populated from first PV metadata node
 - `SpanBatterySnapshot` (extended): `vendor_name`, `product_name`, `nameplate_capacity_kwh` — parsed from BESS metadata node
 
 ### 1E. Enriched circuit sensor attributes
@@ -274,7 +274,7 @@ power_flow_pv = _parse_float(self._get_prop(pf_node, "pv")) if pf_node else None
 class SpanPVSnapshot:
     vendor_name: str | None = None
     product_name: str | None = None
-    nameplate_capacity_kw: float | None = None
+    nameplate_capacity_w: float | None = None
 ```
 
 **`models.py` — extend `SpanBatterySnapshot`:**
@@ -486,6 +486,6 @@ to work with the new sensors.
 7. Circuit power sensor attributes include: breaker_rating, device_type, always_on, relay_state, shed_priority, is_sheddable
 8. Panel power sensor (Current Power) attributes include: l1_voltage, l2_voltage, l1_amperage, l2_amperage, main_breaker_rating, grid_islandable 8b. Panel power
    sensor (Feed Through Power) attributes include: l1_amperage, l2_amperage
-9. PV Power sensor attributes include: vendor_name, product_name, nameplate_capacity_kw
+9. PV Power sensor attributes include: vendor_name, product_name, nameplate_capacity_w
 10. Battery Power sensor attributes include: vendor_name, product_name, nameplate_capacity_kwh
 11. Software version sensor attributes include: panel_size, wifi_ssid

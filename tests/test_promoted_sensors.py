@@ -311,10 +311,10 @@ class TestPVMetadataSensorDefinitions:
 
     def test_pv_nameplate_capacity_value_function(self):
         snapshot = SpanPanelSnapshotFactory.create(
-            pv=SpanPVSnapshot(nameplate_capacity_kw=7.6)
+            pv=SpanPVSnapshot(nameplate_capacity_w=7600.0)
         )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_nameplate_capacity")
-        assert desc.value_fn(snapshot) == 7.6
+        assert desc.value_fn(snapshot) == 7600.0
         assert desc.device_class == SensorDeviceClass.POWER
 
     def test_pv_none_metadata(self):

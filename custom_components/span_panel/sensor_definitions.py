@@ -443,9 +443,9 @@ PV_METADATA_SENSORS: tuple[
         key="pv_nameplate_capacity",
         translation_key="pv_nameplate_capacity",
         device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda s: s.pv.nameplate_capacity_kw,
+        value_fn=lambda s: s.pv.nameplate_capacity_w,
     ),
 )
 
