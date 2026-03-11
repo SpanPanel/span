@@ -591,9 +591,9 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda c: (-c.instant_power_w or 0.0)
-        if c.device_type == "pv"
-        else c.instant_power_w,
+        value_fn=lambda c: (
+            (-c.instant_power_w or 0.0) if c.device_type == "pv" else c.instant_power_w
+        ),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
