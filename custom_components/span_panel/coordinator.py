@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
+from typing import Protocol
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
@@ -33,6 +34,16 @@ from span_panel_api.exceptions import (
 from .const import DOMAIN
 from .helpers import build_circuit_unique_id
 from .options import ENERGY_REPORTING_GRACE_PERIOD
+
+
+class SpanCircuitEnergySensorProtocol(Protocol):
+    """Protocol for circuit energy sensors that expose their dip offset."""
+
+    @property
+    def energy_offset(self) -> float:
+        """Cumulative dip compensation offset."""
+        ...
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -93,6 +104,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # drained and surfaced as a persistent notification after each cycle.
         self._pending_dip_events: list[tuple[str, float, float]] = []
 
+        # Circuit energy sensor registry — consumed/produced sensors register
+        # here so net energy sensors can read their dip offsets directly.
+        self._circuit_energy_sensors: dict[tuple[str, str], SpanCircuitEnergySensorProtocol] = {}
+
         # MQTT streaming: push is the primary update path; poll is a safety net.
         # Simulation: poll is the only update path; use the snapshot interval.
         if isinstance(client, SpanMqttClient):
@@ -139,6 +154,19 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         just a list append. Events are drained in _run_post_update_tasks.
         """
         self._pending_dip_events.append((entity_id, delta, cumulative_offset))
+
+    def register_circuit_energy_sensor(
+        self, circuit_id: str, energy_type: str, sensor: SpanCircuitEnergySensorProtocol
+    ) -> None:
+        """Register a consumed/produced energy sensor so net energy can read its dip offset."""
+        self._circuit_energy_sensors[(circuit_id, energy_type)] = sensor
+
+    def get_circuit_dip_offset(self, circuit_id: str, energy_type: str) -> float:
+        """Return the cumulative dip offset from the registered sensor, or 0."""
+        sensor = self._circuit_energy_sensors.get((circuit_id, energy_type))
+        if sensor is None:
+            return 0.0
+        return sensor.energy_offset
 
     async def _fire_dip_notification(self) -> None:
         """Create a persistent notification summarising energy dips this cycle."""

@@ -474,6 +474,11 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             ENABLE_ENERGY_DIP_COMPENSATION, False
         )
 
+    @property
+    def energy_offset(self) -> float:
+        """Return the cumulative dip compensation offset."""
+        return self._energy_offset
+
     def _process_raw_value(self, raw_value: float | int | str | None) -> None:
         """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
         if (

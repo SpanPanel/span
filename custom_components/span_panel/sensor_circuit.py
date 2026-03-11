@@ -243,6 +243,13 @@ class SpanCircuitEnergySensor(
         if device_info_override is not None:
             self._attr_device_info = device_info_override
 
+    async def async_added_to_hass(self) -> None:
+        """Register consumed/produced sensors on the coordinator for net energy lookup."""
+        await super().async_added_to_hass()
+        energy_type = self._ENERGY_TYPE_MAP.get(self.original_key)
+        if energy_type:
+            self.coordinator.register_circuit_energy_sensor(self.circuit_id, energy_type, self)
+
     def _generate_unique_id(
         self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
     ) -> str:
@@ -295,6 +302,28 @@ class SpanCircuitEnergySensor(
 
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
+
+    # Map original_key to the energy type used for coordinator dip offset tracking
+    _ENERGY_TYPE_MAP: dict[str, str] = {
+        "circuit_energy_consumed": "consumed",
+        "circuit_energy_produced": "produced",
+    }
+
+    def _process_raw_value(self, raw_value: float | int | str | None) -> None:
+        """Process raw value, adjusting net energy for dip compensation consistency.
+
+        Consumed/produced sensors apply dip offsets via the base class. The net
+        energy sensor reads those offsets from the registered sibling sensors
+        so its value stays equal to compensated_consumed - compensated_produced.
+        """
+        super()._process_raw_value(raw_value)
+
+        if self.original_key == "circuit_energy_net" and isinstance(self._attr_native_value, float):
+            consumed_offset = self.coordinator.get_circuit_dip_offset(self.circuit_id, "consumed")
+            produced_offset = self.coordinator.get_circuit_dip_offset(self.circuit_id, "produced")
+            net_adjustment = consumed_offset - produced_offset
+            if net_adjustment:
+                self._attr_native_value += net_adjustment
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the circuit energy sensor."""
