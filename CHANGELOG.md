@@ -9,6 +9,17 @@ All notable changes to this project will be documented in this file.
 - **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` Previously some users could see fewer
   unmapped sensors when trailing breaker positions were empty.
 
+### Fixed
+
+- **Battery power sign inverted** — Battery power sensor now uses the correct sign convention. Previously, charging was reported as positive and discharging as
+  negative, which caused HA energy cards to show the battery discharging when it was actually charging. The panel reports power from its own perspective; the
+  sensor now negates the value to match HA conventions (positive = discharging), consistent with how PV power is already handled. (#184)
+- **Idle circuits showing -0W** — Power sensors that negate values (PV circuits, battery, PV power) could produce IEEE 754 negative zero (`-0.0`) when the
+  circuit was idle, causing HA to display `-0W` instead of `0W`. All negation sites now normalize zero to positive. (#185)
+- **Net energy inconsistent with dip-compensated consumed/produced** — When energy dip compensation was enabled, consumed and produced sensors applied an
+  offset but net energy computed from raw snapshot values, causing a visible mismatch. Net energy now reads dip offsets from its sibling sensors so the
+  displayed value always equals compensated consumed minus compensated produced.
+
   **Important** 2.0.1 cautions still apply — read those carefully if not on 2.0.1 BEFORE proceeding:
 
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
@@ -16,8 +27,8 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.1] - 3/2026
 
-⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on v1.3.0 or later BEFORE upgrading to
-2.0. This upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
+⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on v1.3.0 or later BEFORE upgrading to 2.0. This
+upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 
 ### Breaking Changes
 
