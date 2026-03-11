@@ -4,13 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.2] - 3/2026
 
-### Changed
+**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
 
-- **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` Previously some users could see fewer
-  unmapped sensors when trailing breaker positions were empty.
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
 ### Fixed
 
+- **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` Previously some users could see fewer
+  unmapped sensors when trailing breaker positions were empty.  Topology service reflects panel size.
 - **Battery power sign inverted** — Battery power sensor now uses the correct sign convention. Previously, charging was reported as positive and discharging as
   negative, which caused HA energy cards to show the battery discharging when it was actually charging. The panel reports power from its own perspective; the
   sensor now negates the value to match HA conventions (positive = discharging), consistent with how PV power is already handled. (#184)
@@ -19,11 +21,6 @@ All notable changes to this project will be documented in this file.
 - **Net energy inconsistent with dip-compensated consumed/produced** — When energy dip compensation was enabled, consumed and produced sensors applied an
   offset but net energy computed from raw snapshot values, causing a visible mismatch. Net energy now reads dip offsets from its sibling sensors so the
   displayed value always equals compensated consumed minus compensated produced.
-
-  **Important** 2.0.1 cautions still apply — read those carefully if not on 2.0.1 BEFORE proceeding:
-
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
 ## [2.0.1] - 3/2026
 
