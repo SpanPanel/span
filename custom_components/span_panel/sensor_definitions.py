@@ -483,7 +483,7 @@ BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensor
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: -s.power_flow_battery if s.power_flow_battery is not None else 0.0,
+    value_fn=lambda s: (-s.power_flow_battery or 0.0) if s.power_flow_battery is not None else 0.0,
 )
 
 # PV power sensor (conditionally created when PV is commissioned)
@@ -494,7 +494,7 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: -s.power_flow_pv if s.power_flow_pv is not None else 0.0,
+    value_fn=lambda s: (-s.power_flow_pv or 0.0) if s.power_flow_pv is not None else 0.0,
 )
 
 # Site power sensor (conditionally created when power-flows data is available)
@@ -591,7 +591,9 @@ CIRCUIT_SENSORS: tuple[
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
-        value_fn=lambda c: -c.instant_power_w if c.device_type == "pv" else c.instant_power_w,
+        value_fn=lambda c: (-c.instant_power_w or 0.0)
+        if c.device_type == "pv"
+        else c.instant_power_w,
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
     ),
