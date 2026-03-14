@@ -66,7 +66,7 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         """Publish the GFE override to the panel."""
         client = self.coordinator.client
         if not hasattr(client, "set_dominant_power_source"):
-            _LOGGER.warning("GFE override not available in simulation mode")
+            _LOGGER.warning("Client does not support GFE override")
             return
 
         try:

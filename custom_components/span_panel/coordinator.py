@@ -19,7 +19,6 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import (
-    DynamicSimulationEngine,
     SpanMqttClient,
     SpanPanelSnapshot,
 )
@@ -65,9 +64,6 @@ _LOGGER.addFilter(_SuppressManualUpdateFilter())
 # Fallback poll interval for MQTT streaming mode (push is the primary update path)
 _STREAMING_FALLBACK_INTERVAL = timedelta(seconds=60)
 
-# Poll interval for simulation mode (no streaming, coordinator polls get_snapshot)
-_SIMULATION_POLL_INTERVAL = timedelta(seconds=5)
-
 
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     """Coordinator for managing Span Panel data updates and entity migrations."""
@@ -75,7 +71,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def __init__(
         self,
         hass: HomeAssistant,
-        client: SpanMqttClient | DynamicSimulationEngine,
+        client: SpanMqttClient,
         config_entry: ConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
@@ -93,10 +89,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Streaming state
         self._unregister_streaming: Callable[[], None] | None = None
 
-        # Simulation offline mode
-        self._simulation_offline_minutes: int = 0
-        self._offline_start_time: float | None = None
-
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
@@ -112,12 +104,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # here so net energy sensors can read their dip offsets directly.
         self._circuit_energy_sensors: dict[tuple[str, str], SpanCircuitEnergySensorProtocol] = {}
 
-        # MQTT streaming: push is the primary update path; poll is a safety net.
-        # Simulation: poll is the only update path; use the snapshot interval.
-        if isinstance(client, SpanMqttClient):
-            update_interval = _STREAMING_FALLBACK_INTERVAL
-        else:
-            update_interval = _SIMULATION_POLL_INTERVAL
+        update_interval = _STREAMING_FALLBACK_INTERVAL
 
         _LOGGER.info(
             "Span Panel coordinator: poll interval %s seconds",
@@ -136,7 +123,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self.config_entry = config_entry
 
     @property
-    def client(self) -> SpanMqttClient | DynamicSimulationEngine:
+    def client(self) -> SpanMqttClient:
         """Return the underlying panel client for entity control."""
         return self._client
 
@@ -206,10 +193,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     # --- Streaming ---
 
     async def async_setup_streaming(self) -> None:
-        """Set up push streaming if the client supports it."""
-        if not isinstance(self._client, SpanMqttClient):
-            return
-
+        """Set up push streaming."""
         self._unregister_streaming = self._client.register_snapshot_callback(self._on_snapshot_push)
         await self._client.start_streaming()
         _LOGGER.info("MQTT push streaming started")
@@ -227,40 +211,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._unregister_streaming()
             self._unregister_streaming = None
 
-        if isinstance(self._client, SpanMqttClient):
-            await self._client.stop_streaming()
-            await self._client.close()
+        await self._client.stop_streaming()
+        await self._client.close()
 
         _LOGGER.info("Coordinator shutdown complete")
-
-    # --- Simulation offline mode ---
-
-    def set_simulation_offline_mode(self, minutes: int) -> None:
-        """Configure simulation offline mode duration.
-
-        When minutes > 0, the coordinator will raise SpanPanelConnectionError
-        during data updates for the specified duration, triggering the energy
-        grace period path in entity base classes.
-        """
-        self._simulation_offline_minutes = minutes
-        if minutes > 0:
-            self._offline_start_time = _epoch_time()
-        else:
-            self._offline_start_time = None
-
-    def _is_simulation_offline(self) -> bool:
-        """Check if the simulation is currently in offline mode."""
-        if self._simulation_offline_minutes <= 0 or self._offline_start_time is None:
-            return False
-
-        elapsed = _epoch_time() - self._offline_start_time
-        if elapsed >= self._simulation_offline_minutes * 60:
-            # Window expired — resume normal operation
-            self._simulation_offline_minutes = 0
-            self._offline_start_time = None
-            return False
-
-        return True
 
     # --- Schema validation ---
 
@@ -364,10 +318,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             # Performance timing
             cycle_start = _epoch_time()
             self._last_tick_epoch = cycle_start
-
-            # Simulation offline mode: raise before fetching to trigger grace period
-            if self._is_simulation_offline():
-                raise SpanPanelConnectionError("Panel is offline in simulation mode")
 
             fetch_start = _epoch_time()
             snapshot = await self._client.get_snapshot()

@@ -8,8 +8,6 @@ from homeassistant.config_entries import ConfigEntry
 import voluptuous as vol
 
 from custom_components.span_panel.const import (
-    CONF_SIMULATION_OFFLINE_MINUTES,
-    CONF_SIMULATION_START_TIME,
     DEFAULT_SNAPSHOT_INTERVAL,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_ENERGY_DIP_COMPENSATION,
@@ -118,9 +116,6 @@ def process_general_options_input(
     filtered_input[USE_DEVICE_PREFIX] = use_prefix
     filtered_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
 
-    # Clean up any simulation-only change flag since this will trigger a reload
-    filtered_input.pop("_simulation_only_change", None)
-
     return filtered_input, errors
 
 
@@ -135,37 +130,3 @@ def get_current_naming_pattern(config_entry: ConfigEntry) -> str:
         return EntityNamingPattern.FRIENDLY_NAMES.value
     else:
         return EntityNamingPattern.LEGACY_NAMES.value
-
-
-def get_simulation_start_time_schema() -> vol.Schema:
-    """Get the simulation start time schema."""
-    return vol.Schema(
-        {
-            vol.Optional(CONF_SIMULATION_START_TIME): str,
-        }
-    )
-
-
-def get_simulation_start_time_defaults(config_entry: ConfigEntry) -> dict[str, Any]:
-    """Get the simulation start time defaults."""
-    return {
-        CONF_SIMULATION_START_TIME: config_entry.options.get(CONF_SIMULATION_START_TIME, ""),
-    }
-
-
-def get_simulation_offline_minutes_schema() -> vol.Schema:
-    """Get the simulation offline minutes schema."""
-    return vol.Schema(
-        {
-            vol.Optional(CONF_SIMULATION_OFFLINE_MINUTES): int,
-        }
-    )
-
-
-def get_simulation_offline_minutes_defaults(config_entry: ConfigEntry) -> dict[str, Any]:
-    """Get the simulation offline minutes defaults."""
-    return {
-        CONF_SIMULATION_OFFLINE_MINUTES: config_entry.options.get(
-            CONF_SIMULATION_OFFLINE_MINUTES, 0
-        ),
-    }

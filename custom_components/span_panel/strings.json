@@ -10,7 +10,7 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
-      "host_required": "Host is required for non-simulator mode",
+      "host_required": "Host is required",
       "invalid_auth": "Invalid authentication",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
       "unknown": "Unexpected error"
@@ -24,19 +24,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Simulator Mode",
           "power_display_precision": "Power Display Precision",
           "energy_display_precision": "Energy Display Precision",
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips"
         },
         "data_description": {
-          "host": "IP address or hostname of SPAN Panel (required for real hardware, optional for simulation mode)",
-          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled.",
+          "host": "IP address or hostname of SPAN Panel",
           "power_display_precision": "Number of decimal places for power values (0-3)",
           "energy_display_precision": "Number of decimal places for energy values (0-3)",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings, preventing spikes in the energy dashboard."
         },
-        "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and the host field becomes optional.",
+        "description": "Enter the connection details for your SPAN Panel.",
         "title": "Connect to the Span Panel"
       },
       "choose_auth_type": {
@@ -83,28 +81,11 @@
         "data_description": {
           "host": "IP address or hostname of the SPAN Panel"
         }
-      },
-      "simulator_config": {
-        "title": "Simulator Configuration",
-        "description": "Select a simulation configuration and optionally set a custom start time. {config_count} configurations available.",
-        "data": {
-          "simulation_config": "Simulation Configuration",
-          "host": "Host (Serial Number)",
-          "simulation_start_time": "Simulation Start Time (Optional)",
-          "entity_naming_pattern": "Entity Naming Pattern"
-        },
-        "data_description": {
-          "simulation_config": "Choose a simulation configuration that defines circuit templates and energy profiles",
-          "host": "Custom serial number for the simulated panel (optional, will use config default if empty)",
-          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time.",
-          "entity_naming_pattern": "Choose how circuit entities are named in the simulation"
-        }
       }
     }
   },
   "options": {
     "error": {
-      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Invalid time format. Use HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS)",
       "directory": "Directory path is required",
       "base": "Export failed: {error}"
     },
@@ -113,9 +94,7 @@
         "title": "Options Menu",
         "menu_options": {
           "general_options": "General Options",
-          "export_config": "Export Synthetic Sensor Config",
-          "simulation_start_time": "Simulation Start Time",
-          "simulation_offline_minutes": "Simulation Offline Minutes"
+          "clone_panel_to_simulation": "Clone Panel To Simulation"
         }
       },
       "general_options": {
@@ -134,26 +113,6 @@
           "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
           "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets."
-        }
-      },
-      "simulation_start_time": {
-        "title": "Simulation Start Time",
-        "description": "Configure the simulation start time. Changes to simulation time will reload the integration to apply the new time.",
-        "data": {
-          "simulation_start_time": "Simulation Start Time"
-        },
-        "data_description": {
-          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time. Integration will reload to apply changes."
-        }
-      },
-      "simulation_offline_minutes": {
-        "title": "Simulation Offline Minutes",
-        "description": "Configure how long the panel should appear offline during simulation.",
-        "data": {
-          "simulation_offline_minutes": "Offline Minutes"
-        },
-        "data_description": {
-          "simulation_offline_minutes": "Number of minutes the panel should appear offline during simulation. Set to 0 to disable offline simulation."
         }
       },
       "export_config": {

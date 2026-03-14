@@ -128,8 +128,8 @@ class TestGFEOverrideButtons:
         coordinator.async_request_refresh.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_button_simulation_mode(self) -> None:
-        """Simulation mode (no set_dominant_power_source method) logs warning."""
+    async def test_button_missing_control_method(self) -> None:
+        """Client without set_dominant_power_source method logs warning."""
         from custom_components.span_panel.button import (
             GFE_OVERRIDE_DESCRIPTION,
             SpanPanelGFEOverrideButton,
@@ -141,7 +141,7 @@ class TestGFEOverrideButtons:
         )
         button.hass = MagicMock()
 
-        # Simulation client without set_dominant_power_source
+        # Client without set_dominant_power_source
         coordinator.client = MagicMock(spec=[])
 
         await button.async_press()

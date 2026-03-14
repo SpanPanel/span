@@ -10,12 +10,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import slugify
 from span_panel_api import SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
 from .const import (
-    CONF_API_VERSION,
     CONF_DEVICE_NAME,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
@@ -176,15 +174,11 @@ def _build_evse_device_info_map(
     if not snapshot.evse:
         return {}
 
-    is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
     panel_name = (
         coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
         or "Span Panel"
     )
-    if is_simulator:
-        panel_identifier = slugify(panel_name)
-    else:
-        panel_identifier = snapshot.serial_number
+    panel_identifier = snapshot.serial_number
 
     use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
@@ -293,17 +287,12 @@ def _build_bess_device_info(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
 ) -> DeviceInfo:
     """Build BESS sub-device info, resolving the panel identifier."""
-    is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
     panel_name = (
         coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
         or "Span Panel"
     )
-    if is_simulator:
-        panel_identifier = slugify(panel_name)
-    else:
-        panel_identifier = snapshot.serial_number
 
-    return bess_device_info(panel_identifier, snapshot.battery, panel_name)
+    return bess_device_info(snapshot.serial_number, snapshot.battery, panel_name)
 
 
 def create_battery_sensors(

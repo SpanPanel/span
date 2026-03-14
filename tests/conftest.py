@@ -1,7 +1,6 @@
 """Configure test framework."""
 
 import logging
-import os
 from pathlib import Path
 import sys
 import types
@@ -9,10 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.test_factories.span_panel_simulation_factory import SpanPanelSimulationFactory
-
 # The real span_panel_api library is used directly (no sys.modules mocking).
-# Individual tests mock SpanMqttClient / DynamicSimulationEngine as needed.
+# Individual tests mock SpanMqttClient as needed.
 
 
 @pytest.fixture(autouse=True)
@@ -66,14 +63,6 @@ def patch_frontend_and_panel_custom():
         patch("homeassistant.components.panel_custom", MagicMock(), create=True),
     ):
         yield
-
-
-@pytest.fixture
-async def baseline_serial_number():
-    """Fixture to provide the serial number from the baseline YAML (friendly_names.yaml)."""
-    fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
-    baseline_path = os.path.join(fixtures_dir, "friendly_names.yaml")
-    return await SpanPanelSimulationFactory.extract_serial_number_from_yaml(baseline_path)
 
 
 @pytest.fixture

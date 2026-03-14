@@ -15,12 +15,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
 from .const import (
-    CONF_API_VERSION,
     CONF_DEVICE_NAME,
     PANEL_STATUS,
     SYSTEM_DOOR_STATE,
@@ -301,17 +299,13 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
         self._value_fn = description.value_fn
 
         # Build EVSE sub-device info
-        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
         panel_name = (
             data_coordinator.config_entry.data.get(
                 CONF_DEVICE_NAME, data_coordinator.config_entry.title
             )
             or "Span Panel"
         )
-        if is_simulator:
-            panel_identifier = slugify(panel_name)
-        else:
-            panel_identifier = snapshot.serial_number
+        panel_identifier = snapshot.serial_number
 
         evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
@@ -365,17 +359,12 @@ async def async_setup_entry(
 
     # Add BESS connected sensor on the BESS sub-device when battery is commissioned
     if has_bess(snapshot):
-        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
         panel_name = (
             coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
             or "Span Panel"
         )
-        if is_simulator:
-            panel_identifier = slugify(panel_name)
-        else:
-            panel_identifier = snapshot.serial_number
 
-        bess_info = bess_device_info(panel_identifier, snapshot.battery, panel_name)
+        bess_info = bess_device_info(snapshot.serial_number, snapshot.battery, panel_name)
         entities.append(
             SpanPanelBinarySensor(
                 coordinator, BESS_CONNECTED_SENSOR, device_info_override=bess_info

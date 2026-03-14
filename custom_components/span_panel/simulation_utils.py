@@ -1,59 +1,22 @@
-"""Simulation utilities for SPAN Panel integration."""
+"""Clone panel utilities for SPAN Panel integration."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import slugify
 import yaml
 
-from .const import (
-    CONF_SIMULATION_CONFIG,
-    COORDINATOR,
-    DOMAIN,
-)
 from .simulation_generator import SimulationYamlGenerator
 
+if TYPE_CHECKING:
+    from .coordinator import SpanPanelCoordinator
+
 _LOGGER = logging.getLogger(__name__)
-
-
-def infer_template_for(name: str, tabs: list[int]) -> str:
-    """Infer circuit template based on circuit name and tab configuration.
-
-    Args:
-        name: Circuit name to analyze
-        tabs: List of tab numbers for this circuit
-
-    Returns:
-        Template string identifier for the circuit type
-
-    """
-    lname = str(name).lower()
-    if any(k in lname for k in ["light", "lights"]):
-        return "lighting"
-    if "kitchen" in lname and "outlet" in lname:
-        return "kitchen_outlets"
-    if any(k in lname for k in ["hvac", "furnace", "air conditioner", "ac", "heat pump"]):
-        return "hvac"
-    if any(k in lname for k in ["fridge", "refrigerator", "wine fridge"]):
-        return "refrigerator"
-    if any(k in lname for k in ["ev", "charger"]):
-        return "ev_charger"
-    if any(k in lname for k in ["pool", "spa", "fountain"]):
-        return "pool_equipment"
-    if any(k in lname for k in ["internet", "router", "network", "modem"]):
-        return "always_on"
-    # Heuristics: 240V multi-tab loads as major appliances
-    if len(tabs) >= 2:
-        return "major_appliance"
-    # Fallbacks
-    if "outlet" in lname:
-        return "outlets"
-    return "major_appliance"
 
 
 async def clone_panel_to_simulation(
@@ -61,7 +24,7 @@ async def clone_panel_to_simulation(
     config_entry: ConfigEntry,
     user_input: dict[str, Any] | None = None,
 ) -> tuple[Path, dict[str, str]]:
-    """Clone the live panel into a simulation YAML stored in simulation_configs.
+    """Clone the live panel into a simulation YAML for the standalone simulator.
 
     Args:
         hass: Home Assistant instance
@@ -78,13 +41,14 @@ async def clone_panel_to_simulation(
     device_name = config_entry.data.get("device_name", config_entry.title)
     safe_device = slugify(device_name) if isinstance(device_name, str) else "span_panel"
 
-    config_dir = Path(__file__).parent / "simulation_configs"
+    config_dir = Path(hass.config.config_dir) / "span_panel" / "exports"
     base_name = f"simulation_config_{safe_device}.yaml"
     dest_path = config_dir / base_name
 
-    # Resolve coordinator (live)
-    coordinator_data = hass.data.get(DOMAIN, {}).get(config_entry.entry_id, {})
-    coordinator = coordinator_data.get(COORDINATOR)
+    # Resolve coordinator from runtime_data
+    coordinator: SpanPanelCoordinator | None = None
+    if hasattr(config_entry, "runtime_data") and config_entry.runtime_data is not None:
+        coordinator = config_entry.runtime_data.coordinator
     if coordinator is None:
         errors["base"] = "coordinator_unavailable"
         return dest_path, errors
@@ -114,9 +78,6 @@ async def clone_panel_to_simulation(
                 "" if suffix_index == 1 else f"_{suffix_index}"
             )
 
-            # Use the same filename pattern (device name based, not tab count)
-            # The dest_path is already correctly set above
-
             # Ensure directory exists and write file
             await hass.async_add_executor_job(
                 lambda: dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -128,19 +89,6 @@ async def clone_panel_to_simulation(
 
             await hass.async_add_executor_job(_write_yaml)
             _LOGGER.info("Cloned live panel to simulation YAML at %s", dest_path)
-
-            # Update config entry to point to the new simulation config
-            try:
-                new_data = dict(config_entry.data)
-                new_data[CONF_SIMULATION_CONFIG] = dest_path.stem
-                hass.config_entries.async_update_entry(config_entry, data=new_data)
-                _LOGGER.debug("Set CONF_SIMULATION_CONFIG to %s", dest_path.stem)
-            except Exception as update_err:
-                _LOGGER.warning(
-                    "Failed to set CONF_SIMULATION_CONFIG to %s: %s",
-                    dest_path.stem,
-                    update_err,
-                )
 
             # Return success with no errors
             return dest_path, {}
