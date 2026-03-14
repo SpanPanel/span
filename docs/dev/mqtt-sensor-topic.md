@@ -145,11 +145,11 @@ These are exposed as attributes on the corresponding power sensors:
 
 **PV Power sensor** (`pvPowerW`) attributes:
 
-| Attribute               | Value source                 | Notes                                         |
-| ----------------------- | ---------------------------- | --------------------------------------------- |
-| `vendor_name`           | `s.pv.vendor_name`           | PV inverter vendor (e.g., "Enphase", "Other") |
-| `product_name`          | `s.pv.product_name`          | PV inverter product (e.g., "IQ8+")            |
-| `nameplate_capacity_w`  | `s.pv.nameplate_capacity_w`  | Rated inverter capacity in W                  |
+| Attribute              | Value source                | Notes                                         |
+| ---------------------- | --------------------------- | --------------------------------------------- |
+| `vendor_name`          | `s.pv.vendor_name`          | PV inverter vendor (e.g., "Enphase", "Other") |
+| `product_name`         | `s.pv.product_name`         | PV inverter product (e.g., "IQ8+")            |
+| `nameplate_capacity_w` | `s.pv.nameplate_capacity_w` | Rated inverter capacity in W                  |
 
 **Battery Power sensor** (`batteryPowerW`) attributes:
 

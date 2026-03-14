@@ -34,6 +34,7 @@ from span_panel_api.exceptions import (
 from .const import DOMAIN
 from .helpers import build_circuit_unique_id
 from .options import ENERGY_REPORTING_GRACE_PERIOD
+from .schema_validation import collect_sensor_definitions, validate_field_metadata
 
 
 class SpanCircuitEnergySensorProtocol(Protocol):
@@ -99,6 +100,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
+
+        # Schema validation — run once after first successful refresh
+        self._schema_validated = False
 
         # Energy dip compensation — sensors append events here during updates;
         # drained and surfaced as a persistent notification after each cycle.
@@ -258,6 +262,30 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         return True
 
+    # --- Schema validation ---
+
+    def _run_schema_validation(self) -> None:
+        """Run schema field metadata validation once at startup.
+
+        Compares the library's schema-derived field metadata against the
+        integration's sensor definitions to detect unit mismatches. Also
+        reports fields the integration doesn't map to any sensor.
+        """
+        field_metadata: dict[str, dict[str, object]] | None = None
+        if isinstance(self._client, SpanMqttClient):
+            raw = self._client.field_metadata
+            if raw is not None:
+                field_metadata = {
+                    k: {"unit": v.unit, "datatype": v.datatype} for k, v in raw.items()
+                }
+
+        if field_metadata is None:
+            _LOGGER.debug("Schema validation skipped — no field metadata available")
+            return
+
+        sensor_defs = collect_sensor_definitions()
+        validate_field_metadata(field_metadata, sensor_defs=sensor_defs)
+
     # --- Hardware capability detection ---
 
     @staticmethod
@@ -308,6 +336,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         ensures reload requests and pending migrations are processed regardless
         of transport mode.
         """
+        # One-shot schema validation after first successful refresh
+        if not self._schema_validated:
+            self._schema_validated = True
+            self._run_schema_validation()
+
         # Fire persistent notification for any energy dips detected this cycle
         await self._fire_dip_notification()
 
