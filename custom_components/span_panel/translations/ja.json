@@ -66,15 +66,16 @@
   },
   "options": {
     "error": {
-      "directory": "ファイルパスが必要です",
-      "base": "エクスポートに失敗しました：{error}"
+      "host_required": "シミュレータのホストが必要です",
+      "clone_failed": "クローンに失敗しました。詳細はシミュレータとHome Assistantのログを確認してください。",
+      "clone_connection_failed": "シミュレータに接続できません",
+      "clone_timeout": "クローン操作がタイムアウトしました"
     },
     "step": {
       "init": {
         "title": "オプションメニュー",
         "menu_options": {
           "general_options": "一般オプション",
-          "export_config": "合成センサー設定をエクスポート",
           "clone_panel_to_simulation": "パネルをシミュレーションにクローン"
         }
       },
@@ -94,16 +95,6 @@
           "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
           "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
           "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正します。無効にすると、蓄積されたすべてのオフセットがクリアされます。"
-        }
-      },
-      "export_config": {
-        "title": "合成センサー設定をエクスポート",
-        "description": "現在の合成センサー設定をYAMLファイルにエクスポートします。ディレクトリ（ファイルは自動的に名前が付けられます）または完全なファイルパスを指定できます。デフォルトファイル名：{filename}",
-        "data": {
-          "directory": "ファイルパス"
-        },
-        "data_description": {
-          "directory": "ディレクトリパス（ファイルは自動的に名前が付けられます）または設定が保存される.yamlで終わる完全なファイルパス。"
         }
       }
     }

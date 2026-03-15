@@ -1,101 +1,196 @@
-"""Clone panel utilities for SPAN Panel integration."""
+"""Simulator clone utilities for SPAN Panel integration.
+
+Discovers simulators on the local network via mDNS and delegates panel
+cloning to the simulator over its WebSocket endpoint.  The simulator
+handles eBus scraping, translation, and config writing — the integration
+only provides the target panel's address and passphrase.
+"""
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
+import json
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+import ssl
 
-from homeassistant.config_entries import ConfigEntry
+import aiohttp
+from homeassistant.components import zeroconf as ha_zeroconf
 from homeassistant.core import HomeAssistant
-from homeassistant.util import slugify
-import yaml
-
-from .simulation_generator import SimulationYamlGenerator
-
-if TYPE_CHECKING:
-    from .coordinator import SpanPanelCoordinator
+from zeroconf import ServiceStateChange, Zeroconf
+from zeroconf.asyncio import AsyncServiceBrowser, AsyncServiceInfo
 
 _LOGGER = logging.getLogger(__name__)
 
+EBUS_SERVICE_TYPE = "_ebus._tcp.local."
+CLONE_WSS_PORT_PROPERTY = "cloneWssPort"
+DISCOVERY_TIMEOUT_SECONDS = 3.0
+CLONE_OPERATION_TIMEOUT_SECONDS = 120
 
-async def clone_panel_to_simulation(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    user_input: dict[str, Any] | None = None,
-) -> tuple[Path, dict[str, str]]:
-    """Clone the live panel into a simulation YAML for the standalone simulator.
 
-    Args:
-        hass: Home Assistant instance
-        config_entry: Configuration entry for the SPAN panel
-        user_input: User input from the config flow form
+@dataclass
+class SimulatorInfo:
+    """A simulator discovered via mDNS that supports panel cloning."""
 
-    Returns:
-        Tuple of (destination_path, errors_dict)
+    host: str
+    clone_wss_port: int
+    name: str
 
+
+@dataclass
+class CloneResult:
+    """Outcome of a clone-via-simulator operation."""
+
+    success: bool
+    serial: str = ""
+    clone_serial: str = ""
+    filename: str = ""
+    circuits: int = 0
+    error_message: str = ""
+    error_phase: str = ""
+
+
+async def discover_clone_simulators(hass: HomeAssistant) -> list[SimulatorInfo]:
+    """Browse for simulators advertising a clone WSS port via mDNS.
+
+    Looks for ``_ebus._tcp.local.`` services whose TXT record contains
+    ``cloneWssPort``.  Discovery runs for a short window and returns
+    all matching services found.
     """
-    errors: dict[str, str] = {}
+    aiozc = await ha_zeroconf.async_get_async_instance(hass)
+    zc = aiozc.zeroconf
 
-    # Compute default filename first
-    device_name = config_entry.data.get("device_name", config_entry.title)
-    safe_device = slugify(device_name) if isinstance(device_name, str) else "span_panel"
+    discovered_names: list[str] = []
 
-    config_dir = Path(hass.config.config_dir) / "span_panel" / "exports"
-    base_name = f"simulation_config_{safe_device}.yaml"
-    dest_path = config_dir / base_name
+    def _on_state_change(
+        zeroconf: Zeroconf,  # noqa: ARG001
+        service_type: str,  # noqa: ARG001
+        name: str,
+        state_change: ServiceStateChange,
+    ) -> None:
+        if state_change == ServiceStateChange.Added:
+            discovered_names.append(name)
 
-    # Resolve coordinator from runtime_data
-    coordinator: SpanPanelCoordinator | None = None
-    if hasattr(config_entry, "runtime_data") and config_entry.runtime_data is not None:
-        coordinator = config_entry.runtime_data.coordinator
-    if coordinator is None:
-        errors["base"] = "coordinator_unavailable"
-        return dest_path, errors
+    browser = AsyncServiceBrowser(zc, EBUS_SERVICE_TYPE, handlers=[_on_state_change])
+    try:
+        await asyncio.sleep(DISCOVERY_TIMEOUT_SECONDS)
+    finally:
+        await browser.async_cancel()
 
-    # Suffix if exists: _2, _3, ...
-    suffix_index = 1
-    if await hass.async_add_executor_job(dest_path.exists):
-        suffix_index = 2
-        while True:
-            candidate = config_dir / f"simulation_config_{safe_device}_{suffix_index}.yaml"
-            if not await hass.async_add_executor_job(candidate.exists):
-                dest_path = candidate
-                break
-            suffix_index += 1
+    simulators: list[SimulatorInfo] = []
 
-    if user_input is not None:
-        try:
-            # Use a separate generator to build YAML purely from live data
-            generator = SimulationYamlGenerator(
-                hass=hass,
-                coordinator=coordinator,
+    for name in discovered_names:
+        info = AsyncServiceInfo(EBUS_SERVICE_TYPE, name)
+        await info.async_request(zc, 3000)
+
+        if not info.properties:
+            continue
+
+        props: dict[str, str] = {}
+        for raw_key, raw_val in info.properties.items():
+            key = raw_key.decode() if isinstance(raw_key, bytes) else str(raw_key)
+            val = raw_val.decode() if isinstance(raw_val, bytes) else str(raw_val)
+            props[key] = val
+
+        port_str = props.get(CLONE_WSS_PORT_PROPERTY) or props.get(CLONE_WSS_PORT_PROPERTY.lower())
+        if not port_str:
+            continue
+
+        addresses = info.parsed_scoped_addresses()
+        host = addresses[0] if addresses else (info.server or "")
+        display_name = name.replace(f".{EBUS_SERVICE_TYPE}", "")
+
+        simulators.append(
+            SimulatorInfo(
+                host=host.rstrip("."),
+                clone_wss_port=int(port_str),
+                name=display_name,
             )
-            snapshot_yaml, num_tabs = await generator.build_yaml_from_live_panel()
+        )
 
-            # snapshot_yaml and num_tabs returned by generator
-            snapshot_yaml["panel_config"]["serial_number"] = f"{safe_device}_simulation" + (
-                "" if suffix_index == 1 else f"_{suffix_index}"
-            )
+    return simulators
 
-            # Ensure directory exists and write file
-            await hass.async_add_executor_job(
-                lambda: dest_path.parent.mkdir(parents=True, exist_ok=True)
-            )
 
-            def _write_yaml() -> None:
-                with dest_path.open("w", encoding="utf-8") as f:
-                    yaml.safe_dump(snapshot_yaml, f, sort_keys=False)
+async def execute_clone_via_simulator(
+    simulator_host: str,
+    simulator_port: int,
+    panel_host: str,
+    panel_passphrase: str | None,
+) -> CloneResult:
+    """Open a WSS connection to the simulator and run a panel clone.
 
-            await hass.async_add_executor_job(_write_yaml)
-            _LOGGER.info("Cloned live panel to simulation YAML at %s", dest_path)
+    The simulator connects to the real panel's eBus, scrapes retained
+    messages, translates them into a simulation YAML config, and writes
+    the file.  This function streams status updates to the log and
+    returns the final result.
+    """
+    url = f"wss://{simulator_host}:{simulator_port}/ws/clone"
 
-            # Return success with no errors
-            return dest_path, {}
+    # The simulator uses a self-signed certificate; trust it for
+    # local-network communication.
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
-        except Exception as e:
-            _LOGGER.error("Clone to simulation failed: %s", e)
-            errors["base"] = f"Clone failed: {e}"
+    try:
+        async with asyncio.timeout(CLONE_OPERATION_TIMEOUT_SECONDS):
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(url, ssl=ssl_context) as ws:
+                    await ws.send_json(
+                        {
+                            "type": "clone_panel",
+                            "host": panel_host,
+                            "passphrase": panel_passphrase,
+                        }
+                    )
 
-    # Return the destination path for the form
-    return dest_path, errors
+                    async for msg in ws:
+                        if msg.type == aiohttp.WSMsgType.TEXT:
+                            data: dict[str, str | int] = json.loads(msg.data)
+                            msg_type = str(data.get("type", ""))
+
+                            if msg_type == "status":
+                                _LOGGER.debug(
+                                    "Clone progress: %s — %s",
+                                    data.get("phase", ""),
+                                    data.get("detail", ""),
+                                )
+                            elif msg_type == "result":
+                                if data.get("status") == "ok":
+                                    return CloneResult(
+                                        success=True,
+                                        serial=str(data.get("serial", "")),
+                                        clone_serial=str(data.get("clone_serial", "")),
+                                        filename=str(data.get("filename", "")),
+                                        circuits=int(data.get("circuits", 0)),
+                                    )
+                                return CloneResult(
+                                    success=False,
+                                    error_message=str(data.get("message", "Unknown error")),
+                                    error_phase=str(data.get("phase", "")),
+                                )
+
+                        elif msg.type in (
+                            aiohttp.WSMsgType.ERROR,
+                            aiohttp.WSMsgType.CLOSED,
+                        ):
+                            return CloneResult(
+                                success=False,
+                                error_message="WebSocket connection closed unexpectedly",
+                            )
+
+    except TimeoutError:
+        return CloneResult(
+            success=False,
+            error_message="Clone operation timed out",
+        )
+    except aiohttp.ClientError as err:
+        return CloneResult(
+            success=False,
+            error_message=f"Cannot connect to simulator: {err}",
+        )
+
+    return CloneResult(
+        success=False,
+        error_message="Clone completed without receiving a result",
+    )

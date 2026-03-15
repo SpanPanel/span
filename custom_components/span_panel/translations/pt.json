@@ -66,15 +66,16 @@
   },
   "options": {
     "error": {
-      "directory": "O caminho do arquivo é necessário",
-      "base": "Falha na exportação: {error}"
+      "host_required": "O host do simulador é obrigatório",
+      "clone_failed": "A clonagem falhou. Verifique os logs do simulador e do Home Assistant para mais detalhes.",
+      "clone_connection_failed": "Não é possível conectar ao simulador",
+      "clone_timeout": "A operação de clonagem expirou"
     },
     "step": {
       "init": {
         "title": "Menu de Opções",
         "menu_options": {
           "general_options": "Opções Gerais",
-          "export_config": "Exportar Configuração de Sensores Sintéticos",
           "clone_panel_to_simulation": "Clonar Painel para Simulação"
         }
       },
@@ -94,16 +95,6 @@
           "enable_circuit_net_energy_sensors": "Criar sensores de energia líquida para circuitos individuais. Mostra o verdadeiro consumo de energia contabilizando potência reativa e fluxos regenerativos.",
           "energy_reporting_grace_period": "Quanto tempo os sensores de energia mantêm seu último valor conhecido quando o painel fica indisponível (0-60 minutos). Ajuda a preservar a integridade das estatísticas de energia durante interrupções breves. Padrão: 15 minutos.",
           "enable_energy_dip_compensation": "Compensar automaticamente quando o painel reporta leituras de energia mais baixas. Ao desativar, todas as compensações acumuladas são apagadas."
-        }
-      },
-      "export_config": {
-        "title": "Exportar Configuração de Sensores Sintéticos",
-        "description": "Exportar a configuração atual de sensores sintéticos para um arquivo YAML. Você pode especificar um diretório (o arquivo será nomeado automaticamente) ou um caminho de arquivo completo. Nome do arquivo padrão: {filename}",
-        "data": {
-          "directory": "Caminho do Arquivo"
-        },
-        "data_description": {
-          "directory": "Um caminho de diretório (o arquivo será nomeado automaticamente) ou um caminho de arquivo completo terminando em .yaml onde a configuração será salva."
         }
       }
     }

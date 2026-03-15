@@ -57,6 +57,7 @@ ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
 ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
 
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
+DEFAULT_CLONE_WSS_PORT: Final[int] = 19443
 
 
 class CircuitRelayState(enum.Enum):

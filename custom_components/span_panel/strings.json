@@ -86,8 +86,10 @@
   },
   "options": {
     "error": {
-      "directory": "Directory path is required",
-      "base": "Export failed: {error}"
+      "host_required": "Simulator host is required",
+      "clone_failed": "Clone failed. Check the simulator and Home Assistant logs for details.",
+      "clone_connection_failed": "Cannot connect to the simulator",
+      "clone_timeout": "Clone operation timed out"
     },
     "step": {
       "init": {
@@ -115,14 +117,16 @@
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets."
         }
       },
-      "export_config": {
-        "title": "Export Synthetic Sensor Config",
-        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: {filename}",
+      "clone_panel_to_simulation": {
+        "title": "Clone Panel to Simulator",
+        "description": "Clone **{panel}** to the SPAN Panel Simulator. The simulator will connect to the panel's eBus and create a simulation configuration. If a simulator was discovered on the network, the address is pre-filled.",
         "data": {
-          "directory": "File Path"
+          "simulator_host": "Simulator Host",
+          "clone_wss_port": "Clone WSS Port"
         },
         "data_description": {
-          "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
+          "simulator_host": "IP address or hostname of the SPAN Panel Simulator",
+          "clone_wss_port": "WebSocket port for the clone endpoint"
         }
       }
     }

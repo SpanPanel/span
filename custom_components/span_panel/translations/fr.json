@@ -66,15 +66,16 @@
   },
   "options": {
     "error": {
-      "directory": "Le chemin du fichier est requis",
-      "base": "Échec de l'exportation : {error}"
+      "host_required": "L'hôte du simulateur est requis",
+      "clone_failed": "Le clonage a échoué. Vérifiez les journaux du simulateur et de Home Assistant pour plus de détails.",
+      "clone_connection_failed": "Impossible de se connecter au simulateur",
+      "clone_timeout": "L'opération de clonage a expiré"
     },
     "step": {
       "init": {
         "title": "Menu des Options",
         "menu_options": {
           "general_options": "Options Générales",
-          "export_config": "Exporter la Configuration des Capteurs Synthétiques",
           "clone_panel_to_simulation": "Cloner le Panneau en Simulation"
         }
       },
@@ -94,16 +95,6 @@
           "enable_circuit_net_energy_sensors": "Créer des capteurs d'énergie nette pour les circuits individuels. Affiche la vraie consommation d'énergie en tenant compte de la puissance réactive et des flux régénératifs.",
           "energy_reporting_grace_period": "Combien de temps les capteurs d'énergie maintiennent leur dernière valeur connue lorsque le panneau devient indisponible (0-60 minutes). Aide à préserver l'intégrité des statistiques d'énergie pendant les pannes brèves. Par défaut : 15 minutes.",
           "enable_energy_dip_compensation": "Compenser automatiquement lorsque le panneau signale des lectures d'énergie inférieures. La désactivation efface toutes les compensations accumulées."
-        }
-      },
-      "export_config": {
-        "title": "Exporter la Configuration des Capteurs Synthétiques",
-        "description": "Exporter la configuration actuelle des capteurs synthétiques vers un fichier YAML. Vous pouvez spécifier un répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet. Nom de fichier par défaut : {filename}",
-        "data": {
-          "directory": "Chemin du Fichier"
-        },
-        "data_description": {
-          "directory": "Un chemin de répertoire (le fichier sera nommé automatiquement) ou un chemin de fichier complet se terminant par .yaml où la configuration sera sauvegardée."
         }
       }
     }

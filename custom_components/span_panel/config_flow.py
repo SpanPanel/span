@@ -15,7 +15,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
-from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 from span_panel_api import V2AuthResponse, detect_api_version
@@ -40,6 +39,7 @@ from .const import (
     CONF_HOP_PASSPHRASE,
     CONF_HTTP_PORT,
     CONF_PANEL_SERIAL,
+    DEFAULT_CLONE_WSS_PORT,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
@@ -53,7 +53,10 @@ from .options import (
     POWER_DISPLAY_PRECISION,
     SNAPSHOT_UPDATE_INTERVAL,
 )
-from .simulation_utils import clone_panel_to_simulation
+from .simulation_utils import (
+    discover_clone_simulators,
+    execute_clone_via_simulator,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -752,10 +755,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the main options menu."""
         if user_input is None:
-            menu_options = {
+            menu_options: dict[str, str] = {
                 "general_options": "General Options",
-                "clone_panel_to_simulation": "Clone Panel To Simulation",
             }
+            # Clone via simulator is only available for v2 panels (eBus)
+            if self.config_entry.data.get(CONF_API_VERSION) == "v2":
+                menu_options["clone_panel_to_simulation"] = "Clone Panel To Simulation"
 
             return self.async_show_menu(
                 step_id="init",
@@ -791,49 +796,71 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_clone_panel_to_simulation(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Clone the live panel into a simulation YAML for the standalone simulator."""
-        result = await clone_panel_to_simulation(self.hass, self.config_entry, user_input)
+        """Clone the panel to a simulator discovered via mDNS or entered manually."""
+        errors: dict[str, str] = {}
+        default_host = ""
+        default_port = DEFAULT_CLONE_WSS_PORT
+        panel_name = self.config_entry.data.get("device_name", self.config_entry.title)
 
-        # If result is a ConfigFlowResult, return it directly
-        if hasattr(result, "type"):
-            return result  # type: ignore[return-value]
+        if user_input is not None:
+            sim_host = str(user_input.get("simulator_host", "")).strip()
+            sim_port = int(user_input.get("clone_wss_port", DEFAULT_CLONE_WSS_PORT))
 
-        # Otherwise, result is (dest_path, errors) for the form
-        if isinstance(result, tuple) and len(result) == 2:
-            dest_path, errors = result
-            if not isinstance(errors, dict):
-                errors = {}
+            if not sim_host:
+                errors["simulator_host"] = "host_required"
+            else:
+                panel_host = str(self.config_entry.data.get(CONF_HOST, ""))
+                passphrase: str | None = self.config_entry.data.get(CONF_HOP_PASSPHRASE)
+                if passphrase == "":
+                    passphrase = None
+
+                result = await execute_clone_via_simulator(
+                    simulator_host=sim_host,
+                    simulator_port=sim_port,
+                    panel_host=panel_host,
+                    panel_passphrase=passphrase,
+                )
+
+                if result.success:
+                    _LOGGER.info(
+                        "Panel cloned to simulator: %s (%d circuits)",
+                        result.clone_serial,
+                        result.circuits,
+                    )
+                    return self.async_create_entry(
+                        title="",
+                        data=dict(self.config_entry.options),
+                    )
+
+                _LOGGER.error("Clone failed at %s: %s", result.error_phase, result.error_message)
+                errors["base"] = "clone_failed"
+
+            default_host = sim_host
+            default_port = sim_port
         else:
-            # Fallback if result format is unexpected
-            _LOGGER.error(
-                "Unexpected result format from clone_panel_to_simulation: %s", type(result)
-            )
-            return self.async_abort(reason="unknown")
+            # First visit — try mDNS discovery for simulators
+            simulators = await discover_clone_simulators(self.hass)
+            if simulators:
+                default_host = simulators[0].host
+                default_port = simulators[0].clone_wss_port
+                _LOGGER.debug(
+                    "Discovered %d simulator(s) with clone support; using %s:%d",
+                    len(simulators),
+                    default_host,
+                    default_port,
+                )
 
-        # If user_input was provided and there are no errors, the operation succeeded
-        if user_input is not None and not errors:
-            return self.async_create_entry(
-                title="Simulation Created",
-                data={},
-                description=f"Cloned panel to {dest_path.name}",
-            )
-
-        # Compute device name for form display
-        device_name = self.config_entry.data.get("device_name", self.config_entry.title)
-
-        # Confirm form with destination field
         schema = vol.Schema(
             {
-                vol.Required("destination", default=str(dest_path)): selector(
-                    {"text": {"multiline": False}}
-                )
+                vol.Required("simulator_host", default=default_host): str,
+                vol.Required("clone_wss_port", default=default_port): int,
             }
         )
         return self.async_show_form(
             step_id="clone_panel_to_simulation",
             data_schema=schema,
             description_placeholders={
-                "panel": device_name or "Span Panel",
+                "panel": str(panel_name) if panel_name else "Span Panel",
             },
             errors=errors,
         )

@@ -66,15 +66,16 @@
   },
   "options": {
     "error": {
-      "directory": "Se requiere la ruta del archivo",
-      "base": "Falló la exportación: {error}"
+      "host_required": "Se requiere el host del simulador",
+      "clone_failed": "La clonación falló. Verifique los registros del simulador y de Home Assistant para más detalles.",
+      "clone_connection_failed": "No se puede conectar al simulador",
+      "clone_timeout": "La operación de clonación expiró"
     },
     "step": {
       "init": {
         "title": "Menú de Opciones",
         "menu_options": {
           "general_options": "Opciones Generales",
-          "export_config": "Exportar Configuración de Sensores Sintéticos",
           "clone_panel_to_simulation": "Clonar Panel a Simulación"
         }
       },
@@ -94,16 +95,6 @@
           "enable_circuit_net_energy_sensors": "Crear sensores de energía neta para circuitos individuales. Muestra el verdadero consumo de energía contabilizando potencia reactiva y flujos regenerativos.",
           "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
           "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas. Al deshabilitar se borran todas las compensaciones acumuladas."
-        }
-      },
-      "export_config": {
-        "title": "Exportar Configuración de Sensores Sintéticos",
-        "description": "Exportar la configuración actual de sensores sintéticos a un archivo YAML. Puede especificar un directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa. Nombre de archivo predeterminado: {filename}",
-        "data": {
-          "directory": "Ruta del Archivo"
-        },
-        "data_description": {
-          "directory": "Una ruta de directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa que termine en .yaml donde se guardará la configuración."
         }
       }
     }
