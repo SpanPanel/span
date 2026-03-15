@@ -26,15 +26,20 @@ schema-driven integration would have propagated the error.
 
 Additional blockers:
 
-- **No schema versioning** -- the schema is tied to firmware releases (`rYYYYWW`), with no mechanism to request a specific version or negotiate compatibility.
+- **No schema versioning** -- the schema is tied to firmware releases (`rYYYYWW`), which conflates "the software running on the panel" with "the data contract
+  the panel exposes." A firmware update may change dozens of things without touching the schema, or alter one property's unit declaration without changing the
+  firmware version format. There is no independent schema version, no mechanism to request a specific version, and no backwards-compatibility guarantee. The
+  Homie API (`/api/v2/`) is currently in beta, which explains the in-place schema mutations; post-beta breaking changes would be expected under a new endpoint
+  (e.g. `/api/v3/`). The schema hash computed by Phase 1 drift detection is the best available proxy for a schema version -- a content-addressed identifier for
+  the exact set of node types, properties, units, and datatypes.
 - **Irreducible semantic layer** -- sign conventions, derived state machines (`dsm_state`, `current_run_config`), cross-references (EVSE `feed` to circuit),
   unmapped tab synthesis, and energy dip compensation are domain logic not representable in the Homie schema.
 - **HA-specific metadata** -- `device_class`, `state_class`, `entity_category`, `suggested_display_precision` have no Homie equivalent.
 - **User stability** -- HA users build automations and dashboards against stable entity IDs and sensor behaviors. Schema-driven changes that silently alter a
   sensor's unit or meaning would break installations.
 
-The phased approach below progressively surfaces schema metadata for validation and diagnostic purposes first, then optionally for entity discovery, without
-ever trusting the schema blindly for units or semantics.
+The phased approach below progressively surfaces schema metadata for validation and diagnostic purposes first, then optionally for reducing entity definition
+boilerplate on reviewed fields, without ever trusting the schema blindly for units or semantics and without ever exposing fields to users without human review.
 
 ## Phase 1: Schema Metadata Exposure (Validation and Diagnostics) — COMPLETE
 
@@ -115,6 +120,59 @@ attributes, unit cross-check (match, mismatch, missing), unmapped field detectio
 - Early warning when schema-derived field metadata disagrees with sensor definitions (e.g. the kW/W error).
 - Foundation for Phase 2 -- the field metadata and mapping are reusable.
 
+## Versioning Model
+
+The `span-panel-api` library is the gating factor for all schema changes reaching the integration. Even before SPAN corrects known unit declaration errors in
+the Homie schema, the library applies the correct interpretation -- the snapshot contract defines the truth, not the schema. This isolation has two
+consequences:
+
+1. **Schema corrections (declaration-only)** -- when SPAN fixes a unit declaration (e.g. `kW` → `W`) without changing actual values, neither repo needs code
+   changes. The library's `build_field_metadata()` automatically reflects the corrected declaration, and Phase 1 validation mismatches resolve themselves.
+
+2. **Value changes** -- if SPAN changes actual transmitted values (e.g. starts sending kW-scale values to match a `kW` declaration), the library must apply a
+   conversion in `_build_snapshot()` to maintain the snapshot contract. The integration bumps the library version; no other changes needed.
+
+In both cases, the library version pins a specific interpretation of firmware data. The version sequence for a breaking firmware change:
+
+1. SPAN releases firmware with changed property behavior
+2. Library releases a new version with the conversion/adaptation
+3. Integration bumps its library dependency
+4. User updates the integration -- changelog explains what changed
+
+Each step is a human decision point. No change reaches users without explicit maintainer review.
+
+### Schema Version vs Firmware Version
+
+The correct thing to version against is the schema, not the firmware. The `rYYYYWW` firmware identifier conflates panel software with data contract. Ideally
+SPAN would provide a declared `schema_version` field -- a monotonically increasing version or a semver -- so the library can say "I understand schema versions
+up to X" rather than "I was built against firmware rXXXXYY."
+
+The current unit corrections and schema changes being made without a version bump are beta-phase behavior -- the Homie API is served at `/api/v2/` and is not
+yet stable. Once the API exits beta, breaking changes to the schema would be expected to land under a new endpoint (e.g. `/api/v3/`), not as in-place mutations
+to the v2 schema. This distinction matters: the current churn is not representative of the long-term maintenance burden, and the trigger criteria for later
+phases should be evaluated against post-beta stability, not beta-phase corrections.
+
+Until SPAN provides a declared schema version, the library's schema hash (computed during Phase 1 drift detection) serves as the implicit schema version. The
+library could maintain a known-schema-hashes table, mapping each validated hash to the set of corrections it applies. When encountering an unknown hash, it logs
+a warning (drift detection already does this) and falls back to existing corrections -- safe-by-default behavior.
+
+### New Fields Require Human Review
+
+A new property appearing in the Homie schema must not be automatically exposed to users. The kW/W precedent proves that schema declarations cannot be trusted
+for correctness on first appearance. If a field were surfaced automatically, users would build automations on it, and a subsequent correction to its unit or
+sign convention would break those automations.
+
+The path for a new field:
+
+1. Phase 1 drift detection logs the new property
+2. A maintainer reviews the property's actual values against its declared unit and datatype
+3. The library adds the field to `_build_snapshot()` and `_PROPERTY_FIELD_MAP`
+4. The integration adds a `SensorEntityDescription` with verified HA metadata
+5. Both repos release new versions
+
+This is the same human-gated process used for existing fields. The library absorbs transport details; the integration adds HA semantics; nothing reaches users
+without review.
+
 ## Phase 2: Override-Table Entity Creation (Future)
 
 **Prerequisite**: Phase 1 complete. Schema metadata proven stable across multiple firmware releases. Schema unit corrections resolved (no outstanding known
@@ -124,14 +182,12 @@ Replace the 47+ hardcoded `SensorEntityDescription` instances with:
 
 1. **A declarative override table** mapping snapshot field paths to HA metadata (`device_class`, `state_class`, sign convention, entity category). The library's
    field metadata provides the base unit and datatype; the override table adds HA-specific semantics.
-2. **A generic entity factory** that iterates the library's field metadata, applies overrides where present, and creates entities with sensible defaults
-   otherwise.
-3. **An "unknown field" entity** -- generic sensor, unit from library metadata, no `device_class`, diagnostic category. Surfaces new library fields without
-   integration code changes.
+2. **A generic entity factory** that iterates the library's field metadata, applies overrides where present, and creates entities for fields that have an
+   override entry. Fields without an override entry are not exposed -- they remain invisible until a maintainer explicitly reviews them and adds an override.
 
-The override table inverts the maintenance model: everything works generically, and the maintainer only writes overrides for HA-specific semantics (device
-class, sign convention, etc.). The integration never references Homie node types or property IDs -- it operates entirely in terms of snapshot field paths and
-the library's field metadata.
+The override table reduces boilerplate for reviewed fields: the maintainer writes only the HA-specific semantics (device class, sign convention, etc.) and the
+factory derives the rest from the library's field metadata. But no field is ever exposed without an explicit override entry. The integration never references
+Homie node types or property IDs -- it operates entirely in terms of snapshot field paths and the library's field metadata.
 
 ### Trigger Criteria for Phase 2
 
@@ -153,8 +209,9 @@ Auto-generate `span-panel-api` snapshot dataclasses from the schema at build tim
 3. Manual `models.py` inherits from generated classes and adds derived fields (`dsm_state`, `current_run_config`, etc.).
 4. `mypy` and IDE autocomplete continue working against concrete types.
 
-This means `pip install span-panel-api==X.Y.Z` picks up new fields without integration code changes. The integration's Phase 2 override table handles the
-HA-side mapping.
+This reduces the library-side work for new fields -- the snapshot dataclass picks up new fields automatically from the schema. However, generated fields still
+require human review before they are exposed to the integration. The maintainer must verify the field's actual values against its declared unit and datatype,
+then add an override entry in the integration's Phase 2 override table. The codegen eliminates the library boilerplate but does not bypass the review gate.
 
 ### Trigger Criteria for Phase 3
 
