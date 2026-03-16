@@ -11,9 +11,9 @@ reflects real consumption patterns rather than synthetic noise.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 import logging
-import math
+import statistics
 from typing import TYPE_CHECKING, Literal
 
 from homeassistant.components.recorder import get_instance as get_recorder
@@ -132,7 +132,9 @@ async def build_usage_profiles(
             )
             continue
 
-        profile = _derive_profile(hourly_rows, monthly_stats.get(entity_id, []))
+        profile = _derive_profile(
+            hourly_rows, monthly_stats.get(entity_id, []), dt_util.get_default_time_zone()
+        )
         if profile:
             profiles[template_name] = profile
 
@@ -172,6 +174,7 @@ async def _query_statistics(
 def _derive_profile(
     hourly_rows: list[dict[str, object]],
     monthly_rows: list[dict[str, object]],
+    local_tz: tzinfo,
 ) -> dict[str, object]:
     """Compute profile parameters from raw statistics rows."""
     profile: dict[str, object] = {}
@@ -195,43 +198,46 @@ def _derive_profile(
         if max_val is not None and isinstance(max_val, int | float):
             hourly_maxes.append(abs(float(max_val)))
 
-        # Bucket by hour-of-day
-        if isinstance(start, datetime):
-            hour_buckets[start.hour].append(abs_mean)
+        # Bucket by hour-of-day in local time (simulator uses local hours)
+        if isinstance(start, int | float):
+            local_hour = datetime.fromtimestamp(start, tz=dt_util.UTC).astimezone(local_tz).hour
+            hour_buckets[local_hour].append(abs_mean)
 
     if not hourly_means:
         return profile
 
-    # typical_power: mean of hourly means
-    typical_power = sum(hourly_means) / len(hourly_means)
+    # Use median throughout — robust to sensor glitch spikes that can
+    # reach 100x the real value and destroy mean-based calculations.
+
+    # typical_power: median of hourly means
+    typical_power = statistics.median(hourly_means)
     profile["typical_power"] = round(typical_power, 1)
 
-    # power_variation: coefficient of variation, clamped to [0.0, 1.0]
-    if typical_power > 0:
-        variance = sum((v - typical_power) ** 2 for v in hourly_means) / len(hourly_means)
-        stddev = math.sqrt(variance)
-        cv = stddev / typical_power
-        profile["power_variation"] = round(min(max(cv, 0.0), 1.0), 3)
+    # power_variation: IQR-based dispersion relative to median, clamped [0.0, 1.0]
+    if typical_power > 0 and len(hourly_means) >= 4:
+        q1, q3 = _quartiles(hourly_means)
+        iqr_ratio = (q3 - q1) / typical_power
+        profile["power_variation"] = round(min(max(iqr_ratio, 0.0), 1.0), 3)
 
-    # hour_factors: average by hour-of-day, normalized so peak = 1.0
-    hour_averages: dict[int, float] = {}
+    # hour_factors: median by hour-of-day, normalized so peak = 1.0
+    hour_medians: dict[int, float] = {}
     for h in range(24):
         bucket = hour_buckets[h]
         if bucket:
-            hour_averages[h] = sum(bucket) / len(bucket)
+            hour_medians[h] = statistics.median(bucket)
         else:
-            hour_averages[h] = 0.0
+            hour_medians[h] = 0.0
 
-    peak_hour = max(hour_averages.values()) if hour_averages else 0.0
+    peak_hour = max(hour_medians.values()) if hour_medians else 0.0
     if peak_hour > 0:
-        hour_factors = {h: round(v / peak_hour, 3) for h, v in hour_averages.items()}
+        hour_factors = {h: round(v / peak_hour, 3) for h, v in hour_medians.items()}
         profile["hour_factors"] = hour_factors
 
-    # duty_cycle: mean(hourly_means) / mean(hourly_maxes)
+    # duty_cycle: median(hourly_means) / median(hourly_maxes)
     if hourly_maxes:
-        mean_of_maxes = sum(hourly_maxes) / len(hourly_maxes)
-        if mean_of_maxes > 0:
-            duty = typical_power / mean_of_maxes
+        median_of_maxes = statistics.median(hourly_maxes)
+        if median_of_maxes > 0:
+            duty = typical_power / median_of_maxes
             if duty < _DUTY_CYCLE_CEILING:
                 profile["duty_cycle"] = round(duty, 3)
 
@@ -244,9 +250,10 @@ def _derive_profile(
             if (
                 mean_val is not None
                 and isinstance(mean_val, int | float)
-                and isinstance(start, datetime)
+                and isinstance(start, int | float)
             ):
-                monthly_means[start.month] = abs(float(mean_val))
+                month = datetime.fromtimestamp(start, tz=dt_util.UTC).month
+                monthly_means[month] = abs(float(mean_val))
 
         if len(monthly_means) >= _MIN_MONTHS_FOR_SEASONAL:
             peak_month = max(monthly_means.values())
@@ -255,3 +262,15 @@ def _derive_profile(
                 profile["monthly_factors"] = monthly_factors
 
     return profile
+
+
+def _quartiles(values: list[float]) -> tuple[float, float]:
+    """Return (Q1, Q3) for a list of values."""
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    mid = n // 2
+    lower = sorted_vals[:mid]
+    upper = sorted_vals[mid + (n % 2) :]
+    q1 = statistics.median(lower) if lower else sorted_vals[0]
+    q3 = statistics.median(upper) if upper else sorted_vals[-1]
+    return q1, q3
