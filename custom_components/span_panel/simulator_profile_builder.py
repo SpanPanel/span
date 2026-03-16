@@ -16,6 +16,7 @@ import logging
 import math
 from typing import TYPE_CHECKING, Literal
 
+from homeassistant.components.recorder import get_instance as get_recorder
 from homeassistant.components.recorder.statistics import (
     statistics_during_period,
 )
@@ -155,8 +156,8 @@ async def _query_statistics(
     period: _StatPeriod,
     stat_types: set[_StatType],
 ) -> dict[str, list[dict[str, object]]]:
-    """Run statistics_during_period and return the result dict."""
-    return await hass.async_add_executor_job(
+    """Run statistics_during_period on the recorder's executor."""
+    return await get_recorder(hass).async_add_executor_job(
         statistics_during_period,  # type: ignore[arg-type]
         hass,
         start_time,
