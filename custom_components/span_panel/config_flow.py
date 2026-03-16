@@ -39,7 +39,6 @@ from .const import (
     CONF_HOP_PASSPHRASE,
     CONF_HTTP_PORT,
     CONF_PANEL_SERIAL,
-    DEFAULT_CLONE_WSS_PORT,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
@@ -758,8 +757,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             menu_options: dict[str, str] = {
                 "general_options": "General Options",
             }
-            # Clone via simulator is only available for v2 panels (eBus)
-            if self.config_entry.data.get(CONF_API_VERSION) == "v2":
+            # Clone via simulator is only available for real v2 panels (eBus).
+            # Simulator entries have serials prefixed with "sim-".
+            serial = self.config_entry.unique_id or ""
+            is_simulator = serial.lower().startswith("sim-")
+            if self.config_entry.data.get(CONF_API_VERSION) == "v2" and not is_simulator:
                 menu_options["clone_panel_to_simulation"] = "Clone Panel To Simulation"
 
             return self.async_show_menu(
@@ -799,12 +801,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         """Clone the panel to a simulator discovered via mDNS or entered manually."""
         errors: dict[str, str] = {}
         default_host = ""
-        default_port = DEFAULT_CLONE_WSS_PORT
+        default_http_port = 8081
         panel_name = self.config_entry.data.get("device_name", self.config_entry.title)
 
         if user_input is not None:
             sim_host = str(user_input.get("simulator_host", "")).strip()
-            sim_port = int(user_input.get("clone_wss_port", DEFAULT_CLONE_WSS_PORT))
+            sim_http_port = int(user_input.get("simulator_http_port", 8081))
 
             if not sim_host:
                 errors["simulator_host"] = "host_required"
@@ -816,9 +818,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
                 result = await execute_clone_via_simulator(
                     simulator_host=sim_host,
-                    simulator_port=sim_port,
+                    simulator_http_port=sim_http_port,
                     panel_host=panel_host,
                     panel_passphrase=passphrase,
+                    latitude=self.hass.config.latitude,
+                    longitude=self.hass.config.longitude,
                 )
 
                 if result.success:
@@ -836,24 +840,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 errors["base"] = "clone_failed"
 
             default_host = sim_host
-            default_port = sim_port
+            default_http_port = sim_http_port
         else:
             # First visit — try mDNS discovery for simulators
             simulators = await discover_clone_simulators(self.hass)
             if simulators:
                 default_host = simulators[0].host
-                default_port = simulators[0].clone_wss_port
+                default_http_port = simulators[0].http_port
                 _LOGGER.debug(
                     "Discovered %d simulator(s) with clone support; using %s:%d",
                     len(simulators),
                     default_host,
-                    default_port,
+                    default_http_port,
                 )
 
         schema = vol.Schema(
             {
                 vol.Required("simulator_host", default=default_host): str,
-                vol.Required("clone_wss_port", default=default_port): int,
+                vol.Required("simulator_http_port", default=default_http_port): int,
             }
         )
         return self.async_show_form(

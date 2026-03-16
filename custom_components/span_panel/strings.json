@@ -122,11 +122,11 @@
         "description": "Clone **{panel}** to the SPAN Panel Simulator. The simulator will connect to the panel's eBus and create a simulation configuration. If a simulator was discovered on the network, the address is pre-filled.",
         "data": {
           "simulator_host": "Simulator Host",
-          "clone_wss_port": "Clone WSS Port"
+          "simulator_http_port": "Simulator HTTP Port"
         },
         "data_description": {
           "simulator_host": "IP address or hostname of the SPAN Panel Simulator",
-          "clone_wss_port": "WebSocket port for the clone endpoint"
+          "simulator_http_port": "HTTP port for the simulator's Socket.IO endpoint"
         }
       }
     }
