@@ -55,7 +55,9 @@ from .options import (
 from .simulation_utils import (
     discover_clone_simulators,
     execute_clone_via_simulator,
+    send_usage_profiles,
 )
+from .simulator_profile_builder import build_usage_profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -825,19 +827,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     longitude=self.hass.config.longitude,
                 )
 
-                if result.success:
+                if not result.success:
+                    _LOGGER.error(
+                        "Clone failed at %s: %s",
+                        result.error_phase,
+                        result.error_message,
+                    )
+                    errors["base"] = "clone_failed"
+                else:
                     _LOGGER.info(
                         "Panel cloned to simulator: %s (%d circuits)",
                         result.clone_serial,
                         result.circuits,
                     )
+                    await self._apply_usage_profiles(sim_host, sim_http_port, result.clone_serial)
                     return self.async_create_entry(
                         title="",
                         data=dict(self.config_entry.options),
                     )
-
-                _LOGGER.error("Clone failed at %s: %s", result.error_phase, result.error_message)
-                errors["base"] = "clone_failed"
 
             default_host = sim_host
             default_http_port = sim_http_port
@@ -868,6 +875,48 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             },
             errors=errors,
         )
+
+    async def _apply_usage_profiles(
+        self,
+        simulator_host: str,
+        simulator_http_port: int,
+        clone_serial: str,
+    ) -> None:
+        """Build HA-derived usage profiles and send them to the simulator (best-effort).
+
+        Failures are logged but do not affect the clone result.
+        """
+        try:
+            profiles = await build_usage_profiles(self.hass, self.config_entry)
+        except (KeyError, ValueError):
+            _LOGGER.exception("Failed to build usage profiles from recorder data")
+            return
+
+        if not profiles:
+            _LOGGER.info("No usage profiles to send (no recorder data)")
+            return
+
+        try:
+            profile_result = await send_usage_profiles(
+                simulator_host=simulator_host,
+                simulator_http_port=simulator_http_port,
+                clone_serial=clone_serial,
+                profiles=profiles,
+            )
+        except (TimeoutError, OSError):
+            _LOGGER.exception("Failed to deliver usage profiles to simulator")
+            return
+
+        if profile_result.success:
+            _LOGGER.info(
+                "Applied usage profiles: %d templates updated",
+                profile_result.circuits_updated,
+            )
+        else:
+            _LOGGER.warning(
+                "Profile delivery failed: %s",
+                profile_result.error_message,
+            )
 
 
 # Register the config flow handler

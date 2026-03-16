@@ -25,6 +25,7 @@ EBUS_SERVICE_TYPE = "_ebus._tcp.local."
 HTTP_PORT_PROPERTY = "httpPort"
 DISCOVERY_TIMEOUT_SECONDS = 3.0
 CLONE_OPERATION_TIMEOUT_SECONDS = 120
+PROFILE_OPERATION_TIMEOUT_SECONDS = 30
 SIO_NAMESPACE = "/v1/panel"
 
 
@@ -48,6 +49,44 @@ class CloneResult:
     circuits: int = 0
     error_message: str = ""
     error_phase: str = ""
+
+
+@dataclass
+class ProfileResult:
+    """Outcome of a usage-profile delivery operation."""
+
+    success: bool
+    circuits_updated: int = 0
+    error_message: str = ""
+
+
+async def _sio_call(
+    host: str,
+    port: int,
+    event: str,
+    data: dict[str, object],
+    timeout_seconds: int,
+) -> dict[str, object]:
+    """Connect to the simulator's Socket.IO namespace, emit an event, and return the response.
+
+    Raises TimeoutError if the operation exceeds ``timeout_seconds``.
+    Raises ValueError if the response is not a dict.
+    """
+    url = f"http://{host}:{port}"
+    client: socketio.AsyncSimpleClient = socketio.AsyncSimpleClient()
+
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            await client.connect(url, namespace=SIO_NAMESPACE, wait_timeout=10)
+            result = await client.call(event, data)
+
+        if not isinstance(result, dict):
+            raise TypeError("Unexpected response from simulator")
+
+        return result
+    finally:
+        if client.connected:
+            await client.disconnect()
 
 
 async def discover_clone_simulators(hass: HomeAssistant) -> list[SimulatorInfo]:
@@ -126,29 +165,19 @@ async def execute_clone_via_simulator(
     pipeline.  HA's location is included so the clone config gets the
     correct timezone and seasonal parameters.
     """
-
-    url = f"http://{simulator_host}:{simulator_http_port}"
-    client: socketio.AsyncSimpleClient = socketio.AsyncSimpleClient()
-
     try:
-        async with asyncio.timeout(CLONE_OPERATION_TIMEOUT_SECONDS):
-            await client.connect(url, namespace=SIO_NAMESPACE, wait_timeout=10)
-
-            result = await client.call(
-                "clone_panel",
-                {
-                    "host": panel_host,
-                    "passphrase": panel_passphrase,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                },
-            )
-
-        if not isinstance(result, dict):
-            return CloneResult(
-                success=False,
-                error_message="Unexpected response from simulator",
-            )
+        result = await _sio_call(
+            host=simulator_host,
+            port=simulator_http_port,
+            event="clone_panel",
+            data={
+                "host": panel_host,
+                "passphrase": panel_passphrase,
+                "latitude": latitude,
+                "longitude": longitude,
+            },
+            timeout_seconds=CLONE_OPERATION_TIMEOUT_SECONDS,
+        )
 
         if result.get("status") == "ok":
             return CloneResult(
@@ -156,7 +185,7 @@ async def execute_clone_via_simulator(
                 serial=str(result.get("serial", "")),
                 clone_serial=str(result.get("clone_serial", "")),
                 filename=str(result.get("filename", "")),
-                circuits=int(result.get("circuits", 0)),
+                circuits=int(str(result.get("circuits", 0))),
             )
 
         return CloneResult(
@@ -170,11 +199,64 @@ async def execute_clone_via_simulator(
             success=False,
             error_message="Clone operation timed out",
         )
+    except TypeError as err:
+        return CloneResult(
+            success=False,
+            error_message=str(err),
+        )
     except Exception as err:
         return CloneResult(
             success=False,
             error_message=f"Cannot connect to simulator: {err}",
         )
-    finally:
-        if client.connected:
-            await client.disconnect()
+
+
+async def send_usage_profiles(
+    simulator_host: str,
+    simulator_http_port: int,
+    clone_serial: str,
+    profiles: dict[str, dict[str, object]],
+) -> ProfileResult:
+    """Push usage profiles to the simulator via Socket.IO.
+
+    Connects to the simulator's ``/v1/panel`` namespace and emits an
+    ``apply_usage_profiles`` event with the clone serial and profile data.
+    """
+    try:
+        result = await _sio_call(
+            host=simulator_host,
+            port=simulator_http_port,
+            event="apply_usage_profiles",
+            data={
+                "clone_serial": clone_serial,
+                "profiles": profiles,
+            },
+            timeout_seconds=PROFILE_OPERATION_TIMEOUT_SECONDS,
+        )
+
+        if result.get("status") == "ok":
+            return ProfileResult(
+                success=True,
+                circuits_updated=int(str(result.get("templates_updated", 0))),
+            )
+
+        return ProfileResult(
+            success=False,
+            error_message=str(result.get("message", "Unknown error")),
+        )
+
+    except TimeoutError:
+        return ProfileResult(
+            success=False,
+            error_message="Profile delivery timed out",
+        )
+    except TypeError as err:
+        return ProfileResult(
+            success=False,
+            error_message=str(err),
+        )
+    except Exception as err:
+        return ProfileResult(
+            success=False,
+            error_message=f"Cannot connect to simulator: {err}",
+        )
