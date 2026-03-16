@@ -22,14 +22,11 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
 from .helpers import build_circuit_unique_id
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
-
-    from .coordinator import SpanPanelCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,8 +58,12 @@ async def build_usage_profiles(
     - ``duty_cycle`` (float, 0.0–1.0)
     - ``monthly_factors`` (dict[int, float], 1–12 → 0.0–1.0)
     """
-    coordinator: SpanPanelCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    snapshot = coordinator.data
+    if not hasattr(config_entry, "runtime_data") or config_entry.runtime_data is None:
+        _LOGGER.warning(
+            "Config entry %s has no runtime data (not yet set up?)", config_entry.entry_id
+        )
+        return {}
+    snapshot = config_entry.runtime_data.coordinator.data
     if snapshot is None:
         _LOGGER.warning("No snapshot available for profile building")
         return {}
