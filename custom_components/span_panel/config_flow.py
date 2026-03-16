@@ -53,9 +53,8 @@ from .options import (
     SNAPSHOT_UPDATE_INTERVAL,
 )
 from .simulation_utils import (
+    clone_with_profiles,
     discover_clone_simulators,
-    execute_clone_via_simulator,
-    send_usage_profiles,
 )
 from .simulator_profile_builder import build_usage_profiles
 
@@ -818,13 +817,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 if passphrase == "":
                     passphrase = None
 
-                result = await execute_clone_via_simulator(
+                profiles = await self._build_profiles_best_effort()
+
+                result = await clone_with_profiles(
                     simulator_host=sim_host,
                     simulator_http_port=sim_http_port,
                     panel_host=panel_host,
                     panel_passphrase=passphrase,
                     latitude=self.hass.config.latitude,
                     longitude=self.hass.config.longitude,
+                    profiles=profiles,
                 )
 
                 if not result.success:
@@ -840,7 +842,17 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         result.clone_serial,
                         result.circuits,
                     )
-                    await self._apply_usage_profiles(sim_host, sim_http_port, result.clone_serial)
+                    if result.profile_result is not None:
+                        if result.profile_result.success:
+                            _LOGGER.info(
+                                "Applied usage profiles: %d templates updated",
+                                result.profile_result.circuits_updated,
+                            )
+                        else:
+                            _LOGGER.debug(
+                                "Profile delivery skipped: %s",
+                                result.profile_result.error_message,
+                            )
                     return self.async_create_entry(
                         title="",
                         data=dict(self.config_entry.options),
@@ -876,47 +888,24 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors=errors,
         )
 
-    async def _apply_usage_profiles(
+    async def _build_profiles_best_effort(
         self,
-        simulator_host: str,
-        simulator_http_port: int,
-        clone_serial: str,
-    ) -> None:
-        """Build HA-derived usage profiles and send them to the simulator (best-effort).
+    ) -> dict[str, dict[str, object]] | None:
+        """Build HA-derived usage profiles from recorder data (best-effort).
 
-        Failures are logged but do not affect the clone result.
+        Returns ``None`` on failure so the clone can proceed without profiles.
         """
         try:
             profiles = await build_usage_profiles(self.hass, self.config_entry)
         except (KeyError, ValueError):
             _LOGGER.exception("Failed to build usage profiles from recorder data")
-            return
+            return None
 
         if not profiles:
             _LOGGER.info("No usage profiles to send (no recorder data)")
-            return
+            return None
 
-        try:
-            profile_result = await send_usage_profiles(
-                simulator_host=simulator_host,
-                simulator_http_port=simulator_http_port,
-                clone_serial=clone_serial,
-                profiles=profiles,
-            )
-        except (TimeoutError, OSError):
-            _LOGGER.exception("Failed to deliver usage profiles to simulator")
-            return
-
-        if profile_result.success:
-            _LOGGER.info(
-                "Applied usage profiles: %d templates updated",
-                profile_result.circuits_updated,
-            )
-        else:
-            _LOGGER.warning(
-                "Profile delivery failed: %s",
-                profile_result.error_message,
-            )
+        return profiles
 
 
 # Register the config flow handler
