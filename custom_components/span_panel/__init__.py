@@ -5,11 +5,18 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import logging
+from typing import cast
 
 from homeassistant.components.persistent_notification import async_create as pn_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import (
+    CoreState,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
@@ -41,6 +48,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import SpanPanelCoordinator
+from .helpers import build_circuit_unique_id
 from .migration import migrate_config_entry_sensors
 from .options import SNAPSHOT_UPDATE_INTERVAL
 from .util import snapshot_to_device_info
@@ -68,6 +76,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # Config entry version — bumped to 6 for simulation removal
 CURRENT_CONFIG_VERSION = 6
+
+# Map internal device_type values to external manifest format
+_DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -261,11 +272,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
 
-    # Register WebSocket commands once per HA instance
+    # Register WebSocket commands and services once per HA instance
     domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})
     if not domain_data.get("websocket_registered"):
         domain_data["websocket_registered"] = True
         async_register_commands(hass)
+    if not domain_data.get("service_registered"):
+        domain_data["service_registered"] = True
+        _async_register_services(hass)
 
     config = entry.data
     api_version = config.get(CONF_API_VERSION, "v1")
@@ -454,3 +468,63 @@ async def ensure_device_registered(
     else:
         device_info = snapshot_to_device_info(snapshot, device_name, host=host)
         device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+
+
+def _async_register_services(hass: HomeAssistant) -> None:
+    """Register domain-level services (called once per HA instance)."""
+
+    async def async_handle_export_manifest(
+        _call: ServiceCall,
+    ) -> ServiceResponse:
+        """Export circuit manifest for all configured SPAN panels."""
+        entity_reg = er.async_get(hass)
+        panels = []
+
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if not hasattr(entry, "runtime_data") or not isinstance(
+                entry.runtime_data, SpanPanelRuntimeData
+            ):
+                continue
+
+            snapshot = entry.runtime_data.coordinator.data
+            if snapshot is None:
+                continue
+
+            serial = snapshot.serial_number
+            circuits = []
+
+            for circuit_id, circuit in snapshot.circuits.items():
+                if circuit_id.startswith("unmapped_tab_"):
+                    continue
+
+                tabs = getattr(circuit, "tabs", None)
+                if not tabs:
+                    continue
+
+                unique_id = build_circuit_unique_id(serial, circuit_id, "instantPowerW")
+                entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+                if entity_id is None:
+                    continue
+
+                raw_type = getattr(circuit, "device_type", "circuit")
+
+                circuits.append(
+                    {
+                        "entity_id": entity_id,
+                        "template": f"clone_{min(tabs)}",
+                        "device_type": _DEVICE_TYPE_MAP.get(raw_type, raw_type),
+                        "tabs": list(tabs),
+                    }
+                )
+
+            if circuits:
+                panels.append({"serial": serial, "circuits": circuits})
+
+        return cast(ServiceResponse, {"panels": panels})
+
+    hass.services.async_register(
+        DOMAIN,
+        "export_circuit_manifest",
+        async_handle_export_manifest,
+        supports_response=SupportsResponse.ONLY,
+    )

@@ -1,0 +1,5 @@
+export_circuit_manifest:
+  description: >-
+    Export an authoritative circuit-to-entity manifest for all configured
+    SPAN panels. Returns panel serial numbers, circuit power sensor entity
+    IDs, simulator template names, device types, and breaker tab numbers.
