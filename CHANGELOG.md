@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.3] - 3/2026
+
+### Fixed
+
+**Important** 2.0.1 cautions still apply — read those carefully if not already
+on 2.0.1 BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration
+  if upgrading
+
+### Fixes
+
+- **Force dependency re-resolution** — Version bump to ensure HACS
+  re-installs `span-panel-api` for users who had the earlier 2.0.2
+  release. Users upgrading HA without re-downloading the integration
+  could be left with a stale library missing required imports. (#191)
+
 ## [2.0.2] - 3/2026
 
 **Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
