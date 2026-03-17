@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 3/2026
+
+**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
+
+### Changed
+
+- **Simulation moved to dedicated add-on** — Panel cloning and simulation are no longer part of the integration's options flow. A new `export_circuit_manifest`
+  service provides panel parameters to the standalone SPAN Panel Simulator add-on.
+
+### Fixed
+
+- **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
+- **Schema validation cross-check** — Added Phase 1 schema validation that cross-checks sensor definitions against the Homie schema metadata at startup.
+
 ## [2.0.3] - 3/2026
 
 **Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
