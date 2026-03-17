@@ -65,20 +65,7 @@
     }
   },
   "options": {
-    "error": {
-      "host_required": "L'hôte du simulateur est requis",
-      "clone_failed": "Le clonage a échoué. Vérifiez les journaux du simulateur et de Home Assistant pour plus de détails.",
-      "clone_connection_failed": "Impossible de se connecter au simulateur",
-      "clone_timeout": "L'opération de clonage a expiré"
-    },
     "step": {
-      "init": {
-        "title": "Menu des Options",
-        "menu_options": {
-          "general_options": "Options Générales",
-          "clone_panel_to_simulation": "Cloner le Panneau en Simulation"
-        }
-      },
       "general_options": {
         "title": "Options Générales",
         "description": "Configurer les paramètres de l'intégration SPAN Panel.",

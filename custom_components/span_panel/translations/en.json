@@ -85,20 +85,7 @@
     }
   },
   "options": {
-    "error": {
-      "host_required": "Simulator host is required",
-      "clone_failed": "Clone failed. Check the simulator and Home Assistant logs for details.",
-      "clone_connection_failed": "Cannot connect to the simulator",
-      "clone_timeout": "Clone operation timed out"
-    },
     "step": {
-      "init": {
-        "title": "Options Menu",
-        "menu_options": {
-          "general_options": "General Options",
-          "clone_panel_to_simulation": "Clone Panel To Simulation"
-        }
-      },
       "general_options": {
         "title": "General Options",
         "description": "Configure SPAN Panel integration settings.",
@@ -115,18 +102,6 @@
           "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
           "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets."
-        }
-      },
-      "clone_panel_to_simulation": {
-        "title": "Clone Panel to Simulator",
-        "description": "Clone **{panel}** to the SPAN Panel Simulator. The simulator will connect to the panel's eBus and create a simulation configuration. If a simulator was discovered on the network, the address is pre-filled.",
-        "data": {
-          "simulator_host": "Simulator Host",
-          "simulator_http_port": "Simulator HTTP Port"
-        },
-        "data_description": {
-          "simulator_host": "IP address or hostname of the SPAN Panel Simulator",
-          "simulator_http_port": "HTTP port for the simulator's Socket.IO endpoint"
         }
       }
     }

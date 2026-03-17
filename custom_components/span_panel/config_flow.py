@@ -52,11 +52,6 @@ from .options import (
     POWER_DISPLAY_PRECISION,
     SNAPSHOT_UPDATE_INTERVAL,
 )
-from .simulation_utils import (
-    clone_with_profiles,
-    discover_clone_simulators,
-)
-from .simulator_profile_builder import build_usage_profiles
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -753,24 +748,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the main options menu."""
-        if user_input is None:
-            menu_options: dict[str, str] = {
-                "general_options": "General Options",
-            }
-            # Clone via simulator is only available for real v2 panels (eBus).
-            # Simulator entries have serials prefixed with "sim-".
-            serial = self.config_entry.unique_id or ""
-            is_simulator = serial.lower().startswith("sim-")
-            if self.config_entry.data.get(CONF_API_VERSION) == "v2" and not is_simulator:
-                menu_options["clone_panel_to_simulation"] = "Clone Panel To Simulation"
-
-            return self.async_show_menu(
-                step_id="init",
-                menu_options=menu_options,
-            )
-
-        return self.async_abort(reason="unknown")
+        """Start the options flow with general options directly."""
+        return await self.async_step_general_options(user_input)
 
     async def async_step_general_options(
         self, user_input: dict[str, Any] | None = None
@@ -795,117 +774,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
         )
-
-    async def async_step_clone_panel_to_simulation(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Clone the panel to a simulator discovered via mDNS or entered manually."""
-        errors: dict[str, str] = {}
-        default_host = ""
-        default_http_port = 8081
-        panel_name = self.config_entry.data.get("device_name", self.config_entry.title)
-
-        if user_input is not None:
-            sim_host = str(user_input.get("simulator_host", "")).strip()
-            sim_http_port = int(user_input.get("simulator_http_port", 8081))
-
-            if not sim_host:
-                errors["simulator_host"] = "host_required"
-            else:
-                panel_host = str(self.config_entry.data.get(CONF_HOST, ""))
-                passphrase: str | None = self.config_entry.data.get(CONF_HOP_PASSPHRASE)
-                if passphrase == "":
-                    passphrase = None
-
-                profiles = await self._build_profiles_best_effort()
-
-                result = await clone_with_profiles(
-                    simulator_host=sim_host,
-                    simulator_http_port=sim_http_port,
-                    panel_host=panel_host,
-                    panel_passphrase=passphrase,
-                    latitude=self.hass.config.latitude,
-                    longitude=self.hass.config.longitude,
-                    profiles=profiles,
-                )
-
-                if not result.success:
-                    _LOGGER.error(
-                        "Clone failed at %s: %s",
-                        result.error_phase,
-                        result.error_message,
-                    )
-                    errors["base"] = "clone_failed"
-                else:
-                    _LOGGER.info(
-                        "Panel cloned to simulator: %s (%d circuits)",
-                        result.clone_serial,
-                        result.circuits,
-                    )
-                    if result.profile_result is not None:
-                        if result.profile_result.success:
-                            _LOGGER.info(
-                                "Applied usage profiles: %d templates updated",
-                                result.profile_result.circuits_updated,
-                            )
-                        else:
-                            _LOGGER.debug(
-                                "Profile delivery skipped: %s",
-                                result.profile_result.error_message,
-                            )
-                    return self.async_create_entry(
-                        title="",
-                        data=dict(self.config_entry.options),
-                    )
-
-            default_host = sim_host
-            default_http_port = sim_http_port
-        else:
-            # First visit — try mDNS discovery for simulators
-            simulators = await discover_clone_simulators(self.hass)
-            if simulators:
-                default_host = simulators[0].host
-                default_http_port = simulators[0].http_port
-                _LOGGER.debug(
-                    "Discovered %d simulator(s) with clone support; using %s:%d",
-                    len(simulators),
-                    default_host,
-                    default_http_port,
-                )
-
-        schema = vol.Schema(
-            {
-                vol.Required("simulator_host", default=default_host): str,
-                vol.Required("simulator_http_port", default=default_http_port): int,
-            }
-        )
-        return self.async_show_form(
-            step_id="clone_panel_to_simulation",
-            data_schema=schema,
-            description_placeholders={
-                "panel": str(panel_name) if panel_name else "Span Panel",
-            },
-            errors=errors,
-        )
-
-    async def _build_profiles_best_effort(
-        self,
-    ) -> dict[str, dict[str, object]] | None:
-        """Build HA-derived usage profiles from recorder data (best-effort).
-
-        Returns ``None`` on failure so the clone can proceed without profiles.
-        """
-        try:
-            profiles = await build_usage_profiles(self.hass, self.config_entry)
-        except (KeyError, ValueError):
-            _LOGGER.exception("Failed to build usage profiles from recorder data")
-            return None
-
-        if not profiles:
-            _LOGGER.info("No usage profiles to send (no recorder data)")
-            return None
-
-        return profiles
 
 
 # Register the config flow handler
