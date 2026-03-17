@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -80,7 +81,10 @@ class TestExportCircuitManifest:
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-test-001",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.100"},
+            entry_id="span_entry",
+            unique_id="sp3-test-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -103,6 +107,7 @@ class TestExportCircuitManifest:
 
         panel = result["panels"][0]
         assert panel["serial"] == "sp3-test-001"
+        assert panel["host"] == "192.168.1.100"
         assert len(panel["circuits"]) == 2
 
         by_template = {c["template"]: c for c in panel["circuits"]}
@@ -134,10 +139,16 @@ class TestExportCircuitManifest:
         )
 
         entry_a = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="entry_a", unique_id="serial-aaa",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.100"},
+            entry_id="entry_a",
+            unique_id="serial-aaa",
         )
         entry_b = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="entry_b", unique_id="serial-bbb",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.101"},
+            entry_id="entry_b",
+            unique_id="serial-bbb",
         )
         entry_a.add_to_hass(hass)
         entry_b.add_to_hass(hass)
@@ -156,6 +167,10 @@ class TestExportCircuitManifest:
         serials = {p["serial"] for p in result["panels"]}
         assert serials == {"serial-aaa", "serial-bbb"}
 
+        by_serial = {p["serial"]: p for p in result["panels"]}
+        assert by_serial["serial-aaa"]["host"] == "192.168.1.100"
+        assert by_serial["serial-bbb"]["host"] == "192.168.1.101"
+
     @pytest.mark.asyncio
     async def test_unmapped_tabs_excluded(self, hass: HomeAssistant):
         """Unmapped tab circuits are excluded from the manifest."""
@@ -169,7 +184,10 @@ class TestExportCircuitManifest:
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.1"},
+            entry_id="span_entry",
+            unique_id="sp3-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -201,7 +219,10 @@ class TestExportCircuitManifest:
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.1"},
+            entry_id="span_entry",
+            unique_id="sp3-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -218,30 +239,14 @@ class TestExportCircuitManifest:
         assert panel["circuits"][0]["template"] == "clone_1"
 
     @pytest.mark.asyncio
-    async def test_entry_without_runtime_data_skipped(self, hass: HomeAssistant):
-        """Entries not yet loaded (no runtime_data) are silently omitted."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-        entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
-        )
-        entry.add_to_hass(hass)
-        # NOT setting runtime_data
+    async def test_no_loaded_entries_raises_validation_error(self, hass: HomeAssistant):
+        """Raises ServiceValidationError when no config entries are loaded."""
+        from homeassistant.exceptions import ServiceValidationError
 
         _async_register_services(hass)
-        result = await _call_manifest_service(hass)
 
-        assert result is not None
-        assert result["panels"] == []
-
-    @pytest.mark.asyncio
-    async def test_no_entries_returns_empty(self, hass: HomeAssistant):
-        """No SPAN entries returns empty panels list."""
-        _async_register_services(hass)
-        result = await _call_manifest_service(hass)
-
-        assert result is not None
-        assert result["panels"] == []
+        with pytest.raises(ServiceValidationError):
+            await _call_manifest_service(hass)
 
     @pytest.mark.asyncio
     async def test_all_device_types_included(self, hass: HomeAssistant):
@@ -267,7 +272,10 @@ class TestExportCircuitManifest:
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.1"},
+            entry_id="span_entry",
+            unique_id="sp3-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -301,7 +309,10 @@ class TestExportCircuitManifest:
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.1"},
+            entry_id="span_entry",
+            unique_id="sp3-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -374,7 +385,10 @@ class TestExportCircuitManifest:
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
+            domain=DOMAIN,
+            data={CONF_HOST: "192.168.1.1"},
+            entry_id="span_entry",
+            unique_id="sp3-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
@@ -388,3 +402,30 @@ class TestExportCircuitManifest:
         circuit_data = result["panels"][0]["circuits"][0]
         assert circuit_data["template"] == "clone_6"
         assert circuit_data["tabs"] == [8, 6]
+
+    @pytest.mark.asyncio
+    async def test_host_included_from_config_entry(self, hass: HomeAssistant):
+        """Host field is populated from config entry data."""
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        circuit = SpanCircuitSnapshotFactory.create(circuit_id="uuid_a", tabs=[1])
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number="sp3-001", circuits={"uuid_a": circuit},
+        )
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={CONF_HOST: "10.0.0.50"},
+            entry_id="span_entry",
+            unique_id="sp3-001",
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+
+        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_a", "sensor.a_power")
+
+        _async_register_services(hass)
+        result = await _call_manifest_service(hass)
+
+        assert result["panels"][0]["host"] == "10.0.0.50"

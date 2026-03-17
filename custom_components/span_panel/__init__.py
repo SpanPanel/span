@@ -21,8 +21,10 @@ from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
+    ServiceValidationError,
 )
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.typing import ConfigType
 from span_panel_api import (
     SpanMqttClient,
     SpanPanelSnapshot,
@@ -79,6 +81,12 @@ CURRENT_CONFIG_VERSION = 6
 
 # Map internal device_type values to external manifest format
 _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Span Panel integration (domain-level, called once)."""
+    _async_register_services(hass)
+    return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -272,14 +280,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
 
-    # Register WebSocket commands and services once per HA instance
+    # Register WebSocket commands once per HA instance
     domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})
     if not domain_data.get("websocket_registered"):
         domain_data["websocket_registered"] = True
         async_register_commands(hass)
-    if not domain_data.get("service_registered"):
-        domain_data["service_registered"] = True
-        _async_register_services(hass)
 
     config = entry.data
     api_version = config.get(CONF_API_VERSION, "v1")
@@ -477,10 +482,16 @@ def _async_register_services(hass: HomeAssistant) -> None:
         _call: ServiceCall,
     ) -> ServiceResponse:
         """Export circuit manifest for all configured SPAN panels."""
+        if not hass.config_entries.async_loaded_entries(DOMAIN):
+            raise ServiceValidationError(
+                "No SPAN panel config entries are loaded. "
+                "Add and configure a SPAN panel before calling this service."
+            )
+
         entity_reg = er.async_get(hass)
         panels = []
 
-        for entry in hass.config_entries.async_entries(DOMAIN):
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             if not hasattr(entry, "runtime_data") or not isinstance(
                 entry.runtime_data, SpanPanelRuntimeData
             ):
@@ -518,7 +529,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 )
 
             if circuits:
-                panels.append({"serial": serial, "circuits": circuits})
+                panels.append(
+                    {
+                        "serial": serial,
+                        "host": entry.data[CONF_HOST],
+                        "circuits": circuits,
+                    }
+                )
 
         return cast(ServiceResponse, {"panels": panels})
 
