@@ -32,7 +32,6 @@ pylint = "==4.0.5"  # For import-outside-toplevel checks
 pytest = "^9.0.0"  # Compatible with Python 3.14
 pytest-homeassistant-custom-component = "^0.13.315"  # Latest version compatible with HA 2026.2.x
 isort = "*"
-python-socketio = "^5.16.1"
 
 [build-system]
 requires = ["poetry-core"]
