@@ -198,7 +198,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # Read optional httpPort from mDNS TXT records (non-standard port)
             props = discovery_info.properties or {}
             http_port_str = props.get("httpPort", props.get("httpport", ""))
-            http_port = int(http_port_str) if http_port_str else 80
+            try:
+                http_port = int(http_port_str) if http_port_str else 80
+            except (ValueError, TypeError):
+                http_port = 80
             self._http_port = http_port
 
             detection = await detect_api_version(discovery_info.host, port=http_port)

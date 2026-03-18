@@ -24,12 +24,14 @@
       "user": {
         "data": {
           "host": "Host",
+          "http_port": "HTTP Port",
           "power_display_precision": "Power Display Precision",
           "energy_display_precision": "Energy Display Precision",
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips"
         },
         "data_description": {
           "host": "IP address or hostname of SPAN Panel",
+          "http_port": "HTTP port for the panel API (default: 80)",
           "power_display_precision": "Number of decimal places for power values (0-3)",
           "energy_display_precision": "Number of decimal places for energy values (0-3)",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings, preventing spikes in the energy dashboard."
