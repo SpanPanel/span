@@ -319,8 +319,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             if not serial_number:
                 raise ConfigEntryNotReady("Config entry has no unique_id (serial number)")
 
+            # The MQTT broker runs on the panel itself. The panel advertises
+            # its own mDNS hostname (.local) as ebusBrokerHost, but mDNS
+            # does not resolve across VLAN boundaries. Use the user-configured
+            # panel host (IP or FQDN) which is known reachable.
+            advertised_broker = config[CONF_EBUS_BROKER_HOST]
+            if advertised_broker != host:
+                _LOGGER.debug(
+                    "Panel advertised broker host '%s' differs from configured "
+                    "host '%s'; using configured host for MQTT connection",
+                    advertised_broker,
+                    host,
+                )
+
             broker_config = MqttClientConfig(
-                broker_host=config[CONF_EBUS_BROKER_HOST],
+                broker_host=host,
                 username=config[CONF_EBUS_BROKER_USERNAME],
                 password=config[CONF_EBUS_BROKER_PASSWORD],
                 mqtts_port=int(config[CONF_EBUS_BROKER_PORT]),
