@@ -16,6 +16,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **MQTT broker hostname resolution across VLANs** — The panel advertises its own mDNS hostname (`.local`) as the MQTT broker address, but mDNS does not resolve
+  across VLAN boundaries. The integration now uses the user-configured panel host (IP or FQDN) for the MQTT broker connection, since the broker runs on the panel
+  itself. (#193)
 - **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
 - **Schema validation cross-check** — Added Phase 1 schema validation that cross-checks sensor definitions against the Homie schema metadata at startup.
 
