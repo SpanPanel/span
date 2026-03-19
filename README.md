@@ -126,6 +126,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
 | Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
 | PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
+| Grid Power    | Power        | W    | Computed grid power flow. Only when power-flows node active                 |
 | Site Power    | Power        | W    | Total site power (grid + PV + battery). Only when power-flows node active   |
 
 ### PV Metadata Sensors (v2 only, on main panel device)
@@ -144,7 +145,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Power Sensor Attributes
 
-Applies to Current Power, Feed Through Power, Battery Power, PV Power, and Site Power sensors.
+Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Power, and Site Power sensors.
 
 | Attribute  | Type   | Notes                                |
 | ---------- | ------ | ------------------------------------ |

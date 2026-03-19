@@ -39,6 +39,7 @@ SENSOR_FIELD_MAP: dict[str, str] = {
     "feedthroughPowerW": "panel.feedthrough_power_w",
     "batteryPowerW": "panel.power_flow_battery",
     "pvPowerW": "panel.power_flow_pv",
+    "gridPowerFlowW": "panel.power_flow_grid",
     "sitePowerW": "panel.power_flow_site",
     # --- Panel energy sensors ------------------------------------------------
     "mainMeterEnergyProducedWh": "panel.main_meter_energy_produced_wh",

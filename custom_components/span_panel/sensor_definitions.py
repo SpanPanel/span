@@ -497,6 +497,17 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
     value_fn=lambda s: (-s.power_flow_pv or 0.0) if s.power_flow_pv is not None else 0.0,
 )
 
+# Grid power flow sensor (conditionally created when power-flows data is available)
+GRID_POWER_FLOW_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="gridPowerFlowW",
+    translation_key="grid_power_flow",
+    native_unit_of_measurement=UnitOfPower.WATT,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=0,
+    device_class=SensorDeviceClass.POWER,
+    value_fn=lambda s: s.power_flow_grid if s.power_flow_grid is not None else 0.0,
+)
+
 # Site power sensor (conditionally created when power-flows data is available)
 SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="sitePowerW",

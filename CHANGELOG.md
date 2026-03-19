@@ -9,6 +9,12 @@ All notable changes to this project will be documented in this file.
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
 - You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
+### Added
+
+- **Grid Power sensor** — New `Grid Power`. Previously
+  only `Current Power` (upstream lugs measurement) was available; the new sensor surfaces the panel's own grid power accounting alongside Battery Power, PV Power,
+  and Site Power. Without BESS `Grid Power` is the same as `Current Power`.
+
 ### Changed
 
 - **Simulation moved to dedicated add-on** — Panel cloning and simulation are no longer part of the integration's options flow. A new `export_circuit_manifest`

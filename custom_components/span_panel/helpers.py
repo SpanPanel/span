@@ -45,6 +45,7 @@ PANEL_SUFFIX_MAPPING = {
     "feedthroughPowerW": "feed_through_power",
     "batteryPowerW": "battery_power",
     "pvPowerW": "pv_power",
+    "gridPowerFlowW": "grid_power_flow",
     "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_energy_produced",  # Consistent naming
     "mainMeterEnergyConsumedWh": "main_meter_energy_consumed",  # Consistent naming
@@ -63,6 +64,7 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
     "feedthroughPowerW": "feed_through_power",
     "batteryPowerW": "battery_power",
     "pvPowerW": "pv_power",
+    "gridPowerFlowW": "grid_power_flow",
     "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_produced_energy",
     "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",

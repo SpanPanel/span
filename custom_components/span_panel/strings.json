@@ -197,6 +197,9 @@
       "pv_power": {
         "name": "PV Power"
       },
+      "grid_power_flow": {
+        "name": "Grid Power"
+      },
       "site_power": {
         "name": "Site Power"
       },

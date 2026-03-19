@@ -37,6 +37,7 @@ from .sensor_definitions import (
     DOWNSTREAM_L1_CURRENT_SENSOR,
     DOWNSTREAM_L2_CURRENT_SENSOR,
     EVSE_SENSORS,
+    GRID_POWER_FLOW_SENSOR,
     L1_VOLTAGE_SENSOR,
     L2_VOLTAGE_SENSOR,
     MAIN_BREAKER_RATING_SENSOR,
@@ -341,6 +342,7 @@ def create_power_flow_sensors(
             entities.append(SpanPVMetadataSensor(coordinator, desc, snapshot))
 
     if has_power_flows(snapshot):
+        entities.append(SpanPanelPowerSensor(coordinator, GRID_POWER_FLOW_SENSOR, snapshot))
         entities.append(SpanPanelPowerSensor(coordinator, SITE_POWER_SENSOR, snapshot))
 
     return entities

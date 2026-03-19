@@ -65,6 +65,7 @@ def log_entity_summary(coordinator: SpanPanelCoordinator) -> None:
     if pv_present:
         power_flow_sensors += 1  # PV power
     if power_flows_present:
+        power_flow_sensors += 1  # Grid power flow
         power_flow_sensors += 1  # Site power
 
     # Synthetic sensors (now handled by template system - counts are estimates)

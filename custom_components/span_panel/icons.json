@@ -62,6 +62,9 @@
       "pv_power": {
         "default": "mdi:solar-power"
       },
+      "grid_power_flow": {
+        "default": "mdi:transmission-tower"
+      },
       "site_power": {
         "default": "mdi:home-lightning-bolt"
       },
