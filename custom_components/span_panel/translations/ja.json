@@ -11,10 +11,10 @@
       "invalid_auth": "認証が無効です",
       "unknown": "予期しないエラー",
       "host_required": "ホストが必要です",
-      "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time."
+      "fqdn_registration_failed": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。"
     },
     "progress": {
-      "registering_fqdn": "Registering domain name with the panel and waiting for TLS certificate update. This may take up to 60 seconds..."
+      "registering_fqdn": "パネルにドメイン名を登録し、TLS証明書の更新を待っています。最大60秒かかる場合があります..."
     },
     "flow_title": "スパンパネル ({host})",
     "step": {

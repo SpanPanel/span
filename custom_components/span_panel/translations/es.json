@@ -11,10 +11,10 @@
       "invalid_auth": "Autenticación invalida",
       "unknown": "Error inesperado",
       "host_required": "Se requiere host",
-      "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time."
+      "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo."
     },
     "progress": {
-      "registering_fqdn": "Registering domain name with the panel and waiting for TLS certificate update. This may take up to 60 seconds..."
+      "registering_fqdn": "Registrando el nombre de dominio en el panel y esperando la actualización del certificado TLS. Esto puede tardar hasta 60 segundos..."
     },
     "flow_title": "Span Panel ({host})",
     "step": {

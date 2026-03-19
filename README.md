@@ -22,7 +22,7 @@ execute these actions without user presence; design them with the same care you 
 safety device and must not be relied upon for life-safety applications. Use this software at your own risk. If you cannot accept that risk, do not use this
 software. See [LICENSE](LICENSE) for the full warranty disclaimer.
 
-The SPAN Client documentation has warnings regarding the use of the API (the API used by this integration) which should be headed just as if you were using that
+The SPAN Client documentation has warnings regarding the use of the API (the API used by this integration) which should be heeded just as if you were using that
 API directly:
 
 > An API client that attempts to implement its own load-shedding decisions, grid-state detection, or other critical automation is operating outside the scope of

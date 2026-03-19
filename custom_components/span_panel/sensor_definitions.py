@@ -505,7 +505,7 @@ GRID_POWER_FLOW_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSens
     state_class=SensorStateClass.MEASUREMENT,
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
-    value_fn=lambda s: s.power_flow_grid if s.power_flow_grid is not None else 0.0,
+    value_fn=lambda s: (-s.power_flow_grid or 0.0) if s.power_flow_grid is not None else 0.0,
 )
 
 # Site power sensor (conditionally created when power-flows data is available)
