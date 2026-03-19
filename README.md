@@ -22,6 +22,13 @@ execute these actions without user presence; design them with the same care you 
 safety device and must not be relied upon for life-safety applications. Use this software at your own risk. If you cannot accept that risk, do not use this
 software. See [LICENSE](LICENSE) for the full warranty disclaimer.
 
+The SPAN Client documentation has warnings regarding the use of the API (the API used by this integration) which should be headed just as if you were using that
+API directly:
+
+> An API client that attempts to implement its own load-shedding decisions, grid-state detection, or other critical automation is operating outside the scope of
+> what SPAN API was designed and engineered for. Such use is entirely at the client developer's and homeowner's own risk and may void the SPAN Panel Limited
+> Warranty. See the SPAN API Scope & Responsibility Model in the [SPAN API documentation](https://github.com/spanio/SPAN-API-Client-Docs).
+
 This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
 circuits. You can optionally use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control.
 

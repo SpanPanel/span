@@ -11,9 +11,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Grid Power sensor** — New `Grid Power`. Previously
-  only `Current Power` (upstream lugs measurement) was available; the new sensor surfaces the panel's own grid power accounting alongside Battery Power, PV Power,
-  and Site Power. Without BESS `Grid Power` is the same as `Current Power`.
+- **Grid Power sensor** — New `Grid Power`. Previously only `Current Power` (upstream lugs measurement) was available; the new sensor surfaces the panel's own
+  grid power accounting alongside Battery Power, PV Power, and Site Power. Without BESS `Grid Power` is the same as `Current Power`.
 
 ### Changed
 
@@ -23,10 +22,9 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **MQTT broker hostname resolution across VLANs** — The panel advertises its own mDNS hostname (`.local`) as the MQTT broker address, but mDNS does not resolve
-  across VLAN boundaries. The integration now uses the user-configured panel host (IP or FQDN) for the MQTT broker connection, since the broker runs on the panel
-  itself. (#193)
+  across VLAN boundaries. The integration now uses the user-configured panel host (IP or FQDN) for the MQTT broker connection, since the broker runs on the
+  panel itself. (#193)
 - **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
-- **Schema validation cross-check** — Added Phase 1 schema validation that cross-checks sensor definitions against the Homie schema metadata at startup.
 
 ## [2.0.3] - 3/2026
 
