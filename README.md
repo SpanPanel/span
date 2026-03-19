@@ -127,14 +127,14 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
 | Main Breaker Rating   | Current      | A    | Main breaker amperage      |
 
-### Power Flow Sensors (v2 only, conditional)
+### Power Flow Sensors (v2 only)
 
 | Sensor        | Device Class | Unit | Notes                                                                       |
 | ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
+| Grid Power    | Power        | W    | Grid power flow                                                             |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                      |
 | Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
 | PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
-| Grid Power    | Power        | W    | Computed grid power flow. Only when power-flows node active                 |
-| Site Power    | Power        | W    | Total site power (grid + PV + battery). Only when power-flows node active   |
 
 ### PV Metadata Sensors (v2 only, on main panel device)
 
