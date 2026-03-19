@@ -7,6 +7,8 @@ from .options import (
     process_general_options_input,
 )
 from .validation import (
+    check_fqdn_tls_ready,
+    is_fqdn,
     validate_auth_token,
     validate_host,
     validate_ipv4_address,
@@ -16,6 +18,8 @@ from .validation import (
 
 __all__ = [
     # Validation
+    "check_fqdn_tls_ready",
+    "is_fqdn",
     "validate_auth_token",
     "validate_host",
     "validate_ipv4_address",

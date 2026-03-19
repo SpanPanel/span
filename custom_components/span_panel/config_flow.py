@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 import enum
 import logging
@@ -17,13 +18,15 @@ from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import V2AuthResponse, detect_api_version
+from span_panel_api import V2AuthResponse, delete_fqdn, detect_api_version, register_fqdn
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 import voluptuous as vol
 
 from .config_flow_utils import (
     build_general_options_schema,
+    check_fqdn_tls_ready,
     get_general_options_defaults,
+    is_fqdn,
     process_general_options_input,
     validate_auth_token,
     validate_host,
@@ -39,6 +42,7 @@ from .const import (
     CONF_HOP_PASSPHRASE,
     CONF_HTTP_PORT,
     CONF_PANEL_SERIAL,
+    CONF_REGISTERED_FQDN,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
@@ -130,6 +134,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._http_port: int = 80
         # Energy dip compensation default for fresh installs
         self._enable_dip_compensation: bool = True
+        # FQDN registration task (async_show_progress)
+        self._fqdn_task: asyncio.Task[None] | None = None
+        self._reconfigure_fqdn_task: asyncio.Task[None] | None = None
 
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
         """Set up the flow by detecting the panel API version and serial number."""
@@ -164,12 +171,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             _LOGGER.error("Flow method called before setup")
             raise ConfigFlowError("Flow is not set up")
 
-    async def ensure_not_already_configured(self) -> None:
+    async def ensure_not_already_configured(self, raise_on_progress: bool = True) -> None:
         """Ensure the panel is not already configured."""
         self.ensure_flow_is_set_up()
 
-        # Abort if we had already set this panel up
-        await self.async_set_unique_id(self.serial_number)
+        # Abort if we had already set this panel up.
+        # User-initiated flows pass raise_on_progress=False so they can
+        # proceed when a zeroconf discovery flow is already running.
+        await self.async_set_unique_id(self.serial_number, raise_on_progress=raise_on_progress)
         self._abort_if_unique_id_configured(updates={CONF_HOST: self.host})
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
@@ -284,13 +293,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 },
             }
             self._is_flow_setup = True
-            await self.ensure_not_already_configured()
+            await self.ensure_not_already_configured(raise_on_progress=False)
             return await self.async_step_choose_v2_auth()
 
         # v1 path: probe via the existing setup_flow
         if not self._is_flow_setup:
             await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
-            await self.ensure_not_already_configured()
+            await self.ensure_not_already_configured(raise_on_progress=False)
 
         return await self.async_step_choose_auth_type()
 
@@ -500,7 +509,70 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             if "entry_id" not in self.context:
                 raise ValueError("Entry ID is missing from context")
             return self._update_v2_entry(self.context["entry_id"])
+        # If host is an FQDN, register it with the panel for TLS cert SAN inclusion
+        if self.host and is_fqdn(self.host):
+            return await self.async_step_register_fqdn()
         return await self.async_step_choose_entity_naming_initial()
+
+    async def async_step_register_fqdn(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Register FQDN with the panel and wait for TLS certificate update."""
+        if not self._fqdn_task:
+            self._fqdn_task = self.hass.async_create_task(
+                self._async_register_fqdn_and_wait(),
+                "span_panel_register_fqdn",
+            )
+
+        if not self._fqdn_task.done():
+            return self.async_show_progress(
+                step_id="register_fqdn",
+                progress_action="registering_fqdn",
+                progress_task=self._fqdn_task,
+            )
+
+        try:
+            self._fqdn_task.result()
+        except Exception:
+            _LOGGER.exception("FQDN registration failed for %s", self.host)
+            self._fqdn_task = None
+            return self.async_show_progress_done(next_step_id="fqdn_failed")
+
+        self._fqdn_task = None
+        return self.async_show_progress_done(next_step_id="choose_entity_naming_initial")
+
+    async def _async_register_fqdn_and_wait(self) -> None:
+        """Register the FQDN and poll until the TLS cert includes it."""
+        if not self.host or not self.access_token:
+            raise ConfigFlowError("Host and access token required for FQDN registration")
+
+        await register_fqdn(self.host, self.access_token, self.host, port=self._http_port)
+
+        mqtts_port = self._v2_broker_port or 8883
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            await asyncio.sleep(2)
+            if await check_fqdn_tls_ready(self.host, mqtts_port, http_port=self._http_port):
+                _LOGGER.debug(
+                    "FQDN %s found in TLS cert SAN after %d attempts",
+                    self.host,
+                    attempt + 1,
+                )
+                return
+
+        raise ConfigFlowError(f"Timed out waiting for TLS certificate to include FQDN {self.host}")
+
+    async def async_step_fqdn_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle FQDN registration failure — user may continue without it."""
+        if user_input is not None:
+            return await self.async_step_choose_entity_naming_initial()
+        return self.async_show_form(
+            step_id="fqdn_failed",
+            data_schema=vol.Schema({}),
+            errors={"base": "fqdn_registration_failed"},
+        )
 
     async def async_step_resolve_entity(
         self,
@@ -572,6 +644,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             entry_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
             if self._http_port != 80:
                 entry_data[CONF_HTTP_PORT] = self._http_port
+            if is_fqdn(host):
+                entry_data[CONF_REGISTERED_FQDN] = host
 
         return self.async_create_entry(
             title=device_name,
@@ -722,9 +796,83 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         await self.async_set_unique_id(detection.status_info.serial_number)
         self._abort_if_unique_id_mismatch(reason="unique_id_mismatch")
 
+        if is_fqdn(host):
+            # New host is FQDN — register it (replaces any existing FQDN on the panel)
+            self.host = host
+            self.access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
+            self._http_port = http_port
+            self._v2_broker_port = int(reconfigure_entry.data.get(CONF_EBUS_BROKER_PORT, 8883))
+            return await self.async_step_reconfigure_register_fqdn()
+
+        # New host is not an FQDN — simple update
+        data_updates: dict[str, Any] = {CONF_HOST: host}
+        old_fqdn = str(reconfigure_entry.data.get(CONF_REGISTERED_FQDN, ""))
+        if old_fqdn:
+            # Switching from FQDN to IP — clean up old registration
+            access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
+            try:
+                await delete_fqdn(host, access_token, port=http_port)
+            except Exception:
+                _LOGGER.warning("Failed to delete old FQDN registration: %s", old_fqdn)
+            data_updates[CONF_REGISTERED_FQDN] = ""
+
         return self.async_update_reload_and_abort(
             reconfigure_entry,
-            data_updates={CONF_HOST: host},
+            data_updates=data_updates,
+        )
+
+    async def async_step_reconfigure_register_fqdn(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Register FQDN during reconfiguration and wait for TLS cert update."""
+        if not self._reconfigure_fqdn_task:
+            self._reconfigure_fqdn_task = self.hass.async_create_task(
+                self._async_register_fqdn_and_wait(),
+                "span_panel_reconfigure_fqdn",
+            )
+
+        if not self._reconfigure_fqdn_task.done():
+            return self.async_show_progress(
+                step_id="reconfigure_register_fqdn",
+                progress_action="registering_fqdn",
+                progress_task=self._reconfigure_fqdn_task,
+            )
+
+        try:
+            self._reconfigure_fqdn_task.result()
+        except Exception:
+            _LOGGER.exception("FQDN registration failed during reconfigure for %s", self.host)
+            self._reconfigure_fqdn_task = None
+            return self.async_show_progress_done(next_step_id="reconfigure_fqdn_failed")
+
+        self._reconfigure_fqdn_task = None
+        return self.async_show_progress_done(next_step_id="reconfigure_fqdn_done")
+
+    async def async_step_reconfigure_fqdn_done(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Complete reconfiguration after successful FQDN registration."""
+        reconfigure_entry = self._get_reconfigure_entry()
+        return self.async_update_reload_and_abort(
+            reconfigure_entry,
+            data_updates={CONF_HOST: self.host or "", CONF_REGISTERED_FQDN: self.host or ""},
+        )
+
+    async def async_step_reconfigure_fqdn_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle FQDN registration failure during reconfigure."""
+        if user_input is not None:
+            # User chose to continue anyway — update host without FQDN registration
+            reconfigure_entry = self._get_reconfigure_entry()
+            return self.async_update_reload_and_abort(
+                reconfigure_entry,
+                data_updates={CONF_HOST: self.host or ""},
+            )
+        return self.async_show_form(
+            step_id="reconfigure_fqdn_failed",
+            data_schema=vol.Schema({}),
+            errors={"base": "fqdn_registration_failed"},
         )
 
     @staticmethod

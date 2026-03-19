@@ -10,7 +10,11 @@
       "cannot_connect": "スパンパネルへの接続に失敗しました",
       "invalid_auth": "認証が無効です",
       "unknown": "予期しないエラー",
-      "host_required": "ホストが必要です"
+      "host_required": "ホストが必要です",
+      "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time."
+    },
+    "progress": {
+      "registering_fqdn": "Registering domain name with the panel and waiting for TLS certificate update. This may take up to 60 seconds..."
     },
     "flow_title": "スパンパネル ({host})",
     "step": {
@@ -61,6 +65,23 @@
         "data_description": {
           "hop_passphrase": "SPAN Panel v2 APIでの認証に使用するパスフレーズ"
         }
+      },
+      "register_fqdn": {
+        "title": "Registering Domain Name"
+      },
+      "fqdn_failed": {
+        "title": "Domain Registration",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
+      },
+      "reconfigure_register_fqdn": {
+        "title": "Registering Domain Name"
+      },
+      "reconfigure_fqdn_failed": {
+        "title": "Domain Registration",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
+      },
+      "reconfigure_fqdn_done": {
+        "title": "Reconfiguration Complete"
       }
     }
   },

@@ -18,6 +18,7 @@ CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
 CONF_HOP_PASSPHRASE = "hop_passphrase"
 CONF_HTTP_PORT = "http_port"
 CONF_PANEL_SERIAL = "panel_serial"
+CONF_REGISTERED_FQDN = "registered_fqdn"
 
 # Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"

@@ -10,7 +10,11 @@
       "cannot_connect": "Échec de la connexion au Span Panel",
       "invalid_auth": "Authentification invalide",
       "unknown": "Erreur inattendue",
-      "host_required": "L'hôte est requis"
+      "host_required": "L'hôte est requis",
+      "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time."
+    },
+    "progress": {
+      "registering_fqdn": "Registering domain name with the panel and waiting for TLS certificate update. This may take up to 60 seconds..."
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -61,6 +65,23 @@
         "data_description": {
           "hop_passphrase": "Le mot de passe utilisé pour s'authentifier avec l'API v2 du SPAN Panel"
         }
+      },
+      "register_fqdn": {
+        "title": "Registering Domain Name"
+      },
+      "fqdn_failed": {
+        "title": "Domain Registration",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
+      },
+      "reconfigure_register_fqdn": {
+        "title": "Registering Domain Name"
+      },
+      "reconfigure_fqdn_failed": {
+        "title": "Domain Registration",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
+      },
+      "reconfigure_fqdn_done": {
+        "title": "Reconfiguration Complete"
       }
     }
   },

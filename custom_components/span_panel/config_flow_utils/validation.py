@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import logging
+from pathlib import Path
+import socket
+import ssl
+import tempfile
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import V2AuthResponse, detect_api_version, register_v2
+from span_panel_api import V2AuthResponse, detect_api_version, download_ca_cert, register_v2
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +58,63 @@ async def validate_v2_passphrase(host: str, passphrase: str, port: int = 80) -> 
 
     """
     return await register_v2(host, "Home Assistant", passphrase, port=port)
+
+
+def is_fqdn(host: str) -> bool:
+    """Determine if host is a Fully Qualified Domain Name (not IP, not mDNS).
+
+    Returns True for domain names like 'span.home.lan' or 'panel.example.com'.
+    Returns False for IP addresses, mDNS (.local) names, and single-label hostnames.
+    """
+    if is_ipv4_address(host):
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    if host.endswith(".local") or host.endswith(".local."):
+        return False
+    return "." in host
+
+
+async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, http_port: int = 80) -> bool:
+    """Check if the MQTTS server certificate includes the FQDN in its SAN.
+
+    Downloads the CA certificate from the panel via HTTP, then attempts
+    a TLS connection to the MQTTS port using the FQDN as server_hostname.
+    If the TLS handshake succeeds with hostname verification, the panel
+    has regenerated its certificate to include the FQDN.
+    """
+    try:
+        ca_pem = await download_ca_cert(fqdn, port=http_port)
+    except Exception:
+        return False
+
+    loop = asyncio.get_running_loop()
+
+    def _check() -> bool:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)  # noqa: SIM115
+        tmp.write(ca_pem)
+        tmp.close()
+        ca_path = Path(tmp.name)
+        try:
+            ctx.load_verify_locations(str(ca_path))
+            with (
+                socket.create_connection((fqdn, mqtts_port), timeout=5) as sock,
+                ctx.wrap_socket(sock, server_hostname=fqdn),
+            ):
+                return True
+        except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError):
+            return False
+        finally:
+            ca_path.unlink(missing_ok=True)
+
+    return await loop.run_in_executor(None, _check)
 
 
 async def validate_v2_proximity(host: str, port: int = 80) -> V2AuthResponse:
