@@ -4,7 +4,7 @@
 if [[ ! -f ".deps-installed" ]] || [[ "pyproject.toml" -nt ".deps-installed" ]]; then
     echo "Installing/updating dependencies..."
 
-    poetry install --with dev
+    uv sync
 
     if [[ $? -ne 0 ]]; then
         echo "Failed to install dependencies. Please check the output above."
@@ -15,6 +15,6 @@ fi
 
 # Install pre-commit hooks (only if not already installed)
 if [[ ! -f ".git/hooks/pre-commit" ]]; then
-    poetry run pre-commit install
+    prek install
     echo "Git hooks installed successfully!"
 fi

@@ -19,45 +19,38 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install prek
         run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh
 
       - name: Install dependencies
         run: |
-          # Replace path dependencies with PyPI versions for CI
-          sed -i 's/span-panel-api = {path = "..\/span-panel-api", develop = true}/span-panel-api = "==2.3.2"/' pyproject.toml
-          sed -i 's/ha-synthetic-sensors = {path = "..\/ha-synthetic-sensors", develop = true}/ha-synthetic-sensors = "^1.1.13"/' pyproject.toml
-          # Regenerate lock file with the modified dependencies
-          poetry lock
-          poetry install --with dev
-          # Install bandit with TOML support
-          poetry run pip install 'bandit[toml]'
+          # Remove local path source overrides so uv resolves from PyPI
+          sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml
+          uv lock
+          uv sync
 
       - name: Format check with ruff
-        run: poetry run ruff format --check custom_components/span_panel
+        run: uv run ruff format --check custom_components/span_panel
 
       - name: Lint with ruff
-        run: poetry run ruff check custom_components/span_panel
+        run: uv run ruff check custom_components/span_panel
 
       - name: Type check with mypy
-        run: poetry run mypy custom_components/span_panel
+        run: uv run mypy custom_components/span_panel
 
       - name: Security check with bandit
-        run: poetry run bandit -c pyproject.toml -r custom_components/span_panel
-
-      - name: Check poetry configuration
-        run: poetry check
+        run: uv run bandit -c pyproject.toml -r custom_components/span_panel
 
       - name: Run prek hooks (for extra validation)
         run: prek run --all-files --show-diff-on-failure
         env:
-          SKIP: poetry-lock,poetry-check
+          SKIP: ""
 
       - name: Run tests with coverage
-        run: poetry run pytest tests/ --cov=custom_components/span_panel --cov-report=xml --cov-report=term-missing
+        run: uv run pytest tests/ --cov=custom_components/span_panel --cov-report=xml --cov-report=term-missing
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:

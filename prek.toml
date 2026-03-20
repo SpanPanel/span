@@ -22,7 +22,7 @@ hooks = [
   {
     id = "pylint-import-check",
     name = "pylint import-outside-toplevel check",
-    entry = "poetry run pylint",
+    entry = "uv run pylint",
     language = "system",
     args = ["--disable=all", "--enable=import-outside-toplevel", "--score=no", "custom_components/span_panel/"],
     pass_filenames = false,
@@ -103,15 +103,6 @@ hooks = [
   },
 ]
 
-# Poetry check for pyproject.toml validation
-[[repos]]
-repo = "https://github.com/python-poetry/poetry"
-rev = "2.1.3"
-hooks = [
-  { id = "poetry-check" },
-  { id = "poetry-lock" },
-]
-
 # Radon for code metrics and maintainability (local)
 [[repos]]
 repo = "local"
@@ -119,7 +110,7 @@ hooks = [
   {
     id = "radon-complexity",
     name = "radon complexity check",
-    entry = "poetry run radon",
+    entry = "uv run radon",
     language = "system",
     args = ["cc", "--min=B", "--show-complexity", "custom_components/span_panel/"],
     pass_filenames = false,
@@ -128,7 +119,7 @@ hooks = [
   {
     id = "radon-maintainability",
     name = "radon maintainability index",
-    entry = "poetry run radon",
+    entry = "uv run radon",
     language = "system",
     args = ["mi", "--min=B", "--show", "custom_components/span_panel/"],
     pass_filenames = false,
@@ -145,7 +136,7 @@ hooks = [
     name = "coverage summary",
     entry = "bash",
     language = "system",
-    args = ["-c", 'echo "Running tests with coverage..."; poetry run pytest tests/ --cov=custom_components/span_panel --cov-config=pyproject.toml --cov-report=term-missing:skip-covered -v; exit_code=$?; echo; if [ $exit_code -eq 0 ]; then echo "Tests passed with coverage report above"; else echo "Tests failed"; fi; exit $exit_code'],
+    args = ["-c", 'echo "Running tests with coverage..."; uv run pytest tests/ --cov=custom_components/span_panel --cov-config=pyproject.toml --cov-report=term-missing:skip-covered -v; exit_code=$?; echo; if [ $exit_code -eq 0 ]; then echo "Tests passed with coverage report above"; else echo "Tests failed"; fi; exit $exit_code'],
     pass_filenames = false,
     always_run = true,
     verbose = true,

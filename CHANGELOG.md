@@ -12,7 +12,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - **Grid Power sensor** — New `Grid Power`. Previously only `Current Power` (upstream lugs measurement) was available; the new sensor surfaces the panel's own
-  grid power accounting alongside Battery Power, PV Power, and Site Power. Without BESS `Grid Power` is the same as `Current Power`.
+  grid power accounting alongside Battery Power, PV Power, and Site Power. Without BESS `Grid Power` is the same as `Current Power`. Note that if your panel has
+  an integrated BESS and the BESS loses communication with the panel the Grid Power sensor is not accurate. In such a case HA would need a current clamp
+  upstream of the BESS to accurately reflect whether the Grid is up.
 - **FQDN registration support** — Config flow detects FQDN-based connections and registers the domain with the panel for TLS certificate SAN inclusion. Blocked
   by an upstream API permission issue ([SPAN-API-Client-Docs#10](https://github.com/spanio/SPAN-API-Client-Docs/issues/10)); the integration falls back to
   IP-based connections until resolved.
@@ -24,9 +26,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **MQTT broker hostname resolution across VLANs** — The panel advertises its own mDNS hostname (`.local`) as the MQTT broker address, but mDNS does not resolve
-  across VLAN boundaries. The integration now uses the user-configured panel host (IP or FQDN) for the MQTT broker connection, since the broker runs on the
-  panel itself. (#193)
+- **MQTT broker connection** — The eBus broker connection now uses the panel host from zeroconf discovery or user configuration instead of the panel-advertised
+  `.local` address, which may not resolve in all HA environments (#193).
+
 - **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
 
 ## [2.0.3] - 3/2026
