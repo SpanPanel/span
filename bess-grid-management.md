@@ -39,9 +39,9 @@ islanded during an outage. GFE reports GRID, power flows show battery as grid, a
 The diagrams below show the key components and where sensors can observe power. The critical insight is that the panel's sensors are on the **home side** of the
 MID — they cannot see what is happening on the utility side when the MID is open.
 
-![Integrated BESS Topology](docs/images/bess-topology-integrated.svg)
+![Integrated BESS Topology](images/bess-topology-integrated.svg)
 
-Editable source: [docs/images/bess-topology-integrated.drawio](docs/images/bess-topology-integrated.drawio)
+Editable source: [images/bess-topology-integrated.drawio](images/bess-topology-integrated.drawio)
 
 **Key observations:**
 
@@ -57,9 +57,9 @@ When the battery system is not on the
 between the BESS and the panel. The panel cannot distinguish battery power from grid power and has no awareness that it is islanded during an outage. No
 automatic load shedding is available.
 
-![Non-Integrated BESS Topology](docs/images/bess-topology-non-integrated.svg)
+![Non-Integrated BESS Topology](images/bess-topology-non-integrated.svg)
 
-Editable source: [docs/images/bess-topology-non-integrated.drawio](docs/images/bess-topology-non-integrated.drawio)
+Editable source: [images/bess-topology-non-integrated.drawio](images/bess-topology-non-integrated.drawio)
 
 **Key differences from the integrated topology:**
 

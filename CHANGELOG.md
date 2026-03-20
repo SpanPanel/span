@@ -124,8 +124,8 @@ upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 ### Developer / Card Support
 
 - **WebSocket Topology API**: New `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits
-  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. See
-  [WebSocket API Reference](docs/websocket-api.md) for schema and examples
+  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. See [WebSocket API Reference](websocket-api.md) for
+  schema and examples
 
 ### Improvements
 
@@ -175,8 +175,7 @@ upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 
 ### 📝 Notes
 
-- A future release may implement local energy calculation from power values to eliminate both the freezing issue and negative spikes. See the
-  [energy calculation proposal](docs/dev/energy_calculation_proposal.md) for details.
+- A future release may implement local energy calculation from power values to eliminate both the freezing issue and negative spikes.
 
 ## [1.2.8] - 2025-12-10
 

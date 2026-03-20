@@ -57,7 +57,7 @@ Users MUST upgrade by the end of 2026 to avoid disruption. Upgrade to the latest
 - Requires firmware `spanos2/r202603/05` or later — panels on older firmware will not work
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 
-> Running older firmware? See [v1 Legacy Documentation](docs/v1-legacy.md).
+> Running older firmware? See [v1 Legacy Documentation](v1-legacy.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 
@@ -462,7 +462,7 @@ belong to the same circuit by parsing naming patterns. That correlation is fragi
 device than the panel) and requires multiple round-trips. The topology command provides all of these relationships explicitly, keyed by circuit UUID, so the
 card can render the panel layout without guessing.
 
-See [WebSocket API Reference](docs/websocket-api.md) for the full schema, response format, and usage examples.
+See [WebSocket API Reference](websocket-api.md) for the full schema, response format, and usage examples.
 
 ## Troubleshooting
 
@@ -508,7 +508,7 @@ Setting the interval to 0 disables debouncing entirely and rebuilds on every MQT
 
 ## Development
 
-See [Developer Documentation](docs/developer.md) for setup instructions, prerequisites, and tooling.
+See [Developer Documentation](developer.md) for setup instructions, prerequisites, and tooling.
 
 ## License
 
