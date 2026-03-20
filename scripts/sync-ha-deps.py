@@ -12,10 +12,10 @@ import toml
 
 
 def get_ha_dependencies():
-    """Get HomeAssistant's dependency pins from poetry show."""
+    """Get HomeAssistant's dependency pins from uv pip show."""
     try:
         result = subprocess.run(
-            ["poetry", "show", "homeassistant", "--format", "json"],
+            ["uv", "pip", "show", "homeassistant", "--format", "json"],
             capture_output=True,
             text=True,
             check=True,
@@ -50,25 +50,26 @@ def update_pyproject_constraints(ha_deps):
             "pyyaml",
         }
 
-        # Update constraints for deps we care about
-        deps = (
-            pyproject.setdefault("tool", {}).setdefault("poetry", {}).setdefault("dependencies", {})
-        )
+        deps = pyproject.get("project", {}).get("dependencies", [])
 
         updated = []
-        for dep_name, version in ha_deps.items():
-            if dep_name in exact_match_deps and dep_name in deps:
-                old_constraint = deps[dep_name]
-                new_constraint = f"^{version}"  # Allow patch updates
-                if old_constraint != new_constraint:
-                    deps[dep_name] = new_constraint
-                    updated.append(f"{dep_name}: {old_constraint} -> {new_constraint}")
+        new_deps = []
+        for dep_str in deps:
+            dep_name = dep_str.split("==")[0].split(">=")[0].split("<=")[0].split("~=")[0].split("!=")[0].strip()
+            if dep_name.lower() in exact_match_deps and dep_name.lower() in {d.lower() for d in ha_deps}:
+                version = ha_deps.get(dep_name) or ha_deps.get(dep_name.lower())
+                if version:
+                    new_constraint = f"{dep_name}>={version}"
+                    if dep_str != new_constraint:
+                        updated.append(f"{dep_name}: {dep_str} -> {new_constraint}")
+                        new_deps.append(new_constraint)
+                        continue
+            new_deps.append(dep_str)
 
         if updated:
+            pyproject["project"]["dependencies"] = new_deps
             with open(pyproject_path, "w") as f:
                 toml.dump(pyproject, f)
-            for _update in updated:
-                pass
             return True
         else:
             return False

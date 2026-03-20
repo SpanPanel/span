@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.4] - 3/2026
+
+**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
+
+### Added
+
+- **Grid Power sensor** — New `Grid Power`. Previously only `Current Power` (upstream lugs measurement) was available; the new sensor surfaces the panel's own
+  grid power accounting alongside Battery Power, PV Power, and Site Power. Without BESS `Grid Power` is the same as `Current Power`. Note that if your panel has
+  an integrated BESS and the BESS loses communication with the panel the Grid Power sensor is not accurate. In such a case HA would need a current clamp
+  upstream of the BESS to accurately reflect whether the Grid is up.
+- **FQDN registration support** — Config flow detects FQDN-based connections and registers the domain with the panel for TLS certificate SAN inclusion. Blocked
+  by an upstream API permission issue ([SPAN-API-Client-Docs#10](https://github.com/spanio/SPAN-API-Client-Docs/issues/10)); the integration falls back to
+  IP-based connections until resolved.
+
+### Changed
+
+- **Simulation moved to dedicated add-on** — Panel cloning and simulation are no longer part of the integration's options flow. A new `export_circuit_manifest`
+  service provides panel parameters to the standalone [SPAN Panel Simulator](https://github.com/SpanPanel/simulator) add-on, which now supports upgrade
+  modelling (evaluate firmware or integration upgrades in a sandbox before applying them to your real panel) and panel clone (replicate your panel's circuit
+  layout for testing).
+
+### Fixed
+
+- **MQTT broker connection** — The eBus broker connection now uses the panel host from zeroconf discovery or user configuration instead of the panel-advertised
+  `.local` address, which may not resolve in all HA environments (#193).
+
+- **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
+
+## [2.0.3] - 3/2026
+
+**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
+
+### Fixed
+
+- **Force dependency re-resolution** — Version bump to ensure HACS re-installs `span-panel-api` for users who had the earlier 2.0.2 release. Users upgrading HA
+  without re-downloading the integration could be left with a stale library missing required imports. (#191)
+
 ## [2.0.2] - 3/2026
 
 **Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
@@ -12,15 +55,15 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - **Panel size always available** — `panel_size` is now sourced from the Homie schema by the underlying `span-panel-api` Previously some users could see fewer
-  unmapped sensors when trailing breaker positions were empty.  Topology service reflects panel size.
+  unmapped sensors when trailing breaker positions were empty. Topology service reflects panel size.
 - **Battery power sign inverted** — Battery power sensor now uses the correct sign convention. Previously, charging was reported as positive and discharging as
   negative, which caused HA energy cards to show the battery discharging when it was actually charging. The panel reports power from its own perspective; the
   sensor now negates the value to match HA conventions (positive = discharging), consistent with how PV power is already handled. (#184)
 - **Idle circuits showing -0W** — Power sensors that negate values (PV circuits, battery, PV power) could produce IEEE 754 negative zero (`-0.0`) when the
   circuit was idle, causing HA to display `-0W` instead of `0W`. All negation sites now normalize zero to positive. (#185)
-- **Net energy inconsistent with dip-compensated consumed/produced** — When energy dip compensation was enabled, consumed and produced sensors applied an
-  offset but net energy computed from raw snapshot values, causing a visible mismatch. Net energy now reads dip offsets from its sibling sensors so the
-  displayed value always equals compensated consumed minus compensated produced.
+- **Net energy inconsistent with dip-compensated consumed/produced** — When energy dip compensation was enabled, consumed and produced sensors applied an offset
+  but net energy computed from raw snapshot values, causing a visible mismatch. Net energy now reads dip offsets from its sibling sensors so the displayed value
+  always equals compensated consumed minus compensated produced.
 
 ## [2.0.1] - 3/2026
 
@@ -81,8 +124,8 @@ upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 ### Developer / Card Support
 
 - **WebSocket Topology API**: New `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits
-  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. See
-  [WebSocket API Reference](docs/websocket-api.md) for schema and examples
+  with breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities. See [WebSocket API Reference](websocket-api.md) for
+  schema and examples
 
 ### Improvements
 
@@ -132,8 +175,7 @@ upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
 
 ### 📝 Notes
 
-- A future release may implement local energy calculation from power values to eliminate both the freezing issue and negative spikes. See the
-  [energy calculation proposal](docs/dev/energy_calculation_proposal.md) for details.
+- A future release may implement local energy calculation from power values to eliminate both the freezing issue and negative spikes.
 
 ## [1.2.8] - 2025-12-10
 

@@ -10,7 +10,11 @@
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "invalid_auth": "Autenticación invalida",
       "unknown": "Error inesperado",
-      "host_required": "Se requiere host para conexiones de panel en vivo"
+      "host_required": "Se requiere host",
+      "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo."
+    },
+    "progress": {
+      "registering_fqdn": "Registrando el nombre de dominio en el panel y esperando la actualización del certificado TLS. Esto puede tardar hasta 60 segundos..."
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -21,19 +25,17 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Modo Simulador",
           "power_display_precision": "Precisión de Visualización de Potencia",
           "energy_display_precision": "Precisión de Visualización de Energía",
           "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente"
         },
         "data_description": {
-          "host": "Dirección IP o nombre de host del SPAN Panel (para simulación: use número de serie como 'sp3-simulation-001' o déjelo vacío para el predeterminado)",
-          "simulator_mode": "Habilitar modo simulador para pruebas (no se requiere hardware). Deje el host vacío para simulación predeterminada, o ingrese un número de serie personalizado.",
+          "host": "Dirección IP o nombre de host del SPAN Panel",
           "power_display_precision": "Número de lugares decimales para valores de potencia (0-3)",
           "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)",
           "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas, evitando picos en el panel de energía."
         },
-        "description": "Ingrese los detalles de conexión para su SPAN Panel. Para modo simulador, marque la casilla del simulador y opcionalmente ingrese un número de serie personalizado.",
+        "description": "Ingrese los detalles de conexión para su SPAN Panel.",
         "title": "Establecer conexión al Span Panel"
       },
       "choose_auth_type": {
@@ -63,41 +65,11 @@
         "data_description": {
           "hop_passphrase": "La contraseña utilizada para autenticar con la API v2 del SPAN Panel"
         }
-      },
-      "simulator_config": {
-        "title": "Configuración del Simulador",
-        "description": "Seleccione una configuración de simulación y opcionalmente establezca un tiempo de inicio personalizado. {config_count} configuraciones disponibles.",
-        "data": {
-          "simulation_config": "Configuración de Simulación",
-          "host": "Host (Número de Serie)",
-          "simulation_start_time": "Tiempo de Inicio de Simulación (Opcional)",
-          "entity_naming_pattern": "Patrón de Nomenclatura de Entidades"
-        },
-        "data_description": {
-          "simulation_config": "Elija una configuración de simulación que defina plantillas de circuito y perfiles de energía",
-          "host": "Número de serie personalizado para el panel simulado (opcional, usará el predeterminado de la configuración si está vacío)",
-          "simulation_start_time": "Formato de tiempo: HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deje vacío para usar el tiempo actual.",
-          "entity_naming_pattern": "Elija cómo se nombran las entidades de circuito en la simulación"
-        }
       }
     }
   },
   "options": {
-    "error": {
-      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Formato de fecha/hora inválido. Use HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS)",
-      "directory": "Se requiere la ruta del archivo",
-      "base": "Falló la exportación: {error}"
-    },
     "step": {
-      "init": {
-        "title": "Menú de Opciones",
-        "menu_options": {
-          "general_options": "Opciones Generales",
-          "export_config": "Exportar Configuración de Sensores Sintéticos",
-          "simulation_start_time": "Tiempo de Inicio de Simulación",
-          "simulation_offline_minutes": "Minutos Sin Conexión de Simulación"
-        }
-      },
       "general_options": {
         "title": "Opciones Generales",
         "description": "Configurar los ajustes de la integración SPAN Panel.",
@@ -109,41 +81,11 @@
           "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente"
         },
         "data_description": {
-          "snapshot_update_interval": "Con qué frecuencia reconstruir el snapshot del panel desde datos MQTT. Valores más bajos dan actualizaciones más rápidas pero usan más CPU. Aumente en hardware de baja potencia (ej., Raspberry Pi). Establezca en 0 para sin debounce. Rango: 0\u201315 segundos.",
+          "snapshot_update_interval": "Con qué frecuencia reconstruir el snapshot del panel desde datos MQTT. Valores más bajos dan actualizaciones más rápidas pero usan más CPU. Aumente en hardware de baja potencia (ej., Raspberry Pi). Establezca en 0 para sin debounce. Rango: 0–15 segundos.",
           "enable_panel_net_energy_sensors": "Crear sensores de energía neta para flujos de energía a nivel de panel (medidor principal y derivación). Muestra el verdadero balance de energía contabilizando flujos bidireccionales.",
           "enable_circuit_net_energy_sensors": "Crear sensores de energía neta para circuitos individuales. Muestra el verdadero consumo de energía contabilizando potencia reactiva y flujos regenerativos.",
           "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
           "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas. Al deshabilitar se borran todas las compensaciones acumuladas."
-        }
-      },
-      "export_config": {
-        "title": "Exportar Configuración de Sensores Sintéticos",
-        "description": "Exportar la configuración actual de sensores sintéticos a un archivo YAML. Puede especificar un directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa. Nombre de archivo predeterminado: {filename}",
-        "data": {
-          "directory": "Ruta del Archivo"
-        },
-        "data_description": {
-          "directory": "Una ruta de directorio (el archivo se nombrará automáticamente) o una ruta de archivo completa que termine en .yaml donde se guardará la configuración."
-        }
-      },
-      "simulation_start_time": {
-        "title": "Tiempo de Inicio de Simulación",
-        "description": "Configurar el tiempo de inicio de simulación. Los cambios en el tiempo de simulación recargarán la integración para aplicar el nuevo tiempo.",
-        "data": {
-          "simulation_start_time": "Tiempo de Inicio de Simulación"
-        },
-        "data_description": {
-          "simulation_start_time": "Formato de tiempo: HH:MM (24h), H:MM (12h), o datetime ISO completo (YYYY-MM-DDTHH:MM:SS). Deje vacío para usar el tiempo actual. La integración se recargará para aplicar los cambios."
-        }
-      },
-      "simulation_offline_minutes": {
-        "title": "Minutos Sin Conexión de Simulación",
-        "description": "Configurar cuánto tiempo debe aparecer sin conexión el panel durante la simulación.",
-        "data": {
-          "simulation_offline_minutes": "Minutos Sin Conexión"
-        },
-        "data_description": {
-          "simulation_offline_minutes": "Número de minutos que el panel debe aparecer sin conexión durante la simulación. Establezca en 0 para deshabilitar la simulación sin conexión."
         }
       }
     }

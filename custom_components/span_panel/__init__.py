@@ -4,24 +4,28 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
 import logging
-import os
-from pathlib import Path
+from typing import cast
 
 from homeassistant.components.persistent_notification import async_create as pn_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import (
+    CoreState,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
+    ServiceValidationError,
 )
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from homeassistant.util import slugify
+from homeassistant.helpers.typing import ConfigType
 from span_panel_api import (
-    DynamicSimulationEngine,
     SpanMqttClient,
     SpanPanelSnapshot,
     detect_api_version,
@@ -37,18 +41,16 @@ from span_panel_api.mqtt.models import MqttClientConfig
 from . import config_flow  # noqa: F401  # type: ignore[misc]
 from .const import (
     CONF_API_VERSION,
-    CONF_DEVICE_NAME,
     CONF_EBUS_BROKER_HOST,
     CONF_EBUS_BROKER_PASSWORD,
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
-    CONF_SIMULATION_CONFIG,
-    CONF_SIMULATION_OFFLINE_MINUTES,
-    CONF_SIMULATION_START_TIME,
+    CONF_HTTP_PORT,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
 )
 from .coordinator import SpanPanelCoordinator
+from .helpers import build_circuit_unique_id
 from .migration import migrate_config_entry_sensors
 from .options import SNAPSHOT_UPDATE_INTERVAL
 from .util import snapshot_to_device_info
@@ -74,8 +76,17 @@ PLATFORMS: list[Platform] = [
 
 _LOGGER = logging.getLogger(__name__)
 
-# Config entry version — bumped to 5 for v2 sensor alignment (remove wwanLink binary)
-CURRENT_CONFIG_VERSION = 5
+# Config entry version — bumped to 6 for simulation removal
+CURRENT_CONFIG_VERSION = 6
+
+# Map internal device_type values to external manifest format
+_DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Span Panel integration (domain-level, called once)."""
+    _async_register_services(hass)
+    return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -237,12 +248,41 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         )
         _LOGGER.debug("Migrated config entry %s to version 5", config_entry.entry_id)
 
+    # --- v5 → v6: reject simulation entries ---
+    if config_entry.version < 6:
+        if config_entry.data.get(CONF_API_VERSION) == "simulation" or config_entry.data.get(
+            "simulation_mode", False
+        ):
+            pn_create(
+                hass,
+                "This SPAN Panel config entry was a **built-in simulator** which "
+                "has been removed in this version. Please remove this entry and "
+                "use the standalone SPAN simulator instead.",
+                title="SPAN Panel: Simulation Entry Removed",
+                notification_id=f"span_simulation_removed_{config_entry.entry_id}",
+            )
+            _LOGGER.warning(
+                "Config entry %s is a simulation entry — setup will be skipped",
+                config_entry.entry_id,
+            )
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            version=6,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 6", config_entry.entry_id)
+
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
+
+    # Simulation entries were removed in v6 — skip setup, notification was
+    # already created during migration.
+    if entry.data.get(CONF_API_VERSION) == "simulation" or entry.data.get("simulation_mode", False):
+        return False
 
     # Register WebSocket commands once per HA instance
     domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})
@@ -283,12 +323,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             if not serial_number:
                 raise ConfigEntryNotReady("Config entry has no unique_id (serial number)")
 
+            # The MQTT broker runs on the panel itself. The panel advertises
+            # its own mDNS hostname (.local) as ebusBrokerHost, but mDNS
+            # does not resolve across VLAN boundaries. Use the user-configured
+            # panel host (IP or FQDN) which is known reachable.
+            advertised_broker = config[CONF_EBUS_BROKER_HOST]
+            if advertised_broker != host:
+                _LOGGER.debug(
+                    "Panel advertised broker host '%s' differs from configured "
+                    "host '%s'; using configured host for MQTT connection",
+                    advertised_broker,
+                    host,
+                )
+
             broker_config = MqttClientConfig(
-                broker_host=config[CONF_EBUS_BROKER_HOST],
+                broker_host=host,
                 username=config[CONF_EBUS_BROKER_USERNAME],
                 password=config[CONF_EBUS_BROKER_PASSWORD],
                 mqtts_port=int(config[CONF_EBUS_BROKER_PORT]),
             )
+
+            panel_http_port = int(config.get(CONF_HTTP_PORT, 80))
 
             snapshot_interval = entry.options.get(
                 SNAPSHOT_UPDATE_INTERVAL, DEFAULT_SNAPSHOT_INTERVAL
@@ -298,6 +353,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 serial_number,
                 broker_config,
                 snapshot_interval=snapshot_interval,
+                panel_http_port=panel_http_port,
             )
             try:
                 await client.connect()
@@ -312,44 +368,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             await coordinator.async_config_entry_first_refresh()
             await coordinator.async_setup_streaming()
 
-        # --- Simulation entries ---
-        elif api_version == "simulation":
-            selected_config = config.get(CONF_SIMULATION_CONFIG, "simulation_config_32_circuit")
-            current_dir = os.path.dirname(__file__)
-            config_path = Path(current_dir) / "simulation_configs" / f"{selected_config}.yaml"
-
-            serial_number = entry.unique_id or f"SPAN-SIM-{entry.entry_id[:8]}"
-
-            engine = DynamicSimulationEngine(
-                serial_number=serial_number,
-                config_path=config_path,
-            )
-            await engine.initialize_async()
-
-            # Apply simulation start time override if configured
-            simulation_start_time_str = config.get(CONF_SIMULATION_START_TIME) or entry.options.get(
-                CONF_SIMULATION_START_TIME
-            )
-            if simulation_start_time_str:
-                try:
-                    datetime.fromisoformat(simulation_start_time_str)
-                    engine.override_simulation_start_time(simulation_start_time_str)
-                    _LOGGER.debug("Using simulation start time: %s", simulation_start_time_str)
-                except (ValueError, TypeError) as e:
-                    _LOGGER.warning(
-                        "Invalid simulation start time '%s': %s",
-                        simulation_start_time_str,
-                        e,
-                    )
-
-            coordinator = SpanPanelCoordinator(hass, engine, entry)
-            await coordinator.async_config_entry_first_refresh()
-
-            # Apply simulation offline mode if configured
-            simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
-            if simulation_offline_minutes > 0:
-                coordinator.set_simulation_offline_mode(simulation_offline_minutes)
-
         else:
             raise ConfigEntryError(f"Unknown api_version: {api_version}")
 
@@ -362,10 +380,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         snapshot: SpanPanelSnapshot = coordinator.data
         serial_number = snapshot.serial_number
 
-        is_simulator = api_version == "simulation"
-
-        # Create smart default name
-        base_name = "SPAN Simulator" if is_simulator else "SPAN Panel"
+        base_name = "SPAN Panel"
 
         # Check existing config entries to avoid conflicts
         existing_entries = hass.config_entries.async_entries(DOMAIN)
@@ -424,10 +439,7 @@ async def async_remove_config_entry_device(
     snapshot = coordinator.data
 
     # Identify the main panel device identifier
-    serial_number = snapshot.serial_number
-    is_simulator = config_entry.data.get(CONF_API_VERSION) == "simulation"
-    device_name = config_entry.data.get(CONF_DEVICE_NAME, config_entry.title)
-    panel_identifier = slugify(device_name) if is_simulator and device_name else serial_number
+    panel_identifier = snapshot.serial_number
 
     # Prevent removal of the main panel device
     for identifier in device_entry.identifiers:
@@ -445,43 +457,13 @@ async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> N
         if hass.state is not CoreState.running:
             return
 
-        coordinator = entry.runtime_data.coordinator
-
-        # Update simulation offline mode if this is a simulation entry
-        api_version = entry.data.get(CONF_API_VERSION)
-        if api_version == "simulation":
-            simulation_offline_minutes = entry.options.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
-            _LOGGER.info(
-                "Update listener: processing simulation_offline_minutes = %s",
-                simulation_offline_minutes,
-            )
-            coordinator.set_simulation_offline_mode(simulation_offline_minutes)
-
-        if hass.state is not CoreState.running:
-            return
-
-        if _requires_full_reload(entry):
-            await hass.config_entries.async_reload(entry.entry_id)
-            _LOGGER.debug("Successfully reloaded SPAN Panel integration")
+        await hass.config_entries.async_reload(entry.entry_id)
+        _LOGGER.debug("Successfully reloaded SPAN Panel integration")
 
     except asyncio.CancelledError:
         raise
     except Exception as e:
         _LOGGER.error("Failed to reload SPAN Panel integration: %s", e, exc_info=True)
-
-
-def _requires_full_reload(entry: ConfigEntry) -> bool:
-    """Determine if a full integration reload is required.
-
-    Simulation-only option changes (offline minutes, start time) are applied
-    in-place via the coordinator and do not require a reload.
-    """
-    has_simulation_flag = entry.options.get("_simulation_only_change", False)
-    if has_simulation_flag:
-        _LOGGER.debug("Simulation-only change detected - no reload needed")
-        return False
-
-    return True
 
 
 async def ensure_device_registered(
@@ -493,40 +475,90 @@ async def ensure_device_registered(
     """Register or reconcile the HA Device before creating sensors.
 
     Ensures the device exists in the device registry with proper naming and
-    identifiers. For simulators, moves existing entities to the correct device
-    if the identifier changed due to a name change.
+    identifiers.
     """
     device_registry = dr.async_get(hass)
 
     serial_number = snapshot.serial_number
-    is_simulator = entry.data.get(CONF_API_VERSION) == "simulation"
     host = entry.data.get(CONF_HOST)
 
-    desired_identifier = slugify(device_name) if is_simulator and device_name else serial_number
-    existing_device = device_registry.async_get_device(identifiers={(DOMAIN, desired_identifier)})
+    existing_device = device_registry.async_get_device(identifiers={(DOMAIN, serial_number)})
 
     if existing_device:
         if existing_device.name == serial_number:
             device_registry.async_update_device(existing_device.id, name=device_name)
-        target_device = existing_device
     else:
-        device_info = snapshot_to_device_info(snapshot, device_name, is_simulator, host)
-        device = device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
-        target_device = device
+        device_info = snapshot_to_device_info(snapshot, device_name, host=host)
+        device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
 
-    # For simulators: move entities to the target device if their current device differs
-    try:
-        if is_simulator:
-            entity_registry = er.async_get(hass)
-            entries = er.async_entries_for_config_entry(entity_registry, entry.entry_id)
-            for ent in entries:
-                if ent.device_id != target_device.id:
-                    _LOGGER.debug(
-                        "Moving entity %s from device %s to %s",
-                        ent.entity_id,
-                        ent.device_id,
-                        target_device.id,
-                    )
-                    entity_registry.async_update_entity(ent.entity_id, device_id=target_device.id)
-    except (KeyError, ValueError, AttributeError) as err:
-        _LOGGER.warning("Failed to reassign entities to target device: %s", err)
+
+def _async_register_services(hass: HomeAssistant) -> None:
+    """Register domain-level services (called once per HA instance)."""
+
+    async def async_handle_export_manifest(
+        _call: ServiceCall,
+    ) -> ServiceResponse:
+        """Export circuit manifest for all configured SPAN panels."""
+        if not hass.config_entries.async_loaded_entries(DOMAIN):
+            raise ServiceValidationError(
+                "No SPAN panel config entries are loaded. "
+                "Add and configure a SPAN panel before calling this service."
+            )
+
+        entity_reg = er.async_get(hass)
+        panels = []
+
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if not hasattr(entry, "runtime_data") or not isinstance(
+                entry.runtime_data, SpanPanelRuntimeData
+            ):
+                continue
+
+            snapshot = entry.runtime_data.coordinator.data
+            if snapshot is None:
+                continue
+
+            serial = snapshot.serial_number
+            circuits = []
+
+            for circuit_id, circuit in snapshot.circuits.items():
+                if circuit_id.startswith("unmapped_tab_"):
+                    continue
+
+                tabs = getattr(circuit, "tabs", None)
+                if not tabs:
+                    continue
+
+                unique_id = build_circuit_unique_id(serial, circuit_id, "instantPowerW")
+                entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+                if entity_id is None:
+                    continue
+
+                raw_type = getattr(circuit, "device_type", "circuit")
+
+                circuits.append(
+                    {
+                        "entity_id": entity_id,
+                        "template": f"clone_{min(tabs)}",
+                        "device_type": _DEVICE_TYPE_MAP.get(raw_type, raw_type),
+                        "tabs": list(tabs),
+                    }
+                )
+
+            if circuits:
+                panels.append(
+                    {
+                        "serial": serial,
+                        "host": entry.data[CONF_HOST],
+                        "circuits": circuits,
+                    }
+                )
+
+        return cast(ServiceResponse, {"panels": panels})
+
+    hass.services.async_register(
+        DOMAIN,
+        "export_circuit_manifest",
+        async_handle_export_manifest,
+        supports_response=SupportsResponse.ONLY,
+    )

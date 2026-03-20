@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Synchronize dependency versions from manifest.json to CI workflow.
+"""Synchronize dependency versions from manifest.json to pyproject.toml.
 
 This script reads the dependency versions from custom_components/span_panel/manifest.json
-and updates the corresponding sed commands in .github/workflows/ci.yml to match.
+and updates the corresponding dependencies in pyproject.toml to match.
 
-Used as a pre-commit hook to ensure CI workflow stays in sync with manifest versions.
+Used as a pre-commit hook to ensure pyproject.toml stays in sync with manifest versions.
 """
 
 import json
@@ -29,13 +29,13 @@ def get_manifest_versions():
 
         for req in requirements:
             if req.startswith("span-panel-api"):
-                # Extract version from span-panel-api>=2.0.0 or span-panel-api~=1.1.0
-                match = re.search(r"span-panel-api[>~=]+([0-9.]+)", req)
+                # Extract full specifier (e.g. ==2.3.0, >=2.0.0, ~=1.1.0)
+                match = re.search(r"span-panel-api([>~=!]+[0-9.]+)", req)
                 if match:
                     versions["span-panel-api"] = match.group(1)
             elif req.startswith("ha-synthetic-sensors"):
-                # Extract version from ha-synthetic-sensors>=1.0.8 or ~=1.0.8
-                match = re.search(r"ha-synthetic-sensors[>~=]+([0-9.]+)", req)
+                # Extract full specifier (e.g. >=1.0.8, ~=1.0.8)
+                match = re.search(r"ha-synthetic-sensors([>~=!]+[0-9.]+)", req)
                 if match:
                     versions["ha-synthetic-sensors"] = match.group(1)
 
@@ -45,40 +45,39 @@ def get_manifest_versions():
         return None
 
 
-def update_ci_workflow(versions):
-    """Update the CI workflow with the specified versions."""
-    ci_path = Path(".github/workflows/ci.yml")
+def update_pyproject_dependencies(versions):
+    """Update pyproject.toml dependencies with manifest versions."""
+    pyproject_path = Path("pyproject.toml")
 
-    if not ci_path.exists():
+    if not pyproject_path.exists():
         return False
 
     try:
-        with open(ci_path) as f:
+        with open(pyproject_path) as f:
             content = f.read()
 
         original_content = content
 
-        # Update span-panel-api version (handles ^, >=, ~= specifiers)
+        # Update span-panel-api version in [project] dependencies
         if "span-panel-api" in versions:
-            span_version = versions["span-panel-api"]
+            span_spec = versions["span-panel-api"]
             content = re.sub(
-                r'span-panel-api = "[>=~^]+[0-9.]+"',
-                f'span-panel-api = ">={span_version}"',
+                r'"span-panel-api[><=~!]+[0-9.]+"',
+                f'"span-panel-api{span_spec}"',
                 content,
             )
 
-        # Update ha-synthetic-sensors version (handles ^, >=, ~= specifiers)
+        # Update ha-synthetic-sensors version in [project] dependencies
         if "ha-synthetic-sensors" in versions:
-            ha_version = versions["ha-synthetic-sensors"]
+            ha_spec = versions["ha-synthetic-sensors"]
             content = re.sub(
-                r'ha-synthetic-sensors = "[>=~^]+[0-9.]+"',
-                f'ha-synthetic-sensors = "^{ha_version}"',
+                r'"ha-synthetic-sensors[><=~!]+[0-9.]+"',
+                f'"ha-synthetic-sensors{ha_spec}"',
                 content,
             )
 
-        # Check if changes were made
         if content != original_content:
-            with open(ci_path, "w") as f:
+            with open(pyproject_path, "w") as f:
                 f.write(content)
             return True
 
@@ -90,15 +89,11 @@ def update_ci_workflow(versions):
 
 def main():
     """Main function."""
-
-    # Get versions from manifest
     versions = get_manifest_versions()
     if not versions:
         sys.exit(1)
 
-
-    # Update CI workflow
-    changes_made = update_ci_workflow(versions)
+    changes_made = update_pyproject_dependencies(versions)
 
     if changes_made:
         sys.exit(1)  # Exit with error to fail pre-commit

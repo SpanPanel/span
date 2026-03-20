@@ -1,11 +1,6 @@
-export_synthetic_config:
-  name: Export Synthetic Sensor Config
-  description: Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path.
-  fields:
-    directory:
-      name: File Path
-      description: Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved.
-      required: true
-      example: "/config/span_panel_sensor_config.yaml"
-      selector:
-        text:
+export_circuit_manifest:
+  name: Export circuit manifest
+  description: >-
+    Export an authoritative circuit-to-entity manifest for all configured
+    SPAN panels. Returns panel serial numbers, circuit power sensor entity
+    IDs, simulator template names, device types, and breaker tab numbers.

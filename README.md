@@ -12,7 +12,7 @@ monitoring and control of your home's electrical system.
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/)
 [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![prek](https://img.shields.io/badge/prek-enabled-brightgreen)](https://github.com/j178/prek)
 
 The software is provided as-is with no warranty or guarantee of performance or suitability to your particular setting.
 
@@ -22,8 +22,17 @@ execute these actions without user presence; design them with the same care you 
 safety device and must not be relied upon for life-safety applications. Use this software at your own risk. If you cannot accept that risk, do not use this
 software. See [LICENSE](LICENSE) for the full warranty disclaimer.
 
+The SPAN Client documentation has warnings regarding the use of the API (the API used by this integration) which should be heeded just as if you were using that
+API directly:
+
+> An API client that attempts to implement its own load-shedding decisions, grid-state detection, or other critical automation is operating outside the scope of
+> what SPAN API was designed and engineered for. Such use is entirely at the client developer's and homeowner's own risk and may void the SPAN Panel Limited
+> Warranty. See the SPAN API Scope & Responsibility Model in the [SPAN API documentation](https://github.com/spanio/SPAN-API-Client-Docs).
+
 This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
-circuits. You can optionally use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control.
+circuits. You can optionally use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control. The
+[SPAN Panel Simulator](https://github.com/SpanPanel/simulator) add-on lets you clone your panel's circuit layout for testing, or model an upgrade to evaluate
+firmware or integration changes in a sandbox before applying them to your real panel.
 
 This integration communicates with the SPAN Panel over your local network using SPAN's official
 [Electrification Bus (eBus)](https://github.com/spanio/SPAN-API-Client-Docs) framework — an open, multi-vendor integration standard for home energy
@@ -48,7 +57,7 @@ Users MUST upgrade by the end of 2026 to avoid disruption. Upgrade to the latest
 - Requires firmware `spanos2/r202603/05` or later — panels on older firmware will not work
 - `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
 
-> Running older firmware? See [v1 Legacy Documentation](docs/v1-legacy.md).
+> Running older firmware? See [v1 Legacy Documentation](v1-legacy.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 
@@ -87,6 +96,21 @@ When upgrading through HACS:
 
 If you encounter issues, restore from your backup or check the [troubleshooting section](#troubleshooting) below.
 
+## Key Terms
+
+The following terms appear throughout this document and in the integration's sensors:
+
+- **Grid-forming entity (GFE)** — The power source that sets the voltage and frequency reference for the home. When the utility grid is up, it is the GFE. When
+  islanded on battery, the battery inverter becomes the GFE.
+- **Islanded** — The home is electrically disconnected from the utility grid and running on its own power source, typically battery. Circuits may be shed to
+  conserve battery life.
+- **Microgrid** — When the home is islanded, the battery inverter creates a small, self-contained electrical grid for the home. This local grid functions
+  independently of the utility — the inverter generates AC power at the correct voltage and frequency, and the home's circuits run on it just as they would on
+  utility power.
+- **Microgrid Interconnect Device (MID)** — A switch, part of or alongside the battery system, that disconnects the home from the utility grid during an outage.
+  While open, the panel's sensors can only see the home side.
+- **Shedding** — Automatically turning off lower-priority circuits to conserve battery during an outage, based on each circuit's configured shed priority.
+
 ## Entity Reference
 
 ### Panel-Level Sensors
@@ -120,13 +144,14 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 | Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
 | Main Breaker Rating   | Current      | A    | Main breaker amperage      |
 
-### Power Flow Sensors (v2 only, conditional)
+### Power Flow Sensors (v2 only)
 
 | Sensor        | Device Class | Unit | Notes                                                                       |
 | ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
+| Grid Power    | Power        | W    | Grid power flow                                                             |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                      |
 | Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
 | PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
-| Site Power    | Power        | W    | Total site power (grid + PV + battery). Only when power-flows node active   |
 
 ### PV Metadata Sensors (v2 only, on main panel device)
 
@@ -144,7 +169,7 @@ If you encounter issues, restore from your backup or check the [troubleshooting 
 
 ### Power Sensor Attributes
 
-Applies to Current Power, Feed Through Power, Battery Power, PV Power, and Site Power sensors.
+Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Power, and Site Power sensors.
 
 | Attribute  | Type   | Notes                                |
 | ---------- | ------ | ------------------------------------ |
@@ -157,6 +182,50 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, and Site 
 | ------------ | ------ | ----------------------------------- |
 | `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
 | `wifi_ssid`  | string | Current Wi-Fi network               |
+
+### EVSE (EV Charger) Entities
+
+Created automatically when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via
+`via_device`. Vendor, product, serial number, and software version are surfaced as device info attributes — not separate entities.
+
+#### EVSE Device Naming
+
+The EVSE device name includes the panel device name prefix for collision avoidance across multi-panel installations and to support HA's bulk device rename
+feature. A display suffix differentiates multiple chargers on the same panel:
+
+- **Friendly names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
+- **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): suffix is the EVSE serial number (e.g., "SN-EVSE-001")
+- **No suffix available**: the display suffix is omitted entirely (no empty parentheses)
+
+| Naming Mode     | Example Device Name                   | Example Entity ID                                         |
+| --------------- | ------------------------------------- | --------------------------------------------------------- |
+| Friendly names  | `Main House SPAN Drive (Garage)`      | `sensor.main_house_span_drive_garage_charger_status`      |
+| Circuit numbers | `Main House SPAN Drive (SN-EVSE-001)` | `sensor.main_house_span_drive_sn_evse_001_charger_status` |
+| No suffix       | `Main House SPAN Drive`               | `sensor.main_house_span_drive_charger_status`             |
+
+#### EVSE Sensors (per charger)
+
+| Sensor             | Device Class | Unit | Notes                                                                            |
+| ------------------ | ------------ | ---- | -------------------------------------------------------------------------------- |
+| Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
+| Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
+| Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
+
+#### EVSE Binary Sensors (per charger)
+
+| Sensor       | Device Class     | Notes                                                              |
+| ------------ | ---------------- | ------------------------------------------------------------------ |
+| Charging     | Battery Charging | ON when status is CHARGING                                         |
+| EV Connected | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING |
+
+#### EVSE Device Info Attributes
+
+| Attribute        | Source             |
+| ---------------- | ------------------ |
+| Manufacturer     | `vendor-name`      |
+| Model            | `product-name`     |
+| Serial Number    | `serial-number`    |
+| Software Version | `software-version` |
 
 ### BESS Sub-Device (v2 only, conditional)
 
@@ -220,50 +289,6 @@ Applies to Main Meter and Feed Through energy sensors.
 | `tabs`    | string | Breaker slot position(s)            |
 | `voltage` | string | 120 or 240 (derived from tab count) |
 
-### EVSE (EV Charger) Entities
-
-Created automatically when a SPAN Drive or other EVSE is commissioned on the panel. Each EVSE appears as a separate sub-device linked to the panel via
-`via_device`. Vendor, product, serial number, and software version are surfaced as device info attributes — not separate entities.
-
-#### EVSE Device Naming
-
-The EVSE device name includes the panel device name prefix for collision avoidance across multi-panel installations and to support HA's bulk device rename
-feature. A display suffix differentiates multiple chargers on the same panel:
-
-- **Friendly names** (`USE_CIRCUIT_NUMBERS=False`): suffix is the fed circuit's panel name (e.g., "Garage")
-- **Circuit numbers** (`USE_CIRCUIT_NUMBERS=True`): suffix is the EVSE serial number (e.g., "SN-EVSE-001")
-- **No suffix available**: the display suffix is omitted entirely (no empty parentheses)
-
-| Naming Mode     | Example Device Name                   | Example Entity ID                                         |
-| --------------- | ------------------------------------- | --------------------------------------------------------- |
-| Friendly names  | `Main House SPAN Drive (Garage)`      | `sensor.main_house_span_drive_garage_charger_status`      |
-| Circuit numbers | `Main House SPAN Drive (SN-EVSE-001)` | `sensor.main_house_span_drive_sn_evse_001_charger_status` |
-| No suffix       | `Main House SPAN Drive`               | `sensor.main_house_span_drive_charger_status`             |
-
-#### EVSE Sensors (per charger)
-
-| Sensor             | Device Class | Unit | Notes                                                                            |
-| ------------------ | ------------ | ---- | -------------------------------------------------------------------------------- |
-| Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
-| Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
-| Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
-
-#### EVSE Binary Sensors (per charger)
-
-| Sensor       | Device Class     | Notes                                                              |
-| ------------ | ---------------- | ------------------------------------------------------------------ |
-| Charging     | Battery Charging | ON when status is CHARGING                                         |
-| EV Connected | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING |
-
-#### EVSE Device Info Attributes
-
-| Attribute        | Source             |
-| ---------------- | ------------------ |
-| Manufacturer     | `vendor-name`      |
-| Model            | `product-name`     |
-| Serial Number    | `serial-number`    |
-| Software Version | `software-version` |
-
 ### Binary Sensors
 
 | Sensor          | Device Class | Notes                                                               |
@@ -303,37 +328,66 @@ Labels match the SPAN Home On-Premise app. Translations are provided for all sup
 | ---------------------------- | ------ | ------------------------------------------------------------------------------------ |
 | GFE Override: Grid Connected | Button | (v2) Tell the panel the grid is up. Only present on MQTT-connected panels. See below |
 
-### Grid Forming Entity
+### BESS & Grid Management
 
-The Grid Forming Entity (GFE) identifies which power source provides the frequency and voltage reference for the home. When GFE is Grid, the utility grid sets
-the reference and all circuits remain on. When GFE is Battery, the battery inverter is the reference and circuits are shed based on each circuit's configured
-shed priority.
+This section explains how the SPAN panel manages power sources and load shedding when a Battery Energy Storage System (BESS) is installed, and what the
+integration can and cannot tell you about grid status.
 
-When a battery system (BESS) is installed, the panel relies on the BESS to determine whether the grid is online and to set the GFE accordingly. If BESS
-communication is lost while the panel is islanded, the GFE value becomes stale — it may show Battery when the grid has actually been restored, causing
-unnecessary shedding to continue.
+#### Grid Forming Entity
 
-The panel cannot detect grid restoration while islanded because the Microgrid Interconnect Device (MID) is open. The panel's power sensors are on the home side
-of the open switch and measure only battery-supplied power — grid restoration on the utility side is invisible to any panel-side measurement. This is a physical
-limitation, not a software gap. The `DSM State` sensor inherits the same blind spot for the same reason.
+The Grid Forming Entity (GFE) sensor identifies which power source provides the voltage and frequency reference for the home — not which source is producing the
+most watts. When GFE is Grid, the utility grid sets the reference and all circuits remain on, even if 100% of consumption comes from solar. When GFE is Battery,
+the battery inverter is the reference and circuits are shed based on each circuit's configured shed priority.
 
-The **GFE Override: Grid Connected** button exists for this scenario. It publishes a temporary `GRID` command to the panel telling it the grid is back and
-shedding can stop. When the BESS restores communication, it automatically reclaims control and the override is superseded.
+| GFE Value | Meaning                                                           |
+| --------- | ----------------------------------------------------------------- |
+| GRID      | Panel is grid-connected (includes generator power, see deep dive) |
+| BATTERY   | Panel is islanded, running on battery                             |
+| PV        | Panel is islanded, running on solar (future)                      |
+| GENERATOR | Panel is islanded, running on generator (future)                  |
+| NONE      | Panel is islanded with no power source                            |
+| UNKNOWN   | State not yet determined or fault condition                       |
 
-#### Detecting grid restoration
+When a BESS is installed, the panel relies on the BESS to determine whether the grid is online and to set the GFE accordingly. If BESS communication is lost
+while the panel is islanded, the GFE value becomes stale — it may show Battery when the grid has actually been restored, causing unnecessary shedding to
+continue.
 
-The panel requires an external signal to know the grid is back while islanded. Options include:
+#### What the Panel Can Detect
 
-- An Automatic Transfer Switch (ATS) or Manual Transfer Switch (MTS) with a utility-side contact closure, integrated into Home Assistant as a binary sensor
-- Utility notification, neighbor confirmation, or physical observation
+**Grid loss** — The panel independently detects grid loss via its own voltage monitoring, even if BESS communication is already lost. The MID is still closed at
+this point, so the panel's sensors see the real voltage drop and respond immediately.
 
-**WARNING** - Do _not_ automate the GFE override button based on `dsm_state` — it will read `DSM_OFF_GRID` even after the grid is restored because the panel's
-sensors cannot see past the open MID. Manual confirmation or an external sensor is required before pressing the button.
+**Grid restoration while islanded** — Not detectable by the panel. While the MID is open, the panel's sensors are on the home side and measure only
+battery-supplied power. Grid restoration on the utility side of the open MID is invisible to any panel-side measurement. This is a physical limitation, not a
+software gap. A utility-side sensor — such as a current clamp (e.g., Emporia Vue), ATS/MTS contact closure, or any device that can see the grid side of the MID
+— integrated into Home Assistant as a binary sensor can provide this signal.
 
-Pressing "GFE Override: Grid Connected" when actually off-grid will prevent shedding and drain the battery faster. The battery protects itself by disconnecting
-when depleted, so there is no overload risk, but runtime will be reduced.
+#### DSM State Sensor
+
+The integration's `DSM State` sensor combines multiple panel signals to provide defense-in-depth for grid status detection. It corroborates the Grid Forming
+Entity with BESS grid state and power measurements, which adds confidence during transient inconsistencies and detects some edge cases — for example, when BESS
+communication is lost while on-grid and the grid subsequently drops, the panel self-corrects via voltage detection and the corroborating signals confirm it.
+
+However, when the panel is islanded and the MID is open, all of the panel's signals measure the home side. No combination of panel-sourced data can detect grid
+restoration in this state. Only an external signal (utility-side sensor) or manual confirmation via the GFE Override button can resolve it.
+
+#### GFE Override Button
+
+The **GFE Override: Grid Connected** button tells the panel that the grid is back and shedding can stop. When the BESS restores communication, it automatically
+reclaims control and the override is superseded — no manual undo is needed.
+
+**Risk asymmetry** — Telling the panel to shed (conservative direction) is low-risk; worst case is unnecessary circuit disruption. Telling the panel the grid is
+back when it is not means unmanaged battery drain and reduced runtime, which could affect critical equipment. The battery protects itself by disconnecting when
+depleted, so there is no overload risk, but runtime will be reduced. Use the override button only with confidence that the grid has actually been restored — via
+a utility-side sensor or manual confirmation.
+
+**WARNING** — Do _not_ automate the GFE override button based on `DSM State` — it inherits the same MID blind spot described above and will read `dsm_off_grid`
+even after the grid is restored. Manual confirmation or an external sensor is required before pressing the button.
 
 When `bess_connected` returns to on, no action is needed — firmware resumes normal GFE management automatically.
+
+For a detailed discussion of failure scenarios, the MID topology, generator and non-integrated BESS behavior, and `/set` risk analysis, see
+[BESS & Grid Management Deep Dive](bess-grid-management.md).
 
 ## Configuration Options
 
@@ -408,7 +462,7 @@ belong to the same circuit by parsing naming patterns. That correlation is fragi
 device than the panel) and requires multiple round-trips. The topology command provides all of these relationships explicitly, keyed by circuit UUID, so the
 card can render the panel layout without guessing.
 
-See [WebSocket API Reference](docs/websocket-api.md) for the full schema, response format, and usage examples.
+See [WebSocket API Reference](websocket-api.md) for the full schema, response format, and usage examples.
 
 ## Troubleshooting
 
@@ -454,7 +508,7 @@ Setting the interval to 0 disables debouncing entirely and rebuilds on every MQT
 
 ## Development
 
-See [Developer Documentation](docs/developer.md) for setup instructions, prerequisites, and tooling.
+See [Developer Documentation](developer.md) for setup instructions, prerequisites, and tooling.
 
 ## License
 

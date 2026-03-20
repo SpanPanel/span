@@ -92,7 +92,7 @@ async def test_user_flow_detects_v2_and_shows_auth_choice(hass: HomeAssistant) -
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         assert result2["type"] == FlowResultType.MENU
@@ -120,7 +120,7 @@ async def test_user_flow_v1_aborts(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         # v1 panels should go through setup_flow which detects v1
@@ -155,7 +155,7 @@ async def test_passphrase_auth_success(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
         assert result2["step_id"] == "choose_v2_auth"
 
@@ -198,7 +198,7 @@ async def test_passphrase_auth_bad_passphrase(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         # Select passphrase auth from the menu
@@ -240,7 +240,7 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         # Select passphrase auth from the menu
@@ -286,7 +286,7 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
         # Step 1: submit host
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         # Step 2: choose auth method (passphrase)
@@ -356,7 +356,7 @@ async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
         result = await async_migrate_entry(hass, entry)
 
     assert result is True
-    assert entry.version == 5
+    assert entry.version == 6
     assert entry.data.get(CONF_API_VERSION) == "v1"
 
 
@@ -421,18 +421,18 @@ async def test_migration_blocked_when_panel_unreachable(hass: HomeAssistant) -> 
 
 
 @pytest.mark.asyncio
-async def test_migration_v2_to_v4_simulator(hass: HomeAssistant) -> None:
-    """Simulator entries migrating from version 2 to 5 should get api_version=simulation."""
+async def test_migration_v5_to_v6_rejects_simulation_entry(hass: HomeAssistant) -> None:
+    """Simulation entries at v5 should migrate to v6 but setup should be skipped."""
     entry = MockConfigEntry(
-        version=2,
+        version=5,
         minor_version=1,
         domain=DOMAIN,
         title="Span Simulator",
         data={
             CONF_HOST: "sim-001",
             CONF_ACCESS_TOKEN: "simulator_token",
+            CONF_API_VERSION: "simulation",
             "simulation_mode": True,
-            "simulation_config": "simulation_config_32_circuit",
         },
         source=config_entries.SOURCE_USER,
         options={},
@@ -440,17 +440,17 @@ async def test_migration_v2_to_v4_simulator(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
-    with patch(
-        "custom_components.span_panel.migrate_config_entry_sensors",
-        return_value=True,
-    ):
-        from custom_components.span_panel import async_migrate_entry
+    from custom_components.span_panel import async_migrate_entry, async_setup_entry
 
-        result = await async_migrate_entry(hass, entry)
+    result = await async_migrate_entry(hass, entry)
 
+    # Migration succeeds (no retry on every restart)
     assert result is True
-    assert entry.version == 5
-    assert entry.data.get(CONF_API_VERSION) == "simulation"
+    assert entry.version == 6
+
+    # Setup is skipped for simulation entries
+    setup_result = await async_setup_entry(hass, entry)
+    assert setup_result is False
 
 
 # ---------- zeroconf v2 discovery ----------
@@ -593,7 +593,7 @@ async def test_user_flow_empty_host(hass: HomeAssistant) -> None:
 
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {CONF_HOST: "", "simulator_mode": False},
+        {CONF_HOST: ""},
     )
 
     assert result2["type"] == FlowResultType.FORM
@@ -614,7 +614,7 @@ async def test_user_flow_host_unreachable(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: "10.0.0.99", "simulator_mode": False},
+            {CONF_HOST: "10.0.0.99"},
         )
 
         assert result2["type"] == FlowResultType.FORM
@@ -642,14 +642,14 @@ async def test_user_flow_recovery_after_bad_host(hass: HomeAssistant) -> None:
         # First attempt fails
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: "bad-host", "simulator_mode": False},
+            {CONF_HOST: "bad-host"},
         )
         assert result2["errors"] == {"base": "cannot_connect"}
 
         # Second attempt succeeds
         result3 = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
         assert result3["type"] == FlowResultType.MENU
         assert result3["step_id"] == "choose_v2_auth"
@@ -677,7 +677,7 @@ async def test_passphrase_auth_empty_passphrase(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -718,7 +718,7 @@ async def test_passphrase_auth_recovery_after_error(hass: HomeAssistant) -> None
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -768,7 +768,7 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
         assert result2["step_id"] == "choose_v2_auth"
 
@@ -811,7 +811,7 @@ async def test_proximity_auth_failed(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -852,7 +852,7 @@ async def test_proximity_auth_connection_error(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -908,7 +908,7 @@ async def test_duplicate_entry_aborts(hass: HomeAssistant) -> None:
 
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
-            {CONF_HOST: MOCK_HOST, "simulator_mode": False},
+            {CONF_HOST: MOCK_HOST},
         )
 
         assert result2["type"] == FlowResultType.ABORT

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 import enum
 import logging
-from pathlib import Path
-import shutil
-from time import time
-from typing import Any, cast
+from typing import Any
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
@@ -18,23 +16,20 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
-from homeassistant.helpers.selector import selector
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import V2AuthResponse, detect_api_version
+from span_panel_api import V2AuthResponse, delete_fqdn, detect_api_version, register_fqdn
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
-from span_panel_api.simulation import DynamicSimulationEngine, SimulationConfig
 import voluptuous as vol
-import yaml
 
 from .config_flow_utils import (
     build_general_options_schema,
-    get_available_simulation_configs,
+    check_fqdn_tls_ready,
     get_general_options_defaults,
+    is_fqdn,
     process_general_options_input,
     validate_auth_token,
     validate_host,
-    validate_simulation_time,
     validate_v2_passphrase,
     validate_v2_proximity,
 )
@@ -45,10 +40,9 @@ from .const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
+    CONF_HTTP_PORT,
     CONF_PANEL_SERIAL,
-    CONF_SIMULATION_CONFIG,
-    CONF_SIMULATION_OFFLINE_MINUTES,
-    CONF_SIMULATION_START_TIME,
+    CONF_REGISTERED_FQDN,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
@@ -56,22 +50,14 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from .helpers import generate_unique_simulator_serial_number
 from .options import (
     ENERGY_DISPLAY_PRECISION,
     ENERGY_REPORTING_GRACE_PERIOD,
     POWER_DISPLAY_PRECISION,
     SNAPSHOT_UPDATE_INTERVAL,
 )
-from .simulation_utils import clone_panel_to_simulation
 
 _LOGGER = logging.getLogger(__name__)
-
-
-# Simulation config import/export option keys
-SIM_FILE_KEY = "simulation_config_file"
-SIM_EXPORT_PATH = "simulation_export_path"
-SIM_IMPORT_PATH = "simulation_import_path"
 
 
 class ConfigFlowError(Exception):
@@ -83,7 +69,7 @@ def get_user_data_schema(default_host: str = "") -> vol.Schema:
     return vol.Schema(
         {
             vol.Optional(CONF_HOST, default=default_host): str,
-            vol.Optional("simulator_mode", default=False): bool,
+            vol.Optional(CONF_HTTP_PORT, default=80): int,
             vol.Optional(POWER_DISPLAY_PRECISION, default=0): int,
             vol.Optional(ENERGY_DISPLAY_PRECISION, default=2): int,
             vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION, default=True): bool,
@@ -145,8 +131,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_broker_password: str | None = None
         self._v2_passphrase: str | None = None
         self._v2_panel_serial: str | None = None
+        self._http_port: int = 80
         # Energy dip compensation default for fresh installs
         self._enable_dip_compensation: bool = True
+        # FQDN registration task (async_show_progress)
+        self._fqdn_task: asyncio.Task[None] | None = None
+        self._reconfigure_fqdn_task: asyncio.Task[None] | None = None
 
     async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
         """Set up the flow by detecting the panel API version and serial number."""
@@ -155,7 +145,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             _LOGGER.error("Flow setup attempted when already set up")
             raise ConfigFlowError("Flow is already set up")
 
-        result = await detect_api_version(host)
+        result = await detect_api_version(host, port=self._http_port)
         self.api_version = result.api_version
 
         self.trigger_flow_type = trigger_type
@@ -181,12 +171,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             _LOGGER.error("Flow method called before setup")
             raise ConfigFlowError("Flow is not set up")
 
-    async def ensure_not_already_configured(self) -> None:
+    async def ensure_not_already_configured(self, raise_on_progress: bool = True) -> None:
         """Ensure the panel is not already configured."""
         self.ensure_flow_is_set_up()
 
-        # Abort if we had already set this panel up
-        await self.async_set_unique_id(self.serial_number)
+        # Abort if we had already set this panel up.
+        # User-initiated flows pass raise_on_progress=False so they can
+        # proceed when a zeroconf discovery flow is already running.
+        await self.async_set_unique_id(self.serial_number, raise_on_progress=raise_on_progress)
         self._abort_if_unique_id_configured(updates={CONF_HOST: self.host})
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
@@ -212,7 +204,16 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if is_v2_service:
             # v2 panels discovered via eBus / secure-mqtt service types
-            detection = await detect_api_version(discovery_info.host)
+            # Read optional httpPort from mDNS TXT records (non-standard port)
+            props = discovery_info.properties or {}
+            http_port_str = props.get("httpPort", props.get("httpport", ""))
+            try:
+                http_port = int(http_port_str) if http_port_str else 80
+            except (ValueError, TypeError):
+                http_port = 80
+            self._http_port = http_port
+
+            detection = await detect_api_version(discovery_info.host, port=http_port)
             if detection.api_version != "v2" or detection.status_info is None:
                 # The v2 endpoint did not respond — this IP is not a valid
                 # v2 panel (e.g., an internal link address we didn't filter).
@@ -257,12 +258,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             user_input,
         )
 
-        # Check if simulator mode is enabled
-        if user_input.get("simulator_mode", False):
-            return await self._handle_simulator_setup(user_input)
-
-        # For non-simulator mode, host is required
         host: str = user_input.get(CONF_HOST, "").strip()
+        self._http_port = int(user_input.get(CONF_HTTP_PORT, 80))
         if not host:
             return self.async_show_form(
                 step_id="user",
@@ -271,7 +268,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Validate host before setting up flow
-        if not await validate_host(self.hass, host):
+        if not await validate_host(self.hass, host, port=self._http_port):
             return self.async_show_form(
                 step_id="user",
                 data_schema=STEP_USER_DATA_SCHEMA,
@@ -279,7 +276,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Detect v2 API before setting up the v1 flow
-        detection = await detect_api_version(host)
+        detection = await detect_api_version(host, port=self._http_port)
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
@@ -296,161 +293,23 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 },
             }
             self._is_flow_setup = True
-            await self.ensure_not_already_configured()
+            await self.ensure_not_already_configured(raise_on_progress=False)
             return await self.async_step_choose_v2_auth()
 
         # v1 path: probe via the existing setup_flow
         if not self._is_flow_setup:
             await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
-            await self.ensure_not_already_configured()
+            await self.ensure_not_already_configured(raise_on_progress=False)
 
         return await self.async_step_choose_auth_type()
-
-    async def _handle_simulator_setup(self, user_input: dict[str, Any]) -> ConfigFlowResult:
-        """Handle simulator mode setup."""
-        # Precision settings already stored in async_step_user
-
-        # Check if this is the initial simulator selection or the config selection
-        if CONF_SIMULATION_CONFIG not in user_input:
-            # Show simulator configuration selection
-            return await self.async_step_simulator_config()
-
-        # Get the simulation config and host
-        simulation_config = user_input[CONF_SIMULATION_CONFIG]
-        host = user_input.get(CONF_HOST, "").strip()
-        simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
-
-        # Generate unique simulator serial number first
-        simulator_serial = generate_unique_simulator_serial_number(self.hass)
-
-        # Use the generated simulator serial number as the host
-        # This ensures the span panel API uses the correct serial number
-        host = simulator_serial
-
-        # Create entry for simulator mode
-        base_name = "Span Simulator"
-        device_name = self.get_unique_device_name(base_name)
-
-        # Prepare config data
-        config_data: dict[str, Any] = {
-            CONF_HOST: host,  # This is now the simulator serial number (sim-nnn)
-            CONF_ACCESS_TOKEN: "simulator_token",
-            CONF_API_VERSION: "simulation",
-            "simulation_mode": True,
-            CONF_SIMULATION_CONFIG: simulation_config,
-            "device_name": device_name,
-            "simulator_serial_number": simulator_serial,
-        }
-
-        # Add simulation start time if provided
-        if simulation_start_time:
-            try:
-                validated_time = validate_simulation_time(simulation_start_time)
-                config_data[CONF_SIMULATION_START_TIME] = validated_time
-            except ValueError as e:
-                return self.async_show_form(
-                    step_id="simulator_config",
-                    data_schema=self.add_suggested_values_to_schema(
-                        vol.Schema(
-                            {
-                                vol.Required(
-                                    CONF_SIMULATION_CONFIG, default="simulation_config_32_circuit"
-                                ): vol.In(get_available_simulation_configs()),
-                                vol.Optional(CONF_HOST, default=""): str,
-                                vol.Optional(CONF_SIMULATION_START_TIME, default=""): str,
-                            }
-                        ),
-                        user_input,
-                    ),
-                    errors={"base": str(e)},
-                )
-
-        _LOGGER.debug(
-            "SIMULATOR_CONFIG_DEBUG: Creating simulator entry with precision - power: %s, energy: %s",
-            self.power_display_precision,
-            self.energy_display_precision,
-        )
-        # Determine simulator naming flags based on selection (default Friendly Names)
-        selected_pattern = user_input.get(
-            ENTITY_NAMING_PATTERN, EntityNamingPattern.FRIENDLY_NAMES.value
-        )
-        sim_use_device_prefix = True
-        sim_use_circuit_numbers = selected_pattern == EntityNamingPattern.CIRCUIT_NUMBERS.value
-
-        return self.async_create_entry(
-            title=device_name,
-            data=config_data,
-            options={
-                USE_DEVICE_PREFIX: sim_use_device_prefix,
-                USE_CIRCUIT_NUMBERS: sim_use_circuit_numbers,
-                POWER_DISPLAY_PRECISION: self.power_display_precision,
-                ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
-                ENABLE_ENERGY_DIP_COMPENSATION: self._enable_dip_compensation,
-            },
-        )
-
-    async def async_step_simulator_config(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle simulator configuration selection."""
-        if user_input is None:
-            # Discover files dynamically and build dropdown options
-            available_configs = get_available_simulation_configs()
-            options_list = [
-                {"value": key, "label": label} for key, label in available_configs.items()
-            ]
-
-            # Choose a sensible default
-            default_key = (
-                "simulation_config_32_circuit"
-                if "simulation_config_32_circuit" in available_configs
-                else next(iter(available_configs.keys()))
-            )
-
-            # Create schema with forced dropdown for simulation configuration
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_SIMULATION_CONFIG, default=default_key): selector(
-                        {
-                            "select": {
-                                "options": options_list,
-                                "mode": "dropdown",
-                            }
-                        }
-                    ),
-                    vol.Optional(CONF_HOST, default=""): str,
-                    vol.Optional(CONF_SIMULATION_START_TIME, default=""): str,
-                    vol.Required(
-                        ENTITY_NAMING_PATTERN, default=EntityNamingPattern.FRIENDLY_NAMES.value
-                    ): vol.In(
-                        {
-                            EntityNamingPattern.FRIENDLY_NAMES.value: "Circuit Friendly Names",
-                            EntityNamingPattern.CIRCUIT_NUMBERS.value: "Tab Based Names",
-                        }
-                    ),
-                }
-            )
-
-            return self.async_show_form(
-                step_id="simulator_config",
-                data_schema=schema,
-                description_placeholders={
-                    "config_count": str(len(available_configs)),
-                },
-            )
-
-        # Continue with simulator setup using the selected config
-        # Ensure simulator_mode is set since it's not in the form data
-        user_input_with_sim_mode = dict(user_input)
-        user_input_with_sim_mode["simulator_mode"] = True
-        return await self._handle_simulator_setup(user_input_with_sim_mode)
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle a flow initiated by re-auth."""
         host = entry_data[CONF_HOST]
+        self._http_port = int(entry_data.get(CONF_HTTP_PORT, 80))
 
         # Detect current API version of the panel
-        detection = await detect_api_version(host)
+        detection = await detect_api_version(host, port=self._http_port)
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
@@ -535,7 +394,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self.async_abort(reason="host_not_set")
 
         try:
-            result = await validate_v2_proximity(self.host)
+            result = await validate_v2_proximity(self.host, port=self._http_port)
         except SpanPanelAuthError:
             return self.async_show_form(
                 step_id="auth_proximity",
@@ -617,7 +476,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self.async_abort(reason="host_not_set")
 
         try:
-            result = await validate_v2_passphrase(self.host, passphrase)
+            result = await validate_v2_passphrase(self.host, passphrase, port=self._http_port)
         except SpanPanelAuthError:
             return self.async_show_form(
                 step_id="auth_passphrase",
@@ -650,7 +509,70 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             if "entry_id" not in self.context:
                 raise ValueError("Entry ID is missing from context")
             return self._update_v2_entry(self.context["entry_id"])
+        # If host is an FQDN, register it with the panel for TLS cert SAN inclusion
+        if self.host and is_fqdn(self.host):
+            return await self.async_step_register_fqdn()
         return await self.async_step_choose_entity_naming_initial()
+
+    async def async_step_register_fqdn(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Register FQDN with the panel and wait for TLS certificate update."""
+        if not self._fqdn_task:
+            self._fqdn_task = self.hass.async_create_task(
+                self._async_register_fqdn_and_wait(),
+                "span_panel_register_fqdn",
+            )
+
+        if not self._fqdn_task.done():
+            return self.async_show_progress(
+                step_id="register_fqdn",
+                progress_action="registering_fqdn",
+                progress_task=self._fqdn_task,
+            )
+
+        try:
+            self._fqdn_task.result()
+        except Exception:
+            _LOGGER.exception("FQDN registration failed for %s", self.host)
+            self._fqdn_task = None
+            return self.async_show_progress_done(next_step_id="fqdn_failed")
+
+        self._fqdn_task = None
+        return self.async_show_progress_done(next_step_id="choose_entity_naming_initial")
+
+    async def _async_register_fqdn_and_wait(self) -> None:
+        """Register the FQDN and poll until the TLS cert includes it."""
+        if not self.host or not self.access_token:
+            raise ConfigFlowError("Host and access token required for FQDN registration")
+
+        await register_fqdn(self.host, self.access_token, self.host, port=self._http_port)
+
+        mqtts_port = self._v2_broker_port or 8883
+        max_attempts = 30
+        for attempt in range(max_attempts):
+            await asyncio.sleep(2)
+            if await check_fqdn_tls_ready(self.host, mqtts_port, http_port=self._http_port):
+                _LOGGER.debug(
+                    "FQDN %s found in TLS cert SAN after %d attempts",
+                    self.host,
+                    attempt + 1,
+                )
+                return
+
+        raise ConfigFlowError(f"Timed out waiting for TLS certificate to include FQDN {self.host}")
+
+    async def async_step_fqdn_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle FQDN registration failure — user may continue without it."""
+        if user_input is not None:
+            return await self.async_step_choose_entity_naming_initial()
+        return self.async_show_form(
+            step_id="fqdn_failed",
+            data_schema=vol.Schema({}),
+            errors={"base": "fqdn_registration_failed"},
+        )
 
     async def async_step_resolve_entity(
         self,
@@ -720,6 +642,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             entry_data[CONF_EBUS_BROKER_PASSWORD] = self._v2_broker_password
             entry_data[CONF_HOP_PASSPHRASE] = self._v2_passphrase
             entry_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
+            if self._http_port != 80:
+                entry_data[CONF_HTTP_PORT] = self._http_port
+            if is_fqdn(host):
+                entry_data[CONF_REGISTERED_FQDN] = host
 
         return self.async_create_entry(
             title=device_name,
@@ -749,6 +675,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         updated_data[CONF_EBUS_BROKER_PASSWORD] = self._v2_broker_password
         updated_data[CONF_HOP_PASSPHRASE] = self._v2_passphrase
         updated_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
+        if self._http_port != 80:
+            updated_data[CONF_HTTP_PORT] = self._http_port
 
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
@@ -847,8 +775,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Validate the host is reachable and is a v2 panel
+        http_port = int(reconfigure_entry.data.get(CONF_HTTP_PORT, 80))
         try:
-            detection = await detect_api_version(host)
+            detection = await detect_api_version(host, port=http_port)
         except (SpanPanelConnectionError, Exception):
             return self.async_show_form(
                 step_id="reconfigure",
@@ -867,9 +796,83 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         await self.async_set_unique_id(detection.status_info.serial_number)
         self._abort_if_unique_id_mismatch(reason="unique_id_mismatch")
 
+        if is_fqdn(host):
+            # New host is FQDN — register it (replaces any existing FQDN on the panel)
+            self.host = host
+            self.access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
+            self._http_port = http_port
+            self._v2_broker_port = int(reconfigure_entry.data.get(CONF_EBUS_BROKER_PORT, 8883))
+            return await self.async_step_reconfigure_register_fqdn()
+
+        # New host is not an FQDN — simple update
+        data_updates: dict[str, Any] = {CONF_HOST: host}
+        old_fqdn = str(reconfigure_entry.data.get(CONF_REGISTERED_FQDN, ""))
+        if old_fqdn:
+            # Switching from FQDN to IP — clean up old registration
+            access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
+            try:
+                await delete_fqdn(host, access_token, port=http_port)
+            except Exception:
+                _LOGGER.warning("Failed to delete old FQDN registration: %s", old_fqdn)
+            data_updates[CONF_REGISTERED_FQDN] = ""
+
         return self.async_update_reload_and_abort(
             reconfigure_entry,
-            data_updates={CONF_HOST: host},
+            data_updates=data_updates,
+        )
+
+    async def async_step_reconfigure_register_fqdn(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Register FQDN during reconfiguration and wait for TLS cert update."""
+        if not self._reconfigure_fqdn_task:
+            self._reconfigure_fqdn_task = self.hass.async_create_task(
+                self._async_register_fqdn_and_wait(),
+                "span_panel_reconfigure_fqdn",
+            )
+
+        if not self._reconfigure_fqdn_task.done():
+            return self.async_show_progress(
+                step_id="reconfigure_register_fqdn",
+                progress_action="registering_fqdn",
+                progress_task=self._reconfigure_fqdn_task,
+            )
+
+        try:
+            self._reconfigure_fqdn_task.result()
+        except Exception:
+            _LOGGER.exception("FQDN registration failed during reconfigure for %s", self.host)
+            self._reconfigure_fqdn_task = None
+            return self.async_show_progress_done(next_step_id="reconfigure_fqdn_failed")
+
+        self._reconfigure_fqdn_task = None
+        return self.async_show_progress_done(next_step_id="reconfigure_fqdn_done")
+
+    async def async_step_reconfigure_fqdn_done(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Complete reconfiguration after successful FQDN registration."""
+        reconfigure_entry = self._get_reconfigure_entry()
+        return self.async_update_reload_and_abort(
+            reconfigure_entry,
+            data_updates={CONF_HOST: self.host or "", CONF_REGISTERED_FQDN: self.host or ""},
+        )
+
+    async def async_step_reconfigure_fqdn_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle FQDN registration failure during reconfigure."""
+        if user_input is not None:
+            # User chose to continue anyway — update host without FQDN registration
+            reconfigure_entry = self._get_reconfigure_entry()
+            return self.async_update_reload_and_abort(
+                reconfigure_entry,
+                data_updates={CONF_HOST: self.host or ""},
+            )
+        return self.async_show_form(
+            step_id="reconfigure_fqdn_failed",
+            data_schema=vol.Schema({}),
+            errors={"base": "fqdn_registration_failed"},
         )
 
     @staticmethod
@@ -896,27 +899,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the main options menu."""
-        if user_input is None:
-            menu_options = {
-                "general_options": "General Options",
-            }
-
-            # Add simulation options if this is a simulation mode integration
-            if self.config_entry.data.get("simulation_mode", False):
-                menu_options["simulation_start_time"] = "Simulation Start Time"
-                menu_options["simulation_offline_minutes"] = "Simulation Offline Minutes"
-            else:
-                # Live panel: offer cloning into a simulation config
-                menu_options["clone_panel_to_simulation"] = "Clone Panel To Simulation"
-
-            return self.async_show_menu(
-                step_id="init",
-                menu_options=menu_options,
-            )
-
-            # This shouldn't be reached since we're showing a menu
-        return self.async_abort(reason="unknown")
+        """Start the options flow with general options directly."""
+        return await self.async_step_general_options(user_input)
 
     async def async_step_general_options(
         self, user_input: dict[str, Any] | None = None
@@ -941,328 +925,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
         )
-
-    async def async_step_simulation_start_time(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit simulation start time settings."""
-        if user_input is not None:
-            simulation_start_time = user_input.get(CONF_SIMULATION_START_TIME, "").strip()
-
-            _LOGGER.info("Edit simulation start time - start_time: %s", simulation_start_time)
-
-            if simulation_start_time:
-                try:
-                    simulation_start_time = validate_simulation_time(simulation_start_time)
-                    user_input[CONF_SIMULATION_START_TIME] = simulation_start_time
-                except ValueError as e:
-                    return self.async_show_form(
-                        step_id="simulation_start_time",
-                        data_schema=self.add_suggested_values_to_schema(
-                            self._get_simulation_start_time_schema(),
-                            self._get_simulation_start_time_defaults(),
-                        ),
-                        errors={"base": str(e)},
-                    )
-
-            # Merge with existing options to preserve other settings
-            merged_options = dict(self.config_entry.options)
-            merged_options.update(user_input)
-
-            # Clean up any simulation-only change flag since this will trigger a reload
-            merged_options.pop("_simulation_only_change", None)
-
-            _LOGGER.info("Saving simulation start time: %s", user_input)
-            _LOGGER.info("Merged options: %s", merged_options)
-
-            return self.async_create_entry(title="", data=merged_options)
-
-        return self.async_show_form(
-            step_id="simulation_start_time",
-            data_schema=self.add_suggested_values_to_schema(
-                self._get_simulation_start_time_schema(),
-                self._get_simulation_start_time_defaults(),
-            ),
-        )
-
-    async def async_step_simulation_offline_minutes(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Edit simulation offline minutes settings."""
-        if user_input is not None:
-            offline_minutes = user_input.get(CONF_SIMULATION_OFFLINE_MINUTES, 0)
-
-            _LOGGER.info("Edit simulation offline minutes - offline_minutes: %s", offline_minutes)
-
-            # Merge with existing options to preserve other settings
-            merged_options = dict(self.config_entry.options)
-            merged_options.update(user_input)
-
-            # Add a flag to indicate this is a simulation-only change
-            merged_options["_simulation_only_change"] = True
-
-            # Add a timestamp to force change detection even when offline_minutes value is the same
-            # This ensures the update listener is called to restart the offline timer
-            merged_options["_simulation_timestamp"] = int(time())
-
-            return self.async_create_entry(title="", data=merged_options)
-
-        return self.async_show_form(
-            step_id="simulation_offline_minutes",
-            data_schema=self.add_suggested_values_to_schema(
-                self._get_simulation_offline_minutes_schema(),
-                self._get_simulation_offline_minutes_defaults(),
-            ),
-        )
-
-    async def async_step_simulation_export(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle simulation config export."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            config_key = user_input.get(SIM_FILE_KEY, "")
-            export_path_raw = str(user_input.get(SIM_EXPORT_PATH, "")).strip()
-
-            if not config_key:
-                errors[SIM_FILE_KEY] = "Please select a simulation config to export"
-            elif not export_path_raw:
-                errors[SIM_EXPORT_PATH] = "Export path is required"
-            else:
-                try:
-                    current_file = Path(__file__)
-                    config_dir = current_file.parent / "simulation_configs"
-                    src_yaml = config_dir / f"{config_key}.yaml"
-
-                    export_path = Path(export_path_raw)
-                    await self.hass.async_add_executor_job(
-                        lambda: export_path.parent.mkdir(parents=True, exist_ok=True)
-                    )
-                    if not await self.hass.async_add_executor_job(src_yaml.exists):
-                        raise FileNotFoundError(f"Source simulation file not found: {src_yaml}")
-                    await self.hass.async_add_executor_job(shutil.copyfile, src_yaml, export_path)
-                    _LOGGER.info("Exported simulation config '%s' to %s", config_key, export_path)
-
-                    # Build friendly name for confirmation
-                    friendly = get_available_simulation_configs().get(config_key, config_key)
-                    return self.async_create_entry(
-                        title="",
-                        data={},
-                        description=f"Exported '{friendly}' to {export_path}",
-                    )
-
-                except Exception as e:
-                    _LOGGER.error("Simulation config export error: %s", e)
-                    errors["base"] = f"Export failed: {e}"
-
-        # Show export form
-        available_configs = get_available_simulation_configs()
-        options_list = [{"value": k, "label": v} for k, v in available_configs.items()]
-        current_config_key = self.config_entry.data.get(
-            CONF_SIMULATION_CONFIG, "simulation_config_32_circuit"
-        )
-        default_export = f"/tmp/{current_config_key}.yaml"  # nosec
-
-        export_schema = vol.Schema(
-            {
-                vol.Required(SIM_FILE_KEY, default=current_config_key): selector(
-                    {
-                        "select": {
-                            "options": options_list,
-                            "mode": "dropdown",
-                        }
-                    }
-                ),
-                vol.Required(SIM_EXPORT_PATH, default=default_export): str,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="simulation_export",
-            data_schema=export_schema,
-            errors=errors,
-        )
-
-    async def async_step_simulation_import(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Handle simulation config import."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            import_path_raw = str(user_input.get(SIM_IMPORT_PATH, "")).strip()
-
-            if not import_path_raw:
-                errors[SIM_IMPORT_PATH] = "Import path is required"
-            else:
-                try:
-                    import_path = Path(import_path_raw)
-                    if not await self.hass.async_add_executor_job(import_path.exists):
-                        raise FileNotFoundError(f"Import file not found: {import_path}")
-
-                    # Load and validate YAML using span-panel-api's validator
-                    def load_yaml_file() -> dict[str, Any]:
-                        with import_path.open("r", encoding="utf-8") as f:
-                            result = yaml.safe_load(f)
-                            if result is None:
-                                return {}
-                            if isinstance(result, dict):
-                                return result
-                            return {}
-
-                    loaded_yaml = await self.hass.async_add_executor_job(load_yaml_file)
-                    # Use DynamicSimulationEngine internal validation
-                    config: SimulationConfig = cast(SimulationConfig, loaded_yaml)
-                    engine = DynamicSimulationEngine(config_data=config)
-                    await engine.initialize_async()
-
-                    # Copy to simulation_configs directory
-                    current_file = Path(__file__)
-                    config_dir = current_file.parent / "simulation_configs"
-                    dest_name = (
-                        import_path.name if import_path.suffix else f"{import_path.name}.yaml"
-                    )
-                    dest_yaml = config_dir / dest_name
-                    await self.hass.async_add_executor_job(
-                        lambda: dest_yaml.parent.mkdir(parents=True, exist_ok=True)
-                    )
-                    await self.hass.async_add_executor_job(shutil.copyfile, import_path, dest_yaml)
-                    _LOGGER.info("Imported and validated simulation config to %s", dest_yaml)
-
-                    # Update config entry to point to the imported simulation config
-                    try:
-                        new_data = dict(self.config_entry.data)
-                        new_data[CONF_SIMULATION_CONFIG] = dest_yaml.stem
-                        self.hass.config_entries.async_update_entry(
-                            self.config_entry, data=new_data
-                        )
-                        _LOGGER.debug("Set CONF_SIMULATION_CONFIG to %s", dest_yaml.stem)
-                    except Exception as update_err:
-                        _LOGGER.warning(
-                            "Failed to set CONF_SIMULATION_CONFIG to %s: %s",
-                            dest_yaml.stem,
-                            update_err,
-                        )
-
-                    return self.async_create_entry(
-                        title="",
-                        data={},
-                        description=f"Imported '{dest_yaml.stem}' into simulation configurations",
-                    )
-
-                except Exception as e:
-                    _LOGGER.error("Simulation config import error: %s", e)
-                    errors["base"] = f"Import failed: {e}"
-
-        # Show import form
-        import_schema = vol.Schema(
-            {
-                vol.Required(SIM_IMPORT_PATH, default=""): str,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="simulation_import",
-            data_schema=import_schema,
-            errors=errors,
-        )
-
-    async def async_step_clone_panel_to_simulation(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Clone the live panel into a simulation YAML stored in simulation_configs."""
-        result = await clone_panel_to_simulation(self.hass, self.config_entry, user_input)
-
-        # If result is a ConfigFlowResult, return it directly
-        if hasattr(result, "type"):
-            return result  # type: ignore[return-value]
-
-        # Otherwise, result is (dest_path, errors) for the form
-        if isinstance(result, tuple) and len(result) == 2:
-            dest_path, errors = result
-            if not isinstance(errors, dict):
-                errors = {}
-        else:
-            # Fallback if result format is unexpected
-            _LOGGER.error(
-                "Unexpected result format from clone_panel_to_simulation: %s", type(result)
-            )
-            return self.async_abort(reason="unknown")
-
-        # If user_input was provided and there are no errors, the operation succeeded
-        if user_input is not None and not errors:
-            return self.async_create_entry(
-                title="Simulation Created",
-                data={},
-                description=f"Cloned panel to {dest_path.name} in simulation_configs",
-            )
-
-        # Compute device name for form display
-        device_name = self.config_entry.data.get("device_name", self.config_entry.title)
-
-        # Confirm form with destination field
-        schema = vol.Schema(
-            {
-                vol.Required("destination", default=str(dest_path)): selector(
-                    {"text": {"multiline": False}}
-                )
-            }
-        )
-        return self.async_show_form(
-            step_id="clone_panel_to_simulation",
-            data_schema=schema,
-            description_placeholders={
-                "panel": device_name or "Span Panel",
-            },
-            errors=errors,
-        )
-
-    async def async_step_manage_simulation_configs(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Menu to import or export simulation configs."""
-        if user_input is None:
-            return self.async_show_menu(
-                step_id="manage_simulation_configs",
-                menu_options={
-                    "simulation_import": "Import Simulation Config",
-                    "simulation_export": "Export Simulation Config",
-                },
-            )
-        return self.async_abort(reason="unknown")
-
-    def _get_simulation_start_time_schema(self) -> vol.Schema:
-        """Get the simulation start time schema."""
-        return vol.Schema(
-            {
-                vol.Optional(CONF_SIMULATION_START_TIME): str,
-            }
-        )
-
-    def _get_simulation_start_time_defaults(self) -> dict[str, Any]:
-        """Get the simulation start time defaults."""
-        return {
-            CONF_SIMULATION_START_TIME: self.config_entry.options.get(
-                CONF_SIMULATION_START_TIME, ""
-            ),
-        }
-
-    def _get_simulation_offline_minutes_schema(self) -> vol.Schema:
-        """Get the simulation offline minutes schema."""
-        return vol.Schema(
-            {
-                vol.Optional(CONF_SIMULATION_OFFLINE_MINUTES): int,
-            }
-        )
-
-    def _get_simulation_offline_minutes_defaults(self) -> dict[str, Any]:
-        """Get the simulation offline minutes defaults."""
-        return {
-            CONF_SIMULATION_OFFLINE_MINUTES: self.config_entry.options.get(
-                CONF_SIMULATION_OFFLINE_MINUTES, 0
-            ),
-        }
 
 
 # Register the config flow handler

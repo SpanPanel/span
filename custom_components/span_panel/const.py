@@ -4,7 +4,6 @@ import enum
 from typing import Final
 
 DOMAIN: Final = "span_panel"
-COORDINATOR = "coordinator"
 
 CONF_SERIAL_NUMBER = "serial_number"
 CONF_USE_SSL = "use_ssl"
@@ -17,16 +16,9 @@ CONF_EBUS_BROKER_USERNAME = "ebus_broker_username"
 CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"
 CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
 CONF_HOP_PASSPHRASE = "hop_passphrase"
+CONF_HTTP_PORT = "http_port"
 CONF_PANEL_SERIAL = "panel_serial"
-
-# Simulation configuration
-CONF_SIMULATION_CONFIG = "simulation_config"
-CONF_SIMULATION_START_TIME = "simulation_start_time"
-CONF_SIMULATION_OFFLINE_MINUTES = "simulation_offline_minutes"
-
-# Time format constants for simulation
-TIME_ONLY_FORMATS = ["HH:MM", "H:MM"]  # 24-hour and 12-hour formats
-ISO_DATETIME_FORMAT = "YYYY-MM-DDTHH:MM:SS"  # Full ISO datetime format
+CONF_REGISTERED_FQDN = "registered_fqdn"
 
 # Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.util import slugify
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from .const import (
-    CONF_API_VERSION,
     CONF_DEVICE_NAME,
     USE_CIRCUIT_NUMBERS,
 )
@@ -42,17 +40,13 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
         super().__init__(data_coordinator, description, snapshot)
 
         # Override device_info to point to EVSE sub-device instead of panel
-        is_simulator = data_coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
         panel_name = (
             data_coordinator.config_entry.data.get(
                 CONF_DEVICE_NAME, data_coordinator.config_entry.title
             )
             or "Span Panel"
         )
-        if is_simulator:
-            panel_identifier = slugify(panel_name)
-        else:
-            panel_identifier = snapshot.serial_number
+        panel_identifier = snapshot.serial_number
 
         evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)

@@ -7,7 +7,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import SpanPanelSnapshot
 
-from .const import CONF_API_VERSION, CONF_DEVICE_NAME
+from .const import CONF_DEVICE_NAME
 from .coordinator import SpanPanelCoordinator
 from .util import snapshot_to_device_info
 
@@ -26,6 +26,5 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         device_name = coordinator.config_entry.data.get(
             CONF_DEVICE_NAME, coordinator.config_entry.title
         )
-        is_simulator = coordinator.config_entry.data.get(CONF_API_VERSION) == "simulation"
         host = coordinator.config_entry.data.get(CONF_HOST)
-        return snapshot_to_device_info(snapshot, device_name, is_simulator, host)
+        return snapshot_to_device_info(snapshot, device_name, host=host)

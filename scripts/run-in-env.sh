@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ensures the script runs in the correct Python environment
-# Handles pyenv/virtualenv/poetry activation if needed
+# Handles pyenv/virtualenv/uv activation if needed
 
 # Find the project root directory (where .git is)
 PROJECT_ROOT=$(git rev-parse --show-toplevel)
@@ -19,7 +19,6 @@ VENV_PATHS=(
   "venv"
   ".env"
   "env"
-  "$(poetry env info --path 2>/dev/null)" # Try to get Poetry's venv path
 )
 
 for venv_path in "${VENV_PATHS[@]}"; do
@@ -31,12 +30,11 @@ for venv_path in "${VENV_PATHS[@]}"; do
   fi
 done
 
-# If poetry is available, ensure dependencies
-if command -v poetry &> /dev/null && [ -f "pyproject.toml" ]; then
-  # Check if pylint is missing
+# If uv is available, ensure dependencies
+if command -v uv &> /dev/null && [ -f "pyproject.toml" ]; then
   if ! command -v pylint &> /dev/null; then
-    echo "pylint not found, installing dependencies with poetry..."
-    poetry install --only dev
+    echo "pylint not found, installing dependencies with uv..."
+    uv sync
   fi
 fi
 

@@ -7,7 +7,6 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
@@ -46,6 +45,7 @@ PANEL_SUFFIX_MAPPING = {
     "feedthroughPowerW": "feed_through_power",
     "batteryPowerW": "battery_power",
     "pvPowerW": "pv_power",
+    "gridPowerFlowW": "grid_power_flow",
     "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_energy_produced",  # Consistent naming
     "mainMeterEnergyConsumedWh": "main_meter_energy_consumed",  # Consistent naming
@@ -64,6 +64,7 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
     "feedthroughPowerW": "feed_through_power",
     "batteryPowerW": "battery_power",
     "pvPowerW": "pv_power",
+    "gridPowerFlowW": "grid_power_flow",
     "sitePowerW": "site_power",
     "mainMeterEnergyProducedWh": "main_meter_produced_energy",
     "mainMeterEnergyConsumedWh": "main_meter_consumed_energy",
@@ -635,43 +636,6 @@ def construct_sensor_set_id(device_identifier: str) -> str:
 
     """
     return f"{device_identifier}_sensors"
-
-
-def generate_unique_simulator_serial_number(hass: HomeAssistant) -> str:
-    """Generate a unique simulator serial number in the format sim-nnn.
-
-    Args:
-        hass: Home Assistant instance
-
-    Returns:
-        Unique serial number in format sim-nnn (e.g., sim-001, sim-002, etc.)
-
-    """
-
-    # Get all existing span panel config entries
-    existing_entries = hass.config_entries.async_entries(DOMAIN)
-
-    # Find existing simulator serial numbers
-    existing_serials = set()
-    for entry in existing_entries:
-        if entry.data.get("simulation_mode", False):
-            # Check both simulator_serial_number and CONF_HOST fields
-            # simulator_serial_number is the newer field
-            serial = entry.data.get("simulator_serial_number")
-            if serial and serial.startswith("sim-"):
-                existing_serials.add(serial)
-
-            # CONF_HOST may contain the serial for existing simulator configurations
-            host_serial = entry.data.get(CONF_HOST)
-            if host_serial and host_serial.startswith("sim-"):
-                existing_serials.add(host_serial)
-
-    # Find the next available number
-    counter = 1
-    while f"sim-{counter:03d}" in existing_serials:
-        counter += 1
-
-    return f"sim-{counter:03d}"
 
 
 def _get_device_identifier_for_unique_ids(

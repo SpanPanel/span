@@ -1,41 +1,41 @@
-[tool.poetry]
+[project]
 name = "span"
-# integration version is managed in the manifest.json for HA
-# version = "0.0.0"
+version = "0.0.0"
 description = "Span Panel Custom Integration for Home Assistant"
-authors = ["SpanPanel"]
-license = "MIT"
+authors = [{name = "SpanPanel"}]
+license = {text = "MIT"}
 readme = "README.md"
-package-mode = false
+requires-python = ">=3.14.2,<3.15"
+dependencies = [
+    "homeassistant==2026.2.2",
+    "span-panel-api==2.3.2",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.14.2,<3.15"
-homeassistant = "2026.2.2"  # Pin to exact version for custom component compatibility
-span-panel-api = {path = "../span-panel-api", develop = true}
+[dependency-groups]
+dev = [
+    "homeassistant-stubs==2026.2.2",
+    "types-requests",
+    "types-PyYAML",
+    "mypy==1.19.1",
+    "pyright==1.1.405",
+    "ruff==0.15.1",
+    "bandit[toml]==1.8.6",
+    "prek>=0.3.6",
+    "voluptuous-stubs",
+    "python-direnv",
+    "prettier",
+    "radon==6.0.1",
+    "pylint==4.0.5",
+    "pytest>=9.0.0",
+    "pytest-homeassistant-custom-component>=0.13.315",
+    "isort",
+]
 
-[tool.poetry.group.dev.dependencies]
-# Type stubs and dev-only tools that don't conflict with HA runtime
-homeassistant-stubs = "2026.2.2"
-types-requests = "*"
-types-PyYAML = "*"
-mypy = "==1.19.1"
-pyright = "==1.1.405"
-ruff = "==0.15.1"
-bandit = "==1.8.6"
-pre-commit = "==4.3.0"
-voluptuous-stubs = "*"
-python-direnv = "*"
-prettier = "*"
-radon = "==6.0.1"
-pylint = "==4.0.5"  # For import-outside-toplevel checks
-# Testing dependencies
-pytest = "^9.0.0"  # Compatible with Python 3.14
-pytest-homeassistant-custom-component = "^0.13.315"  # Latest version compatible with HA 2026.2.x
-isort = "*"
+[tool.uv]
+package = false
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.uv.sources]
+span-panel-api = { path = "../span-panel-api", editable = true }
 
 [tool.jscpd]
 path = ["custom_components/span_panel", "./*.{html,md}"]

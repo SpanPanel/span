@@ -443,9 +443,9 @@ PV_METADATA_SENSORS: tuple[
         key="pv_nameplate_capacity",
         translation_key="pv_nameplate_capacity",
         device_class=SensorDeviceClass.POWER,
-        native_unit_of_measurement=UnitOfPower.KILO_WATT,
+        native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda s: s.pv.nameplate_capacity_kw,
+        value_fn=lambda s: s.pv.nameplate_capacity_w,
     ),
 )
 
@@ -495,6 +495,17 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
     suggested_display_precision=0,
     device_class=SensorDeviceClass.POWER,
     value_fn=lambda s: (-s.power_flow_pv or 0.0) if s.power_flow_pv is not None else 0.0,
+)
+
+# Grid power flow sensor (conditionally created when power-flows data is available)
+GRID_POWER_FLOW_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="gridPowerFlowW",
+    translation_key="grid_power_flow",
+    native_unit_of_measurement=UnitOfPower.WATT,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=0,
+    device_class=SensorDeviceClass.POWER,
+    value_fn=lambda s: (-s.power_flow_grid or 0.0) if s.power_flow_grid is not None else 0.0,
 )
 
 # Site power sensor (conditionally created when power-flows data is available)

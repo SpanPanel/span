@@ -242,7 +242,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         """Turn the switch on."""
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_relay"):
-            _LOGGER.warning("Circuit relay control not available in simulation mode")
+            _LOGGER.warning("Client does not support relay control")
             return
 
         await client.set_circuit_relay(self._circuit_id, "CLOSED")
@@ -253,7 +253,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         """Turn the switch off."""
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_relay"):
-            _LOGGER.warning("Circuit relay control not available in simulation mode")
+            _LOGGER.warning("Client does not support relay control")
             return
 
         await client.set_circuit_relay(self._circuit_id, "OPEN")

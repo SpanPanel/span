@@ -1,0 +1,92 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.6.1 Chrome/142.0.7444.265 Electron/39.8.0 Safari/537.36" version="29.6.1">
+  <diagram id="bess-non-integrated" name="Non-Integrated BESS Topology">
+    <mxGraphModel dx="2007" dy="1160" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="home-zone" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#4CAF50;strokeWidth=3;dashed=1;dashPattern=12 8;" value="" vertex="1">
+          <mxGeometry height="640" width="900" x="120" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="home-zone-label" parent="1" style="text;html=1;align=center;verticalAlign=top;fontSize=22;fontColor=#1B5E20;fontStyle=1;" value="HOME SIDE" vertex="1">
+          <mxGeometry height="30" width="400" x="120" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="home-zone-sublabel" parent="1" style="text;html=1;align=center;verticalAlign=top;fontSize=14;fontColor=#2E7D32;fontStyle=2;" value="All panel sensors measure here" vertex="1">
+          <mxGeometry height="24" width="400" x="125" y="348" as="geometry" />
+        </mxCell>
+        <mxCell id="grid" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#1976D2;strokeWidth=2;fontSize=16;fontStyle=1;fontColor=#0D47A1;" value="UTILITY GRID" vertex="1">
+          <mxGeometry height="30" width="400" x="330" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="meter" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#9E9E9E;strokeWidth=2;fontColor=#212121;fontSize=13;" value="Utility Meter /&lt;br&gt;Service Entrance" vertex="1">
+          <mxGeometry height="60" width="200" x="430" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="grid-to-meter" edge="1" parent="1" source="grid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=3;strokeColor=#1976D2;" target="meter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="mid" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#F9A825;strokeWidth=2;fontSize=12;fontColor=#E65100;" value="&lt;b style=&quot;font-size:14px&quot;&gt;MID&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:11px&quot;&gt;Microgrid Interconnect Device&lt;/span&gt;" vertex="1">
+          <mxGeometry height="55" width="200" x="470" y="425" as="geometry" />
+        </mxCell>
+        <mxCell id="mid-label" parent="1" style="text;html=1;align=left;fontSize=11;fontColor=#C62828;fontStyle=3;" value="BESS controls MID but does&lt;br&gt;NOT report state to panel" vertex="1">
+          <mxGeometry height="40" width="240" x="690" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="meter-to-mid" edge="1" parent="1" source="meter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=3;strokeColor=#757575;" target="mid">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bess-group" connectable="0" parent="1" style="group;rotation=180;" value="" vertex="1">
+          <mxGeometry height="130" width="220" x="280" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="bess" parent="bess-group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFCDD2;strokeColor=#E53935;strokeWidth=2;fontSize=13;fontColor=#B71C1C;verticalAlign=top;arcSize=0;" value="&lt;b style=&quot;font-size:14px&quot;&gt;Non-Integrated&lt;br&gt;BESS / Inverter&lt;/b&gt;" vertex="1">
+          <mxGeometry height="130" width="220" as="geometry" />
+        </mxCell>
+        <mxCell id="battery" parent="bess-group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#E53935;strokeWidth=1;fontSize=12;fontColor=#B71C1C;" value="Battery Pack(s)" vertex="1">
+          <mxGeometry height="50" width="160" x="30" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="no-comms" parent="1" style="text;html=1;align=center;fontColor=#C62828;" value="&lt;b style=&quot;font-size:16px&quot;&gt;✖ NO COMMS&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;&lt;i&gt;Panel has no awareness of BESS&lt;/i&gt;&lt;/span&gt;" vertex="1">
+          <mxGeometry height="50" width="240" x="140" y="670" as="geometry" />
+        </mxCell>
+        <mxCell id="mid-to-bess" edge="1" parent="1" source="mid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=3;strokeColor=#E53935;exitX=0.29;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitPerimeter=0;" target="bess">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="upstream-lugs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#43A047;strokeWidth=2;fontSize=12;fontColor=#1B5E20;" value="&lt;b style=&quot;font-size:13px&quot;&gt;Upstream Lugs&lt;/b&gt;&lt;br&gt;&lt;i style=&quot;font-size:11px&quot;&gt;sees battery power as &quot;grid&quot;&lt;/i&gt;" vertex="1">
+          <mxGeometry height="50" width="180" x="540" y="740" as="geometry" />
+        </mxCell>
+        <mxCell id="mid-to-lugs" edge="1" parent="1" source="mid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=3;strokeColor=#424242;" target="upstream-lugs">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="bess-to-lugs" edge="1" parent="1" source="bess" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=3;strokeColor=#E53935;" target="upstream-lugs">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="670" y="685" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="pv" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#43A047;strokeWidth=2;fontSize=12;fontColor=#1B5E20;" value="PV Inverter&lt;br&gt;(Solar)" vertex="1">
+          <mxGeometry height="55" width="150" x="720" y="800" as="geometry" />
+        </mxCell>
+        <mxCell id="panel-to-pv-electrical" edge="1" parent="1" source="pv" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=3;strokeColor=#43A047;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="panel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="panel-to-pv-comms" edge="1" parent="1" source="panel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#F9A825;strokeWidth=2;dashed=1;dashPattern=8 4;fontSize=12;fontColor=#E65100;fontStyle=1;exitX=1;exitY=0.35;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;" target="pv" value="comms">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="downstream-lugs" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#43A047;strokeWidth=2;fontSize=13;fontColor=#1B5E20;" value="&lt;b&gt;Downstream&lt;br&gt;Lugs&lt;/b&gt;" vertex="1">
+          <mxGeometry height="55" width="170" x="540" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="panel-group" connectable="0" parent="1" style="group" value="" vertex="1">
+          <mxGeometry height="140" width="200" x="360" y="770" as="geometry" />
+        </mxCell>
+        <mxCell id="panel" parent="panel-group" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#1976D2;strokeWidth=2;fontSize=13;fontColor=#0D47A1;verticalAlign=top;" value="&lt;b style=&quot;font-size:14px&quot;&gt;SPAN Panel&lt;/b&gt;" vertex="1">
+          <mxGeometry height="140" width="200" as="geometry" />
+        </mxCell>
+        <mxCell id="circuits" parent="panel-group" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#90CAF9;fontColor=#1565C0;fontSize=11;" value="Circuit&lt;br&gt;Circuit&lt;br&gt;Circuit&lt;br&gt;..." vertex="1">
+          <mxGeometry height="70" width="120" x="40" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="subpanel" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#9E9E9E;strokeWidth=2;fontColor=#212121;fontSize=12;" value="Sub-Panel or&lt;br&gt;Second Panel" vertex="1">
+          <mxGeometry height="55" width="150" x="790" y="880" as="geometry" />
+        </mxCell>
+        <mxCell id="downstream-to-subpanel" edge="1" parent="1" source="downstream-lugs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeWidth=2;strokeColor=#757575;" target="subpanel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

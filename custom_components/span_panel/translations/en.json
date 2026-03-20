@@ -10,10 +10,14 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
-      "host_required": "Host is required for non-simulator mode",
+      "host_required": "Host is required",
       "invalid_auth": "Invalid authentication",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
-      "unknown": "Unexpected error"
+      "unknown": "Unexpected error",
+      "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time."
+    },
+    "progress": {
+      "registering_fqdn": "Registering domain name with the panel and waiting for TLS certificate update. This may take up to 60 seconds..."
     },
     "flow_title": "Span Panel ({host})",
     "step": {
@@ -24,19 +28,19 @@
       "user": {
         "data": {
           "host": "Host",
-          "simulator_mode": "Simulator Mode",
+          "http_port": "HTTP Port",
           "power_display_precision": "Power Display Precision",
           "energy_display_precision": "Energy Display Precision",
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips"
         },
         "data_description": {
-          "host": "IP address or hostname of SPAN Panel (required for real hardware, optional for simulation mode)",
-          "simulator_mode": "Enable simulator mode for testing (no hardware required). Host field becomes optional when simulation mode is enabled.",
+          "host": "IP address or hostname of SPAN Panel",
+          "http_port": "HTTP port for the panel API (default: 80)",
           "power_display_precision": "Number of decimal places for power values (0-3)",
           "energy_display_precision": "Number of decimal places for energy values (0-3)",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings, preventing spikes in the energy dashboard."
         },
-        "description": "Enter the connection details for your SPAN Panel. For simulation mode, check the simulator checkbox and the host field becomes optional.",
+        "description": "Enter the connection details for your SPAN Panel.",
         "title": "Connect to the Span Panel"
       },
       "choose_auth_type": {
@@ -84,40 +88,27 @@
           "host": "IP address or hostname of the SPAN Panel"
         }
       },
-      "simulator_config": {
-        "title": "Simulator Configuration",
-        "description": "Select a simulation configuration and optionally set a custom start time. {config_count} configurations available.",
-        "data": {
-          "simulation_config": "Simulation Configuration",
-          "host": "Host (Serial Number)",
-          "simulation_start_time": "Simulation Start Time (Optional)",
-          "entity_naming_pattern": "Entity Naming Pattern"
-        },
-        "data_description": {
-          "simulation_config": "Choose a simulation configuration that defines circuit templates and energy profiles",
-          "host": "Custom serial number for the simulated panel (optional, will use config default if empty)",
-          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time.",
-          "entity_naming_pattern": "Choose how circuit entities are named in the simulation"
-        }
+      "register_fqdn": {
+        "title": "Registering Domain Name"
+      },
+      "fqdn_failed": {
+        "title": "Domain Registration",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
+      },
+      "reconfigure_register_fqdn": {
+        "title": "Registering Domain Name"
+      },
+      "reconfigure_fqdn_failed": {
+        "title": "Domain Registration",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
+      },
+      "reconfigure_fqdn_done": {
+        "title": "Reconfiguration Complete"
       }
     }
   },
   "options": {
-    "error": {
-      "Invalid date/time format. Use ISO format (YYYY-MM-DDTHH:MM:SS)": "Invalid time format. Use HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS)",
-      "directory": "Directory path is required",
-      "base": "Export failed: {error}"
-    },
     "step": {
-      "init": {
-        "title": "Options Menu",
-        "menu_options": {
-          "general_options": "General Options",
-          "export_config": "Export Synthetic Sensor Config",
-          "simulation_start_time": "Simulation Start Time",
-          "simulation_offline_minutes": "Simulation Offline Minutes"
-        }
-      },
       "general_options": {
         "title": "General Options",
         "description": "Configure SPAN Panel integration settings.",
@@ -129,41 +120,11 @@
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips"
         },
         "data_description": {
-          "snapshot_update_interval": "How often to rebuild the panel snapshot from MQTT data. Lower values give faster updates but use more CPU. Increase on low-power hardware (e.g., Raspberry Pi). Set to 0 for no debounce. Range: 0\u201315 seconds.",
+          "snapshot_update_interval": "How often to rebuild the panel snapshot from MQTT data. Lower values give faster updates but use more CPU. Increase on low-power hardware (e.g., Raspberry Pi). Set to 0 for no debounce. Range: 0–15 seconds.",
           "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
           "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
           "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
           "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets."
-        }
-      },
-      "simulation_start_time": {
-        "title": "Simulation Start Time",
-        "description": "Configure the simulation start time. Changes to simulation time will reload the integration to apply the new time.",
-        "data": {
-          "simulation_start_time": "Simulation Start Time"
-        },
-        "data_description": {
-          "simulation_start_time": "Time format: HH:MM (24h), H:MM (12h), or full ISO datetime (YYYY-MM-DDTHH:MM:SS). Leave empty to use current time. Integration will reload to apply changes."
-        }
-      },
-      "simulation_offline_minutes": {
-        "title": "Simulation Offline Minutes",
-        "description": "Configure how long the panel should appear offline during simulation.",
-        "data": {
-          "simulation_offline_minutes": "Offline Minutes"
-        },
-        "data_description": {
-          "simulation_offline_minutes": "Number of minutes the panel should appear offline during simulation. Set to 0 to disable offline simulation."
-        }
-      },
-      "export_config": {
-        "title": "Export Synthetic Sensor Config",
-        "description": "Export the current synthetic sensor configuration to a YAML file. You can specify either a directory (file will be named automatically) or a full file path. Default filename: {filename}",
-        "data": {
-          "directory": "File Path"
-        },
-        "data_description": {
-          "directory": "Either a directory path (file will be named automatically) or a full file path ending in .yaml where the configuration will be saved."
         }
       }
     }
@@ -256,6 +217,9 @@
       },
       "pv_power": {
         "name": "PV Power"
+      },
+      "grid_power_flow": {
+        "name": "Grid Power"
       },
       "site_power": {
         "name": "Site Power"
