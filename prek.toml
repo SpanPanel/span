@@ -1,0 +1,169 @@
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v5.0.0"
+hooks = [
+  { id = "check-yaml", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "check-toml", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "check-json", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "check-added-large-files" },
+  { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "trailing-whitespace", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "end-of-file-fixer", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+]
+
+# Pylint check for import-outside-toplevel (run before ruff)
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "pylint-import-check",
+    name = "pylint import-outside-toplevel check",
+    entry = "poetry run pylint",
+    language = "system",
+    args = ["--disable=all", "--enable=import-outside-toplevel", "--score=no", "custom_components/span_panel/"],
+    pass_filenames = false,
+    files = '\.py$',
+    exclude = '^tests/.*|^scripts/.*',
+  },
+]
+
+# Ruff for linting, import sorting, and primary formatting
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.15.1"
+hooks = [
+  { id = "ruff-format", exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "ruff-check", args = ["--fix"], exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
+]
+
+# MyPy for type checking
+[[repos]]
+repo = "https://github.com/pre-commit/mirrors-mypy"
+rev = "v1.16.0"
+hooks = [
+  {
+    id = "mypy",
+    additional_dependencies = [
+      "httpx",
+      "pydantic",
+      "typing-extensions",
+      "pytest",
+      "homeassistant-stubs",
+      "types-PyYAML",
+      "types-aiofiles",
+    ],
+    args = ["--config-file=pyproject.toml"],
+    exclude = '^tests/.*|^scripts/.*|docs/.*|\.\S*_cache/.*|dist/.*|venv/.*',
+  },
+]
+
+# Markdownlint for markdown files
+[[repos]]
+repo = "https://github.com/DavidAnson/markdownlint-cli2"
+rev = "v0.18.1"
+hooks = [
+  {
+    id = "markdownlint-cli2",
+    args = ["--config", ".markdownlint-cli2.jsonc"],
+    exclude = '\.\S*_cache/.*|dist/.*|venv/.*|\.venv/.*|node_modules/.*|htmlcov/.*|tests/.*',
+  },
+]
+
+# Markdown formatting using shared script (local only)
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "markdown-format",
+    name = "Format markdown files",
+    entry = "scripts/fix-markdown.sh",
+    language = "system",
+    args = ["."],
+    types = ["markdown"],
+    pass_filenames = false,
+    always_run = true,
+    stages = ["manual"],
+  },
+]
+
+# Check for common security issues
+[[repos]]
+repo = "https://github.com/PyCQA/bandit"
+rev = "1.8.3"
+hooks = [
+  {
+    id = "bandit",
+    args = ["-c", "pyproject.toml"],
+    additional_dependencies = ["bandit[toml]"],
+    exclude = '^tests/.*|^scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*',
+  },
+]
+
+# Poetry check for pyproject.toml validation
+[[repos]]
+repo = "https://github.com/python-poetry/poetry"
+rev = "2.1.3"
+hooks = [
+  { id = "poetry-check" },
+  { id = "poetry-lock" },
+]
+
+# Radon for code metrics and maintainability (local)
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "radon-complexity",
+    name = "radon complexity check",
+    entry = "poetry run radon",
+    language = "system",
+    args = ["cc", "--min=B", "--show-complexity", "custom_components/span_panel/"],
+    pass_filenames = false,
+    files = '\.py$',
+  },
+  {
+    id = "radon-maintainability",
+    name = "radon maintainability index",
+    entry = "poetry run radon",
+    language = "system",
+    args = ["mi", "--min=B", "--show", "custom_components/span_panel/"],
+    pass_filenames = false,
+    files = '\.py$',
+  },
+]
+
+# Coverage check with pytest output and coverage report
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "pytest-cov-summary",
+    name = "coverage summary",
+    entry = "bash",
+    language = "system",
+    args = ["-c", 'echo "Running tests with coverage..."; poetry run pytest tests/ --cov=custom_components/span_panel --cov-config=pyproject.toml --cov-report=term-missing:skip-covered -v; exit_code=$?; echo; if [ $exit_code -eq 0 ]; then echo "Tests passed with coverage report above"; else echo "Tests failed"; fi; exit $exit_code'],
+    pass_filenames = false,
+    always_run = true,
+    verbose = true,
+  },
+]
+
+# Sync dependencies from manifest.json to CI workflow (run last)
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "sync-dependencies",
+    name = "sync dependency versions between manifest.json and CI workflow",
+    entry = "python scripts/sync-dependencies.py",
+    language = "system",
+    pass_filenames = false,
+    always_run = true,
+    stages = ["pre-commit"],
+    verbose = true,
+  },
+]
