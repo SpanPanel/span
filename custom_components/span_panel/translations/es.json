@@ -65,23 +65,6 @@
         "data_description": {
           "hop_passphrase": "La contraseña utilizada para autenticar con la API v2 del SPAN Panel"
         }
-      },
-      "register_fqdn": {
-        "title": "Registering Domain Name"
-      },
-      "fqdn_failed": {
-        "title": "Domain Registration",
-        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
-      },
-      "reconfigure_register_fqdn": {
-        "title": "Registering Domain Name"
-      },
-      "reconfigure_fqdn_failed": {
-        "title": "Domain Registration",
-        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name."
-      },
-      "reconfigure_fqdn_done": {
-        "title": "Reconfiguration Complete"
       }
     }
   },

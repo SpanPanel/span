@@ -262,10 +262,9 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
                 notification_id=f"span_simulation_removed_{config_entry.entry_id}",
             )
             _LOGGER.warning(
-                "Config entry %s is a simulation entry — rejecting migration",
+                "Config entry %s is a simulation entry — setup will be skipped",
                 config_entry.entry_id,
             )
-            return False
 
         hass.config_entries.async_update_entry(
             config_entry,
@@ -279,6 +278,11 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
+
+    # Simulation entries were removed in v6 — skip setup, notification was
+    # already created during migration.
+    if entry.data.get(CONF_API_VERSION) == "simulation" or entry.data.get("simulation_mode", False):
+        return False
 
     # Register WebSocket commands once per HA instance
     domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})

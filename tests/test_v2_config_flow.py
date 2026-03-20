@@ -422,7 +422,7 @@ async def test_migration_blocked_when_panel_unreachable(hass: HomeAssistant) -> 
 
 @pytest.mark.asyncio
 async def test_migration_v5_to_v6_rejects_simulation_entry(hass: HomeAssistant) -> None:
-    """Simulation entries at v5 should be rejected by v5→v6 migration."""
+    """Simulation entries at v5 should migrate to v6 but setup should be skipped."""
     entry = MockConfigEntry(
         version=5,
         minor_version=1,
@@ -440,11 +440,17 @@ async def test_migration_v5_to_v6_rejects_simulation_entry(hass: HomeAssistant) 
     )
     entry.add_to_hass(hass)
 
-    from custom_components.span_panel import async_migrate_entry
+    from custom_components.span_panel import async_migrate_entry, async_setup_entry
 
     result = await async_migrate_entry(hass, entry)
 
-    assert result is False
+    # Migration succeeds (no retry on every restart)
+    assert result is True
+    assert entry.version == 6
+
+    # Setup is skipped for simulation entries
+    setup_result = await async_setup_entry(hass, entry)
+    assert setup_result is False
 
 
 # ---------- zeroconf v2 discovery ----------
