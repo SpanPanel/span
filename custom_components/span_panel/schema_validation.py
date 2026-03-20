@@ -10,7 +10,7 @@ the library's responsibility. The integration only consumes the result.
 
 All output is log-only. No entity creation or sensor behavior changes.
 
-Phase 1 of the schema-driven changes plan (see docs/Dev/schema_driven_changes.md).
+Phase 1 of the schema-driven changes plan (see docs/dev/schema_driven_changes.md).
 
 Usage:
     Called from the coordinator after the first successful data refresh.

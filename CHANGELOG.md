@@ -22,7 +22,9 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - **Simulation moved to dedicated add-on** — Panel cloning and simulation are no longer part of the integration's options flow. A new `export_circuit_manifest`
-  service provides panel parameters to the standalone SPAN Panel Simulator add-on.
+  service provides panel parameters to the standalone [SPAN Panel Simulator](https://github.com/SpanPanel/simulator) add-on, which now supports upgrade
+  modelling (evaluate firmware or integration upgrades in a sandbox before applying them to your real panel) and panel clone (replicate your panel's circuit
+  layout for testing).
 
 ### Fixed
 

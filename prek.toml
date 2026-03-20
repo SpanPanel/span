@@ -40,23 +40,18 @@ hooks = [
   { id = "ruff-check", args = ["--fix"], exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
 ]
 
-# MyPy for type checking
+# MyPy for type checking (local hook — needs project venv for span-panel-api)
 [[repos]]
-repo = "https://github.com/pre-commit/mirrors-mypy"
-rev = "v1.16.0"
+repo = "local"
 hooks = [
   {
     id = "mypy",
-    additional_dependencies = [
-      "httpx",
-      "pydantic",
-      "typing-extensions",
-      "pytest",
-      "homeassistant-stubs",
-      "types-PyYAML",
-      "types-aiofiles",
-    ],
-    args = ["--config-file=pyproject.toml"],
+    name = "mypy",
+    entry = "uv run mypy",
+    language = "system",
+    args = ["--config-file=pyproject.toml", "custom_components/span_panel/"],
+    pass_filenames = false,
+    files = '\.py$',
     exclude = '^tests/.*|^scripts/.*|docs/.*|\.\S*_cache/.*|dist/.*|venv/.*',
   },
 ]
