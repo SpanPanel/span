@@ -43,23 +43,9 @@
         "description": "Enter the connection details for your SPAN Panel.",
         "title": "Connect to the Span Panel"
       },
-      "choose_auth_type": {
-        "title": "Choose Authentication Options",
-        "menu_options": {
-          "auth_proximity": "Authenticate through your physical Span Panel",
-          "auth_token": "Authenticate using an access token"
-        }
-      },
       "auth_proximity": {
         "title": "Proximity Authentication",
         "description": "Please open and close the Span Panel door 3 times."
-      },
-      "auth_token": {
-        "title": "Manual Token Authentication",
-        "description": "Please enter your access token (empty to start over):",
-        "data": {
-          "access_token": "Access Token"
-        }
       },
       "choose_v2_auth": {
         "title": "Choose Authentication Method",

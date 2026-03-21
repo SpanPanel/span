@@ -38,23 +38,9 @@
         "description": "Insira os detalhes de conexão para seu SPAN Panel.",
         "title": "Ligar ao Painel Span"
       },
-      "choose_auth_type": {
-        "title": "Escolher Opções de Autenticação",
-        "menu_options": {
-          "auth_proximity": "Autenticar através do seu Painel Span físico",
-          "auth_token": "Autenticar usando um token de acesso"
-        }
-      },
       "auth_proximity": {
         "title": "Autenticação por Proximidade",
         "description": "Por favor, abra e feche a porta do Painel Span 3 vezes."
-      },
-      "auth_token": {
-        "title": "Autenticação Manual por Token",
-        "description": "Por favor, introduza o seu token de acesso (Vazio para recomeçar)",
-        "data": {
-          "access_token": "Token de Acesso"
-        }
       },
       "auth_passphrase": {
         "title": "Frase-passe do Painel",

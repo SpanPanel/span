@@ -38,23 +38,9 @@
         "description": "SPAN Panelの接続詳細を入力してください。",
         "title": "スパンパネルに接続"
       },
-      "choose_auth_type": {
-        "title": "認証オプションを選んでください",
-        "menu_options": {
-          "auth_proximity": "スパンパネル実物を通じて認証する",
-          "auth_token": "アクセストークンを使用して認証する"
-        }
-      },
       "auth_proximity": {
         "title": "近接認証",
         "description": "スパンパネルのドアを {remaining} 回開閉してください。"
-      },
-      "auth_token": {
-        "title": "手動にトークン認証",
-        "description": "あなたのアクセストークンを入力してください（空白のままで再開）:",
-        "data": {
-          "access_token": "アクセストークン"
-        }
       },
       "auth_passphrase": {
         "title": "パネルパスフレーズ",

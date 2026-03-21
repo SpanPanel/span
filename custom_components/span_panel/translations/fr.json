@@ -38,23 +38,9 @@
         "description": "Entrez les détails de connexion pour votre SPAN Panel.",
         "title": "Connectez-vous au Span Panel"
       },
-      "choose_auth_type": {
-        "title": "Choisir les options d'authentification",
-        "menu_options": {
-          "auth_proximity": "Authentifiez-vous via votre Span Panel physique",
-          "auth_token": "Authentifier à l'aide d'un jeton d'accès"
-        }
-      },
       "auth_proximity": {
         "title": "Authentification de proximité",
         "description": "Veuillez ouvrir et fermer la porte du Span Panel les fois {remaining}."
-      },
-      "auth_token": {
-        "title": "Authentification manuelle du jeton",
-        "description": "Vieuillez entrer votre jeton d'accès (laissez vide pour recommencer):",
-        "data": {
-          "access_token": "Jeton d'accès"
-        }
       },
       "auth_passphrase": {
         "title": "Mot de passe du panneau",

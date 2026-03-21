@@ -28,7 +28,6 @@ from .config_flow_utils import (
     get_general_options_defaults,
     is_fqdn,
     process_general_options_input,
-    validate_auth_token,
     validate_host,
     validate_v2_passphrase,
     validate_v2_proximity,
@@ -79,12 +78,6 @@ def get_user_data_schema(default_host: str = "") -> vol.Schema:
 
 STEP_USER_DATA_SCHEMA = get_user_data_schema()
 
-STEP_AUTH_TOKEN_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_ACCESS_TOKEN): str,
-    }
-)
-
 STEP_AUTH_PASSPHRASE_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOP_PASSPHRASE): str,
@@ -124,7 +117,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._chosen_use_device_prefix: bool | None = None
         self._chosen_use_circuit_numbers: bool | None = None
         # v2 provisioning state
-        self.api_version: str = "v1"
+        self.api_version: str = "v2"
         self._v2_broker_host: str | None = None
         self._v2_broker_port: int | None = None
         self._v2_broker_username: str | None = None
@@ -137,33 +130,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # FQDN registration task (async_show_progress)
         self._fqdn_task: asyncio.Task[None] | None = None
         self._reconfigure_fqdn_task: asyncio.Task[None] | None = None
-
-    async def setup_flow(self, trigger_type: TriggerFlowType, host: str) -> None:
-        """Set up the flow by detecting the panel API version and serial number."""
-
-        if self._is_flow_setup is True:
-            _LOGGER.error("Flow setup attempted when already set up")
-            raise ConfigFlowError("Flow is already set up")
-
-        result = await detect_api_version(host, port=self._http_port)
-        self.api_version = result.api_version
-
-        self.trigger_flow_type = trigger_type
-        self.host = host
-
-        if result.status_info is not None:
-            self.serial_number = result.status_info.serial_number
-
-        # Keep the existing context values and add the host value
-        self.context = {
-            **self.context,
-            "title_placeholders": {
-                **self.context.get("title_placeholders", {}),
-                CONF_HOST: self.host,
-            },
-        }
-
-        self._is_flow_setup = True
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
@@ -215,8 +181,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
             detection = await detect_api_version(discovery_info.host, port=http_port)
             if detection.api_version != "v2" or detection.status_info is None:
-                # The v2 endpoint did not respond — this IP is not a valid
-                # v2 panel (e.g., an internal link address we didn't filter).
                 return self.async_abort(reason="not_span_panel")
             self.api_version = "v2"
             self.host = discovery_info.host
@@ -233,13 +197,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             await self.ensure_not_already_configured()
             return await self.async_step_confirm_discovery()
 
-        # v1 path: validate via REST status endpoint
-        if not await validate_host(self.hass, discovery_info.host):
-            return self.async_abort(reason="not_span_panel")
-
-        await self.setup_flow(TriggerFlowType.CREATE_ENTRY, discovery_info.host)
-        await self.ensure_not_already_configured()
-        return await self.async_step_confirm_discovery()
+        # Non-v2 panels are not supported
+        return self.async_abort(reason="v1_not_supported")
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle a flow initiated by the user."""
@@ -275,12 +234,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 errors={"base": "cannot_connect"},
             )
 
-        # Detect v2 API before setting up the v1 flow
+        # Detect API version — only v2 is supported
         detection = await detect_api_version(host, port=self._http_port)
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
-            # v2 panels: serial comes from detection, no v1 status probe needed
+            # Serial comes from detection
             self.host = host
             if detection.status_info is not None:
                 self.serial_number = detection.status_info.serial_number
@@ -296,12 +255,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             await self.ensure_not_already_configured(raise_on_progress=False)
             return await self.async_step_choose_v2_auth()
 
-        # v1 path: probe via the existing setup_flow
-        if not self._is_flow_setup:
-            await self.setup_flow(TriggerFlowType.CREATE_ENTRY, host)
-            await self.ensure_not_already_configured(raise_on_progress=False)
-
-        return await self.async_step_choose_auth_type()
+        # Non-v2 panels are not supported
+        return self.async_abort(reason="v1_not_supported")
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         """Handle a flow initiated by re-auth."""
@@ -321,9 +276,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             self._is_flow_setup = True
             return await self.async_step_choose_v2_auth()
 
-        # v1 reauth: existing token flow
-        await self.setup_flow(TriggerFlowType.UPDATE_ENTRY, host)
-        return await self.async_step_auth_token(dict(entry_data))
+        # Non-v2 panels are not supported
+        return self.async_abort(reason="v1_not_supported")
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
@@ -342,30 +296,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 },
             )
 
-        # v2 panels: offer auth method choice after confirmation
-        if self.api_version == "v2":
-            return await self.async_step_choose_v2_auth()
-
-        # v1 panels: choose between proximity and token auth
-        return await self.async_step_choose_auth_type(user_input)
-
-    async def async_step_choose_auth_type(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Choose the authentication method to use."""
-        self.ensure_flow_is_set_up()
-
-        # None means this method was called by HA core as an abort
-        if user_input is None:
-            return await self.async_step_confirm_discovery()
-
-        return self.async_show_menu(
-            step_id="choose_auth_type",
-            menu_options={
-                "auth_proximity": "Proof of Proximity (recommended)",
-                "auth_token": "Existing Auth Token",
-            },
-        )
+        return await self.async_step_choose_v2_auth()
 
     async def async_step_choose_v2_auth(
         self, user_input: dict[str, Any] | None = None
@@ -408,50 +339,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 errors={"base": "cannot_connect"},
             )
 
-        self._store_v2_auth_result(result, passphrase="")
+        self._store_v2_auth_result(result, passphrase="")  # nosec B106
         return await self._async_finalize_v2_auth()
-
-    async def async_step_auth_token(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
-        """Step that prompts user for access token."""
-        self.ensure_flow_is_set_up()
-
-        if user_input is None:
-            # Show the form to prompt for the access token
-            return self.async_show_form(
-                step_id="auth_token", data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA
-            )
-
-        # Extract access token from user input
-        access_token: str | None = user_input.get(CONF_ACCESS_TOKEN)
-
-        # Check if token was provided and is not empty
-        if access_token and access_token.strip():
-            self.access_token = access_token.strip()
-
-            # Ensure host is set
-            if not self.host:
-                return self.async_abort(reason="host_not_set")
-
-            # Validate the provided token
-            if not await validate_auth_token(self.hass, self.host, self.access_token):
-                return self.async_show_form(
-                    step_id="auth_token",
-                    data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
-                    errors={"base": "invalid_access_token"},
-                )
-
-            # Proceed to pre-setup naming selection then to entry creation
-            return await self.async_step_resolve_entity(user_input)
-
-        # If no access token was provided or it's empty, show form with error
-        return self.async_show_form(
-            step_id="auth_token",
-            data_schema=STEP_AUTH_TOKEN_DATA_SCHEMA,
-            errors={"base": "missing_access_token"},
-        )
 
     async def async_step_auth_passphrase(
         self,
@@ -574,40 +463,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             errors={"base": "fqdn_registration_failed"},
         )
 
-    async def async_step_resolve_entity(
-        self,
-        entry_data: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
-        """Resolve the entity."""
-        self.ensure_flow_is_set_up()
-
-        # Continue based on flow trigger type
-        match self.trigger_flow_type:
-            case TriggerFlowType.CREATE_ENTRY:
-                if self.host is None:
-                    raise ValueError("Host cannot be None when creating a new entry")
-                if self.serial_number is None:
-                    raise ValueError("Serial number cannot be None when creating a new entry")
-                if self.access_token is None:
-                    raise ValueError("Access token cannot be None when creating a new entry")
-                # Before creating the entry, prompt for naming pattern selection
-                return await self.async_step_choose_entity_naming_initial()
-            case TriggerFlowType.UPDATE_ENTRY:
-                if self.host is None:
-                    raise ValueError("Host cannot be None when updating an entry")
-                if self.access_token is None:
-                    raise ValueError("Access token cannot be None when updating an entry")
-                if "entry_id" not in self.context:
-                    raise ValueError("Entry ID is missing from context")
-                return self.update_existing_entry(
-                    self.context["entry_id"],
-                    self.host,
-                    self.access_token,
-                    entry_data or {},
-                )
-            case _:
-                raise NotImplementedError()
-
     def create_new_entry(
         self, host: str, serial_number: str, access_token: str
     ) -> ConfigFlowResult:
@@ -631,21 +486,19 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             CONF_HOST: host,
             CONF_ACCESS_TOKEN: access_token,
             "device_name": device_name,
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_HOST: self._v2_broker_host,
+            CONF_EBUS_BROKER_PORT: self._v2_broker_port,
+            CONF_EBUS_BROKER_USERNAME: self._v2_broker_username,
+            CONF_EBUS_BROKER_PASSWORD: self._v2_broker_password,
+            CONF_HOP_PASSPHRASE: self._v2_passphrase,
+            CONF_PANEL_SERIAL: self._v2_panel_serial,
         }
 
-        # Add v2-specific fields
-        if self.api_version == "v2":
-            entry_data[CONF_API_VERSION] = "v2"
-            entry_data[CONF_EBUS_BROKER_HOST] = self._v2_broker_host
-            entry_data[CONF_EBUS_BROKER_PORT] = self._v2_broker_port
-            entry_data[CONF_EBUS_BROKER_USERNAME] = self._v2_broker_username
-            entry_data[CONF_EBUS_BROKER_PASSWORD] = self._v2_broker_password
-            entry_data[CONF_HOP_PASSPHRASE] = self._v2_passphrase
-            entry_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
-            if self._http_port != 80:
-                entry_data[CONF_HTTP_PORT] = self._http_port
-            if is_fqdn(host):
-                entry_data[CONF_REGISTERED_FQDN] = host
+        if self._http_port != 80:
+            entry_data[CONF_HTTP_PORT] = self._http_port
+        if is_fqdn(host):
+            entry_data[CONF_REGISTERED_FQDN] = host
 
         return self.async_create_entry(
             title=device_name,
@@ -677,30 +530,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         updated_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
         if self._http_port != 80:
             updated_data[CONF_HTTP_PORT] = self._http_port
-
-        self.hass.config_entries.async_update_entry(entry, data=updated_data)
-        self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
-        return self.async_abort(reason="reauth_successful")
-
-    def update_existing_entry(
-        self,
-        entry_id: str,
-        host: str,
-        access_token: str,
-        entry_data: Mapping[str, Any],
-    ) -> ConfigFlowResult:
-        """Update an existing entry with new configurations."""
-        # Update the existing data with reauthed data
-        # Create a new mutable copy of the entry data (Mapping is immutable)
-        updated_data = dict(entry_data)
-        updated_data[CONF_HOST] = host
-        updated_data[CONF_ACCESS_TOKEN] = access_token
-
-        # An existing entry must exist before we can update it
-        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(entry_id)
-        if entry is None:
-            _LOGGER.error("Config entry %s does not exist during reauth", entry_id)
-            return self.async_abort(reason="reauth_failed")
 
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
