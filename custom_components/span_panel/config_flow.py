@@ -240,7 +240,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             **self.context,
             "title_placeholders": {
                 **self.context.get("title_placeholders", {}),
-                CONF_HOST: f"{host}:{port}",
+                CONF_HOST: panel_serial,
             },
         }
         self._is_flow_setup = True
