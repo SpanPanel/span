@@ -6,7 +6,10 @@
       "reauth_successful": "Authentication successful.",
       "reconfigure_successful": "Host updated successfully.",
       "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
-      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
+      "no_host": "No host address was provided by the add-on.",
+      "no_serial": "Could not determine the panel serial number.",
+      "cannot_connect": "Failed to connect to Span Panel"
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
@@ -43,23 +46,9 @@
         "description": "Enter the connection details for your SPAN Panel.",
         "title": "Connect to the Span Panel"
       },
-      "choose_auth_type": {
-        "title": "Choose Authentication Options",
-        "menu_options": {
-          "auth_proximity": "Authenticate through your physical Span Panel",
-          "auth_token": "Authenticate using an access token"
-        }
-      },
       "auth_proximity": {
         "title": "Proximity Authentication",
         "description": "Please open and close the Span Panel door 3 times."
-      },
-      "auth_token": {
-        "title": "Manual Token Authentication",
-        "description": "Please enter your access token (empty to start over):",
-        "data": {
-          "access_token": "Access Token"
-        }
       },
       "choose_v2_auth": {
         "title": "Choose Authentication Method",

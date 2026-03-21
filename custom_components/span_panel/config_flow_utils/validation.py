@@ -31,18 +31,6 @@ async def validate_host(
         return False
 
 
-async def validate_auth_token(hass: HomeAssistant, host: str, access_token: str) -> bool:
-    """Validate an auth token.
-
-    For v2 panels, token validation is not applicable (passphrase auth is used).
-    This function exists for backward compatibility with v1 config flow paths.
-    """
-    # v1 token validation is no longer supported since SpanPanelClient was removed.
-    # v2 panels authenticate via passphrase → register_v2().
-    _LOGGER.warning("validate_auth_token called but v1 REST validation is no longer available")
-    return False
-
-
 def validate_ipv4_address(host: str) -> bool:
     """Validate that the host is an IPv4 address."""
     return is_ipv4_address(host)
