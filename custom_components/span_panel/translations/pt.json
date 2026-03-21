@@ -4,7 +4,10 @@
       "no_devices_found": "Não foram encontrados dispositivos na rede",
       "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
       "reauth_successful": "Autenticação bem-sucedida.",
-      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
+      "v1_not_supported": "O firmware v1 não é suportado. Atualize o firmware do seu painel para v2.",
+      "no_host": "Nenhum endereço de anfitrião foi fornecido pelo add-on.",
+      "no_serial": "Não foi possível determinar o número de série do painel.",
+      "cannot_connect": "Falha ao ligar ao Painel Span"
     },
     "error": {
       "cannot_connect": "Falha ao ligar ao Painel Span",
@@ -38,23 +41,9 @@
         "description": "Insira os detalhes de conexão para seu SPAN Panel.",
         "title": "Ligar ao Painel Span"
       },
-      "choose_auth_type": {
-        "title": "Escolher Opções de Autenticação",
-        "menu_options": {
-          "auth_proximity": "Autenticar através do seu Painel Span físico",
-          "auth_token": "Autenticar usando um token de acesso"
-        }
-      },
       "auth_proximity": {
         "title": "Autenticação por Proximidade",
         "description": "Por favor, abra e feche a porta do Painel Span 3 vezes."
-      },
-      "auth_token": {
-        "title": "Autenticação Manual por Token",
-        "description": "Por favor, introduza o seu token de acesso (Vazio para recomeçar)",
-        "data": {
-          "access_token": "Token de Acesso"
-        }
       },
       "auth_passphrase": {
         "title": "Frase-passe do Painel",
