@@ -123,9 +123,7 @@ async def test_user_flow_v1_aborts(hass: HomeAssistant) -> None:
             {CONF_HOST: MOCK_HOST},
         )
 
-        # v1 panels should go through setup_flow which detects v1
-        # The flow should still proceed (v1 detection stores api_version)
-        # then route to choose_auth_type or abort depending on implementation
+        # Non-v2 panels are not supported and should abort
         assert result2["type"] in (FlowResultType.FORM, FlowResultType.ABORT)
 
 

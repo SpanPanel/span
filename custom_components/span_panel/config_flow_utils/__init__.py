@@ -9,7 +9,6 @@ from .options import (
 from .validation import (
     check_fqdn_tls_ready,
     is_fqdn,
-    validate_auth_token,
     validate_host,
     validate_ipv4_address,
     validate_v2_passphrase,
@@ -20,7 +19,6 @@ __all__ = [
     # Validation
     "check_fqdn_tls_ready",
     "is_fqdn",
-    "validate_auth_token",
     "validate_host",
     "validate_ipv4_address",
     "validate_v2_passphrase",

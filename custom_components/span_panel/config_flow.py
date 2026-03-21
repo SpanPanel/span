@@ -16,6 +16,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
+from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 from span_panel_api import V2AuthResponse, delete_fqdn, detect_api_version, register_fqdn
@@ -199,6 +200,51 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Non-v2 panels are not supported
         return self.async_abort(reason="v1_not_supported")
+
+    async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
+        """Handle discovery from HA Supervisor (simulator add-on).
+
+        Unlike zeroconf, multiple simulated panels may share the same
+        host IP (differentiated by port).  Dedup by serial number, not
+        by host, so each panel gets its own config entry.
+        """
+        config = discovery_info.config
+        host = str(config.get("host", ""))
+        port = int(config.get("port", 80))
+        serial = str(config.get("serial", ""))
+
+        if not host:
+            return self.async_abort(reason="no_host")
+
+        # Validate panel is reachable and v2
+        self._http_port = port
+        detection = await detect_api_version(host, port=port)
+        if detection.api_version != "v2" or detection.status_info is None:
+            return self.async_abort(reason="not_span_panel")
+
+        # Use the serial from the panel (prefer detected over discovery hint)
+        panel_serial = detection.status_info.serial_number or serial
+        if not panel_serial:
+            return self.async_abort(reason="no_serial")
+
+        # Dedup by serial — multiple panels may share the same host IP
+        await self.async_set_unique_id(panel_serial)
+        self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_HTTP_PORT: port})
+
+        # Set up flow — same path as v2 zeroconf discovery
+        self.api_version = "v2"
+        self.host = host
+        self.serial_number = panel_serial
+        self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
+        self.context = {
+            **self.context,
+            "title_placeholders": {
+                **self.context.get("title_placeholders", {}),
+                CONF_HOST: f"{host}:{port}",
+            },
+        }
+        self._is_flow_setup = True
+        return await self.async_step_confirm_discovery()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Handle a flow initiated by the user."""

@@ -4,7 +4,9 @@
       "no_devices_found": "Não foram encontrados dispositivos na rede",
       "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
       "reauth_successful": "Autenticação bem-sucedida.",
-      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
+      "no_host": "No host address was provided by the add-on.",
+      "no_serial": "Could not determine the panel serial number."
     },
     "error": {
       "cannot_connect": "Falha ao ligar ao Painel Span",
