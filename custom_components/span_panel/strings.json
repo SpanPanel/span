@@ -8,7 +8,8 @@
       "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
       "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
       "no_host": "No host address was provided by the add-on.",
-      "no_serial": "Could not determine the panel serial number."
+      "no_serial": "Could not determine the panel serial number.",
+      "cannot_connect": "Failed to connect to Span Panel"
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",

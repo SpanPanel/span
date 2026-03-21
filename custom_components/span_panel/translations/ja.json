@@ -4,9 +4,10 @@
       "no_devices_found": "ネットワーク上にデバイスが見つかりません",
       "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
       "reauth_successful": "認証できました",
-      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
-      "no_host": "No host address was provided by the add-on.",
-      "no_serial": "Could not determine the panel serial number."
+      "v1_not_supported": "v1ファームウェアはサポートされていません。パネルのファームウェアをv2にアップグレードしてください。",
+      "no_host": "アドオンからホストアドレスが提供されませんでした。",
+      "no_serial": "パネルのシリアル番号を特定できませんでした。",
+      "cannot_connect": "スパンパネルへの接続に失敗しました"
     },
     "error": {
       "cannot_connect": "スパンパネルへの接続に失敗しました",

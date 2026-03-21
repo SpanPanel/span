@@ -285,10 +285,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
+            if detection.status_info is None:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=STEP_USER_DATA_SCHEMA,
+                    errors={"base": "cannot_connect"},
+                )
             # Serial comes from detection
             self.host = host
-            if detection.status_info is not None:
-                self.serial_number = detection.status_info.serial_number
+            self.serial_number = detection.status_info.serial_number
             self.trigger_flow_type = TriggerFlowType.CREATE_ENTRY
             self.context = {
                 **self.context,
@@ -314,10 +319,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
+            if detection.status_info is None:
+                return self.async_abort(reason="cannot_connect")
             # v2 reauth: set up flow state manually and offer auth choice
             self.host = host
-            if detection.status_info is not None:
-                self.serial_number = detection.status_info.serial_number
+            self.serial_number = detection.status_info.serial_number
             self.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
             self._is_flow_setup = True
             return await self.async_step_choose_v2_auth()

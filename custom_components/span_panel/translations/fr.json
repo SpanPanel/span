@@ -4,9 +4,10 @@
       "no_devices_found": "Aucun appareil trouvé sur le réseau",
       "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
       "reauth_successful": "Authentification réussie.",
-      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
-      "no_host": "No host address was provided by the add-on.",
-      "no_serial": "Could not determine the panel serial number."
+      "v1_not_supported": "Le micrologiciel v1 n'est pas pris en charge. Veuillez mettre à jour le micrologiciel de votre panneau vers la version v2.",
+      "no_host": "Aucune adresse d'hôte n'a été fournie par le module complémentaire.",
+      "no_serial": "Impossible de déterminer le numéro de série du panneau.",
+      "cannot_connect": "Échec de la connexion au Span Panel"
     },
     "error": {
       "cannot_connect": "Échec de la connexion au Span Panel",

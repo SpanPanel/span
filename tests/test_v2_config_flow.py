@@ -21,6 +21,7 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
+    CONF_HTTP_PORT,
     CONF_PANEL_SERIAL,
     DOMAIN,
 )
@@ -1364,3 +1365,280 @@ async def test_reconfigure_recovery_after_error(hass: HomeAssistant) -> None:
         assert result3["reason"] == "reconfigure_successful"
 
     assert entry.data[CONF_HOST] == "192.168.1.200"
+
+
+# ---------- hassio (Supervisor) discovery ----------
+
+
+MOCK_HASSIO_CONFIG = {
+    "host": "192.168.1.50",
+    "port": 9090,
+    "serial": "SPAN-SIM-001",
+}
+
+MOCK_V2_DETECTION_SIM = DetectionResult(
+    api_version="v2",
+    status_info=V2StatusInfo(
+        serial_number="SPAN-SIM-001",
+        firmware_version="2.0.0",
+    ),
+)
+
+
+def _hassio_service_info(config: dict[str, str | int]) -> "HassioServiceInfo":
+    """Build a HassioServiceInfo for testing."""
+    from homeassistant.helpers.service_info.hassio import HassioServiceInfo
+
+    return HassioServiceInfo(
+        config=config,
+        name="SPAN Panel Simulator",
+        slug="span_panel_simulator",
+        uuid="test-uuid-1234",
+    )
+
+
+@pytest.mark.asyncio
+async def test_hassio_missing_host_aborts(hass: HomeAssistant) -> None:
+    """Hassio discovery with no host should abort with no_host."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_HASSIO},
+        data=_hassio_service_info({"port": 9090, "serial": "SPAN-SIM-001"}),
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_host"
+
+
+@pytest.mark.asyncio
+async def test_hassio_missing_host_empty_string_aborts(hass: HomeAssistant) -> None:
+    """Hassio discovery with empty host string should abort with no_host."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_HASSIO},
+        data=_hassio_service_info({"host": "", "port": 9090, "serial": "SPAN-SIM-001"}),
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_host"
+
+
+@pytest.mark.asyncio
+async def test_hassio_not_v2_aborts(hass: HomeAssistant) -> None:
+    """Hassio discovery of a non-v2 panel should abort with not_span_panel."""
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=MOCK_V1_DETECTION,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "not_span_panel"
+
+
+@pytest.mark.asyncio
+async def test_hassio_no_serial_aborts(hass: HomeAssistant) -> None:
+    """Hassio discovery where panel returns no serial should abort."""
+    detection_no_serial = DetectionResult(
+        api_version="v2",
+        status_info=V2StatusInfo(
+            serial_number="",
+            firmware_version="2.0.0",
+        ),
+    )
+    config_no_serial = {"host": "192.168.1.50", "port": 9090, "serial": ""}
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=detection_no_serial,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(config_no_serial),
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "no_serial"
+
+
+@pytest.mark.asyncio
+async def test_hassio_discovery_routes_to_confirm(hass: HomeAssistant) -> None:
+    """Successful hassio discovery should route to confirm_discovery."""
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=MOCK_V2_DETECTION_SIM,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "confirm_discovery"
+
+
+@pytest.mark.asyncio
+async def test_hassio_dedup_by_serial(hass: HomeAssistant) -> None:
+    """Hassio discovery of an already-configured serial should abort and update host/port."""
+    existing = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: "192.168.1.40",
+            CONF_ACCESS_TOKEN: "existing-token",
+            CONF_API_VERSION: "v2",
+            CONF_HTTP_PORT: 80,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-SIM-001",
+    )
+    existing.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=MOCK_V2_DETECTION_SIM,
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    # Host and port should be updated to the new values
+    assert existing.data[CONF_HOST] == "192.168.1.50"
+    assert existing.data[CONF_HTTP_PORT] == 9090
+
+
+@pytest.mark.asyncio
+async def test_hassio_end_to_end_entry_creation(hass: HomeAssistant) -> None:
+    """Hassio discovery through confirm -> passphrase -> naming -> entry creation."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION_SIM,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+    ):
+        # Step 1: hassio discovery -> confirm
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "confirm_discovery"
+
+        # Step 2: confirm -> auth choice
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {},
+        )
+        assert result2["type"] == FlowResultType.MENU
+        assert result2["step_id"] == "choose_v2_auth"
+
+        # Step 3: choose passphrase
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+        assert result3["step_id"] == "auth_passphrase"
+
+        # Step 4: enter passphrase
+        result4 = await hass.config_entries.flow.async_configure(
+            result3["flow_id"],
+            {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
+        )
+        assert result4["step_id"] == "choose_entity_naming_initial"
+
+        # Step 5: accept naming default -> entry created
+        result5 = await hass.config_entries.flow.async_configure(
+            result4["flow_id"],
+            {"entity_naming_pattern": "friendly_names"},
+        )
+        assert result5["type"] == FlowResultType.CREATE_ENTRY
+        assert result5["data"][CONF_API_VERSION] == "v2"
+        assert result5["data"][CONF_HOST] == "192.168.1.50"
+        assert result5["data"][CONF_HTTP_PORT] == 9090
+
+
+# ---------- user flow: null status_info ----------
+
+
+@pytest.mark.asyncio
+async def test_user_flow_v2_null_status_info_shows_error(hass: HomeAssistant) -> None:
+    """User flow should show cannot_connect when v2 detection has null status_info."""
+    detection_no_status = DetectionResult(
+        api_version="v2",
+        status_info=None,
+    )
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=detection_no_status,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: MOCK_HOST},
+        )
+
+        assert result2["type"] == FlowResultType.FORM
+        assert result2["step_id"] == "user"
+        assert result2["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.asyncio
+async def test_reauth_v2_null_status_info_aborts(hass: HomeAssistant) -> None:
+    """Reauth should abort with cannot_connect when v2 detection has null status_info."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    detection_no_status = DetectionResult(
+        api_version="v2",
+        status_info=None,
+    )
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=detection_no_status,
+    ):
+        result = await entry.start_reauth_flow(hass)
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "cannot_connect"
