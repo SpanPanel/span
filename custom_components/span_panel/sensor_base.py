@@ -37,6 +37,23 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
 
+# Keys from Span energy sensors' extra_state_attributes that we omit from the recorder
+# (SpanEnergySensorBase: panel-wide and circuit energy entities). High-churn grace/dip
+# diagnostics dominated DB growth (#197). tabs and voltage are merged in by circuit
+# subclasses; they stay on the live entity for Developer tools and automations.
+_ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
+    {
+        "energy_offset",
+        "grace_period_remaining",
+        "last_dip_delta",
+        "last_valid_changed",
+        "last_valid_state",
+        "tabs",
+        "using_grace_period",
+        "voltage",
+    }
+)
+
 
 def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | None]:
     """Extract a numeric value and naive timestamp from a restored HA state.
@@ -445,7 +462,13 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
     - Grace period tracking for offline scenarios
     - State restoration across HA restarts via RestoreSensor mixin
     - Automatic persistence of last_valid_state and last_valid_changed
+
+    High-churn diagnostic attributes are listed in ``extra_state_attributes`` for
+    the UI but omitted from recorder history via ``_unrecorded_attributes`` so the
+    database is not flooded with unique attribute blobs on every energy update.
     """
+
+    _unrecorded_attributes = _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES
 
     def __init__(
         self,
