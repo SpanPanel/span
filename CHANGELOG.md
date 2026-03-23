@@ -33,6 +33,9 @@ All notable changes to this project will be documented in this file.
 
 - **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
 
+- **Recorder database growth** — Energy sensors still expose grace-period and dip-compensation diagnostics, plus circuit `tabs` and `voltage`, on the entity, but
+  those attributes are no longer written to the recorder, which greatly reduces churn in the `state_attributes` table (#197).
+
 ## [2.0.3] - 3/2026
 
 **Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
