@@ -37,10 +37,10 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 # Sentinel value to distinguish "never synced" from "circuit name is None"
 _NAME_UNSET: object = object()
 
-# Keys merged into circuit energy sensors' extra_state_attributes that we omit
-# from the recorder. High-churn grace/dip diagnostics dominated DB growth (#197);
-# tabs and voltage are usually static but need not be duplicated on every state
-# row—they stay on the live entity for Developer tools and automations.
+# Keys from Span energy sensors' extra_state_attributes that we omit from the recorder
+# (SpanEnergySensorBase: panel-wide and circuit energy entities). High-churn grace/dip
+# diagnostics dominated DB growth (#197). tabs and voltage are merged in by circuit
+# subclasses; they stay on the live entity for Developer tools and automations.
 _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
     {
         "energy_offset",
