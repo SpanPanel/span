@@ -13,7 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "homeassistant-stubs==2026.3.2",
+    "homeassistant-stubs==2026.3.3",
     "types-requests",
     "types-PyYAML",
     "mypy==1.19.1",
