@@ -49,7 +49,6 @@ from .const import (
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     ENABLE_CURRENT_MONITORING,
-    MAINS_LEGS,
 )
 from .coordinator import SpanPanelCoordinator
 from .current_monitor import CurrentMonitor
@@ -509,7 +508,7 @@ def _build_set_mains_threshold_schema() -> vol.Schema:
     """Build schema for set_mains_threshold service."""
     return vol.Schema(
         {
-            vol.Required("leg"): vol.In(MAINS_LEGS),
+            vol.Required("leg"): str,
             vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
@@ -525,7 +524,7 @@ def _build_clear_circuit_threshold_schema() -> vol.Schema:
 
 def _build_clear_mains_threshold_schema() -> vol.Schema:
     """Build schema for clear_mains_threshold service."""
-    return vol.Schema({vol.Required("leg"): vol.In(MAINS_LEGS)})
+    return vol.Schema({vol.Required("leg"): str})
 
 
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
@@ -549,22 +548,28 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
         monitor = _get_monitor(call)
         data = dict(call.data)
-        circuit_id = data.pop("circuit_id")
+        entity_id = data.pop("circuit_id")
+        circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
         monitor.set_circuit_override(circuit_id, data)
 
     async def async_handle_clear_circuit_threshold(call: ServiceCall) -> None:
         monitor = _get_monitor(call)
-        monitor.clear_circuit_override(call.data["circuit_id"])
+        entity_id = call.data["circuit_id"]
+        circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
+        monitor.clear_circuit_override(circuit_id)
 
     async def async_handle_set_mains_threshold(call: ServiceCall) -> None:
         monitor = _get_monitor(call)
         data = dict(call.data)
-        leg = data.pop("leg")
+        entity_id = data.pop("leg")
+        leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.set_mains_override(leg, data)
 
     async def async_handle_clear_mains_threshold(call: ServiceCall) -> None:
         monitor = _get_monitor(call)
-        monitor.clear_mains_override(call.data["leg"])
+        entity_id = call.data["leg"]
+        leg = monitor.resolve_entity_to_mains_leg(entity_id)
+        monitor.clear_mains_override(leg)
 
     async def async_handle_get_monitoring_status(
         call: ServiceCall,

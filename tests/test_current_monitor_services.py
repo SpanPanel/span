@@ -14,8 +14,8 @@ class TestServiceRegistration:
         )
 
         schema = _build_set_circuit_threshold_schema()
-        result = schema({"circuit_id": "1", "spike_threshold_pct": 90})
-        assert result["circuit_id"] == "1"
+        result = schema({"circuit_id": "sensor.span_panel_kitchen_power", "spike_threshold_pct": 90})
+        assert result["circuit_id"] == "sensor.span_panel_kitchen_power"
         assert result["spike_threshold_pct"] == 90
 
     def test_set_circuit_threshold_schema_rejects_missing_circuit_id(self):
@@ -35,15 +35,15 @@ class TestServiceRegistration:
         )
 
         schema = _build_set_mains_threshold_schema()
-        result = schema({"leg": "upstream_l1", "spike_threshold_pct": 90})
-        assert result["leg"] == "upstream_l1"
+        result = schema({"leg": "sensor.span_panel_upstream_l1_current", "spike_threshold_pct": 90})
+        assert result["leg"] == "sensor.span_panel_upstream_l1_current"
 
-    def test_set_mains_threshold_schema_rejects_invalid_leg(self):
-        """Service schema rejects invalid mains leg identifier."""
+    def test_set_mains_threshold_schema_accepts_legacy_leg_name(self):
+        """Service schema accepts legacy leg name for backwards compatibility."""
         from custom_components.span_panel.__init__ import (
             _build_set_mains_threshold_schema,
         )
 
         schema = _build_set_mains_threshold_schema()
-        with pytest.raises(vol.MultipleInvalid):
-            schema({"leg": "invalid_leg", "spike_threshold_pct": 90})
+        result = schema({"leg": "upstream_l1", "spike_threshold_pct": 90})
+        assert result["leg"] == "upstream_l1"

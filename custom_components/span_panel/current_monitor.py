@@ -135,6 +135,44 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
         return entity_id if entity_id is not None else circuit_id
 
+    def resolve_entity_to_circuit_id(self, entity_id: str) -> str:
+        """Resolve a power sensor entity_id to its internal circuit_id.
+
+        Accepts either an entity_id (sensor.span_panel_kitchen_power) or
+        a raw circuit_id (UUID) for backwards compatibility.
+        """
+        entity_reg = er.async_get(self._hass)
+        entry = entity_reg.async_get(entity_id)
+        if entry is not None and entry.unique_id:
+            # unique_id format: span_{serial}_{circuit_id}_{suffix}
+            parts = entry.unique_id.split("_")
+            # Find the circuit_id — it's the UUID segment between serial and suffix
+            # Serial is parts[1], suffix is last part(s). The circuit UUID is a 32-char hex.
+            for part in parts:
+                if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
+                    return part
+        # Fall through: assume it's already a circuit_id
+        return entity_id
+
+    def resolve_entity_to_mains_leg(self, entity_id: str) -> str:
+        """Resolve a current sensor entity_id to its internal mains leg name.
+
+        Accepts either an entity_id (sensor.span_panel_upstream_l1_current)
+        or a raw leg name (upstream_l1) for backwards compatibility.
+        """
+        # Check if it's already a known leg name
+        if entity_id in _MAINS_CURRENT_ATTRS:
+            return entity_id
+        entity_reg = er.async_get(self._hass)
+        entry = entity_reg.async_get(entity_id)
+        if entry is not None and entry.unique_id:
+            # unique_id format: span_{serial}_{leg}_current
+            # e.g., span_sp3-242424-001_upstream_l1_current
+            for leg in _MAINS_CURRENT_ATTRS:
+                if f"_{leg}_current" in entry.unique_id:
+                    return leg
+        return entity_id
+
     def _resolve_mains_entity_id(self, leg: str) -> str:
         """Resolve mains leg to its current sensor entity_id, or fall back to leg name."""
         snapshot = self._last_snapshot

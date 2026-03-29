@@ -5,7 +5,9 @@ set_circuit_threshold:
     circuit_id:
       required: true
       selector:
-        text:
+        entity:
+          domain: sensor
+          integration: span_panel
     continuous_threshold_pct:
       selector:
         number:
@@ -33,19 +35,18 @@ clear_circuit_threshold:
     circuit_id:
       required: true
       selector:
-        text:
+        entity:
+          domain: sensor
+          integration: span_panel
 
 set_mains_threshold:
   fields:
     leg:
       required: true
       selector:
-        select:
-          options:
-            - upstream_l1
-            - upstream_l2
-            - downstream_l1
-            - downstream_l2
+        entity:
+          domain: sensor
+          integration: span_panel
     continuous_threshold_pct:
       selector:
         number:
@@ -73,11 +74,8 @@ clear_mains_threshold:
     leg:
       required: true
       selector:
-        select:
-          options:
-            - upstream_l1
-            - upstream_l2
-            - downstream_l1
-            - downstream_l2
+        entity:
+          domain: sensor
+          integration: span_panel
 
 get_monitoring_status:

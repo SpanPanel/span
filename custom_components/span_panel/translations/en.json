@@ -432,8 +432,8 @@
             "description": "Set current monitoring thresholds for a specific circuit.",
             "fields": {
                 "circuit_id": {
-                    "name": "Circuit ID",
-                    "description": "The circuit identifier to configure."
+                    "name": "Circuit",
+                    "description": "The circuit power sensor entity."
                 },
                 "continuous_threshold_pct": {
                     "name": "Continuous threshold (%)",
@@ -458,8 +458,8 @@
             "description": "Remove per-circuit threshold overrides, reverting to global defaults.",
             "fields": {
                 "circuit_id": {
-                    "name": "Circuit ID",
-                    "description": "The circuit identifier to clear."
+                    "name": "Circuit",
+                    "description": "The circuit power sensor entity."
                 }
             }
         },
@@ -469,7 +469,7 @@
             "fields": {
                 "leg": {
                     "name": "Mains leg",
-                    "description": "The mains leg to configure."
+                    "description": "The mains current sensor entity."
                 },
                 "continuous_threshold_pct": {
                     "name": "Continuous threshold (%)",
@@ -495,7 +495,7 @@
             "fields": {
                 "leg": {
                     "name": "Mains leg",
-                    "description": "The mains leg to clear."
+                    "description": "The mains current sensor entity."
                 }
             }
         },
