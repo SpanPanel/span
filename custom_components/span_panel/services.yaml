@@ -8,6 +8,7 @@ set_circuit_threshold:
         entity:
           domain: sensor
           integration: span_panel
+          device_class: current
     continuous_threshold_pct:
       selector:
         number:
@@ -38,6 +39,7 @@ clear_circuit_threshold:
         entity:
           domain: sensor
           integration: span_panel
+          device_class: current
 
 set_mains_threshold:
   fields:
@@ -47,6 +49,7 @@ set_mains_threshold:
         entity:
           domain: sensor
           integration: span_panel
+          device_class: current
     continuous_threshold_pct:
       selector:
         number:
@@ -77,5 +80,6 @@ clear_mains_threshold:
         entity:
           domain: sensor
           integration: span_panel
+          device_class: current
 
 get_monitoring_status:
