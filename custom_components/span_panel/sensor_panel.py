@@ -1,7 +1,5 @@
 """Panel-level sensors for Span Panel integration."""
 
-# pylint: disable=hass-enforce-class-module
-
 from __future__ import annotations
 
 import logging
@@ -220,7 +218,7 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             try:
                 amperage = float(self.native_value) / 240.0
                 attributes["amperage"] = round(amperage, 2)
-            except ValueError, ZeroDivisionError:
+            except (ValueError, ZeroDivisionError):
                 attributes["amperage"] = 0.0
         else:
             attributes["amperage"] = 0.0

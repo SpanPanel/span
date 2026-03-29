@@ -185,7 +185,8 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
     def _get_circuit(self) -> SpanCircuitSnapshot:
         """Get the circuit for this entity."""
-        return self.coordinator.data.circuits[self.id]
+        snapshot: SpanPanelSnapshot = self.coordinator.data
+        return snapshot.circuits[self.id]
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up when entity is removed."""

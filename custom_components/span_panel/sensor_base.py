@@ -1,7 +1,5 @@
 """Base sensor classes for Span Panel integration."""
 
-# pylint: disable=hass-enforce-class-module
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -69,7 +67,7 @@ def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | 
 
     try:
         value = float(state.state)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None, None
 
     # Normalize last_changed to naive datetime to match existing tracking
@@ -532,7 +530,7 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
                 last_panel_reading=restored.get("last_panel_reading"),
                 last_dip_delta=restored.get("last_dip_delta"),
             )
-        except AttributeError, KeyError, TypeError:
+        except (AttributeError, KeyError, TypeError):
             return None
 
 
@@ -798,7 +796,7 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
 
         try:
             minutes = int(self._grace_period_minutes)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             minutes = 15
             self._grace_period_minutes = minutes
 

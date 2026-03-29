@@ -9,8 +9,6 @@ This file contains sensor definitions for all native integration sensors:
 - Battery sensor
 """
 
-# pylint: disable=hass-enforce-class-module
-
 from __future__ import annotations
 
 from collections.abc import Callable

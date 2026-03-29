@@ -192,7 +192,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             http_port_str = props.get("httpPort", props.get("httpport", ""))
             try:
                 http_port = int(http_port_str) if http_port_str else 80
-            except ValueError, TypeError:
+            except (ValueError, TypeError):
                 http_port = 80
             self._http_port = http_port
 
@@ -438,7 +438,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         try:
             result = await validate_v2_proximity(self.hass, self.host, port=self._http_port)
-        except SpanPanelAuthError, SpanPanelConnectionError:
+        except (SpanPanelAuthError, SpanPanelConnectionError):
             return await self.async_step_auth_proximity()
 
         self._store_v2_auth_result(result, passphrase="")  # nosec B106

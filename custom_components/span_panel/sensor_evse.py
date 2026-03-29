@@ -1,7 +1,5 @@
 """EVSE (EV Charger) sensors for Span Panel integration."""
 
-# pylint: disable=hass-enforce-class-module
-
 from __future__ import annotations
 
 import logging

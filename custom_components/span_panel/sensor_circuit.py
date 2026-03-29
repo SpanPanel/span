@@ -1,7 +1,5 @@
 """Circuit-level sensors for Span Panel integration."""
 
-# pylint: disable=hass-enforce-class-module
-
 from __future__ import annotations
 
 from collections.abc import Mapping
