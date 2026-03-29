@@ -1,4 +1,4 @@
-"""Options flow utilities for Span Panel config flow."""
+"""Options flow helpers for Span Panel config flow."""
 
 from __future__ import annotations
 
@@ -7,19 +7,17 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 import voluptuous as vol
 
-from custom_components.span_panel.const import (
+from .const import (
     DEFAULT_SNAPSHOT_INTERVAL,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
+    ENABLE_UNMAPPED_CIRCUIT_SENSORS,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from custom_components.span_panel.options import (
-    ENERGY_REPORTING_GRACE_PERIOD,
-    SNAPSHOT_UPDATE_INTERVAL,
-)
+from .options import ENERGY_REPORTING_GRACE_PERIOD, SNAPSHOT_UPDATE_INTERVAL
 
 
 def build_general_options_schema(
@@ -48,6 +46,7 @@ def build_general_options_schema(
         ),
         vol.Optional(ENABLE_PANEL_NET_ENERGY_SENSORS): bool,
         vol.Optional(ENABLE_CIRCUIT_NET_ENERGY_SENSORS): bool,
+        vol.Optional(ENABLE_UNMAPPED_CIRCUIT_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
         vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
     }
@@ -79,6 +78,9 @@ def get_general_options_defaults(
         ENABLE_CIRCUIT_NET_ENERGY_SENSORS: config_entry.options.get(
             ENABLE_CIRCUIT_NET_ENERGY_SENSORS, True
         ),
+        ENABLE_UNMAPPED_CIRCUIT_SENSORS: config_entry.options.get(
+            ENABLE_UNMAPPED_CIRCUIT_SENSORS, False
+        ),
         ENERGY_REPORTING_GRACE_PERIOD: config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15),
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
             ENABLE_ENERGY_DIP_COMPENSATION, False
@@ -87,7 +89,9 @@ def get_general_options_defaults(
 
 
 def process_general_options_input(
-    config_entry: ConfigEntry, user_input: dict[str, Any], available_tabs: list[int] | None = None
+    config_entry: ConfigEntry,
+    user_input: dict[str, Any],
+    available_tabs: list[int] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Process user input for general options.
 
@@ -126,7 +130,6 @@ def get_current_naming_pattern(config_entry: ConfigEntry) -> str:
 
     if use_circuit_numbers:
         return EntityNamingPattern.CIRCUIT_NUMBERS.value
-    elif use_device_prefix:
+    if use_device_prefix:
         return EntityNamingPattern.FRIENDLY_NAMES.value
-    else:
-        return EntityNamingPattern.LEGACY_NAMES.value
+    return EntityNamingPattern.LEGACY_NAMES.value

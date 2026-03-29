@@ -1,4 +1,4 @@
-"""Validation utilities for Span Panel config flow."""
+"""Validation helpers for Span Panel config flow."""
 
 from __future__ import annotations
 
@@ -11,8 +11,19 @@ import ssl
 import tempfile
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import V2AuthResponse, detect_api_version, download_ca_cert, register_v2
+from span_panel_api import (
+    V2AuthResponse,
+    detect_api_version,
+    download_ca_cert,
+    register_v2,
+)
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelConnectionError,
+    SpanPanelTimeoutError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,15 +31,23 @@ _LOGGER = logging.getLogger(__name__)
 async def validate_host(
     hass: HomeAssistant,
     host: str,
-    access_token: str | None = None,
     port: int = 80,
 ) -> bool:
     """Validate the host connection by probing the panel's status endpoint."""
+    client = get_async_client(hass, verify_ssl=False)
     try:
-        result = await detect_api_version(host, port=port)
-        return result.api_version in ("v1", "v2")
-    except Exception:
+        result = await detect_api_version(host, port=port, httpx_client=client)
+    except (
+        ValueError,
+        OSError,
+        SpanPanelAPIError,
+        SpanPanelConnectionError,
+        SpanPanelTimeoutError,
+    ):
         return False
+    if result.probe_failed:
+        return False
+    return result.api_version in ("v1", "v2")
 
 
 def validate_ipv4_address(host: str) -> bool:
@@ -36,7 +55,9 @@ def validate_ipv4_address(host: str) -> bool:
     return is_ipv4_address(host)
 
 
-async def validate_v2_passphrase(host: str, passphrase: str, port: int = 80) -> V2AuthResponse:
+async def validate_v2_passphrase(
+    hass: HomeAssistant, host: str, passphrase: str, port: int = 80
+) -> V2AuthResponse:
     """Validate a v2 panel passphrase and return MQTT credentials.
 
     Raises:
@@ -45,7 +66,8 @@ async def validate_v2_passphrase(host: str, passphrase: str, port: int = 80) -> 
         SpanPanelTimeoutError: on request timeout.
 
     """
-    return await register_v2(host, "Home Assistant", passphrase, port=port)
+    client = get_async_client(hass, verify_ssl=False)
+    return await register_v2(host, "Home Assistant", passphrase, port=port, httpx_client=client)
 
 
 def is_fqdn(host: str) -> bool:
@@ -58,15 +80,18 @@ def is_fqdn(host: str) -> bool:
         return False
     try:
         ipaddress.ip_address(host)
-        return False
     except ValueError:
         pass
-    if host.endswith(".local") or host.endswith(".local."):
+    else:
+        return False
+    if host.endswith((".local", ".local.")):
         return False
     return "." in host
 
 
-async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, http_port: int = 80) -> bool:
+async def check_fqdn_tls_ready(
+    hass: HomeAssistant, fqdn: str, mqtts_port: int, http_port: int = 80
+) -> bool:
     """Check if the MQTTS server certificate includes the FQDN in its SAN.
 
     Downloads the CA certificate from the panel via HTTP, then attempts
@@ -74,9 +99,15 @@ async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, http_port: int = 80) 
     If the TLS handshake succeeds with hostname verification, the panel
     has regenerated its certificate to include the FQDN.
     """
+    client = get_async_client(hass, verify_ssl=False)
     try:
-        ca_pem = await download_ca_cert(fqdn, port=http_port)
-    except Exception:
+        ca_pem = await download_ca_cert(fqdn, port=http_port, httpx_client=client)
+    except (
+        OSError,
+        SpanPanelAPIError,
+        SpanPanelConnectionError,
+        SpanPanelTimeoutError,
+    ):
         return False
 
     loop = asyncio.get_running_loop()
@@ -86,10 +117,9 @@ async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, http_port: int = 80) 
         ctx.check_hostname = True
         ctx.verify_mode = ssl.CERT_REQUIRED
 
-        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False)  # noqa: SIM115
-        tmp.write(ca_pem)
-        tmp.close()
-        ca_path = Path(tmp.name)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as tmp:
+            tmp.write(ca_pem)
+            ca_path = Path(tmp.name)
         try:
             ctx.load_verify_locations(str(ca_path))
             with (
@@ -97,7 +127,7 @@ async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, http_port: int = 80) 
                 ctx.wrap_socket(sock, server_hostname=fqdn),
             ):
                 return True
-        except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError):
+        except ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError:
             return False
         finally:
             ca_path.unlink(missing_ok=True)
@@ -105,7 +135,7 @@ async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, http_port: int = 80) 
     return await loop.run_in_executor(None, _check)
 
 
-async def validate_v2_proximity(host: str, port: int = 80) -> V2AuthResponse:
+async def validate_v2_proximity(hass: HomeAssistant, host: str, port: int = 80) -> V2AuthResponse:
     """Validate v2 panel proximity (door bypass) and return MQTT credentials.
 
     Calls register_v2 without a passphrase, which triggers door-bypass
@@ -118,4 +148,5 @@ async def validate_v2_proximity(host: str, port: int = 80) -> V2AuthResponse:
         SpanPanelTimeoutError: on request timeout.
 
     """
-    return await register_v2(host, "Home Assistant", port=port)
+    client = get_async_client(hass, verify_ssl=False)
+    return await register_v2(host, "Home Assistant", port=port, httpx_client=client)
