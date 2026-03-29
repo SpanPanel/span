@@ -6,7 +6,10 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from .current_monitor import CurrentMonitor
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
@@ -91,6 +94,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Circuit energy sensor registry — consumed/produced sensors register
         # here so net energy sensors can read their dip offsets directly.
         self._circuit_energy_sensors: dict[tuple[str, str], SpanCircuitEnergySensorProtocol] = {}
+
+        # Current monitor — set by async_setup_entry when monitoring is enabled
+        self.current_monitor: CurrentMonitor | None = None
 
         update_interval = _STREAMING_FALLBACK_INTERVAL
 
@@ -300,6 +306,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         # Fire persistent notification for any energy dips detected this cycle
         await self._fire_dip_notification()
+
+        # Delegate snapshot to current monitor if enabled
+        if self.current_monitor is not None:
+            self.current_monitor.process_snapshot(snapshot)
 
         # Handle reload request if one was made (e.g., name sync, capability change)
         if self._reload_requested:

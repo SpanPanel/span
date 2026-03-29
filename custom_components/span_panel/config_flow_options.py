@@ -8,8 +8,13 @@ from homeassistant.config_entries import ConfigEntry
 import voluptuous as vol
 
 from .const import (
+    DEFAULT_CONTINUOUS_THRESHOLD_PCT,
+    DEFAULT_COOLDOWN_DURATION_M,
     DEFAULT_SNAPSHOT_INTERVAL,
+    DEFAULT_SPIKE_THRESHOLD_PCT,
+    DEFAULT_WINDOW_DURATION_M,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
+    ENABLE_CURRENT_MONITORING,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     ENABLE_UNMAPPED_CIRCUIT_SENSORS,
@@ -17,7 +22,17 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from .options import ENERGY_REPORTING_GRACE_PERIOD, SNAPSHOT_UPDATE_INTERVAL
+from .options import (
+    CONTINUOUS_THRESHOLD_PCT,
+    COOLDOWN_DURATION_M,
+    ENABLE_EVENT_BUS,
+    ENABLE_PERSISTENT_NOTIFICATIONS,
+    ENERGY_REPORTING_GRACE_PERIOD,
+    NOTIFY_TARGETS,
+    SNAPSHOT_UPDATE_INTERVAL,
+    SPIKE_THRESHOLD_PCT,
+    WINDOW_DURATION_M,
+)
 
 
 def build_general_options_schema(
@@ -49,6 +64,15 @@ def build_general_options_schema(
         vol.Optional(ENABLE_UNMAPPED_CIRCUIT_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
         vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
+        # Current monitoring
+        vol.Optional(ENABLE_CURRENT_MONITORING): bool,
+        vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+        vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+        vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+        vol.Optional(COOLDOWN_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+        vol.Optional(ENABLE_PERSISTENT_NOTIFICATIONS): bool,
+        vol.Optional(ENABLE_EVENT_BUS): bool,
+        vol.Optional(NOTIFY_TARGETS): str,
     }
 
     return vol.Schema(schema_fields)
@@ -85,6 +109,22 @@ def get_general_options_defaults(
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
             ENABLE_ENERGY_DIP_COMPENSATION, False
         ),
+        ENABLE_CURRENT_MONITORING: config_entry.options.get(ENABLE_CURRENT_MONITORING, False),
+        CONTINUOUS_THRESHOLD_PCT: config_entry.options.get(
+            CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT
+        ),
+        SPIKE_THRESHOLD_PCT: config_entry.options.get(
+            SPIKE_THRESHOLD_PCT, DEFAULT_SPIKE_THRESHOLD_PCT
+        ),
+        WINDOW_DURATION_M: config_entry.options.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
+        COOLDOWN_DURATION_M: config_entry.options.get(
+            COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M
+        ),
+        ENABLE_PERSISTENT_NOTIFICATIONS: config_entry.options.get(
+            ENABLE_PERSISTENT_NOTIFICATIONS, True
+        ),
+        ENABLE_EVENT_BUS: config_entry.options.get(ENABLE_EVENT_BUS, True),
+        NOTIFY_TARGETS: config_entry.options.get(NOTIFY_TARGETS, "notify.notify"),
     }
 
 

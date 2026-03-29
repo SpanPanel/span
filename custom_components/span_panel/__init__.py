@@ -48,10 +48,18 @@ from .const import (
     CONF_HTTP_PORT,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
+    ENABLE_CURRENT_MONITORING,
+    MAINS_LEGS,
 )
 from .coordinator import SpanPanelCoordinator
+from .current_monitor import CurrentMonitor
 from .helpers import build_circuit_unique_id
-from .options import SNAPSHOT_UPDATE_INTERVAL
+from .options import (
+    CONTINUOUS_THRESHOLD_PCT,
+    SNAPSHOT_UPDATE_INTERVAL,
+    SPIKE_THRESHOLD_PCT,
+    WINDOW_DURATION_M,
+)
 from .util import snapshot_to_device_info
 from .websocket import async_register_commands
 
@@ -87,6 +95,7 @@ _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
     _async_register_services(hass)
+    _async_register_monitoring_services(hass)
     return True
 
 
@@ -279,6 +288,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             await coordinator.async_config_entry_first_refresh()
             await coordinator.async_setup_streaming()
 
+            if entry.options.get(ENABLE_CURRENT_MONITORING, False):
+                monitor = CurrentMonitor(hass, entry)
+                await monitor.async_start()
+                coordinator.current_monitor = monitor
+
         else:
             raise ConfigEntryError(  # noqa: TRY301
                 f"Unknown api_version: {api_version}"
@@ -329,6 +343,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     _LOGGER.debug("Unloading SPAN Panel integration")
 
     if hasattr(entry, "runtime_data") and entry.runtime_data is not None:
+        if entry.runtime_data.coordinator.current_monitor is not None:
+            entry.runtime_data.coordinator.current_monitor.async_stop()
         await entry.runtime_data.coordinator.async_shutdown()
 
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -471,6 +487,119 @@ def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "export_circuit_manifest",
         async_handle_export_manifest,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+
+
+def _build_set_circuit_threshold_schema() -> vol.Schema:
+    """Build schema for set_circuit_threshold service."""
+    return vol.Schema(
+        {
+            vol.Required("circuit_id"): str,
+            vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional("monitoring_enabled"): bool,
+        }
+    )
+
+
+def _build_set_mains_threshold_schema() -> vol.Schema:
+    """Build schema for set_mains_threshold service."""
+    return vol.Schema(
+        {
+            vol.Required("leg"): vol.In(MAINS_LEGS),
+            vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional("monitoring_enabled"): bool,
+        }
+    )
+
+
+def _build_clear_circuit_threshold_schema() -> vol.Schema:
+    """Build schema for clear_circuit_threshold service."""
+    return vol.Schema({vol.Required("circuit_id"): str})
+
+
+def _build_clear_mains_threshold_schema() -> vol.Schema:
+    """Build schema for clear_mains_threshold service."""
+    return vol.Schema({vol.Required("leg"): vol.In(MAINS_LEGS)})
+
+
+def _async_register_monitoring_services(hass: HomeAssistant) -> None:
+    """Register current monitoring services."""
+
+    def _get_monitor(call: ServiceCall) -> CurrentMonitor:
+        """Find the CurrentMonitor for the calling entry."""
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if (
+                hasattr(entry, "runtime_data")
+                and isinstance(entry.runtime_data, SpanPanelRuntimeData)
+                and entry.runtime_data.coordinator.current_monitor is not None
+            ):
+                return entry.runtime_data.coordinator.current_monitor
+        raise ServiceValidationError(
+            "No SPAN panel with current monitoring enabled.",
+            translation_domain=DOMAIN,
+            translation_key="monitoring_not_enabled",
+        )
+
+    async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
+        monitor = _get_monitor(call)
+        data = dict(call.data)
+        circuit_id = data.pop("circuit_id")
+        monitor.set_circuit_override(circuit_id, data)
+
+    async def async_handle_clear_circuit_threshold(call: ServiceCall) -> None:
+        monitor = _get_monitor(call)
+        monitor.clear_circuit_override(call.data["circuit_id"])
+
+    async def async_handle_set_mains_threshold(call: ServiceCall) -> None:
+        monitor = _get_monitor(call)
+        data = dict(call.data)
+        leg = data.pop("leg")
+        monitor.set_mains_override(leg, data)
+
+    async def async_handle_clear_mains_threshold(call: ServiceCall) -> None:
+        monitor = _get_monitor(call)
+        monitor.clear_mains_override(call.data["leg"])
+
+    async def async_handle_get_monitoring_status(
+        call: ServiceCall,
+    ) -> ServiceResponse:
+        monitor = _get_monitor(call)
+        return cast(ServiceResponse, monitor.get_monitoring_status())
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_circuit_threshold",
+        async_handle_set_circuit_threshold,
+        schema=_build_set_circuit_threshold_schema(),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "clear_circuit_threshold",
+        async_handle_clear_circuit_threshold,
+        schema=_build_clear_circuit_threshold_schema(),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_mains_threshold",
+        async_handle_set_mains_threshold,
+        schema=_build_set_mains_threshold_schema(),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "clear_mains_threshold",
+        async_handle_clear_mains_threshold,
+        schema=_build_clear_mains_threshold_schema(),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "get_monitoring_status",
+        async_handle_get_monitoring_status,
         schema=vol.Schema({}),
         supports_response=SupportsResponse.ONLY,
     )

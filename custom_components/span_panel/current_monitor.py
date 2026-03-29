@@ -154,6 +154,17 @@ class CurrentMonitor:
             },
         }
 
+    async def async_start(self) -> None:
+        """Start the monitor — load persisted overrides."""
+        await self.async_load_overrides()
+        _LOGGER.info("Current monitor started")
+
+    def async_stop(self) -> None:
+        """Stop the monitor — clear all tracking state."""
+        self._circuit_states.clear()
+        self._mains_states.clear()
+        _LOGGER.info("Current monitor stopped")
+
     async def async_save_overrides(self) -> None:
         """Persist circuit and mains overrides to storage."""
         await self._store.async_save(
@@ -454,7 +465,11 @@ class CurrentMonitor:
             window_duration_s,
         )
 
-        notify_targets: list[str] = opts.get(NOTIFY_TARGETS, ["notify.notify"])
+        raw_targets = opts.get(NOTIFY_TARGETS, "notify.notify")
+        if isinstance(raw_targets, str):
+            notify_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
+        else:
+            notify_targets = raw_targets
         for target in notify_targets:
             self._hass.async_create_task(
                 self._hass.services.async_call(

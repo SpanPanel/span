@@ -1,1 +1,83 @@
 export_circuit_manifest:
+
+set_circuit_threshold:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        text:
+    continuous_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    spike_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    monitoring_enabled:
+      selector:
+        boolean:
+
+clear_circuit_threshold:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        text:
+
+set_mains_threshold:
+  fields:
+    leg:
+      required: true
+      selector:
+        select:
+          options:
+            - upstream_l1
+            - upstream_l2
+            - downstream_l1
+            - downstream_l2
+    continuous_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    spike_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    monitoring_enabled:
+      selector:
+        boolean:
+
+clear_mains_threshold:
+  fields:
+    leg:
+      required: true
+      selector:
+        select:
+          options:
+            - upstream_l1
+            - upstream_l2
+            - downstream_l1
+            - downstream_l2
+
+get_monitoring_status:
