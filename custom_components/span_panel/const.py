@@ -60,6 +60,22 @@ ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
 # Unmapped circuit sensor configuration
 ENABLE_UNMAPPED_CIRCUIT_SENSORS = "enable_unmapped_circuit_sensors"
 
+# Current monitoring configuration
+ENABLE_CURRENT_MONITORING = "enable_current_monitoring"
+DEFAULT_CONTINUOUS_THRESHOLD_PCT = 80
+DEFAULT_SPIKE_THRESHOLD_PCT = 100
+DEFAULT_WINDOW_DURATION_M = 15
+DEFAULT_COOLDOWN_DURATION_M = 15
+EVENT_CURRENT_ALERT = "span_panel_current_alert"
+
+# Mains leg identifiers
+MAINS_LEGS: Final[tuple[str, ...]] = (
+    "upstream_l1",
+    "upstream_l2",
+    "downstream_l1",
+    "downstream_l2",
+)
+
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 
 
