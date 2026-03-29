@@ -422,8 +422,8 @@ async def test_migration_updates_older_entry_to_current_version(
 
 
 @pytest.mark.asyncio
-async def test_simulation_entry_is_skipped_during_setup(hass: HomeAssistant) -> None:
-    """Simulation entries are not set up in core."""
+async def test_simulation_entry_is_removed_during_migration(hass: HomeAssistant) -> None:
+    """Simulation entries are removed during v5→v6 migration."""
     entry = MockConfigEntry(
         version=5,
         minor_version=1,
@@ -441,9 +441,9 @@ async def test_simulation_entry_is_skipped_during_setup(hass: HomeAssistant) -> 
     )
     entry.add_to_hass(hass)
 
-    # Setup is skipped for simulation entries
-    setup_result = await async_setup_entry(hass, entry)
-    assert setup_result is False
+    # Migration removes simulation entries and returns False
+    result = await async_migrate_entry(hass, entry)
+    assert result is False
 
 
 # ---------- zeroconf v2 discovery ----------

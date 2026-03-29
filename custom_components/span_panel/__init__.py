@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import logging
 from typing import cast
 
-from homeassistant.components.persistent_notification import async_create as pn_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import (
@@ -169,23 +168,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
         )
         _LOGGER.debug("Migrated config entry %s to version 5", config_entry.entry_id)
 
-    # --- v5 → v6: reject simulation entries ---
+    # --- v5 → v6: remove simulation entries ---
     if config_entry.version < 6:
         if config_entry.data.get(CONF_API_VERSION) == "simulation" or config_entry.data.get(
             "simulation_mode", False
         ):
-            pn_create(
-                hass,
-                "This SPAN Panel config entry was a **built-in simulator** which "
-                "has been removed in this version. Please remove this entry and "
-                "use the standalone SPAN simulator instead.",
-                title="SPAN Panel: Simulation Entry Removed",
-                notification_id=f"span_simulation_removed_{config_entry.entry_id}",
-            )
-            _LOGGER.warning(
-                "Config entry %s is a simulation entry — setup will be skipped",
+            _LOGGER.info(
+                "Removing simulation config entry %s — built-in simulator "
+                "has been replaced by the standalone SPAN simulator add-on",
                 config_entry.entry_id,
             )
+            await hass.config_entries.async_remove(config_entry.entry_id)
+            return False
 
         hass.config_entries.async_update_entry(
             config_entry,
@@ -199,11 +193,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
-
-    # Legacy in-integration simulation entries — skip setup; notification was
-    # already created during migration.
-    if entry.data.get(CONF_API_VERSION) == "simulation" or entry.data.get("simulation_mode", False):
-        return False
 
     # Register WebSocket commands once per HA instance
     domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})
