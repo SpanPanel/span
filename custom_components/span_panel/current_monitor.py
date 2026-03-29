@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot
 
 from .const import (
@@ -46,6 +47,9 @@ _MAINS_CURRENT_ATTRS: dict[str, str] = {
     "downstream_l2": "downstream_l2_current_a",
 }
 
+_STORAGE_VERSION = 1
+_STORAGE_KEY_PREFIX = "span_panel_current_monitor"
+
 
 @dataclass
 class MonitoredPointState:
@@ -68,6 +72,11 @@ class CurrentMonitor:
         self._mains_states: dict[str, MonitoredPointState] = {}
         self._circuit_overrides: dict[str, dict[str, Any]] = {}
         self._mains_overrides: dict[str, dict[str, Any]] = {}
+        self._store: Store = Store(
+            hass,
+            _STORAGE_VERSION,
+            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
+        )
 
     # --- Public API ---
 
@@ -89,22 +98,26 @@ class CurrentMonitor:
         existing = self._circuit_overrides.get(circuit_id, {})
         existing.update(overrides)
         self._circuit_overrides[circuit_id] = existing
+        self._hass.async_create_task(self.async_save_overrides())
 
     def clear_circuit_override(self, circuit_id: str) -> None:
         """Remove per-circuit threshold overrides."""
         self._circuit_overrides.pop(circuit_id, None)
         self._circuit_states.pop(circuit_id, None)
+        self._hass.async_create_task(self.async_save_overrides())
 
     def set_mains_override(self, leg: str, overrides: dict[str, Any]) -> None:
         """Set per-mains-leg threshold overrides."""
         existing = self._mains_overrides.get(leg, {})
         existing.update(overrides)
         self._mains_overrides[leg] = existing
+        self._hass.async_create_task(self.async_save_overrides())
 
     def clear_mains_override(self, leg: str) -> None:
         """Remove per-mains-leg threshold overrides."""
         self._mains_overrides.pop(leg, None)
         self._mains_states.pop(leg, None)
+        self._hass.async_create_task(self.async_save_overrides())
 
     def get_monitoring_status(self) -> dict[str, Any]:
         """Return current monitoring state for all tracked points."""
@@ -140,6 +153,23 @@ class CurrentMonitor:
                 for leg, s in self._mains_states.items()
             },
         }
+
+    async def async_save_overrides(self) -> None:
+        """Persist circuit and mains overrides to storage."""
+        await self._store.async_save(
+            {
+                "circuit_overrides": self._circuit_overrides,
+                "mains_overrides": self._mains_overrides,
+            }
+        )
+
+    async def async_load_overrides(self) -> None:
+        """Load circuit and mains overrides from storage."""
+        data = await self._store.async_load()
+        if data is None:
+            return
+        self._circuit_overrides = data.get("circuit_overrides", {})
+        self._mains_overrides = data.get("mains_overrides", {})
 
     # --- Threshold resolution ---
 

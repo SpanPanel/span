@@ -3,6 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from custom_components.span_panel.const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
     DEFAULT_COOLDOWN_DURATION_M,
@@ -475,3 +477,48 @@ class TestPerMainsOverrides:
         )
         monitor.process_snapshot(snapshot)
         assert monitor.get_mains_state("upstream_l1").last_spike_alert is None
+
+
+class TestStoragePersistence:
+    """Tests for persisting overrides to HA storage."""
+
+    @pytest.mark.asyncio
+    async def test_save_and_load_circuit_overrides(self):
+        """Circuit overrides survive save/load cycle."""
+        hass = _make_hass()
+        store_data = {}
+
+        async def mock_save(data):
+            store_data["saved"] = data
+
+        async def mock_load():
+            return store_data.get("saved")
+
+        monitor = _make_monitor(hass)
+        monitor._store = MagicMock()
+        monitor._store.async_save = AsyncMock(side_effect=mock_save)
+        monitor._store.async_load = AsyncMock(side_effect=mock_load)
+
+        monitor.set_circuit_override("1", {SPIKE_THRESHOLD_PCT: 90})
+        monitor.set_mains_override("upstream_l1", {SPIKE_THRESHOLD_PCT: 85})
+        await monitor.async_save_overrides()
+
+        # Create a new monitor and load
+        monitor2 = _make_monitor(hass)
+        monitor2._store = MagicMock()
+        monitor2._store.async_load = AsyncMock(side_effect=mock_load)
+        await monitor2.async_load_overrides()
+
+        assert monitor2._circuit_overrides["1"][SPIKE_THRESHOLD_PCT] == 90
+        assert monitor2._mains_overrides["upstream_l1"][SPIKE_THRESHOLD_PCT] == 85
+
+    @pytest.mark.asyncio
+    async def test_load_handles_no_existing_data(self):
+        """Loading with no stored data leaves overrides empty."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor._store = MagicMock()
+        monitor._store.async_load = AsyncMock(return_value=None)
+        await monitor.async_load_overrides()
+        assert monitor._circuit_overrides == {}
+        assert monitor._mains_overrides == {}
