@@ -71,13 +71,25 @@ Stored in `.storage/span_panel_current_monitor.{entry_id}`:
       "window_duration_m": 30,
       "monitoring_enabled": true
     }
+  },
+  "mains_overrides": {
+    "upstream_l1": {
+      "continuous_threshold_pct": 75,
+      "spike_threshold_pct": 95,
+      "window_duration_m": 10,
+      "monitoring_enabled": true
+    },
+    "upstream_l2": { ... },
+    "downstream_l1": { ... },
+    "downstream_l2": { ... }
   }
 }
 ```
 
-Circuits without overrides inherit global defaults. The `monitoring_enabled`
-flag allows disabling monitoring on specific circuits (e.g., those with
-known benign spikes like a well pump).
+Circuits and mains legs without overrides inherit global defaults. The
+`monitoring_enabled` flag allows disabling monitoring on specific
+circuits (e.g., those with known benign spikes like a well pump) or
+specific mains legs.
 
 ### Services
 
@@ -85,6 +97,27 @@ known benign spikes like a well pump).
 
 Set per-circuit overrides. All threshold fields are optional — only
 provided fields are updated.
+
+**`span_panel.set_mains_threshold`**
+
+Set per-mains-leg overrides. Same threshold fields as circuit overrides.
+
+Fields:
+
+- `leg` (required) — one of `upstream_l1`, `upstream_l2`,
+  `downstream_l1`, `downstream_l2`
+- `continuous_threshold_pct` (optional) — continuous load threshold
+- `spike_threshold_pct` (optional) — spike threshold
+- `window_duration_m` (optional) — window duration
+- `monitoring_enabled` (optional) — per-leg toggle
+
+**`span_panel.clear_mains_threshold`**
+
+Remove per-mains-leg overrides, reverting to global defaults.
+
+Fields:
+
+- `leg` (required) — leg identifier
 
 Fields:
 
