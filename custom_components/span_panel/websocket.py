@@ -41,6 +41,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         vol.Required("device_id"): str,
     }
 )
+@websocket_api.require_admin
 @websocket_api.async_response
 async def handle_panel_topology(
     hass: HomeAssistant,
@@ -49,9 +50,9 @@ async def handle_panel_topology(
 ) -> None:
     """Return the full panel topology with entity mappings.
 
-    Accepts a device_id (the HA device registry ID for the SPAN panel)
-    and returns a JSON object containing panel metadata, circuits with
-    tabs/entity mappings, and sub-devices (BESS, EVSE).
+    Admin users must pass the HA device registry ID for the **main SPAN panel**
+    device only (not BESS/EVSE sub-devices). Returns panel metadata, circuits
+    with tabs/entity mappings, and sub-devices (BESS, EVSE).
     """
     device_id = msg["device_id"]
 
@@ -60,6 +61,20 @@ async def handle_panel_topology(
 
     if device_entry is None:
         connection.send_error(msg["id"], "device_not_found", "Device not found")
+        return
+
+    is_span_device = any(domain == DOMAIN for domain, _ in device_entry.identifiers)
+    if not is_span_device:
+        connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
+        return
+
+    # Sub-devices (BESS, EVSE) register with via_device_id pointing at the panel.
+    if device_entry.via_device_id is not None:
+        connection.send_error(
+            msg["id"],
+            "not_panel_device",
+            "Use the SPAN panel device registry ID, not a BESS or EVSE sub-device.",
+        )
         return
 
     # Find the config entry for this device.
@@ -80,9 +95,6 @@ async def handle_panel_topology(
     runtime_data: SpanPanelRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
     snapshot = coordinator.data
-    if snapshot is None:
-        connection.send_error(msg["id"], "no_data", "No panel data available")
-        return
 
     # Build entity lookup grouped by device_id for sub-device section.
     entity_registry = er.async_get(hass)
@@ -105,10 +117,11 @@ async def handle_panel_topology(
         if circuit_id not in circuit_ids:
             continue
 
+        tabs = sorted(circuit.tabs) if circuit.tabs else []
         circuits[circuit_id] = {
-            "tabs": sorted(circuit.tabs) if circuit.tabs else [],
+            "tabs": tabs,
             "name": circuit.name or None,
-            "voltage": 240 if len(circuit.tabs) == 2 else 120,
+            "voltage": 240 if len(tabs) == 2 else 120,
             "device_type": circuit.device_type,
             "relay_state": circuit.relay_state,
             "is_user_controllable": circuit.is_user_controllable,
@@ -195,10 +208,24 @@ def _build_circuit_entity_map(
     for entity in entities:
         uid = entity.unique_id
 
+        # Skip entities without a unique_id, as we cannot reliably match them.
+        if not uid:
+            continue
+
         # Find which circuit this entity belongs to.
         matched_circuit_id: str | None = None
         for cid in circuit_ids:
-            if cid in uid:
+            # Avoid plain substring matching to prevent collisions like "1" in "15".
+            idx = uid.find(cid)
+            if idx == -1:
+                continue
+
+            # Require delimiters (or string boundaries) around the circuit_id.
+            before_ok = idx == 0 or uid[idx - 1] in "_-"
+            after_index = idx + len(cid)
+            after_ok = after_index == len(uid) or uid[after_index] in "_-"
+
+            if before_ok and after_ok:
                 matched_circuit_id = cid
                 break
 
