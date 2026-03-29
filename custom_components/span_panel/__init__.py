@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import logging
 from typing import cast
 
+from homeassistant.components.persistent_notification import async_create as pn_create
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import (
@@ -91,23 +92,106 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfigEntry) -> bool:
-    """Apply config entry migrations.
+    """Migrate config entry through successive versions.
 
-    Entries reaching core are expected to already be storage-compatible with the
-    latest supported custom integration release. If an older version is seen,
-    bump the version marker without mutating stored data.
+    Supports upgrades from v1.3.1+ (config version 2) through to the
+    current version 6. Each step mutates only the fields relevant to
+    that version boundary.
     """
-    if config_entry.version < CURRENT_CONFIG_VERSION:
-        _LOGGER.debug(
-            "Updating config entry %s from version %s to %s without data changes",
-            config_entry.entry_id,
-            config_entry.version,
-            CURRENT_CONFIG_VERSION,
-        )
+    if config_entry.version >= CURRENT_CONFIG_VERSION:
+        return True
+
+    _LOGGER.debug(
+        "Migrating config entry %s from version %s to %s",
+        config_entry.entry_id,
+        config_entry.version,
+        CURRENT_CONFIG_VERSION,
+    )
+
+    # --- v2 → v3: add api_version field ---
+    if config_entry.version < 3:
+        updated_data = dict(config_entry.data)
+
+        if updated_data.get("simulation_mode", False):
+            updated_data[CONF_API_VERSION] = "simulation"
+        else:
+            updated_data[CONF_API_VERSION] = "v1"
+
         hass.config_entries.async_update_entry(
             config_entry,
-            version=CURRENT_CONFIG_VERSION,
+            data=updated_data,
+            options=config_entry.options,
+            title=config_entry.title,
+            version=3,
         )
+        _LOGGER.debug("Migrated config entry %s to version 3", config_entry.entry_id)
+
+    # --- v3 → v4: remove legacy solar/retry options ---
+    if config_entry.version < 4:
+        updated_options = dict(config_entry.options)
+        updated_data = dict(config_entry.data)
+
+        # Remove v1 solar options (no longer applicable)
+        updated_options.pop("enable_solar_circuit", None)
+        updated_options.pop("leg1", None)
+        updated_options.pop("leg2", None)
+
+        # Remove v1 REST retry options (no longer applicable)
+        for key in ("api_retries", "api_retry_timeout", "api_retry_backoff_multiplier"):
+            updated_options.pop(key, None)
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            data=updated_data,
+            options=updated_options,
+            version=4,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 4", config_entry.entry_id)
+
+    # --- v4 → v5: remove wwanLink binary sensor ---
+    if config_entry.version < 5:
+        entity_registry = er.async_get(hass)
+        entities = er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
+
+        removed = 0
+        for entity in entities:
+            if entity.domain == "binary_sensor" and entity.unique_id.endswith("_wwanLink"):
+                entity_registry.async_remove(entity.entity_id)
+                _LOGGER.info("Removed deprecated wwanLink binary sensor: %s", entity.entity_id)
+                removed += 1
+
+        if removed:
+            _LOGGER.info("v4→v5 migration: removed %d deprecated entities", removed)
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            version=5,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 5", config_entry.entry_id)
+
+    # --- v5 → v6: reject simulation entries ---
+    if config_entry.version < 6:
+        if config_entry.data.get(CONF_API_VERSION) == "simulation" or config_entry.data.get(
+            "simulation_mode", False
+        ):
+            pn_create(
+                hass,
+                "This SPAN Panel config entry was a **built-in simulator** which "
+                "has been removed in this version. Please remove this entry and "
+                "use the standalone SPAN simulator instead.",
+                title="SPAN Panel: Simulation Entry Removed",
+                notification_id=f"span_simulation_removed_{config_entry.entry_id}",
+            )
+            _LOGGER.warning(
+                "Config entry %s is a simulation entry — setup will be skipped",
+                config_entry.entry_id,
+            )
+
+        hass.config_entries.async_update_entry(
+            config_entry,
+            version=6,
+        )
+        _LOGGER.debug("Migrated config entry %s to version 6", config_entry.entry_id)
 
     return True
 

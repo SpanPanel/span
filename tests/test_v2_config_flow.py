@@ -397,7 +397,7 @@ async def test_config_flow_uses_current_config_entry_version() -> None:
 async def test_migration_updates_older_entry_to_current_version(
     hass: HomeAssistant,
 ) -> None:
-    """Core should treat older entries as already storage-compatible."""
+    """v1.3.1 entries (version 2) should migrate through v3→v4→v5→v6."""
     entry = MockConfigEntry(
         version=2,
         minor_version=1,
@@ -417,7 +417,8 @@ async def test_migration_updates_older_entry_to_current_version(
 
     assert result is True
     assert entry.version == 6
-    assert CONF_API_VERSION not in entry.data
+    # v2→v3 migration adds api_version field
+    assert entry.data[CONF_API_VERSION] == "v1"
 
 
 @pytest.mark.asyncio
