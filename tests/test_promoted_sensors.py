@@ -265,7 +265,8 @@ class TestBessMetadataSensorDefinitions:
         battery = SpanBatterySnapshotFactory.create(nameplate_capacity_kwh=13.5)
         desc = next(d for d in BESS_METADATA_SENSORS if d.key == "nameplate_capacity")
         assert desc.value_fn(battery) == 13.5
-        assert desc.device_class == SensorDeviceClass.ENERGY_STORAGE
+        assert desc.device_class is None
+        assert desc.entity_registry_enabled_default is False
 
     def test_soe_kwh_value_function(self):
         battery = SpanBatterySnapshotFactory.create(soe_kwh=10.2)
@@ -344,7 +345,8 @@ class TestPVMetadataSensorDefinitions:
         )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_nameplate_capacity")
         assert desc.value_fn(snapshot) == 7600.0
-        assert desc.device_class == SensorDeviceClass.POWER
+        assert desc.device_class is None
+        assert desc.entity_registry_enabled_default is False
 
     def test_pv_none_metadata(self):
         snapshot = SpanPanelSnapshotFactory.create(pv=SpanPVSnapshot())

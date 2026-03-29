@@ -392,9 +392,9 @@ BESS_METADATA_SENSORS: tuple[
     SpanBessMetadataSensorEntityDescription(
         key="nameplate_capacity",
         translation_key="bess_nameplate_capacity",
-        device_class=SensorDeviceClass.ENERGY_STORAGE,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda b: b.nameplate_capacity_kwh,
     ),
     SpanBessMetadataSensorEntityDescription(
@@ -448,9 +448,9 @@ PV_METADATA_SENSORS: tuple[
     SpanPVMetadataSensorEntityDescription(
         key="pv_nameplate_capacity",
         translation_key="pv_nameplate_capacity",
-        device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda s: s.pv.nameplate_capacity_w,
     ),
 )
