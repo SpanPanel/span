@@ -10,7 +10,9 @@ from custom_components.span_panel.helpers import (
 )
 
 
-def _make_circuit(tabs: list[int], instant_power_w: float = 100.0) -> SpanCircuitSnapshot:
+def _make_circuit(
+    tabs: list[int], instant_power_w: float = 100.0
+) -> SpanCircuitSnapshot:
     """Create a minimal SpanCircuitSnapshot for tab/voltage tests."""
     return SpanCircuitSnapshot(
         circuit_id="test",
@@ -27,7 +29,7 @@ def _make_circuit(tabs: list[int], instant_power_w: float = 100.0) -> SpanCircui
     )
 
 
-def test_tabs_attribute_construction():
+def test_tabs_attribute_construction() -> None:
     """Test tabs attribute construction from circuit data."""
     # Single tab (120V)
     assert construct_tabs_attribute(_make_circuit([28])) == "tabs [28]"
@@ -42,7 +44,7 @@ def test_tabs_attribute_construction():
     assert construct_tabs_attribute(_make_circuit([1, 3, 5])) is None
 
 
-def test_tabs_attribute_parsing():
+def test_tabs_attribute_parsing() -> None:
     """Test tabs attribute parsing back to tab numbers."""
     assert parse_tabs_attribute("tabs [28]") == [28]
     assert parse_tabs_attribute("tabs [30:32]") == [30, 32]
@@ -51,7 +53,7 @@ def test_tabs_attribute_parsing():
     assert parse_tabs_attribute("tabs [1,3,5]") is None
 
 
-def test_voltage_type_detection():
+def test_voltage_type_detection() -> None:
     """Test voltage type detection from circuit data."""
     assert get_circuit_voltage_type(_make_circuit([28])) == "120V"
     assert get_circuit_voltage_type(_make_circuit([30, 32])) == "240V"
@@ -59,7 +61,7 @@ def test_voltage_type_detection():
     assert get_circuit_voltage_type(_make_circuit([1, 3, 5])) == "unknown"
 
 
-def test_voltage_attribute_construction():
+def test_voltage_attribute_construction() -> None:
     """Test voltage attribute construction from circuit data."""
     assert construct_voltage_attribute(_make_circuit([28])) == 120
     assert construct_voltage_attribute(_make_circuit([30, 32])) == 240
@@ -67,7 +69,7 @@ def test_voltage_attribute_construction():
     assert construct_voltage_attribute(_make_circuit([1, 3, 5])) is None
 
 
-def test_end_to_end_tabs_workflow():
+def test_end_to_end_tabs_workflow() -> None:
     """Test the complete workflow from circuit data to tabs attribute and back."""
     circuit = _make_circuit([30, 32])
 
@@ -81,7 +83,7 @@ def test_end_to_end_tabs_workflow():
     assert construct_voltage_attribute(circuit) == 240
 
 
-def test_amperage_calculation():
+def test_amperage_calculation() -> None:
     """Test amperage calculation using voltage and power."""
     # 120V at 1200W -> 10A
     circuit_120v = _make_circuit([28], instant_power_w=1200.0)

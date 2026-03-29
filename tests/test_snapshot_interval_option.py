@@ -1,5 +1,7 @@
 """Test snapshot update interval configuration option."""
 
+from unittest.mock import MagicMock
+
 import pytest
 import voluptuous as vol
 
@@ -64,8 +66,6 @@ class TestSnapshotIntervalOption:
 
     def test_snapshot_interval_option_persistence(self) -> None:
         """Test that the option is accessible from config entry options."""
-        from unittest.mock import MagicMock
-
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
         mock_coordinator.config_entry.options = {
@@ -79,8 +79,6 @@ class TestSnapshotIntervalOption:
 
     def test_snapshot_interval_default_when_missing(self) -> None:
         """Test that the default is used when option is not set."""
-        from unittest.mock import MagicMock
-
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
         mock_coordinator.config_entry.options = {}

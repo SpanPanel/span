@@ -1,12 +1,19 @@
-"""test_circuit_control.
+"""Tests for Span Panel circuit control functionality (switches, relay operations)."""
 
-Tests for Span Panel circuit control functionality (switches, relay operations).
-"""
-
+from dataclasses import replace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
+
+from custom_components.span_panel.switch import (
+    _OPTIMISTIC_HOLD_SECONDS,
+    SpanPanelCircuitsSwitch,
+    async_setup_entry,
+)
+from homeassistant.core import HomeAssistant
+
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 
 @pytest.fixture(autouse=True)
@@ -15,342 +22,843 @@ def expected_lingering_timers():
     return True
 
 
-def create_mock_circuit(
-    circuit_id: str = "1",
-    name: str = "Test Circuit",
-    relay_state: str = "CLOSED",
-    is_user_controllable: bool = True,
-):
-    """Create a mock circuit for testing."""
-    circuit = MagicMock()
-    circuit.id = circuit_id
-    circuit.name = name
-    circuit.relay_state = relay_state
-    circuit.is_user_controllable = is_user_controllable
-    circuit.tabs = [int(circuit_id)]
-    circuit.copy.return_value = circuit
-    return circuit
-
-
-def create_mock_span_panel(circuits: dict[str, Any]):
-    """Create a mock SpanPanel with circuits."""
-    panel = MagicMock()
-    panel.circuits = circuits
-    panel.status.serial_number = "TEST123"
-    panel.api = MagicMock()  # Add api attribute for mock compatibility
-    return panel
+def _make_coordinator(
+    circuits: dict[str, Any],
+    *,
+    panel_offline: bool = False,
+    options: dict[str, Any] | None = None,
+) -> MagicMock:
+    """Create a coordinator mock with a real snapshot from factories."""
+    snapshot = SpanPanelSnapshotFactory.create(circuits=circuits)
+    coordinator = MagicMock()
+    coordinator.data = snapshot
+    coordinator.panel_offline = panel_offline
+    coordinator.config_entry = MagicMock()
+    coordinator.config_entry.title = "SPAN Panel"
+    coordinator.config_entry.data = {}
+    coordinator.config_entry.options = options or {}
+    coordinator.request_reload = MagicMock()
+    coordinator.async_request_refresh = AsyncMock()
+    coordinator.client = AsyncMock()
+    return coordinator
 
 
 @pytest.mark.asyncio
-async def test_switch_creation_for_controllable_circuit(hass: Any, enable_custom_integrations: Any):
-    """Test that switches are created only for user-controllable circuits."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.const import CircuitRelayState
-    from custom_components.span_panel.switch import (
-        async_setup_entry,
-    )
-
-    # Create controllable circuit
-    controllable_circuit = create_mock_circuit(
+async def test_switch_creation_for_controllable_circuit(hass: HomeAssistant) -> None:
+    """Switches are created only for user-controllable circuits."""
+    controllable = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
         name="Kitchen Outlets",
-        relay_state=CircuitRelayState.CLOSED.name,
         is_user_controllable=True,
     )
-
-    # Create non-controllable circuit
-    non_controllable_circuit = create_mock_circuit(
+    non_controllable = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Main Feed",
-        relay_state=CircuitRelayState.CLOSED.name,
         is_user_controllable=False,
     )
+    coordinator = _make_coordinator({"1": controllable, "2": non_controllable})
 
-    circuits = {
-        "1": controllable_circuit,
-        "2": non_controllable_circuit,
-    }
+    entities: list[Any] = []
+    mock_entry = MagicMock()
+    mock_entry.title = "SPAN Panel"
+    mock_entry.data = {}
+    mock_entry.runtime_data = MagicMock(coordinator=coordinator)
 
-    mock_panel = create_mock_span_panel(circuits)
-    mock_coordinator = MagicMock()
-    mock_coordinator.data = mock_panel
-    # Add proper config entry with title for device name fallback
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.title = "SPAN Panel"
-    mock_coordinator.config_entry.data = {}  # Empty data dict
-    mock_coordinator.config_entry.options = {}  # Empty options dict
+    await async_setup_entry(hass, mock_entry, lambda e, **kw: entities.extend(e))
 
-    entities = []
-
-    def mock_add_entities(new_entities, update_before_add: bool = False):
-        entities.extend(new_entities)
-
-    mock_config_entry = MagicMock()
-    mock_config_entry.entry_id = "test_entry"
-    mock_config_entry.title = "SPAN Panel"  # Provide string title
-    mock_config_entry.data = {}  # Empty data dict for device_name fallback to title
-    mock_config_entry.runtime_data = MagicMock()
-    mock_config_entry.runtime_data.coordinator = mock_coordinator
-
-    await async_setup_entry(hass, mock_config_entry, mock_add_entities)
-
-    # Should only create one switch for the controllable circuit
     assert len(entities) == 1
-    assert entities[0]._circuit_id == "1"  # Access private attribute
+    assert entities[0]._circuit_id == "1"
 
 
 @pytest.mark.asyncio
-async def test_switch_turn_on_operation(hass: Any, enable_custom_integrations: Any):
-    """Test turning on a circuit switch."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.const import CircuitRelayState
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    circuit = create_mock_circuit(
+async def test_switch_turn_on_operation() -> None:
+    """Turning on a switch sends CLOSED to the client."""
+    circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
         name="Kitchen Outlets",
-        relay_state=CircuitRelayState.OPEN.name,
+        relay_state="OPEN",
     )
+    coordinator = _make_coordinator({"1": circuit})
 
-    circuits = {"1": circuit}
-    mock_panel = create_mock_span_panel(circuits)
-
-    mock_coordinator = MagicMock()
-    mock_coordinator.data = mock_panel
-    # Add proper config entry with title for device name fallback
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.title = "SPAN Panel"
-    mock_coordinator.config_entry.data = {}  # Empty data dict
-    mock_coordinator.config_entry.options = {}  # Empty options dict
-    mock_coordinator.async_request_refresh = AsyncMock()
-
-    # v2: relay control goes through coordinator.client
-    mock_client = AsyncMock()
-    mock_coordinator.client = mock_client
-
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
-
-    # Turn on the switch
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
     await switch.async_turn_on()
 
-    # Verify client was called with correct parameters
-    mock_client.set_circuit_relay.assert_called_once_with("1", "CLOSED")
-
-    # Verify refresh was requested
-    mock_coordinator.async_request_refresh.assert_called_once()
+    coordinator.client.set_circuit_relay.assert_called_once_with("1", "CLOSED")
+    coordinator.async_request_refresh.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_switch_turn_off_operation(hass: Any, enable_custom_integrations: Any):
-    """Test turning off a circuit switch."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.const import CircuitRelayState
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    circuit = create_mock_circuit(
+async def test_switch_turn_off_operation() -> None:
+    """Turning off a switch sends OPEN to the client."""
+    circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
         name="Kitchen Outlets",
-        relay_state=CircuitRelayState.CLOSED.name,
+        relay_state="CLOSED",
     )
+    coordinator = _make_coordinator({"1": circuit})
 
-    circuits = {"1": circuit}
-    mock_panel = create_mock_span_panel(circuits)
-
-    mock_coordinator = MagicMock()
-    mock_coordinator.data = mock_panel
-    # Add proper config entry with title for device name fallback
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.title = "SPAN Panel"
-    mock_coordinator.config_entry.data = {}  # Empty data dict
-    mock_coordinator.config_entry.options = {}  # Empty options dict
-    mock_coordinator.async_request_refresh = AsyncMock()
-
-    # v2: relay control goes through coordinator.client
-    mock_client = AsyncMock()
-    mock_coordinator.client = mock_client
-
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
-
-    # Turn off the switch
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
     await switch.async_turn_off()
 
-    # Verify client was called with correct parameters
-    mock_client.set_circuit_relay.assert_called_once_with("1", "OPEN")
-
-    # Verify refresh was requested
-    mock_coordinator.async_request_refresh.assert_called_once()
+    coordinator.client.set_circuit_relay.assert_called_once_with("1", "OPEN")
+    coordinator.async_request_refresh.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_switch_state_reflects_relay_state(hass: Any, enable_custom_integrations: Any):
-    """Test that switch state correctly reflects circuit relay state."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.const import CircuitRelayState
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    # Test CLOSED relay -> switch ON
-    circuit_closed = create_mock_circuit(
-        circuit_id="1",
-        name="Kitchen Outlets",
-        relay_state=CircuitRelayState.CLOSED.name,
+def test_switch_state_reflects_relay_state() -> None:
+    """Switch is_on mirrors the circuit relay state."""
+    closed = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen", relay_state="CLOSED"
+    )
+    coordinator_closed = _make_coordinator({"1": closed})
+    assert (
+        SpanPanelCircuitsSwitch(coordinator_closed, "1", "Kitchen", "SPAN Panel").is_on
+        is True
     )
 
-    circuits_closed = {"1": circuit_closed}
-    mock_panel_closed = create_mock_span_panel(circuits_closed)
-
-    mock_coordinator_closed = MagicMock()
-    mock_coordinator_closed.data = mock_panel_closed
-    # Add proper config entry with title for device name fallback
-    mock_coordinator_closed.config_entry = MagicMock()
-    mock_coordinator_closed.config_entry.title = "SPAN Panel"
-    mock_coordinator_closed.config_entry.data = {}  # Empty data dict
-    mock_coordinator_closed.config_entry.options = {}  # Empty options dict
-
-    switch_closed = SpanPanelCircuitsSwitch(mock_coordinator_closed, "1", "Kitchen Outlets", "SPAN Panel")
-
-    # Check that switch is on for CLOSED relay
-    assert switch_closed.is_on is True
-
-    # Test OPEN relay -> switch OFF
-    circuit_open = create_mock_circuit(
-        circuit_id="1",
-        name="Kitchen Outlets",
-        relay_state=CircuitRelayState.OPEN.name,
+    opened = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen", relay_state="OPEN"
+    )
+    coordinator_open = _make_coordinator({"1": opened})
+    assert (
+        SpanPanelCircuitsSwitch(coordinator_open, "1", "Kitchen", "SPAN Panel").is_on
+        is False
     )
 
-    circuits_open = {"1": circuit_open}
-    mock_panel_open = create_mock_span_panel(circuits_open)
 
-    mock_coordinator_open = MagicMock()
-    mock_coordinator_open.data = mock_panel_open
-    # Add proper config entry with title for device name fallback
-    mock_coordinator_open.config_entry = MagicMock()
-    mock_coordinator_open.config_entry.title = "SPAN Panel"
-    mock_coordinator_open.config_entry.data = {}  # Empty data dict
-    mock_coordinator_open.config_entry.options = {}  # Empty options dict
+def test_switch_handles_missing_circuit() -> None:
+    """Constructing a switch for a missing circuit raises ValueError."""
+    coordinator = _make_coordinator({})
 
-    switch_open = SpanPanelCircuitsSwitch(mock_coordinator_open, "1", "Kitchen Outlets", "SPAN Panel")
-
-    # Check that switch is off for OPEN relay
-    assert switch_open.is_on is False
-
-
-@pytest.mark.asyncio
-async def test_switch_handles_missing_circuit(hass: Any, enable_custom_integrations: Any):
-    """Test that switch handles gracefully when circuit is missing."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    # Empty circuits dict
-    circuits = {}
-    mock_panel = create_mock_span_panel(circuits)
-
-    mock_coordinator = MagicMock()
-    mock_coordinator.data = mock_panel
-    # Add proper config entry with title for device name fallback
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.title = "SPAN Panel"
-    mock_coordinator.config_entry.data = {}  # Empty data dict
-    mock_coordinator.config_entry.options = {}  # Empty options dict
-
-    # Should raise ValueError for missing circuit
     with pytest.raises(ValueError, match="Circuit 1 not found"):
-        SpanPanelCircuitsSwitch(mock_coordinator, "1", "Missing Circuit", "SPAN Panel")
+        SpanPanelCircuitsSwitch(coordinator, "1", "Missing Circuit", "SPAN Panel")
 
 
-@pytest.mark.asyncio
-async def test_switch_coordinator_update_handling(hass: Any, enable_custom_integrations: Any):
-    """Test switch updates correctly when coordinator data changes."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.const import CircuitRelayState
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    circuit = create_mock_circuit(
+def test_switch_coordinator_update_handling(hass: HomeAssistant) -> None:
+    """Switch reflects new relay state after coordinator data changes."""
+    circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
         name="Kitchen Outlets",
-        relay_state=CircuitRelayState.CLOSED.name,
+        relay_state="CLOSED",
     )
+    coordinator = _make_coordinator({"1": circuit})
 
-    circuits = {"1": circuit}
-    mock_panel = create_mock_span_panel(circuits)
-
-    mock_coordinator = MagicMock()
-    mock_coordinator.data = mock_panel
-    # Add proper config entry with title for device name fallback
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.title = "SPAN Panel"
-    mock_coordinator.config_entry.data = {}  # Empty data dict
-    mock_coordinator.config_entry.options = {}  # Empty options dict
-
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
-
-    # Add mock hass and entity registry to prevent "hass is None" error
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
     switch.hass = hass
     switch.entity_id = "switch.span_panel_kitchen_outlets_breaker"
     switch.registry_entry = MagicMock()
+    switch.platform = MagicMock(platform_name="switch")
 
-    # Add mock platform to prevent platform_name error
-    mock_platform = MagicMock()
-    mock_platform.platform_name = "switch"
-    switch.platform = mock_platform
-
-    # Initially should be on (CLOSED)
     assert switch.is_on is True
 
-    # Change circuit state to OPEN
-    circuit.relay_state = CircuitRelayState.OPEN.name
-
-    # Trigger coordinator update (now won't fail due to hass being None)
+    # Replace snapshot with an OPEN relay
+    updated = replace(circuit, relay_state="OPEN")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": updated})
     switch._handle_coordinator_update()
 
-    # Switch should now be off
+    assert switch.is_on is False
+
+
+def test_circuit_name_change_triggers_reload_request(hass: HomeAssistant) -> None:
+    """Changing a circuit name triggers an integration reload."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1",
+        name="Kitchen Outlets",
+        relay_state="CLOSED",
+    )
+    coordinator = _make_coordinator({"1": circuit})
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
+    switch.hass = hass
+    switch.entity_id = "switch.span_panel_kitchen_outlets_breaker"
+    switch.registry_entry = MagicMock()
+    switch.platform = MagicMock(platform_name="switch")
+
+    # Replace snapshot with a renamed circuit
+    renamed = replace(circuit, name="New Kitchen Outlets")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": renamed})
+    switch._handle_coordinator_update()
+
+    coordinator.request_reload.assert_called_once()
+
+
+def test_switch_unavailable_when_panel_offline() -> None:
+    """Switches become unavailable when the panel is offline."""
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1")
+    coordinator = _make_coordinator({"1": circuit}, panel_offline=True)
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    assert switch.available is False
+
+
+def test_switch_extra_state_attributes_include_tabs_and_voltage() -> None:
+    """Switches expose circuit tab and voltage metadata."""
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", tabs=[1])
+    coordinator = _make_coordinator({"1": circuit})
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    assert switch.extra_state_attributes == {"tabs": "tabs [1]", "voltage": 120}
+
+
+@pytest.mark.asyncio
+async def test_switch_turn_on_without_relay_support_logs_and_returns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Switches should no-op when the client lacks relay control."""
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", relay_state="OPEN")
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.client = MagicMock(spec=[])
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    await switch.async_turn_on()
+
+    assert "Client does not support relay control" in caplog.text
+    coordinator.async_request_refresh.assert_not_called()
+
+
+def test_switch_optimistic_hold_preserves_requested_state_until_timeout() -> None:
+    """Coordinator updates should respect the optimistic hold window."""
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", relay_state="OPEN")
+    coordinator = _make_coordinator({"1": circuit})
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    switch._set_optimistic_state(True)
+
+    # Panel still reports OPEN, but the optimistic hold should keep the switch on.
+    switch._optimistic_set_at = 0.0
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            "custom_components.span_panel.switch.time.monotonic", lambda: 1.0
+        )
+        switch._update_is_on()
+    assert switch.is_on is True
+
+    # Once the hold window expires, the real panel state should win.
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(
+            "custom_components.span_panel.switch.time.monotonic",
+            lambda: _OPTIMISTIC_HOLD_SECONDS + 1.0,
+        )
+        switch._update_is_on()
     assert switch.is_on is False
 
 
 @pytest.mark.asyncio
-async def test_circuit_name_change_triggers_reload_request(
-    hass: Any, enable_custom_integrations: Any
-):
-    """Test that changing circuit name triggers integration reload."""
-    # Lazy imports to avoid collection issues
-    from custom_components.span_panel.const import CircuitRelayState
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    circuit = create_mock_circuit(
+async def test_switch_async_setup_entry_filters_supported_circuits(
+    hass: HomeAssistant,
+) -> None:
+    """Setup should only create switches for supported controllable circuits."""
+    controllable = SpanCircuitSnapshotFactory.create(
         circuit_id="1",
-        name="Kitchen Outlets",
-        relay_state=CircuitRelayState.CLOSED.name,
+        is_user_controllable=True,
+    )
+    locked = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        is_user_controllable=False,
+    )
+    evse_upstream = replace(
+        SpanCircuitSnapshotFactory.create(
+            circuit_id="3",
+            name="EV Upstream",
+            is_user_controllable=True,
+            tabs=[3, 4],
+        ),
+        device_type="evse",
+        relative_position="UPSTREAM",
+    )
+    pv_downstream = replace(
+        SpanCircuitSnapshotFactory.create(
+            circuit_id="4",
+            name="Solar",
+            is_user_controllable=True,
+            tabs=[5, 6],
+        ),
+        device_type="pv",
+        relative_position="DOWNSTREAM",
     )
 
-    circuits = {"1": circuit}
-    mock_panel = create_mock_span_panel(circuits)
+    coordinator = _make_coordinator(
+        {
+            "1": controllable,
+            "2": locked,
+            "3": evse_upstream,
+            "4": pv_downstream,
+        }
+    )
 
-    mock_coordinator = MagicMock()
-    mock_coordinator.data = mock_panel
-    # Add proper config entry with title for device name fallback
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.title = "SPAN Panel"
-    mock_coordinator.config_entry.data = {}  # Empty data dict
-    mock_coordinator.config_entry.options = {}  # Empty options dict
-    mock_coordinator.request_reload = MagicMock()
+    entities: list[Any] = []
+    mock_entry = MagicMock()
+    mock_entry.title = "SPAN Panel"
+    mock_entry.data = {}
+    mock_entry.runtime_data = MagicMock(coordinator=coordinator)
 
-    switch = SpanPanelCircuitsSwitch(mock_coordinator, "1", "Kitchen Outlets", "SPAN Panel")
+    await async_setup_entry(hass, mock_entry, lambda e, **kw: entities.extend(e))
 
-    # Add mock hass and entity registry to prevent "hass is None" error
+    assert len(entities) == 2
+    assert {entity._circuit_id for entity in entities} == {"1", "4"}
+
+
+def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) -> None:
+    """Existing solar switch entities should sync to the solar fallback label."""
+    solar = replace(
+        SpanCircuitSnapshotFactory.create(
+            circuit_id="15",
+            name="",
+            tabs=[15],
+            is_user_controllable=True,
+        ),
+        device_type="pv",
+    )
+    coordinator = _make_coordinator({"15": solar})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = "switch.solar_breaker"
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "15", "", "SPAN Panel")
+
+    assert switch.name == "Solar Breaker"
+
+
+def test_switch_initial_install_uses_circuit_numbers_when_enabled(
+    hass: HomeAssistant,
+) -> None:
+    """Initial switch names should honor the use-circuit-numbers option."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        name="Kitchen",
+        tabs=[2, 3],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"2": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "2", "Kitchen", "SPAN Panel")
+
+    assert switch.name == "Circuit 2 3 Breaker"
+
+
+def test_switch_initial_install_without_name_lets_ha_default(
+    hass: HomeAssistant,
+) -> None:
+    """Unnamed switches on first install should let HA provide the name."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="3",
+        name="",
+        tabs=[3],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator({"3": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "3", "", "SPAN Panel")
+
+    assert switch._attr_name is None
+    assert switch._previous_circuit_name is not None
+
+
+def test_switch_first_update_requests_reload_without_user_override(
+    hass: HomeAssistant,
+) -> None:
+    """First update should request a reload when no user override exists."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen", is_user_controllable=True
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        init_registry = MagicMock()
+        init_registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: init_registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen", "SPAN Panel")
+
+    switch.hass = hass
+    switch.entity_id = "switch.kitchen_breaker"
+    switch.async_write_ha_state = MagicMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
+
+    coordinator.request_reload.assert_called_once()
+
+
+def test_switch_user_override_skips_reload_on_update(hass: HomeAssistant) -> None:
+    """User-customized switch names should suppress auto-sync reloads."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen", is_user_controllable=True
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        init_registry = MagicMock()
+        init_registry.async_get_entity_id.return_value = "switch.kitchen_breaker"
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: init_registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen", "SPAN Panel")
+
+    renamed = replace(circuit, name="Renamed Kitchen")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": renamed})
+    switch.hass = hass
+    switch.entity_id = "switch.kitchen_breaker"
+    switch.async_write_ha_state = MagicMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = MagicMock(
+            name="Custom Kitchen Breaker"
+        )
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
+
+    coordinator.request_reload.assert_not_called()
+    assert switch._previous_circuit_name == "Renamed Kitchen"
+
+
+def test_switch_update_is_on_clears_state_when_circuit_disappears(
+    hass: HomeAssistant,
+) -> None:
+    """Switch state should clear when its circuit disappears from coordinator data."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", is_user_controllable=True
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
+    switch._optimistic_state = True
+    switch._update_is_on()
+
+    assert switch.is_on is None
+    assert switch._optimistic_state is None
+
+
+@pytest.mark.asyncio
+async def test_switch_turn_off_without_relay_support_logs_and_returns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Turning off should no-op when the client lacks relay control."""
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", relay_state="CLOSED")
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.client = MagicMock(spec=[])
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    await switch.async_turn_off()
+
+    assert "Client does not support relay control" in caplog.text
+    coordinator.async_request_refresh.assert_not_called()
+
+
+def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:
+    """Sync turn_on/turn_off wrappers should schedule async tasks."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", is_user_controllable=True
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+
+    switch.hass = MagicMock()
+    on_task = object()
+    off_task = object()
+    switch.async_turn_on = MagicMock(return_value=on_task)
+    switch.async_turn_off = MagicMock(return_value=off_task)
+
+    switch.turn_on()
+    switch.turn_off()
+
+    assert switch.hass.create_task.call_count == 2
+    switch.hass.create_task.assert_any_call(on_task)
+    switch.hass.create_task.assert_any_call(off_task)
+
+
+def test_set_optimistic_state_writes_state_when_hass_present() -> None:
+    """Setting optimistic state should immediately push HA state when attached."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", is_user_controllable=True
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = MagicMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+
+    switch.hass = MagicMock()
+    switch.async_write_ha_state = MagicMock()
+
+    switch._set_optimistic_state(True)
+
+    assert switch.is_on is True
+    switch.async_write_ha_state.assert_called_once()
+
+
+def test_switch_circuit_numbers_entity_id_stable_after_reload(
+    hass: HomeAssistant,
+) -> None:
+    """Entity_id must stay circuit-based after name sync sets friendly display name."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        name="Air Conditioner",
+        tabs=[15, 17],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"2": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    # --- Initial install: entity NOT in registry ---
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(
+            coordinator, "2", "Air Conditioner", "SPAN Panel"
+        )
+
+    assert switch.name == "Circuit 15 17 Breaker"
+    assert switch.entity_id == "switch.span_panel_circuit_15_17_breaker"
+
+    # --- After reload: entity EXISTS in registry ---
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = (
+            "switch.span_panel_circuit_15_17_breaker"
+        )
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch2 = SpanPanelCircuitsSwitch(
+            coordinator, "2", "Air Conditioner", "SPAN Panel"
+        )
+
+    # Entity_id must still be circuit-based
+    assert switch2.name == "Circuit 15 17 Breaker"
+    assert switch2.entity_id == "switch.span_panel_circuit_15_17_breaker"
+
+
+def test_switch_circuit_numbers_entity_id_120v_single_tab(
+    hass: HomeAssistant,
+) -> None:
+    """120V single-tab circuit should produce entity_id with one tab number."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="5",
+        name="Kitchen Outlets",
+        tabs=[10],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"5": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(
+            coordinator, "5", "Kitchen Outlets", "SPAN Panel"
+        )
+
+    assert switch.name == "Circuit 10 Breaker"
+    assert switch.entity_id == "switch.span_panel_circuit_10_breaker"
+
+
+def test_switch_circuit_numbers_syncs_friendly_name_to_registry(
+    hass: HomeAssistant,
+) -> None:
+    """Registry display name should be synced to the panel friendly name."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        name="Air Conditioner",
+        tabs=[15, 17],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"2": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = (
+            "switch.span_panel_circuit_15_17_breaker"
+        )
+        # Simulate registry entry with no user-set name.
+        # Use PropertyMock because MagicMock(name=...) sets the mock's
+        # internal label rather than the .name attribute.
+        entity_entry = MagicMock()
+        type(entity_entry).name = PropertyMock(return_value=None)
+        registry.async_get.return_value = entity_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        SpanPanelCircuitsSwitch(coordinator, "2", "Air Conditioner", "SPAN Panel")
+
+    registry.async_update_entity.assert_called_once_with(
+        "switch.span_panel_circuit_15_17_breaker", name="Air Conditioner Breaker"
+    )
+
+
+def test_switch_circuit_numbers_preserves_user_custom_name(
+    hass: HomeAssistant,
+) -> None:
+    """User-customized registry names must not be overwritten by sync."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        name="Air Conditioner",
+        tabs=[15, 17],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"2": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = (
+            "switch.span_panel_circuit_15_17_breaker"
+        )
+        # Simulate registry entry with a user-customized name.
+        # Use PropertyMock because MagicMock(name=...) sets the mock's
+        # internal label rather than the .name attribute.
+        entity_entry = MagicMock()
+        type(entity_entry).name = PropertyMock(return_value="My AC Unit")
+        registry.async_get.return_value = entity_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        SpanPanelCircuitsSwitch(coordinator, "2", "Air Conditioner", "SPAN Panel")
+
+    registry.async_update_entity.assert_not_called()
+
+
+def test_switch_coordinator_update_circuit_numbers_updates_registry(
+    hass: HomeAssistant,
+) -> None:
+    """In circuit-numbers mode, a name change should update the registry display name."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        name="Air Conditioner",
+        tabs=[15, 17],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"2": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    # Create switch with entity already in registry (existing entity)
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = (
+            "switch.span_panel_circuit_15_17_breaker"
+        )
+        entity_entry = MagicMock()
+        type(entity_entry).name = PropertyMock(return_value="Air Conditioner Breaker")
+        registry.async_get.return_value = entity_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(
+            coordinator, "2", "Air Conditioner", "SPAN Panel"
+        )
+
+    # Simulate a circuit name change from "Air Conditioner" to "Kitchen AC"
+    renamed = replace(circuit, name="Kitchen AC")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"2": renamed})
+    switch.hass = hass
+    switch.entity_id = "switch.span_panel_circuit_15_17_breaker"
+    switch.async_write_ha_state = MagicMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_entry = MagicMock()
+        type(runtime_entry).name = PropertyMock(return_value="Air Conditioner Breaker")
+        runtime_registry.async_get.return_value = runtime_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
+
+    runtime_registry.async_update_entity.assert_called_once_with(
+        "switch.span_panel_circuit_15_17_breaker", name="Kitchen AC Breaker"
+    )
+    coordinator.request_reload.assert_not_called()
+
+
+def test_switch_coordinator_update_circuit_numbers_preserves_user_override(
+    hass: HomeAssistant,
+) -> None:
+    """In circuit-numbers mode, user-customized registry names must not be overwritten."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="2",
+        name="Air Conditioner",
+        tabs=[15, 17],
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"2": circuit}, options={"use_circuit_numbers": True}
+    )
+    coordinator.hass = hass
+
+    # Create switch with entity already in registry
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = (
+            "switch.span_panel_circuit_15_17_breaker"
+        )
+        entity_entry = MagicMock()
+        type(entity_entry).name = PropertyMock(return_value="Air Conditioner Breaker")
+        registry.async_get.return_value = entity_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(
+            coordinator, "2", "Air Conditioner", "SPAN Panel"
+        )
+
+    # Simulate a circuit name change; user has set "My AC Unit" in the registry
+    renamed = replace(circuit, name="Kitchen AC")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"2": renamed})
+    switch.hass = hass
+    switch.entity_id = "switch.span_panel_circuit_15_17_breaker"
+    switch.async_write_ha_state = MagicMock()
+
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_entry = MagicMock()
+        type(runtime_entry).name = PropertyMock(return_value="My AC Unit")
+        runtime_registry.async_get.return_value = runtime_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
+
+    runtime_registry.async_update_entity.assert_not_called()
+    coordinator.request_reload.assert_not_called()
+
+
+def test_switch_coordinator_update_friendly_mode_still_reloads(
+    hass: HomeAssistant,
+) -> None:
+    """In friendly-names mode, name changes should still trigger a reload."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1",
+        name="Kitchen Outlets",
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator(
+        {"1": circuit}, options={"use_circuit_numbers": False}
+    )
+    coordinator.hass = hass
+
+    # Create switch with entity already in registry (previous name known)
+    with pytest.MonkeyPatch.context() as mp:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = (
+            "switch.span_panel_kitchen_outlets_breaker"
+        )
+        entity_entry = MagicMock()
+        type(entity_entry).name = PropertyMock(return_value=None)
+        registry.async_get.return_value = entity_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: registry,
+        )
+        switch = SpanPanelCircuitsSwitch(
+            coordinator, "1", "Kitchen Outlets", "SPAN Panel"
+        )
+
+    assert switch._previous_circuit_name == "Kitchen Outlets"
+
+    # Simulate a circuit name change
+    renamed = replace(circuit, name="New Kitchen Outlets")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": renamed})
     switch.hass = hass
     switch.entity_id = "switch.span_panel_kitchen_outlets_breaker"
-    switch.registry_entry = MagicMock()
+    switch.async_write_ha_state = MagicMock()
 
-    # Add mock platform to prevent platform_name error
-    mock_platform = MagicMock()
-    mock_platform.platform_name = "switch"
-    switch.platform = mock_platform
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_entry = MagicMock()
+        type(runtime_entry).name = PropertyMock(return_value=None)
+        runtime_registry.async_get.return_value = runtime_entry
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
 
-    # Change circuit name
-    circuit.name = "New Kitchen Outlets"
-
-    # Trigger coordinator update (now won't fail due to hass being None)
-    switch._handle_coordinator_update()
-
-    # Should request reload due to name change
-    mock_coordinator.request_reload.assert_called_once()
+    coordinator.request_reload.assert_called_once()

@@ -12,28 +12,27 @@ Tests cover:
 - Multiple EVSE devices create separate entity sets
 """
 
+# ruff: noqa: D102
+
 from __future__ import annotations
 
-from span_panel_api import SpanEvseSnapshot
+from dataclasses import replace
 
 from custom_components.span_panel.binary_sensor import (
-    EVSE_BINARY_SENSORS,
     _EV_CONNECTED_STATUSES,
+    EVSE_BINARY_SENSORS,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.helpers import (
     build_evse_unique_id,
-    resolve_evse_display_suffix,
-)
-from custom_components.span_panel.sensor_definitions import (
-    EVSE_SENSORS,
-)
-from custom_components.span_panel.helpers import (
     detect_capabilities,
     has_evse,
+    resolve_evse_display_suffix,
 )
+from custom_components.span_panel.sensor_definitions import EVSE_SENSORS
 from custom_components.span_panel.util import evse_device_info
-from tests.factories import (
+
+from .factories import (
     SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
@@ -61,7 +60,6 @@ class TestEvseDetection:
     def test_capability_detection_includes_evse_via_circuit_device_type(self):
         circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="EV Charger")
         # Use dataclasses.replace to set device_type since it's frozen
-        from dataclasses import replace
         circuit_with_evse = replace(circuit, device_type="evse")
         snapshot = SpanPanelSnapshotFactory.create(
             circuits={"ev1": circuit_with_evse},
@@ -94,7 +92,9 @@ class TestEvseSensorDefinitions:
         assert lock_desc.options == ["unknown"]
 
     def test_evse_advertised_current_is_measurement(self):
-        current_desc = next(d for d in EVSE_SENSORS if d.key == "evse_advertised_current")
+        current_desc = next(
+            d for d in EVSE_SENSORS if d.key == "evse_advertised_current"
+        )
         assert current_desc.native_unit_of_measurement == "A"
         assert current_desc.state_class is not None
 
@@ -110,12 +110,16 @@ class TestEvseSensorDefinitions:
 
     def test_evse_advertised_current_value_fn(self):
         evse = SpanEvseSnapshotFactory.create(advertised_current_a=32.0)
-        current_desc = next(d for d in EVSE_SENSORS if d.key == "evse_advertised_current")
+        current_desc = next(
+            d for d in EVSE_SENSORS if d.key == "evse_advertised_current"
+        )
         assert current_desc.value_fn(evse) == 32.0
 
     def test_evse_advertised_current_none(self):
         evse = SpanEvseSnapshotFactory.create(advertised_current_a=None)
-        current_desc = next(d for d in EVSE_SENSORS if d.key == "evse_advertised_current")
+        current_desc = next(
+            d for d in EVSE_SENSORS if d.key == "evse_advertised_current"
+        )
         assert current_desc.value_fn(evse) is None
 
 
@@ -141,16 +145,24 @@ class TestEvseBinarySensorDefinitions:
         assert charging_desc.value_fn(evse) is False
 
     def test_ev_connected_on_for_connected_statuses(self):
-        connected_desc = next(d for d in EVSE_BINARY_SENSORS if d.key == "evse_ev_connected")
+        connected_desc = next(
+            d for d in EVSE_BINARY_SENSORS if d.key == "evse_ev_connected"
+        )
         for status in _EV_CONNECTED_STATUSES:
             evse = SpanEvseSnapshotFactory.create(status=status)
-            assert connected_desc.value_fn(evse) is True, f"Expected True for status={status}"
+            assert connected_desc.value_fn(evse) is True, (
+                f"Expected True for status={status}"
+            )
 
     def test_ev_connected_off_for_disconnected_statuses(self):
-        connected_desc = next(d for d in EVSE_BINARY_SENSORS if d.key == "evse_ev_connected")
+        connected_desc = next(
+            d for d in EVSE_BINARY_SENSORS if d.key == "evse_ev_connected"
+        )
         for status in ("AVAILABLE", "UNKNOWN", "FAULTED", "UNAVAILABLE", "RESERVED"):
             evse = SpanEvseSnapshotFactory.create(status=status)
-            assert connected_desc.value_fn(evse) is False, f"Expected False for status={status}"
+            assert connected_desc.value_fn(evse) is False, (
+                f"Expected False for status={status}"
+            )
 
 
 class TestEvseDeviceInfo:

@@ -1,10 +1,11 @@
 """Tests for energy dip compensation feature."""
 
+# ruff: noqa: D102
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from homeassistant.components.sensor import SensorStateClass
-
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
@@ -16,7 +17,7 @@ from custom_components.span_panel.sensor_base import (
 class DummyDipSensor(SpanEnergySensorBase):
     """Minimal concrete energy sensor for dip compensation tests."""
 
-    def __init__(
+    def __init__(  # pylint: disable=super-init-not-called
         self,
         dip_enabled: bool = True,
         state_class: SensorStateClass = SensorStateClass.TOTAL_INCREASING,
@@ -59,13 +60,13 @@ class DummyDipSensor(SpanEnergySensorBase):
         )
         self._dip_compensation_enabled: bool = dip_enabled
 
-    def _generate_unique_id(self, span_panel, description):
+    def _generate_unique_id(self, snapshot, description):
         return "dummy_sensor"
 
-    def _generate_friendly_name(self, span_panel, description):
+    def _generate_friendly_name(self, snapshot, description):
         return "Dummy"
 
-    def get_data_source(self, span_panel):
+    def get_data_source(self, snapshot):
         return "dummy_data"
 
 
@@ -453,49 +454,3 @@ class TestDipRestoration:
         stored = sensor.extra_restore_state_data
         d = stored.as_dict()
         assert d["energy_offset"] is None
-
-
-# =============================================================================
-# Coordinator dip event collection
-# =============================================================================
-
-
-class TestCoordinatorDipEvents:
-    """Tests for coordinator.report_energy_dip and notification."""
-
-    def test_report_energy_dip_collects_events(self):
-        """report_energy_dip appends events to the pending list."""
-        from custom_components.span_panel.coordinator import SpanPanelCoordinator
-
-        events: list[tuple[str, float, float]] = []
-
-        # Test the append logic directly
-        events.append(("sensor.energy_consumed", 50.0, 50.0))
-        events.append(("sensor.energy_produced", 10.0, 10.0))
-
-        assert len(events) == 2
-        assert events[0] == ("sensor.energy_consumed", 50.0, 50.0)
-        assert events[1] == ("sensor.energy_produced", 10.0, 10.0)
-
-    def test_fire_dip_notification_clears_list(self):
-        """_fire_dip_notification drains the pending events list."""
-        # We can't easily instantiate the full coordinator, so test the
-        # drain pattern directly
-        pending: list[tuple[str, float, float]] = [
-            ("sensor.a", 5.0, 5.0),
-            ("sensor.b", 10.0, 15.0),
-        ]
-
-        # Drain pattern (same as _fire_dip_notification)
-        events = pending
-        pending = []
-
-        assert len(events) == 2
-        assert len(pending) == 0
-
-    def test_no_notification_when_empty(self):
-        """No notification fires when there are no pending events."""
-        pending: list[tuple[str, float, float]] = []
-
-        # _fire_dip_notification early-returns when empty
-        assert len(pending) == 0

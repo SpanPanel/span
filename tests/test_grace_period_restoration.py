@@ -1,10 +1,11 @@
 """Tests for grace period state restoration across HA restarts."""
 
+# ruff: noqa: D102, D107
+
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from homeassistant.components.sensor import SensorStateClass
-
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
@@ -136,7 +137,9 @@ class TestSpanEnergyExtraStoredData:
 
         assert restored is not None
         assert restored.native_value == original.native_value
-        assert restored.native_unit_of_measurement == original.native_unit_of_measurement
+        assert (
+            restored.native_unit_of_measurement == original.native_unit_of_measurement
+        )
         assert restored.last_valid_state == original.last_valid_state
         assert restored.last_valid_changed == original.last_valid_changed
 
@@ -217,7 +220,13 @@ class TestGracePeriodRestorationLogic:
 
         # At exactly the limit, should still be within grace period (<= comparison)
         # Allow small timing difference
-        assert abs(time_since_last_valid.total_seconds() - grace_period_duration.total_seconds()) < 1
+        assert (
+            abs(
+                time_since_last_valid.total_seconds()
+                - grace_period_duration.total_seconds()
+            )
+            < 1
+        )
 
     def test_grace_period_zero_disabled(self):
         """Test that grace period of 0 means no grace period."""
@@ -362,7 +371,9 @@ class TestRestorationScenarios:
 class DummyEnergySensor(SpanEnergySensorBase):
     """Minimal concrete energy sensor for offline grace period tests."""
 
-    def __init__(self, grace_minutes: int | str = 15) -> None:
+    def __init__(  # pylint: disable=super-init-not-called
+        self, grace_minutes: int | str = 15
+    ) -> None:
         # Bypass parent __init__ to avoid full HA dependencies for unit testing
         self.coordinator = SimpleNamespace(
             panel_offline=True,
@@ -397,13 +408,13 @@ class DummyEnergySensor(SpanEnergySensorBase):
         self._is_total_increasing: bool = True
         self._dip_compensation_enabled: bool = False
 
-    def _generate_unique_id(self, span_panel, description):
+    def _generate_unique_id(self, snapshot, description):
         return "dummy"
 
-    def _generate_friendly_name(self, span_panel, description):
+    def _generate_friendly_name(self, snapshot, description):
         return "dummy"
 
-    def get_data_source(self, span_panel):
+    def get_data_source(self, snapshot):
         return "dummy_data"
 
 

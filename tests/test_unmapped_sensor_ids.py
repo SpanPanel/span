@@ -2,14 +2,16 @@
 
 from unittest.mock import MagicMock
 
-from homeassistant.const import CONF_HOST
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel.const import USE_DEVICE_PREFIX
 from custom_components.span_panel.sensor import SpanUnmappedCircuitSensor
 from custom_components.span_panel.sensor_definitions import UNMAPPED_SENSORS
-from tests.common import create_mock_config_entry
-from tests.factories import SpanPanelSnapshotFactory
+from homeassistant.const import CONF_HOST
+
+from .factories import SpanPanelSnapshotFactory
+
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 class TestUnmappedSensorIds:
@@ -23,17 +25,20 @@ class TestUnmappedSensorIds:
             serial_number = self.TEST_SERIAL_NUMBER
         return SpanPanelSnapshotFactory.create(serial_number=serial_number)
 
-    def _create_mock_coordinator(self, config_options: dict[str, object] | None = None) -> MagicMock:
+    def _create_mock_coordinator(
+        self, config_options: dict[str, object] | None = None
+    ) -> MagicMock:
         """Create a mock coordinator with config entry."""
         if config_options is None:
             config_options = {}
 
         coordinator = MagicMock()
-        mock_config_entry = create_mock_config_entry(
-            {CONF_HOST: "192.168.1.100", "device_name": "SPAN Panel"},
-            config_options,
+        coordinator.config_entry = MockConfigEntry(
+            domain="span_panel",
+            data={CONF_HOST: "192.168.1.100", "device_name": "SPAN Panel"},
+            options=config_options,
+            title="SPAN Panel",
         )
-        coordinator.config_entry = mock_config_entry
         return coordinator
 
     def test_unmapped_sensor_unique_id_generation(self) -> None:
@@ -49,7 +54,9 @@ class TestUnmappedSensorIds:
         }
 
         for description in UNMAPPED_SENSORS:
-            sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+            sensor = SpanUnmappedCircuitSensor(
+                coordinator, description, snapshot, circuit_id
+            )
 
             actual_unique_id = sensor._attr_unique_id
             expected_unique_id = expected_patterns[description.key]
@@ -73,7 +80,9 @@ class TestUnmappedSensorIds:
         circuit_id = "unmapped_tab_32"
 
         for description in UNMAPPED_SENSORS:
-            sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+            sensor = SpanUnmappedCircuitSensor(
+                coordinator, description, snapshot, circuit_id
+            )
 
             assert sensor.unique_id is not None
             assert "unmapped_tab_32" in sensor.unique_id
@@ -84,8 +93,12 @@ class TestUnmappedSensorIds:
         snapshot = self._create_snapshot()
         circuit_id = "unmapped_tab_27"
 
-        coordinator_no_prefix = self._create_mock_coordinator({USE_DEVICE_PREFIX: False})
-        coordinator_with_prefix = self._create_mock_coordinator({USE_DEVICE_PREFIX: True})
+        coordinator_no_prefix = self._create_mock_coordinator(
+            {USE_DEVICE_PREFIX: False}
+        )
+        coordinator_with_prefix = self._create_mock_coordinator(
+            {USE_DEVICE_PREFIX: True}
+        )
 
         for description in UNMAPPED_SENSORS:
             sensor_no_prefix = SpanUnmappedCircuitSensor(
@@ -103,9 +116,11 @@ class TestUnmappedSensorIds:
         snapshot = self._create_snapshot()
         coordinator = self._create_mock_coordinator()
 
-        for circuit_id in ["unmapped_tab_15", "unmapped_tab_30", "unmapped_tab_28"]:
+        for circuit_id in ("unmapped_tab_15", "unmapped_tab_30", "unmapped_tab_28"):
             for description in UNMAPPED_SENSORS:
-                sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+                sensor = SpanUnmappedCircuitSensor(
+                    coordinator, description, snapshot, circuit_id
+                )
 
                 unique_id = sensor._generate_unique_id(snapshot, description)
                 assert circuit_id in unique_id
@@ -116,11 +131,13 @@ class TestUnmappedSensorIds:
         coordinator = self._create_mock_coordinator()
         circuit_id = "unmapped_tab_32"
 
-        for serial_number in ["ABC123DEF456", "XYZ789GHI012", "TEST-SERIAL-001"]:
+        for serial_number in ("ABC123DEF456", "XYZ789GHI012", "TEST-SERIAL-001"):
             snapshot = self._create_snapshot(serial_number)
 
             for description in UNMAPPED_SENSORS:
-                sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+                sensor = SpanUnmappedCircuitSensor(
+                    coordinator, description, snapshot, circuit_id
+                )
                 unique_id = sensor._generate_unique_id(snapshot, description)
 
                 assert serial_number.lower() in unique_id
@@ -139,7 +156,9 @@ class TestUnmappedSensorIds:
         }
 
         for description in UNMAPPED_SENSORS:
-            sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+            sensor = SpanUnmappedCircuitSensor(
+                coordinator, description, snapshot, circuit_id
+            )
             unique_id = sensor._generate_unique_id(snapshot, description)
             expected_suffix = key_to_suffix_mapping[description.key]
 
@@ -152,7 +171,9 @@ class TestUnmappedSensorIds:
         circuit_id = "unmapped_tab_32"
 
         for description in UNMAPPED_SENSORS:
-            sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+            sensor = SpanUnmappedCircuitSensor(
+                coordinator, description, snapshot, circuit_id
+            )
             assert sensor._attr_entity_registry_enabled_default is True
             assert sensor._attr_entity_registry_visible_default is False
 
@@ -163,7 +184,9 @@ class TestUnmappedSensorIds:
         circuit_id = "unmapped_tab_32"
 
         for description in UNMAPPED_SENSORS:
-            sensor = SpanUnmappedCircuitSensor(coordinator, description, snapshot, circuit_id)
+            sensor = SpanUnmappedCircuitSensor(
+                coordinator, description, snapshot, circuit_id
+            )
 
             assert hasattr(sensor, "original_key")
             assert sensor.original_key == description.key

@@ -1,5 +1,7 @@
 """Test grace period configuration option."""
 
+from unittest.mock import MagicMock
+
 import pytest
 import voluptuous as vol
 
@@ -39,17 +41,15 @@ class TestGracePeriodOption:
 
     def test_grace_period_option_persistence(self):
         """Test that grace period option persists in configuration."""
-        from unittest.mock import MagicMock
-
         # Mock coordinator with grace period option
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
-        mock_coordinator.config_entry.options = {
-            ENERGY_REPORTING_GRACE_PERIOD: 30
-        }
+        mock_coordinator.config_entry.options = {ENERGY_REPORTING_GRACE_PERIOD: 30}
 
         # Test that option is accessible
-        grace_period = mock_coordinator.config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
+        grace_period = mock_coordinator.config_entry.options.get(
+            ENERGY_REPORTING_GRACE_PERIOD, 15
+        )
         assert grace_period == 30
 
     def test_grace_period_edge_cases(self):
@@ -69,17 +69,15 @@ class TestGracePeriodOption:
 
     def test_grace_period_integration_with_yaml_generation(self):
         """Test that grace period integrates correctly with YAML generation."""
-        from unittest.mock import MagicMock
-
         # Test that the grace period gets passed to YAML templates
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
-        mock_coordinator.config_entry.options = {
-            ENERGY_REPORTING_GRACE_PERIOD: 25
-        }
+        mock_coordinator.config_entry.options = {ENERGY_REPORTING_GRACE_PERIOD: 25}
 
         # Simulate how the option is used in template generation
-        grace_period = str(mock_coordinator.config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15))
+        grace_period = str(
+            mock_coordinator.config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
+        )
 
         # Should be converted to string for template placeholders
         assert grace_period == "25"

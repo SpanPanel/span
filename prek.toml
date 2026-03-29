@@ -9,7 +9,7 @@ hooks = [
   { id = "check-json", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "check-added-large-files" },
   { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*', language_version = "python3.14" },
   { id = "trailing-whitespace", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "end-of-file-fixer", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
