@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.5] - 4/2026
+
+### Added
+
+**Local brand images** — Icon and logo assets are now shipped inside the integration (`brand/` directory) instead of relying on the Home Assistant brands CDN.
+Requires Home Assistant 2026.3 or later.
+
+The SpanPanel/span integration submitted PRs for inclusion into HA core. **_If_** the PRs are eventually accepted the custom integration will be retired. In
+preparation we are moving the brand images into the custom integration to avoid core conflict. You should be on the latest HA version to upgrade to span v2.0.5
+if you intend to continue using the custom integration.
+
+**_At the time of core integration_** we will publish a final update with notes instructing users to remove the HACS span version (**DO NOT delete the
+configuration entries** for your panel during migration), reboot, and the core integration will work as usual. No keys changed. The custom integration will
+override the HA core integration until you remove the HACS span version.
+
 ## [2.0.4] - 3/2026
 
 **Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
@@ -33,8 +48,8 @@ All notable changes to this project will be documented in this file.
 
 - **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
 
-- **Recorder database growth** — Energy sensors still expose grace-period and dip-compensation diagnostics, plus circuit `tabs` and `voltage`, on the entity, but
-  those attributes are no longer written to the recorder, which greatly reduces churn in the `state_attributes` table (#197).
+- **Recorder database growth** — Energy sensors still expose grace-period and dip-compensation diagnostics, plus circuit `tabs` and `voltage`, on the entity,
+  but those attributes are no longer written to the recorder, which greatly reduces churn in the `state_attributes` table (#197).
 
 ## [2.0.3] - 3/2026
 
