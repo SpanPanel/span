@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot
 
@@ -21,8 +22,10 @@ from .const import (
     DEFAULT_COOLDOWN_DURATION_M,
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
+    DOMAIN,
     EVENT_CURRENT_ALERT,
 )
+from .helpers import build_circuit_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -121,6 +124,17 @@ class CurrentMonitor:
         self._mains_states.pop(leg, None)
         self._hass.async_create_task(self.async_save_overrides())
 
+    def _resolve_circuit_entity_id(self, circuit_id: str) -> str:
+        """Resolve circuit_id to the power sensor entity_id, or fall back to circuit_id."""
+        snapshot = self._last_snapshot
+        if snapshot is None:
+            return circuit_id
+        serial = snapshot.serial_number
+        unique_id = build_circuit_unique_id(serial, circuit_id, "instantPowerW")
+        entity_reg = er.async_get(self._hass)
+        entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        return entity_id if entity_id is not None else circuit_id
+
     def get_monitoring_status(self) -> dict[str, Any]:
         """Return current monitoring state for all tracked points."""
         snapshot = self._last_snapshot
@@ -138,8 +152,9 @@ class CurrentMonitor:
             )
             utilization = round(state.last_current_a / rating * 100, 1) if rating else None
             cont_pct, spike_pct, window_m, cooldown_m = self._resolve_circuit_thresholds(cid)
+            entity_id = self._resolve_circuit_entity_id(cid)
 
-            circuits[cid] = {
+            circuits[entity_id] = {
                 "name": circuit.name if circuit else cid,
                 "last_current_a": state.last_current_a,
                 "breaker_rating_a": rating,
