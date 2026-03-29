@@ -25,7 +25,7 @@ from .const import (
     DOMAIN,
     EVENT_CURRENT_ALERT,
 )
-from .helpers import build_circuit_unique_id
+from .helpers import build_circuit_unique_id, build_panel_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -135,6 +135,18 @@ class CurrentMonitor:
         entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
         return entity_id if entity_id is not None else circuit_id
 
+    def _resolve_mains_entity_id(self, leg: str) -> str:
+        """Resolve mains leg to its current sensor entity_id, or fall back to leg name."""
+        snapshot = self._last_snapshot
+        if snapshot is None:
+            return leg
+        serial = snapshot.serial_number
+        # The sensor key matches the leg name + "_current" (e.g., "upstream_l1_current")
+        unique_id = build_panel_unique_id(serial, f"{leg}_current")
+        entity_reg = er.async_get(self._hass)
+        entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        return entity_id if entity_id is not None else leg
+
     def get_monitoring_status(self) -> dict[str, Any]:
         """Return current monitoring state for all tracked points."""
         snapshot = self._last_snapshot
@@ -181,8 +193,9 @@ class CurrentMonitor:
             )
             cont_pct, spike_pct, window_m, cooldown_m = self._resolve_mains_thresholds(leg)
             leg_label = leg.replace("_", " ").title()
+            entity_id = self._resolve_mains_entity_id(leg)
 
-            mains[leg] = {
+            mains[entity_id] = {
                 "name": leg_label,
                 "last_current_a": state.last_current_a,
                 "breaker_rating_a": main_rating,
