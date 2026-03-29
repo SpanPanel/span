@@ -1,5 +1,7 @@
 """Circuit-level sensors for Span Panel integration."""
 
+# pylint: disable=hass-enforce-class-module
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -14,9 +16,11 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
+    construct_single_circuit_entity_id,
     construct_tabs_attribute,
     construct_unmapped_friendly_name,
     construct_voltage_attribute,
+    get_user_friendly_suffix,
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
@@ -120,7 +124,9 @@ class SpanCircuitPowerSensor(
     }
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str:
         """Generate unique ID for circuit power sensors."""
         api_key = self._API_KEY_MAP.get(self.original_key, self.original_key)
@@ -129,7 +135,9 @@ class SpanCircuitPowerSensor(
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str | None:
         """Generate friendly name for circuit power sensors based on user preferences.
 
@@ -155,7 +163,9 @@ class SpanCircuitPowerSensor(
         return f"{circuit_identifier} {description.name or 'Sensor'}"
 
     def _generate_panel_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str:
         """Generate panel name for circuit sensors (always uses panel circuit name)."""
         if self._is_sub_device:
@@ -170,6 +180,28 @@ class SpanCircuitPowerSensor(
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name or 'Sensor'}"
 
+    def _construct_entity_id(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        existing_entity_id: str | None = None,
+    ) -> str | None:
+        """Construct explicit entity_id for circuit power sensors."""
+        circuit = snapshot.circuits.get(self.circuit_id)
+        if not circuit:
+            return None
+        suffix = get_user_friendly_suffix(
+            self._API_KEY_MAP.get(self.original_key, self.original_key)
+        )
+        return construct_single_circuit_entity_id(
+            self.coordinator,
+            snapshot,
+            "sensor",
+            suffix,
+            circuit,
+            unique_id=self._attr_unique_id if existing_entity_id else None,
+        )
+
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the circuit power sensor."""
         circuit = snapshot.circuits.get(self.circuit_id)
@@ -178,7 +210,7 @@ class SpanCircuitPowerSensor(
         return circuit
 
     @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+    def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes."""
         if not self.coordinator.data:
             return None
@@ -251,7 +283,9 @@ class SpanCircuitEnergySensor(
             self.coordinator.register_circuit_energy_sensor(self.circuit_id, energy_type, self)
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str:
         """Generate unique ID for circuit energy sensors."""
         # Map new description keys to original API keys that migration normalized from
@@ -266,7 +300,9 @@ class SpanCircuitEnergySensor(
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str | None:
         """Generate friendly name for circuit energy sensors based on user preferences.
 
@@ -290,7 +326,9 @@ class SpanCircuitEnergySensor(
         return f"{circuit_identifier} {description.name}"
 
     def _generate_panel_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str:
         """Generate panel name for circuit energy sensors (always uses panel circuit name)."""
         if self._is_sub_device:
@@ -303,13 +341,39 @@ class SpanCircuitEnergySensor(
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
 
+    def _construct_entity_id(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        existing_entity_id: str | None = None,
+    ) -> str | None:
+        """Construct explicit entity_id for circuit energy sensors."""
+        circuit = snapshot.circuits.get(self.circuit_id)
+        if not circuit:
+            return None
+        api_key_mapping = {
+            "circuit_energy_produced": "producedEnergyWh",
+            "circuit_energy_consumed": "consumedEnergyWh",
+            "circuit_energy_net": "netEnergyWh",
+        }
+        api_key = api_key_mapping.get(self.original_key, self.original_key)
+        suffix = get_user_friendly_suffix(api_key)
+        return construct_single_circuit_entity_id(
+            self.coordinator,
+            snapshot,
+            "sensor",
+            suffix,
+            circuit,
+            unique_id=self._attr_unique_id if existing_entity_id else None,
+        )
+
     # Map original_key to the energy type used for coordinator dip offset tracking
     _ENERGY_TYPE_MAP: dict[str, str] = {
         "circuit_energy_consumed": "consumed",
         "circuit_energy_produced": "produced",
     }
 
-    def _process_raw_value(self, raw_value: float | int | str | None) -> None:
+    def _process_raw_value(self, raw_value: float | str | None) -> None:
         """Process raw value, adjusting net energy for dip compensation consistency.
 
         Consumed/produced sensors apply dip offsets via the base class. The net
@@ -330,7 +394,7 @@ class SpanCircuitEnergySensor(
         return snapshot.circuits[self.circuit_id]
 
     @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+    def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes including grace period and circuit info."""
         # Get base grace period attributes
         base_attributes = super().extra_state_attributes or {}
@@ -348,7 +412,7 @@ class SpanCircuitEnergySensor(
                 voltage = construct_voltage_attribute(circuit) or 240
                 attributes["voltage"] = voltage
 
-        return attributes if attributes else None
+        return attributes or None
 
 
 class SpanUnmappedCircuitSensor(
@@ -384,15 +448,23 @@ class SpanUnmappedCircuitSensor(
         super().__init__(data_coordinator, description_with_circuit, snapshot)
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str:
         """Generate unique ID for unmapped circuit sensors."""
         return construct_circuit_unique_id_for_entry(
-            self.coordinator, snapshot, self.circuit_id, self.original_key, self._device_name
+            self.coordinator,
+            snapshot,
+            self.circuit_id,
+            self.original_key,
+            self._device_name,
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelCircuitsSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelCircuitsSensorEntityDescription,
     ) -> str:
         """Generate friendly name for unmapped circuit sensors."""
         tab_number = self.circuit_id.replace("unmapped_tab_", "")
