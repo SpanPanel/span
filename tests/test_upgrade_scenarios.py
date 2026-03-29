@@ -310,7 +310,6 @@ class TestGeneralOptionsPreservesNamingFlags:
         with patch.object(OptionsFlowHandler, "__init__", return_value=None):
             flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
             flow.hass = mock_hass
-            flow._general_input = {}
 
             # Simulate general options form submission (only changing solar settings)
             user_input = {
@@ -325,12 +324,12 @@ class TestGeneralOptionsPreservesNamingFlags:
                     "config_entry",
                     new_callable=lambda: mock_config_entry,
                 ),
-                patch.object(flow, "async_step_monitoring_options") as mock_next_step,
+                patch.object(flow, "async_create_entry") as mock_create_entry,
             ):
                 await flow.async_step_general_options(user_input)
 
-                mock_next_step.assert_called_once()
-                result_data = flow._general_input
+                mock_create_entry.assert_called_once()
+                result_data = mock_create_entry.call_args[1]["data"]
                 assert result_data.get(USE_DEVICE_PREFIX) is False  # Preserved
                 assert result_data.get(USE_CIRCUIT_NUMBERS) is False  # Preserved
 
@@ -350,7 +349,6 @@ class TestGeneralOptionsPreservesNamingFlags:
         with patch.object(OptionsFlowHandler, "__init__", return_value=None):
             flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
             flow.hass = mock_hass
-            flow._general_input = {}
 
             # Simulate general options form submission (only changing solar settings)
             user_input = {
@@ -365,12 +363,12 @@ class TestGeneralOptionsPreservesNamingFlags:
                     "config_entry",
                     new_callable=lambda: mock_config_entry,
                 ),
-                patch.object(flow, "async_step_monitoring_options") as mock_next_step,
+                patch.object(flow, "async_create_entry") as mock_create_entry,
             ):
                 await flow.async_step_general_options(user_input)
 
-                mock_next_step.assert_called_once()
-                result_data = flow._general_input
+                mock_create_entry.assert_called_once()
+                result_data = mock_create_entry.call_args[1]["data"]
                 assert result_data.get(USE_DEVICE_PREFIX) is True  # Preserved
                 assert result_data.get(USE_CIRCUIT_NUMBERS) is True  # Preserved
 
@@ -389,7 +387,6 @@ class TestGeneralOptionsPreservesNamingFlags:
         with patch.object(OptionsFlowHandler, "__init__", return_value=None):
             flow = OptionsFlowHandler.__new__(OptionsFlowHandler)
             flow.hass = mock_hass
-            flow._general_input = {}
 
             # Simulate general options form submission
             user_input = {
@@ -404,12 +401,12 @@ class TestGeneralOptionsPreservesNamingFlags:
                     "config_entry",
                     new_callable=lambda: mock_config_entry,
                 ),
-                patch.object(flow, "async_step_monitoring_options") as mock_next_step,
+                patch.object(flow, "async_create_entry") as mock_create_entry,
             ):
                 await flow.async_step_general_options(user_input)
 
-                mock_next_step.assert_called_once()
-                result_data = flow._general_input
+                mock_create_entry.assert_called_once()
+                result_data = mock_create_entry.call_args[1]["data"]
                 assert (
                     result_data.get(USE_DEVICE_PREFIX) is True
                 )  # Default to True for safety (prevents accidental legacy treatment)

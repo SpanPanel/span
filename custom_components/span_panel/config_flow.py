@@ -872,31 +872,25 @@ OPTIONS_SCHEMA: vol.Schema = vol.Schema(
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize the options flow."""
-        super().__init__(*args, **kwargs)
-        self._general_input: dict[str, Any] = {}
-
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Start the options flow with general options directly."""
-        return await self.async_step_general_options(user_input)
+        """Show the options menu."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["general_options", "monitoring_options"],
+        )
 
     async def async_step_general_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the general options (excluding entity naming)."""
         if user_input is not None:
-            # Process the user input using the utility function
             filtered_input, errors = process_general_options_input(self.config_entry, user_input)
 
-            # If no errors, proceed to monitoring options
             if not errors:
-                self._general_input = filtered_input
-                return await self.async_step_monitoring_options()
+                return self.async_create_entry(title="", data=filtered_input)
         else:
             errors = {}
 
-        # Build schema and defaults using utility functions
         schema = build_general_options_schema(self.config_entry)
         defaults = get_general_options_defaults(self.config_entry)
 
@@ -904,7 +898,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="general_options",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
-            last_step=False,
         )
 
     async def async_step_monitoring_options(
@@ -912,8 +905,14 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     ) -> ConfigFlowResult:
         """Manage current monitoring options."""
         if user_input is not None:
-            merged = dict(self._general_input)
+            # Merge monitoring input with existing options to preserve all settings
+            merged = dict(self.config_entry.options)
             merged.update(user_input)
+
+            # Preserve naming flags
+            merged[USE_DEVICE_PREFIX] = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
+            merged[USE_CIRCUIT_NUMBERS] = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+
             return self.async_create_entry(title="", data=merged)
 
         schema = build_monitoring_options_schema(self.config_entry)
