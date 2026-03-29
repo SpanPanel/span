@@ -872,8 +872,9 @@ OPTIONS_SCHEMA: vol.Schema = vol.Schema(
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
-    def __init__(self) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the options flow."""
+        super().__init__(*args, **kwargs)
         self._general_input: dict[str, Any] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -903,6 +904,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="general_options",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
+            last_step=False,
         )
 
     async def async_step_monitoring_options(
