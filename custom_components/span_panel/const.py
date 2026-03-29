@@ -57,6 +57,9 @@ ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
 ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
 
+# Unmapped circuit sensor configuration
+ENABLE_UNMAPPED_CIRCUIT_SENSORS = "enable_unmapped_circuit_sensors"
+
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 
 
