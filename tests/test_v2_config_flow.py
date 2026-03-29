@@ -422,8 +422,8 @@ async def test_migration_updates_older_entry_to_current_version(
 
 
 @pytest.mark.asyncio
-async def test_simulation_entry_is_removed_during_migration(hass: HomeAssistant) -> None:
-    """Simulation entries are removed during v5→v6 migration."""
+async def test_simulation_entry_migrates_normally(hass: HomeAssistant) -> None:
+    """Simulation entries migrate to v6; setup will fail naturally at connection time."""
     entry = MockConfigEntry(
         version=5,
         minor_version=1,
@@ -441,9 +441,9 @@ async def test_simulation_entry_is_removed_during_migration(hass: HomeAssistant)
     )
     entry.add_to_hass(hass)
 
-    # Migration removes simulation entries and returns True (success)
     result = await async_migrate_entry(hass, entry)
     assert result is True
+    assert entry.version == 6
 
 
 # ---------- zeroconf v2 discovery ----------

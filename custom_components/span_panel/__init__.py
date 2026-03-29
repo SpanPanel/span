@@ -168,19 +168,8 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
         )
         _LOGGER.debug("Migrated config entry %s to version 5", config_entry.entry_id)
 
-    # --- v5 → v6: remove simulation entries ---
+    # --- v5 → v6: bump version ---
     if config_entry.version < 6:
-        if config_entry.data.get(CONF_API_VERSION) == "simulation" or config_entry.data.get(
-            "simulation_mode", False
-        ):
-            _LOGGER.info(
-                "Removing simulation config entry %s — built-in simulator "
-                "has been replaced by the standalone SPAN simulator add-on",
-                config_entry.entry_id,
-            )
-            await hass.config_entries.async_remove(config_entry.entry_id)
-            return True
-
         hass.config_entries.async_update_entry(
             config_entry,
             version=6,
