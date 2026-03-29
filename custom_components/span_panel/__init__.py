@@ -170,6 +170,16 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
 
     # --- v5 → v6: bump version ---
     if config_entry.version < 6:
+        if config_entry.data.get(CONF_API_VERSION) == "simulation" or config_entry.data.get(
+            "simulation_mode", False
+        ):
+            _LOGGER.warning(
+                "Config entry '%s' is a built-in simulation entry which is no "
+                "longer supported. Please remove it manually from Settings > "
+                "Devices & Services",
+                config_entry.title,
+            )
+
         hass.config_entries.async_update_entry(
             config_entry,
             version=6,
