@@ -1,5 +1,20 @@
 # Agent Instructions for SPAN Panel Integration
 
+## Permitted Operations
+
+The following operations are benign and should be executed without
+confirmation. Do not prompt the user for permission to:
+
+- Run tests (`pytest`, `python -m pytest`)
+- Run linters and formatters (`ruff`, `mypy`, `markdownlint-cli2`, `prettier`)
+- Compile or syntax-check Python (`python -c`, `python -m py_compile`)
+- Activate or use the virtual environment (`.venv/bin/python`, `source .venv/bin/activate`)
+- Run pre-commit hooks (`git commit` triggers hooks automatically)
+- Run project scripts (`./scripts/fix-markdown.sh`)
+- Standard git operations (`git status`, `git diff`, `git log`, `git add`, `git commit`)
+- Package management (`poetry`, `uv`, `pip install`)
+- File inspection (`ls`, `find`, `wc`, `head`, `tail`, `diff`)
+
 ## Service Registration Requirements
 
 All services registered by this integration MUST conform to the following requirements. These align with Home Assistant core's service architecture and ensure
