@@ -4,18 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.5] - 4/2026
 
+**Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
+
 ### Added
 
-**Local brand images** — Icon and logo assets are now shipped inside the integration (`brand/` directory) instead of relying on the Home Assistant brands CDN.
-Requires Home Assistant 2026.3 or later.
+- **Local brand images** — Icon and logo assets are now shipped inside the integration (`brand/` directory) instead of relying on the Home Assistant brands CDN.
+  Requires Home Assistant 2026.3 or later.
 
-The SpanPanel/span integration submitted PRs for inclusion into HA core. **_If_** the PRs are eventually accepted the custom integration will be retired. In
-preparation we are moving the brand images into the custom integration to avoid core conflict. You should be on the latest HA version to upgrade to span v2.0.5
-if you intend to continue using the custom integration.
+### Changed
 
-**_At the time of core integration_** we will publish a final update with notes instructing users to remove the HACS span version (**DO NOT delete the
-configuration entries** for your panel during migration), reboot, and the core integration will work as usual. No keys changed. The custom integration will
-override the HA core integration until you remove the HACS span version.
+- **HA compliance refactor** — integration changes to align with Home Assistant standards; no user facing changes.
+
+- **`span-panel-api` updated to 2.4.1** — Improved HTTP connection handling and firmware compatibility. Fully backward compatible.
 
 ## [2.0.4] - 3/2026
 
