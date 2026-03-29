@@ -382,7 +382,16 @@
             },
             "monitoring_options": {
                 "data": {
-                    "enable_current_monitoring": "Current Monitoring",
+                    "enable_current_monitoring": "Current Monitoring"
+                },
+                "data_description": {
+                    "enable_current_monitoring": "Requires V2 panel with current sensors."
+                },
+                "description": "Enable or disable current monitoring.",
+                "title": "Monitoring"
+            },
+            "monitoring_settings": {
+                "data": {
                     "continuous_threshold_pct": "Continuous Load Threshold (%)",
                     "spike_threshold_pct": "Spike Threshold (%)",
                     "window_duration_m": "Continuous Load Window (minutes)",
@@ -392,7 +401,6 @@
                     "notify_targets": "Notify Service Targets"
                 },
                 "data_description": {
-                    "enable_current_monitoring": "Requires V2 panel with current sensors.",
                     "continuous_threshold_pct": "NEC default 80%. Range: 1\u2013200%.",
                     "spike_threshold_pct": "Default 100% (full breaker rating). Range: 1\u2013200%.",
                     "window_duration_m": "Duration above threshold before alerting. Range: 1\u2013180.",
@@ -402,7 +410,7 @@
                     "notify_targets": "Comma-separated targets (e.g., notify.notify, notify.mobile_app_phone)."
                 },
                 "description": "Configure monitoring thresholds and notifications.",
-                "title": "Monitoring"
+                "title": "Monitoring Settings"
             }
         }
     },

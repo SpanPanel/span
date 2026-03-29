@@ -72,6 +72,7 @@ class CurrentMonitor:
         self._mains_states: dict[str, MonitoredPointState] = {}
         self._circuit_overrides: dict[str, dict[str, Any]] = {}
         self._mains_overrides: dict[str, dict[str, Any]] = {}
+        self._last_snapshot: SpanPanelSnapshot | None = None
         self._store: Store = Store(
             hass,
             _STORAGE_VERSION,
@@ -82,6 +83,7 @@ class CurrentMonitor:
 
     def process_snapshot(self, snapshot: SpanPanelSnapshot) -> None:
         """Evaluate thresholds for all circuits and mains legs."""
+        self._last_snapshot = snapshot
         self._evaluate_circuits(snapshot)
         self._evaluate_mains(snapshot)
 
@@ -121,38 +123,71 @@ class CurrentMonitor:
 
     def get_monitoring_status(self) -> dict[str, Any]:
         """Return current monitoring state for all tracked points."""
-        return {
-            "circuits": {
-                cid: {
-                    "last_current_a": s.last_current_a,
-                    "over_threshold_since": s.over_threshold_since.isoformat()
-                    if s.over_threshold_since
-                    else None,
-                    "last_spike_alert": s.last_spike_alert.isoformat()
-                    if s.last_spike_alert
-                    else None,
-                    "last_continuous_alert": s.last_continuous_alert.isoformat()
-                    if s.last_continuous_alert
-                    else None,
-                }
-                for cid, s in self._circuit_states.items()
-            },
-            "mains": {
-                leg: {
-                    "last_current_a": s.last_current_a,
-                    "over_threshold_since": s.over_threshold_since.isoformat()
-                    if s.over_threshold_since
-                    else None,
-                    "last_spike_alert": s.last_spike_alert.isoformat()
-                    if s.last_spike_alert
-                    else None,
-                    "last_continuous_alert": s.last_continuous_alert.isoformat()
-                    if s.last_continuous_alert
-                    else None,
-                }
-                for leg, s in self._mains_states.items()
-            },
-        }
+        snapshot = self._last_snapshot
+        main_rating = (
+            float(snapshot.main_breaker_rating_a)
+            if snapshot and snapshot.main_breaker_rating_a
+            else None
+        )
+
+        circuits: dict[str, dict[str, Any]] = {}
+        for cid, state in self._circuit_states.items():
+            circuit = snapshot.circuits.get(cid) if snapshot else None
+            rating = (
+                float(circuit.breaker_rating_a) if circuit and circuit.breaker_rating_a else None
+            )
+            utilization = round(state.last_current_a / rating * 100, 1) if rating else None
+            cont_pct, spike_pct, window_m, cooldown_m = self._resolve_circuit_thresholds(cid)
+
+            circuits[cid] = {
+                "name": circuit.name if circuit else cid,
+                "last_current_a": state.last_current_a,
+                "breaker_rating_a": rating,
+                "utilization_pct": utilization,
+                "continuous_threshold_pct": cont_pct,
+                "spike_threshold_pct": spike_pct,
+                "window_duration_m": window_m,
+                "cooldown_duration_m": cooldown_m,
+                "over_threshold_since": state.over_threshold_since.isoformat()
+                if state.over_threshold_since
+                else None,
+                "last_spike_alert": state.last_spike_alert.isoformat()
+                if state.last_spike_alert
+                else None,
+                "last_continuous_alert": state.last_continuous_alert.isoformat()
+                if state.last_continuous_alert
+                else None,
+            }
+
+        mains: dict[str, dict[str, Any]] = {}
+        for leg, state in self._mains_states.items():
+            utilization = (
+                round(state.last_current_a / main_rating * 100, 1) if main_rating else None
+            )
+            cont_pct, spike_pct, window_m, cooldown_m = self._resolve_mains_thresholds(leg)
+            leg_label = leg.replace("_", " ").title()
+
+            mains[leg] = {
+                "name": leg_label,
+                "last_current_a": state.last_current_a,
+                "breaker_rating_a": main_rating,
+                "utilization_pct": utilization,
+                "continuous_threshold_pct": cont_pct,
+                "spike_threshold_pct": spike_pct,
+                "window_duration_m": window_m,
+                "cooldown_duration_m": cooldown_m,
+                "over_threshold_since": state.over_threshold_since.isoformat()
+                if state.over_threshold_since
+                else None,
+                "last_spike_alert": state.last_spike_alert.isoformat()
+                if state.last_spike_alert
+                else None,
+                "last_continuous_alert": state.last_continuous_alert.isoformat()
+                if state.last_continuous_alert
+                else None,
+            }
+
+        return {"circuits": circuits, "mains": mains}
 
     async def async_start(self) -> None:
         """Start the monitor — load persisted overrides."""

@@ -36,9 +36,9 @@ import voluptuous as vol
 
 from .config_flow_options import (
     build_general_options_schema,
-    build_monitoring_options_schema,
+    build_monitoring_settings_schema,
     get_general_options_defaults,
-    get_monitoring_options_defaults,
+    get_monitoring_settings_defaults,
     process_general_options_input,
 )
 from .config_flow_validation import (
@@ -59,6 +59,7 @@ from .const import (
     CONF_PANEL_SERIAL,
     CONF_REGISTERED_FQDN,
     DOMAIN,
+    ENABLE_CURRENT_MONITORING,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
@@ -903,23 +904,48 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_monitoring_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage current monitoring options."""
+        """Manage the monitoring enable/disable toggle."""
         if user_input is not None:
-            # Merge monitoring input with existing options to preserve all settings
-            merged = dict(self.config_entry.options)
-            merged.update(user_input)
+            if user_input.get(ENABLE_CURRENT_MONITORING, False):
+                return await self.async_step_monitoring_settings()
 
-            # Preserve naming flags
+            # Disabled — save with monitoring off
+            merged = dict(self.config_entry.options)
+            merged[ENABLE_CURRENT_MONITORING] = False
             merged[USE_DEVICE_PREFIX] = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
             merged[USE_CIRCUIT_NUMBERS] = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-
             return self.async_create_entry(title="", data=merged)
 
-        schema = build_monitoring_options_schema(self.config_entry)
-        defaults = get_monitoring_options_defaults(self.config_entry)
+        schema = vol.Schema({vol.Optional(ENABLE_CURRENT_MONITORING): bool})
+        defaults = {
+            ENABLE_CURRENT_MONITORING: self.config_entry.options.get(
+                ENABLE_CURRENT_MONITORING, False
+            ),
+        }
 
         return self.async_show_form(
             step_id="monitoring_options",
+            data_schema=self.add_suggested_values_to_schema(schema, defaults),
+            last_step=False,
+        )
+
+    async def async_step_monitoring_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage monitoring threshold and notification settings."""
+        if user_input is not None:
+            merged = dict(self.config_entry.options)
+            merged[ENABLE_CURRENT_MONITORING] = True
+            merged.update(user_input)
+            merged[USE_DEVICE_PREFIX] = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
+            merged[USE_CIRCUIT_NUMBERS] = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+            return self.async_create_entry(title="", data=merged)
+
+        schema = build_monitoring_settings_schema(self.config_entry)
+        defaults = get_monitoring_settings_defaults(self.config_entry)
+
+        return self.async_show_form(
+            step_id="monitoring_settings",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
         )
 

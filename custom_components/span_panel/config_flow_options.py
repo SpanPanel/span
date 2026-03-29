@@ -14,7 +14,6 @@ from .const import (
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
-    ENABLE_CURRENT_MONITORING,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     ENABLE_UNMAPPED_CIRCUIT_SENSORS,
@@ -103,11 +102,10 @@ def get_general_options_defaults(
     }
 
 
-def build_monitoring_options_schema(config_entry: ConfigEntry) -> vol.Schema:
-    """Build the schema for current monitoring options form."""
+def build_monitoring_settings_schema(config_entry: ConfigEntry) -> vol.Schema:
+    """Build the schema for monitoring threshold/notification settings."""
     return vol.Schema(
         {
-            vol.Optional(ENABLE_CURRENT_MONITORING): bool,
             vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
@@ -119,10 +117,9 @@ def build_monitoring_options_schema(config_entry: ConfigEntry) -> vol.Schema:
     )
 
 
-def get_monitoring_options_defaults(config_entry: ConfigEntry) -> dict[str, Any]:
-    """Get default values for current monitoring options form."""
+def get_monitoring_settings_defaults(config_entry: ConfigEntry) -> dict[str, Any]:
+    """Get default values for monitoring threshold/notification settings."""
     return {
-        ENABLE_CURRENT_MONITORING: config_entry.options.get(ENABLE_CURRENT_MONITORING, False),
         CONTINUOUS_THRESHOLD_PCT: config_entry.options.get(
             CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT
         ),
