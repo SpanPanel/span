@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Mapping
 import enum
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
@@ -16,19 +16,32 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import callback
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
-from span_panel_api import V2AuthResponse, delete_fqdn, detect_api_version, register_fqdn
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+from span_panel_api import (
+    V2AuthResponse,
+    delete_fqdn,
+    detect_api_version,
+    register_fqdn,
+)
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelTimeoutError,
+)
 import voluptuous as vol
 
-from .config_flow_utils import (
+from .config_flow_options import (
     build_general_options_schema,
-    check_fqdn_tls_ready,
     get_general_options_defaults,
-    is_fqdn,
     process_general_options_input,
+)
+from .config_flow_validation import (
+    check_fqdn_tls_ready,
+    is_fqdn,
     validate_host,
     validate_v2_passphrase,
     validate_v2_proximity,
@@ -56,6 +69,9 @@ from .options import (
     POWER_DISPLAY_PRECISION,
     SNAPSHOT_UPDATE_INTERVAL,
 )
+
+if TYPE_CHECKING:
+    from . import SpanPanelConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,7 +112,7 @@ class TriggerFlowType(enum.Enum):
 class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
-    VERSION = 3
+    VERSION = 6
     MINOR_VERSION = 1
     domain = DOMAIN
 
@@ -176,11 +192,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             http_port_str = props.get("httpPort", props.get("httpport", ""))
             try:
                 http_port = int(http_port_str) if http_port_str else 80
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 http_port = 80
             self._http_port = http_port
 
-            detection = await detect_api_version(discovery_info.host, port=http_port)
+            detection = await detect_api_version(
+                discovery_info.host,
+                port=http_port,
+                httpx_client=get_async_client(self.hass, verify_ssl=False),
+            )
             if detection.api_version != "v2" or detection.status_info is None:
                 return self.async_abort(reason="not_span_panel")
             self.api_version = "v2"
@@ -202,11 +222,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         return self.async_abort(reason="v1_not_supported")
 
     async def async_step_hassio(self, discovery_info: HassioServiceInfo) -> ConfigFlowResult:
-        """Handle discovery from HA Supervisor (simulator add-on).
+        """Handle discovery from Home Assistant Supervisor (add-on).
 
-        Unlike zeroconf, multiple simulated panels may share the same
-        host IP (differentiated by port).  Dedup by serial number, not
-        by host, so each panel gets its own config entry.
+        Unlike zeroconf, several panels may be reachable on the same host IP
+        on different HTTP ports (for example the SPAN Panel Simulator add-on).
+        Deduplicate by panel serial, not by host, so each panel gets its own
+        config entry.
         """
         config = discovery_info.config
         host = str(config.get("host", ""))
@@ -218,7 +239,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Validate panel is reachable and v2
         self._http_port = port
-        detection = await detect_api_version(host, port=port)
+        detection = await detect_api_version(
+            host, port=port, httpx_client=get_async_client(self.hass, verify_ssl=False)
+        )
         if detection.api_version != "v2" or detection.status_info is None:
             return self.async_abort(reason="not_span_panel")
 
@@ -251,7 +274,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_DATA_SCHEMA)
 
-        # Store precision settings from user input (needed for both simulator and regular mode)
+        # Store precision settings from user input for later flow steps.
         self.power_display_precision = user_input.get(POWER_DISPLAY_PRECISION, 0)
         self.energy_display_precision = user_input.get(ENERGY_DISPLAY_PRECISION, 2)
         self._enable_dip_compensation = user_input.get(ENABLE_ENERGY_DIP_COMPENSATION, True)
@@ -281,7 +304,17 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Detect API version — only v2 is supported
-        detection = await detect_api_version(host, port=self._http_port)
+        detection = await detect_api_version(
+            host,
+            port=self._http_port,
+            httpx_client=get_async_client(self.hass, verify_ssl=False),
+        )
+        if detection.probe_failed:
+            return self.async_show_form(
+                step_id="user",
+                data_schema=STEP_USER_DATA_SCHEMA,
+                errors={"base": "cannot_connect"},
+            )
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
@@ -315,7 +348,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._http_port = int(entry_data.get(CONF_HTTP_PORT, 80))
 
         # Detect current API version of the panel
-        detection = await detect_api_version(host, port=self._http_port)
+        detection = await detect_api_version(
+            host,
+            port=self._http_port,
+            httpx_client=get_async_client(self.hass, verify_ssl=False),
+        )
+        if detection.probe_failed:
+            return self.async_abort(reason="cannot_connect")
         self.api_version = detection.api_version
 
         if self.api_version == "v2":
@@ -366,30 +405,41 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> ConfigFlowResult:
-        """Guide user through v2 proof-of-proximity authentication."""
-        if user_input is None:
-            return self.async_show_form(
-                step_id="auth_proximity",
-                data_schema=vol.Schema({}),
-            )
+        """Instruct user to complete the door challenge, then confirm or switch method."""
+        return self.async_show_menu(
+            step_id="auth_proximity",
+            menu_options={
+                "auth_proximity_confirm": "I have opened and closed the door",
+                "auth_passphrase": "Use passphrase instead",
+            },
+        )
 
+    async def async_step_auth_proximity_confirm(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> ConfigFlowResult:
+        """Verify proximity was proven, then register."""
         if not self.host:
             return self.async_abort(reason="host_not_set")
 
+        # Check proximityProven before calling register_v2 (avoids 15-min block).
+        # On older firmware the field is None — fall through to register_v2 directly.
+        detection = await detect_api_version(
+            self.host,
+            port=self._http_port,
+            httpx_client=get_async_client(self.hass, verify_ssl=False),
+        )
+        proximity_status = (
+            detection.status_info.proximity_proven if detection.status_info is not None else None
+        )
+        if proximity_status is False:
+            # Door challenge not completed — send back to the instruction menu.
+            return await self.async_step_auth_proximity()
+
         try:
-            result = await validate_v2_proximity(self.host, port=self._http_port)
-        except SpanPanelAuthError:
-            return self.async_show_form(
-                step_id="auth_proximity",
-                data_schema=vol.Schema({}),
-                errors={"base": "proximity_failed"},
-            )
-        except SpanPanelConnectionError:
-            return self.async_show_form(
-                step_id="auth_proximity",
-                data_schema=vol.Schema({}),
-                errors={"base": "cannot_connect"},
-            )
+            result = await validate_v2_proximity(self.hass, self.host, port=self._http_port)
+        except SpanPanelAuthError, SpanPanelConnectionError:
+            return await self.async_step_auth_proximity()
 
         self._store_v2_auth_result(result, passphrase="")  # nosec B106
         return await self._async_finalize_v2_auth()
@@ -417,7 +467,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self.async_abort(reason="host_not_set")
 
         try:
-            result = await validate_v2_passphrase(self.host, passphrase, port=self._http_port)
+            result = await validate_v2_passphrase(
+                self.hass, self.host, passphrase, port=self._http_port
+            )
         except SpanPanelAuthError:
             return self.async_show_form(
                 step_id="auth_passphrase",
@@ -487,13 +539,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not self.host or not self.access_token:
             raise ConfigFlowError("Host and access token required for FQDN registration")
 
-        await register_fqdn(self.host, self.access_token, self.host, port=self._http_port)
+        httpx_client = get_async_client(self.hass, verify_ssl=False)
+        await register_fqdn(
+            self.host,
+            self.access_token,
+            self.host,
+            port=self._http_port,
+            httpx_client=httpx_client,
+        )
 
         mqtts_port = self._v2_broker_port or 8883
         max_attempts = 30
         for attempt in range(max_attempts):
             await asyncio.sleep(2)
-            if await check_fqdn_tls_ready(self.host, mqtts_port, http_port=self._http_port):
+            if await check_fqdn_tls_ready(
+                self.hass, self.host, mqtts_port, http_port=self._http_port
+            ):
                 _LOGGER.debug(
                     "FQDN %s found in TLS cert SAN after %d attempts",
                     self.host,
@@ -616,7 +677,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             schema = vol.Schema(
                 {
                     vol.Required(
-                        ENTITY_NAMING_PATTERN, default=EntityNamingPattern.FRIENDLY_NAMES.value
+                        ENTITY_NAMING_PATTERN,
+                        default=EntityNamingPattern.FRIENDLY_NAMES.value,
                     ): vol.In(pattern_options)
                 }
             )
@@ -658,8 +720,24 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Validate the host is reachable and is a v2 panel
         http_port = int(reconfigure_entry.data.get(CONF_HTTP_PORT, 80))
         try:
-            detection = await detect_api_version(host, port=http_port)
-        except (SpanPanelConnectionError, Exception):
+            detection = await detect_api_version(
+                host,
+                port=http_port,
+                httpx_client=get_async_client(self.hass, verify_ssl=False),
+            )
+        except (
+            ValueError,
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ):
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                errors={"base": "cannot_connect"},
+            )
+
+        if detection.probe_failed:
             return self.async_show_form(
                 step_id="reconfigure",
                 data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
@@ -692,8 +770,18 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # Switching from FQDN to IP — clean up old registration
             access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
             try:
-                await delete_fqdn(host, access_token, port=http_port)
-            except Exception:
+                await delete_fqdn(
+                    host,
+                    access_token,
+                    port=http_port,
+                    httpx_client=get_async_client(self.hass, verify_ssl=False),
+                )
+            except (
+                SpanPanelAPIError,
+                SpanPanelAuthError,
+                SpanPanelConnectionError,
+                SpanPanelTimeoutError,
+            ):
                 _LOGGER.warning("Failed to delete old FQDN registration: %s", old_fqdn)
             data_updates[CONF_REGISTERED_FQDN] = ""
 
@@ -736,7 +824,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         reconfigure_entry = self._get_reconfigure_entry()
         return self.async_update_reload_and_abort(
             reconfigure_entry,
-            data_updates={CONF_HOST: self.host or "", CONF_REGISTERED_FQDN: self.host or ""},
+            data_updates={
+                CONF_HOST: self.host or "",
+                CONF_REGISTERED_FQDN: self.host or "",
+            },
         )
 
     async def async_step_reconfigure_fqdn_failed(
@@ -759,7 +850,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        config_entry: SpanPanelConfigEntry,
     ) -> OptionsFlowHandler:
         """Create the options flow."""
         return OptionsFlowHandler()
