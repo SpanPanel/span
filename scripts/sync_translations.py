@@ -1,7 +1,8 @@
 """Sync and validate translation files against strings.json.
 
 Generates translations/en.json from strings.json and validates that all
-other translation files contain only keys that exist in strings.json.
+other translation files are complete (no missing keys) and contain no
+orphaned keys that don't exist in strings.json.
 """
 
 from __future__ import annotations
@@ -16,23 +17,40 @@ TRANSLATIONS_DIR = COMPONENT_DIR / "translations"
 EN_PATH = TRANSLATIONS_DIR / "en.json"
 
 
-def collect_keys(obj: dict | list | str, prefix: str = "") -> set[str]:
+def collect_leaf_keys(obj: dict | list | str, prefix: str = "") -> set[str]:
+    """Recursively collect dot-delimited paths to leaf (non-dict) values."""
+    keys: set[str] = set()
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            full = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                keys.update(collect_leaf_keys(value, full))
+            else:
+                keys.add(full)
+    return keys
+
+
+def collect_all_keys(obj: dict | list | str, prefix: str = "") -> set[str]:
     """Recursively collect all dot-delimited key paths from a nested dict."""
     keys: set[str] = set()
     if isinstance(obj, dict):
         for key, value in obj.items():
             full = f"{prefix}.{key}" if prefix else key
             keys.add(full)
-            keys.update(collect_keys(value, full))
+            keys.update(collect_all_keys(value, full))
     return keys
 
 
-def find_orphaned_keys(
-    source_keys: set[str], translation: dict, lang: str
-) -> list[str]:
+def find_orphaned_keys(source_keys: set[str], translation: dict) -> list[str]:
     """Return keys present in the translation but absent from the source."""
-    translation_keys = collect_keys(translation)
+    translation_keys = collect_all_keys(translation)
     return sorted(translation_keys - source_keys)
+
+
+def find_missing_keys(source_leaf_keys: set[str], translation: dict) -> list[str]:
+    """Return leaf keys present in the source but absent from the translation."""
+    translation_leaf_keys = collect_leaf_keys(translation)
+    return sorted(source_leaf_keys - translation_leaf_keys)
 
 
 def sync_en(source: dict) -> bool:
@@ -49,7 +67,9 @@ def sync_en(source: dict) -> bool:
     return True
 
 
-def validate_translations(source_keys: set[str]) -> list[str]:
+def validate_translations(
+    source_all_keys: set[str], source_leaf_keys: set[str]
+) -> list[str]:
     """Validate all non-en translation files. Return list of error messages."""
     errors: list[str] = []
 
@@ -64,11 +84,18 @@ def validate_translations(source_keys: set[str]) -> list[str]:
             errors.append(f"{lang}: invalid JSON — {exc}")
             continue
 
-        orphaned = find_orphaned_keys(source_keys, translation, lang)
+        orphaned = find_orphaned_keys(source_all_keys, translation)
         if orphaned:
             errors.append(
                 f"{lang}: {len(orphaned)} orphaned key(s) not in strings.json:\n"
                 + "\n".join(f"  - {k}" for k in orphaned)
+            )
+
+        missing = find_missing_keys(source_leaf_keys, translation)
+        if missing:
+            errors.append(
+                f"{lang}: {len(missing)} missing key(s) from strings.json:\n"
+                + "\n".join(f"  - {k}" for k in missing)
             )
 
     return errors
@@ -80,13 +107,14 @@ def main() -> int:
         return 1
 
     source = json.loads(STRINGS_PATH.read_text(encoding="utf-8"))
-    source_keys = collect_keys(source)
+    source_all_keys = collect_all_keys(source)
+    source_leaf_keys = collect_leaf_keys(source)
 
     changed = sync_en(source)
     if changed:
         print(f"Updated {EN_PATH.relative_to(Path.cwd())}")
 
-    errors = validate_translations(source_keys)
+    errors = validate_translations(source_all_keys, source_leaf_keys)
     if errors:
         print("Translation validation failed:", file=sys.stderr)
         for error in errors:
