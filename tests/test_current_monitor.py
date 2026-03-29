@@ -11,6 +11,7 @@ from custom_components.span_panel.const import (
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
     ENABLE_CURRENT_MONITORING,
+    EVENT_CURRENT_ALERT,
 )
 from custom_components.span_panel.current_monitor import CurrentMonitor
 from custom_components.span_panel.options import (
@@ -522,3 +523,134 @@ class TestStoragePersistence:
         await monitor.async_load_overrides()
         assert monitor._circuit_overrides == {}
         assert monitor._mains_overrides == {}
+
+
+class TestNotificationDispatch:
+    """Tests for alert notification through all channels."""
+
+    def test_spike_fires_event_bus(self):
+        """Spike alert fires event on the HA event bus."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(**{ENABLE_EVENT_BUS: True}))
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number="ABC123",
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+
+        hass.bus.async_fire.assert_called_once()
+        call_args = hass.bus.async_fire.call_args
+        assert call_args[0][0] == EVENT_CURRENT_ALERT
+        event_data = call_args[0][1]
+        assert event_data["alert_type"] == "spike"
+        assert event_data["alert_id"] == "1"
+        assert event_data["alert_name"] == "Kitchen"
+        assert event_data["current_a"] == 20.0
+        assert event_data["breaker_rating_a"] == 20.0
+        assert event_data["utilization_pct"] == 100.0
+        assert event_data["panel_serial"] == "ABC123"
+
+    def test_spike_does_not_fire_event_when_disabled(self):
+        """No event fired when event bus is disabled."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(**{ENABLE_EVENT_BUS: False}))
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+        hass.bus.async_fire.assert_not_called()
+
+    def test_spike_calls_notify_service(self):
+        """Spike alert calls configured notify service targets."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(
+            **{NOTIFY_TARGETS: "notify.mobile_app_phone"}
+        ))
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+
+        # Should have called notify service
+        notify_calls = [
+            c for c in hass.services.async_call.call_args_list
+            if c[0][0] == "notify"
+        ]
+        assert len(notify_calls) == 1
+        assert notify_calls[0][0][1] == "mobile_app_phone"
+
+    def test_spike_creates_persistent_notification(self):
+        """Spike alert creates persistent notification when enabled."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(
+            **{ENABLE_PERSISTENT_NOTIFICATIONS: True}
+        ))
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+
+        pn_calls = [
+            c for c in hass.services.async_call.call_args_list
+            if c[0][0] == "persistent_notification"
+        ]
+        assert len(pn_calls) == 1
+        assert pn_calls[0][0][2]["notification_id"] == "span_panel_circuit_1_spike"
+
+    def test_no_persistent_notification_when_disabled(self):
+        """No persistent notification when disabled."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options(
+            **{ENABLE_PERSISTENT_NOTIFICATIONS: False}
+        ))
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+
+        pn_calls = [
+            c for c in hass.services.async_call.call_args_list
+            if c[0][0] == "persistent_notification"
+        ]
+        assert len(pn_calls) == 0
+
+    def test_notification_message_format_spike(self):
+        """Spike notification message includes current and rating."""
+        title, message = CurrentMonitor._format_notification(
+            "spike", "Kitchen", 22.1, 20.0, 100, 110.5, None,
+        )
+        assert title == "SPAN: Kitchen spike"
+        assert "22.1A" in message
+        assert "110.5%" in message
+        assert "20A" in message
+
+    def test_notification_message_format_continuous(self):
+        """Continuous notification message includes window duration."""
+        title, message = CurrentMonitor._format_notification(
+            "continuous_overload", "Kitchen", 18.4, 20.0, 80, 92.0, 900,
+        )
+        assert title == "SPAN: Kitchen overload"
+        assert "18.4A" in message
+        assert "92.0%" in message
+        assert "80%" in message
+        assert "15 min" in message
