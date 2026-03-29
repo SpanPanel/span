@@ -64,15 +64,6 @@ def build_general_options_schema(
         vol.Optional(ENABLE_UNMAPPED_CIRCUIT_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
         vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
-        # Current monitoring
-        vol.Optional(ENABLE_CURRENT_MONITORING): bool,
-        vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
-        vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
-        vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
-        vol.Optional(COOLDOWN_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
-        vol.Optional(ENABLE_PERSISTENT_NOTIFICATIONS): bool,
-        vol.Optional(ENABLE_EVENT_BUS): bool,
-        vol.Optional(NOTIFY_TARGETS): str,
     }
 
     return vol.Schema(schema_fields)
@@ -109,6 +100,28 @@ def get_general_options_defaults(
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
             ENABLE_ENERGY_DIP_COMPENSATION, False
         ),
+    }
+
+
+def build_monitoring_options_schema(config_entry: ConfigEntry) -> vol.Schema:
+    """Build the schema for current monitoring options form."""
+    return vol.Schema(
+        {
+            vol.Optional(ENABLE_CURRENT_MONITORING): bool,
+            vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional(COOLDOWN_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional(ENABLE_PERSISTENT_NOTIFICATIONS): bool,
+            vol.Optional(ENABLE_EVENT_BUS): bool,
+            vol.Optional(NOTIFY_TARGETS): str,
+        }
+    )
+
+
+def get_monitoring_options_defaults(config_entry: ConfigEntry) -> dict[str, Any]:
+    """Get default values for current monitoring options form."""
+    return {
         ENABLE_CURRENT_MONITORING: config_entry.options.get(ENABLE_CURRENT_MONITORING, False),
         CONTINUOUS_THRESHOLD_PCT: config_entry.options.get(
             CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT

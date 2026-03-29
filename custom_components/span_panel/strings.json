@@ -359,7 +359,21 @@
           "enable_panel_net_energy_sensors": "Panel Net Energy",
           "enable_unmapped_circuit_sensors": "Unmapped Circuit Sensors",
           "energy_reporting_grace_period": "Energy Sensor Grace Period (minutes)",
-          "snapshot_update_interval": "Snapshot Update Interval (seconds)",
+          "snapshot_update_interval": "Snapshot Update Interval (seconds)"
+        },
+        "data_description": {
+          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
+          "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets.",
+          "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
+          "enable_unmapped_circuit_sensors": "Create sensors for unmapped circuit tabs. These provide backing data for panels with circuits that are not assigned to named breakers.",
+          "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
+          "snapshot_update_interval": "How often to rebuild the panel snapshot from MQTT data. Lower values give faster updates but use more CPU. Increase on low-power hardware (e.g., Raspberry Pi). Set to 0 for no debounce. Range: 0\u201315 seconds."
+        },
+        "description": "Configure SPAN Panel integration settings.",
+        "title": "General Options"
+      },
+      "monitoring_options": {
+        "data": {
           "enable_current_monitoring": "Current Monitoring",
           "continuous_threshold_pct": "Continuous Load Threshold (%)",
           "spike_threshold_pct": "Spike Threshold (%)",
@@ -370,12 +384,6 @@
           "notify_targets": "Notify Service Targets"
         },
         "data_description": {
-          "enable_circuit_net_energy_sensors": "Create net energy sensors for individual circuits. Shows true energy consumption accounting for reactive power and regenerative flows.",
-          "enable_energy_dip_compensation": "Automatically compensate when the panel reports lower energy readings. Disabling clears all accumulated offsets.",
-          "enable_panel_net_energy_sensors": "Create net energy sensors for panel-level energy flows (main meter and feed-through). Shows true energy balance accounting for bidirectional flows.",
-          "enable_unmapped_circuit_sensors": "Create sensors for unmapped circuit tabs. These provide backing data for panels with circuits that are not assigned to named breakers.",
-          "energy_reporting_grace_period": "How long energy sensors maintain their last known value when the panel becomes unavailable (0-60 minutes). Helps preserve energy statistics integrity during brief outages. Default: 15 minutes.",
-          "snapshot_update_interval": "How often to rebuild the panel snapshot from MQTT data. Lower values give faster updates but use more CPU. Increase on low-power hardware (e.g., Raspberry Pi). Set to 0 for no debounce. Range: 0\u201315 seconds.",
           "enable_current_monitoring": "Monitor current draw against breaker ratings. Alerts when thresholds exceeded. Requires V2 panel.",
           "continuous_threshold_pct": "Percentage of breaker rating for continuous load alerts. NEC code specifies 80% for continuous loads. Range: 1-200%.",
           "spike_threshold_pct": "Percentage of breaker rating for instantaneous spike alerts. Default 100% (full breaker rating). Range: 1-200%.",
@@ -385,8 +393,8 @@
           "enable_event_bus": "Fire span_panel_current_alert events on the HA event bus for automations and Node-RED.",
           "notify_targets": "Comma-separated list of notify service targets for current alerts (e.g., notify.notify, notify.mobile_app_phone). Default: notify.notify."
         },
-        "description": "Configure SPAN Panel integration settings.",
-        "title": "General Options"
+        "description": "Configure monitoring thresholds and notifications.",
+        "title": "Monitoring"
       }
     }
   },

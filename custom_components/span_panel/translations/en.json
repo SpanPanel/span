@@ -371,6 +371,30 @@
                 },
                 "description": "Configure SPAN Panel integration settings.",
                 "title": "General Options"
+            },
+            "monitoring_options": {
+                "data": {
+                    "enable_current_monitoring": "Current Monitoring",
+                    "continuous_threshold_pct": "Continuous Load Threshold (%)",
+                    "spike_threshold_pct": "Spike Threshold (%)",
+                    "window_duration_m": "Continuous Load Window (minutes)",
+                    "cooldown_duration_m": "Alert Cooldown (minutes)",
+                    "enable_persistent_notifications": "Persistent Notifications",
+                    "enable_event_bus": "Event Bus Alerts",
+                    "notify_targets": "Notify Service Targets"
+                },
+                "data_description": {
+                    "enable_current_monitoring": "Monitor current draw against breaker ratings. Alerts when thresholds exceeded. Requires V2 panel.",
+                    "continuous_threshold_pct": "Percentage of breaker rating for continuous load alerts. NEC code specifies 80% for continuous loads. Range: 1-200%.",
+                    "spike_threshold_pct": "Percentage of breaker rating for instantaneous spike alerts. Default 100% (full breaker rating). Range: 1-200%.",
+                    "window_duration_m": "How long current must stay above the continuous threshold before alerting. Range: 1-180 minutes.",
+                    "cooldown_duration_m": "Minimum time between repeated alerts for the same circuit and alert type. Range: 1-180 minutes.",
+                    "enable_persistent_notifications": "Show alerts in the Home Assistant notification panel.",
+                    "enable_event_bus": "Fire span_panel_current_alert events on the HA event bus for automations and Node-RED.",
+                    "notify_targets": "Comma-separated list of notify service targets for current alerts (e.g., notify.notify, notify.mobile_app_phone). Default: notify.notify."
+                },
+                "description": "Configure monitoring thresholds and notifications.",
+                "title": "Monitoring"
             }
         }
     },
@@ -386,6 +410,82 @@
         "export_circuit_manifest": {
             "description": "Returns a structured circuit manifest for all configured SPAN panels: serial, host, and per-circuit power sensor entity IDs, layout template identifiers (clone_{{tab}}), device types, and breaker tab numbers. Intended for dashboard cards and automations that need panel topology without querying the entity registry. This is a response-only service; the response may list zero panels if nothing can be resolved.",
             "name": "Export circuit manifest"
+        },
+        "set_circuit_threshold": {
+            "name": "Set circuit threshold",
+            "description": "Set current monitoring thresholds for a specific circuit.",
+            "fields": {
+                "circuit_id": {
+                    "name": "Circuit ID",
+                    "description": "The circuit identifier to configure."
+                },
+                "continuous_threshold_pct": {
+                    "name": "Continuous threshold (%)",
+                    "description": "Percentage of breaker rating for continuous load alerts."
+                },
+                "spike_threshold_pct": {
+                    "name": "Spike threshold (%)",
+                    "description": "Percentage of breaker rating for instantaneous spike alerts."
+                },
+                "window_duration_m": {
+                    "name": "Window duration (minutes)",
+                    "description": "How long current must stay above threshold before alerting."
+                },
+                "monitoring_enabled": {
+                    "name": "Monitoring enabled",
+                    "description": "Enable or disable monitoring for this circuit."
+                }
+            }
+        },
+        "clear_circuit_threshold": {
+            "name": "Clear circuit threshold",
+            "description": "Remove per-circuit threshold overrides, reverting to global defaults.",
+            "fields": {
+                "circuit_id": {
+                    "name": "Circuit ID",
+                    "description": "The circuit identifier to clear."
+                }
+            }
+        },
+        "set_mains_threshold": {
+            "name": "Set mains threshold",
+            "description": "Set current monitoring thresholds for a specific mains leg.",
+            "fields": {
+                "leg": {
+                    "name": "Mains leg",
+                    "description": "The mains leg to configure."
+                },
+                "continuous_threshold_pct": {
+                    "name": "Continuous threshold (%)",
+                    "description": "Percentage of breaker rating for continuous load alerts."
+                },
+                "spike_threshold_pct": {
+                    "name": "Spike threshold (%)",
+                    "description": "Percentage of breaker rating for instantaneous spike alerts."
+                },
+                "window_duration_m": {
+                    "name": "Window duration (minutes)",
+                    "description": "How long current must stay above threshold before alerting."
+                },
+                "monitoring_enabled": {
+                    "name": "Monitoring enabled",
+                    "description": "Enable or disable monitoring for this mains leg."
+                }
+            }
+        },
+        "clear_mains_threshold": {
+            "name": "Clear mains threshold",
+            "description": "Remove per-mains-leg threshold overrides, reverting to global defaults.",
+            "fields": {
+                "leg": {
+                    "name": "Mains leg",
+                    "description": "The mains leg to clear."
+                }
+            }
+        },
+        "get_monitoring_status": {
+            "name": "Get monitoring status",
+            "description": "Returns current monitoring state for all tracked circuits and mains legs."
         }
     }
 }

@@ -36,7 +36,9 @@ import voluptuous as vol
 
 from .config_flow_options import (
     build_general_options_schema,
+    build_monitoring_options_schema,
     get_general_options_defaults,
+    get_monitoring_options_defaults,
     process_general_options_input,
 )
 from .config_flow_validation import (
@@ -870,6 +872,10 @@ OPTIONS_SCHEMA: vol.Schema = vol.Schema(
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
+    def __init__(self) -> None:
+        """Initialize the options flow."""
+        self._general_input: dict[str, Any] = {}
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Start the options flow with general options directly."""
         return await self.async_step_general_options(user_input)
@@ -882,9 +888,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # Process the user input using the utility function
             filtered_input, errors = process_general_options_input(self.config_entry, user_input)
 
-            # If no errors, proceed with saving options
+            # If no errors, proceed to monitoring options
             if not errors:
-                return self.async_create_entry(title="", data=filtered_input)
+                self._general_input = filtered_input
+                return await self.async_step_monitoring_options()
         else:
             errors = {}
 
@@ -896,6 +903,23 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             step_id="general_options",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
+        )
+
+    async def async_step_monitoring_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage current monitoring options."""
+        if user_input is not None:
+            merged = dict(self._general_input)
+            merged.update(user_input)
+            return self.async_create_entry(title="", data=merged)
+
+        schema = build_monitoring_options_schema(self.config_entry)
+        defaults = get_monitoring_options_defaults(self.config_entry)
+
+        return self.async_show_form(
+            step_id="monitoring_options",
+            data_schema=self.add_suggested_values_to_schema(schema, defaults),
         )
 
 
