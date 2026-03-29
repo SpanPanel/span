@@ -96,8 +96,9 @@ class TestPanelDiagnosticSensorDefinitions:
             d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating"
         )
         assert desc.translation_key == "main_breaker_rating"
-        assert desc.device_class == SensorDeviceClass.CURRENT
+        assert desc.device_class is None
         assert desc.entity_category == EntityCategory.DIAGNOSTIC
+        assert desc.entity_registry_enabled_default is False
 
     def test_voltage_value_functions(self):
         snapshot = SpanPanelSnapshotFactory.create(l1_voltage=121.5, l2_voltage=119.3)
@@ -181,11 +182,12 @@ class TestCircuitSensorDefinitions:
 
     def test_circuit_breaker_rating_definition(self):
         assert CIRCUIT_BREAKER_RATING_SENSOR.key == "circuit_breaker_rating"
-        assert CIRCUIT_BREAKER_RATING_SENSOR.device_class == SensorDeviceClass.CURRENT
+        assert CIRCUIT_BREAKER_RATING_SENSOR.device_class is None
         assert (
             CIRCUIT_BREAKER_RATING_SENSOR.entity_category == EntityCategory.DIAGNOSTIC
         )
         assert CIRCUIT_BREAKER_RATING_SENSOR.name == "Breaker Rating"
+        assert CIRCUIT_BREAKER_RATING_SENSOR.entity_registry_enabled_default is False
 
 
 # ---------------------------------------------------------------------------

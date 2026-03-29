@@ -302,9 +302,9 @@ MAIN_BREAKER_RATING_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="main_breaker_rating",
         translation_key="main_breaker_rating",
-        device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda s: s.main_breaker_rating_a,
     )
 )
@@ -331,9 +331,9 @@ CIRCUIT_BREAKER_RATING_SENSOR: SpanPanelCircuitsSensorEntityDescription = (
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_breaker_rating",
         name="Breaker Rating",
-        device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda c: c.breaker_rating_a,
     )
 )
