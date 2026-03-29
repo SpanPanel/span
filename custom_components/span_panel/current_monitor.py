@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.core import CoreState
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot
@@ -566,33 +567,39 @@ class CurrentMonitor:
             window_duration_s,
         )
 
-        raw_targets = opts.get(NOTIFY_TARGETS, "notify.notify")
-        if isinstance(raw_targets, str):
-            notify_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
+        if self._hass.state is not CoreState.running:
+            _LOGGER.debug(
+                "Skipping alert notifications during startup (state=%s)",
+                self._hass.state,
+            )
         else:
-            notify_targets = raw_targets
-        for target in notify_targets:
-            self._hass.async_create_task(
-                self._hass.services.async_call(
-                    target.split(".")[0] if "." in target else "notify",
-                    target.split(".")[1] if "." in target else "notify",
-                    {"title": title, "message": message},
+            raw_targets = opts.get(NOTIFY_TARGETS, "notify.notify")
+            if isinstance(raw_targets, str):
+                notify_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
+            else:
+                notify_targets = raw_targets
+            for target in notify_targets:
+                self._hass.async_create_task(
+                    self._hass.services.async_call(
+                        target.split(".")[0] if "." in target else "notify",
+                        target.split(".")[1] if "." in target else "notify",
+                        {"title": title, "message": message},
+                    )
                 )
-            )
 
-        if opts.get(ENABLE_PERSISTENT_NOTIFICATIONS, True):
-            notification_id = f"span_panel_{alert_source}_{alert_id}_{alert_type}"
-            self._hass.async_create_task(
-                self._hass.services.async_call(
-                    "persistent_notification",
-                    "create",
-                    {
-                        "title": title,
-                        "message": message,
-                        "notification_id": notification_id,
-                    },
+            if opts.get(ENABLE_PERSISTENT_NOTIFICATIONS, True):
+                notification_id = f"span_panel_{alert_source}_{alert_id}_{alert_type}"
+                self._hass.async_create_task(
+                    self._hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": title,
+                            "message": message,
+                            "notification_id": notification_id,
+                        },
+                    )
                 )
-            )
 
         _LOGGER.warning(
             "Current alert: %s — %s at %.1fA (%.1f%% of %.0fA rating)",

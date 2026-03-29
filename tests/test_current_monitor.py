@@ -13,6 +13,8 @@ from custom_components.span_panel.const import (
     ENABLE_CURRENT_MONITORING,
     EVENT_CURRENT_ALERT,
 )
+from homeassistant.core import CoreState
+
 from custom_components.span_panel.current_monitor import CurrentMonitor
 from custom_components.span_panel.options import (
     CONTINUOUS_THRESHOLD_PCT,
@@ -55,6 +57,7 @@ def _make_monitor(hass, options=None, entry_id="test_entry"):
 def _make_hass():
     """Create a minimal mock hass object."""
     hass = MagicMock()
+    hass.state = CoreState.running
     hass.bus = MagicMock()
     hass.bus.async_fire = MagicMock()
     hass.services = MagicMock()
@@ -612,6 +615,24 @@ class TestNotificationDispatch:
         ]
         assert len(pn_calls) == 1
         assert pn_calls[0][0][2]["notification_id"] == "span_panel_circuit_1_spike"
+
+    def test_no_notifications_during_startup(self):
+        """Service calls are suppressed when HA is still starting."""
+        hass = _make_hass()
+        hass.state = CoreState.starting
+        monitor = _make_monitor(hass, _make_options())
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+
+        hass.services.async_call.assert_not_called()
+        # Event bus should still fire
+        hass.bus.async_fire.assert_called()
 
     def test_no_persistent_notification_when_disabled(self):
         """No persistent notification when disabled."""
