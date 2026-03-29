@@ -441,9 +441,9 @@ async def test_simulation_entry_is_removed_during_migration(hass: HomeAssistant)
     )
     entry.add_to_hass(hass)
 
-    # Migration removes simulation entries and returns False
+    # Migration removes simulation entries and returns True (success)
     result = await async_migrate_entry(hass, entry)
-    assert result is False
+    assert result is True
 
 
 # ---------- zeroconf v2 discovery ----------

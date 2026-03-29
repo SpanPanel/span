@@ -179,7 +179,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
                 config_entry.entry_id,
             )
             await hass.config_entries.async_remove(config_entry.entry_id)
-            return False
+            return True
 
         hass.config_entries.async_update_entry(
             config_entry,
