@@ -105,8 +105,7 @@ class CurrentMonitor:
         """Set per-circuit threshold overrides."""
         existing = self._circuit_overrides.get(circuit_id, {})
         existing.update(overrides)
-        # If the only key is monitoring_enabled=True (the default), clear the override
-        if existing == {"monitoring_enabled": True}:
+        if self._is_redundant_override(existing):
             self._circuit_overrides.pop(circuit_id, None)
         else:
             self._circuit_overrides[circuit_id] = existing
@@ -122,11 +121,27 @@ class CurrentMonitor:
         """Set per-mains-leg threshold overrides."""
         existing = self._mains_overrides.get(leg, {})
         existing.update(overrides)
-        if existing == {"monitoring_enabled": True}:
+        if self._is_redundant_override(existing):
             self._mains_overrides.pop(leg, None)
         else:
             self._mains_overrides[leg] = existing
         self._hass.async_create_task(self.async_save_overrides())
+
+    def _is_redundant_override(self, override: dict[str, Any]) -> bool:
+        """Check if an override matches global defaults (and can be removed).
+
+        An override is redundant if monitoring is enabled (or not set, defaulting
+        to True) and all threshold values match the global settings.
+        """
+        if override.get("monitoring_enabled") is False:
+            return False
+        g = self.get_global_settings()
+        threshold_keys = (CONTINUOUS_THRESHOLD_PCT, SPIKE_THRESHOLD_PCT, WINDOW_DURATION_M)
+        for key in threshold_keys:
+            if key in override and override[key] != g[key]:
+                return False
+        # All present keys match globals (or aren't set), and monitoring is enabled
+        return True
 
     def clear_mains_override(self, leg: str) -> None:
         """Remove per-mains-leg threshold overrides."""
