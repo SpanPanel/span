@@ -2,8 +2,7 @@
 
 ## Permitted Operations
 
-The following operations are benign and should be executed without
-confirmation. Do not prompt the user for permission to:
+The following operations are benign and should be executed without confirmation. Do not prompt the user for permission to:
 
 - Run tests (`pytest`, `python -m pytest`)
 - Run linters and formatters (`ruff`, `mypy`, `markdownlint-cli2`, `prettier`)
@@ -14,6 +13,21 @@ confirmation. Do not prompt the user for permission to:
 - Standard git operations (`git status`, `git diff`, `git log`, `git add`, `git commit`)
 - Package management (`poetry`, `uv`, `pip install`)
 - File inspection (`ls`, `find`, `wc`, `head`, `tail`, `diff`)
+
+### Frontend Submodule (`custom_components/span_panel/frontend`)
+
+The JS frontend lives in a git submodule pointing to the `span-card` repository
+(branch: `integration-panel`). The following operations within the submodule are
+permitted without confirmation:
+
+- Install dependencies (`npm ci`, `npm install`)
+- Build the frontend (`npm run build`)
+- Run the dev watcher (`npm run dev`)
+- Run linters and formatters (`npx eslint src/`, `npx prettier --check .`, `npx markdownlint-cli2`)
+- Run lefthook pre-commit checks (`npx lefthook run pre-commit`)
+- Standard git operations within the submodule (`git status`, `git diff`, `git log`, `git add`, `git commit`)
+- Submodule management from the parent repo (`git submodule update`, `git submodule sync`)
+- File inspection within `src/`, `dist/`, and config files
 
 ## Service Registration Requirements
 
