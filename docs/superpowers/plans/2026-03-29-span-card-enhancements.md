@@ -293,10 +293,12 @@ export function buildSubDevicesHTML(topology, hass, config, _durationMs) {
         <div class="sub-device-header">
           <span class="sub-device-type">${escapeHtml(label)}</span>
           <span class="sub-device-name">${escapeHtml(sub.name || "")}</span>
-          ${powerEid
-            ? `<span class="sub-power-value"><strong>${formatPowerSigned(powerW)}</strong>
+          ${
+            powerEid
+              ? `<span class="sub-power-value"><strong>${formatPowerSigned(powerW)}</strong>
                <span class="power-unit">${formatPowerUnit(powerW)}</span></span>`
-            : ""}
+              : ""
+          }
         </div>
         ${chartsHTML}
         ${entHTML}
