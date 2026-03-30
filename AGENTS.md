@@ -29,6 +29,16 @@ permitted without confirmation:
 - Submodule management from the parent repo (`git submodule update`, `git submodule sync`)
 - File inspection within `src/`, `dist/`, and config files
 
+## Translation Workflow
+
+`strings.json` is the single source of truth for all translatable strings. When
+adding or updating any user-facing text (config flow steps, service names,
+service field descriptions, error messages, etc.), always edit `strings.json`
+first. The pre-commit hook runs `scripts/sync_translations.py`, which copies
+`strings.json` to `translations/en.json` and validates that all other language
+files have no missing or orphaned keys. Never edit `translations/en.json`
+directly — it is generated automatically.
+
 ## Service Registration Requirements
 
 All services registered by this integration MUST conform to the following requirements. These align with Home Assistant core's service architecture and ensure
