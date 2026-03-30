@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 import voluptuous as vol
 
 from .const import DOMAIN
+from .helpers import build_panel_unique_id
 
 if TYPE_CHECKING:
     from . import SpanPanelRuntimeData
@@ -20,6 +21,27 @@ if TYPE_CHECKING:
 # get_user_friendly_suffix) to semantic role names used in the topology response.
 # NOTE: build_circuit_unique_id maps API keys through CIRCUIT_SUFFIX_MAPPING,
 # so unique_ids end with e.g. "_power" not "_instantPowerW".
+# Panel-level sensor keys to resolve via entity registry.
+# Maps topology role name -> sensor description key (used by
+# build_panel_unique_id to construct the unique_id).
+_PANEL_SENSOR_KEYS: dict[str, str] = {
+    "current_power": "instantGridPowerW",
+    "site_power": "sitePowerW",
+    "grid_power": "gridPowerFlowW",
+    "feedthrough_power": "feedthroughPowerW",
+    "pv_power": "pvPowerW",
+    "battery_power": "batteryPowerW",
+    "battery_level": "storage_battery_percentage",
+    "dsm_state": "dsm_state",
+    "main_breaker_rating": "main_breaker_rating",
+    "upstream_l1_current": "upstream_l1_current",
+    "upstream_l2_current": "upstream_l2_current",
+    "downstream_l1_current": "downstream_l1_current",
+    "downstream_l2_current": "downstream_l2_current",
+    "l1_voltage": "l1_voltage",
+    "l2_voltage": "l2_voltage",
+}
+
 _SENSOR_ROLE_SUFFIXES: dict[str, str] = {
     "_power": "power",
     "_energy_produced": "produced_energy",
@@ -105,6 +127,9 @@ async def handle_panel_topology(
         if entity.device_id:
             entities_by_device.setdefault(entity.device_id, []).append(entity)
 
+    # Resolve panel-level sensor entity_ids via unique_id registry lookup.
+    panel_entities = _build_panel_entity_map(snapshot.serial_number, entity_registry)
+
     # Single pass over all entities to build circuit_id to role to entity_id
     # map. EVSE feed circuit sensors live on the EVSE sub-device, so we
     # search all entities for the config entry, not just panel-device ones.
@@ -166,6 +191,7 @@ async def handle_panel_topology(
             "panel_size": snapshot.panel_size,
             "device_id": device_id,
             "device_name": device_entry.name,
+            "panel_entities": panel_entities,
             "circuits": circuits,
             "sub_devices": sub_devices,
         },
@@ -243,6 +269,24 @@ def _build_circuit_entity_map(
             if role:
                 mapped[role] = entity.entity_id
 
+    return result
+
+
+def _build_panel_entity_map(
+    serial: str,
+    entity_registry: er.EntityRegistry,
+) -> dict[str, str]:
+    """Resolve panel-level sensor unique_ids to current entity_ids.
+
+    Returns a dict of {role: entity_id} for sensors that exist in the
+    registry. Entries that cannot be resolved are omitted.
+    """
+    result: dict[str, str] = {}
+    for role, description_key in _PANEL_SENSOR_KEYS.items():
+        unique_id = build_panel_unique_id(serial, description_key)
+        entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id is not None:
+            result[role] = entity_id
     return result
 
 
