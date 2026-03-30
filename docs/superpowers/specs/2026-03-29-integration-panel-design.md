@@ -63,6 +63,18 @@ No new backend code is required. The panel consumes existing APIs:
   - `span_panel.set_mains_threshold` / `span_panel.clear_mains_threshold` for mains monitoring overrides
 - Config entry options update for global monitoring and general settings
 
+## Multi-Panel Support
+
+When multiple SPAN Panel config entries are loaded (multiple physical panels), the dashboard shows a panel selector dropdown at the top of the page. Selecting a
+panel switches the entire view (header, circuit grid, monitoring status, settings) to that panel's data.
+
+When only one panel is configured, the dropdown is hidden and the panel loads directly.
+
+The panel JS discovers available panels by querying the HA device registry for devices provided by the `span_panel` integration. Each device maps to a config
+entry, which provides the `device_id` needed for the `panel_topology` WebSocket call and entity state lookups.
+
+The selected panel is persisted in the browser's local storage so the user's choice survives page reloads.
+
 ## Panel Tab (Default)
 
 The primary view: a physical breaker-box representation of the panel.
@@ -237,12 +249,13 @@ The config flow General Options step remains as a fallback but the panel becomes
 
 ### Panel registration
 
-`async_setup_entry` in `__init__.py` registers the panel:
+A single sidebar entry is registered once (not per config entry). The panel JS handles multi-panel internally.
+
+`async_setup` (domain-level, not per-entry) registers the static path and panel:
 
 ```python
-panel_url = f"/span_panel_frontend/{entry.entry_id}"
 hass.http.register_static_path(
-    panel_url,
+    "/span_panel_frontend",
     hass.config.path(
         "custom_components/span_panel/frontend/span-panel.js"
     ),
@@ -251,16 +264,16 @@ hass.http.register_static_path(
 hass.components.panel_custom.async_register_panel(
     hass,
     webcomponent_name="span-panel",
-    frontend_url_path=f"span-panel-{entry.entry_id}",
+    frontend_url_path="span-panel",
     sidebar_title="Span Panel",
     sidebar_icon="mdi:lightning-bolt",
-    module_url=f"{panel_url}/span-panel.js",
+    module_url="/span_panel_frontend/span-panel.js",
     require_admin=False,
-    config={"entry_id": entry.entry_id},
+    config={},
 )
 ```
 
-`async_unload_entry` removes the panel registration.
+The panel JS discovers all loaded SPAN Panel config entries via the HA device registry and presents a panel selector when more than one exists.
 
 ### No new services or WebSocket commands
 
@@ -289,4 +302,4 @@ Out of scope:
 - Mobile-specific responsive design (the existing span-card responsive breakpoint at 600px carries over)
 - Chart enhancements beyond A/W toggle and threshold lines
 - Automation creation from the panel UI
-- Multi-panel support (one panel per integration entry; multiple entries each get their own sidebar item)
+- Multi-panel support is addressed in the architecture but detailed UX for comparing panels side-by-side is out of scope
