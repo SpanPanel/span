@@ -309,7 +309,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             await coordinator.async_config_entry_first_refresh()
             await coordinator.async_setup_streaming()
 
-            if entry.options.get(ENABLE_CURRENT_MONITORING, False):
+            if entry.options.get(
+                ENABLE_CURRENT_MONITORING, False
+            ) or await CurrentMonitor.async_is_enabled(hass, entry):
                 monitor = CurrentMonitor(hass, entry)
                 await monitor.async_start()
                 coordinator.current_monitor = monitor
@@ -567,20 +569,44 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     """Register current monitoring services."""
 
+    def _get_runtime_data() -> tuple[SpanPanelRuntimeData, ConfigEntry] | None:
+        """Find the first loaded SPAN panel runtime data and entry."""
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if hasattr(entry, "runtime_data") and isinstance(
+                entry.runtime_data, SpanPanelRuntimeData
+            ):
+                return entry.runtime_data, entry
+        return None
+
     def _get_monitor(call: ServiceCall) -> CurrentMonitor:
         """Find the CurrentMonitor for the calling entry."""
-        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if (
-                hasattr(entry, "runtime_data")
-                and isinstance(entry.runtime_data, SpanPanelRuntimeData)
-                and entry.runtime_data.coordinator.current_monitor is not None
-            ):
-                return entry.runtime_data.coordinator.current_monitor
+        result = _get_runtime_data()
+        if result is not None:
+            runtime_data, _entry = result
+            if runtime_data.coordinator.current_monitor is not None:
+                return runtime_data.coordinator.current_monitor
         raise ServiceValidationError(
             "No SPAN panel with current monitoring enabled.",
             translation_domain=DOMAIN,
             translation_key="monitoring_not_enabled",
         )
+
+    async def _get_or_create_monitor() -> CurrentMonitor:
+        """Find or bootstrap a CurrentMonitor for the first loaded panel."""
+        result = _get_runtime_data()
+        if result is None:
+            raise ServiceValidationError(
+                "No SPAN panel integration loaded.",
+                translation_domain=DOMAIN,
+                translation_key="monitoring_not_enabled",
+            )
+        runtime_data, entry = result
+        if runtime_data.coordinator.current_monitor is not None:
+            return runtime_data.coordinator.current_monitor
+        monitor = CurrentMonitor(hass, entry)
+        await monitor.async_start()
+        runtime_data.coordinator.current_monitor = monitor
+        return monitor
 
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
         monitor = _get_monitor(call)
@@ -611,8 +637,16 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_get_monitoring_status(
         call: ServiceCall,
     ) -> ServiceResponse:
-        monitor = _get_monitor(call)
-        return cast(ServiceResponse, monitor.get_monitoring_status())
+        result = _get_runtime_data()
+        if result is None:
+            return cast(ServiceResponse, {"enabled": False})
+        runtime_data, _entry = result
+        monitor = runtime_data.coordinator.current_monitor
+        if monitor is None:
+            return cast(ServiceResponse, {"enabled": False})
+        status = monitor.get_monitoring_status()
+        status["enabled"] = True
+        return cast(ServiceResponse, status)
 
     hass.services.async_register(
         DOMAIN,
@@ -640,7 +674,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     )
 
     async def async_handle_set_global_monitoring(call: ServiceCall) -> None:
-        monitor = _get_monitor(call)
+        monitor = await _get_or_create_monitor()
         monitor.set_global_settings(dict(call.data))
 
     hass.services.async_register(

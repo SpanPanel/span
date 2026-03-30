@@ -20,7 +20,7 @@ class TestBuildPanelEntityMap:
             mapping = {
                 build_panel_unique_id(serial, "instantGridPowerW"): "sensor.my_current_power",
                 build_panel_unique_id(serial, "sitePowerW"): "sensor.custom_site",
-                build_panel_unique_id(serial, "dsm_state"): "sensor.grid_state",
+                build_panel_unique_id(serial, "dsm_grid_state"): "sensor.grid_state",
             }
             return mapping.get(unique_id)
 

@@ -32,7 +32,7 @@ _PANEL_SENSOR_KEYS: dict[str, str] = {
     "pv_power": "pvPowerW",
     "battery_power": "batteryPowerW",
     "battery_level": "storage_battery_percentage",
-    "dsm_state": "dsm_state",
+    "dsm_state": "dsm_grid_state",
     "main_breaker_rating": "main_breaker_rating",
     "upstream_l1_current": "upstream_l1_current",
     "upstream_l2_current": "upstream_l2_current",

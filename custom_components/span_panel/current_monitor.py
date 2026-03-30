@@ -312,6 +312,7 @@ class CurrentMonitor:
     async def async_save_overrides(self) -> None:
         """Persist circuit overrides, mains overrides, and global settings to storage."""
         data: dict[str, Any] = {
+            "enabled": True,
             "circuit_overrides": self._circuit_overrides,
             "mains_overrides": self._mains_overrides,
         }
@@ -327,6 +328,17 @@ class CurrentMonitor:
         self._circuit_overrides = data.get("circuit_overrides", {})
         self._mains_overrides = data.get("mains_overrides", {})
         self._global_settings = data.get("global", {})
+
+    @staticmethod
+    async def async_is_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+        """Check if monitoring was previously enabled by reading storage."""
+        store: Store = Store(
+            hass,
+            _STORAGE_VERSION,
+            f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
+        )
+        data = await store.async_load()
+        return bool(data and data.get("enabled", False))
 
     # --- Threshold resolution ---
 
