@@ -27,3 +27,5 @@ htmlcov/
 .pytest_cache/
 docs/agile-readme.md
 .github/copilot-instructions.md
+.claude/
+.superpowers/
