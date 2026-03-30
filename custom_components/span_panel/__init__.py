@@ -686,6 +686,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
             return cast(ServiceResponse, {"enabled": False})
         status = monitor.get_monitoring_status()
         status["enabled"] = True
+        status["global_settings"] = monitor.get_global_settings()
         return cast(ServiceResponse, status)
 
     hass.services.async_register(
