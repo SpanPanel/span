@@ -105,7 +105,11 @@ class CurrentMonitor:
         """Set per-circuit threshold overrides."""
         existing = self._circuit_overrides.get(circuit_id, {})
         existing.update(overrides)
-        self._circuit_overrides[circuit_id] = existing
+        # If the only key is monitoring_enabled=True (the default), clear the override
+        if existing == {"monitoring_enabled": True}:
+            self._circuit_overrides.pop(circuit_id, None)
+        else:
+            self._circuit_overrides[circuit_id] = existing
         self._hass.async_create_task(self.async_save_overrides())
 
     def clear_circuit_override(self, circuit_id: str) -> None:
@@ -118,7 +122,10 @@ class CurrentMonitor:
         """Set per-mains-leg threshold overrides."""
         existing = self._mains_overrides.get(leg, {})
         existing.update(overrides)
-        self._mains_overrides[leg] = existing
+        if existing == {"monitoring_enabled": True}:
+            self._mains_overrides.pop(leg, None)
+        else:
+            self._mains_overrides[leg] = existing
         self._hass.async_create_task(self.async_save_overrides())
 
     def clear_mains_override(self, leg: str) -> None:
@@ -256,6 +263,9 @@ class CurrentMonitor:
             utilization = round(last_current / rating * 100, 1) if rating else None
             cont_pct, spike_pct, window_m, cooldown_m = self._resolve_circuit_thresholds(cid)
             entity_id = self._resolve_circuit_entity_id(cid)
+            override = self._circuit_overrides.get(cid, {})
+            has_override = bool(override)
+            monitoring_enabled = override.get("monitoring_enabled", True)
 
             circuits[entity_id] = {
                 "name": circuit.name if circuit else cid,
@@ -266,6 +276,8 @@ class CurrentMonitor:
                 "spike_threshold_pct": spike_pct,
                 "window_duration_m": window_m,
                 "cooldown_duration_m": cooldown_m,
+                "has_override": has_override,
+                "monitoring_enabled": monitoring_enabled,
                 "over_threshold_since": state.over_threshold_since.isoformat()
                 if state and state.over_threshold_since
                 else None,
@@ -277,34 +289,40 @@ class CurrentMonitor:
                 else None,
             }
 
+        # Present mains as a single entry using the higher of the two upstream legs.
+        # The main breaker is a single 240V breaker; internally we still evaluate
+        # per-leg, but the UI shows one combined "Mains Breaker" point.
         mains: dict[str, dict[str, Any]] = {}
-        for leg, state in self._mains_states.items():
-            utilization = (
-                round(state.last_current_a / main_rating * 100, 1) if main_rating else None
-            )
-            cont_pct, spike_pct, window_m, cooldown_m = self._resolve_mains_thresholds(leg)
-            leg_label = leg.replace("_", " ").title()
-            entity_id = self._resolve_mains_entity_id(leg)
+        l1_state = self._mains_states.get("upstream_l1")
+        l2_state = self._mains_states.get("upstream_l2")
+        l1_current = l1_state.last_current_a if l1_state else 0.0
+        l2_current = l2_state.last_current_a if l2_state else 0.0
+        peak_current = max(l1_current, l2_current)
+        utilization = round(peak_current / main_rating * 100, 1) if main_rating else None
 
-            mains[entity_id] = {
-                "name": leg_label,
-                "last_current_a": state.last_current_a,
-                "breaker_rating_a": main_rating,
-                "utilization_pct": utilization,
-                "continuous_threshold_pct": cont_pct,
-                "spike_threshold_pct": spike_pct,
-                "window_duration_m": window_m,
-                "cooldown_duration_m": cooldown_m,
-                "over_threshold_since": state.over_threshold_since.isoformat()
-                if state.over_threshold_since
-                else None,
-                "last_spike_alert": state.last_spike_alert.isoformat()
-                if state.last_spike_alert
-                else None,
-                "last_continuous_alert": state.last_continuous_alert.isoformat()
-                if state.last_continuous_alert
-                else None,
-            }
+        # Use upstream_l1 thresholds as the representative (they're the same unless overridden)
+        cont_pct, spike_pct, window_m, cooldown_m = self._resolve_mains_thresholds("upstream_l1")
+        override = self._mains_overrides.get("upstream_l1", {})
+        has_override = bool(override)
+        monitoring_enabled = override.get("monitoring_enabled", True)
+
+        # Resolve to the current_power entity for the mains entry key
+        mains_entity_id = self._resolve_mains_entity_id("upstream_l1")
+        mains[mains_entity_id] = {
+            "name": "Mains Breaker",
+            "last_current_a": peak_current,
+            "breaker_rating_a": main_rating,
+            "utilization_pct": utilization,
+            "continuous_threshold_pct": cont_pct,
+            "spike_threshold_pct": spike_pct,
+            "window_duration_m": window_m,
+            "cooldown_duration_m": cooldown_m,
+            "has_override": has_override,
+            "monitoring_enabled": monitoring_enabled,
+            "over_threshold_since": None,
+            "last_spike_alert": None,
+            "last_continuous_alert": None,
+        }
 
         return {"circuits": circuits, "mains": mains}
 
