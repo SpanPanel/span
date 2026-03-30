@@ -498,6 +498,18 @@
         "enable_event_bus": {
           "name": "Event Bus",
           "description": "Fire events on the HA event bus for alerts."
+        },
+        "notification_title_template": {
+          "name": "Notification Title Template",
+          "description": "Template for notification title. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+        },
+        "notification_message_template": {
+          "name": "Notification Message Template",
+          "description": "Template for notification message body. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+        },
+        "notification_priority": {
+          "name": "Notification Priority",
+          "description": "Push notification priority level. Controls interruption behavior on mobile devices (iOS: interruption-level, Android: priority/channel)."
         }
       }
     }

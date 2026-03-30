@@ -22,6 +22,9 @@ from span_panel_api import SpanPanelSnapshot
 from .const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
     DEFAULT_COOLDOWN_DURATION_M,
+    DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE,
+    DEFAULT_NOTIFICATION_PRIORITY,
+    DEFAULT_NOTIFICATION_TITLE_TEMPLATE,
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
@@ -33,6 +36,9 @@ from .options import (
     COOLDOWN_DURATION_M,
     ENABLE_EVENT_BUS,
     ENABLE_PERSISTENT_NOTIFICATIONS,
+    NOTIFICATION_MESSAGE_TEMPLATE,
+    NOTIFICATION_PRIORITY,
+    NOTIFICATION_TITLE_TEMPLATE,
     NOTIFY_TARGETS,
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
@@ -175,6 +181,13 @@ class CurrentMonitor:
             NOTIFY_TARGETS: opts.get(NOTIFY_TARGETS, "notify.notify"),
             ENABLE_PERSISTENT_NOTIFICATIONS: opts.get(ENABLE_PERSISTENT_NOTIFICATIONS, True),
             ENABLE_EVENT_BUS: opts.get(ENABLE_EVENT_BUS, True),
+            NOTIFICATION_TITLE_TEMPLATE: opts.get(
+                NOTIFICATION_TITLE_TEMPLATE, DEFAULT_NOTIFICATION_TITLE_TEMPLATE
+            ),
+            NOTIFICATION_MESSAGE_TEMPLATE: opts.get(
+                NOTIFICATION_MESSAGE_TEMPLATE, DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE
+            ),
+            NOTIFICATION_PRIORITY: opts.get(NOTIFICATION_PRIORITY, DEFAULT_NOTIFICATION_PRIORITY),
         }
 
     def set_global_settings(self, settings: dict[str, Any]) -> None:
@@ -187,6 +200,9 @@ class CurrentMonitor:
             NOTIFY_TARGETS,
             ENABLE_PERSISTENT_NOTIFICATIONS,
             ENABLE_EVENT_BUS,
+            NOTIFICATION_TITLE_TEMPLATE,
+            NOTIFICATION_MESSAGE_TEMPLATE,
+            NOTIFICATION_PRIORITY,
         }
         for key, value in settings.items():
             if key in valid_keys:
@@ -674,13 +690,20 @@ class CurrentMonitor:
             self._hass.bus.async_fire(EVENT_CURRENT_ALERT, event_data)
 
         title, message = self._format_notification(
-            alert_type,
-            alert_name,
-            current_a,
-            breaker_rating_a,
-            threshold_pct,
-            utilization_pct,
-            window_duration_s,
+            alert_type=alert_type,
+            alert_name=alert_name,
+            alert_id=alert_id,
+            current_a=current_a,
+            breaker_rating_a=breaker_rating_a,
+            threshold_pct=threshold_pct,
+            utilization_pct=utilization_pct,
+            window_duration_s=window_duration_s,
+            title_template=opts.get(
+                NOTIFICATION_TITLE_TEMPLATE, DEFAULT_NOTIFICATION_TITLE_TEMPLATE
+            ),
+            message_template=opts.get(
+                NOTIFICATION_MESSAGE_TEMPLATE, DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE
+            ),
         )
 
         if self._hass.state is not CoreState.running:
@@ -694,13 +717,13 @@ class CurrentMonitor:
                 notify_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
             else:
                 notify_targets = raw_targets
+
+            priority = opts.get(NOTIFICATION_PRIORITY, DEFAULT_NOTIFICATION_PRIORITY)
+            push_data = self._build_push_data(priority)
+
             for target in notify_targets:
                 self._hass.async_create_task(
-                    self._hass.services.async_call(
-                        target.split(".")[0] if "." in target else "notify",
-                        target.split(".")[1] if "." in target else "notify",
-                        {"title": title, "message": message},
-                    )
+                    self._dispatch_to_target(target, title, message, push_data)
                 )
 
             if opts.get(ENABLE_PERSISTENT_NOTIFICATIONS, True):
@@ -728,28 +751,110 @@ class CurrentMonitor:
 
     @staticmethod
     def _format_notification(
+        *,
         alert_type: str,
         alert_name: str,
+        alert_id: str,
         current_a: float,
         breaker_rating_a: float,
         threshold_pct: int,
         utilization_pct: float,
         window_duration_s: int | None,
+        title_template: str,
+        message_template: str,
     ) -> tuple[str, str]:
-        """Format notification title and message."""
-        if alert_type == "spike":
-            title = f"SPAN: {alert_name} spike"
+        """Format notification title and message using templates.
+
+        Available placeholders:
+            {name}            - Circuit/mains friendly name
+            {entity_id}       - Entity ID (e.g. sensor.kitchen_current)
+            {alert_type}      - "spike" or "continuous"
+            {current_a}       - Current draw in amps (e.g. 18.3)
+            {breaker_rating_a}- Breaker rating in amps (e.g. 20)
+            {threshold_pct}   - Configured threshold percentage
+            {utilization_pct} - Actual utilization percentage
+            {window_m}        - Window duration in minutes (continuous only)
+        """
+        window_m = (window_duration_s or 0) // 60
+        template_vars = {
+            "name": alert_name,
+            "entity_id": alert_id,
+            "alert_type": alert_type,
+            "current_a": f"{current_a:.1f}",
+            "breaker_rating_a": f"{breaker_rating_a:.0f}",
+            "threshold_pct": str(threshold_pct),
+            "utilization_pct": str(utilization_pct),
+            "window_m": str(window_m),
+        }
+        try:
+            title = title_template.format_map(template_vars)
+        except (KeyError, ValueError):
+            title = f"SPAN: {alert_name} {alert_type}"
+        try:
+            message = message_template.format_map(template_vars)
+        except (KeyError, ValueError):
             message = (
-                f"{alert_name} spike at {current_a:.1f}A "
+                f"{alert_name} at {current_a:.1f}A "
                 f"({utilization_pct}% of {breaker_rating_a:.0f}A rating)"
             )
-        else:
-            window_m = (window_duration_s or 0) // 60
-            title = f"SPAN: {alert_name} overload"
-            message = (
-                f"{alert_name} drawing {current_a:.1f}A "
-                f"({utilization_pct}% of {breaker_rating_a:.0f}A rating) "
-                f"— continuous threshold of {threshold_pct}% "
-                f"exceeded over {window_m} min"
-            )
         return title, message
+
+    @staticmethod
+    def _build_push_data(priority: str) -> dict[str, Any]:
+        """Build platform-specific push data for the given priority level.
+
+        Returns a dict suitable for the ``data`` parameter of a notify service
+        call.  Includes keys for both iOS (``push.interruption-level``) and
+        Android (``priority``, ``channel``) so the correct one is picked up
+        regardless of the receiving device platform.
+        """
+        if priority == "default":
+            return {}
+
+        android_priority_map = {
+            "passive": "low",
+            "active": "default",
+            "time-sensitive": "high",
+            "critical": "high",
+        }
+        data: dict[str, Any] = {
+            "push": {"interruption-level": priority},
+            "priority": android_priority_map.get(priority, "default"),
+        }
+        if priority == "critical":
+            data["push"]["sound"] = {
+                "name": "default",
+                "critical": 1,
+                "volume": 1.0,
+            }
+            data["channel"] = "alarm_stream"
+        elif priority == "time-sensitive":
+            data["channel"] = "alarm_stream_other"
+        return data
+
+    async def _dispatch_to_target(
+        self,
+        target: str,
+        title: str,
+        message: str,
+        push_data: dict[str, Any],
+    ) -> None:
+        """Send a notification to a single target.
+
+        Handles both entity-based targets (``notify.mobile_app_*``) which use
+        ``notify.send_message`` with an ``entity_id``, and legacy service-based
+        targets (``notify.notify``) which call the service directly.
+        """
+        service_data: dict[str, Any] = {"title": title, "message": message}
+        if push_data:
+            service_data["data"] = push_data
+
+        is_entity = target.startswith("notify.") and self._hass.states.get(target)
+
+        if is_entity:
+            service_data["entity_id"] = target
+            await self._hass.services.async_call("notify", "send_message", service_data)
+        else:
+            domain = target.split(".")[0] if "." in target else "notify"
+            service = target.split(".")[1] if "." in target else "notify"
+            await self._hass.services.async_call(domain, service, service_data)

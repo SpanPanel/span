@@ -1,5 +1,6 @@
 """Tests for the CurrentMonitor class."""
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -55,6 +56,27 @@ def _make_monitor(hass, options=None, entry_id="test_entry"):
     return CurrentMonitor(hass, entry)
 
 
+def _run_coro(coro):
+    """Run a coroutine synchronously so async_create_task records inner calls.
+
+    Falls back to returning the coroutine if an event loop is already running
+    (e.g. in async test cases).
+    """
+    if not asyncio.iscoroutine(coro):
+        return coro
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        return coro
+    new_loop = asyncio.new_event_loop()
+    try:
+        return new_loop.run_until_complete(coro)
+    finally:
+        new_loop.close()
+
+
 def _make_hass():
     """Create a minimal mock hass object."""
     hass = MagicMock()
@@ -63,7 +85,9 @@ def _make_hass():
     hass.bus.async_fire = MagicMock()
     hass.services = MagicMock()
     hass.services.async_call = AsyncMock()
-    hass.async_create_task = MagicMock(side_effect=lambda coro: coro)
+    hass.states = MagicMock()
+    hass.states.get = MagicMock(return_value=None)
+    hass.async_create_task = MagicMock(side_effect=_run_coro)
     return hass
 
 
@@ -659,7 +683,16 @@ class TestNotificationDispatch:
     def test_notification_message_format_spike(self):
         """Spike notification message includes current and rating."""
         title, message = CurrentMonitor._format_notification(
-            "spike", "Kitchen", 22.1, 20.0, 100, 110.5, None,
+            alert_type="spike",
+            alert_name="Kitchen",
+            alert_id="sensor.kitchen_current",
+            current_a=22.1,
+            breaker_rating_a=20.0,
+            threshold_pct=100,
+            utilization_pct=110.5,
+            window_duration_s=None,
+            title_template="SPAN: {name} {alert_type}",
+            message_template="{name} at {current_a}A ({utilization_pct}% of {breaker_rating_a}A rating)",
         )
         assert title == "SPAN: Kitchen spike"
         assert "22.1A" in message
@@ -669,13 +702,59 @@ class TestNotificationDispatch:
     def test_notification_message_format_continuous(self):
         """Continuous notification message includes window duration."""
         title, message = CurrentMonitor._format_notification(
-            "continuous_overload", "Kitchen", 18.4, 20.0, 80, 92.0, 900,
+            alert_type="continuous_overload",
+            alert_name="Kitchen",
+            alert_id="sensor.kitchen_current",
+            current_a=18.4,
+            breaker_rating_a=20.0,
+            threshold_pct=80,
+            utilization_pct=92.0,
+            window_duration_s=900,
+            title_template="SPAN: {name} {alert_type}",
+            message_template=(
+                "{name} drawing {current_a}A ({utilization_pct}% of {breaker_rating_a}A rating) "
+                "— continuous threshold of {threshold_pct}% exceeded over {window_m} min"
+            ),
         )
-        assert title == "SPAN: Kitchen overload"
+        assert title == "SPAN: Kitchen continuous_overload"
         assert "18.4A" in message
         assert "92.0%" in message
         assert "80%" in message
         assert "15 min" in message
+
+    def test_notification_custom_template_with_entity_id(self):
+        """Custom templates produce expected output with entity_id placeholder."""
+        title, message = CurrentMonitor._format_notification(
+            alert_type="spike",
+            alert_name="Kitchen",
+            alert_id="sensor.kitchen_current",
+            current_a=22.1,
+            breaker_rating_a=20.0,
+            threshold_pct=100,
+            utilization_pct=110.5,
+            window_duration_s=None,
+            title_template="Alert: {entity_id}",
+            message_template="{entity_id} is at {current_a}A",
+        )
+        assert title == "Alert: sensor.kitchen_current"
+        assert message == "sensor.kitchen_current is at 22.1A"
+
+    def test_notification_invalid_template_falls_back(self):
+        """Invalid template placeholders fall back to defaults."""
+        title, message = CurrentMonitor._format_notification(
+            alert_type="spike",
+            alert_name="Kitchen",
+            alert_id="sensor.kitchen_current",
+            current_a=22.1,
+            breaker_rating_a=20.0,
+            threshold_pct=100,
+            utilization_pct=110.5,
+            window_duration_s=None,
+            title_template="{nonexistent_var}",
+            message_template="{also_bad}",
+        )
+        assert "Kitchen" in title
+        assert "22.1A" in message
 
 
 class TestGlobalSettingsStorage:

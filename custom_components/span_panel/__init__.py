@@ -617,6 +617,11 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
             vol.Optional("notify_targets"): str,
             vol.Optional("enable_persistent_notifications"): bool,
             vol.Optional("enable_event_bus"): bool,
+            vol.Optional("notification_title_template"): str,
+            vol.Optional("notification_message_template"): str,
+            vol.Optional("notification_priority"): vol.In(
+                ["default", "passive", "active", "time-sensitive", "critical"]
+            ),
             vol.Optional("config_entry_id"): str,
         }
     )

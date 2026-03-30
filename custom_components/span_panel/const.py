@@ -66,6 +66,18 @@ DEFAULT_CONTINUOUS_THRESHOLD_PCT = 80
 DEFAULT_SPIKE_THRESHOLD_PCT = 100
 DEFAULT_WINDOW_DURATION_M = 15
 DEFAULT_COOLDOWN_DURATION_M = 15
+DEFAULT_NOTIFICATION_TITLE_TEMPLATE = "SPAN: {name} {alert_type}"
+DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE = (
+    "{name} at {current_a}A ({utilization_pct}% of {breaker_rating_a}A rating)"
+)
+DEFAULT_NOTIFICATION_PRIORITY = "default"
+NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
+    "default",
+    "passive",
+    "active",
+    "time-sensitive",
+    "critical",
+)
 EVENT_CURRENT_ALERT = "span_panel_current_alert"
 
 # Mains leg identifiers

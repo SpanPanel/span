@@ -29,6 +29,23 @@ permitted without confirmation:
 - Submodule management from the parent repo (`git submodule update`, `git submodule sync`)
 - File inspection within `src/`, `dist/`, and config files
 
+## Frontend Build Workflow
+
+After making any changes to the span-card frontend source (`src/`), you MUST
+rebuild and copy the dist files into the integration before considering the work
+complete. Run the build script from the integration repo:
+
+```bash
+./scripts/build-frontend.sh /path/to/span-card
+# or, if SPAN_CARD_DIR is set in the environment:
+./scripts/build-frontend.sh
+```
+
+This builds the card (`npm run build`) and copies `span-panel-card.js` and
+`span-panel.js` into `custom_components/span_panel/frontend/dist/`. The updated
+dist files must be staged and committed with the rest of the change. Skipping
+this step means the frontend changes will not be visible in Home Assistant.
+
 ## Translation Workflow
 
 `strings.json` is the single source of truth for all translatable strings. When
