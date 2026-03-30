@@ -527,6 +527,21 @@ def _build_clear_mains_threshold_schema() -> vol.Schema:
     return vol.Schema({vol.Required("leg"): str})
 
 
+def _build_set_global_monitoring_schema() -> vol.Schema:
+    """Build schema for set_global_monitoring service."""
+    return vol.Schema(
+        {
+            vol.Optional("continuous_threshold_pct"): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional("spike_threshold_pct"): vol.All(int, vol.Range(min=1, max=200)),
+            vol.Optional("window_duration_m"): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional("cooldown_duration_m"): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional("notify_targets"): str,
+            vol.Optional("enable_persistent_notifications"): bool,
+            vol.Optional("enable_event_bus"): bool,
+        }
+    )
+
+
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     """Register current monitoring services."""
 
@@ -601,10 +616,21 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         async_handle_clear_mains_threshold,
         schema=_build_clear_mains_threshold_schema(),
     )
+
+    async def async_handle_set_global_monitoring(call: ServiceCall) -> None:
+        monitor = _get_monitor(call)
+        monitor.set_global_settings(dict(call.data))
+
     hass.services.async_register(
         DOMAIN,
         "get_monitoring_status",
         async_handle_get_monitoring_status,
         schema=vol.Schema({}),
         supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_global_monitoring",
+        async_handle_set_global_monitoring,
+        schema=_build_set_global_monitoring_schema(),
     )

@@ -83,3 +83,39 @@ clear_mains_threshold:
           device_class: current
 
 get_monitoring_status:
+
+set_global_monitoring:
+  fields:
+    continuous_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    spike_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    cooldown_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    notify_targets:
+      selector:
+        text:
+    enable_persistent_notifications:
+      selector:
+        boolean:
+    enable_event_bus:
+      selector:
+        boolean:

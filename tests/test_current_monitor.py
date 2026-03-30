@@ -1,6 +1,7 @@
 """Tests for the CurrentMonitor class."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -675,3 +676,156 @@ class TestNotificationDispatch:
         assert "92.0%" in message
         assert "80%" in message
         assert "15 min" in message
+
+
+class TestGlobalSettingsStorage:
+    """Tests for global monitoring settings in storage."""
+
+    def test_get_global_settings_returns_defaults_from_entry_options(self):
+        """Returns values from entry.options when no stored globals exist."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        settings = monitor.get_global_settings()
+        assert settings[CONTINUOUS_THRESHOLD_PCT] == DEFAULT_CONTINUOUS_THRESHOLD_PCT
+        assert settings[SPIKE_THRESHOLD_PCT] == DEFAULT_SPIKE_THRESHOLD_PCT
+        assert settings[WINDOW_DURATION_M] == DEFAULT_WINDOW_DURATION_M
+        assert settings[COOLDOWN_DURATION_M] == DEFAULT_COOLDOWN_DURATION_M
+
+    def test_get_global_settings_from_storage(self):
+        """Returns stored values when available, ignoring entry.options."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor._global_settings = {
+            CONTINUOUS_THRESHOLD_PCT: 70,
+            SPIKE_THRESHOLD_PCT: 90,
+        }
+        settings = monitor.get_global_settings()
+        assert settings[CONTINUOUS_THRESHOLD_PCT] == 70
+        assert settings[SPIKE_THRESHOLD_PCT] == 90
+
+    def test_get_global_settings_storage_defaults_missing_keys(self):
+        """Stored globals with missing keys fall back to defaults."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor._global_settings = {
+            CONTINUOUS_THRESHOLD_PCT: 70,
+        }
+        settings = monitor.get_global_settings()
+        assert settings[CONTINUOUS_THRESHOLD_PCT] == 70
+        assert settings[SPIKE_THRESHOLD_PCT] == DEFAULT_SPIKE_THRESHOLD_PCT
+
+    def test_set_global_settings_persists(self):
+        """set_global_settings updates internal state."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor.set_global_settings({
+            CONTINUOUS_THRESHOLD_PCT: 75,
+            SPIKE_THRESHOLD_PCT: 95,
+        })
+        assert monitor._global_settings[CONTINUOUS_THRESHOLD_PCT] == 75
+        assert monitor._global_settings[SPIKE_THRESHOLD_PCT] == 95
+
+    def test_set_global_settings_ignores_unknown_keys(self):
+        """Unknown keys are not stored."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor.set_global_settings({"bogus_key": 42})
+        assert "bogus_key" not in monitor._global_settings
+
+    def test_set_global_settings_triggers_save(self):
+        """set_global_settings schedules a storage save."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor.set_global_settings({CONTINUOUS_THRESHOLD_PCT: 75})
+        hass.async_create_task.assert_called()
+
+    def test_circuit_thresholds_use_global_settings(self):
+        """Circuit thresholds read from global settings, not entry.options."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor._global_settings = {
+            CONTINUOUS_THRESHOLD_PCT: 70,
+            SPIKE_THRESHOLD_PCT: 85,
+            WINDOW_DURATION_M: 10,
+            COOLDOWN_DURATION_M: 20,
+        }
+        thresholds = monitor._resolve_circuit_thresholds("test_circuit")
+        assert thresholds == (70, 85, 10, 20)
+
+    def test_mains_thresholds_use_global_settings(self):
+        """Mains thresholds read from global settings, not entry.options."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor._global_settings = {
+            CONTINUOUS_THRESHOLD_PCT: 65,
+            SPIKE_THRESHOLD_PCT: 88,
+            WINDOW_DURATION_M: 12,
+            COOLDOWN_DURATION_M: 25,
+        }
+        thresholds = monitor._resolve_mains_thresholds("upstream_l1")
+        assert thresholds == (65, 88, 12, 25)
+
+    def test_dispatch_alert_uses_global_settings(self):
+        """Alert dispatch reads notification settings from global settings."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass, _make_options())
+        monitor._global_settings = {
+            ENABLE_EVENT_BUS: False,
+            NOTIFY_TARGETS: "notify.test_target",
+            ENABLE_PERSISTENT_NOTIFICATIONS: False,
+        }
+        circuit = SpanCircuitSnapshotFactory.create(
+            circuit_id="1", name="Kitchen",
+            current_a=20.0, breaker_rating_a=20.0,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            circuits={"1": circuit}, main_breaker_rating_a=200,
+        )
+        monitor.process_snapshot(snapshot)
+        # Event bus should NOT fire because global settings disabled it
+        hass.bus.async_fire.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_save_and_load_global_settings(self):
+        """Global settings survive save/load cycle."""
+        hass = _make_hass()
+        store_data: dict[str, Any] = {}
+
+        async def mock_save(data: dict[str, Any]) -> None:
+            store_data["saved"] = data
+
+        async def mock_load() -> dict[str, Any] | None:
+            return store_data.get("saved")
+
+        monitor = _make_monitor(hass)
+        monitor._store = MagicMock()
+        monitor._store.async_save = AsyncMock(side_effect=mock_save)
+        monitor._store.async_load = AsyncMock(side_effect=mock_load)
+
+        monitor.set_global_settings({
+            CONTINUOUS_THRESHOLD_PCT: 70,
+            SPIKE_THRESHOLD_PCT: 90,
+        })
+        await monitor.async_save_overrides()
+
+        # Create a new monitor and load
+        monitor2 = _make_monitor(hass)
+        monitor2._store = MagicMock()
+        monitor2._store.async_load = AsyncMock(side_effect=mock_load)
+        await monitor2.async_load_overrides()
+
+        assert monitor2._global_settings[CONTINUOUS_THRESHOLD_PCT] == 70
+        assert monitor2._global_settings[SPIKE_THRESHOLD_PCT] == 90
+
+    @pytest.mark.asyncio
+    async def test_load_without_global_key_leaves_empty(self):
+        """Loading storage without a 'global' key leaves global_settings empty."""
+        hass = _make_hass()
+        monitor = _make_monitor(hass)
+        monitor._store = MagicMock()
+        monitor._store.async_load = AsyncMock(return_value={
+            "circuit_overrides": {},
+            "mains_overrides": {},
+        })
+        await monitor.async_load_overrides()
+        assert monitor._global_settings == {}

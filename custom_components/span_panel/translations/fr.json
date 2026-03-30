@@ -502,6 +502,40 @@
     "get_monitoring_status": {
       "name": "Obtenir l'état de surveillance",
       "description": "Retourne l'état actuel de surveillance pour tous les circuits et phases du réseau suivis."
+    },
+    "set_global_monitoring": {
+      "name": "Set Global Monitoring",
+      "description": "Update global monitoring thresholds and notification settings.",
+      "fields": {
+        "continuous_threshold_pct": {
+          "name": "Continuous Threshold",
+          "description": "Percentage of breaker rating for continuous overload detection."
+        },
+        "spike_threshold_pct": {
+          "name": "Spike Threshold",
+          "description": "Percentage of breaker rating for spike detection."
+        },
+        "window_duration_m": {
+          "name": "Window Duration",
+          "description": "Minutes of sustained overload before alerting."
+        },
+        "cooldown_duration_m": {
+          "name": "Cooldown Duration",
+          "description": "Minutes between repeated alerts for the same point."
+        },
+        "notify_targets": {
+          "name": "Notification Targets",
+          "description": "Comma-separated list of notify service targets."
+        },
+        "enable_persistent_notifications": {
+          "name": "Persistent Notifications",
+          "description": "Create persistent notifications for alerts."
+        },
+        "enable_event_bus": {
+          "name": "Event Bus",
+          "description": "Fire events on the HA event bus for alerts."
+        }
+      }
     }
   }
 }

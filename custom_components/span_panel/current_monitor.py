@@ -8,6 +8,7 @@ notifications.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import logging
@@ -76,6 +77,7 @@ class CurrentMonitor:
         self._mains_states: dict[str, MonitoredPointState] = {}
         self._circuit_overrides: dict[str, dict[str, Any]] = {}
         self._mains_overrides: dict[str, dict[str, Any]] = {}
+        self._global_settings: dict[str, Any] = {}
         self._last_snapshot: SpanPanelSnapshot | None = None
         self._store: Store = Store(
             hass,
@@ -123,6 +125,46 @@ class CurrentMonitor:
         """Remove per-mains-leg threshold overrides."""
         self._mains_overrides.pop(leg, None)
         self._mains_states.pop(leg, None)
+        self._hass.async_create_task(self.async_save_overrides())
+
+    def get_global_settings(self) -> dict[str, Any]:
+        """Get the effective global monitoring settings.
+
+        Returns stored global settings if available, otherwise falls back
+        to config entry options for backward compatibility during migration.
+        """
+        opts: Mapping[str, Any]
+        if self._global_settings:
+            opts = self._global_settings
+        else:
+            opts = self._entry.options
+        return {
+            CONTINUOUS_THRESHOLD_PCT: opts.get(
+                CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT
+            ),
+            SPIKE_THRESHOLD_PCT: opts.get(SPIKE_THRESHOLD_PCT, DEFAULT_SPIKE_THRESHOLD_PCT),
+            WINDOW_DURATION_M: opts.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
+            COOLDOWN_DURATION_M: opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+            NOTIFY_TARGETS: opts.get(NOTIFY_TARGETS, "notify.notify"),
+            ENABLE_PERSISTENT_NOTIFICATIONS: opts.get(ENABLE_PERSISTENT_NOTIFICATIONS, True),
+            ENABLE_EVENT_BUS: opts.get(ENABLE_EVENT_BUS, True),
+        }
+
+    def set_global_settings(self, settings: dict[str, Any]) -> None:
+        """Update global monitoring settings in storage."""
+        valid_keys = {
+            CONTINUOUS_THRESHOLD_PCT,
+            SPIKE_THRESHOLD_PCT,
+            WINDOW_DURATION_M,
+            COOLDOWN_DURATION_M,
+            NOTIFY_TARGETS,
+            ENABLE_PERSISTENT_NOTIFICATIONS,
+            ENABLE_EVENT_BUS,
+        }
+        for key, value in settings.items():
+            if key in valid_keys:
+                self._global_settings[key] = value
+
         self._hass.async_create_task(self.async_save_overrides())
 
     def _resolve_circuit_entity_id(self, circuit_id: str) -> str:
@@ -268,28 +310,30 @@ class CurrentMonitor:
         _LOGGER.info("Current monitor stopped")
 
     async def async_save_overrides(self) -> None:
-        """Persist circuit and mains overrides to storage."""
-        await self._store.async_save(
-            {
-                "circuit_overrides": self._circuit_overrides,
-                "mains_overrides": self._mains_overrides,
-            }
-        )
+        """Persist circuit overrides, mains overrides, and global settings to storage."""
+        data: dict[str, Any] = {
+            "circuit_overrides": self._circuit_overrides,
+            "mains_overrides": self._mains_overrides,
+        }
+        if self._global_settings:
+            data["global"] = self._global_settings
+        await self._store.async_save(data)
 
     async def async_load_overrides(self) -> None:
-        """Load circuit and mains overrides from storage."""
+        """Load circuit overrides, mains overrides, and global settings from storage."""
         data = await self._store.async_load()
         if data is None:
             return
         self._circuit_overrides = data.get("circuit_overrides", {})
         self._mains_overrides = data.get("mains_overrides", {})
+        self._global_settings = data.get("global", {})
 
     # --- Threshold resolution ---
 
     def _resolve_circuit_thresholds(self, circuit_id: str) -> tuple[int, int, int, int]:
         """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a circuit."""
         override = self._circuit_overrides.get(circuit_id, {})
-        opts = self._entry.options
+        opts = self.get_global_settings()
         return (
             override.get(
                 CONTINUOUS_THRESHOLD_PCT,
@@ -309,7 +353,7 @@ class CurrentMonitor:
     def _resolve_mains_thresholds(self, leg: str) -> tuple[int, int, int, int]:
         """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a mains leg."""
         override = self._mains_overrides.get(leg, {})
-        opts = self._entry.options
+        opts = self.get_global_settings()
         return (
             override.get(
                 CONTINUOUS_THRESHOLD_PCT,
@@ -552,7 +596,7 @@ class CurrentMonitor:
         if over_threshold_since is not None:
             event_data["over_threshold_since"] = over_threshold_since
 
-        opts = self._entry.options
+        opts = self.get_global_settings()
 
         if opts.get(ENABLE_EVENT_BUS, True):
             self._hass.bus.async_fire(EVENT_CURRENT_ALERT, event_data)
