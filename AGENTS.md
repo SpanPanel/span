@@ -12,7 +12,7 @@ The following operations are benign and should be executed without confirmation.
 - Run project scripts (`./scripts/fix-markdown.sh`)
 - Standard git operations (`git status`, `git diff`, `git log`, `git add`, `git commit`)
 - Package management (`poetry`, `uv`, `pip install`)
-- File inspection (`ls`, `find`, `wc`, `head`, `tail`, `diff`)
+- File inspection (`ls`, `find`, `wc`, `head`, `tail`, `diff`, `cat`)
 
 ### Frontend Submodule (`custom_components/span_panel/frontend`)
 
