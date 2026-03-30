@@ -6,8 +6,9 @@ import asyncio
 from dataclasses import dataclass
 import logging
 import os
-from typing import cast
+from typing import Any, cast
 
+from homeassistant.components.frontend import async_remove_panel
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.panel_custom import async_register_panel
 from homeassistant.config_entries import ConfigEntry
@@ -30,6 +31,7 @@ from homeassistant.helpers import (
     device_registry as dr,
     entity_registry as er,
 )
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import (
@@ -52,6 +54,8 @@ from .const import (
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     ENABLE_CURRENT_MONITORING,
+    PANEL_ADMIN_ONLY,
+    PANEL_SHOW_SIDEBAR,
 )
 from .coordinator import SpanPanelCoordinator
 from .current_monitor import CurrentMonitor
@@ -97,25 +101,60 @@ PANEL_URL = "/span_panel_frontend"
 PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
 
+_PANEL_SETTINGS_STORAGE_VERSION = 1
+_PANEL_SETTINGS_STORAGE_KEY = "span_panel_settings"
+
+
+async def async_load_panel_settings(hass: HomeAssistant) -> dict[str, Any]:
+    """Load domain-level panel settings from storage."""
+    store: Store[dict[str, Any]] = Store(
+        hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
+    )
+    data = await store.async_load()
+    return data or {}
+
+
+async def async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any]) -> None:
+    """Save domain-level panel settings to storage."""
+    store: Store[dict[str, Any]] = Store(
+        hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
+    )
+    await store.async_save(settings)
+
+
+async def async_apply_panel_registration(hass: HomeAssistant) -> None:
+    """Register or remove the sidebar panel based on stored settings."""
+    settings = await async_load_panel_settings(hass)
+    show = settings.get(PANEL_SHOW_SIDEBAR, True)
+    admin_only = settings.get(PANEL_ADMIN_ONLY, False)
+
+    if show:
+        # Always register static paths (idempotent for the URL path)
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
+        )
+        # Remove first to allow re-registration with updated require_admin
+        async_remove_panel(hass, "span-panel", warn_if_unknown=False)
+        await async_register_panel(
+            hass,
+            webcomponent_name="span-panel",
+            frontend_url_path="span-panel",
+            sidebar_title="Span Panel",
+            sidebar_icon="mdi:lightning-bolt",
+            module_url=f"{PANEL_URL}/span-panel.js",
+            require_admin=admin_only,
+            config={},
+        )
+    else:
+        async_remove_panel(hass, "span-panel", warn_if_unknown=False)
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
 
-    # Register sidebar panel serving the frontend JS bundle
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
-    )
-    await async_register_panel(
-        hass,
-        webcomponent_name="span-panel",
-        frontend_url_path="span-panel",
-        sidebar_title="Span Panel",
-        sidebar_icon="mdi:lightning-bolt",
-        module_url=f"{PANEL_URL}/span-panel.js",
-        require_admin=False,
-        config={},
-    )
+    await async_apply_panel_registration(hass)
 
     return True
 
@@ -555,6 +594,7 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
     """Build schema for set_global_monitoring service."""
     return vol.Schema(
         {
+            vol.Optional("enabled"): bool,
             vol.Optional("continuous_threshold_pct"): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional("spike_threshold_pct"): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional("window_duration_m"): vol.All(int, vol.Range(min=1, max=180)),
@@ -674,8 +714,24 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     )
 
     async def async_handle_set_global_monitoring(call: ServiceCall) -> None:
+        data = dict(call.data)
+        enabled = data.pop("enabled", None)
+
+        if enabled is False:
+            # Disable monitoring: stop the monitor and mark storage as disabled
+            result = _get_runtime_data()
+            if result is not None:
+                runtime_data, entry = result
+                monitor = runtime_data.coordinator.current_monitor
+                if monitor is not None:
+                    monitor.async_stop()
+                    await monitor.async_save_disabled()
+                    runtime_data.coordinator.current_monitor = None
+            return
+
         monitor = await _get_or_create_monitor()
-        monitor.set_global_settings(dict(call.data))
+        if data:
+            monitor.set_global_settings(data)
 
     hass.services.async_register(
         DOMAIN,

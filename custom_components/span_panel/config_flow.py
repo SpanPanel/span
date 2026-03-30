@@ -872,16 +872,30 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the general options."""
+        from . import (  # pylint: disable=import-outside-toplevel
+            async_apply_panel_registration,
+            async_load_panel_settings,
+            async_save_panel_settings,
+        )
+
         if user_input is not None:
-            filtered_input, errors = process_general_options_input(self.config_entry, user_input)
+            filtered_input, errors, panel_settings = process_general_options_input(
+                self.config_entry, user_input
+            )
 
             if not errors:
+                # Save panel settings to domain-level storage
+                current_ps = await async_load_panel_settings(self.hass)
+                current_ps.update(panel_settings)
+                await async_save_panel_settings(self.hass, current_ps)
+                await async_apply_panel_registration(self.hass)
                 return self.async_create_entry(title="", data=filtered_input)
         else:
             errors = {}
 
+        panel_settings = await async_load_panel_settings(self.hass)
         schema = build_general_options_schema(self.config_entry)
-        defaults = get_general_options_defaults(self.config_entry)
+        defaults = get_general_options_defaults(self.config_entry, panel_settings=panel_settings)
 
         return self.async_show_form(
             step_id="init",

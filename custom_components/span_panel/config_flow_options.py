@@ -13,6 +13,8 @@ from .const import (
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
     ENABLE_UNMAPPED_CIRCUIT_SENSORS,
+    PANEL_ADMIN_ONLY,
+    PANEL_SHOW_SIDEBAR,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
@@ -44,6 +46,8 @@ def build_general_options_schema(
 
     """
     schema_fields = {
+        vol.Optional(PANEL_SHOW_SIDEBAR): bool,
+        vol.Optional(PANEL_ADMIN_ONLY): bool,
         vol.Optional(SNAPSHOT_UPDATE_INTERVAL): vol.All(
             vol.Coerce(float), vol.Range(min=0, max=15)
         ),
@@ -58,7 +62,10 @@ def build_general_options_schema(
 
 
 def get_general_options_defaults(
-    config_entry: ConfigEntry, current_leg1: int = 0, current_leg2: int = 0
+    config_entry: ConfigEntry,
+    current_leg1: int = 0,
+    current_leg2: int = 0,
+    panel_settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Get default values for general options form.
 
@@ -66,12 +73,16 @@ def get_general_options_defaults(
         config_entry: The config entry
         current_leg1: Unused (kept for backward compatibility)
         current_leg2: Unused (kept for backward compatibility)
+        panel_settings: Domain-level panel sidebar settings from storage
 
     Returns:
         Dictionary of default values
 
     """
+    ps = panel_settings or {}
     return {
+        PANEL_SHOW_SIDEBAR: ps.get(PANEL_SHOW_SIDEBAR, True),
+        PANEL_ADMIN_ONLY: ps.get(PANEL_ADMIN_ONLY, False),
         SNAPSHOT_UPDATE_INTERVAL: config_entry.options.get(
             SNAPSHOT_UPDATE_INTERVAL, DEFAULT_SNAPSHOT_INTERVAL
         ),
@@ -91,11 +102,14 @@ def get_general_options_defaults(
     }
 
 
+_PANEL_SETTING_KEYS = {PANEL_SHOW_SIDEBAR, PANEL_ADMIN_ONLY}
+
+
 def process_general_options_input(
     config_entry: ConfigEntry,
     user_input: dict[str, Any],
     available_tabs: list[int] | None = None,
-) -> tuple[dict[str, Any], dict[str, str]]:
+) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
     """Process user input for general options.
 
     Args:
@@ -104,13 +118,20 @@ def process_general_options_input(
         available_tabs: Unused (kept for backward compatibility)
 
     Returns:
-        Tuple of (processed_options, errors)
+        Tuple of (processed_options, errors, panel_settings)
 
     """
     errors: dict[str, str] = {}
 
-    # Filter out separator fields from user input
-    filtered_input = {k: v for k, v in user_input.items() if not k.startswith("_separator")}
+    # Extract panel settings (domain-level, not per-entry)
+    panel_settings = {k: v for k, v in user_input.items() if k in _PANEL_SETTING_KEYS}
+
+    # Filter out separator fields and panel settings from entry options
+    filtered_input = {
+        k: v
+        for k, v in user_input.items()
+        if not k.startswith("_separator") and k not in _PANEL_SETTING_KEYS
+    }
 
     # Merge with existing options to preserve unchanged values
     merged_options = dict(config_entry.options)
@@ -123,7 +144,7 @@ def process_general_options_input(
     filtered_input[USE_DEVICE_PREFIX] = use_prefix
     filtered_input[USE_CIRCUIT_NUMBERS] = use_circuit_numbers
 
-    return filtered_input, errors
+    return filtered_input, errors, panel_settings
 
 
 def get_current_naming_pattern(config_entry: ConfigEntry) -> str:

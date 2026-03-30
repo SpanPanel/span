@@ -13,9 +13,9 @@ CONF_DEVICE_NAME = "device_name"
 CONF_API_VERSION = "api_version"
 CONF_EBUS_BROKER_HOST = "ebus_broker_host"
 CONF_EBUS_BROKER_USERNAME = "ebus_broker_username"
-CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"
+CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"  # nosec B105
 CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
-CONF_HOP_PASSPHRASE = "hop_passphrase"
+CONF_HOP_PASSPHRASE = "hop_passphrase"  # nosec B105
 CONF_HTTP_PORT = "http_port"
 CONF_PANEL_SERIAL = "panel_serial"
 CONF_REGISTERED_FQDN = "registered_fqdn"
@@ -75,6 +75,10 @@ MAINS_LEGS: Final[tuple[str, ...]] = (
     "downstream_l1",
     "downstream_l2",
 )
+
+# Panel sidebar settings (domain-level, shared across config entries)
+PANEL_SHOW_SIDEBAR = "show_panel"
+PANEL_ADMIN_ONLY = "panel_admin_only"
 
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 

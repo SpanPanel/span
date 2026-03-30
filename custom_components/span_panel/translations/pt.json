@@ -354,6 +354,8 @@
     "step": {
       "init": {
         "data": {
+          "show_panel": "Mostrar Painel na Barra Lateral",
+          "panel_admin_only": "Apenas Usuários Administradores",
           "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito",
           "enable_energy_dip_compensation": "Compensar Quedas de Energia Automaticamente",
           "enable_panel_net_energy_sensors": "Energia Líquida do Painel",
@@ -362,6 +364,8 @@
           "snapshot_update_interval": "Intervalo de Atualização do Snapshot (segundos)"
         },
         "data_description": {
+          "show_panel": "Exiba o painel de controle do SPAN como uma entrada de barra lateral.",
+          "panel_admin_only": "Restrinja a entrada da barra lateral do painel de controle apenas aos usuários administradores.",
           "enable_circuit_net_energy_sensors": "Energia líquida por circuito, contabilizando potência reativa.",
           "enable_energy_dip_compensation": "Compensar quando o painel reporta leituras de energia mais baixas. Ao desativar, as compensações são apagadas.",
           "enable_panel_net_energy_sensors": "Energia líquida para o medidor principal e derivação, contabilizando fluxos bidirecionais.",

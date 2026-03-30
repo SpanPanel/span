@@ -238,18 +238,28 @@ class CurrentMonitor:
         )
 
         circuits: dict[str, dict[str, Any]] = {}
-        for cid, state in self._circuit_states.items():
+        # Include all circuits from the snapshot, not just those with active state.
+        # Circuits with relays off may have no state yet but should still appear.
+        all_circuit_ids = set(self._circuit_states.keys())
+        if snapshot:
+            all_circuit_ids |= {
+                cid for cid in snapshot.circuits if not cid.startswith("unmapped_tab_")
+            }
+
+        for cid in all_circuit_ids:
+            state = self._circuit_states.get(cid)
             circuit = snapshot.circuits.get(cid) if snapshot else None
             rating = (
                 float(circuit.breaker_rating_a) if circuit and circuit.breaker_rating_a else None
             )
-            utilization = round(state.last_current_a / rating * 100, 1) if rating else None
+            last_current = state.last_current_a if state else 0.0
+            utilization = round(last_current / rating * 100, 1) if rating else None
             cont_pct, spike_pct, window_m, cooldown_m = self._resolve_circuit_thresholds(cid)
             entity_id = self._resolve_circuit_entity_id(cid)
 
             circuits[entity_id] = {
                 "name": circuit.name if circuit else cid,
-                "last_current_a": state.last_current_a,
+                "last_current_a": last_current,
                 "breaker_rating_a": rating,
                 "utilization_pct": utilization,
                 "continuous_threshold_pct": cont_pct,
@@ -257,13 +267,13 @@ class CurrentMonitor:
                 "window_duration_m": window_m,
                 "cooldown_duration_m": cooldown_m,
                 "over_threshold_since": state.over_threshold_since.isoformat()
-                if state.over_threshold_since
+                if state and state.over_threshold_since
                 else None,
                 "last_spike_alert": state.last_spike_alert.isoformat()
-                if state.last_spike_alert
+                if state and state.last_spike_alert
                 else None,
                 "last_continuous_alert": state.last_continuous_alert.isoformat()
-                if state.last_continuous_alert
+                if state and state.last_continuous_alert
                 else None,
             }
 
@@ -308,6 +318,12 @@ class CurrentMonitor:
         self._circuit_states.clear()
         self._mains_states.clear()
         _LOGGER.info("Current monitor stopped")
+
+    async def async_save_disabled(self) -> None:
+        """Mark monitoring as disabled in storage, preserving settings."""
+        data = await self._store.async_load() or {}
+        data["enabled"] = False
+        await self._store.async_save(data)
 
     async def async_save_overrides(self) -> None:
         """Persist circuit overrides, mains overrides, and global settings to storage."""

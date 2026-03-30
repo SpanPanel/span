@@ -354,6 +354,8 @@
     "step": {
       "init": {
         "data": {
+          "show_panel": "Show Dashboard in Sidebar",
+          "panel_admin_only": "Admin Users Only",
           "enable_circuit_net_energy_sensors": "Circuit Net Energy",
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips",
           "enable_panel_net_energy_sensors": "Panel Net Energy",
@@ -362,6 +364,8 @@
           "snapshot_update_interval": "Snapshot Update Interval (seconds)"
         },
         "data_description": {
+          "show_panel": "Display the SPAN Panel dashboard as a sidebar entry.",
+          "panel_admin_only": "Restrict the dashboard sidebar entry to admin users.",
           "enable_circuit_net_energy_sensors": "Net energy per circuit, accounting for reactive power.",
           "enable_energy_dip_compensation": "Compensate when panel reports lower energy readings. Disabling clears offsets.",
           "enable_panel_net_energy_sensors": "Net energy for main meter and feed-through, accounting for bidirectional flows.",

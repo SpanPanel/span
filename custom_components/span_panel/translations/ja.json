@@ -354,6 +354,8 @@
     "step": {
       "init": {
         "data": {
+          "show_panel": "サイドバーにダッシュボードを表示",
+          "panel_admin_only": "管理ユーザーのみ",
           "enable_circuit_net_energy_sensors": "回路正味エネルギー",
           "enable_energy_dip_compensation": "エネルギー低下を自動補正",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
@@ -362,6 +364,8 @@
           "snapshot_update_interval": "スナップショット更新間隔（秒）"
         },
         "data_description": {
+          "show_panel": "SPANパネルダッシュボードをサイドバーエントリとして表示します。",
+          "panel_admin_only": "ダッシュボードサイドバーエントリを管理ユーザーのみに制限します。",
           "enable_circuit_net_energy_sensors": "無効電力を考慮した回路ごとの正味エネルギー。",
           "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に補正します。無効にするとオフセットがクリアされます。",
           "enable_panel_net_energy_sensors": "双方向フローを考慮した主幹メーターとフィードスルーの正味エネルギー。",

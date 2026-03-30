@@ -354,6 +354,8 @@
     "step": {
       "init": {
         "data": {
+          "show_panel": "Mostrar Panel en la Barra Lateral",
+          "panel_admin_only": "Solo Usuarios Administradores",
           "enable_circuit_net_energy_sensors": "Energía Neta del Circuito",
           "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente",
           "enable_panel_net_energy_sensors": "Energía Neta del Panel",
@@ -362,6 +364,8 @@
           "snapshot_update_interval": "Intervalo de Actualización de Snapshot (segundos)"
         },
         "data_description": {
+          "show_panel": "Mostrar el panel de control de SPAN como entrada de barra lateral.",
+          "panel_admin_only": "Restringir la entrada de la barra lateral del panel de control solo a usuarios administradores.",
           "enable_circuit_net_energy_sensors": "Energía neta por circuito, contabilizando potencia reactiva.",
           "enable_energy_dip_compensation": "Compensar cuando el panel reporta lecturas de energía más bajas. Al deshabilitar se borran las compensaciones.",
           "enable_panel_net_energy_sensors": "Energía neta para medidor principal y derivación, contabilizando flujos bidireccionales.",

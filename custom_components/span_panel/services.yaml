@@ -86,6 +86,9 @@ get_monitoring_status:
 
 set_global_monitoring:
   fields:
+    enabled:
+      selector:
+        boolean:
     continuous_threshold_pct:
       selector:
         number:
