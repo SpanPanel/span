@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import logging
+import os
 from typing import cast
 
+from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.panel_custom import async_register_panel
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import (
@@ -90,11 +93,30 @@ CURRENT_CONFIG_VERSION = 6
 # Map internal device_type values to external manifest format
 _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
 
+PANEL_URL = "/span_panel_frontend"
+PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
+
+    # Register sidebar panel serving the frontend JS bundle
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
+    )
+    await async_register_panel(
+        hass,
+        webcomponent_name="span-panel",
+        frontend_url_path="span-panel",
+        sidebar_title="Span Panel",
+        sidebar_icon="mdi:lightning-bolt",
+        module_url=f"{PANEL_URL}/span-panel.js",
+        require_admin=False,
+        config={},
+    )
+
     return True
 
 
