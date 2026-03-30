@@ -62,6 +62,7 @@ from .current_monitor import CurrentMonitor
 from .helpers import build_circuit_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
+    COOLDOWN_DURATION_M,
     SNAPSHOT_UPDATE_INTERVAL,
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
@@ -562,7 +563,9 @@ def _build_set_circuit_threshold_schema() -> vol.Schema:
             vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional(COOLDOWN_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
             vol.Optional("monitoring_enabled"): bool,
+            vol.Optional("config_entry_id"): str,
         }
     )
 
@@ -575,19 +578,31 @@ def _build_set_mains_threshold_schema() -> vol.Schema:
             vol.Optional(CONTINUOUS_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(SPIKE_THRESHOLD_PCT): vol.All(int, vol.Range(min=1, max=200)),
             vol.Optional(WINDOW_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
+            vol.Optional(COOLDOWN_DURATION_M): vol.All(int, vol.Range(min=1, max=180)),
             vol.Optional("monitoring_enabled"): bool,
+            vol.Optional("config_entry_id"): str,
         }
     )
 
 
 def _build_clear_circuit_threshold_schema() -> vol.Schema:
     """Build schema for clear_circuit_threshold service."""
-    return vol.Schema({vol.Required("circuit_id"): str})
+    return vol.Schema(
+        {
+            vol.Required("circuit_id"): str,
+            vol.Optional("config_entry_id"): str,
+        }
+    )
 
 
 def _build_clear_mains_threshold_schema() -> vol.Schema:
     """Build schema for clear_mains_threshold service."""
-    return vol.Schema({vol.Required("leg"): str})
+    return vol.Schema(
+        {
+            vol.Required("leg"): str,
+            vol.Optional("config_entry_id"): str,
+        }
+    )
 
 
 def _build_set_global_monitoring_schema() -> vol.Schema:
@@ -602,6 +617,7 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
             vol.Optional("notify_targets"): str,
             vol.Optional("enable_persistent_notifications"): bool,
             vol.Optional("enable_event_bus"): bool,
+            vol.Optional("config_entry_id"): str,
         }
     )
 
@@ -609,18 +625,30 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
 def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     """Register current monitoring services."""
 
-    def _get_runtime_data() -> tuple[SpanPanelRuntimeData, ConfigEntry] | None:
-        """Find the first loaded SPAN panel runtime data and entry."""
+    def _get_runtime_data(
+        config_entry_id: str | None = None,
+    ) -> tuple[SpanPanelRuntimeData, ConfigEntry] | None:
+        """Find SPAN panel runtime data and entry.
+
+        When config_entry_id is provided, returns that specific entry.
+        Otherwise falls back to the first loaded entry.
+        """
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if hasattr(entry, "runtime_data") and isinstance(
+            if not hasattr(entry, "runtime_data") or not isinstance(
                 entry.runtime_data, SpanPanelRuntimeData
             ):
+                continue
+            if config_entry_id is None or entry.entry_id == config_entry_id:
                 return entry.runtime_data, entry
         return None
 
-    def _get_monitor(call: ServiceCall) -> CurrentMonitor:
-        """Find the CurrentMonitor for the calling entry."""
-        result = _get_runtime_data()
+    def _get_monitor(
+        call: ServiceCall,
+        config_entry_id: str | None = None,
+    ) -> CurrentMonitor:
+        """Find the CurrentMonitor for the given entry."""
+        entry_id = config_entry_id or call.data.get("config_entry_id")
+        result = _get_runtime_data(entry_id)
         if result is not None:
             runtime_data, _entry = result
             if runtime_data.coordinator.current_monitor is not None:
@@ -631,9 +659,11 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
             translation_key="monitoring_not_enabled",
         )
 
-    async def _get_or_create_monitor() -> CurrentMonitor:
-        """Find or bootstrap a CurrentMonitor for the first loaded panel."""
-        result = _get_runtime_data()
+    async def _get_or_create_monitor(
+        config_entry_id: str | None = None,
+    ) -> CurrentMonitor:
+        """Find or bootstrap a CurrentMonitor for the specified panel."""
+        result = _get_runtime_data(config_entry_id)
         if result is None:
             raise ServiceValidationError(
                 "No SPAN panel integration loaded.",
@@ -652,6 +682,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         monitor = _get_monitor(call)
         data = dict(call.data)
         entity_id = data.pop("circuit_id")
+        data.pop("config_entry_id", None)
         circuit_id = monitor.resolve_entity_to_circuit_id(entity_id)
         monitor.set_circuit_override(circuit_id, data)
 
@@ -665,6 +696,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         monitor = _get_monitor(call)
         data = dict(call.data)
         entity_id = data.pop("leg")
+        data.pop("config_entry_id", None)
         leg = monitor.resolve_entity_to_mains_leg(entity_id)
         monitor.set_mains_override(leg, data)
 
@@ -677,7 +709,8 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_get_monitoring_status(
         call: ServiceCall,
     ) -> ServiceResponse:
-        result = _get_runtime_data()
+        entry_id = call.data.get("config_entry_id")
+        result = _get_runtime_data(entry_id)
         if result is None:
             return cast(ServiceResponse, {"enabled": False})
         runtime_data, _entry = result
@@ -717,10 +750,11 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
     async def async_handle_set_global_monitoring(call: ServiceCall) -> None:
         data = dict(call.data)
         enabled = data.pop("enabled", None)
+        entry_id = data.pop("config_entry_id", None)
 
         if enabled is False:
             # Disable monitoring: stop the monitor and mark storage as disabled
-            result = _get_runtime_data()
+            result = _get_runtime_data(entry_id)
             if result is not None:
                 runtime_data, entry = result
                 monitor = runtime_data.coordinator.current_monitor
@@ -730,7 +764,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
                     runtime_data.coordinator.current_monitor = None
             return
 
-        monitor = await _get_or_create_monitor()
+        monitor = await _get_or_create_monitor(entry_id)
         if data:
             monitor.set_global_settings(data)
 
@@ -738,7 +772,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "get_monitoring_status",
         async_handle_get_monitoring_status,
-        schema=vol.Schema({}),
+        schema=vol.Schema({vol.Optional("config_entry_id"): str}),
         supports_response=SupportsResponse.ONLY,
     )
     hass.services.async_register(

@@ -136,7 +136,12 @@ class CurrentMonitor:
         if override.get("monitoring_enabled") is False:
             return False
         g = self.get_global_settings()
-        threshold_keys = (CONTINUOUS_THRESHOLD_PCT, SPIKE_THRESHOLD_PCT, WINDOW_DURATION_M)
+        threshold_keys = (
+            CONTINUOUS_THRESHOLD_PCT,
+            SPIKE_THRESHOLD_PCT,
+            WINDOW_DURATION_M,
+            COOLDOWN_DURATION_M,
+        )
         for key in threshold_keys:
             if key in override and override[key] != g[key]:
                 return False
@@ -408,7 +413,10 @@ class CurrentMonitor:
                 WINDOW_DURATION_M,
                 opts.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
             ),
-            opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+            override.get(
+                COOLDOWN_DURATION_M,
+                opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+            ),
         )
 
     def _resolve_mains_thresholds(self, leg: str) -> tuple[int, int, int, int]:
@@ -428,7 +436,10 @@ class CurrentMonitor:
                 WINDOW_DURATION_M,
                 opts.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
             ),
-            opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+            override.get(
+                COOLDOWN_DURATION_M,
+                opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+            ),
         )
 
     def _is_circuit_monitoring_disabled(self, circuit_id: str) -> bool:
