@@ -353,14 +353,6 @@
   "options": {
     "step": {
       "init": {
-        "title": "Options du SPAN Panel",
-        "description": "Choisissez les paramètres à configurer.",
-        "menu_options": {
-          "general_options": "Options Générales",
-          "monitoring_options": "Surveillance"
-        }
-      },
-      "general_options": {
         "data": {
           "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit",
           "enable_energy_dip_compensation": "Compenser les Baisses d'Énergie Automatiquement",
@@ -378,39 +370,7 @@
           "snapshot_update_interval": "Secondes entre les reconstructions de snapshot (0–15). Plus bas = plus rapide, plus de CPU. 0 = pas de temporisation."
         },
         "description": "Configurer les paramètres de l'intégration SPAN Panel.",
-        "title": "Options Générales"
-      },
-      "monitoring_options": {
-        "data": {
-          "enable_current_monitoring": "Surveillance du Courant"
-        },
-        "data_description": {
-          "enable_current_monitoring": "Nécessite un panneau V2 avec des capteurs de courant."
-        },
-        "description": "Activer ou désactiver la surveillance du courant.",
-        "title": "Surveillance"
-      },
-      "monitoring_settings": {
-        "data": {
-          "continuous_threshold_pct": "Seuil de Charge Continue (%)",
-          "spike_threshold_pct": "Seuil de Pic (%)",
-          "window_duration_m": "Fenêtre de Charge Continue (minutes)",
-          "cooldown_duration_m": "Délai de Récupération des Alertes (minutes)",
-          "enable_persistent_notifications": "Notifications Persistantes",
-          "enable_event_bus": "Alertes sur le Bus d'Événements",
-          "notify_targets": "Cibles du Service de Notification"
-        },
-        "data_description": {
-          "continuous_threshold_pct": "Valeur par défaut NEC 80 %. Plage : 1–200 %.",
-          "spike_threshold_pct": "Par défaut 100 % (calibre complet du disjoncteur). Plage : 1–200 %.",
-          "window_duration_m": "Durée au-dessus du seuil avant déclenchement de l'alerte. Plage : 1–180.",
-          "cooldown_duration_m": "Temps minimum entre les alertes répétées par circuit. Plage : 1–180.",
-          "enable_persistent_notifications": "Afficher les alertes dans le panneau de notification de HA.",
-          "enable_event_bus": "Émettre des événements span_panel_current_alert pour les automatisations et Node-RED.",
-          "notify_targets": "Cibles séparées par des virgules (ex., notify.notify, notify.mobile_app_phone)."
-        },
-        "description": "Configurer les seuils de surveillance et les notifications.",
-        "title": "Paramètres de Surveillance"
+        "title": "Options du panneau SPAN"
       }
     }
   },

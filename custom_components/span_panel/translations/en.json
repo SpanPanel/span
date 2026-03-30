@@ -353,14 +353,6 @@
   "options": {
     "step": {
       "init": {
-        "title": "SPAN Panel Options",
-        "description": "Choose which settings to configure.",
-        "menu_options": {
-          "general_options": "General Options",
-          "monitoring_options": "Monitoring"
-        }
-      },
-      "general_options": {
         "data": {
           "enable_circuit_net_energy_sensors": "Circuit Net Energy",
           "enable_energy_dip_compensation": "Auto-Compensate Energy Dips",
@@ -378,39 +370,7 @@
           "snapshot_update_interval": "Seconds between snapshot rebuilds (0–15). Lower = faster, more CPU. 0 = no debounce."
         },
         "description": "Configure SPAN Panel integration settings.",
-        "title": "General Options"
-      },
-      "monitoring_options": {
-        "data": {
-          "enable_current_monitoring": "Current Monitoring"
-        },
-        "data_description": {
-          "enable_current_monitoring": "Requires V2 panel with current sensors."
-        },
-        "description": "Enable or disable current monitoring.",
-        "title": "Monitoring"
-      },
-      "monitoring_settings": {
-        "data": {
-          "continuous_threshold_pct": "Continuous Load Threshold (%)",
-          "spike_threshold_pct": "Spike Threshold (%)",
-          "window_duration_m": "Continuous Load Window (minutes)",
-          "cooldown_duration_m": "Alert Cooldown (minutes)",
-          "enable_persistent_notifications": "Persistent Notifications",
-          "enable_event_bus": "Event Bus Alerts",
-          "notify_targets": "Notify Service Targets"
-        },
-        "data_description": {
-          "continuous_threshold_pct": "NEC default 80%. Range: 1–200%.",
-          "spike_threshold_pct": "Default 100% (full breaker rating). Range: 1–200%.",
-          "window_duration_m": "Duration above threshold before alerting. Range: 1–180.",
-          "cooldown_duration_m": "Min time between repeat alerts per circuit. Range: 1–180.",
-          "enable_persistent_notifications": "Show alerts in the HA notification panel.",
-          "enable_event_bus": "Fire span_panel_current_alert events for automations and Node-RED.",
-          "notify_targets": "Comma-separated targets (e.g., notify.notify, notify.mobile_app_phone)."
-        },
-        "description": "Configure monitoring thresholds and notifications.",
-        "title": "Monitoring Settings"
+        "title": "SPAN Panel Options"
       }
     }
   },

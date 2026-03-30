@@ -353,14 +353,6 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opciones de SPAN Panel",
-        "description": "Elija qué ajustes configurar.",
-        "menu_options": {
-          "general_options": "Opciones Generales",
-          "monitoring_options": "Monitoreo"
-        }
-      },
-      "general_options": {
         "data": {
           "enable_circuit_net_energy_sensors": "Energía Neta del Circuito",
           "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente",
@@ -378,39 +370,7 @@
           "snapshot_update_interval": "Segundos entre reconstrucciones de snapshot (0–15). Menor = más rápido, más CPU. 0 = sin debounce."
         },
         "description": "Configurar los ajustes de la integración SPAN Panel.",
-        "title": "Opciones Generales"
-      },
-      "monitoring_options": {
-        "data": {
-          "enable_current_monitoring": "Monitoreo de Corriente"
-        },
-        "data_description": {
-          "enable_current_monitoring": "Requiere panel V2 con sensores de corriente."
-        },
-        "description": "Habilitar o deshabilitar el monitoreo de corriente.",
-        "title": "Monitoreo"
-      },
-      "monitoring_settings": {
-        "data": {
-          "continuous_threshold_pct": "Umbral de Carga Continua (%)",
-          "spike_threshold_pct": "Umbral de Pico (%)",
-          "window_duration_m": "Ventana de Carga Continua (minutos)",
-          "cooldown_duration_m": "Enfriamiento de Alerta (minutos)",
-          "enable_persistent_notifications": "Notificaciones Persistentes",
-          "enable_event_bus": "Alertas por Bus de Eventos",
-          "notify_targets": "Destinos del Servicio de Notificación"
-        },
-        "data_description": {
-          "continuous_threshold_pct": "Predeterminado NEC 80%. Rango: 1–200%.",
-          "spike_threshold_pct": "Predeterminado 100% (capacidad total del interruptor). Rango: 1–200%.",
-          "window_duration_m": "Duración por encima del umbral antes de alertar. Rango: 1–180.",
-          "cooldown_duration_m": "Tiempo mínimo entre alertas repetidas por circuito. Rango: 1–180.",
-          "enable_persistent_notifications": "Mostrar alertas en el panel de notificaciones de HA.",
-          "enable_event_bus": "Emitir eventos span_panel_current_alert para automatizaciones y Node-RED.",
-          "notify_targets": "Destinos separados por coma (ej., notify.notify, notify.mobile_app_phone)."
-        },
-        "description": "Configurar umbrales de monitoreo y notificaciones.",
-        "title": "Ajustes de Monitoreo"
+        "title": "Opciones del Panel SPAN"
       }
     }
   },

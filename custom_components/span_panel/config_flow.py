@@ -36,9 +36,7 @@ import voluptuous as vol
 
 from .config_flow_options import (
     build_general_options_schema,
-    build_monitoring_settings_schema,
     get_general_options_defaults,
-    get_monitoring_settings_defaults,
     process_general_options_input,
 )
 from .config_flow_validation import (
@@ -59,7 +57,6 @@ from .const import (
     CONF_PANEL_SERIAL,
     CONF_REGISTERED_FQDN,
     DOMAIN,
-    ENABLE_CURRENT_MONITORING,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
     USE_CIRCUIT_NUMBERS,
@@ -874,16 +871,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the options menu."""
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["general_options", "monitoring_options"],
-        )
-
-    async def async_step_general_options(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Manage the general options (excluding entity naming)."""
+        """Manage the general options."""
         if user_input is not None:
             filtered_input, errors = process_general_options_input(self.config_entry, user_input)
 
@@ -896,58 +884,16 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         defaults = get_general_options_defaults(self.config_entry)
 
         return self.async_show_form(
-            step_id="general_options",
+            step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, defaults),
             errors=errors,
         )
 
-    async def async_step_monitoring_options(
+    async def async_step_general_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the monitoring enable/disable toggle."""
-        if user_input is not None:
-            if user_input.get(ENABLE_CURRENT_MONITORING, False):
-                return await self.async_step_monitoring_settings()
-
-            # Disabled — save with monitoring off
-            merged = dict(self.config_entry.options)
-            merged[ENABLE_CURRENT_MONITORING] = False
-            merged[USE_DEVICE_PREFIX] = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
-            merged[USE_CIRCUIT_NUMBERS] = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-            return self.async_create_entry(title="", data=merged)
-
-        schema = vol.Schema({vol.Optional(ENABLE_CURRENT_MONITORING): bool})
-        defaults = {
-            ENABLE_CURRENT_MONITORING: self.config_entry.options.get(
-                ENABLE_CURRENT_MONITORING, False
-            ),
-        }
-
-        return self.async_show_form(
-            step_id="monitoring_options",
-            data_schema=self.add_suggested_values_to_schema(schema, defaults),
-            last_step=False,
-        )
-
-    async def async_step_monitoring_settings(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Manage monitoring threshold and notification settings."""
-        if user_input is not None:
-            merged = dict(self.config_entry.options)
-            merged[ENABLE_CURRENT_MONITORING] = True
-            merged.update(user_input)
-            merged[USE_DEVICE_PREFIX] = self.config_entry.options.get(USE_DEVICE_PREFIX, True)
-            merged[USE_CIRCUIT_NUMBERS] = self.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-            return self.async_create_entry(title="", data=merged)
-
-        schema = build_monitoring_settings_schema(self.config_entry)
-        defaults = get_monitoring_settings_defaults(self.config_entry)
-
-        return self.async_show_form(
-            step_id="monitoring_settings",
-            data_schema=self.add_suggested_values_to_schema(schema, defaults),
-        )
+        """Redirect to init for backward compatibility."""
+        return await self.async_step_init(user_input)
 
 
 # Register the config flow handler

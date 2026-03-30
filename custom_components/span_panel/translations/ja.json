@@ -353,14 +353,6 @@
   "options": {
     "step": {
       "init": {
-        "title": "SPAN Panelオプション",
-        "description": "設定する項目を選択してください。",
-        "menu_options": {
-          "general_options": "一般オプション",
-          "monitoring_options": "モニタリング"
-        }
-      },
-      "general_options": {
         "data": {
           "enable_circuit_net_energy_sensors": "回路正味エネルギー",
           "enable_energy_dip_compensation": "エネルギー低下を自動補正",
@@ -378,39 +370,7 @@
           "snapshot_update_interval": "スナップショット再構築の間隔（秒）（0〜15）。低い値＝高速、CPU負荷増。0＝デバウンスなし。"
         },
         "description": "SPAN Panel統合の設定を構成します。",
-        "title": "一般オプション"
-      },
-      "monitoring_options": {
-        "data": {
-          "enable_current_monitoring": "電流モニタリング"
-        },
-        "data_description": {
-          "enable_current_monitoring": "電流センサー付きのV2パネルが必要です。"
-        },
-        "description": "電流モニタリングを有効または無効にします。",
-        "title": "モニタリング"
-      },
-      "monitoring_settings": {
-        "data": {
-          "continuous_threshold_pct": "連続負荷しきい値（%）",
-          "spike_threshold_pct": "スパイクしきい値（%）",
-          "window_duration_m": "連続負荷ウィンドウ（分）",
-          "cooldown_duration_m": "アラートクールダウン（分）",
-          "enable_persistent_notifications": "永続的通知",
-          "enable_event_bus": "イベントバスアラート",
-          "notify_targets": "通知サービスターゲット"
-        },
-        "data_description": {
-          "continuous_threshold_pct": "NECデフォルト80%。範囲：1〜200%。",
-          "spike_threshold_pct": "デフォルト100%（ブレーカー定格の全量）。範囲：1〜200%。",
-          "window_duration_m": "アラート発報前にしきい値を超えている時間。範囲：1〜180。",
-          "cooldown_duration_m": "回路ごとの再アラートまでの最小時間。範囲：1〜180。",
-          "enable_persistent_notifications": "HA通知パネルにアラートを表示します。",
-          "enable_event_bus": "オートメーションやNode-RED用にspan_panel_current_alertイベントを発行します。",
-          "notify_targets": "カンマ区切りのターゲット（例：notify.notify、notify.mobile_app_phone）。"
-        },
-        "description": "モニタリングのしきい値と通知を設定します。",
-        "title": "モニタリング設定"
+        "title": "SPANパネルオプション"
       }
     }
   },
