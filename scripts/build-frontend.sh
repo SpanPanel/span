@@ -2,9 +2,10 @@
 # Build the span-card frontend and copy dist files into the integration.
 #
 # Usage:
-#   ./scripts/build-frontend.sh                    # uses default path
-#   ./scripts/build-frontend.sh ~/my/span-card     # explicit card repo path
-#   SPAN_CARD_DIR=~/my/span-card ./scripts/build-frontend.sh
+#   ./scripts/build-frontend.sh /path/to/span-card
+#   SPAN_CARD_DIR=/path/to/span-card ./scripts/build-frontend.sh
+#
+# Set SPAN_CARD_DIR in your .envrc (direnv) so you don't have to pass it every time.
 #
 # After running, the updated JS files are in custom_components/span_panel/frontend/dist/.
 # Stage and commit them normally — no submodule dance required.
@@ -15,15 +16,21 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEST_DIR="$REPO_ROOT/custom_components/span_panel/frontend/dist"
 
-# Resolve span-card repo location
-CARD_DIR="${1:-${SPAN_CARD_DIR:-$REPO_ROOT/../cards/span-card}}"
-CARD_DIR="$(cd "$CARD_DIR" 2>/dev/null && pwd)" || {
-  echo "Error: span-card repo not found at: ${1:-$REPO_ROOT/../cards/span-card}"
+# Resolve span-card repo location (argument takes precedence over env var)
+CARD_DIR="${1:-${SPAN_CARD_DIR:-}}"
+
+if [ -z "$CARD_DIR" ]; then
+  echo "Error: span-card repo path not specified."
   echo ""
   echo "Either:"
-  echo "  1. Pass the path:  ./scripts/build-frontend.sh /path/to/span-card"
-  echo "  2. Set SPAN_CARD_DIR=/path/to/span-card"
-  echo "  3. Clone span-card next to this repo at ../cards/span-card"
+  echo "  1. Pass the path:       ./scripts/build-frontend.sh /path/to/span-card"
+  echo "  2. Set env var:         export SPAN_CARD_DIR=/path/to/span-card"
+  echo "  3. Add to .envrc:       echo 'export SPAN_CARD_DIR=/path/to/span-card' >> .envrc"
+  exit 1
+fi
+
+CARD_DIR="$(cd "$CARD_DIR" 2>/dev/null && pwd)" || {
+  echo "Error: span-card repo not found at: $CARD_DIR"
   exit 1
 }
 
