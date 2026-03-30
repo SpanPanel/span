@@ -1,4 +1,0 @@
-[submodule "custom_components/span_panel/frontend"]
-	path = custom_components/span_panel/frontend
-	url = /Users/bflood/projects/HA/cards/span-card
-	branch = integration-panel
