@@ -127,7 +127,7 @@ async def check_fqdn_tls_ready(
                 ctx.wrap_socket(sock, server_hostname=fqdn),
             ):
                 return True
-        except ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError:
+        except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError):
             return False
         finally:
             ca_path.unlink(missing_ok=True)
