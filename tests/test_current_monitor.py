@@ -59,8 +59,9 @@ def _make_monitor(hass, options=None, entry_id="test_entry"):
 def _run_coro(coro):
     """Run a coroutine synchronously so async_create_task records inner calls.
 
-    Falls back to returning the coroutine if an event loop is already running
-    (e.g. in async test cases).
+    When an event loop is already running (async tests) the coroutine is
+    scheduled as an eager task so it is consumed immediately and never
+    triggers an "unawaited coroutine" warning.
     """
     if not asyncio.iscoroutine(coro):
         return coro
@@ -69,7 +70,7 @@ def _run_coro(coro):
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        return coro
+        return loop.create_task(coro)
     new_loop = asyncio.new_event_loop()
     try:
         return new_loop.run_until_complete(coro)

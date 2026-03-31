@@ -1,5 +1,6 @@
 """Tests for the GraphHorizonManager class."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -11,10 +12,17 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.graph_horizon import GraphHorizonManager
 
 
+def _consume_coro(coro):
+    """Consume a coroutine to avoid 'never awaited' warnings in tests."""
+    if asyncio.iscoroutine(coro):
+        coro.close()
+    return coro
+
+
 def _make_hass():
     """Create a minimal mock hass object."""
     hass = MagicMock()
-    hass.async_create_task = MagicMock(side_effect=lambda c: c)
+    hass.async_create_task = MagicMock(side_effect=_consume_coro)
     return hass
 
 
