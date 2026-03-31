@@ -14,7 +14,11 @@
     "span_panel_api"
   ],
   "dependencies": [
-    "http"
+    "diagnostics",
+    "frontend",
+    "http",
+    "panel_custom",
+    "persistent_notification"
   ],
   "quality_scale": "gold",
   "version": "2.0.5",
