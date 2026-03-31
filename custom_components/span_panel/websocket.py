@@ -155,6 +155,8 @@ async def handle_panel_topology(
             "relay_state": circuit.relay_state,
             "is_user_controllable": circuit.is_user_controllable,
             "breaker_rating_a": circuit.breaker_rating_a,
+            "always_on": circuit.always_on,
+            "priority": circuit.priority,
             "entities": entity_map.get(circuit_id, {}),
         }
 

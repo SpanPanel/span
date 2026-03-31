@@ -686,6 +686,65 @@ class TestHandlePanelTopology:
         assert circuit_data["entities"]["power"] == "sensor.span_panel_garage_power"
 
     @pytest.mark.asyncio
+    async def test_topology_includes_always_on_and_priority(self, hass: HomeAssistant):
+        """Topology response includes always_on and priority for each circuit."""
+        router = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_router",
+            name="Internet Router",
+            tabs=[23],
+            relay_state="CLOSED",
+            is_user_controllable=False,
+            always_on=True,
+            priority="NEVER",
+            breaker_rating_a=15,
+        )
+        hvac = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_hvac",
+            name="HVAC",
+            tabs=[7, 8],
+            relay_state="CLOSED",
+            is_user_controllable=True,
+            always_on=False,
+            priority="SOC_THRESHOLD",
+            breaker_rating_a=30,
+        )
+        snapshot = SpanPanelSnapshotFactory.create(
+            serial_number="sp3-prio-001",
+            circuits={"uuid_router": router, "uuid_hvac": hvac},
+        )
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={},
+            entry_id="span_entry",
+            unique_id="sp3-prio-001",
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
+
+        device = _register_panel_device(hass, "span_entry", serial="sp3-prio-001")
+
+        connection = _make_mock_connection()
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+
+        await _handle_panel_topology_inner(hass, connection, msg)
+
+        result = connection.send_result.call_args[0][1]
+
+        # Always-on circuit (system-configured, not user-controllable)
+        router_data = result["circuits"]["uuid_router"]
+        assert router_data["always_on"] is True
+        assert router_data["priority"] == "NEVER"
+
+        # User-controllable circuit with SoC threshold
+        hvac_data = result["circuits"]["uuid_hvac"]
+        assert hvac_data["always_on"] is False
+        assert hvac_data["priority"] == "SOC_THRESHOLD"
+
+    @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_registration(self, hass: HomeAssistant):
         """WebSocket commands can be registered without error."""
