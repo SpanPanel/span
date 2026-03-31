@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 import pytest
 
 from custom_components.span_panel.switch import (
-    _OPTIMISTIC_HOLD_SECONDS,
     SpanPanelCircuitsSwitch,
     async_setup_entry,
 )
@@ -215,30 +214,35 @@ async def test_switch_turn_on_without_relay_support_logs_and_returns(
     coordinator.async_request_refresh.assert_not_called()
 
 
-def test_switch_optimistic_hold_preserves_requested_state_until_timeout() -> None:
-    """Coordinator updates should respect the optimistic hold window."""
-    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", relay_state="OPEN")
+def test_switch_relay_state_target_shows_pending_state() -> None:
+    """Switch should show the target state while a relay command is pending."""
+    # Panel reports OPEN but has a pending target of CLOSED
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", relay_state="OPEN", relay_state_target="CLOSED"
+    )
     coordinator = _make_coordinator({"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
-    switch._set_optimistic_state(True)
-
-    # Panel still reports OPEN, but the optimistic hold should keep the switch on.
-    switch._optimistic_set_at = 0.0
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(
-            "custom_components.span_panel.switch.time.monotonic", lambda: 1.0
-        )
-        switch._update_is_on()
+    # Target differs from actual — switch should show target (CLOSED = on)
     assert switch.is_on is True
 
-    # Once the hold window expires, the real panel state should win.
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(
-            "custom_components.span_panel.switch.time.monotonic",
-            lambda: _OPTIMISTIC_HOLD_SECONDS + 1.0,
-        )
-        switch._update_is_on()
+    # Once the panel confirms the relay change, target matches actual
+    confirmed = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", relay_state="CLOSED", relay_state_target="CLOSED"
+    )
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": confirmed})
+    switch._update_is_on()
+    assert switch.is_on is True
+
+
+def test_switch_relay_state_target_none_uses_actual_state() -> None:
+    """Switch should use actual relay state when no target is published."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", relay_state="OPEN", relay_state_target=None
+    )
+    coordinator = _make_coordinator({"1": circuit})
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
     assert switch.is_on is False
 
 
@@ -469,11 +473,9 @@ def test_switch_update_is_on_clears_state_when_circuit_disappears(
         switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
 
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
-    switch._optimistic_state = True
     switch._update_is_on()
 
     assert switch.is_on is None
-    assert switch._optimistic_state is None
 
 
 @pytest.mark.asyncio
@@ -523,30 +525,36 @@ def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:
     switch.hass.create_task.assert_any_call(off_task)
 
 
-def test_set_optimistic_state_writes_state_when_hass_present() -> None:
-    """Setting optimistic state should immediately push HA state when attached."""
+def test_switch_relay_state_target_exposed_in_attributes() -> None:
+    """relay_state_target should appear in extra attributes when set."""
     circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="1", is_user_controllable=True
+        circuit_id="1",
+        relay_state="OPEN",
+        relay_state_target="CLOSED",
+        tabs=[1],
     )
     coordinator = _make_coordinator({"1": circuit})
-    coordinator.hass = MagicMock()
 
-    with pytest.MonkeyPatch.context() as mp:
-        registry = MagicMock()
-        registry.async_get_entity_id.return_value = None
-        mp.setattr(
-            "custom_components.span_panel.switch.er.async_get",
-            lambda _hass: registry,
-        )
-        switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    attrs = switch.extra_state_attributes
+    assert attrs is not None
+    assert attrs["relay_state_target"] == "CLOSED"
 
-    switch.hass = MagicMock()
-    switch.async_write_ha_state = MagicMock()
 
-    switch._set_optimistic_state(True)
+def test_switch_relay_state_target_absent_when_none() -> None:
+    """relay_state_target should not appear in attributes when None."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1",
+        relay_state="CLOSED",
+        relay_state_target=None,
+        tabs=[1],
+    )
+    coordinator = _make_coordinator({"1": circuit})
 
-    assert switch.is_on is True
-    switch.async_write_ha_state.assert_called_once()
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Test Circuit", "SPAN Panel")
+    attrs = switch.extra_state_attributes
+    assert attrs is not None
+    assert "relay_state_target" not in attrs
 
 
 def test_switch_circuit_numbers_entity_id_stable_after_reload(

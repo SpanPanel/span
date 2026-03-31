@@ -153,10 +153,12 @@ async def handle_panel_topology(
             "voltage": 240 if len(tabs) == 2 else 120,
             "device_type": circuit.device_type,
             "relay_state": circuit.relay_state,
+            "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
             "breaker_rating_a": circuit.breaker_rating_a,
             "always_on": circuit.always_on,
             "priority": circuit.priority,
+            "priority_target": circuit.priority_target,
             "entities": entity_map.get(circuit_id, {}),
         }
 

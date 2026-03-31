@@ -50,6 +50,8 @@ class SpanCircuitSnapshotFactory:
         relay_requester: str = "UNKNOWN",
         energy_accum_update_time_s: int = 0,
         instant_power_update_time_s: int = 0,
+        relay_state_target: str | None = None,
+        priority_target: str | None = None,
     ) -> SpanCircuitSnapshot:
         """Create a SpanCircuitSnapshot with reasonable defaults."""
         if tabs is None:
@@ -75,6 +77,8 @@ class SpanCircuitSnapshotFactory:
             relay_requester=relay_requester,
             energy_accum_update_time_s=energy_accum_update_time_s,
             instant_power_update_time_s=instant_power_update_time_s,
+            relay_state_target=relay_state_target,
+            priority_target=priority_target,
         )
 
     @staticmethod
@@ -226,7 +230,7 @@ class SpanPanelSnapshotFactory:
         power_flow_battery: float | None = None,
         power_flow_site: float | None = None,
         power_flow_pv: float | None = None,
-        panel_size: int | None = None,
+        panel_size: int = 32,
         power_flow_grid: float | None = None,
         upstream_l1_current_a: float | None = None,
         upstream_l2_current_a: float | None = None,

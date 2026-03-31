@@ -266,6 +266,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         voltage = construct_voltage_attribute(circuit) or 240
         attributes["voltage"] = voltage
 
+        if circuit.priority_target is not None:
+            attributes["priority_target"] = circuit.priority_target
+
         return attributes or None
 
     def _handle_coordinator_update(self) -> None:

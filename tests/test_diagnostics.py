@@ -96,7 +96,9 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     assert result["circuits"]["uuid_kitchen"] == {
         "name": "Kitchen",
         "relay_state": "CLOSED",
+        "relay_state_target": None,
         "priority": "SOC_THRESHOLD",
+        "priority_target": None,
         "is_user_controllable": True,
         "instant_power_w": 245.5,
         "produced_energy_wh": 10.0,
@@ -137,7 +139,9 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
             "uuid_minimal": SimpleNamespace(
                 name=None,
                 relay_state="OPEN",
+                relay_state_target=None,
                 priority="NEVER",
+                priority_target=None,
                 is_user_controllable=False,
                 instant_power_w=0.0,
                 produced_energy_wh=0.0,
@@ -165,7 +169,9 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     assert result["circuits"]["uuid_minimal"] == {
         "name": None,
         "relay_state": "OPEN",
+        "relay_state_target": None,
         "priority": "NEVER",
+        "priority_target": None,
         "is_user_controllable": False,
         "instant_power_w": 0.0,
         "produced_energy_wh": 0.0,
