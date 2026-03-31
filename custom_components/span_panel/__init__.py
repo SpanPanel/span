@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import hashlib
 import logging
 import os
 from typing import Any, cast
@@ -105,6 +106,16 @@ PANEL_URL = "/span_panel_frontend"
 PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
 
+def _frontend_file_hash(filename: str) -> str:
+    """Compute a short hash of a frontend dist file for cache busting."""
+    path = os.path.join(PANEL_FRONTEND_DIR, filename)
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.md5(fh.read(), usedforsecurity=False).hexdigest()[:8]
+    except FileNotFoundError:
+        return "0"
+
+
 _PANEL_SETTINGS_STORAGE_VERSION = 1
 _PANEL_SETTINGS_STORAGE_KEY = "span_panel_settings"
 
@@ -139,13 +150,14 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
         )
         # Remove first to allow re-registration with updated require_admin
         async_remove_panel(hass, "span-panel", warn_if_unknown=False)
+        cache_tag = _frontend_file_hash("span-panel.js")
         await async_register_panel(
             hass,
             webcomponent_name="span-panel",
             frontend_url_path="span-panel",
             sidebar_title="Span Panel",
             sidebar_icon="mdi:lightning-bolt",
-            module_url=f"{PANEL_URL}/span-panel.js",
+            module_url=f"{PANEL_URL}/span-panel.js?v={cache_tag}",
             require_admin=admin_only,
             config={},
         )
