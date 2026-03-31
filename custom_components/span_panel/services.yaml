@@ -148,6 +148,7 @@ set_graph_time_horizon:
             - "5m"
             - "1h"
             - "1d"
+            - "1w"
             - "1M"
 
 set_circuit_graph_horizon:
@@ -164,6 +165,7 @@ set_circuit_graph_horizon:
             - "5m"
             - "1h"
             - "1d"
+            - "1w"
             - "1M"
 
 clear_circuit_graph_horizon:

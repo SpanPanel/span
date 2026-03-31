@@ -81,7 +81,7 @@ NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
 EVENT_CURRENT_ALERT = "span_panel_current_alert"
 
 # Graph time horizon configuration
-VALID_GRAPH_HORIZONS: Final[tuple[str, ...]] = ("5m", "1h", "1d", "1M")
+VALID_GRAPH_HORIZONS: Final[tuple[str, ...]] = ("5m", "1h", "1d", "1w", "1M")
 DEFAULT_GRAPH_HORIZON = "5m"
 
 # Mains leg identifiers
