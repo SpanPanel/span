@@ -16,8 +16,7 @@ The following operations are benign and should be executed without confirmation.
 
 ### Frontend Submodule (`custom_components/span_panel/frontend`)
 
-The JS frontend lives in a git submodule pointing to the `span-card` repository
-(branch: `integration-panel`). The following operations within the submodule are
+The JS frontend lives in a git submodule pointing to the `span-card` repository (branch: `integration-panel`). The following operations within the submodule are
 permitted without confirmation:
 
 - Install dependencies (`npm ci`, `npm install`)
@@ -31,8 +30,7 @@ permitted without confirmation:
 
 ## Frontend Build Workflow
 
-After making any changes to the span-card frontend source (`src/`), you MUST
-rebuild and copy the dist files into the integration before considering the work
+After making any changes to the span-card frontend source (`src/`), you MUST rebuild and copy the dist files into the integration before considering the work
 complete. Run the build script from the integration repo:
 
 ```bash
@@ -41,19 +39,14 @@ complete. Run the build script from the integration repo:
 ./scripts/build-frontend.sh
 ```
 
-This builds the card (`npm run build`) and copies `span-panel-card.js` and
-`span-panel.js` into `custom_components/span_panel/frontend/dist/`. The updated
-dist files must be staged and committed with the rest of the change. Skipping
-this step means the frontend changes will not be visible in Home Assistant.
+This builds the card (`npm run build`) and copies `span-panel-card.js` and `span-panel.js` into `custom_components/span_panel/frontend/dist/`. The updated dist
+files must be staged and committed with the rest of the change. Skipping this step means the frontend changes will not be visible in Home Assistant.
 
 ## Translation Workflow
 
-`strings.json` is the single source of truth for all translatable strings. When
-adding or updating any user-facing text (config flow steps, service names,
-service field descriptions, error messages, etc.), always edit `strings.json`
-first. The pre-commit hook runs `scripts/sync_translations.py`, which copies
-`strings.json` to `translations/en.json` and validates that all other language
-files have no missing or orphaned keys. Never edit `translations/en.json`
+`strings.json` is the single source of truth for all translatable strings. When adding or updating any user-facing text (config flow steps, service names,
+service field descriptions, error messages, etc.), always edit `strings.json` first. The pre-commit hook runs `scripts/sync_translations.py`, which copies
+`strings.json` to `translations/en.json` and validates that all other language files have no missing or orphaned keys. Never edit `translations/en.json`
 directly — it is generated automatically.
 
 ## Service Registration Requirements
