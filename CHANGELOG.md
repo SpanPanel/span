@@ -33,9 +33,6 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **Suppress monitoring notifications during HA startup** — Notifications are no longer fired while Home Assistant is still starting up, preventing false alerts
-  from stale or incomplete state data.
-
 - **Breaker rating and nameplate capacity sensors** — Corrected device classes on breaker ratings (main and per-circuit) and BESS/PV nameplate capacity sensors.
   These are static configuration values that rarely change, so they are now disabled by default in new installs to reduce recorder writes. The data is still
   available via the panel topology service; enable the sensors from entity settings if you need them in dashboards or automations.
