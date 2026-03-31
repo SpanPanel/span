@@ -4,6 +4,11 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
+async def _fake_executor_job(func, *args):
+    """Run a function synchronously, mimicking async_add_executor_job."""
+    return func(*args)
+
+
 class TestPanelRegistration:
     """Tests for sidebar panel registration."""
 
@@ -16,6 +21,7 @@ class TestPanelRegistration:
         hass.data = {}
         hass.http = MagicMock()
         hass.http.async_register_static_paths = AsyncMock()
+        hass.async_add_executor_job = AsyncMock(side_effect=_fake_executor_job)
         hass.services = MagicMock()
         hass.services.async_register = MagicMock()
 
@@ -91,6 +97,7 @@ class TestPanelRegistration:
         hass.data = {}
         hass.http = MagicMock()
         hass.http.async_register_static_paths = AsyncMock()
+        hass.async_add_executor_job = AsyncMock(side_effect=_fake_executor_job)
         hass.services = MagicMock()
         hass.services.async_register = MagicMock()
 
@@ -124,6 +131,7 @@ class TestPanelRegistration:
         hass.data = {}
         hass.http = MagicMock()
         hass.http.async_register_static_paths = AsyncMock()
+        hass.async_add_executor_job = AsyncMock(side_effect=_fake_executor_job)
         hass.services = MagicMock()
         hass.services.async_register = MagicMock()
 

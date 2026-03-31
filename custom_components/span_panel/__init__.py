@@ -107,10 +107,14 @@ PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
 
 
 def _frontend_file_hash(filename: str) -> str:
-    """Compute a short hash of a frontend dist file for cache busting."""
+    """Compute a short hash of a frontend dist file for cache busting.
+
+    This is a synchronous helper—call via ``await hass.async_add_executor_job``
+    to avoid blocking the event loop.
+    """
     path = os.path.join(PANEL_FRONTEND_DIR, filename)
     try:
-        with open(path, "rb") as fh:
+        with open(path, "rb") as fh:  # noqa: ASYNC230
             return hashlib.md5(fh.read(), usedforsecurity=False).hexdigest()[:8]
     except FileNotFoundError:
         return "0"
@@ -150,7 +154,7 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
         )
         # Remove first to allow re-registration with updated require_admin
         async_remove_panel(hass, "span-panel", warn_if_unknown=False)
-        cache_tag = _frontend_file_hash("span-panel.js")
+        cache_tag = await hass.async_add_executor_job(_frontend_file_hash, "span-panel.js")
         await async_register_panel(
             hass,
             webcomponent_name="span-panel",
