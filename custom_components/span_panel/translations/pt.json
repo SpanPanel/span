@@ -512,6 +512,44 @@
           "description": "Push notification priority level. Controls interruption behavior on mobile devices (iOS: interruption-level, Android: priority/channel)."
         }
       }
+    },
+    "set_graph_time_horizon": {
+      "name": "Set graph time horizon",
+      "description": "Set the global default time horizon for circuit graphs.",
+      "fields": {
+        "horizon": {
+          "name": "Horizon",
+          "description": "Time window preset for graph display."
+        }
+      }
+    },
+    "set_circuit_graph_horizon": {
+      "name": "Set circuit graph horizon",
+      "description": "Set a per-circuit time horizon override for graphs.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit ID",
+          "description": "The circuit identifier to override."
+        },
+        "horizon": {
+          "name": "Horizon",
+          "description": "Time window preset for graph display."
+        }
+      }
+    },
+    "clear_circuit_graph_horizon": {
+      "name": "Clear circuit graph horizon",
+      "description": "Remove a per-circuit graph horizon override, reverting to the global default.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuit ID",
+          "description": "The circuit identifier to clear the override for."
+        }
+      }
+    },
+    "get_graph_settings": {
+      "name": "Get graph settings",
+      "description": "Returns the current global and per-circuit graph horizon settings."
     }
   }
 }

@@ -118,6 +118,10 @@ async def handle_panel_topology(
     coordinator = runtime_data.coordinator
     snapshot = coordinator.data
 
+    if snapshot is None:
+        connection.send_error(msg["id"], "no_data", "SPAN Panel has not yet provided any data")
+        return
+
     # Build entity lookup grouped by device_id for sub-device section.
     entity_registry = er.async_get(hass)
     all_entities = er.async_entries_for_config_entry(entity_registry, config_entry_id)
