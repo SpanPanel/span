@@ -4,18 +4,17 @@
 
 The SPAN Panel integration consists of two repositories:
 
-| Repo | Purpose | Branch |
-|------|---------|--------|
-| `span` (this repo) | HA custom integration (Python) | `main` |
-| `span-card` | Frontend dashboard (JavaScript) | `integration-panel` |
+| Repo               | Purpose                         | Branch              |
+| ------------------ | ------------------------------- | ------------------- |
+| `span` (this repo) | HA custom integration (Python)  | `main`              |
+| `span-card`        | Frontend dashboard (JavaScript) | `integration-panel` |
 
 The card repo produces two JS bundles:
 
 - `span-panel-card.js` -- Lovelace card (standalone, HACS-distributable)
 - `span-panel.js` -- Full-page sidebar panel (served by the integration)
 
-Both bundles are committed as build artifacts in
-`custom_components/span_panel/frontend/dist/`.
+Both bundles are committed as build artifacts in `custom_components/span_panel/frontend/dist/`.
 
 ## Prerequisites
 
@@ -49,13 +48,11 @@ direnv allow
 
 ## Pre-commit Hooks
 
-This project uses prek for pre-commit hooks. Hooks run automatically on
-`git commit` and check formatting, linting, type checking, translations,
-and test coverage.
+This project uses prek for pre-commit hooks. Hooks run automatically on `git commit` and check formatting, linting, type checking, translations, and test
+coverage.
 
-The linters may modify files (e.g., to sort imports or reformat). Files
-that are changed or fail checks will be unstaged. Review the changes,
-re-stage, and recommit.
+The linters may modify files (e.g., to sort imports or reformat). Files that are changed or fail checks will be unstaged. Review the changes, re-stage, and
+recommit.
 
 To run hooks manually:
 
@@ -67,14 +64,12 @@ prek run
 prek run --all-files
 ```
 
-You can also use VS Code's `Tasks: Run Task` from the command palette to
-run `Run all Pre-commit checks`.
+You can also use VS Code's `Tasks: Run Task` from the command palette to run `Run all Pre-commit checks`.
 
 ## Frontend Build Workflow
 
-The span-card repo is independent -- it has its own git history, branches,
-and releases. The integration repo consumes its build output via a copy
-script. There is no git submodule.
+The span-card repo is independent -- it has its own git history, branches, and releases. The integration repo consumes its build output via a copy script. There
+is no git submodule.
 
 ### Build and update frontend
 
@@ -100,10 +95,8 @@ git commit -m "feat: update frontend with card changes"
 
 `scripts/build-frontend.sh` does three things:
 
-1. Runs `npm run build` in the span-card repo (rollup produces two IIFE
-   bundles)
-2. Copies `dist/span-panel.js` and `dist/span-panel-card.js` into
-   `custom_components/span_panel/frontend/dist/`
+1. Runs `npm run build` in the span-card repo (rollup produces two IIFE bundles)
+2. Copies `dist/span-panel.js` and `dist/span-panel-card.js` into `custom_components/span_panel/frontend/dist/`
 3. Prints the files and a reminder to stage them
 
 The script needs to know where the span-card repo lives:
@@ -119,14 +112,11 @@ export SPAN_CARD_DIR=~/projects/HA/cards/span-card
 
 ### Local development with HA Core
 
-When running HA Core locally, the integration is symlinked into
-`config/custom_components/span_panel`. The frontend JS files are served
-from `custom_components/span_panel/frontend/dist/` via the
-`async_register_static_paths` call in `__init__.py`.
+When running HA Core locally, the integration is symlinked into `config/custom_components/span_panel`. The frontend JS files are served from
+`custom_components/span_panel/frontend/dist/` via the `async_register_static_paths` call in `__init__.py`.
 
-After rebuilding the frontend, restart HA to pick up the new JS. Browsers
-cache aggressively -- a hard refresh (Cmd+Shift+R) of the panel page
-also works if you clear the `cache_headers` flag during development.
+After rebuilding the frontend, restart HA to pick up the new JS. Browsers cache aggressively -- a hard refresh (Cmd+Shift+R) of the panel page also works if you
+clear the `cache_headers` flag during development.
 
 ## Running Tests
 
@@ -157,23 +147,19 @@ python -m mypy custom_components/span_panel/
 
 ## Translation Workflow
 
-Source strings live in `custom_components/span_panel/strings.json`.
-Translated files in `translations/` are synced from `strings.json` by the
-pre-commit hook (`sync_translations.py`).
+Source strings live in `custom_components/span_panel/strings.json`. Translated files in `translations/` are synced from `strings.json` by the pre-commit hook
+(`sync_translations.py`).
 
 To add a new translatable string:
 
 1. Add the key to `strings.json`
 2. Add translations to each `translations/<lang>.json`
-3. The pre-commit hook validates that all translation files match
-   `strings.json` keys
+3. The pre-commit hook validates that all translation files match `strings.json` keys
 
 ## Panel Sidebar Registration
 
-The integration registers a sidebar panel in `async_setup()` (domain-level,
-called once). Panel visibility (`show_panel`, `admin_only`) is stored in
-domain-level storage (`span_panel_settings`) -- shared across all config
-entries. These settings are editable from any entry's options flow.
+The integration registers a sidebar panel in `async_setup()` (domain-level, called once). Panel visibility (`show_panel`, `admin_only`) is stored in
+domain-level storage (`span_panel_settings`) -- shared across all config entries. These settings are editable from any entry's options flow.
 
 ## VS Code
 
