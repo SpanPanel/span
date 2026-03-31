@@ -11,14 +11,34 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Current monitoring and dashboard** — Real-time monitoring of circuit and mains current draw, managed entirely from a new sidebar panel with Panel,
+  Monitoring, and Settings tabs.
+  - Configurable spike and continuous overload thresholds (percentage of breaker rating, window duration, cooldown)
+  - Per-circuit and per-mains-leg threshold overrides with reset-to-global
+  - Notification targets and device trackers
+  - Persistent HA notifications and event bus alerts
+  - Customizable notification title and message templates with placeholder substitution
+  - Breaker grid view with live utilization indicators, shedding icons, and per-circuit side panel
+
+- **Frontend i18n** — Dashboard panel and card editor translated into English, Spanish, French, Japanese, and Portuguese.
+
 - **Local brand images** — Icon and logo assets are now shipped inside the integration (`brand/` directory) instead of relying on the Home Assistant brands CDN.
   Requires Home Assistant 2026.3 or later.
 
 ### Changed
 
-- **HA compliance refactor** — integration changes to align with Home Assistant standards; no user facing changes.
+- **Services use entity IDs** — Monitoring services accept entity IDs instead of internal circuit UUIDs, matching HA conventions.
 
 - **`span-panel-api` updated to 2.4.1** — Improved HTTP connection handling and firmware compatibility. Fully backward compatible.
+
+### Fixed
+
+- **Suppress monitoring notifications during HA startup** — Notifications are no longer fired while Home Assistant is still starting up, preventing false alerts
+  from stale or incomplete state data.
+
+- **Breaker rating and nameplate capacity sensors** — Corrected device classes on breaker ratings (main and per-circuit) and BESS/PV nameplate capacity sensors.
+  These are static configuration values that rarely change, so they are now disabled by default in new installs to reduce recorder writes. The data is still
+  available via the panel topology service; enable the sensors from entity settings if you need them in dashboards or automations.
 
 ## [2.0.4] - 3/2026
 
