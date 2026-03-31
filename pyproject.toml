@@ -29,6 +29,7 @@ dev = [
     "pytest>=9.0.0",
     "pytest-homeassistant-custom-component>=0.13.320",
     "isort",
+    "vulture>=2.14",
 ]
 
 [tool.uv]

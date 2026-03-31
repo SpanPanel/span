@@ -27,19 +27,11 @@ from .options import (
 
 def build_general_options_schema(
     config_entry: ConfigEntry,
-    available_tabs: list[int] | None = None,
-    current_leg1: int = 0,
-    current_leg2: int = 0,
-    user_input: dict[str, Any] | None = None,
 ) -> vol.Schema:
     """Build the schema for general options form.
 
     Args:
         config_entry: The config entry
-        available_tabs: Unused (kept for backward compatibility)
-        current_leg1: Unused (kept for backward compatibility)
-        current_leg2: Unused (kept for backward compatibility)
-        user_input: Current user input for dynamic updates
 
     Returns:
         Voluptuous schema for the form
@@ -63,16 +55,12 @@ def build_general_options_schema(
 
 def get_general_options_defaults(
     config_entry: ConfigEntry,
-    current_leg1: int = 0,
-    current_leg2: int = 0,
     panel_settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Get default values for general options form.
 
     Args:
         config_entry: The config entry
-        current_leg1: Unused (kept for backward compatibility)
-        current_leg2: Unused (kept for backward compatibility)
         panel_settings: Domain-level panel sidebar settings from storage
 
     Returns:
@@ -108,14 +96,12 @@ _PANEL_SETTING_KEYS = {PANEL_SHOW_SIDEBAR, PANEL_ADMIN_ONLY}
 def process_general_options_input(
     config_entry: ConfigEntry,
     user_input: dict[str, Any],
-    available_tabs: list[int] | None = None,
 ) -> tuple[dict[str, Any], dict[str, str], dict[str, Any]]:
     """Process user input for general options.
 
     Args:
         config_entry: The config entry
         user_input: User input from the form
-        available_tabs: Unused (kept for backward compatibility)
 
     Returns:
         Tuple of (processed_options, errors, panel_settings)

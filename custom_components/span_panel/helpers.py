@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.core import HomeAssistant
@@ -77,36 +77,6 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
 
 # Combined mapping for general suffix lookup
 ALL_SUFFIX_MAPPINGS = {**CIRCUIT_SUFFIX_MAPPING, **PANEL_SUFFIX_MAPPING}
-
-
-def get_api_description_key_from_suffix(suffix: str) -> str | None:
-    """Reverse map from user-friendly suffix back to API description key.
-
-    This is used for migration when we need to extract the original API description key
-    from an entity_id suffix to call the helper functions correctly.
-
-    Args:
-        suffix: User-friendly suffix extracted from entity_id (e.g., "power", "energy_produced")
-
-    Returns:
-        API description key (e.g., "instantPowerW", "producedEnergyWh") or None if not found
-
-    Examples:
-        get_api_description_key_from_suffix("power") → "instantPowerW"
-        get_api_description_key_from_suffix("energy_produced") → "producedEnergyWh"
-        get_api_description_key_from_suffix("current_power") → "instantGridPowerW"
-
-    """
-    # Panel entity suffix mappings take precedence over panel and circuit suffixes.
-    reverse_mapping = {
-        **{user_suffix: api_key for api_key, user_suffix in CIRCUIT_SUFFIX_MAPPING.items()},
-        **{user_suffix: api_key for api_key, user_suffix in PANEL_SUFFIX_MAPPING.items()},
-        **{
-            entity_suffix: api_key for api_key, entity_suffix in PANEL_ENTITY_SUFFIX_MAPPING.items()
-        },
-    }
-
-    return reverse_mapping.get(suffix)
 
 
 def get_suffix_from_sensor_key(sensor_key: str) -> str:
@@ -198,140 +168,6 @@ def is_panel_level_sensor_key(sensor_key: str) -> bool:
         return False
     # No UUID pattern found, this is a panel-level sensor
     return True
-
-
-def construct_panel_synthetic_entity_id(
-    coordinator: SpanPanelCoordinator,
-    snapshot: SpanPanelSnapshot,
-    platform: str,
-    suffix: str,
-    device_name: str,
-    unique_id: str | None = None,
-) -> str | None:
-    """Construct entity ID for synthetic panel-level sensors with device prefix logic.
-
-    Args:
-        coordinator: The coordinator instance
-        snapshot: The panel snapshot data
-        platform: Platform name ("sensor", etc.)
-        suffix: Entity-specific suffix ("current_power", etc.)
-        device_name: Device name for the panel
-        unique_id: The unique ID for this entity (None to skip registry lookup)
-
-    Returns:
-        Constructed entity ID string or None if device info unavailable
-
-    """
-    # Check registry first only if unique_id is provided
-    if unique_id is not None:
-        entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
-        if existing_entity_id:
-            return existing_entity_id
-        # FATAL ERROR: Expected unique_id not found in registry
-        raise ValueError(
-            f"REGISTRY LOOKUP ERROR: Expected unique_id '{unique_id}' not found in registry. "
-            f"This indicates a migration or configuration mismatch."
-        )
-
-    config_entry = coordinator.config_entry
-    if not device_name:
-        return None
-    use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-    parts = []
-    if use_device_prefix:
-        # Sanitize device name for entity ID use
-        sanitized_device_name = slugify(device_name)
-        parts.append(sanitized_device_name)
-    parts.append(suffix)
-    return f"{platform}.{'_'.join(parts)}"
-
-
-def construct_240v_synthetic_entity_id(
-    coordinator: SpanPanelCoordinator,
-    snapshot: SpanPanelSnapshot,
-    platform: str,
-    suffix: str,
-    friendly_name: str,
-    tab1: int = 0,
-    tab2: int = 0,
-    unique_id: str | None = None,
-) -> str | None:
-    """Construct entity ID for synthetic 240V circuits using tab numbers.
-
-    Args:
-        coordinator: The coordinator instance
-        snapshot: The panel snapshot data
-        platform: Platform name ("sensor", "switch", "select")
-        suffix: Entity-specific suffix ("power", "energy_produced", etc.)
-        friendly_name: Descriptive name for this synthetic circuit
-        tab1: First tab number (0 if not used)
-        tab2: Second tab number (0 if not used)
-        unique_id: The unique ID for this entity (None to skip registry lookup)
-
-    Returns:
-        Constructed entity ID string or None if device info unavailable
-
-    """
-    # Validate that we have exactly 2 tabs for 240V circuits
-    if tab1 <= 0 or tab2 <= 0:
-        raise ValueError(
-            f"240V synthetic entity requires exactly 2 tabs, got tab1={tab1}, tab2={tab2}"
-        )
-
-    # Build tab numbers list
-    tab_numbers = [tab1, tab2]
-
-    # Use the multi-circuit helper
-    return construct_multi_circuit_entity_id(
-        coordinator=coordinator,
-        snapshot=snapshot,
-        platform=platform,
-        suffix=suffix,
-        circuit_numbers=tab_numbers,
-        friendly_name=friendly_name,
-        unique_id=unique_id,
-    )
-
-
-def construct_120v_synthetic_entity_id(
-    coordinator: SpanPanelCoordinator,
-    snapshot: SpanPanelSnapshot,
-    platform: str,
-    suffix: str,
-    friendly_name: str,
-    tab: int = 0,
-    unique_id: str | None = None,
-) -> str | None:
-    """Construct entity ID for synthetic 120V circuits using tab number.
-
-    Args:
-        coordinator: The coordinator instance
-        snapshot: The panel snapshot data
-        platform: Platform name ("sensor", "switch", "select")
-        suffix: Entity-specific suffix ("power", "energy_produced", etc.)
-        friendly_name: Descriptive name for this synthetic circuit
-        tab: Tab number
-        unique_id: The unique ID for this entity (None to skip registry lookup)
-
-    Returns:
-        Constructed entity ID string or None if device info unavailable
-
-    """
-    # Validate that we have exactly 1 tab for 120V circuits
-    if tab <= 0:
-        raise ValueError(f"120V synthetic entity requires exactly 1 tab, got tab={tab}")
-
-    # Use the multi-circuit helper with only one tab
-    return construct_multi_circuit_entity_id(
-        coordinator=coordinator,
-        snapshot=snapshot,
-        platform=platform,
-        suffix=suffix,
-        circuit_numbers=[tab],
-        friendly_name=friendly_name,
-        unique_id=unique_id,
-    )
 
 
 def get_user_friendly_suffix(description_key: str) -> str:
@@ -479,19 +315,6 @@ def construct_synthetic_unique_id(serial: str, sensor_name: str) -> str:
 
     """
     return f"span_{serial.lower()}_{sensor_name}"
-
-
-def construct_sensor_set_id(device_identifier: str) -> str:
-    """Build sensor set ID for synthetic sensors using consistent pattern (pure function).
-
-    Args:
-        device_identifier: Per-entry panel identifier (panel serial from the API).
-
-    Returns:
-        Sensor set ID like "{device_identifier}_sensors"
-
-    """
-    return f"{device_identifier}_sensors"
 
 
 def _get_device_identifier_for_unique_ids(
@@ -887,80 +710,6 @@ def construct_single_circuit_entity_id(
     return f"{platform}.{'_'.join(parts)}"
 
 
-def construct_panel_entity_id(
-    coordinator: SpanPanelCoordinator,
-    snapshot: SpanPanelSnapshot,
-    platform: str,
-    suffix: str,
-    device_name: str,
-    unique_id: str | None = None,
-    use_device_prefix: bool | None = None,
-) -> str | None:
-    """Construct entity ID for panel-level sensors based on integration configuration flags.
-
-    This function handles entity naming for panel-level entities based on the
-    USE_DEVICE_PREFIX configuration flag. It also checks the entity registry
-    to respect user customizations when unique_id is provided.
-
-    Args:
-        coordinator: The coordinator instance
-        snapshot: The panel snapshot data
-        platform: Platform name ("sensor", "switch", "select")
-        suffix: Entity-specific suffix ("current_power", "feed_through_power", etc.)
-        device_name: Device name for the panel
-        unique_id: The unique ID for this entity (None to skip registry lookup)
-        use_device_prefix: Whether to include device name prefix in entity ID (None to use config option)
-
-    Returns:
-        Constructed entity ID string or None if device info unavailable
-
-    """
-    # Check registry first only if unique_id is provided
-    if unique_id is not None:
-        entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
-
-        # Debug logging for panel entity registry lookup
-        _LOGGER.debug(
-            "Panel helper registry lookup - unique_id=%s, found_entity_id=%s",
-            unique_id,
-            existing_entity_id,
-        )
-
-        if existing_entity_id:
-            return existing_entity_id
-
-    # Construct default entity_id
-    config_entry = coordinator.config_entry
-
-    if not device_name:
-        return None
-
-    if use_device_prefix is None:
-        use_device_prefix = config_entry.options.get(USE_DEVICE_PREFIX, True)
-
-    # Build entity ID components
-    parts = []
-
-    if use_device_prefix:
-        # Sanitize device name for entity ID use
-        sanitized_device_name = slugify(device_name)
-        parts.append(sanitized_device_name)
-
-    parts.append(suffix)
-
-    return f"{platform}.{'_'.join(parts)}"
-
-
-def construct_unmapped_unique_id(
-    snapshot: SpanPanelSnapshot, circuit_number: int | str, suffix: str
-) -> str:
-    """Construct unique ID for unmapped circuit sensors."""
-    # Always use consistent unique ID pattern for unmapped circuits
-    # Format: span_{serial}_unmapped_tab_{circuit_number}_{suffix}
-    return f"span_{snapshot.serial_number}_unmapped_tab_{circuit_number}_{suffix}"
-
-
 def construct_unmapped_entity_id(
     snapshot: SpanPanelSnapshot,
     circuit_id: str,
@@ -1051,32 +800,6 @@ def construct_unmapped_friendly_name(
     return f"Unmapped Tab {circuit_number} {sensor_description_name}"
 
 
-def construct_panel_friendly_name(description_name: Any) -> str:
-    """Construct friendly name for panel-level sensors.
-
-    Args:
-        description_name: The sensor description name (can be str, None, or UndefinedType)
-
-    Returns:
-        Friendly name string
-
-    """
-    return str(description_name) if description_name else ""
-
-
-def construct_status_friendly_name(description_name: Any) -> str:
-    """Construct friendly name for status sensors.
-
-    Args:
-        description_name: The sensor description name (can be str, None, or UndefinedType)
-
-    Returns:
-        Friendly name string
-
-    """
-    return str(description_name) if description_name else ""
-
-
 async def async_create_span_notification(
     hass: HomeAssistant,
     message: str,
@@ -1108,26 +831,6 @@ async def async_create_span_notification(
         title=title,
         notification_id=notification_id,
     )
-
-
-def construct_unmapped_circuit_id(circuit_number: int | str) -> str:
-    """Construct circuit ID for unmapped circuits.
-
-    This returns just the circuit ID part (e.g., "unmapped_tab_30"), not a full entity ID.
-    Used for API circuit references and internal circuit identification.
-
-    Args:
-        circuit_number: The tab number (e.g., 30, 32)
-
-    Returns:
-        Circuit ID string like "unmapped_tab_30"
-
-    Examples:
-        construct_unmapped_circuit_id(30) -> "unmapped_tab_30"
-        construct_unmapped_circuit_id(32) -> "unmapped_tab_32"
-
-    """
-    return f"unmapped_tab_{circuit_number}"
 
 
 def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = "") -> str:
@@ -1188,83 +891,6 @@ def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
         len(sorted_tabs),
     )
     return None
-
-
-def parse_tabs_attribute(tabs_attr: str) -> list[int] | None:
-    """Parse tabs attribute string back to list of tab numbers.
-
-    For US electrical systems, only 1 tab (120V) or 2 tabs (240V) are valid.
-
-    Args:
-        tabs_attr: Tabs attribute string like "tabs [30:32]" or "tabs [28]"
-
-    Returns:
-        List of tab numbers, or None if parsing fails or invalid for US electrical system
-
-    Examples:
-        "tabs [28]" -> [28] (120V)
-        "tabs [30:32]" -> [30, 32] (240V)
-
-    """
-    if not tabs_attr or not tabs_attr.startswith("tabs ["):
-        return None
-
-    try:
-        # Extract content between brackets
-        content = tabs_attr[6:-1]  # Remove "tabs [" and "]"
-
-        if ":" in content:
-            # Range format: "30:32" (240V)
-            start, end = map(int, content.split(":"))
-            return [start, end]
-        # Single tab: "28" (120V)
-        return [int(content)]
-
-    except (ValueError, IndexError) as e:
-        _LOGGER.warning("Failed to parse tabs attribute '%s': %s", tabs_attr, e)
-        return None
-
-
-def get_circuit_voltage_type(circuit: SpanCircuitSnapshot) -> str:
-    """Determine the voltage type of a circuit based on its tabs.
-
-    For US electrical systems, circuits can only be 120V (1 tab) or 240V (2 tabs).
-
-    Args:
-        circuit: SpanCircuitSnapshot object
-
-    Returns:
-        Voltage type: "120V" for single tab, "240V" for two tabs, "unknown" otherwise
-
-    """
-    if not circuit.tabs:
-        return "unknown"
-
-    if len(circuit.tabs) == 1:
-        return "120V"
-    if len(circuit.tabs) == 2:
-        return "240V"
-    # More than 2 tabs is not valid for US electrical system
-    _LOGGER.warning(
-        "Circuit %s has %d tabs, which is not valid for US electrical system (expected 1 or 2)",
-        circuit.circuit_id,
-        len(circuit.tabs),
-    )
-    return "unknown"
-
-
-def get_panel_voltage_attribute() -> int:
-    """Get voltage attribute for panel-level sensors.
-
-    US residential electrical panels are standardized as 240V split-phase systems.
-    Panel-level sensors (like main meter energy) represent aggregate measurements
-    at the full panel voltage.
-
-    Returns:
-        Panel voltage in volts (always 240 for US residential panels)
-
-    """
-    return 240
 
 
 def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:

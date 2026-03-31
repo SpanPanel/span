@@ -5,8 +5,6 @@ from span_panel_api import SpanCircuitSnapshot
 from custom_components.span_panel.helpers import (
     construct_tabs_attribute,
     construct_voltage_attribute,
-    get_circuit_voltage_type,
-    parse_tabs_attribute,
 )
 
 
@@ -44,23 +42,6 @@ def test_tabs_attribute_construction() -> None:
     assert construct_tabs_attribute(_make_circuit([1, 3, 5])) is None
 
 
-def test_tabs_attribute_parsing() -> None:
-    """Test tabs attribute parsing back to tab numbers."""
-    assert parse_tabs_attribute("tabs [28]") == [28]
-    assert parse_tabs_attribute("tabs [30:32]") == [30, 32]
-    assert parse_tabs_attribute("invalid format") is None
-    assert parse_tabs_attribute("tabs [invalid]") is None
-    assert parse_tabs_attribute("tabs [1,3,5]") is None
-
-
-def test_voltage_type_detection() -> None:
-    """Test voltage type detection from circuit data."""
-    assert get_circuit_voltage_type(_make_circuit([28])) == "120V"
-    assert get_circuit_voltage_type(_make_circuit([30, 32])) == "240V"
-    assert get_circuit_voltage_type(_make_circuit([])) == "unknown"
-    assert get_circuit_voltage_type(_make_circuit([1, 3, 5])) == "unknown"
-
-
 def test_voltage_attribute_construction() -> None:
     """Test voltage attribute construction from circuit data."""
     assert construct_voltage_attribute(_make_circuit([28])) == 120
@@ -70,16 +51,12 @@ def test_voltage_attribute_construction() -> None:
 
 
 def test_end_to_end_tabs_workflow() -> None:
-    """Test the complete workflow from circuit data to tabs attribute and back."""
+    """Test the complete workflow from circuit data to tabs attribute and voltage."""
     circuit = _make_circuit([30, 32])
 
     tabs_attr = construct_tabs_attribute(circuit)
     assert tabs_attr == "tabs [30:32]"
 
-    parsed_tabs = parse_tabs_attribute(tabs_attr)
-    assert parsed_tabs == [30, 32]
-
-    assert get_circuit_voltage_type(circuit) == "240V"
     assert construct_voltage_attribute(circuit) == 240
 
 
