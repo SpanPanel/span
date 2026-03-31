@@ -22,7 +22,7 @@
   ],
   "quality_scale": "gold",
   "requirements": [
-    "span-panel-api==2.4.2"
+    "span-panel-api==2.5.0"
   ],
   "version": "2.0.5",
   "zeroconf": [
