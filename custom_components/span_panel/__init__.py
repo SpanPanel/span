@@ -51,14 +51,17 @@ from .const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HTTP_PORT,
+    DEFAULT_GRAPH_HORIZON,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     ENABLE_CURRENT_MONITORING,
     PANEL_ADMIN_ONLY,
     PANEL_SHOW_SIDEBAR,
+    VALID_GRAPH_HORIZONS,
 )
 from .coordinator import SpanPanelCoordinator
 from .current_monitor import CurrentMonitor
+from .graph_horizon import GraphHorizonManager
 from .helpers import build_circuit_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
@@ -154,6 +157,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
+    _async_register_graph_horizon_services(hass)
 
     await async_apply_panel_registration(hass)
 
@@ -355,6 +359,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 monitor = CurrentMonitor(hass, entry)
                 await monitor.async_start()
                 coordinator.current_monitor = monitor
+
+            graph_horizon = GraphHorizonManager(hass, entry)
+            await graph_horizon.async_load()
+            coordinator.graph_horizon_manager = graph_horizon
 
         else:
             raise ConfigEntryError(  # noqa: TRY301
@@ -785,4 +793,101 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         "set_global_monitoring",
         async_handle_set_global_monitoring,
         schema=_build_set_global_monitoring_schema(),
+    )
+
+
+def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
+    """Register graph time horizon services."""
+
+    def _get_horizon_manager(
+        call: ServiceCall,
+    ) -> GraphHorizonManager:
+        """Find the GraphHorizonManager for the given entry."""
+        entry_id = call.data.get("config_entry_id")
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if not hasattr(entry, "runtime_data") or not isinstance(
+                entry.runtime_data, SpanPanelRuntimeData
+            ):
+                continue
+            if entry_id is None or entry.entry_id == entry_id:
+                mgr = entry.runtime_data.coordinator.graph_horizon_manager
+                if mgr is not None:
+                    return mgr
+        raise ServiceValidationError(
+            "No SPAN panel with graph horizon manager found.",
+            translation_domain=DOMAIN,
+            translation_key="graph_horizon_not_available",
+        )
+
+    async def async_handle_set_graph_time_horizon(call: ServiceCall) -> None:
+        manager = _get_horizon_manager(call)
+        horizon = call.data["horizon"]
+        manager.set_global_horizon(horizon)
+
+    async def async_handle_set_circuit_graph_horizon(call: ServiceCall) -> None:
+        manager = _get_horizon_manager(call)
+        circuit_id = call.data["circuit_id"]
+        horizon = call.data["horizon"]
+        manager.set_circuit_horizon(circuit_id, horizon)
+
+    async def async_handle_clear_circuit_graph_horizon(call: ServiceCall) -> None:
+        manager = _get_horizon_manager(call)
+        circuit_id = call.data["circuit_id"]
+        manager.clear_circuit_horizon(circuit_id)
+
+    async def async_handle_get_graph_settings(
+        call: ServiceCall,
+    ) -> ServiceResponse:
+        entry_id = call.data.get("config_entry_id")
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if not hasattr(entry, "runtime_data") or not isinstance(
+                entry.runtime_data, SpanPanelRuntimeData
+            ):
+                continue
+            if entry_id is None or entry.entry_id == entry_id:
+                mgr = entry.runtime_data.coordinator.graph_horizon_manager
+                if mgr is not None:
+                    return cast(ServiceResponse, mgr.get_all_settings())
+        return cast(ServiceResponse, {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}})
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_graph_time_horizon",
+        async_handle_set_graph_time_horizon,
+        schema=vol.Schema(
+            {
+                vol.Required("horizon"): vol.In(VALID_GRAPH_HORIZONS),
+                vol.Optional("config_entry_id"): str,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_circuit_graph_horizon",
+        async_handle_set_circuit_graph_horizon,
+        schema=vol.Schema(
+            {
+                vol.Required("circuit_id"): str,
+                vol.Required("horizon"): vol.In(VALID_GRAPH_HORIZONS),
+                vol.Optional("config_entry_id"): str,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "clear_circuit_graph_horizon",
+        async_handle_clear_circuit_graph_horizon,
+        schema=vol.Schema(
+            {
+                vol.Required("circuit_id"): str,
+                vol.Optional("config_entry_id"): str,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "get_graph_settings",
+        async_handle_get_graph_settings,
+        schema=vol.Schema({vol.Optional("config_entry_id"): str}),
+        supports_response=SupportsResponse.ONLY,
     )

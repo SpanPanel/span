@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from .current_monitor import CurrentMonitor
+    from .graph_horizon import GraphHorizonManager
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
@@ -97,6 +98,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         # Current monitor — set by async_setup_entry when monitoring is enabled
         self.current_monitor: CurrentMonitor | None = None
+
+        # Graph horizon manager — set by async_setup_entry
+        self.graph_horizon_manager: GraphHorizonManager | None = None
 
         update_interval = _STREAMING_FALLBACK_INTERVAL
 
