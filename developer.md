@@ -4,11 +4,11 @@
 
 The SPAN Panel integration consists of three repositories:
 
-| Repo               | Purpose                            | Branch              |
-| ------------------ | ---------------------------------- | ------------------- |
-| `span` (this repo) | HA custom integration (Python)     | `main`              |
-| `span-panel-api`   | API client library (Python)        | `main`              |
-| `span-card`        | Frontend dashboard (JavaScript)    | `integration-panel` |
+| Repo               | Purpose                         | Branch              |
+| ------------------ | ------------------------------- | ------------------- |
+| `span` (this repo) | HA custom integration (Python)  | `main`              |
+| `span-panel-api`   | API client library (Python)     | `main`              |
+| `span-card`        | Frontend dashboard (JavaScript) | `integration-panel` |
 
 The card repo produces two JS bundles:
 
@@ -70,7 +70,8 @@ export SPAN_CARD_DIR=../cards/span-card
 export HA_CONFIG_DIR=./ha-config
 ```
 
-VS Code loads `.env` automatically into Python terminals (requires `python.terminal.useEnvFile` enabled in workspace settings). For shell use outside VS Code, [direnv](https://direnv.net/) is recommended -- create an `.envrc` that sources `.env`:
+VS Code loads `.env` automatically into Python terminals (requires `python.terminal.useEnvFile` enabled in workspace settings). For shell use outside VS Code,
+[direnv](https://direnv.net/) is recommended -- create an `.envrc` that sources `.env`:
 
 ```bash
 echo 'dotenv' > .envrc
