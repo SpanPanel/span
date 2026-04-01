@@ -104,6 +104,7 @@ _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
 
 PANEL_URL = "/span_panel_frontend"
 PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+CARD_FILENAME = "span-panel-card.js"
 
 
 def _frontend_file_hash(filename: str) -> str:
@@ -141,17 +142,60 @@ async def async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any
     await store.async_save(settings)
 
 
+async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
+    """Ensure the card JS is registered as a Lovelace resource.
+
+    Reads the lovelace_resources storage directly and adds an entry for our
+    card URL if one isn't already present.  This avoids the MIME-type issues
+    that occur when serving from /local/ in dev mode.
+    """
+    store: Store[dict[str, list[dict[str, str]]]] = Store(hass, 1, "lovelace_resources")
+    data = await store.async_load()
+    if data is None:
+        data = {"items": []}
+
+    items: list[dict[str, str]] = data.get("items", [])
+
+    # Strip query strings when comparing so a cache-bust bump doesn't duplicate
+    base_url = url.split("?")[0]
+    for item in items:
+        if item.get("url", "").split("?")[0] == base_url:
+            # Update the URL in case the cache tag changed
+            if item["url"] != url:
+                item["url"] = url
+                await store.async_save(data)
+            return
+
+    items.append(
+        {
+            "id": hashlib.md5(base_url.encode(), usedforsecurity=False).hexdigest(),
+            "url": url,
+            "type": "module",
+        }
+    )
+    data["items"] = items
+    await store.async_save(data)
+
+
 async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     """Register or remove the sidebar panel based on stored settings."""
     settings = await async_load_panel_settings(hass)
     show = settings.get(PANEL_SHOW_SIDEBAR, True)
     admin_only = settings.get(PANEL_ADMIN_ONLY, False)
 
+    # Always register static paths so the card JS is reachable even when
+    # the sidebar panel is hidden.
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
+    )
+
+    # Auto-register the Lovelace card as a resource so users don't need a
+    # manual entry (also avoids MIME-type issues with /local/ in dev mode).
+    card_cache_tag = await hass.async_add_executor_job(_frontend_file_hash, CARD_FILENAME)
+    card_url = f"{PANEL_URL}/{CARD_FILENAME}?v={card_cache_tag}"
+    await _async_ensure_lovelace_resource(hass, card_url)
+
     if show:
-        # Always register static paths (idempotent for the URL path)
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
-        )
         # Remove first to allow re-registration with updated require_admin
         async_remove_panel(hass, "span-panel", warn_if_unknown=False)
         cache_tag = await hass.async_add_executor_job(_frontend_file_hash, "span-panel.js")

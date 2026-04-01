@@ -3,6 +3,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+_ENSURE_RESOURCE_PATCH = (
+    "custom_components.span_panel._async_ensure_lovelace_resource"
+)
+
 
 async def _fake_executor_job(func, *args):
     """Run a function synchronously, mimicking async_add_executor_job."""
@@ -39,12 +43,15 @@ class TestPanelRegistration:
             patch(
                 "custom_components.span_panel.async_remove_panel",
             ),
+            patch(_ENSURE_RESOURCE_PATCH, new_callable=AsyncMock) as mock_ensure,
         ):
             result = await async_setup(hass, {})
 
         assert result is True
         hass.http.async_register_static_paths.assert_called_once()
         mock_register.assert_called_once()
+        mock_ensure.assert_called_once()
+        assert "span-panel-card.js" in mock_ensure.call_args[0][1]
 
         call_kwargs = mock_register.call_args
         assert call_kwargs[1]["sidebar_title"] == "Span Panel"
@@ -62,6 +69,7 @@ class TestPanelRegistration:
         hass.data = {}
         hass.http = MagicMock()
         hass.http.async_register_static_paths = AsyncMock()
+        hass.async_add_executor_job = AsyncMock(side_effect=_fake_executor_job)
         hass.services = MagicMock()
         hass.services.async_register = MagicMock()
 
@@ -81,12 +89,15 @@ class TestPanelRegistration:
                 "custom_components.span_panel.async_remove_panel",
                 mock_remove,
             ),
+            patch(_ENSURE_RESOURCE_PATCH, new_callable=AsyncMock) as mock_ensure,
         ):
             result = await async_setup(hass, {})
 
         assert result is True
         mock_register.assert_not_called()
         mock_remove.assert_called_once_with(hass, "span-panel", warn_if_unknown=False)
+        # Card JS is still registered even when sidebar panel is hidden
+        mock_ensure.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_panel_admin_only_when_configured(self):
@@ -115,6 +126,7 @@ class TestPanelRegistration:
             patch(
                 "custom_components.span_panel.async_remove_panel",
             ),
+            patch(_ENSURE_RESOURCE_PATCH, new_callable=AsyncMock),
         ):
             result = await async_setup(hass, {})
 
@@ -147,6 +159,7 @@ class TestPanelRegistration:
             patch(
                 "custom_components.span_panel.async_remove_panel",
             ),
+            patch(_ENSURE_RESOURCE_PATCH, new_callable=AsyncMock),
         ):
             await async_setup(hass, {})
 
