@@ -287,7 +287,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             return
 
         await client.set_circuit_relay(self._circuit_id, "CLOSED")
-        await self.coordinator.async_request_refresh()
+        self._attr_is_on = True
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
@@ -297,7 +298,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             return
 
         await client.set_circuit_relay(self._circuit_id, "OPEN")
-        await self.coordinator.async_request_refresh()
+        self._attr_is_on = False
+        self.async_write_ha_state()
 
     def _construct_switch_unique_id(
         self,

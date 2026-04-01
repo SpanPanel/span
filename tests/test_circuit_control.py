@@ -80,10 +80,11 @@ async def test_switch_turn_on_operation() -> None:
     coordinator = _make_coordinator({"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
+    switch.async_write_ha_state = MagicMock()
     await switch.async_turn_on()
 
     coordinator.client.set_circuit_relay.assert_called_once_with("1", "CLOSED")
-    coordinator.async_request_refresh.assert_called_once()
+    assert switch.is_on is True
 
 
 @pytest.mark.asyncio
@@ -97,10 +98,11 @@ async def test_switch_turn_off_operation() -> None:
     coordinator = _make_coordinator({"1": circuit})
 
     switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
+    switch.async_write_ha_state = MagicMock()
     await switch.async_turn_off()
 
     coordinator.client.set_circuit_relay.assert_called_once_with("1", "OPEN")
-    coordinator.async_request_refresh.assert_called_once()
+    assert switch.is_on is False
 
 
 def test_switch_state_reflects_relay_state() -> None:
@@ -211,7 +213,6 @@ async def test_switch_turn_on_without_relay_support_logs_and_returns(
     await switch.async_turn_on()
 
     assert "Client does not support relay control" in caplog.text
-    coordinator.async_request_refresh.assert_not_called()
 
 
 def test_switch_relay_state_target_shows_pending_state() -> None:
@@ -491,7 +492,6 @@ async def test_switch_turn_off_without_relay_support_logs_and_returns(
     await switch.async_turn_off()
 
     assert "Client does not support relay control" in caplog.text
-    coordinator.async_request_refresh.assert_not_called()
 
 
 def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:
