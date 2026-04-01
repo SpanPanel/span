@@ -22,6 +22,7 @@ env/
 # Coverage files
 .coverage
 .coverage.*
+coverage_output.log
 .local_coverage_data
 htmlcov/
 .pytest_cache/
@@ -30,3 +31,6 @@ docs/agile-readme.md
 .claude/
 .superpowers/
 docs/superpowers/
+
+# Docker dev environment
+ha-config/

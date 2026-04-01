@@ -2,12 +2,13 @@
 
 ## Repository Layout
 
-The SPAN Panel integration consists of two repositories:
+The SPAN Panel integration consists of three repositories:
 
-| Repo               | Purpose                         | Branch              |
-| ------------------ | ------------------------------- | ------------------- |
-| `span` (this repo) | HA custom integration (Python)  | `main`              |
-| `span-card`        | Frontend dashboard (JavaScript) | `integration-panel` |
+| Repo               | Purpose                            | Branch              |
+| ------------------ | ---------------------------------- | ------------------- |
+| `span` (this repo) | HA custom integration (Python)     | `main`              |
+| `span-panel-api`   | API client library (Python)        | `main`              |
+| `span-card`        | Frontend dashboard (JavaScript)    | `integration-panel` |
 
 The card repo produces two JS bundles:
 
@@ -22,13 +23,15 @@ Both bundles are committed as build artifacts in `custom_components/span_panel/f
 - [prek](https://github.com/j178/prek) for pre-commit hooks (fast, Rust-based)
 - Python 3.14.2+
 - Node.js 18+ and npm (for the card repo)
+- [Home Assistant Core](https://developers.home-assistant.io/docs/development_environment) for local development
 - [direnv](https://direnv.net/) (recommended, for automatic env setup)
 
 ## Initial Setup
 
 ```bash
-# Clone both repos
+# Clone all repos
 git clone <span-repo-url> ~/projects/HA/span
+git clone <span-panel-api-url> ~/projects/HA/span-panel-api
 git clone <span-card-repo-url> ~/projects/HA/cards/span-card
 
 # Set up the integration
@@ -36,13 +39,41 @@ cd ~/projects/HA/span
 uv sync
 prek install
 
+# Set up the API library
+cd ~/projects/HA/span-panel-api
+uv sync
+
 # Set up the card
 cd ~/projects/HA/cards/span-card
 npm install
+```
 
-# Configure direnv (one-time)
+## Environment Variables
+
+The `.env` file configures paths to sibling repos and the local HA config directory. These variables are used by build scripts.
+
+```bash
 cd ~/projects/HA/span
-echo 'export SPAN_CARD_DIR="$HOME/projects/HA/cards/span-card"' >> .envrc
+cp .env.example .env
+```
+
+The defaults assume the standard workspace layout:
+
+```dotenv
+# Path to span-panel-api repo (for editable pip install)
+export SPAN_PANEL_API_DIR=../span-panel-api
+
+# Path to span-card frontend repo (for build-frontend.sh)
+export SPAN_CARD_DIR=../cards/span-card
+
+# Path to HA config directory
+export HA_CONFIG_DIR=./ha-config
+```
+
+VS Code loads `.env` automatically into Python terminals (requires `python.terminal.useEnvFile` enabled in workspace settings). For shell use outside VS Code, [direnv](https://direnv.net/) is recommended -- create an `.envrc` that sources `.env`:
+
+```bash
+echo 'dotenv' > .envrc
 direnv allow
 ```
 
@@ -99,11 +130,10 @@ git commit -m "feat: update frontend with card changes"
 2. Copies `dist/span-panel.js` and `dist/span-panel-card.js` into `custom_components/span_panel/frontend/dist/`
 3. Prints the files and a reminder to stage them
 
-The script needs to know where the span-card repo lives:
+The script reads `SPAN_CARD_DIR` from `.env` (or the environment). You can also pass the path as an argument:
 
 ```bash
-# Via env var (recommended -- set once in .envrc, picked up by direnv)
-export SPAN_CARD_DIR=~/projects/HA/cards/span-card
+# Uses SPAN_CARD_DIR from .env
 ./scripts/build-frontend.sh
 
 # Via argument (overrides env var)
