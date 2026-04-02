@@ -237,6 +237,12 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         monitor = CurrentMonitor(hass, entry)
         await monitor.async_start()
         runtime_data.coordinator.current_monitor = monitor
+        # Seed the monitor with the coordinator's latest snapshot so that
+        # get_monitoring_status returns circuits immediately (before the
+        # next coordinator poll cycle).
+        snapshot = runtime_data.coordinator.data
+        if snapshot is not None:
+            monitor.process_snapshot(snapshot)
         return monitor
 
     async def async_handle_set_circuit_threshold(call: ServiceCall) -> None:
