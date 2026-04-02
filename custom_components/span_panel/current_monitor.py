@@ -14,11 +14,11 @@ from datetime import datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.core import CoreState
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPanelSnapshot
 
+from .alert_dispatcher import dispatch_alert, format_notification
 from .const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
     DEFAULT_COOLDOWN_DURATION_M,
@@ -28,7 +28,6 @@ from .const import (
     DEFAULT_SPIKE_THRESHOLD_PCT,
     DEFAULT_WINDOW_DURATION_M,
     DOMAIN,
-    EVENT_CURRENT_ALERT,
 )
 from .helpers import build_circuit_unique_id, build_panel_unique_id
 from .options import (
@@ -453,7 +452,9 @@ class CurrentMonitor:
 
             alert = check_spike(state, current, rating, spike_pct, cooldown_m)
             if alert is not None:
-                self._dispatch_alert(
+                dispatch_alert(
+                    self._hass,
+                    self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=circuit.name or circuit_id,
                     alert_id=circuit_id,
@@ -462,12 +463,14 @@ class CurrentMonitor:
                     breaker_rating_a=alert.breaker_rating_a,
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
-                    snapshot=snapshot,
+                    panel_serial=snapshot.serial_number,
                 )
 
             alert = check_continuous(state, current, rating, cont_pct, window_m, cooldown_m)
             if alert is not None:
-                self._dispatch_alert(
+                dispatch_alert(
+                    self._hass,
+                    self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=circuit.name or circuit_id,
                     alert_id=circuit_id,
@@ -476,7 +479,7 @@ class CurrentMonitor:
                     breaker_rating_a=alert.breaker_rating_a,
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
-                    snapshot=snapshot,
+                    panel_serial=snapshot.serial_number,
                     window_duration_s=alert.window_duration_s,
                     over_threshold_since=alert.over_threshold_since,
                 )
@@ -509,7 +512,9 @@ class CurrentMonitor:
 
             alert = check_spike(state, current, rating, spike_pct, cooldown_m)
             if alert is not None:
-                self._dispatch_alert(
+                dispatch_alert(
+                    self._hass,
+                    self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=f"Mains {leg_label}",
                     alert_id=leg,
@@ -518,12 +523,14 @@ class CurrentMonitor:
                     breaker_rating_a=alert.breaker_rating_a,
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
-                    snapshot=snapshot,
+                    panel_serial=snapshot.serial_number,
                 )
 
             alert = check_continuous(state, current, rating, cont_pct, window_m, cooldown_m)
             if alert is not None:
-                self._dispatch_alert(
+                dispatch_alert(
+                    self._hass,
+                    self.get_global_settings(),
                     alert_type=alert.alert_type,
                     alert_name=f"Mains {leg_label}",
                     alert_id=leg,
@@ -532,216 +539,10 @@ class CurrentMonitor:
                     breaker_rating_a=alert.breaker_rating_a,
                     threshold_pct=alert.threshold_pct,
                     utilization_pct=alert.utilization_pct,
-                    snapshot=snapshot,
+                    panel_serial=snapshot.serial_number,
                     window_duration_s=alert.window_duration_s,
                     over_threshold_since=alert.over_threshold_since,
                 )
 
-    # --- Notification dispatch ---
-
-    def _dispatch_alert(
-        self,
-        *,
-        alert_type: str,
-        alert_name: str,
-        alert_id: str,
-        alert_source: str,
-        current_a: float,
-        breaker_rating_a: float,
-        threshold_pct: int,
-        utilization_pct: float,
-        snapshot: SpanPanelSnapshot,
-        window_duration_s: int | None = None,
-        over_threshold_since: str | None = None,
-    ) -> None:
-        """Dispatch alert through all enabled notification channels."""
-        event_data: dict[str, Any] = {
-            "alert_source": alert_source,
-            "alert_id": alert_id,
-            "alert_name": alert_name,
-            "alert_type": alert_type,
-            "current_a": round(current_a, 1),
-            "breaker_rating_a": breaker_rating_a,
-            "threshold_pct": threshold_pct,
-            "utilization_pct": utilization_pct,
-            "panel_serial": snapshot.serial_number,
-        }
-        if window_duration_s is not None:
-            event_data["window_duration_s"] = window_duration_s
-        if over_threshold_since is not None:
-            event_data["over_threshold_since"] = over_threshold_since
-
-        opts = self.get_global_settings()
-
-        if opts.get(ENABLE_EVENT_BUS, True):
-            self._hass.bus.async_fire(EVENT_CURRENT_ALERT, event_data)
-
-        title, message = self._format_notification(
-            alert_type=alert_type,
-            alert_name=alert_name,
-            alert_id=alert_id,
-            current_a=current_a,
-            breaker_rating_a=breaker_rating_a,
-            threshold_pct=threshold_pct,
-            utilization_pct=utilization_pct,
-            window_duration_s=window_duration_s,
-            title_template=opts.get(
-                NOTIFICATION_TITLE_TEMPLATE, DEFAULT_NOTIFICATION_TITLE_TEMPLATE
-            ),
-            message_template=opts.get(
-                NOTIFICATION_MESSAGE_TEMPLATE, DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE
-            ),
-        )
-
-        if self._hass.state is not CoreState.running:
-            _LOGGER.debug(
-                "Skipping alert notifications during startup (state=%s)",
-                self._hass.state,
-            )
-        else:
-            raw_targets = opts.get(NOTIFY_TARGETS, "notify.notify")
-            if isinstance(raw_targets, str):
-                notify_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
-            else:
-                notify_targets = raw_targets
-
-            priority = opts.get(NOTIFICATION_PRIORITY, DEFAULT_NOTIFICATION_PRIORITY)
-            push_data = self._build_push_data(priority)
-
-            for target in notify_targets:
-                self._hass.async_create_task(
-                    self._dispatch_to_target(target, title, message, push_data)
-                )
-
-            if opts.get(ENABLE_PERSISTENT_NOTIFICATIONS, True):
-                notification_id = f"span_panel_{alert_source}_{alert_id}_{alert_type}"
-                self._hass.async_create_task(
-                    self._hass.services.async_call(
-                        "persistent_notification",
-                        "create",
-                        {
-                            "title": title,
-                            "message": message,
-                            "notification_id": notification_id,
-                        },
-                    )
-                )
-
-        _LOGGER.warning(
-            "Current alert: %s — %s at %.1fA (%.1f%% of %.0fA rating)",
-            alert_name,
-            alert_type,
-            current_a,
-            utilization_pct,
-            breaker_rating_a,
-        )
-
-    @staticmethod
-    def _format_notification(
-        *,
-        alert_type: str,
-        alert_name: str,
-        alert_id: str,
-        current_a: float,
-        breaker_rating_a: float,
-        threshold_pct: int,
-        utilization_pct: float,
-        window_duration_s: int | None,
-        title_template: str,
-        message_template: str,
-    ) -> tuple[str, str]:
-        """Format notification title and message using templates.
-
-        Available placeholders:
-            {name}            - Circuit/mains friendly name
-            {entity_id}       - Entity ID (e.g. sensor.kitchen_current)
-            {alert_type}      - "spike" or "continuous"
-            {current_a}       - Current draw in amps (e.g. 18.3)
-            {breaker_rating_a}- Breaker rating in amps (e.g. 20)
-            {threshold_pct}   - Configured threshold percentage
-            {utilization_pct} - Actual utilization percentage
-            {window_m}        - Window duration in minutes (continuous only)
-        """
-        window_m = (window_duration_s or 0) // 60
-        template_vars = {
-            "name": alert_name,
-            "entity_id": alert_id,
-            "alert_type": alert_type,
-            "current_a": f"{current_a:.1f}",
-            "breaker_rating_a": f"{breaker_rating_a:.0f}",
-            "threshold_pct": str(threshold_pct),
-            "utilization_pct": str(utilization_pct),
-            "window_m": str(window_m),
-        }
-        try:
-            title = title_template.format_map(template_vars)
-        except (KeyError, ValueError):
-            title = f"SPAN: {alert_name} {alert_type}"
-        try:
-            message = message_template.format_map(template_vars)
-        except (KeyError, ValueError):
-            message = (
-                f"{alert_name} at {current_a:.1f}A "
-                f"({utilization_pct}% of {breaker_rating_a:.0f}A rating)"
-            )
-        return title, message
-
-    @staticmethod
-    def _build_push_data(priority: str) -> dict[str, Any]:
-        """Build platform-specific push data for the given priority level.
-
-        Returns a dict suitable for the ``data`` parameter of a notify service
-        call.  Includes keys for both iOS (``push.interruption-level``) and
-        Android (``priority``, ``channel``) so the correct one is picked up
-        regardless of the receiving device platform.
-        """
-        if priority == "default":
-            return {}
-
-        android_priority_map = {
-            "passive": "low",
-            "active": "default",
-            "time-sensitive": "high",
-            "critical": "high",
-        }
-        data: dict[str, Any] = {
-            "push": {"interruption-level": priority},
-            "priority": android_priority_map.get(priority, "default"),
-        }
-        if priority == "critical":
-            data["push"]["sound"] = {
-                "name": "default",
-                "critical": 1,
-                "volume": 1.0,
-            }
-            data["channel"] = "alarm_stream"
-        elif priority == "time-sensitive":
-            data["channel"] = "alarm_stream_other"
-        return data
-
-    async def _dispatch_to_target(
-        self,
-        target: str,
-        title: str,
-        message: str,
-        push_data: dict[str, Any],
-    ) -> None:
-        """Send a notification to a single target.
-
-        Handles both entity-based targets (``notify.mobile_app_*``) which use
-        ``notify.send_message`` with an ``entity_id``, and legacy service-based
-        targets (``notify.notify``) which call the service directly.
-        """
-        service_data: dict[str, Any] = {"title": title, "message": message}
-        if push_data:
-            service_data["data"] = push_data
-
-        is_entity = target.startswith("notify.") and self._hass.states.get(target)
-
-        if is_entity:
-            service_data["entity_id"] = target
-            await self._hass.services.async_call("notify", "send_message", service_data)
-        else:
-            domain = target.split(".")[0] if "." in target else "notify"
-            service = target.split(".")[1] if "." in target else "notify"
-            await self._hass.services.async_call(domain, service, service_data)
+    # Backward-compatible static alias kept for existing callers/tests.
+    _format_notification = staticmethod(format_notification)  # type: ignore[assignment]
