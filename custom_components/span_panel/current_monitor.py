@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +42,12 @@ from .options import (
     NOTIFY_TARGETS,
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
+)
+from .threshold_evaluator import (
+    check_continuous,
+    check_spike,
+    is_monitoring_disabled,
+    resolve_thresholds,
 )
 
 if TYPE_CHECKING:
@@ -297,7 +303,9 @@ class CurrentMonitor:
             )
             last_current = state.last_current_a if state else 0.0
             utilization = round(last_current / rating * 100, 1) if rating else None
-            cont_pct, spike_pct, window_m, cooldown_m = self._resolve_circuit_thresholds(cid)
+            cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
+                self._circuit_overrides.get(cid, {}), self.get_global_settings()
+            )
             entity_id = self._resolve_circuit_entity_id(cid)
             override = self._circuit_overrides.get(cid, {})
             has_override = bool(override)
@@ -337,7 +345,9 @@ class CurrentMonitor:
         utilization = round(peak_current / main_rating * 100, 1) if main_rating else None
 
         # Use upstream_l1 thresholds as the representative (they're the same unless overridden)
-        cont_pct, spike_pct, window_m, cooldown_m = self._resolve_mains_thresholds("upstream_l1")
+        cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
+            self._mains_overrides.get("upstream_l1", {}), self.get_global_settings()
+        )
         override = self._mains_overrides.get("upstream_l1", {})
         has_override = bool(override)
         monitoring_enabled = override.get("monitoring_enabled", True)
@@ -410,63 +420,17 @@ class CurrentMonitor:
         data = await store.async_load()
         return bool(data and data.get("enabled", False))
 
-    # --- Threshold resolution ---
+    # --- Threshold resolution (delegated to threshold_evaluator) ---
 
     def _resolve_circuit_thresholds(self, circuit_id: str) -> tuple[int, int, int, int]:
         """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a circuit."""
-        override = self._circuit_overrides.get(circuit_id, {})
-        opts = self.get_global_settings()
-        return (
-            override.get(
-                CONTINUOUS_THRESHOLD_PCT,
-                opts.get(CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT),
-            ),
-            override.get(
-                SPIKE_THRESHOLD_PCT,
-                opts.get(SPIKE_THRESHOLD_PCT, DEFAULT_SPIKE_THRESHOLD_PCT),
-            ),
-            override.get(
-                WINDOW_DURATION_M,
-                opts.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
-            ),
-            override.get(
-                COOLDOWN_DURATION_M,
-                opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
-            ),
+        return resolve_thresholds(
+            self._circuit_overrides.get(circuit_id, {}), self.get_global_settings()
         )
 
     def _resolve_mains_thresholds(self, leg: str) -> tuple[int, int, int, int]:
         """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a mains leg."""
-        override = self._mains_overrides.get(leg, {})
-        opts = self.get_global_settings()
-        return (
-            override.get(
-                CONTINUOUS_THRESHOLD_PCT,
-                opts.get(CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT),
-            ),
-            override.get(
-                SPIKE_THRESHOLD_PCT,
-                opts.get(SPIKE_THRESHOLD_PCT, DEFAULT_SPIKE_THRESHOLD_PCT),
-            ),
-            override.get(
-                WINDOW_DURATION_M,
-                opts.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
-            ),
-            override.get(
-                COOLDOWN_DURATION_M,
-                opts.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
-            ),
-        )
-
-    def _is_circuit_monitoring_disabled(self, circuit_id: str) -> bool:
-        """Check if monitoring is disabled for a specific circuit."""
-        override = self._circuit_overrides.get(circuit_id, {})
-        return override.get("monitoring_enabled") is False
-
-    def _is_mains_monitoring_disabled(self, leg: str) -> bool:
-        """Check if monitoring is disabled for a specific mains leg."""
-        override = self._mains_overrides.get(leg, {})
-        return override.get("monitoring_enabled") is False
+        return resolve_thresholds(self._mains_overrides.get(leg, {}), self.get_global_settings())
 
     # --- Circuit evaluation ---
 
@@ -475,7 +439,7 @@ class CurrentMonitor:
         for circuit_id, circuit in snapshot.circuits.items():
             if circuit.current_a is None or circuit.breaker_rating_a is None:
                 continue
-            if self._is_circuit_monitoring_disabled(circuit_id):
+            if is_monitoring_disabled(self._circuit_overrides.get(circuit_id, {})):
                 continue
 
             state = self._circuit_states.setdefault(circuit_id, MonitoredPointState())
@@ -483,31 +447,39 @@ class CurrentMonitor:
             rating = circuit.breaker_rating_a
             state.last_current_a = current
 
-            cont_pct, spike_pct, window_m, cooldown_m = self._resolve_circuit_thresholds(circuit_id)
+            cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
+                self._circuit_overrides.get(circuit_id, {}), self.get_global_settings()
+            )
 
-            self._check_spike(
-                state,
-                current,
-                rating,
-                spike_pct,
-                cooldown_m,
-                alert_name=circuit.name,
-                alert_id=circuit_id,
-                alert_source="circuit",
-                snapshot=snapshot,
-            )
-            self._check_continuous(
-                state,
-                current,
-                rating,
-                cont_pct,
-                window_m,
-                cooldown_m,
-                alert_name=circuit.name,
-                alert_id=circuit_id,
-                alert_source="circuit",
-                snapshot=snapshot,
-            )
+            alert = check_spike(state, current, rating, spike_pct, cooldown_m)
+            if alert is not None:
+                self._dispatch_alert(
+                    alert_type=alert.alert_type,
+                    alert_name=circuit.name or circuit_id,
+                    alert_id=circuit_id,
+                    alert_source="circuit",
+                    current_a=alert.current_a,
+                    breaker_rating_a=alert.breaker_rating_a,
+                    threshold_pct=alert.threshold_pct,
+                    utilization_pct=alert.utilization_pct,
+                    snapshot=snapshot,
+                )
+
+            alert = check_continuous(state, current, rating, cont_pct, window_m, cooldown_m)
+            if alert is not None:
+                self._dispatch_alert(
+                    alert_type=alert.alert_type,
+                    alert_name=circuit.name or circuit_id,
+                    alert_id=circuit_id,
+                    alert_source="circuit",
+                    current_a=alert.current_a,
+                    breaker_rating_a=alert.breaker_rating_a,
+                    threshold_pct=alert.threshold_pct,
+                    utilization_pct=alert.utilization_pct,
+                    snapshot=snapshot,
+                    window_duration_s=alert.window_duration_s,
+                    over_threshold_since=alert.over_threshold_since,
+                )
 
     # --- Mains evaluation ---
 
@@ -522,133 +494,48 @@ class CurrentMonitor:
             current_val = getattr(snapshot, attr, None)
             if current_val is None:
                 continue
-            if self._is_mains_monitoring_disabled(leg):
+            if is_monitoring_disabled(self._mains_overrides.get(leg, {})):
                 continue
 
             state = self._mains_states.setdefault(leg, MonitoredPointState())
             current = abs(current_val)
             state.last_current_a = current
 
-            cont_pct, spike_pct, window_m, cooldown_m = self._resolve_mains_thresholds(leg)
+            cont_pct, spike_pct, window_m, cooldown_m = resolve_thresholds(
+                self._mains_overrides.get(leg, {}), self.get_global_settings()
+            )
 
             leg_label = leg.replace("_", " ").title()
 
-            self._check_spike(
-                state,
-                current,
-                rating,
-                spike_pct,
-                cooldown_m,
-                alert_name=f"Mains {leg_label}",
-                alert_id=leg,
-                alert_source="mains",
-                snapshot=snapshot,
-            )
-            self._check_continuous(
-                state,
-                current,
-                rating,
-                cont_pct,
-                window_m,
-                cooldown_m,
-                alert_name=f"Mains {leg_label}",
-                alert_id=leg,
-                alert_source="mains",
-                snapshot=snapshot,
-            )
+            alert = check_spike(state, current, rating, spike_pct, cooldown_m)
+            if alert is not None:
+                self._dispatch_alert(
+                    alert_type=alert.alert_type,
+                    alert_name=f"Mains {leg_label}",
+                    alert_id=leg,
+                    alert_source="mains",
+                    current_a=alert.current_a,
+                    breaker_rating_a=alert.breaker_rating_a,
+                    threshold_pct=alert.threshold_pct,
+                    utilization_pct=alert.utilization_pct,
+                    snapshot=snapshot,
+                )
 
-    # --- Threshold checks ---
-
-    def _check_spike(
-        self,
-        state: MonitoredPointState,
-        current: float,
-        rating: float,
-        threshold_pct: int,
-        cooldown_m: int,
-        *,
-        alert_name: str,
-        alert_id: str,
-        alert_source: str,
-        snapshot: SpanPanelSnapshot,
-    ) -> None:
-        """Check for instantaneous spike condition."""
-        limit = rating * threshold_pct / 100.0
-        if current < limit:
-            return
-
-        now = datetime.now(UTC)
-        if state.last_spike_alert is not None and now - state.last_spike_alert < timedelta(
-            minutes=cooldown_m
-        ):
-            return
-
-        state.last_spike_alert = now
-        utilization = round(current / rating * 100, 1)
-
-        self._dispatch_alert(
-            alert_type="spike",
-            alert_name=alert_name,
-            alert_id=alert_id,
-            alert_source=alert_source,
-            current_a=current,
-            breaker_rating_a=rating,
-            threshold_pct=threshold_pct,
-            utilization_pct=utilization,
-            snapshot=snapshot,
-        )
-
-    def _check_continuous(
-        self,
-        state: MonitoredPointState,
-        current: float,
-        rating: float,
-        threshold_pct: int,
-        window_m: int,
-        cooldown_m: int,
-        *,
-        alert_name: str,
-        alert_id: str,
-        alert_source: str,
-        snapshot: SpanPanelSnapshot,
-    ) -> None:
-        """Check for sustained continuous overload condition."""
-        limit = rating * threshold_pct / 100.0
-        now = datetime.now(UTC)
-
-        if current < limit:
-            state.over_threshold_since = None
-            return
-
-        if state.over_threshold_since is None:
-            state.over_threshold_since = now
-
-        elapsed = now - state.over_threshold_since
-        if elapsed < timedelta(minutes=window_m):
-            return
-
-        if (
-            state.last_continuous_alert is not None
-            and now - state.last_continuous_alert < timedelta(minutes=cooldown_m)
-        ):
-            return
-
-        state.last_continuous_alert = now
-        utilization = round(current / rating * 100, 1)
-
-        self._dispatch_alert(
-            alert_type="continuous_overload",
-            alert_name=alert_name,
-            alert_id=alert_id,
-            alert_source=alert_source,
-            current_a=current,
-            breaker_rating_a=rating,
-            threshold_pct=threshold_pct,
-            utilization_pct=utilization,
-            snapshot=snapshot,
-            window_duration_s=int(elapsed.total_seconds()),
-            over_threshold_since=state.over_threshold_since.isoformat(),
-        )
+            alert = check_continuous(state, current, rating, cont_pct, window_m, cooldown_m)
+            if alert is not None:
+                self._dispatch_alert(
+                    alert_type=alert.alert_type,
+                    alert_name=f"Mains {leg_label}",
+                    alert_id=leg,
+                    alert_source="mains",
+                    current_a=alert.current_a,
+                    breaker_rating_a=alert.breaker_rating_a,
+                    threshold_pct=alert.threshold_pct,
+                    utilization_pct=alert.utilization_pct,
+                    snapshot=snapshot,
+                    window_duration_s=alert.window_duration_s,
+                    over_threshold_since=alert.over_threshold_since,
+                )
 
     # --- Notification dispatch ---
 
