@@ -30,9 +30,14 @@ API directly:
 > Warranty. See the SPAN API Scope & Responsibility Model in the [SPAN API documentation](https://github.com/spanio/SPAN-API-Client-Docs).
 
 This integration provides sensors and controls for understanding an installation's power consumption, energy usage, and controlling user-manageable panel
-circuits. You can optionally use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control. The
-[SPAN Panel Simulator](https://github.com/SpanPanel/simulator) add-on lets you clone your panel's circuit layout for testing, or model an upgrade to evaluate
-firmware or integration changes in a sandbox before applying them to your real panel.
+circuits.
+
+The integration includes a built-in dashboard accessible from the Home Assistant sidebar, providing real-time circuit-level power visualization, current
+monitoring with configurable alerts, and circuit settings for relays and load shedding. See [Frontend Dashboard](frontend.md) for details. You can optionally
+use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control.
+
+The [SPAN Panel Simulator](https://github.com/SpanPanel/simulator) HA App lets you clone your panel's circuit layout for testing, or model an upgrade to
+evaluate firmware or integration changes in a sandbox before applying them to your real panel.
 
 This integration communicates with the SPAN Panel over your local network using SPAN's official
 [Electrification Bus (eBus)](https://github.com/spanio/SPAN-API-Client-Docs) framework — an open, multi-vendor integration standard for home energy
