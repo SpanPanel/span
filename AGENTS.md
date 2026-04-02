@@ -43,6 +43,17 @@ service field descriptions, error messages, etc.), always edit `strings.json` fi
 `strings.json` to `translations/en.json` and validates that all other language files have no missing or orphaned keys. Never edit `translations/en.json`
 directly — it is generated automatically.
 
+## Documentation Artifacts
+
+When using superpowers, planning tools, spec generators, or other tools that produce design documents, plans, specs, or analysis artifacts, place, read, edit
+those files in the `SpanPanel_Docs/span/docs/` folder in the workspace — not in this repository. Use the appropriate subfolder:
+
+- `SpanPanel_Docs/span/docs/superpowers/plans` — superpowers artifacts
+- `SpanPanel_Docs/span/docs/dev/` — developer plans, specs, and design documents
+- Do NOT create documents in the `span/docs` folders or subfolders
+
+Do not commit documentation artifacts to the `span` integration repo itself.
+
 ## Service Registration Requirements
 
 All services registered by this integration MUST conform to the following requirements. These align with Home Assistant core's service architecture and ensure
