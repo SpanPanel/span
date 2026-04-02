@@ -468,112 +468,112 @@
       "description": "すべての追跡対象回路と主幹レグの現在のモニタリング状態を返します。"
     },
     "set_global_monitoring": {
-      "name": "Set Global Monitoring",
-      "description": "Update global monitoring thresholds and notification settings.",
+      "name": "グローバル監視の設定",
+      "description": "グローバル監視のしきい値と通知設定を更新します。",
       "fields": {
         "continuous_threshold_pct": {
-          "name": "Continuous Threshold",
-          "description": "Percentage of breaker rating for continuous overload detection."
+          "name": "連続しきい値",
+          "description": "連続過負荷検出のためのブレーカー定格に対する割合。"
         },
         "spike_threshold_pct": {
-          "name": "Spike Threshold",
-          "description": "Percentage of breaker rating for spike detection."
+          "name": "スパイクしきい値",
+          "description": "スパイク検出のためのブレーカー定格に対する割合。"
         },
         "window_duration_m": {
-          "name": "Window Duration",
-          "description": "Minutes of sustained overload before alerting."
+          "name": "ウィンドウ期間",
+          "description": "アラートを発する前の持続的過負荷の分数。"
         },
         "cooldown_duration_m": {
-          "name": "Cooldown Duration",
-          "description": "Minutes between repeated alerts for the same point."
+          "name": "クールダウン期間",
+          "description": "同じポイントの繰り返しアラート間の分数。"
         },
         "notify_targets": {
-          "name": "Notification Targets",
-          "description": "Comma-separated list of notify service targets."
+          "name": "通知ターゲット",
+          "description": "通知サービスターゲットのカンマ区切りリスト。"
         },
         "enable_persistent_notifications": {
-          "name": "Persistent Notifications",
-          "description": "Create persistent notifications for alerts."
+          "name": "永続的通知",
+          "description": "アラートの永続的通知を作成します。"
         },
         "enable_event_bus": {
-          "name": "Event Bus",
-          "description": "Fire events on the HA event bus for alerts."
+          "name": "イベントバス",
+          "description": "アラートのHAイベントバスにイベントを発行します。"
         },
         "notification_title_template": {
-          "name": "Notification Title Template",
-          "description": "Template for notification title. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+          "name": "通知タイトルテンプレート",
+          "description": "通知タイトルのテンプレート。プレースホルダー: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}。"
         },
         "notification_message_template": {
-          "name": "Notification Message Template",
-          "description": "Template for notification message body. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+          "name": "通知メッセージテンプレート",
+          "description": "通知メッセージ本文のテンプレート。プレースホルダー: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}。"
         },
         "notification_priority": {
-          "name": "Notification Priority",
-          "description": "Push notification priority level. Controls interruption behavior on mobile devices (iOS: interruption-level, Android: priority/channel)."
+          "name": "通知優先度",
+          "description": "プッシュ通知の優先度レベル。モバイルデバイスでの割り込み動作を制御します（iOS: interruption-level、Android: priority/チャンネル）。"
         }
       }
     },
     "set_graph_time_horizon": {
-      "name": "Set graph time horizon",
-      "description": "Set the global default time horizon for circuit graphs.",
+      "name": "グラフの時間範囲を設定",
+      "description": "回路グラフのグローバルデフォルト時間範囲を設定します。",
       "fields": {
         "horizon": {
-          "name": "Horizon",
-          "description": "Time window preset for graph display."
+          "name": "時間範囲",
+          "description": "グラフ表示用の時間ウィンドウプリセット。"
         }
       }
     },
     "set_circuit_graph_horizon": {
-      "name": "Set circuit graph horizon",
-      "description": "Set a per-circuit time horizon override for graphs.",
+      "name": "回路別グラフ時間範囲を設定",
+      "description": "回路別のグラフ時間範囲オーバーライドを設定します。",
       "fields": {
         "circuit_id": {
-          "name": "Circuit ID",
-          "description": "The circuit identifier to override."
+          "name": "回路ID",
+          "description": "オーバーライドする回路の識別子。"
         },
         "horizon": {
-          "name": "Horizon",
-          "description": "Time window preset for graph display."
+          "name": "時間範囲",
+          "description": "グラフ表示用の時間ウィンドウプリセット。"
         }
       }
     },
     "clear_circuit_graph_horizon": {
-      "name": "Clear circuit graph horizon",
-      "description": "Remove a per-circuit graph horizon override, reverting to the global default.",
+      "name": "回路別グラフ時間範囲をクリア",
+      "description": "回路別のグラフ時間範囲オーバーライドを削除し、グローバルデフォルトに戻します。",
       "fields": {
         "circuit_id": {
-          "name": "Circuit ID",
-          "description": "The circuit identifier to clear the override for."
+          "name": "回路ID",
+          "description": "オーバーライドをクリアする回路の識別子。"
         }
       }
     },
     "set_subdevice_graph_horizon": {
-      "name": "Set sub-device graph horizon",
-      "description": "Set a per-sub-device time horizon override for graphs.",
+      "name": "サブデバイス別グラフ時間範囲を設定",
+      "description": "サブデバイス別のグラフ時間範囲オーバーライドを設定します。",
       "fields": {
         "subdevice_id": {
-          "name": "Sub-device ID",
-          "description": "The sub-device identifier to override."
+          "name": "サブデバイスID",
+          "description": "オーバーライドするサブデバイスの識別子。"
         },
         "horizon": {
-          "name": "Horizon",
-          "description": "Time window preset for graph display."
+          "name": "時間範囲",
+          "description": "グラフ表示用の時間ウィンドウプリセット。"
         }
       }
     },
     "clear_subdevice_graph_horizon": {
-      "name": "Clear sub-device graph horizon",
-      "description": "Remove a per-sub-device graph horizon override, reverting to the global default.",
+      "name": "サブデバイス別グラフ時間範囲をクリア",
+      "description": "サブデバイス別のグラフ時間範囲オーバーライドを削除し、グローバルデフォルトに戻します。",
       "fields": {
         "subdevice_id": {
-          "name": "Sub-device ID",
-          "description": "The sub-device identifier to clear the override for."
+          "name": "サブデバイスID",
+          "description": "オーバーライドをクリアするサブデバイスの識別子。"
         }
       }
     },
     "get_graph_settings": {
-      "name": "Get graph settings",
-      "description": "Returns the current global and per-circuit graph horizon settings."
+      "name": "グラフ設定を取得",
+      "description": "現在のグローバルおよび回路別のグラフ時間範囲設定を返します。"
     }
   }
 }

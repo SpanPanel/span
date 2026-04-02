@@ -468,112 +468,112 @@
       "description": "Retourne l'état actuel de surveillance pour tous les circuits et phases du réseau suivis."
     },
     "set_global_monitoring": {
-      "name": "Set Global Monitoring",
-      "description": "Update global monitoring thresholds and notification settings.",
+      "name": "Configurer la surveillance globale",
+      "description": "Mettre à jour les seuils de surveillance globale et les paramètres de notification.",
       "fields": {
         "continuous_threshold_pct": {
-          "name": "Continuous Threshold",
-          "description": "Percentage of breaker rating for continuous overload detection."
+          "name": "Seuil continu",
+          "description": "Pourcentage de la capacité du disjoncteur pour la détection de surcharge continue."
         },
         "spike_threshold_pct": {
-          "name": "Spike Threshold",
-          "description": "Percentage of breaker rating for spike detection."
+          "name": "Seuil de pointe",
+          "description": "Pourcentage de la capacité du disjoncteur pour la détection de pointes."
         },
         "window_duration_m": {
-          "name": "Window Duration",
-          "description": "Minutes of sustained overload before alerting."
+          "name": "Durée de la fenêtre",
+          "description": "Minutes de surcharge soutenue avant de déclencher une alerte."
         },
         "cooldown_duration_m": {
-          "name": "Cooldown Duration",
-          "description": "Minutes between repeated alerts for the same point."
+          "name": "Durée de refroidissement",
+          "description": "Minutes entre les alertes répétées pour le même point."
         },
         "notify_targets": {
-          "name": "Notification Targets",
-          "description": "Comma-separated list of notify service targets."
+          "name": "Cibles de notification",
+          "description": "Liste séparée par des virgules des cibles de services de notification."
         },
         "enable_persistent_notifications": {
-          "name": "Persistent Notifications",
-          "description": "Create persistent notifications for alerts."
+          "name": "Notifications persistantes",
+          "description": "Créer des notifications persistantes pour les alertes."
         },
         "enable_event_bus": {
-          "name": "Event Bus",
-          "description": "Fire events on the HA event bus for alerts."
+          "name": "Bus d'événements",
+          "description": "Émettre des événements sur le bus d'événements HA pour les alertes."
         },
         "notification_title_template": {
-          "name": "Notification Title Template",
-          "description": "Template for notification title. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+          "name": "Modèle de titre de notification",
+          "description": "Modèle pour le titre de la notification. Marqueurs : {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
         },
         "notification_message_template": {
-          "name": "Notification Message Template",
-          "description": "Template for notification message body. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+          "name": "Modèle de message de notification",
+          "description": "Modèle pour le corps du message de notification. Marqueurs : {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
         },
         "notification_priority": {
-          "name": "Notification Priority",
-          "description": "Push notification priority level. Controls interruption behavior on mobile devices (iOS: interruption-level, Android: priority/channel)."
+          "name": "Priorité de notification",
+          "description": "Niveau de priorité de la notification push. Contrôle le comportement d'interruption sur les appareils mobiles (iOS : interruption-level, Android : priority/canal)."
         }
       }
     },
     "set_graph_time_horizon": {
-      "name": "Set graph time horizon",
-      "description": "Set the global default time horizon for circuit graphs.",
+      "name": "Définir l'horizon temporel du graphique",
+      "description": "Définit l'horizon temporel par défaut global pour les graphiques de circuits.",
       "fields": {
         "horizon": {
           "name": "Horizon",
-          "description": "Time window preset for graph display."
+          "description": "Fenêtre temporelle prédéfinie pour l'affichage du graphique."
         }
       }
     },
     "set_circuit_graph_horizon": {
-      "name": "Set circuit graph horizon",
-      "description": "Set a per-circuit time horizon override for graphs.",
+      "name": "Définir l'horizon de graphique par circuit",
+      "description": "Définit un remplacement d'horizon temporel par circuit pour les graphiques.",
       "fields": {
         "circuit_id": {
-          "name": "Circuit ID",
-          "description": "The circuit identifier to override."
+          "name": "ID du circuit",
+          "description": "L'identifiant du circuit à remplacer."
         },
         "horizon": {
           "name": "Horizon",
-          "description": "Time window preset for graph display."
+          "description": "Fenêtre temporelle prédéfinie pour l'affichage du graphique."
         }
       }
     },
     "clear_circuit_graph_horizon": {
-      "name": "Clear circuit graph horizon",
-      "description": "Remove a per-circuit graph horizon override, reverting to the global default.",
+      "name": "Effacer l'horizon de graphique du circuit",
+      "description": "Supprime le remplacement d'horizon de graphique par circuit, revenant à la valeur par défaut globale.",
       "fields": {
         "circuit_id": {
-          "name": "Circuit ID",
-          "description": "The circuit identifier to clear the override for."
+          "name": "ID du circuit",
+          "description": "L'identifiant du circuit pour lequel effacer le remplacement."
         }
       }
     },
     "set_subdevice_graph_horizon": {
-      "name": "Set sub-device graph horizon",
-      "description": "Set a per-sub-device time horizon override for graphs.",
+      "name": "Définir l'horizon de graphique par sous-appareil",
+      "description": "Définit un remplacement d'horizon temporel par sous-appareil pour les graphiques.",
       "fields": {
         "subdevice_id": {
-          "name": "Sub-device ID",
-          "description": "The sub-device identifier to override."
+          "name": "ID du sous-appareil",
+          "description": "L'identifiant du sous-appareil à remplacer."
         },
         "horizon": {
           "name": "Horizon",
-          "description": "Time window preset for graph display."
+          "description": "Fenêtre temporelle prédéfinie pour l'affichage du graphique."
         }
       }
     },
     "clear_subdevice_graph_horizon": {
-      "name": "Clear sub-device graph horizon",
-      "description": "Remove a per-sub-device graph horizon override, reverting to the global default.",
+      "name": "Effacer l'horizon de graphique du sous-appareil",
+      "description": "Supprime le remplacement d'horizon de graphique par sous-appareil, revenant à la valeur par défaut globale.",
       "fields": {
         "subdevice_id": {
-          "name": "Sub-device ID",
-          "description": "The sub-device identifier to clear the override for."
+          "name": "ID du sous-appareil",
+          "description": "L'identifiant du sous-appareil pour lequel effacer le remplacement."
         }
       }
     },
     "get_graph_settings": {
-      "name": "Get graph settings",
-      "description": "Returns the current global and per-circuit graph horizon settings."
+      "name": "Obtenir les paramètres de graphique",
+      "description": "Retourne les paramètres actuels d'horizon de graphique globaux et par circuit."
     }
   }
 }

@@ -17,7 +17,7 @@ TRANSLATIONS_DIR = COMPONENT_DIR / "translations"
 EN_PATH = TRANSLATIONS_DIR / "en.json"
 
 
-def collect_leaf_keys(obj: dict | list | str, prefix: str = "") -> set[str]:
+def collect_leaf_keys(obj: dict | str, prefix: str = "") -> set[str]:
     """Recursively collect dot-delimited paths to leaf (non-dict) values."""
     keys: set[str] = set()
     if isinstance(obj, dict):
@@ -30,7 +30,7 @@ def collect_leaf_keys(obj: dict | list | str, prefix: str = "") -> set[str]:
     return keys
 
 
-def collect_all_keys(obj: dict | list | str, prefix: str = "") -> set[str]:
+def collect_all_keys(obj: dict | str, prefix: str = "") -> set[str]:
     """Recursively collect all dot-delimited key paths from a nested dict."""
     keys: set[str] = set()
     if isinstance(obj, dict):
