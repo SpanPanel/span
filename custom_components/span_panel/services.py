@@ -60,6 +60,8 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 continue
 
             snapshot = entry.runtime_data.coordinator.data
+            if snapshot is None:
+                continue
             serial = snapshot.serial_number
             circuits = []
 
