@@ -82,7 +82,8 @@ async def test_sensor_async_setup_entry_logs_and_reraises_errors(
     ):
         await async_setup_entry(hass, entry, MagicMock())
 
-    assert "Error in async_setup_entry: broken sensor setup" in caplog.text
+    assert "Error in async_setup_entry" in caplog.text
+    assert "broken sensor setup" in caplog.text
 
 
 def test_create_native_sensors_concatenates_sensor_groups() -> None:

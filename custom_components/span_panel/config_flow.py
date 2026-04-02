@@ -416,11 +416,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Check proximityProven before calling register_v2 (avoids 15-min block).
         # On older firmware the field is None — fall through to register_v2 directly.
-        detection = await detect_api_version(
-            self.host,
-            port=self._http_port,
-            httpx_client=get_async_client(self.hass, verify_ssl=False),
-        )
+        try:
+            detection = await detect_api_version(
+                self.host,
+                port=self._http_port,
+                httpx_client=get_async_client(self.hass, verify_ssl=False),
+            )
+        except (SpanPanelAPIError, SpanPanelConnectionError, SpanPanelTimeoutError) as err:
+            _LOGGER.warning("Failed to detect API version during proximity auth: %s", err)
+            return await self.async_step_auth_proximity()
         proximity_status = (
             detection.status_info.proximity_proven if detection.status_info is not None else None
         )

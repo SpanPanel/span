@@ -110,8 +110,8 @@ async def async_setup_entry(
         await coordinator.async_request_refresh()
 
         _LOGGER.debug("Native sensor platform setup completed with %d entities", len(entities))
-    except Exception as err:
-        _LOGGER.error("Error in async_setup_entry: %s", err)
+    except Exception:
+        _LOGGER.exception("Error in async_setup_entry")
         raise
 
 

@@ -27,7 +27,7 @@ for circuit priority icons are displayed alongside.
 
 Use the **Enable Switches** toggle in the banner to globally enable or disable circuit switch controls.
 
-![Panel Dashboard](images/fontend.png)
+![Panel Dashboard](images/frontend.png)
 
 ## Monitoring View
 
