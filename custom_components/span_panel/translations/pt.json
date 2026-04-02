@@ -72,7 +72,11 @@
         "title": "Registo de Domínio"
       },
       "reauth_confirm": {
-        "description": "O Painel Span em {host} requer re-autenticação. Será pedido que forneça a frase-passe do seu painel ou prove proximidade.",
+        "description": "O Painel Span em {host} requer re-autenticação.",
+        "menu_options": {
+          "auth_passphrase": "Inserir Frase-passe do Painel",
+          "auth_proximity": "Prova de Proximidade (abrir/fechar porta)"
+        },
         "title": "Re-autenticar Painel Span"
       },
       "reconfigure": {

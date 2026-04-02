@@ -72,7 +72,11 @@
         "title": "ドメイン登録"
       },
       "reauth_confirm": {
-        "description": "{host}のSpan Panelは再認証が必要です。パネルのパスフレーズの入力または近接の証明を求められます。",
+        "description": "{host}のSpan Panelは再認証が必要です。",
+        "menu_options": {
+          "auth_passphrase": "パネルパスフレーズを入力",
+          "auth_proximity": "近接証明（ドアの開閉）"
+        },
         "title": "Span Panelの再認証"
       },
       "reconfigure": {

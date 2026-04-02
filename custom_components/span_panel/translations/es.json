@@ -72,7 +72,11 @@
         "title": "Registro de Dominio"
       },
       "reauth_confirm": {
-        "description": "El Span Panel en {host} requiere re-autenticación. Se le pedirá que proporcione la contraseña de su panel o demuestre proximidad.",
+        "description": "El Span Panel en {host} requiere re-autenticación.",
+        "menu_options": {
+          "auth_passphrase": "Ingresar Contraseña del Panel",
+          "auth_proximity": "Prueba de Proximidad (abrir/cerrar puerta)"
+        },
         "title": "Re-autenticar Span Panel"
       },
       "reconfigure": {

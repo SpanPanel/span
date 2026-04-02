@@ -72,7 +72,11 @@
         "title": "Domain Registration"
       },
       "reauth_confirm": {
-        "description": "The Span Panel at {host} requires re-authentication. You will be asked to provide your panel passphrase or prove proximity.",
+        "description": "The Span Panel at {host} requires re-authentication.",
+        "menu_options": {
+          "auth_passphrase": "Enter Panel Passphrase",
+          "auth_proximity": "Proof of Proximity (open/close door)"
+        },
         "title": "Re-authenticate Span Panel"
       },
       "reconfigure": {

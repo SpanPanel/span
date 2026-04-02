@@ -372,13 +372,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Confirm reauth before proceeding to authentication."""
-        if user_input is None:
-            return self.async_show_form(
-                step_id="reauth_confirm",
-                description_placeholders={"host": self.host or ""},
-            )
-        return await self.async_step_choose_v2_auth()
+        """Show reauth context and let user choose authentication method."""
+        return self.async_show_menu(
+            step_id="reauth_confirm",
+            menu_options=["auth_passphrase", "auth_proximity"],
+            description_placeholders={"host": self.host or ""},
+        )
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None
