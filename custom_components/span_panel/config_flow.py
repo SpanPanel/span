@@ -35,7 +35,7 @@ from span_panel_api.exceptions import (
 import voluptuous as vol
 
 from .config_flow_options import (
-    build_general_options_schema,
+    GENERAL_OPTIONS_SCHEMA,
     get_general_options_defaults,
     process_general_options_input,
 )
@@ -65,9 +65,7 @@ from .const import (
 )
 from .options import (
     ENERGY_DISPLAY_PRECISION,
-    ENERGY_REPORTING_GRACE_PERIOD,
     POWER_DISPLAY_PRECISION,
-    SNAPSHOT_UPDATE_INTERVAL,
 )
 
 if TYPE_CHECKING:
@@ -856,17 +854,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         return OptionsFlowHandler()
 
 
-OPTIONS_SCHEMA: vol.Schema = vol.Schema(
-    {
-        vol.Optional(SNAPSHOT_UPDATE_INTERVAL): vol.All(
-            vol.Coerce(float), vol.Range(min=0, max=15)
-        ),
-        vol.Optional(ENTITY_NAMING_PATTERN): vol.In([e.value for e in EntityNamingPattern]),
-        vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
-    }
-)
-
-
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle the options flow for Span Panel."""
 
@@ -894,7 +881,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors = {}
 
         panel_settings = await async_load_panel_settings(self.hass)
-        schema = build_general_options_schema(self.config_entry)
+        schema = GENERAL_OPTIONS_SCHEMA
         defaults = get_general_options_defaults(self.config_entry, panel_settings=panel_settings)
 
         return self.async_show_form(

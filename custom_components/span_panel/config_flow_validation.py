@@ -47,12 +47,7 @@ async def validate_host(
         return False
     if result.probe_failed:
         return False
-    return result.api_version in ("v1", "v2")
-
-
-def validate_ipv4_address(host: str) -> bool:
-    """Validate that the host is an IPv4 address."""
-    return is_ipv4_address(host)
+    return result.api_version == "v2"
 
 
 async def validate_v2_passphrase(

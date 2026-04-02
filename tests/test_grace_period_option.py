@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import voluptuous as vol
 
-from custom_components.span_panel.config_flow import OPTIONS_SCHEMA
+from custom_components.span_panel.config_flow_options import GENERAL_OPTIONS_SCHEMA
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 
 
@@ -19,10 +19,10 @@ class TestGracePeriodOption:
     def test_grace_period_in_options_schema(self):
         """Test that grace period option is in the options schema."""
         # Check that energy_reporting_grace_period is in the schema
-        assert ENERGY_REPORTING_GRACE_PERIOD in OPTIONS_SCHEMA.schema
+        assert ENERGY_REPORTING_GRACE_PERIOD in GENERAL_OPTIONS_SCHEMA.schema
 
         # Check that it has proper validation (int, 0-60 range)
-        grace_period_validator = OPTIONS_SCHEMA.schema[ENERGY_REPORTING_GRACE_PERIOD]
+        grace_period_validator = GENERAL_OPTIONS_SCHEMA.schema[ENERGY_REPORTING_GRACE_PERIOD]
 
         # Test valid values
         assert grace_period_validator(0) == 0
@@ -54,7 +54,7 @@ class TestGracePeriodOption:
 
     def test_grace_period_edge_cases(self):
         """Test grace period edge cases."""
-        grace_period_validator = OPTIONS_SCHEMA.schema[ENERGY_REPORTING_GRACE_PERIOD]
+        grace_period_validator = GENERAL_OPTIONS_SCHEMA.schema[ENERGY_REPORTING_GRACE_PERIOD]
 
         # Test boundary values
         assert grace_period_validator(0) == 0  # Immediate unavailable

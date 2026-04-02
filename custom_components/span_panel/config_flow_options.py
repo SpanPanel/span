@@ -24,20 +24,8 @@ from .options import (
     SNAPSHOT_UPDATE_INTERVAL,
 )
 
-
-def build_general_options_schema(
-    config_entry: ConfigEntry,
-) -> vol.Schema:
-    """Build the schema for general options form.
-
-    Args:
-        config_entry: The config entry
-
-    Returns:
-        Voluptuous schema for the form
-
-    """
-    schema_fields = {
+GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
+    {
         vol.Optional(PANEL_SHOW_SIDEBAR): bool,
         vol.Optional(PANEL_ADMIN_ONLY): bool,
         vol.Optional(SNAPSHOT_UPDATE_INTERVAL): vol.All(
@@ -49,8 +37,7 @@ def build_general_options_schema(
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
         vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
     }
-
-    return vol.Schema(schema_fields)
+)
 
 
 def get_general_options_defaults(

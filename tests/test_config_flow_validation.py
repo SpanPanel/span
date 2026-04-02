@@ -13,7 +13,6 @@ from custom_components.span_panel.config_flow_validation import (
     check_fqdn_tls_ready,
     is_fqdn,
     validate_host,
-    validate_ipv4_address,
     validate_v2_passphrase,
     validate_v2_proximity,
 )
@@ -103,8 +102,8 @@ async def test_validate_host_returns_false_when_probe_failed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_validate_host_returns_true_for_v1_when_http_response_received() -> None:
-    """A real v1-only panel (non-200 on v2 status) should still validate as reachable."""
+async def test_validate_host_rejects_v1_panel() -> None:
+    """A v1-only panel should be rejected since only v2 is supported."""
     hass = MagicMock()
     fake_client = MagicMock()
     with (
@@ -121,14 +120,11 @@ async def test_validate_host_returns_true_for_v1_when_http_response_received() -
             ),
         ),
     ):
-        assert await validate_host(hass, "panel.example.com") is True
+        assert await validate_host(hass, "panel.example.com") is False
 
 
 def test_validate_ipv4_and_fqdn_classification() -> None:
-    """IPv4 and FQDN helpers should classify host formats correctly."""
-    assert validate_ipv4_address("192.168.1.10") is True
-    assert validate_ipv4_address("panel.example.com") is False
-
+    """FQDN helper should classify host formats correctly."""
     assert is_fqdn("panel.example.com") is True
     assert is_fqdn("192.168.1.10") is False
     assert is_fqdn("2001:db8::1") is False
