@@ -112,7 +112,11 @@ def main() -> int:
 
     changed = sync_en(source)
     if changed:
-        print(f"Updated {EN_PATH.relative_to(Path.cwd())}")
+        try:
+            display_path = EN_PATH.relative_to(Path.cwd())
+        except ValueError:
+            display_path = EN_PATH
+        print(f"Updated {display_path}")
 
     errors = validate_translations(source_all_keys, source_leaf_keys)
     if errors:

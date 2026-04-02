@@ -65,7 +65,7 @@ def build_dip_attributes(
 
     attrs: dict[str, Any] = {}
     if energy_offset > 0:
-        attrs["energy_offset"] = str(round(energy_offset, 1))
+        attrs["energy_offset"] = round(energy_offset, 1)
     if last_dip_delta is not None:
-        attrs["last_dip_delta"] = str(round(last_dip_delta, 1))
+        attrs["last_dip_delta"] = round(last_dip_delta, 1)
     return attrs

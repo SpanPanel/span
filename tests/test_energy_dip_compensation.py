@@ -336,8 +336,8 @@ class TestDipAttributes:
 
         attrs = sensor.extra_state_attributes
         assert attrs is not None
-        assert attrs["energy_offset"] == "25.0"
-        assert attrs["last_dip_delta"] == "10.0"
+        assert attrs["energy_offset"] == 25.0
+        assert attrs["last_dip_delta"] == 10.0
 
     def test_hidden_when_offset_zero_no_dip(self):
         """Attributes omit energy_offset when zero and no dip has occurred."""
@@ -365,7 +365,7 @@ class TestDipAttributes:
 
         attrs = sensor.extra_state_attributes
         assert attrs is not None
-        assert attrs["last_dip_delta"] == "5.0"
+        assert attrs["last_dip_delta"] == 5.0
         # energy_offset is 0, should not be included
         assert "energy_offset" not in attrs
 
