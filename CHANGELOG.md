@@ -29,7 +29,7 @@ All notable changes to this project will be documented in this file.
 
 - **Services use entity IDs** — Monitoring services accept entity IDs instead of internal circuit UUIDs, matching HA conventions.
 
-- **`span-panel-api` updated to 2.4.2** — Improved HTTP connection handling and firmware compatibility. Fully backward compatible.
+- **`span-panel-api` updated to 2.5.1** — Improved HTTP connection handling and performance.
 
 ### Fixed
 
