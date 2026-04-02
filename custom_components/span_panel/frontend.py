@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import sys
 from typing import Any
 
 from homeassistant.components.http import StaticPathConfig
@@ -92,13 +91,22 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
 
 
 async def async_apply_panel_registration(hass: HomeAssistant) -> None:
-    """Register or remove the sidebar panel based on stored settings."""
-    # Look up the package module at call time so that test patches applied
-    # to the *package* namespace (e.g.
-    # ``custom_components.span_panel.async_register_panel``) take effect.
-    _pkg = sys.modules[__package__]
+    """Register or remove the sidebar panel based on stored settings.
 
-    settings = await _pkg.async_load_panel_settings(hass)
+    Uses deferred imports from the parent package so that test patches
+    applied to ``custom_components.span_panel.*`` take effect.
+    """
+    # Deferred imports: tests patch these names on the package namespace
+    # (custom_components.span_panel.X). Resolving through ``from .`` at
+    # call time ensures patched values are picked up.
+    from . import (  # pylint: disable=import-outside-toplevel
+        _async_ensure_lovelace_resource as _ensure_lovelace,
+        async_load_panel_settings as _load_settings,
+        async_register_panel as _register_panel,
+        async_remove_panel as _remove_panel,
+    )
+
+    settings = await _load_settings(hass)
     show = settings.get(PANEL_SHOW_SIDEBAR, True)
     admin_only = settings.get(PANEL_ADMIN_ONLY, False)
 
@@ -112,13 +120,13 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     # manual entry (also avoids MIME-type issues with /local/ in dev mode).
     card_cache_tag = await hass.async_add_executor_job(_frontend_file_hash, CARD_FILENAME)
     card_url = f"{PANEL_URL}/{CARD_FILENAME}?v={card_cache_tag}"
-    await _pkg._async_ensure_lovelace_resource(hass, card_url)
+    await _ensure_lovelace(hass, card_url)
 
     if show:
         # Remove first to allow re-registration with updated require_admin
-        _pkg.async_remove_panel(hass, "span-panel", warn_if_unknown=False)
+        _remove_panel(hass, "span-panel", warn_if_unknown=False)
         cache_tag = await hass.async_add_executor_job(_frontend_file_hash, "span-panel.js")
-        await _pkg.async_register_panel(
+        await _register_panel(
             hass,
             webcomponent_name="span-panel",
             frontend_url_path="span-panel",
@@ -129,4 +137,4 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
             config={},
         )
     else:
-        _pkg.async_remove_panel(hass, "span-panel", warn_if_unknown=False)
+        _remove_panel(hass, "span-panel", warn_if_unknown=False)
