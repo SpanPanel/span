@@ -71,6 +71,10 @@
         "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルの証明書にドメイン名が含まれていない場合、MQTT接続が失敗する可能性があります。",
         "title": "ドメイン登録"
       },
+      "reauth_confirm": {
+        "description": "{host}のSpan Panelは再認証が必要です。パネルのパスフレーズの入力または近接の証明を求められます。",
+        "title": "Span Panelの再認証"
+      },
       "reconfigure": {
         "data": {
           "host": "ホスト"

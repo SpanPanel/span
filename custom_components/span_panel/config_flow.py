@@ -358,15 +358,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if self.api_version == "v2":
             if detection.status_info is None:
                 return self.async_abort(reason="cannot_connect")
-            # v2 reauth: set up flow state manually and offer auth choice
+            # v2 reauth: set up flow state manually and show confirmation
             self.host = host
             self.serial_number = detection.status_info.serial_number
             self.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
             self._is_flow_setup = True
-            return await self.async_step_choose_v2_auth()
+            self.context["title_placeholders"] = {"host": host}
+            return await self.async_step_reauth_confirm()
 
         # Non-v2 panels are not supported
         return self.async_abort(reason="v1_not_supported")
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm reauth before proceeding to authentication."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                description_placeholders={"host": self.host or ""},
+            )
+        return await self.async_step_choose_v2_auth()
 
     async def async_step_confirm_discovery(
         self, user_input: dict[str, Any] | None = None

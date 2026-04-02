@@ -71,6 +71,10 @@
         "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer, mais la connexion MQTT peut échouer si le certificat du panneau n'inclut pas votre nom de domaine.",
         "title": "Enregistrement du domaine"
       },
+      "reauth_confirm": {
+        "description": "Le Span Panel à {host} nécessite une ré-authentification. Vous serez invité à fournir le mot de passe de votre panneau ou à prouver la proximité.",
+        "title": "Ré-authentifier le Span Panel"
+      },
       "reconfigure": {
         "data": {
           "host": "Hôte"

@@ -511,8 +511,15 @@ async def test_reauth_v2_shows_auth_choice(hass: HomeAssistant) -> None:
     ):
         result = await entry.start_reauth_flow(hass)
 
-        assert result["type"] == FlowResultType.MENU
-        assert result["step_id"] == "choose_v2_auth"
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+
+        # Submit the confirmation to proceed to auth choice
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {}
+        )
+        assert result2["type"] == FlowResultType.MENU
+        assert result2["step_id"] == "choose_v2_auth"
 
 
 @pytest.mark.asyncio
@@ -586,11 +593,17 @@ async def test_reauth_v2_success_updates_entry(hass: HomeAssistant) -> None:
         patch.object(hass.config_entries, "async_reload", return_value=True),
     ):
         result = await entry.start_reauth_flow(hass)
-        assert result["step_id"] == "choose_v2_auth"
+        assert result["step_id"] == "reauth_confirm"
+
+        # Submit the confirmation
+        result1a = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {}
+        )
+        assert result1a["step_id"] == "choose_v2_auth"
 
         # Select passphrase auth from the menu
         result1b = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
+            result1a["flow_id"],
             {"next_step_id": "auth_passphrase"},
         )
         assert result1b["step_id"] == "auth_passphrase"
@@ -1187,10 +1200,16 @@ async def test_reauth_v2_proximity_success(hass: HomeAssistant) -> None:
         patch.object(hass.config_entries, "async_reload", return_value=True),
     ):
         result = await entry.start_reauth_flow(hass)
-        assert result["step_id"] == "choose_v2_auth"
+        assert result["step_id"] == "reauth_confirm"
+
+        # Submit the confirmation
+        result1a = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {}
+        )
+        assert result1a["step_id"] == "choose_v2_auth"
 
         result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
+            result1a["flow_id"],
             {"next_step_id": "auth_proximity"},
         )
         assert result2["step_id"] == "auth_proximity"

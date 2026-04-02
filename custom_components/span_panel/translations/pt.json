@@ -71,6 +71,10 @@
         "description": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo. Pode continuar, mas a conexão MQTT pode falhar se o certificado do painel não incluir o seu nome de domínio.",
         "title": "Registo de Domínio"
       },
+      "reauth_confirm": {
+        "description": "O Painel Span em {host} requer re-autenticação. Será pedido que forneça a frase-passe do seu painel ou prove proximidade.",
+        "title": "Re-autenticar Painel Span"
+      },
       "reconfigure": {
         "data": {
           "host": "Anfitrião"
