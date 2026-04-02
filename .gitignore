@@ -11,6 +11,7 @@ xnotes/*
 !.vscode/tasks.json
 .git/
 .direnv/
+docs/
 env/
 .envrc
 .env
