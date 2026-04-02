@@ -85,6 +85,25 @@ class TestSetCircuitGraphHorizon:
         assert manager.get_effective_horizon("c1") == DEFAULT_GRAPH_HORIZON
 
 
+class TestSetSubDeviceGraphHorizon:
+    """Tests for the set_subdevice_graph_horizon service."""
+
+    @pytest.mark.asyncio
+    async def test_set_subdevice_override(self):
+        hass = _make_hass()
+        _, manager = _make_runtime_data(hass)
+        manager.set_subdevice_horizon("bess_1", "1d")
+        assert manager.get_effective_subdevice_horizon("bess_1") == "1d"
+
+    @pytest.mark.asyncio
+    async def test_clear_subdevice_override(self):
+        hass = _make_hass()
+        _, manager = _make_runtime_data(hass)
+        manager.set_subdevice_horizon("bess_1", "1d")
+        manager.clear_subdevice_horizon("bess_1")
+        assert manager.get_effective_subdevice_horizon("bess_1") == DEFAULT_GRAPH_HORIZON
+
+
 class TestGetGraphSettings:
     """Tests for the get_graph_settings service."""
 
@@ -99,3 +118,16 @@ class TestGetGraphSettings:
         assert result["global_horizon"] == DEFAULT_GRAPH_HORIZON
         assert result["circuits"]["c1"]["horizon"] == "1M"
         assert result["circuits"]["c1"]["has_override"] is True
+
+
+class TestGetGraphSettingsWithSubDevices:
+    """Tests for get_graph_settings with sub-device overrides."""
+
+    @pytest.mark.asyncio
+    async def test_returns_subdevice_settings(self):
+        hass = _make_hass()
+        _, manager = _make_runtime_data(hass)
+        manager.set_subdevice_horizon("bess_1", "1M")
+        result = manager.get_all_settings()
+        assert result["sub_devices"]["bess_1"]["horizon"] == "1M"
+        assert result["sub_devices"]["bess_1"]["has_override"] is True

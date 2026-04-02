@@ -895,6 +895,17 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         circuit_id = call.data["circuit_id"]
         manager.clear_circuit_horizon(circuit_id)
 
+    async def async_handle_set_subdevice_graph_horizon(call: ServiceCall) -> None:
+        manager = _get_horizon_manager(call)
+        subdevice_id = call.data["subdevice_id"]
+        horizon = call.data["horizon"]
+        manager.set_subdevice_horizon(subdevice_id, horizon)
+
+    async def async_handle_clear_subdevice_graph_horizon(call: ServiceCall) -> None:
+        manager = _get_horizon_manager(call)
+        subdevice_id = call.data["subdevice_id"]
+        manager.clear_subdevice_horizon(subdevice_id)
+
     async def async_handle_get_graph_settings(
         call: ServiceCall,
     ) -> ServiceResponse:
@@ -940,6 +951,29 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         schema=vol.Schema(
             {
                 vol.Required("circuit_id"): str,
+                vol.Optional("config_entry_id"): str,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_subdevice_graph_horizon",
+        async_handle_set_subdevice_graph_horizon,
+        schema=vol.Schema(
+            {
+                vol.Required("subdevice_id"): str,
+                vol.Required("horizon"): vol.In(VALID_GRAPH_HORIZONS),
+                vol.Optional("config_entry_id"): str,
+            }
+        ),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "clear_subdevice_graph_horizon",
+        async_handle_clear_subdevice_graph_horizon,
+        schema=vol.Schema(
+            {
+                vol.Required("subdevice_id"): str,
                 vol.Optional("config_entry_id"): str,
             }
         ),

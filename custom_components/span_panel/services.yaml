@@ -175,4 +175,28 @@ clear_circuit_graph_horizon:
       selector:
         text:
 
+set_subdevice_graph_horizon:
+  fields:
+    subdevice_id:
+      required: true
+      selector:
+        text:
+    horizon:
+      required: true
+      selector:
+        select:
+          options:
+            - "5m"
+            - "1h"
+            - "1d"
+            - "1w"
+            - "1M"
+
+clear_subdevice_graph_horizon:
+  fields:
+    subdevice_id:
+      required: true
+      selector:
+        text:
+
 get_graph_settings:
