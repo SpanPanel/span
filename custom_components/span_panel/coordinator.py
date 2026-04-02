@@ -20,11 +20,13 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
     HomeAssistantError,
 )
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelAuthError
 
 from .const import DOMAIN
+from .id_builder import build_circuit_unique_id
 from .options import ENERGY_REPORTING_GRACE_PERIOD
 from .schema_validation import collect_sensor_definitions, validate_field_metadata
 
@@ -292,6 +294,113 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._known_capabilities = current
             self.request_reload()
 
+    # --- Solar entity migration (v1 → v2) ---
+
+    _SOLAR_SUFFIX_TO_DESCRIPTION_KEY: dict[str, str] = {
+        "_solar_current_power": "instantPowerW",
+        "_solar_produced_energy": "producedEnergyWh",
+        "_solar_consumed_energy": "consumedEnergyWh",
+        "_solar_net_energy": "netEnergyWh",
+    }
+
+    async def _handle_solar_migration(self, snapshot: SpanPanelSnapshot) -> None:
+        """Migrate v1 virtual solar entities to v2 PV circuit entities.
+
+        When solar_migration_pending is set in config entry data (by v3→v4
+        config migration), this method finds the PV circuit in the MQTT
+        snapshot and rewrites entity registry unique_ids in-place so that
+        history and statistics are preserved.
+
+        Old pattern: span_{serial}_solar_current_power
+        New pattern: span_{serial}_{pv_uuid}_power
+        """
+        pv_circuits = [c for c in snapshot.circuits.values() if c.device_type == "pv"]
+
+        if len(pv_circuits) == 0:
+            _LOGGER.info("No PV circuits found — removing stale solar entities")
+            self._remove_stale_solar_entities()
+            self._clear_solar_migration_flag()
+            return
+
+        if len(pv_circuits) > 1:
+            _LOGGER.warning(
+                "Found %d PV circuits — cannot auto-migrate solar entities. "
+                "Please reconfigure solar manually.",
+                len(pv_circuits),
+            )
+            async_create(
+                self.hass,
+                "Multiple PV circuits detected on your SPAN Panel. "
+                "Automatic solar entity migration cannot proceed. "
+                "Please reconfigure solar settings in the integration options.",
+                title="SPAN Panel: Solar Migration Required",
+                notification_id=f"span_solar_migration_{self.config_entry.entry_id}",
+            )
+            return
+
+        # Single PV circuit — proceed with unique_id rewrite
+        pv_circuit = pv_circuits[0]
+        pv_uuid = pv_circuit.circuit_id
+        serial = snapshot.serial_number
+        _LOGGER.info(
+            "Found single PV circuit %s — migrating solar entity unique IDs",
+            pv_uuid,
+        )
+
+        entity_registry = er.async_get(self.hass)
+        entries = er.async_entries_for_config_entry(entity_registry, self.config_entry.entry_id)
+        migrated_count = 0
+
+        for entry in entries:
+            if not entry.unique_id:
+                continue
+            for old_suffix, desc_key in self._SOLAR_SUFFIX_TO_DESCRIPTION_KEY.items():
+                if entry.unique_id.endswith(old_suffix):
+                    new_unique_id = build_circuit_unique_id(serial, pv_uuid, desc_key)
+                    _LOGGER.info(
+                        "Migrating solar entity: %s → %s (entity_id=%s)",
+                        entry.unique_id,
+                        new_unique_id,
+                        entry.entity_id,
+                    )
+                    entity_registry.async_update_entity(
+                        entry.entity_id, new_unique_id=new_unique_id
+                    )
+                    migrated_count += 1
+                    break
+
+        _LOGGER.info("Solar migration complete: %d entities migrated", migrated_count)
+        self._clear_solar_migration_flag()
+
+        if migrated_count > 0:
+            # Reload so platform re-registers entities with updated unique IDs
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            )
+
+    def _remove_stale_solar_entities(self) -> None:
+        """Remove v1 virtual solar entities that have no v2 PV equivalent."""
+        entity_registry = er.async_get(self.hass)
+        entries = er.async_entries_for_config_entry(entity_registry, self.config_entry.entry_id)
+        for entry in entries:
+            if not entry.unique_id:
+                continue
+            if any(
+                entry.unique_id.endswith(suffix) for suffix in self._SOLAR_SUFFIX_TO_DESCRIPTION_KEY
+            ):
+                _LOGGER.info(
+                    "Removing stale solar entity: %s (unique_id=%s)",
+                    entry.entity_id,
+                    entry.unique_id,
+                )
+                entity_registry.async_remove(entry.entity_id)
+
+    def _clear_solar_migration_flag(self) -> None:
+        """Clear the solar_migration_pending flag from config entry data."""
+        updated_data = dict(self.config_entry.data)
+        updated_data.pop("solar_migration_pending", None)
+        self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
+
     # --- Post-update maintenance ---
 
     async def _run_post_update_tasks(self, snapshot: SpanPanelSnapshot) -> None:
@@ -307,6 +416,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         if not self._schema_validated:
             self._schema_validated = True
             self._run_schema_validation()
+
+        # Check for pending solar entity migration (v1 solar → v2 PV circuit)
+        if self.config_entry.data.get("solar_migration_pending", False):
+            await self._handle_solar_migration(snapshot)
 
         # Fire persistent notification for any energy dips detected this cycle
         await self._fire_dip_notification()

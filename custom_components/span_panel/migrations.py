@@ -54,15 +54,24 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
         )
         _LOGGER.debug("Migrated config entry %s to version 3", config_entry.entry_id)
 
-    # --- v3 → v4: remove legacy solar/retry options ---
+    # --- v3 → v4: solar migration flag + remove legacy solar/retry options ---
     if config_entry.version < 4:
         updated_options = dict(config_entry.options)
         updated_data = dict(config_entry.data)
 
-        # Remove v1 solar options (no longer applicable)
-        updated_options.pop("enable_solar_circuit", None)
+        # Check if user had solar configured under v1 options layout
+        solar_was_enabled = updated_options.pop("enable_solar_circuit", False)
         updated_options.pop("leg1", None)
         updated_options.pop("leg2", None)
+
+        if solar_was_enabled:
+            # PV circuit UUID is only known at runtime (from MQTT data),
+            # so defer entity registry update to first coordinator refresh.
+            updated_data["solar_migration_pending"] = True
+            _LOGGER.info(
+                "Solar was configured — setting solar_migration_pending flag "
+                "for runtime entity registry migration"
+            )
 
         # Remove v1 REST retry options (no longer applicable)
         for key in ("api_retries", "api_retry_timeout", "api_retry_backoff_multiplier"):
