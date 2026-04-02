@@ -24,6 +24,7 @@ from span_panel_api import SpanPanelSnapshot
 
 from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION, USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
+from .energy_dip import build_dip_attributes, process_energy_dip
 from .entity import SpanPanelEntity
 from .grace_period import (  # noqa: F401
     SpanEnergyExtraStoredData,
@@ -517,17 +518,19 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             and isinstance(raw_value, float | int)
         ):
             raw_float = float(raw_value)
-            if self._last_panel_reading is not None and self._last_panel_reading - raw_float >= 1.0:
-                dip = self._last_panel_reading - raw_float
-                self._energy_offset += dip
-                self._last_dip_delta = dip
+            new_offset, dip_delta, compensated = process_energy_dip(
+                raw_float, self._last_panel_reading, self._energy_offset
+            )
+            if dip_delta is not None:
+                self._last_dip_delta = dip_delta
                 self.coordinator.report_energy_dip(
                     self.entity_id or self._attr_unique_id or "unknown",
-                    dip,
-                    self._energy_offset,
+                    dip_delta,
+                    new_offset,
                 )
+            self._energy_offset = new_offset
             self._last_panel_reading = raw_float
-            super()._process_raw_value(raw_float + self._energy_offset)
+            super()._process_raw_value(compensated)
         else:
             super()._process_raw_value(raw_value)
 
@@ -721,11 +724,13 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 if panel_offline and remaining_seconds > 0:
                     attributes["using_grace_period"] = "True"
 
-        # Energy dip compensation attributes (only when enabled and meaningful)
-        if self._dip_compensation_enabled and self._is_total_increasing:
-            if self._energy_offset > 0:
-                attributes["energy_offset"] = str(round(self._energy_offset, 1))
-            if self._last_dip_delta is not None:
-                attributes["last_dip_delta"] = str(round(self._last_dip_delta, 1))
+        # Energy dip compensation attributes
+        dip_attrs = build_dip_attributes(
+            self._energy_offset,
+            self._last_dip_delta,
+            self._is_total_increasing,
+            self._dip_compensation_enabled,
+        )
+        attributes.update(dip_attrs)
 
         return attributes or None
