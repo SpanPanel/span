@@ -157,3 +157,93 @@ class TestStoragePersistence:
         await manager.async_load()
         assert manager.get_global_horizon() == DEFAULT_GRAPH_HORIZON
         assert manager._circuit_overrides == {}
+
+
+class TestSubDeviceOverrides:
+    """Tests for per-sub-device horizon overrides."""
+
+    def test_effective_subdevice_horizon_returns_global_when_no_override(self):
+        manager = _make_manager()
+        assert manager.get_effective_subdevice_horizon("bess_1") == DEFAULT_GRAPH_HORIZON
+
+    def test_set_subdevice_override(self):
+        manager = _make_manager()
+        manager.set_subdevice_horizon("bess_1", "1d")
+        assert manager.get_effective_subdevice_horizon("bess_1") == "1d"
+
+    def test_set_subdevice_invalid_horizon_raises(self):
+        manager = _make_manager()
+        with pytest.raises(ValueError, match="Invalid graph horizon"):
+            manager.set_subdevice_horizon("bess_1", "bad")
+
+    def test_set_subdevice_matching_global_removes_override(self):
+        manager = _make_manager()
+        manager.set_subdevice_horizon("bess_1", "1h")
+        assert "bess_1" in manager._subdevice_overrides
+        manager.set_subdevice_horizon("bess_1", DEFAULT_GRAPH_HORIZON)
+        assert "bess_1" not in manager._subdevice_overrides
+
+    def test_clear_subdevice_override(self):
+        manager = _make_manager()
+        manager.set_subdevice_horizon("bess_1", "1d")
+        manager.clear_subdevice_horizon("bess_1")
+        assert manager.get_effective_subdevice_horizon("bess_1") == DEFAULT_GRAPH_HORIZON
+
+    def test_clear_nonexistent_subdevice_override_is_noop(self):
+        manager = _make_manager()
+        manager.clear_subdevice_horizon("nonexistent")
+
+    def test_set_global_prunes_matching_subdevice_overrides(self):
+        manager = _make_manager()
+        manager.set_subdevice_horizon("bess_1", "1h")
+        manager.set_global_horizon("1h")
+        assert "bess_1" not in manager._subdevice_overrides
+
+
+class TestGetAllSettingsWithSubDevices:
+    def test_returns_subdevices_key(self):
+        manager = _make_manager()
+        settings = manager.get_all_settings()
+        assert settings["sub_devices"] == {}
+
+    def test_returns_subdevice_overrides_with_has_override_flag(self):
+        manager = _make_manager()
+        manager.set_subdevice_horizon("bess_1", "1M")
+        settings = manager.get_all_settings()
+        assert settings["sub_devices"]["bess_1"] == {
+            "horizon": "1M",
+            "has_override": True,
+        }
+
+
+class TestSubDeviceStoragePersistence:
+    @pytest.mark.asyncio
+    async def test_save_and_load_round_trip_with_subdevices(self):
+        hass = _make_hass()
+        manager = _make_manager(hass)
+        manager.set_global_horizon("1d")
+        manager.set_circuit_horizon("c1", "1M")
+        manager.set_subdevice_horizon("bess_1", "1w")
+        manager.set_subdevice_horizon("evse_1", "1h")
+
+        saved_data = {}
+
+        async def fake_save(data):
+            saved_data.update(data)
+
+        manager._store = MagicMock()
+        manager._store.async_save = AsyncMock(side_effect=fake_save)
+        await manager.async_save()
+
+        assert saved_data["global_horizon"] == "1d"
+        assert saved_data["circuit_overrides"] == {"c1": "1M"}
+        assert saved_data["subdevice_overrides"] == {"bess_1": "1w", "evse_1": "1h"}
+
+        manager2 = _make_manager(hass)
+        manager2._store = MagicMock()
+        manager2._store.async_load = AsyncMock(return_value=saved_data)
+        await manager2.async_load()
+
+        assert manager2.get_global_horizon() == "1d"
+        assert manager2.get_effective_subdevice_horizon("bess_1") == "1w"
+        assert manager2.get_effective_subdevice_horizon("evse_1") == "1h"

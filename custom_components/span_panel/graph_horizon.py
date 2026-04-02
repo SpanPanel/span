@@ -32,6 +32,7 @@ class GraphHorizonManager:
         self._entry = entry
         self._global_horizon: str = DEFAULT_GRAPH_HORIZON
         self._circuit_overrides: dict[str, str] = {}
+        self._subdevice_overrides: dict[str, str] = {}
         self._store: Store = Store(
             hass,
             _STORAGE_VERSION,
@@ -48,6 +49,9 @@ class GraphHorizonManager:
         self._global_horizon = horizon
         self._circuit_overrides = {
             cid: h for cid, h in self._circuit_overrides.items() if h != horizon
+        }
+        self._subdevice_overrides = {
+            sid: h for sid, h in self._subdevice_overrides.items() if h != horizon
         }
         self._hass.async_create_task(self.async_save())
 
@@ -69,6 +73,24 @@ class GraphHorizonManager:
         self._circuit_overrides.pop(circuit_id, None)
         self._hass.async_create_task(self.async_save())
 
+    def get_effective_subdevice_horizon(self, subdevice_id: str) -> str:
+        """Return the override horizon for a sub-device, or the global default."""
+        return self._subdevice_overrides.get(subdevice_id, self._global_horizon)
+
+    def set_subdevice_horizon(self, subdevice_id: str, horizon: str) -> None:
+        """Set a per-sub-device horizon override."""
+        _validate_horizon(horizon)
+        if horizon == self._global_horizon:
+            self._subdevice_overrides.pop(subdevice_id, None)
+        else:
+            self._subdevice_overrides[subdevice_id] = horizon
+        self._hass.async_create_task(self.async_save())
+
+    def clear_subdevice_horizon(self, subdevice_id: str) -> None:
+        """Remove a per-sub-device override, reverting to global."""
+        self._subdevice_overrides.pop(subdevice_id, None)
+        self._hass.async_create_task(self.async_save())
+
     def get_all_settings(self) -> dict[str, Any]:
         """Return full state for frontend consumption."""
         circuits: dict[str, dict[str, Any]] = {}
@@ -77,9 +99,16 @@ class GraphHorizonManager:
                 "horizon": horizon,
                 "has_override": True,
             }
+        sub_devices: dict[str, dict[str, Any]] = {}
+        for subdevice_id, horizon in self._subdevice_overrides.items():
+            sub_devices[subdevice_id] = {
+                "horizon": horizon,
+                "has_override": True,
+            }
         return {
             "global_horizon": self._global_horizon,
             "circuits": circuits,
+            "sub_devices": sub_devices,
         }
 
     async def async_load(self) -> None:
@@ -95,6 +124,11 @@ class GraphHorizonManager:
             for cid, h in data.get("circuit_overrides", {}).items()
             if h in VALID_GRAPH_HORIZONS
         }
+        self._subdevice_overrides = {
+            sid: h
+            for sid, h in data.get("subdevice_overrides", {}).items()
+            if h in VALID_GRAPH_HORIZONS
+        }
 
     async def async_save(self) -> None:
         """Persist settings to HA Storage."""
@@ -102,6 +136,7 @@ class GraphHorizonManager:
             {
                 "global_horizon": self._global_horizon,
                 "circuit_overrides": self._circuit_overrides,
+                "subdevice_overrides": self._subdevice_overrides,
             }
         )
 
