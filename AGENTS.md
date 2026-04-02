@@ -14,19 +14,13 @@ The following operations are benign and should be executed without confirmation.
 - Package management (`poetry`, `uv`, `pip install`)
 - File inspection (`ls`, `find`, `wc`, `head`, `tail`, `diff`, `cat`)
 
-### Frontend Submodule (`custom_components/span_panel/frontend`)
+### Frontend (`custom_components/span_panel/frontend`)
 
-The JS frontend lives in a git submodule pointing to the `span-card` repository (branch: `integration-panel`). The following operations within the submodule are
-permitted without confirmation:
+The JS frontend lives in a separate `span-card` repository (there is no git submodule). Build artifacts are copied into
+`custom_components/span_panel/frontend/dist/` via `scripts/build-frontend.sh`. The following operations are permitted without confirmation:
 
-- Install dependencies (`npm ci`, `npm install`)
-- Build the frontend (`npm run build`)
-- Run the dev watcher (`npm run dev`)
-- Run linters and formatters (`npx eslint src/`, `npx prettier --check .`, `npx markdownlint-cli2`)
-- Run lefthook pre-commit checks (`npx lefthook run pre-commit`)
-- Standard git operations within the submodule (`git status`, `git diff`, `git log`, `git add`, `git commit`)
-- Submodule management from the parent repo (`git submodule update`, `git submodule sync`)
-- File inspection within `src/`, `dist/`, and config files
+- Build and copy the frontend (`./scripts/build-frontend.sh`)
+- File inspection within `dist/` and config files
 
 ## Frontend Build Workflow
 

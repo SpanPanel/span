@@ -19,7 +19,7 @@ The Panel tab displays your SPAN panel layout with real-time circuit-level power
 
 - **Breaker rating** and **current power draw** in the card header
 - **Circuit priority icons** indicating always-on, never-shed, SoC threshold, or off-grid shed behavior
-- **Historical poweror current graph** with configurable time horizon globally or per circuit
+- **Historical power or current graph** with configurable time horizon globally or per circuit
 - **Switch control** for user-controllable circuits (via the safety slider in the card header)
 
 The top banner summarizes panel-level metrics: site power, grid state, upstream/downstream current, and solar production. A firmware version badge and legend

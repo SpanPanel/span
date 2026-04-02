@@ -393,10 +393,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Choose v2 authentication method: passphrase or proximity."""
         return self.async_show_menu(
             step_id="choose_v2_auth",
-            menu_options={
-                "auth_passphrase": "Enter Panel Passphrase",
-                "auth_proximity": "Proof of Proximity (open/close door)",
-            },
+            menu_options=["auth_passphrase", "auth_proximity"],
         )
 
     async def async_step_auth_proximity(
@@ -406,10 +403,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Instruct user to complete the door challenge, then confirm or switch method."""
         return self.async_show_menu(
             step_id="auth_proximity",
-            menu_options={
-                "auth_proximity_confirm": "I have opened and closed the door",
-                "auth_passphrase": "Use passphrase instead",
-            },
+            menu_options=["auth_proximity_confirm", "auth_passphrase"],
         )
 
     async def async_step_auth_proximity_confirm(
