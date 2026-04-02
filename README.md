@@ -8,7 +8,7 @@ monitoring and control of your home's electrical system.
 [![GitHub Activity](https://img.shields.io/github/commit-activity/y/SpanPanel/span.svg?style=flat-square)](https://github.com/SpanPanel/span/commits)
 [![License](https://img.shields.io/github/license/SpanPanel/span.svg?style=flat-square)](LICENSE)
 
-[![Python](https://img.shields.io/badge/python-3.13.2-blue.svg)](https://www.python.org/downloads/release/python-3132/)
+[![Python](https://img.shields.io/badge/python-3.14.2-blue.svg)](https://www.python.org/downloads/release/python-3132/)
 [![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Mypy](https://img.shields.io/badge/mypy-checked-blue)](http://mypy-lang.org/)
 [![prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
