@@ -1,4 +1,4 @@
-"""Span Panel Coordinator for managing data updates and entity migrations."""
+"""Span Panel Coordinator for managing data updates."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from .current_monitor import CurrentMonitor
+    from .graph_horizon import GraphHorizonManager
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.config_entries import ConfigEntry
@@ -18,20 +22,11 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from span_panel_api import (
-    SpanMqttClient,
-    SpanPanelSnapshot,
-)
-from span_panel_api.exceptions import (
-    SpanPanelAPIError,
-    SpanPanelAuthError,
-    SpanPanelConnectionError,
-    SpanPanelServerError,
-    SpanPanelTimeoutError,
-)
+from span_panel_api import SpanMqttClient, SpanPanelSnapshot
+from span_panel_api.exceptions import SpanPanelAuthError
 
 from .const import DOMAIN
-from .helpers import build_circuit_unique_id
+from .id_builder import build_circuit_unique_id
 from .options import ENERGY_REPORTING_GRACE_PERIOD
 from .schema_validation import collect_sensor_definitions, validate_field_metadata
 
@@ -42,7 +37,6 @@ class SpanCircuitEnergySensorProtocol(Protocol):
     @property
     def energy_offset(self) -> float:
         """Cumulative dip compensation offset."""
-        ...
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,7 +60,7 @@ _STREAMING_FALLBACK_INTERVAL = timedelta(seconds=60)
 
 
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
-    """Coordinator for managing Span Panel data updates and entity migrations."""
+    """Coordinator for managing Span Panel data updates."""
 
     def __init__(
         self,
@@ -76,7 +70,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     ) -> None:
         """Initialize the coordinator."""
         self._client = client
-        self.config_entry = config_entry
+        self.config_entry: ConfigEntry[Any] = config_entry
         # Track last tick for visibility into cadence
         self._last_tick_epoch: float | None = None
         # Flag to track if a reload was requested
@@ -104,9 +98,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # here so net energy sensors can read their dip offsets directly.
         self._circuit_energy_sensors: dict[tuple[str, str], SpanCircuitEnergySensorProtocol] = {}
 
+        # Current monitor — set by async_setup_entry when monitoring is enabled
+        self.current_monitor: CurrentMonitor | None = None
+
+        # Graph horizon manager — set by async_setup_entry
+        self.graph_horizon_manager: GraphHorizonManager | None = None
+
         update_interval = _STREAMING_FALLBACK_INTERVAL
 
-        _LOGGER.info(
+        _LOGGER.debug(
             "Span Panel coordinator: poll interval %s seconds",
             update_interval.total_seconds(),
         )
@@ -135,6 +135,22 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def request_reload(self) -> None:
         """Request a reload of the integration."""
         self._reload_requested = True
+
+    def _mark_panel_online(self) -> None:
+        """Mark the panel online and log a recovery transition once."""
+        if self._panel_offline:
+            _LOGGER.info("%s is back online", self.config_entry.title or "SPAN Panel")
+        self._panel_offline = False
+
+    def _mark_panel_offline(self, err: Exception) -> None:
+        """Mark the panel offline and log the transition once."""
+        if not self._panel_offline:
+            _LOGGER.info(
+                "%s is unavailable: %s",
+                self.config_entry.title or "SPAN Panel",
+                err,
+            )
+        self._panel_offline = True
 
     # --- Energy dip compensation ---
 
@@ -200,7 +216,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
-        self._panel_offline = False
+        self._mark_panel_online()
         self._check_capability_change(snapshot)
         self.async_set_updated_data(snapshot)
         await self._run_post_update_tasks(snapshot)
@@ -278,112 +294,8 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._known_capabilities = current
             self.request_reload()
 
-    # --- Post-update maintenance ---
+    # --- Solar entity migration (v1 → v2) ---
 
-    async def _run_post_update_tasks(self, snapshot: SpanPanelSnapshot) -> None:
-        """Run maintenance tasks after a snapshot update.
-
-        Called from both the polling path (_async_update_data) and the streaming
-        path (_on_snapshot_push). The HA DataUpdateCoordinator resets its fallback
-        poll timer on every async_set_updated_data() call, so during active MQTT
-        streaming the polling path effectively never fires. This shared method
-        ensures reload requests and pending migrations are processed regardless
-        of transport mode.
-        """
-        # One-shot schema validation after first successful refresh
-        if not self._schema_validated:
-            self._schema_validated = True
-            self._run_schema_validation()
-
-        # Fire persistent notification for any energy dips detected this cycle
-        await self._fire_dip_notification()
-
-        # Handle reload request if one was made (e.g., name sync, capability change)
-        if self._reload_requested:
-            self._reload_requested = False
-            self.hass.async_create_task(self._async_reload_task())
-
-        # Check for pending solar entity migration (v1 solar → v2 PV circuit)
-        if self.config_entry.data.get("solar_migration_pending", False):
-            await self._handle_solar_migration(snapshot)
-
-    # --- Data update ---
-
-    async def _async_update_data(self) -> SpanPanelSnapshot:
-        """Fetch data from the panel client."""
-        try:
-            # Reset offline flag on successful update
-            self._panel_offline = False
-
-            # Performance timing
-            cycle_start = _epoch_time()
-            self._last_tick_epoch = cycle_start
-
-            fetch_start = _epoch_time()
-            snapshot = await self._client.get_snapshot()
-            fetch_duration = _epoch_time() - fetch_start
-
-            cycle_total = _epoch_time() - cycle_start
-            _LOGGER.info(
-                "SPAN Panel update cycle completed - Total: %.3fs | Fetch: %.3fs",
-                cycle_total,
-                fetch_duration,
-            )
-
-            # Check for new hardware capabilities (BESS, PV, power-flows)
-            self._check_capability_change(snapshot)
-
-            await self._run_post_update_tasks(snapshot)
-
-            return snapshot
-
-        except SpanPanelAuthError as err:
-            raise ConfigEntryAuthFailed from err
-
-        except ConfigEntryAuthFailed:
-            raise
-
-        except Exception as err:
-            self._panel_offline = True
-
-            if isinstance(err, SpanPanelConnectionError):
-                _LOGGER.warning("Span Panel connection error: %s", err)
-            elif isinstance(err, SpanPanelTimeoutError):
-                _LOGGER.warning("Span Panel timeout: %s", err)
-            elif isinstance(err, SpanPanelServerError):
-                _LOGGER.warning("Span Panel server error: %s", err)
-            elif isinstance(err, SpanPanelAPIError):
-                _LOGGER.warning("Span Panel API error: %s", err)
-            else:
-                _LOGGER.warning("Unexpected Span Panel error: %s", err)
-
-            # Return last known data to keep coordinator updating for grace period logic.
-            # On first refresh (self.data is None), re-raise so async_config_entry_first_refresh
-            # surfaces the error properly.
-            if self.data is not None:
-                return self.data
-            raise
-
-    async def _async_reload_task(self) -> None:
-        """Task to handle integration reload with proper error handling."""
-        try:
-            _LOGGER.info("Reloading SPAN Panel integration")
-            await self.hass.async_block_till_done()
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-            _LOGGER.info("SPAN Panel integration reload completed successfully")
-
-        except ConfigEntryNotReady as err:
-            _LOGGER.warning("Config entry not ready during reload: %s", err)
-        except HomeAssistantError as err:
-            _LOGGER.error("Home Assistant error during reload: %s", err)
-        except Exception as err:
-            _LOGGER.exception("Unexpected error during reload: %s", err)
-
-    # --- Solar entity migration (v1 virtual sensors → v2 PV circuit sensors) ---
-
-    # Old solar unique_id suffixes → circuit sensor description keys.
-    # These map the v1 virtual solar sensor unique_ids to the v2 circuit sensor
-    # description keys used by build_circuit_unique_id.
     _SOLAR_SUFFIX_TO_DESCRIPTION_KEY: dict[str, str] = {
         "_solar_current_power": "instantPowerW",
         "_solar_produced_energy": "producedEnergyWh",
@@ -402,9 +314,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         Old pattern: span_{serial}_solar_current_power
         New pattern: span_{serial}_{pv_uuid}_power
         """
-        # TODO(post-2.0.0): Remove solar_migration_pending handling once all
-        # users have been forced through the 2.0.x upgrade path.
-
         pv_circuits = [c for c in snapshot.circuits.values() if c.device_type == "pv"]
 
         if len(pv_circuits) == 0:
@@ -491,3 +400,95 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         updated_data = dict(self.config_entry.data)
         updated_data.pop("solar_migration_pending", None)
         self.hass.config_entries.async_update_entry(self.config_entry, data=updated_data)
+
+    # --- Post-update maintenance ---
+
+    async def _run_post_update_tasks(self, snapshot: SpanPanelSnapshot) -> None:
+        """Run maintenance tasks after a snapshot update.
+
+        Called from both the polling path (_async_update_data) and the streaming
+        path (_on_snapshot_push). The HA DataUpdateCoordinator resets its fallback
+        poll timer on every async_set_updated_data() call, so during active MQTT
+        streaming the polling path effectively never fires. This shared method
+        ensures reload requests are processed regardless of transport mode.
+        """
+        # One-shot schema validation after first successful refresh
+        if not self._schema_validated:
+            self._schema_validated = True
+            self._run_schema_validation()
+
+        # Check for pending solar entity migration (v1 solar → v2 PV circuit)
+        if self.config_entry.data.get("solar_migration_pending", False):
+            await self._handle_solar_migration(snapshot)
+
+        # Fire persistent notification for any energy dips detected this cycle
+        await self._fire_dip_notification()
+
+        # Delegate snapshot to current monitor if enabled
+        if self.current_monitor is not None:
+            self.current_monitor.process_snapshot(snapshot)
+
+        # Handle reload request if one was made (e.g., name sync, capability change)
+        if self._reload_requested:
+            self._reload_requested = False
+            self.hass.async_create_task(self._async_reload_task())
+
+    # --- Data update ---
+
+    async def _async_update_data(self) -> SpanPanelSnapshot:
+        """Fetch data from the panel client."""
+        try:
+            # Performance timing
+            cycle_start = _epoch_time()
+            self._last_tick_epoch = cycle_start
+
+            fetch_start = _epoch_time()
+            snapshot = await self._client.get_snapshot()
+            fetch_duration = _epoch_time() - fetch_start
+
+            cycle_total = _epoch_time() - cycle_start
+            _LOGGER.debug(
+                "SPAN Panel update cycle completed - Total: %.3fs | Fetch: %.3fs",
+                cycle_total,
+                fetch_duration,
+            )
+
+            self._mark_panel_online()
+
+            # Check for new hardware capabilities (BESS, PV, power-flows)
+            self._check_capability_change(snapshot)
+
+            await self._run_post_update_tasks(snapshot)
+
+        except SpanPanelAuthError as err:
+            raise ConfigEntryAuthFailed from err
+
+        except ConfigEntryAuthFailed:
+            raise
+
+        except Exception as err:
+            self._mark_panel_offline(err)
+
+            # Return last known data to keep coordinator updating for grace period logic.
+            # On first refresh (self.data is None), re-raise so async_config_entry_first_refresh
+            # surfaces the error properly.
+            if self.data is not None:
+                return self.data
+            raise
+        else:
+            return snapshot
+
+    async def _async_reload_task(self) -> None:
+        """Task to handle integration reload with proper error handling."""
+        try:
+            _LOGGER.info("Reloading SPAN Panel integration")
+            await self.hass.async_block_till_done()
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            _LOGGER.info("SPAN Panel integration reload completed successfully")
+
+        except ConfigEntryNotReady as err:
+            _LOGGER.warning("Config entry not ready during reload: %s", err)
+        except HomeAssistantError as err:
+            _LOGGER.error("Home Assistant error during reload: %s", err)
+        except Exception:
+            _LOGGER.exception("Unexpected error during reload")

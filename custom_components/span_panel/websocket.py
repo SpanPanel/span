@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 import voluptuous as vol
 
 from .const import DOMAIN
+from .helpers import build_panel_unique_id
 
 if TYPE_CHECKING:
     from . import SpanPanelRuntimeData
@@ -20,6 +21,27 @@ if TYPE_CHECKING:
 # get_user_friendly_suffix) to semantic role names used in the topology response.
 # NOTE: build_circuit_unique_id maps API keys through CIRCUIT_SUFFIX_MAPPING,
 # so unique_ids end with e.g. "_power" not "_instantPowerW".
+# Panel-level sensor keys to resolve via entity registry.
+# Maps topology role name -> sensor description key (used by
+# build_panel_unique_id to construct the unique_id).
+_PANEL_SENSOR_KEYS: dict[str, str] = {
+    "current_power": "instantGridPowerW",
+    "site_power": "sitePowerW",
+    "grid_power": "gridPowerFlowW",
+    "feedthrough_power": "feedthroughPowerW",
+    "pv_power": "pvPowerW",
+    "battery_power": "batteryPowerW",
+    "battery_level": "storage_battery_percentage",
+    "dsm_state": "dsm_grid_state",
+    "main_breaker_rating": "main_breaker_rating",
+    "upstream_l1_current": "upstream_l1_current",
+    "upstream_l2_current": "upstream_l2_current",
+    "downstream_l1_current": "downstream_l1_current",
+    "downstream_l2_current": "downstream_l2_current",
+    "l1_voltage": "l1_voltage",
+    "l2_voltage": "l2_voltage",
+}
+
 _SENSOR_ROLE_SUFFIXES: dict[str, str] = {
     "_power": "power",
     "_energy_produced": "produced_energy",
@@ -41,6 +63,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
         vol.Required("device_id"): str,
     }
 )
+@websocket_api.require_admin
 @websocket_api.async_response
 async def handle_panel_topology(
     hass: HomeAssistant,
@@ -49,9 +72,9 @@ async def handle_panel_topology(
 ) -> None:
     """Return the full panel topology with entity mappings.
 
-    Accepts a device_id (the HA device registry ID for the SPAN panel)
-    and returns a JSON object containing panel metadata, circuits with
-    tabs/entity mappings, and sub-devices (BESS, EVSE).
+    Admin users must pass the HA device registry ID for the **main SPAN panel**
+    device only (not BESS/EVSE sub-devices). Returns panel metadata, circuits
+    with tabs/entity mappings, and sub-devices (BESS, EVSE).
     """
     device_id = msg["device_id"]
 
@@ -60,6 +83,20 @@ async def handle_panel_topology(
 
     if device_entry is None:
         connection.send_error(msg["id"], "device_not_found", "Device not found")
+        return
+
+    is_span_device = any(domain == DOMAIN for domain, _ in device_entry.identifiers)
+    if not is_span_device:
+        connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
+        return
+
+    # Sub-devices (BESS, EVSE) register with via_device_id pointing at the panel.
+    if device_entry.via_device_id is not None:
+        connection.send_error(
+            msg["id"],
+            "not_panel_device",
+            "Use the SPAN panel device registry ID, not a BESS or EVSE sub-device.",
+        )
         return
 
     # Find the config entry for this device.
@@ -80,8 +117,9 @@ async def handle_panel_topology(
     runtime_data: SpanPanelRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
     snapshot = coordinator.data
+
     if snapshot is None:
-        connection.send_error(msg["id"], "no_data", "No panel data available")
+        connection.send_error(msg["id"], "no_data", "SPAN Panel has not yet provided any data")
         return
 
     # Build entity lookup grouped by device_id for sub-device section.
@@ -92,6 +130,9 @@ async def handle_panel_topology(
     for entity in all_entities:
         if entity.device_id:
             entities_by_device.setdefault(entity.device_id, []).append(entity)
+
+    # Resolve panel-level sensor entity_ids via unique_id registry lookup.
+    panel_entities = _build_panel_entity_map(snapshot.serial_number, entity_registry)
 
     # Single pass over all entities to build circuit_id to role to entity_id
     # map. EVSE feed circuit sensors live on the EVSE sub-device, so we
@@ -105,14 +146,19 @@ async def handle_panel_topology(
         if circuit_id not in circuit_ids:
             continue
 
+        tabs = sorted(circuit.tabs) if circuit.tabs else []
         circuits[circuit_id] = {
-            "tabs": sorted(circuit.tabs) if circuit.tabs else [],
+            "tabs": tabs,
             "name": circuit.name or None,
-            "voltage": 240 if len(circuit.tabs) == 2 else 120,
+            "voltage": 240 if len(tabs) == 2 else 120,
             "device_type": circuit.device_type,
             "relay_state": circuit.relay_state,
+            "relay_state_target": circuit.relay_state_target,
             "is_user_controllable": circuit.is_user_controllable,
             "breaker_rating_a": circuit.breaker_rating_a,
+            "always_on": circuit.always_on,
+            "priority": circuit.priority,
+            "priority_target": circuit.priority_target,
             "entities": entity_map.get(circuit_id, {}),
         }
 
@@ -153,6 +199,7 @@ async def handle_panel_topology(
             "panel_size": snapshot.panel_size,
             "device_id": device_id,
             "device_name": device_entry.name,
+            "panel_entities": panel_entities,
             "circuits": circuits,
             "sub_devices": sub_devices,
         },
@@ -195,10 +242,24 @@ def _build_circuit_entity_map(
     for entity in entities:
         uid = entity.unique_id
 
+        # Skip entities without a unique_id, as we cannot reliably match them.
+        if not uid:
+            continue
+
         # Find which circuit this entity belongs to.
         matched_circuit_id: str | None = None
         for cid in circuit_ids:
-            if cid in uid:
+            # Avoid plain substring matching to prevent collisions like "1" in "15".
+            idx = uid.find(cid)
+            if idx == -1:
+                continue
+
+            # Require delimiters (or string boundaries) around the circuit_id.
+            before_ok = idx == 0 or uid[idx - 1] in "_-"
+            after_index = idx + len(cid)
+            after_ok = after_index == len(uid) or uid[after_index] in "_-"
+
+            if before_ok and after_ok:
                 matched_circuit_id = cid
                 break
 
@@ -216,6 +277,24 @@ def _build_circuit_entity_map(
             if role:
                 mapped[role] = entity.entity_id
 
+    return result
+
+
+def _build_panel_entity_map(
+    serial: str,
+    entity_registry: er.EntityRegistry,
+) -> dict[str, str]:
+    """Resolve panel-level sensor unique_ids to current entity_ids.
+
+    Returns a dict of {role: entity_id} for sensors that exist in the
+    registry. Entries that cannot be resolved are omitted.
+    """
+    result: dict[str, str] = {}
+    for role, description_key in _PANEL_SENSOR_KEYS.items():
+        unique_id = build_panel_unique_id(serial, description_key)
+        entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id is not None:
+            result[role] = entity_id
     return result
 
 

@@ -5,7 +5,7 @@ from typing import Final
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
@@ -111,7 +111,7 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up button entities for Span Panel."""
     coordinator = config_entry.runtime_data.coordinator

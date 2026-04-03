@@ -1,167 +1,146 @@
-"""Tests for unique ID generation patterns in Span Panel integration."""
+"""Tests for unique ID generation pure functions in Span Panel integration.
 
-from unittest.mock import MagicMock
+These tests exercise the actual build_*_unique_id helpers and
+get_user_friendly_suffix / get_panel_entity_suffix functions that
+produce the unique IDs stored in the entity registry.
+"""
 
-from span_panel_api import SpanPanelSnapshot
+from custom_components.span_panel.helpers import (
+    build_binary_sensor_unique_id,
+    build_circuit_unique_id,
+    build_panel_unique_id,
+    build_select_unique_id,
+    build_switch_unique_id,
+    get_panel_entity_suffix,
+    get_user_friendly_suffix,
+)
 
-from custom_components.span_panel.const import USE_CIRCUIT_NUMBERS
-from tests.factories import SpanPanelSnapshotFactory
+
+class TestBuildCircuitUniqueId:
+    """Tests for build_circuit_unique_id."""
+
+    def test_basic_format(self) -> None:
+        """Circuit unique IDs follow span_{serial}_{circuit_id}_{suffix}."""
+        uid = build_circuit_unique_id("SP3-001", "uuid-kitchen", "instantPowerW")
+        assert uid == "span_sp3-001_uuid-kitchen_power"
+
+    def test_serial_lowercased(self) -> None:
+        """Serial numbers are lowercased for consistency."""
+        uid = build_circuit_unique_id("ABC123DEF", "1", "instantPowerW")
+        assert uid.startswith("span_abc123def_")
+
+    def test_different_serials_produce_different_ids(self) -> None:
+        """Two panels with the same circuit produce distinct unique IDs."""
+        uid1 = build_circuit_unique_id("PANEL001", "1", "instantPowerW")
+        uid2 = build_circuit_unique_id("PANEL002", "1", "instantPowerW")
+        assert uid1 != uid2
+
+    def test_different_circuits_produce_different_ids(self) -> None:
+        """Same panel, different circuits produce distinct unique IDs."""
+        uid1 = build_circuit_unique_id("SP3-001", "1", "instantPowerW")
+        uid2 = build_circuit_unique_id("SP3-001", "2", "instantPowerW")
+        assert uid1 != uid2
+
+    def test_different_description_keys_produce_different_ids(self) -> None:
+        """Same circuit, different sensor types produce distinct unique IDs."""
+        uid_power = build_circuit_unique_id("SP3-001", "1", "instantPowerW")
+        uid_energy = build_circuit_unique_id("SP3-001", "1", "consumedEnergyWh")
+        assert uid_power != uid_energy
+
+    def test_energy_consumed_suffix(self) -> None:
+        """ConsumedEnergyWh maps to the expected suffix."""
+        uid = build_circuit_unique_id("SP3-001", "1", "consumedEnergyWh")
+        assert uid.endswith("_energy_consumed")
+
+    def test_energy_produced_suffix(self) -> None:
+        """ProducedEnergyWh maps to the expected suffix."""
+        uid = build_circuit_unique_id("SP3-001", "1", "producedEnergyWh")
+        assert uid.endswith("_energy_produced")
+
+    def test_unmapped_key_passes_through_lowercased(self) -> None:
+        """Keys without a suffix mapping are lowercased as-is."""
+        uid = build_circuit_unique_id("SP3-001", "1", "someNewField")
+        assert uid.endswith("_somenewfield")
 
 
-class TestUniqueIdGeneration:
-    """Test unique ID generation for circuits."""
+class TestBuildPanelUniqueId:
+    """Tests for build_panel_unique_id."""
 
-    TEST_SERIAL_NUMBER = "ABC123DEF456"
+    def test_basic_format(self) -> None:
+        """Panel unique IDs follow span_{serial}_{entity_suffix}."""
+        uid = build_panel_unique_id("SP3-001", "instantGridPowerW")
+        assert uid == "span_sp3-001_current_power"
 
-    KITCHEN_CIRCUIT_DATA = {
-        "circuit_id": "1",
-        "name": "Kitchen Outlets",
-        "power": 245.3,
-        "tab": 1,
-    }
+    def test_serial_lowercased(self) -> None:
+        """Serial numbers are lowercased."""
+        uid = build_panel_unique_id("ABC123", "instantGridPowerW")
+        assert uid.startswith("span_abc123_")
 
-    LIVING_ROOM_CIRCUIT_DATA = {
-        "circuit_id": "2",
-        "name": "Living Room Lights",
-        "power": 85.2,
-        "tab": 2,
-    }
+    def test_feedthrough_power_suffix(self) -> None:
+        """FeedthroughPowerW uses its panel-specific suffix mapping."""
+        uid = build_panel_unique_id("SP3-001", "feedthroughPowerW")
+        assert uid.endswith("_feed_through_power")
 
-    SOLAR_CIRCUIT_DATA = {
-        "circuit_id": "15",
-        "name": "Solar Panels",
-        "power": -1200.0,
-        "tab": 15,
-    }
 
-    def _create_mock_snapshot(self, serial_number: str | None = None) -> SpanPanelSnapshot:
-        """Create a mock SpanPanelSnapshot with predefined data."""
-        if serial_number is None:
-            serial_number = self.TEST_SERIAL_NUMBER
-        return SpanPanelSnapshotFactory.create(serial_number=serial_number)
+class TestBuildSwitchUniqueId:
+    """Tests for build_switch_unique_id."""
 
-    def _create_circuit_sensor(
-        self,
-        snapshot: SpanPanelSnapshot,
-        circuit_id: str,
-        sensor_description: object,
-        config_options: dict[str, object] | None = None,
-    ) -> MagicMock:
-        """Create a circuit sensor for testing."""
-        if config_options is None:
-            config_options = {}
+    def test_format(self) -> None:
+        """Switch unique IDs follow span_{serial}_relay_{circuit_id}."""
+        uid = build_switch_unique_id("SP3-001", "uuid-kitchen")
+        assert uid == "span_SP3-001_relay_uuid-kitchen"
 
-        mock_sensor = MagicMock()
-        key: str = getattr(sensor_description, "key", "")
-        unique_id = f"span_{snapshot.serial_number}_{circuit_id}_{key}"
-        mock_sensor.unique_id = unique_id
-        return mock_sensor
 
-    def test_regular_circuit_unique_id_new_installation(self) -> None:
-        """Test unique ID generation for regular circuits in new installations."""
-        snapshot = self._create_mock_snapshot()
+class TestBuildBinarySensorUniqueId:
+    """Tests for build_binary_sensor_unique_id."""
 
-        power_description = MagicMock()
-        power_description.key = "power"
+    def test_format(self) -> None:
+        """Binary sensor unique IDs follow span_{serial}_{key}."""
+        uid = build_binary_sensor_unique_id("SP3-001", "doorState")
+        assert uid == "span_SP3-001_doorState"
 
-        sensor = self._create_circuit_sensor(
-            snapshot,
-            self.KITCHEN_CIRCUIT_DATA["circuit_id"],
-            power_description,
-            {USE_CIRCUIT_NUMBERS: True},
-        )
 
-        expected_unique_id = (
-            f"span_{self.TEST_SERIAL_NUMBER}_{self.KITCHEN_CIRCUIT_DATA['circuit_id']}_power"
-        )
-        assert sensor.unique_id == expected_unique_id
+class TestBuildSelectUniqueId:
+    """Tests for build_select_unique_id."""
 
-    def test_regular_circuit_unique_id_multiple_circuits(self) -> None:
-        """Test unique ID generation for multiple regular circuits."""
-        snapshot = self._create_mock_snapshot()
+    def test_format(self) -> None:
+        """Select unique IDs follow span_{serial}_select_{select_id}."""
+        uid = build_select_unique_id("SP3-001", "uuid-kitchen")
+        assert uid == "span_SP3-001_select_uuid-kitchen"
 
-        power_description = MagicMock()
-        power_description.key = "power"
 
-        test_cases = [
-            (self.KITCHEN_CIRCUIT_DATA, "power"),
-            (self.LIVING_ROOM_CIRCUIT_DATA, "power"),
-            (self.SOLAR_CIRCUIT_DATA, "power"),
-        ]
+class TestGetUserFriendlySuffix:
+    """Tests for the suffix mapping used by circuit unique IDs."""
 
-        for circuit_data, expected_suffix in test_cases:
-            sensor = self._create_circuit_sensor(
-                snapshot, circuit_data["circuit_id"], power_description, {USE_CIRCUIT_NUMBERS: True}
-            )
+    def test_known_power_key(self) -> None:
+        """InstantPowerW maps to 'power'."""
+        assert get_user_friendly_suffix("instantPowerW") == "power"
 
-            expected_unique_id = (
-                f"span_{self.TEST_SERIAL_NUMBER}_{circuit_data['circuit_id']}_{expected_suffix}"
-            )
-            assert sensor.unique_id == expected_unique_id
+    def test_known_energy_keys(self) -> None:
+        """Energy keys map to human-readable suffixes."""
+        assert get_user_friendly_suffix("consumedEnergyWh") == "energy_consumed"
+        assert get_user_friendly_suffix("producedEnergyWh") == "energy_produced"
 
-    def test_unique_id_with_different_serial_numbers(self) -> None:
-        """Test that unique IDs change with different serial numbers."""
-        test_serials = ["ABC123", "XYZ789", "PANEL001"]
+    def test_unknown_key_lowercased(self) -> None:
+        """Unknown keys pass through lowercased."""
+        assert get_user_friendly_suffix("novelMetric") == "novelmetric"
 
-        for serial in test_serials:
-            snapshot = self._create_mock_snapshot(serial)
+    def test_dotted_key_underscored(self) -> None:
+        """Dots in keys are replaced with underscores."""
+        assert get_user_friendly_suffix("some.dotted.key") == "some_dotted_key"
 
-            power_description = MagicMock()
-            power_description.key = "power"
 
-            circuit_sensor = self._create_circuit_sensor(
-                snapshot, self.KITCHEN_CIRCUIT_DATA["circuit_id"], power_description
-            )
-            expected_circuit_id = f"span_{serial}_{self.KITCHEN_CIRCUIT_DATA['circuit_id']}_power"
-            assert circuit_sensor.unique_id == expected_circuit_id
+class TestGetPanelEntitySuffix:
+    """Tests for the panel-specific suffix mapping."""
 
-    def test_unique_id_format_consistency(self) -> None:
-        """Test that unique ID formats are consistent and follow documented patterns."""
-        snapshot = self._create_mock_snapshot()
+    def test_panel_specific_mapping(self) -> None:
+        """Panel keys use their own mapping (not the circuit one)."""
+        assert get_panel_entity_suffix("instantGridPowerW") == "current_power"
 
-        power_description = MagicMock()
-        power_description.key = "power"
+    def test_falls_back_to_general(self) -> None:
+        """Keys not in the panel mapping fall back to the general suffix map."""
+        assert get_panel_entity_suffix("instantPowerW") == "power"
 
-        circuit_sensor = self._create_circuit_sensor(
-            snapshot, self.KITCHEN_CIRCUIT_DATA["circuit_id"], power_description
-        )
-
-        parts = circuit_sensor.unique_id.split("_")
-        assert parts[0] == "span"
-        assert parts[1] == self.TEST_SERIAL_NUMBER
-        assert parts[2] == self.KITCHEN_CIRCUIT_DATA["circuit_id"]
-        assert parts[3] == "power"
-
-    def test_multi_panel_unique_id_differentiation(self) -> None:
-        """Test that unique IDs differentiate between multiple panels."""
-        panel1 = self._create_mock_snapshot("PANEL001")
-        panel2 = self._create_mock_snapshot("PANEL002")
-
-        power_description = MagicMock()
-        power_description.key = "power"
-
-        sensor1 = self._create_circuit_sensor(panel1, "1", power_description)
-        sensor2 = self._create_circuit_sensor(panel2, "1", power_description)
-
-        assert sensor1.unique_id != sensor2.unique_id
-        assert "PANEL001" in sensor1.unique_id
-        assert "PANEL002" in sensor2.unique_id
-
-    def test_circuit_sensor_uses_correct_documented_pattern(self) -> None:
-        """Test that circuit sensors follow the documented unique ID pattern."""
-        snapshot = self._create_mock_snapshot()
-
-        from custom_components.span_panel.sensor_definitions import UNMAPPED_SENSORS
-
-        power_description = next(d for d in UNMAPPED_SENSORS if d.key == "instantPowerW")
-
-        sensor = self._create_circuit_sensor(
-            snapshot,
-            self.KITCHEN_CIRCUIT_DATA["circuit_id"],
-            power_description,
-            {USE_CIRCUIT_NUMBERS: True},
-        )
-
-        expected_unique_id = f"span_{self.TEST_SERIAL_NUMBER}_{self.KITCHEN_CIRCUIT_DATA['circuit_id']}_instantPowerW"
-        assert sensor.unique_id == expected_unique_id
-        assert power_description.key == "instantPowerW"
+    def test_unknown_key_lowercased(self) -> None:
+        """Unmapped keys pass through lowercased."""
+        assert get_panel_entity_suffix("brandNewField") == "brandnewfield"

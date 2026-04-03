@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import ipaddress
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant import config_entries
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 
+from homeassistant import config_entries
+from custom_components.span_panel import (
+    CURRENT_CONFIG_VERSION,
+    async_migrate_entry,
+    async_setup_entry,
+)
+from custom_components.span_panel.config_flow import (
+    SpanPanelConfigFlow,
+    TriggerFlowType,
+)
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -23,8 +28,16 @@ from custom_components.span_panel.const import (
     CONF_HOP_PASSPHRASE,
     CONF_HTTP_PORT,
     CONF_PANEL_SERIAL,
+    CONF_REGISTERED_FQDN,
     DOMAIN,
 )
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.service_info.hassio import HassioServiceInfo
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -45,6 +58,24 @@ MOCK_V2_DETECTION = DetectionResult(
     status_info=V2StatusInfo(
         serial_number="SPAN-V2-001",
         firmware_version="2.0.0",
+    ),
+)
+
+MOCK_V2_DETECTION_PROXIMITY_PROVEN = DetectionResult(
+    api_version="v2",
+    status_info=V2StatusInfo(
+        serial_number="SPAN-V2-001",
+        firmware_version="2.0.0",
+        proximity_proven=True,
+    ),
+)
+
+MOCK_V2_DETECTION_PROXIMITY_NOT_PROVEN = DetectionResult(
+    api_version="v2",
+    status_info=V2StatusInfo(
+        serial_number="SPAN-V2-001",
+        firmware_version="2.0.0",
+        proximity_proven=False,
     ),
 )
 
@@ -100,6 +131,38 @@ async def test_user_flow_detects_v2_and_shows_auth_choice(hass: HomeAssistant) -
         assert result2["step_id"] == "choose_v2_auth"
         assert "auth_passphrase" in result2["menu_options"]
         assert "auth_proximity" in result2["menu_options"]
+
+
+@pytest.mark.asyncio
+async def test_user_flow_passes_ha_httpx_client_to_detect_api_version(
+    hass: HomeAssistant,
+) -> None:
+    """User flow should pass the Home Assistant shared httpx client to detection."""
+    fake_client = MagicMock()
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.get_async_client",
+            return_value=fake_client,
+        ) as mock_get_client,
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ) as mock_detect,
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: MOCK_HOST},
+        )
+
+    mock_get_client.assert_called_once_with(hass, verify_ssl=False)
+    mock_detect.assert_awaited_once_with(MOCK_HOST, port=80, httpx_client=fake_client)
 
 
 @pytest.mark.asyncio
@@ -261,6 +324,7 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
 # ---------- v2 entry creation ----------
 
 
+@pytest.mark.usefixtures("socket_enabled")
 @pytest.mark.asyncio
 async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
     """A completed v2 flow should create an entry with MQTT broker fields."""
@@ -319,12 +383,21 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
         assert data[CONF_PANEL_SERIAL] == "SPAN-V2-001"
 
 
-# ---------- config entry migration v2->v3 ----------
+# ---------- config entry migration (2.0.4 baseline) ----------
 
 
 @pytest.mark.asyncio
-async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
-    """Live panel entries migrating from version 2 to 5 should get api_version=v1 when panel is v2."""
+async def test_config_flow_uses_current_config_entry_version() -> None:
+    """New core entries should use the current storage version."""
+
+    assert SpanPanelConfigFlow.VERSION == CURRENT_CONFIG_VERSION
+
+
+@pytest.mark.asyncio
+async def test_migration_updates_older_entry_to_current_version(
+    hass: HomeAssistant,
+) -> None:
+    """v1.3.1 entries (version 2) should migrate through v3→v4→v5→v6."""
     entry = MockConfigEntry(
         version=2,
         minor_version=1,
@@ -340,88 +413,17 @@ async def test_migration_v2_to_v3_live_panel(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
-    with (
-        patch(
-            "custom_components.span_panel.migrate_config_entry_sensors",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.span_panel.detect_api_version",
-            return_value=MOCK_V2_DETECTION,
-        ),
-    ):
-        from custom_components.span_panel import async_migrate_entry
-
-        result = await async_migrate_entry(hass, entry)
+    result = await async_migrate_entry(hass, entry)
 
     assert result is True
     assert entry.version == 6
-    assert entry.data.get(CONF_API_VERSION) == "v1"
+    # v2→v3 migration adds api_version field
+    assert entry.data[CONF_API_VERSION] == "v1"
 
 
 @pytest.mark.asyncio
-async def test_migration_blocked_when_panel_is_v1(hass: HomeAssistant) -> None:
-    """Migration should fail and leave schema untouched when panel firmware is v1."""
-    entry = MockConfigEntry(
-        version=2,
-        minor_version=1,
-        domain=DOMAIN,
-        title="Span Panel",
-        data={
-            CONF_HOST: "192.168.1.50",
-            CONF_ACCESS_TOKEN: "old-token",
-        },
-        source=config_entries.SOURCE_USER,
-        options={},
-        unique_id="SN-LIVE-002",
-    )
-    entry.add_to_hass(hass)
-
-    with patch(
-        "custom_components.span_panel.detect_api_version",
-        return_value=MOCK_V1_DETECTION,
-    ):
-        from custom_components.span_panel import async_migrate_entry
-
-        result = await async_migrate_entry(hass, entry)
-
-    assert result is False
-    assert entry.version == 2  # schema untouched
-
-
-@pytest.mark.asyncio
-async def test_migration_blocked_when_panel_unreachable(hass: HomeAssistant) -> None:
-    """Migration should fail and leave schema untouched when the panel is unreachable."""
-    entry = MockConfigEntry(
-        version=2,
-        minor_version=1,
-        domain=DOMAIN,
-        title="Span Panel",
-        data={
-            CONF_HOST: "192.168.1.50",
-            CONF_ACCESS_TOKEN: "old-token",
-        },
-        source=config_entries.SOURCE_USER,
-        options={},
-        unique_id="SN-LIVE-003",
-    )
-    entry.add_to_hass(hass)
-
-    with patch(
-        "custom_components.span_panel.detect_api_version",
-        side_effect=SpanPanelConnectionError("timeout"),
-    ):
-        from custom_components.span_panel import async_migrate_entry
-
-        result = await async_migrate_entry(hass, entry)
-
-    assert result is False
-    assert entry.version == 2  # schema untouched
-
-
-@pytest.mark.asyncio
-async def test_migration_v5_to_v6_rejects_simulation_entry(hass: HomeAssistant) -> None:
-    """Simulation entries at v5 should migrate to v6 but setup should be skipped."""
+async def test_simulation_entry_migrates_normally(hass: HomeAssistant) -> None:
+    """Simulation entries migrate to v6; setup will fail naturally at connection time."""
     entry = MockConfigEntry(
         version=5,
         minor_version=1,
@@ -439,17 +441,9 @@ async def test_migration_v5_to_v6_rejects_simulation_entry(hass: HomeAssistant) 
     )
     entry.add_to_hass(hass)
 
-    from custom_components.span_panel import async_migrate_entry, async_setup_entry
-
     result = await async_migrate_entry(hass, entry)
-
-    # Migration succeeds (no retry on every restart)
     assert result is True
     assert entry.version == 6
-
-    # Setup is skipped for simulation entries
-    setup_result = await async_setup_entry(hass, entry)
-    assert setup_result is False
 
 
 # ---------- zeroconf v2 discovery ----------
@@ -458,7 +452,6 @@ async def test_migration_v5_to_v6_rejects_simulation_entry(hass: HomeAssistant) 
 @pytest.mark.asyncio
 async def test_zeroconf_ebus_discovery_routes_to_confirm(hass: HomeAssistant) -> None:
     """Discovering an _ebus._tcp.local. service should set api_version=v2 and show confirm."""
-    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
     discovery_info = ZeroconfServiceInfo(
         ip_address=ipaddress.IPv4Address("192.168.1.200"),
@@ -519,7 +512,43 @@ async def test_reauth_v2_shows_auth_choice(hass: HomeAssistant) -> None:
         result = await entry.start_reauth_flow(hass)
 
         assert result["type"] == FlowResultType.MENU
-        assert result["step_id"] == "choose_v2_auth"
+        assert result["step_id"] == "reauth_confirm"
+
+
+@pytest.mark.asyncio
+async def test_reauth_aborts_cannot_connect_when_probe_failed(
+    hass: HomeAssistant,
+) -> None:
+    """Reauth must abort with cannot_connect when detection probe fails."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-v2-token",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    probe_failed = DetectionResult(
+        api_version="v1",
+        status_info=None,
+        probe_failed=True,
+    )
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        return_value=probe_failed,
+    ):
+        result = await entry.start_reauth_flow(hass)
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "cannot_connect"
 
 
 @pytest.mark.asyncio
@@ -557,17 +586,18 @@ async def test_reauth_v2_success_updates_entry(hass: HomeAssistant) -> None:
         patch.object(hass.config_entries, "async_reload", return_value=True),
     ):
         result = await entry.start_reauth_flow(hass)
-        assert result["step_id"] == "choose_v2_auth"
+        assert result["type"] == FlowResultType.MENU
+        assert result["step_id"] == "reauth_confirm"
 
-        # Select passphrase auth from the menu
-        result1b = await hass.config_entries.flow.async_configure(
+        # Select passphrase auth from the reauth menu
+        result1 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {"next_step_id": "auth_passphrase"},
         )
-        assert result1b["step_id"] == "auth_passphrase"
+        assert result1["step_id"] == "auth_passphrase"
 
         result2 = await hass.config_entries.flow.async_configure(
-            result1b["flow_id"],
+            result1["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
@@ -619,6 +649,39 @@ async def test_user_flow_host_unreachable(hass: HomeAssistant) -> None:
         assert result2["type"] == FlowResultType.FORM
         assert result2["step_id"] == "user"
         assert result2["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.asyncio
+async def test_user_flow_cannot_connect_when_second_detection_probe_failed(
+    hass: HomeAssistant,
+) -> None:
+    """Second detection with probe_failed must show cannot_connect, not v1_not_supported."""
+    probe_failed = DetectionResult(
+        api_version="v1",
+        status_info=None,
+        probe_failed=True,
+    )
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=probe_failed,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: MOCK_HOST},
+        )
+
+    assert result2["type"] == FlowResultType.FORM
+    assert result2["step_id"] == "user"
+    assert result2["errors"] == {"base": "cannot_connect"}
 
 
 @pytest.mark.asyncio
@@ -750,7 +813,7 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
-            return_value=MOCK_V2_DETECTION,
+            side_effect=[MOCK_V2_DETECTION, MOCK_V2_DETECTION_PROXIMITY_PROVEN],
         ),
         patch(
             "custom_components.span_panel.config_flow.validate_host",
@@ -777,10 +840,10 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
         )
         assert result2b["step_id"] == "auth_proximity"
 
-        # Submit the proximity form (empty — user just confirms)
+        # User confirms they opened the door
         result3 = await hass.config_entries.flow.async_configure(
             result2b["flow_id"],
-            {},
+            {"next_step_id": "auth_proximity_confirm"},
         )
 
         assert result3["type"] == FlowResultType.FORM
@@ -788,20 +851,16 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_proximity_auth_failed(hass: HomeAssistant) -> None:
-    """Failed proximity auth should re-show the form with proximity_failed error."""
+async def test_proximity_not_proven_returns_to_menu(hass: HomeAssistant) -> None:
+    """Unproven proximity should return to the auth proximity menu."""
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
-            return_value=MOCK_V2_DETECTION,
+            side_effect=[MOCK_V2_DETECTION, MOCK_V2_DETECTION_PROXIMITY_NOT_PROVEN],
         ),
         patch(
             "custom_components.span_panel.config_flow.validate_host",
             return_value=True,
-        ),
-        patch(
-            "custom_components.span_panel.config_flow.validate_v2_proximity",
-            side_effect=SpanPanelAuthError("door not detected"),
         ),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -818,19 +877,20 @@ async def test_proximity_auth_failed(hass: HomeAssistant) -> None:
             {"next_step_id": "auth_proximity"},
         )
 
+        # User claims they opened the door but proximityProven is false
         result3 = await hass.config_entries.flow.async_configure(
             result2b["flow_id"],
-            {},
+            {"next_step_id": "auth_proximity_confirm"},
         )
 
-        assert result3["type"] == FlowResultType.FORM
+        # Should return to the proximity menu
+        assert result3["type"] == FlowResultType.MENU
         assert result3["step_id"] == "auth_proximity"
-        assert result3["errors"] == {"base": "proximity_failed"}
 
 
 @pytest.mark.asyncio
-async def test_proximity_auth_connection_error(hass: HomeAssistant) -> None:
-    """Connection error during proximity should re-show with cannot_connect."""
+async def test_proximity_switch_to_passphrase(hass: HomeAssistant) -> None:
+    """User should be able to switch from proximity menu to passphrase."""
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -839,10 +899,6 @@ async def test_proximity_auth_connection_error(hass: HomeAssistant) -> None:
         patch(
             "custom_components.span_panel.config_flow.validate_host",
             return_value=True,
-        ),
-        patch(
-            "custom_components.span_panel.config_flow.validate_v2_proximity",
-            side_effect=SpanPanelConnectionError("timeout"),
         ),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -858,15 +914,16 @@ async def test_proximity_auth_connection_error(hass: HomeAssistant) -> None:
             result2["flow_id"],
             {"next_step_id": "auth_proximity"},
         )
+        assert result2b["step_id"] == "auth_proximity"
 
+        # User picks "Use passphrase instead"
         result3 = await hass.config_entries.flow.async_configure(
             result2b["flow_id"],
-            {},
+            {"next_step_id": "auth_passphrase"},
         )
 
         assert result3["type"] == FlowResultType.FORM
-        assert result3["step_id"] == "auth_proximity"
-        assert result3["errors"] == {"base": "cannot_connect"}
+        assert result3["step_id"] == "auth_passphrase"
 
 
 # ---------- duplicate entry prevention ----------
@@ -920,7 +977,6 @@ async def test_duplicate_entry_aborts(hass: HomeAssistant) -> None:
 @pytest.mark.asyncio
 async def test_zeroconf_non_ipv4_aborts(hass: HomeAssistant) -> None:
     """Non-IPv4 discovery addresses should abort."""
-    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
     discovery_info = ZeroconfServiceInfo(
         ip_address=ipaddress.IPv6Address("fe80::1"),
@@ -965,8 +1021,6 @@ async def test_zeroconf_already_configured_aborts(hass: HomeAssistant) -> None:
     )
     existing.add_to_hass(hass)
 
-    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-
     discovery_info = ZeroconfServiceInfo(
         ip_address=ipaddress.IPv4Address("192.168.1.200"),
         ip_addresses=[ipaddress.IPv4Address("192.168.1.200")],
@@ -989,7 +1043,6 @@ async def test_zeroconf_already_configured_aborts(hass: HomeAssistant) -> None:
 @pytest.mark.asyncio
 async def test_zeroconf_not_span_panel_aborts(hass: HomeAssistant) -> None:
     """Zeroconf discovery where v2 endpoint does not respond should abort."""
-    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
     # Detection returns v1 (not v2) — this IP is not a valid v2 panel
     mock_bad_detection = DetectionResult(
@@ -1027,10 +1080,10 @@ async def test_zeroconf_not_span_panel_aborts(hass: HomeAssistant) -> None:
         assert result["reason"] == "not_span_panel"
 
 
+@pytest.mark.usefixtures("socket_enabled")
 @pytest.mark.asyncio
 async def test_zeroconf_end_to_end_entry_creation(hass: HomeAssistant) -> None:
     """Zeroconf discovery through confirm → passphrase → naming → entry creation."""
-    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
     discovery_info = ZeroconfServiceInfo(
         ip_address=ipaddress.IPv4Address("192.168.1.200"),
@@ -1126,7 +1179,7 @@ async def test_reauth_v2_proximity_success(hass: HomeAssistant) -> None:
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
-            return_value=MOCK_V2_DETECTION,
+            side_effect=[MOCK_V2_DETECTION, MOCK_V2_DETECTION_PROXIMITY_PROVEN],
         ),
         patch(
             "custom_components.span_panel.config_flow.validate_v2_proximity",
@@ -1135,17 +1188,20 @@ async def test_reauth_v2_proximity_success(hass: HomeAssistant) -> None:
         patch.object(hass.config_entries, "async_reload", return_value=True),
     ):
         result = await entry.start_reauth_flow(hass)
-        assert result["step_id"] == "choose_v2_auth"
+        assert result["type"] == FlowResultType.MENU
+        assert result["step_id"] == "reauth_confirm"
 
+        # Select proximity auth from the reauth menu
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {"next_step_id": "auth_proximity"},
         )
         assert result2["step_id"] == "auth_proximity"
 
+        # User confirms door challenge
         result3 = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
-            {},
+            {"next_step_id": "auth_proximity_confirm"},
         )
 
         assert result3["type"] == FlowResultType.ABORT
@@ -1385,10 +1441,8 @@ MOCK_V2_DETECTION_SIM = DetectionResult(
 )
 
 
-def _hassio_service_info(config: dict[str, str | int]) -> "HassioServiceInfo":
+def _hassio_service_info(config: dict[str, str | int]) -> HassioServiceInfo:
     """Build a HassioServiceInfo for testing."""
-    from homeassistant.helpers.service_info.hassio import HassioServiceInfo
-
     return HassioServiceInfo(
         config=config,
         name="SPAN Panel Simulator",
@@ -1520,6 +1574,7 @@ async def test_hassio_dedup_by_serial(hass: HomeAssistant) -> None:
     assert existing.data[CONF_HTTP_PORT] == 9090
 
 
+@pytest.mark.usefixtures("socket_enabled")
 @pytest.mark.asyncio
 async def test_hassio_end_to_end_entry_creation(hass: HomeAssistant) -> None:
     """Hassio discovery through confirm -> passphrase -> naming -> entry creation."""
@@ -1642,3 +1697,392 @@ async def test_reauth_v2_null_status_info_aborts(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "cannot_connect"
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_invalid_http_port_defaults_to_80(hass: HomeAssistant) -> None:
+    """Invalid httpPort TXT records should fall back to port 80."""
+
+    discovery_info = ZeroconfServiceInfo(
+        ip_address=ipaddress.IPv4Address("192.168.1.200"),
+        ip_addresses=[ipaddress.IPv4Address("192.168.1.200")],
+        hostname="span-panel.local.",
+        name="SPAN Panel._ebus._tcp.local.",
+        port=8883,
+        properties={"httpPort": "bad-port"},
+        type="_ebus._tcp.local.",
+    )
+
+    fake_client = MagicMock()
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.get_async_client",
+            return_value=fake_client,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ) as mock_detect,
+        patch(
+            "custom_components.span_panel.config_flow.is_ipv4_address",
+            return_value=True,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=discovery_info,
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "confirm_discovery"
+    mock_detect.assert_awaited_once_with(
+        "192.168.1.200", port=80, httpx_client=fake_client
+    )
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_user_flow_fqdn_registration_progress_then_naming(
+    hass: HomeAssistant,
+) -> None:
+    """FQDN hosts should route through the registration progress step."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.register_fqdn",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.check_fqdn_tls_ready",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "panel.example.com"},
+        )
+        result2b = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+        result3 = await hass.config_entries.flow.async_configure(
+            result2b["flow_id"],
+            {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
+        )
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert result3["data"][CONF_REGISTERED_FQDN] == "panel.example.com"
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_user_flow_fqdn_registration_failure_can_continue(
+    hass: HomeAssistant,
+) -> None:
+    """Failed FQDN registration should allow continuing without registration."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.register_fqdn",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.check_fqdn_tls_ready",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "panel.example.com"},
+        )
+        result2b = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+        result3 = await hass.config_entries.flow.async_configure(
+            result2b["flow_id"],
+            {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
+        )
+        assert result3["type"] == FlowResultType.FORM
+        assert result3["step_id"] == "choose_entity_naming_initial"
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_fqdn_entry_creation_sets_registered_fqdn_and_unique_title(
+    hass: HomeAssistant,
+) -> None:
+    """FQDN-based entries should store the registered host and keep unique titles."""
+    existing = MockConfigEntry(
+        domain=DOMAIN,
+        title="Span Panel",
+        data={CONF_HOST: "192.168.1.10", CONF_ACCESS_TOKEN: "existing-token"},
+        unique_id="EXISTING-PANEL-001",
+    )
+    existing.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.register_fqdn",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.check_fqdn_tls_ready",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.span_panel.async_setup_entry",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "panel.example.com", CONF_HTTP_PORT: 8080},
+        )
+        result2b = await hass.config_entries.flow.async_configure(
+            result2["flow_id"],
+            {"next_step_id": "auth_passphrase"},
+        )
+        result3 = await hass.config_entries.flow.async_configure(
+            result2b["flow_id"],
+            {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
+        )
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert result3["title"] == "Span Panel 2"
+    assert result3["data"][CONF_HOST] == "panel.example.com"
+    assert result3["data"][CONF_REGISTERED_FQDN] == "panel.example.com"
+    assert result3["data"][CONF_HTTP_PORT] == 8080
+
+
+@pytest.mark.asyncio
+async def test_update_v2_entry_missing_entry_aborts_with_reauth_failed(
+    hass: HomeAssistant,
+) -> None:
+    """Missing entries during reauth should abort cleanly."""
+    flow = SpanPanelConfigFlow()
+    flow.hass = hass
+    flow.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
+    flow.context = {"entry_id": "missing-entry"}
+    flow.host = MOCK_HOST
+    flow.serial_number = "SPAN-V2-001"
+    flow.access_token = MOCK_V2_AUTH.access_token
+    flow._is_flow_setup = True
+    flow._store_v2_auth_result(MOCK_V2_AUTH, MOCK_PASSPHRASE)
+
+    result = await flow._async_finalize_v2_auth()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reauth_failed"
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_to_fqdn_registers_and_updates_registered_fqdn(
+    hass: HomeAssistant,
+) -> None:
+    """Reconfiguring to an FQDN should go through registration and persist it."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_PORT: 8883,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.register_fqdn",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.check_fqdn_tls_ready",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "panel.example.com"},
+        )
+        result3 = result2
+
+    assert result3["type"] == FlowResultType.ABORT
+    assert result3["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HOST] == "panel.example.com"
+    assert entry.data[CONF_REGISTERED_FQDN] == "panel.example.com"
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_fqdn_failure_can_continue_without_registration(
+    hass: HomeAssistant,
+) -> None:
+    """Failed FQDN registration during reconfigure should allow continue."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_PORT: 8883,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.register_fqdn",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.check_fqdn_tls_ready",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.asyncio.sleep",
+            new=AsyncMock(),
+        ),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "panel.example.com"},
+        )
+        result4 = result2
+
+    assert result4["type"] == FlowResultType.ABORT
+    assert result4["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HOST] == "panel.example.com"
+    assert CONF_REGISTERED_FQDN not in entry.data
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_switch_from_fqdn_to_ip_clears_registration(
+    hass: HomeAssistant,
+) -> None:
+    """Switching from FQDN back to IP should delete the old registration."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: "panel.example.com",
+            CONF_REGISTERED_FQDN: "panel.example.com",
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    fake_client = MagicMock()
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.get_async_client",
+            return_value=fake_client,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.delete_fqdn",
+            new=AsyncMock(),
+        ) as mock_delete,
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "192.168.1.201"},
+        )
+
+    assert result2["type"] == FlowResultType.ABORT
+    assert result2["reason"] == "reconfigure_successful"
+    mock_delete.assert_awaited_once_with(
+        "192.168.1.201", "token", port=80, httpx_client=fake_client
+    )
+    assert entry.data[CONF_HOST] == "192.168.1.201"
+    assert entry.data[CONF_REGISTERED_FQDN] == ""

@@ -14,7 +14,8 @@
     "dist/**",
     "build/**",
     ".cursor/**",
-    "tests/**"
+    "tests/**",
+    "docs/superpowers/**"
   ],
   "config": {
     "default": true,

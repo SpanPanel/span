@@ -5,8 +5,22 @@ from unittest.mock import MagicMock
 import pytest
 from span_panel_api import SpanPanelSnapshot
 
-from tests.factories import SpanPanelSnapshotFactory
-from tests.helpers import make_span_panel_entry
+from custom_components.span_panel.const import (
+    DSM_OFF_GRID,
+    DSM_ON_GRID,
+    PANEL_ON_GRID,
+)
+from custom_components.span_panel.sensor import (
+    SpanPanelPanelStatus,
+    SpanPanelStatus,
+)
+from custom_components.span_panel.sensor_definitions import (
+    PANEL_DATA_STATUS_SENSORS,
+    STATUS_SENSORS,
+)
+
+from .factories import SpanPanelSnapshotFactory
+from .helpers import make_span_panel_entry
 
 
 class TestPanelSensors:
@@ -25,11 +39,10 @@ class TestPanelSensors:
         coordinator.config_entry = make_span_panel_entry()
         return coordinator
 
-    def test_panel_data_status_sensors_creation(self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot) -> None:
+    def test_panel_data_status_sensors_creation(
+        self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot
+    ) -> None:
         """Test that panel data status sensors are created correctly."""
-        from custom_components.span_panel.sensor import SpanPanelPanelStatus
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         for description in PANEL_DATA_STATUS_SENSORS:
             sensor = SpanPanelPanelStatus(mock_coordinator, description, mock_snapshot)
             assert sensor.entity_description == description
@@ -39,11 +52,10 @@ class TestPanelSensors:
             data_source = sensor.get_data_source(mock_snapshot)
             assert data_source is mock_snapshot
 
-    def test_hardware_status_sensors_creation(self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot) -> None:
+    def test_hardware_status_sensors_creation(
+        self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot
+    ) -> None:
         """Test that hardware status sensors are created correctly."""
-        from custom_components.span_panel.sensor import SpanPanelStatus
-        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
-
         for description in STATUS_SENSORS:
             sensor = SpanPanelStatus(mock_coordinator, description, mock_snapshot)
             assert sensor.entity_description == description
@@ -55,17 +67,15 @@ class TestPanelSensors:
 
     def test_main_relay_state_sensor(self) -> None:
         """Test the main relay state sensor specifically."""
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         main_relay_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "main_relay_state"
         )
 
-        test_cases = [
+        test_cases = (
             ("CLOSED", "CLOSED"),
             ("OPEN", "OPEN"),
             ("UNKNOWN", "UNKNOWN"),
-        ]
+        )
 
         for input_state, expected_output in test_cases:
             snapshot = SpanPanelSnapshotFactory.create(main_relay_state=input_state)
@@ -76,13 +86,11 @@ class TestPanelSensors:
 
     def test_grid_forming_entity_sensor(self) -> None:
         """Test the grid forming entity sensor."""
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "grid_forming_entity"
         )
 
-        for source in ["GRID", "BATTERY", "PV", "GENERATOR", "NONE"]:
+        for source in ("GRID", "BATTERY", "PV", "GENERATOR", "NONE"):
             snapshot = SpanPanelSnapshotFactory.create(dominant_power_source=source)
             assert description.value_fn(snapshot) == source
 
@@ -92,11 +100,11 @@ class TestPanelSensors:
 
     def test_vendor_cloud_sensor(self) -> None:
         """Test the vendor cloud sensor."""
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
+        description = next(
+            d for d in PANEL_DATA_STATUS_SENSORS if d.key == "vendor_cloud"
+        )
 
-        description = next(d for d in PANEL_DATA_STATUS_SENSORS if d.key == "vendor_cloud")
-
-        for state in ["CONNECTED", "UNCONNECTED"]:
+        for state in ("CONNECTED", "UNCONNECTED"):
             snapshot = SpanPanelSnapshotFactory.create(vendor_cloud=state)
             assert description.value_fn(snapshot) == state
 
@@ -106,19 +114,16 @@ class TestPanelSensors:
 
     def test_software_version_sensor(self) -> None:
         """Test the software version sensor."""
-        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
+        version_description = next(
+            d for d in STATUS_SENSORS if d.key == "software_version"
+        )
 
-        version_description = next(d for d in STATUS_SENSORS if d.key == "software_version")
-
-        for version in ["1.2.3", "2.0.1", "1.5.0-beta"]:
+        for version in ("1.2.3", "2.0.1", "1.5.0-beta"):
             snapshot = SpanPanelSnapshotFactory.create(firmware_version=version)
             assert version_description.value_fn(snapshot) == version
 
     def test_current_run_config_sensor(self) -> None:
         """Test the current run config sensor."""
-        from custom_components.span_panel.const import PANEL_ON_GRID
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         config_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "current_run_config"
         )
@@ -126,16 +131,17 @@ class TestPanelSensors:
         snapshot = SpanPanelSnapshotFactory.create(current_run_config=PANEL_ON_GRID)
         assert config_description.value_fn(snapshot) == PANEL_ON_GRID
 
-    def test_sensor_unique_ids(self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot) -> None:
+    def test_sensor_unique_ids(
+        self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot
+    ) -> None:
         """Test that sensors have correct unique IDs."""
-        from custom_components.span_panel.sensor import SpanPanelPanelStatus
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         main_relay_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "main_relay_state"
         )
 
-        sensor = SpanPanelPanelStatus(mock_coordinator, main_relay_description, mock_snapshot)
+        sensor = SpanPanelPanelStatus(
+            mock_coordinator, main_relay_description, mock_snapshot
+        )
         expected_unique_id = (
             f"span_{mock_snapshot.serial_number.lower()}_{main_relay_description.key}"
         )
@@ -145,26 +151,22 @@ class TestPanelSensors:
         self, mock_coordinator: MagicMock, mock_snapshot: SpanPanelSnapshot
     ) -> None:
         """Test that panel sensors have translation keys set."""
-        from custom_components.span_panel.sensor import SpanPanelPanelStatus, SpanPanelStatus
-        from custom_components.span_panel.sensor_definitions import (
-            PANEL_DATA_STATUS_SENSORS,
-            STATUS_SENSORS,
-        )
-
         for description in PANEL_DATA_STATUS_SENSORS:
             sensor = SpanPanelPanelStatus(mock_coordinator, description, mock_snapshot)
             assert description.translation_key is not None
-            assert sensor.entity_description.translation_key == description.translation_key
+            assert (
+                sensor.entity_description.translation_key == description.translation_key
+            )
 
         for description in STATUS_SENSORS:
             sensor = SpanPanelStatus(mock_coordinator, description, mock_snapshot)
             assert description.translation_key is not None
-            assert sensor.entity_description.translation_key == description.translation_key
+            assert (
+                sensor.entity_description.translation_key == description.translation_key
+            )
 
     def test_main_relay_state_with_real_data(self) -> None:
         """Test main relay state sensor with real snapshot data."""
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         main_relay_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "main_relay_state"
         )
@@ -177,9 +179,6 @@ class TestPanelSensors:
 
     def test_dsm_state_with_real_data(self) -> None:
         """Test DSM state sensor with real snapshot data."""
-        from custom_components.span_panel.const import DSM_OFF_GRID, DSM_ON_GRID
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         dsm_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_state"
         )
@@ -194,9 +193,6 @@ class TestPanelSensors:
         self, mock_coordinator: MagicMock
     ) -> None:
         """Test that panel_size is always present in extra_state_attributes."""
-        from custom_components.span_panel.sensor import SpanPanelStatus
-        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
-
         description = next(d for d in STATUS_SENSORS if d.key == "software_version")
 
         snapshot_with_size = SpanPanelSnapshotFactory.create(panel_size=32)
@@ -210,9 +206,6 @@ class TestPanelSensors:
         self, mock_coordinator: MagicMock
     ) -> None:
         """Test that wifi_ssid appears in extra_state_attributes when present."""
-        from custom_components.span_panel.sensor import SpanPanelStatus
-        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
-
         description = next(d for d in STATUS_SENSORS if d.key == "software_version")
 
         snapshot = SpanPanelSnapshotFactory.create(panel_size=24, wifi_ssid="MyNetwork")
@@ -227,9 +220,6 @@ class TestPanelSensors:
         self, mock_coordinator: MagicMock
     ) -> None:
         """Test that wifi_ssid is omitted when None."""
-        from custom_components.span_panel.sensor import SpanPanelStatus
-        from custom_components.span_panel.sensor_definitions import STATUS_SENSORS
-
         description = next(d for d in STATUS_SENSORS if d.key == "software_version")
 
         snapshot = SpanPanelSnapshotFactory.create(panel_size=16, wifi_ssid=None)
@@ -242,9 +232,6 @@ class TestPanelSensors:
 
     def test_dsm_grid_state_deprecated_alias(self) -> None:
         """Test DSM Grid State reads from dsm_state (deprecated alias)."""
-        from custom_components.span_panel.const import DSM_ON_GRID
-        from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
-
         dsm_grid_description = next(
             d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_grid_state"
         )

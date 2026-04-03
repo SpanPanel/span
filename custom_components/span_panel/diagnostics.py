@@ -51,7 +51,9 @@ async def async_get_config_entry_diagnostics(
         circuit_data[circuit_id] = {
             "name": circuit.name,
             "relay_state": circuit.relay_state,
+            "relay_state_target": circuit.relay_state_target,
             "priority": circuit.priority,
+            "priority_target": circuit.priority_target,
             "is_user_controllable": circuit.is_user_controllable,
             "instant_power_w": circuit.instant_power_w,
             "produced_energy_wh": circuit.produced_energy_wh,

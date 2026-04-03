@@ -1,9 +1,11 @@
 """Test snapshot update interval configuration option."""
 
+from unittest.mock import MagicMock
+
 import pytest
 import voluptuous as vol
 
-from custom_components.span_panel.config_flow import OPTIONS_SCHEMA
+from custom_components.span_panel.config_flow_options import GENERAL_OPTIONS_SCHEMA
 from custom_components.span_panel.const import DEFAULT_SNAPSHOT_INTERVAL
 from custom_components.span_panel.options import SNAPSHOT_UPDATE_INTERVAL
 
@@ -20,12 +22,12 @@ class TestSnapshotIntervalOption:
         assert DEFAULT_SNAPSHOT_INTERVAL == 5.0
 
     def test_snapshot_interval_in_options_schema(self) -> None:
-        """Test that snapshot interval is in the OPTIONS_SCHEMA."""
-        assert SNAPSHOT_UPDATE_INTERVAL in OPTIONS_SCHEMA.schema
+        """Test that snapshot interval is in the GENERAL_OPTIONS_SCHEMA."""
+        assert SNAPSHOT_UPDATE_INTERVAL in GENERAL_OPTIONS_SCHEMA.schema
 
     def test_snapshot_interval_valid_values(self) -> None:
         """Test that valid values pass validation."""
-        validator = OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
+        validator = GENERAL_OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
 
         assert validator(0) == 0.0
         assert validator(0.5) == 0.5
@@ -36,20 +38,20 @@ class TestSnapshotIntervalOption:
 
     def test_snapshot_interval_coerces_int_to_float(self) -> None:
         """Test that integer input is coerced to float."""
-        validator = OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
+        validator = GENERAL_OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
         result = validator(3)
         assert isinstance(result, float)
         assert result == 3.0
 
     def test_snapshot_interval_rejects_negative(self) -> None:
         """Test that negative values are rejected."""
-        validator = OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
+        validator = GENERAL_OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
         with pytest.raises(vol.Invalid):
             validator(-1)
 
     def test_snapshot_interval_rejects_above_max(self) -> None:
         """Test that values above 15 are rejected."""
-        validator = OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
+        validator = GENERAL_OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
         with pytest.raises(vol.Invalid):
             validator(16)
 
@@ -58,14 +60,12 @@ class TestSnapshotIntervalOption:
 
     def test_snapshot_interval_rejects_non_numeric(self) -> None:
         """Test that non-numeric values are rejected."""
-        validator = OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
+        validator = GENERAL_OPTIONS_SCHEMA.schema[SNAPSHOT_UPDATE_INTERVAL]
         with pytest.raises(vol.Invalid):
             validator("invalid")
 
     def test_snapshot_interval_option_persistence(self) -> None:
         """Test that the option is accessible from config entry options."""
-        from unittest.mock import MagicMock
-
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
         mock_coordinator.config_entry.options = {
@@ -79,8 +79,6 @@ class TestSnapshotIntervalOption:
 
     def test_snapshot_interval_default_when_missing(self) -> None:
         """Test that the default is used when option is not set."""
-        from unittest.mock import MagicMock
-
         mock_coordinator = MagicMock()
         mock_coordinator.config_entry = MagicMock()
         mock_coordinator.config_entry.options = {}

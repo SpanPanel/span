@@ -1,6 +1,210 @@
 export_circuit_manifest:
-  name: Export circuit manifest
-  description: >-
-    Export an authoritative circuit-to-entity manifest for all configured
-    SPAN panels. Returns panel serial numbers, circuit power sensor entity
-    IDs, simulator template names, device types, and breaker tab numbers.
+
+set_circuit_threshold:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+          device_class: current
+    continuous_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    spike_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    cooldown_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    monitoring_enabled:
+      selector:
+        boolean:
+
+clear_circuit_threshold:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+          device_class: current
+
+set_mains_threshold:
+  fields:
+    leg:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+          device_class: current
+    continuous_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    spike_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    cooldown_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    monitoring_enabled:
+      selector:
+        boolean:
+
+clear_mains_threshold:
+  fields:
+    leg:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+          device_class: current
+
+get_monitoring_status:
+
+set_global_monitoring:
+  fields:
+    enabled:
+      selector:
+        boolean:
+    continuous_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    spike_threshold_pct:
+      selector:
+        number:
+          min: 1
+          max: 200
+          unit_of_measurement: "%"
+    window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    cooldown_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    notify_targets:
+      selector:
+        text:
+    notification_title_template:
+      selector:
+        text:
+    notification_message_template:
+      selector:
+        text:
+    notification_priority:
+      selector:
+        select:
+          options:
+            - "default"
+            - "passive"
+            - "active"
+            - "time-sensitive"
+            - "critical"
+
+test_notification:
+
+set_graph_time_horizon:
+  fields:
+    horizon:
+      required: true
+      selector:
+        select:
+          options:
+            - "5m"
+            - "1h"
+            - "1d"
+            - "1w"
+            - "1M"
+
+set_circuit_graph_horizon:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        text:
+    horizon:
+      required: true
+      selector:
+        select:
+          options:
+            - "5m"
+            - "1h"
+            - "1d"
+            - "1w"
+            - "1M"
+
+clear_circuit_graph_horizon:
+  fields:
+    circuit_id:
+      required: true
+      selector:
+        text:
+
+set_subdevice_graph_horizon:
+  fields:
+    subdevice_id:
+      required: true
+      selector:
+        text:
+    horizon:
+      required: true
+      selector:
+        select:
+          options:
+            - "5m"
+            - "1h"
+            - "1d"
+            - "1w"
+            - "1M"
+
+clear_subdevice_graph_horizon:
+  fields:
+    subdevice_id:
+      required: true
+      selector:
+        text:
+
+get_graph_settings:

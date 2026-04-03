@@ -1,186 +1,591 @@
 {
   "config": {
     "abort": {
-      "no_devices_found": "ネットワーク上にデバイスが見つかりません",
       "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
-      "reauth_successful": "認証できました",
-      "v1_not_supported": "v1ファームウェアはサポートされていません。パネルのファームウェアをv2にアップグレードしてください。",
+      "cannot_connect": "スパンパネルへの接続に失敗しました",
+      "no_devices_found": "ネットワーク上にデバイスが見つかりません",
       "no_host": "アドオンからホストアドレスが提供されませんでした。",
       "no_serial": "パネルのシリアル番号を特定できませんでした。",
-      "cannot_connect": "スパンパネルへの接続に失敗しました"
+      "reauth_successful": "認証できました",
+      "reconfigure_successful": "ホストが正常に更新されました。",
+      "unique_id_mismatch": "このアドレスのパネルは異なるシリアル番号を持っています。再設定中に別のパネルに切り替えることはできません。",
+      "v1_not_supported": "v1ファームウェアはサポートされていません。パネルのファームウェアをv2にアップグレードしてください。"
     },
     "error": {
       "cannot_connect": "スパンパネルへの接続に失敗しました",
-      "invalid_auth": "認証が無効です",
-      "unknown": "予期しないエラー",
+      "fqdn_registration_failed": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。",
       "host_required": "ホストが必要です",
-      "fqdn_registration_failed": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。"
+      "invalid_auth": "認証が無効です",
+      "proximity_failed": "近接が証明されませんでした。パネルのドアを3回開閉してから、もう一度お試しください。",
+      "unknown": "予期しないエラー"
     },
+    "flow_title": "スパンパネル ({host})",
     "progress": {
       "registering_fqdn": "パネルにドメイン名を登録し、TLS証明書の更新を待っています。最大60秒かかる場合があります..."
     },
-    "flow_title": "スパンパネル ({host})",
     "step": {
-      "confirm_discovery": {
-        "description": "{host}でスパンパネルをセットアップしますか?",
-        "title": "スパンパネルに接続"
-      },
-      "user": {
-        "data": {
-          "host": "ホスト",
-          "power_display_precision": "電力表示精度",
-          "energy_display_precision": "エネルギー表示精度",
-          "enable_energy_dip_compensation": "エネルギー低下を自動補正"
-        },
-        "data_description": {
-          "host": "SPAN PanelのIPアドレスまたはホスト名",
-          "power_display_precision": "電力値の小数点以下の桁数（0-3）",
-          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）",
-          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正し、エネルギーダッシュボードのスパイクを防止します。"
-        },
-        "description": "SPAN Panelの接続詳細を入力してください。",
-        "title": "スパンパネルに接続"
-      },
-      "auth_proximity": {
-        "title": "近接認証",
-        "description": "スパンパネルのドアを {remaining} 回開閉してください。"
-      },
       "auth_passphrase": {
-        "title": "パネルパスフレーズ",
-        "description": "SPAN Panelのパスフレーズを入力してください。パネルラベルに印刷されているか、パネルオーナーによって設定されています。",
         "data": {
           "hop_passphrase": "パスフレーズ"
         },
         "data_description": {
           "hop_passphrase": "SPAN Panel v2 APIでの認証に使用するパスフレーズ"
-        }
-      }
-    }
-  },
-  "options": {
-    "step": {
-      "general_options": {
-        "title": "一般オプション",
-        "description": "SPAN Panel統合の設定を構成します。",
+        },
+        "description": "SPAN Panelのパスフレーズを入力してください。パネルラベルに印刷されているか、パネルオーナーによって設定されています。",
+        "title": "パネルパスフレーズ"
+      },
+      "auth_proximity": {
+        "description": "スパンパネルのドアを3回開閉してから、以下の確認を選択してください。",
+        "menu_options": {
+          "auth_passphrase": "代わりにパスフレーズを使用",
+          "auth_proximity_confirm": "ドアを開閉しました"
+        },
+        "title": "近接認証"
+      },
+      "auth_proximity_confirm": {
+        "description": "パネルとの近接を確認しています。",
+        "title": "近接認証"
+      },
+      "choose_entity_naming_initial": {
         "data": {
-          "snapshot_update_interval": "スナップショット更新間隔（秒）",
-          "enable_panel_net_energy_sensors": "パネル正味エネルギー",
-          "enable_circuit_net_energy_sensors": "回路正味エネルギー",
-          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
-          "enable_energy_dip_compensation": "エネルギー低下を自動補正"
+          "entity_naming_pattern": "命名パターン"
         },
         "data_description": {
-          "snapshot_update_interval": "MQTTデータからパネルスナップショットを再構築する頻度。低い値はより速い更新を提供しますが、CPUをより多く使用します。低電力ハードウェア（例：Raspberry Pi）では増加させてください。0に設定するとデバウンスなし。範囲：0〜15秒。",
-          "enable_panel_net_energy_sensors": "パネルレベルエネルギー流れ（メインメーターとフィードスルー）の正味エネルギーセンサーを作成します。双方向流れを考慮した真のエネルギー収支を表示します。",
-          "enable_circuit_net_energy_sensors": "個別回路の正味エネルギーセンサーを作成します。無効電力と回生流れを考慮した真のエネルギー消費を表示します。",
-          "energy_reporting_grace_period": "パネルが利用できなくなったときにエネルギーセンサーが最後の既知の値を維持する時間（0-60分）。短時間の停電中にエネルギー統計の整合性を維持するのに役立ちます。デフォルト：15分。",
-          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正します。無効にすると、蓄積されたすべてのオフセットがクリアされます。"
-        }
+          "entity_naming_pattern": "フレンドリ名はパネルの回路ラベルを使用します。タブベースの名前はブレーカータブ番号を使用し、安定したエンティティIDを提供します。"
+        },
+        "description": "Home Assistantでの回路関連エンティティの命名方法を選択してください。",
+        "title": "回路エンティティの命名"
+      },
+      "choose_v2_auth": {
+        "menu_options": {
+          "auth_passphrase": "パネルパスフレーズを入力",
+          "auth_proximity": "近接証明（ドアの開閉）"
+        },
+        "title": "認証方法の選択"
+      },
+      "confirm_discovery": {
+        "description": "{host}でスパンパネルをセットアップしますか?",
+        "title": "スパンパネルに接続"
+      },
+      "fqdn_failed": {
+        "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルの証明書にドメイン名が含まれていない場合、MQTT接続が失敗する可能性があります。",
+        "title": "ドメイン登録"
+      },
+      "reauth_confirm": {
+        "description": "{host}のSpan Panelは再認証が必要です。",
+        "menu_options": {
+          "auth_passphrase": "パネルパスフレーズを入力",
+          "auth_proximity": "近接証明（ドアの開閉）"
+        },
+        "title": "Span Panelの再認証"
+      },
+      "reconfigure": {
+        "data": {
+          "host": "ホスト"
+        },
+        "data_description": {
+          "host": "SPAN PanelのIPアドレスまたはホスト名"
+        },
+        "description": "このSPAN Panelのホストアドレスを更新します。パネルのシリアル番号が一致する必要があります。",
+        "title": "SPAN Panelの再設定"
+      },
+      "reconfigure_fqdn_done": {
+        "title": "再設定完了"
+      },
+      "reconfigure_fqdn_failed": {
+        "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルの証明書にドメイン名が含まれていない場合、MQTT接続が失敗する可能性があります。",
+        "title": "ドメイン登録"
+      },
+      "reconfigure_register_fqdn": {
+        "title": "ドメイン名の登録"
+      },
+      "register_fqdn": {
+        "title": "ドメイン名の登録"
+      },
+      "user": {
+        "data": {
+          "enable_energy_dip_compensation": "エネルギー低下を自動補正",
+          "energy_display_precision": "エネルギー表示精度",
+          "host": "ホスト",
+          "http_port": "HTTPポート",
+          "power_display_precision": "電力表示精度"
+        },
+        "data_description": {
+          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に自動的に補正し、エネルギーダッシュボードのスパイクを防止します。",
+          "energy_display_precision": "エネルギー値の小数点以下の桁数（0-3）",
+          "host": "SPAN PanelのIPアドレスまたはホスト名",
+          "http_port": "パネルAPIのHTTPポート（デフォルト：80）",
+          "power_display_precision": "電力値の小数点以下の桁数（0-3）"
+        },
+        "description": "SPAN Panelの接続詳細を入力してください。",
+        "title": "スパンパネルに接続"
       }
     }
   },
   "entity": {
-    "sensor": {
-      "evse_status": {
-        "state": {
-          "unknown": "不明",
-          "available": "利用可能",
-          "preparing": "準備中",
-          "charging": "充電中",
-          "suspended_ev": "車両により一時停止",
-          "suspended_evse": "充電器により一時停止",
-          "finishing": "終了処理中",
-          "reserved": "予約済み",
-          "faulted": "故障",
-          "unavailable": "利用不可"
-        }
-      },
-      "evse_lock_state": {
-        "state": {
-          "unknown": "不明",
-          "locked": "ロック",
-          "unlocked": "アンロック"
-        }
-      },
-      "dsm_state": {
-        "state": {
-          "unknown": "不明",
-          "dsm_on_grid": "系統連系",
-          "dsm_off_grid": "系統切離"
-        }
-      },
-      "dsm_grid_state": {
-        "state": {
-          "unknown": "不明",
-          "dsm_on_grid": "系統連系",
-          "dsm_off_grid": "系統切離"
-        }
-      },
-      "current_run_config": {
-        "state": {
-          "unknown": "不明",
-          "panel_on_grid": "系統連系",
-          "panel_off_grid": "系統切離",
-          "panel_backup": "バックアップ"
-        }
-      },
-      "main_relay_state": {
-        "state": {
-          "unknown": "不明",
-          "closed": "閉",
-          "open": "開"
-        }
-      },
-      "vendor_cloud": {
-        "state": {
-          "unknown": "不明",
-          "connected": "接続済み",
-          "unconnected": "未接続"
-        }
-      },
-      "grid_forming_entity": {
-        "state": {
-          "unknown": "不明",
-          "grid": "系統",
-          "battery": "バッテリー",
-          "pv": "PV",
-          "generator": "発電機",
-          "none": "なし"
-        }
-      }
-    },
     "binary_sensor": {
       "bess_connected": {
         "name": "BESS接続済み"
+      },
+      "door_state": {
+        "name": "ドア状態"
+      },
+      "ethernet_link": {
+        "name": "イーサネットリンク"
       },
       "evse_charging": {
         "name": "充電中"
       },
       "evse_ev_connected": {
         "name": "EV接続済み"
-      }
-    },
-    "select": {
-      "circuit_priority": {
-        "state": {
-          "never": "停電時もオンのまま",
-          "soc_threshold": "バッテリーしきい値までオンのまま",
-          "off_grid": "停電時にオフになる"
-        }
+      },
+      "grid_islandable": {
+        "name": "系統自立運転可能"
+      },
+      "panel_status": {
+        "name": "パネルステータス"
+      },
+      "wifi_link": {
+        "name": "Wi-Fiリンク"
       }
     },
     "button": {
       "gfe_override": {
         "name": "GFEオーバーライド：系統接続"
       }
+    },
+    "select": {
+      "circuit_priority": {
+        "name": "回路優先度",
+        "state": {
+          "never": "停電時もオンのまま",
+          "off_grid": "停電時にオフになる",
+          "soc_threshold": "バッテリーしきい値までオンのまま"
+        }
+      }
+    },
+    "sensor": {
+      "battery_level": {
+        "name": "バッテリー残量"
+      },
+      "battery_power": {
+        "name": "バッテリー電力"
+      },
+      "bess_firmware_version": {
+        "name": "ファームウェアバージョン"
+      },
+      "bess_model": {
+        "name": "モデル"
+      },
+      "bess_nameplate_capacity": {
+        "name": "定格容量"
+      },
+      "bess_serial_number": {
+        "name": "シリアル番号"
+      },
+      "bess_soe_kwh": {
+        "name": "エネルギー残量"
+      },
+      "bess_vendor": {
+        "name": "ベンダー"
+      },
+      "current_run_config": {
+        "name": "現在の動作設定",
+        "state": {
+          "panel_backup": "バックアップ",
+          "panel_off_grid": "系統切離",
+          "panel_on_grid": "系統連系",
+          "unknown": "不明"
+        }
+      },
+      "downstream_l1_current": {
+        "name": "下流側L1電流"
+      },
+      "downstream_l2_current": {
+        "name": "下流側L2電流"
+      },
+      "dsm_grid_state": {
+        "name": "DSM系統状態",
+        "state": {
+          "dsm_off_grid": "系統切離",
+          "dsm_on_grid": "系統連系",
+          "unknown": "不明"
+        }
+      },
+      "dsm_state": {
+        "name": "DSM状態",
+        "state": {
+          "dsm_off_grid": "系統切離",
+          "dsm_on_grid": "系統連系",
+          "unknown": "不明"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "通知電流"
+      },
+      "evse_lock_state": {
+        "name": "ロック状態",
+        "state": {
+          "locked": "ロック",
+          "unknown": "不明",
+          "unlocked": "アンロック"
+        }
+      },
+      "evse_status": {
+        "name": "充電器ステータス",
+        "state": {
+          "available": "利用可能",
+          "charging": "充電中",
+          "faulted": "故障",
+          "finishing": "終了処理中",
+          "preparing": "準備中",
+          "reserved": "予約済み",
+          "suspended_ev": "車両により一時停止",
+          "suspended_evse": "充電器により一時停止",
+          "unavailable": "利用不可",
+          "unknown": "不明"
+        }
+      },
+      "feedthrough_consumed_energy": {
+        "name": "フィードスルー消費エネルギー"
+      },
+      "feedthrough_net_energy": {
+        "name": "フィードスルー正味エネルギー"
+      },
+      "feedthrough_power": {
+        "name": "フィードスルー電力"
+      },
+      "feedthrough_produced_energy": {
+        "name": "フィードスルー発電エネルギー"
+      },
+      "grid_forming_entity": {
+        "name": "系統形成エンティティ",
+        "state": {
+          "battery": "バッテリー",
+          "generator": "発電機",
+          "grid": "系統",
+          "none": "なし",
+          "pv": "PV",
+          "unknown": "不明"
+        }
+      },
+      "grid_power_flow": {
+        "name": "系統電力"
+      },
+      "instant_grid_power": {
+        "name": "現在の電力"
+      },
+      "l1_voltage": {
+        "name": "L1電圧"
+      },
+      "l2_voltage": {
+        "name": "L2電圧"
+      },
+      "main_breaker_rating": {
+        "name": "主幹ブレーカー定格"
+      },
+      "main_meter_consumed_energy": {
+        "name": "主幹メーター消費エネルギー"
+      },
+      "main_meter_net_energy": {
+        "name": "主幹メーター正味エネルギー"
+      },
+      "main_meter_produced_energy": {
+        "name": "主幹メーター発電エネルギー"
+      },
+      "main_relay_state": {
+        "name": "主幹リレー状態",
+        "state": {
+          "closed": "閉",
+          "open": "開",
+          "unknown": "不明"
+        }
+      },
+      "pv_nameplate_capacity": {
+        "name": "PV定格容量"
+      },
+      "pv_power": {
+        "name": "PV電力"
+      },
+      "pv_product": {
+        "name": "PV製品"
+      },
+      "pv_vendor": {
+        "name": "PVベンダー"
+      },
+      "site_power": {
+        "name": "サイト電力"
+      },
+      "software_version": {
+        "name": "ソフトウェアバージョン"
+      },
+      "upstream_l1_current": {
+        "name": "上流側L1電流"
+      },
+      "upstream_l2_current": {
+        "name": "上流側L2電流"
+      },
+      "vendor_cloud": {
+        "name": "ベンダークラウド",
+        "state": {
+          "connected": "接続済み",
+          "unconnected": "未接続",
+          "unknown": "不明"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "circuit_priority_failed": {
+      "message": "{circuit}の回路優先度の設定に失敗しました。"
+    },
+    "circuit_relay_failed": {
+      "message": "{circuit}の回路リレー状態の設定に失敗しました。"
+    },
+    "export_manifest_no_entries": {
+      "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"
+    },
+    "gfe_override_failed": {
+      "message": "パネルへのGFEオーバーライドの送信に失敗しました。"
+    },
+    "panel_auth_failed": {
+      "message": "SPAN Panelとの認証に失敗しました。再認証してください。"
+    },
+    "panel_connection_failed": {
+      "message": "{host}のSPAN Panelへの接続に失敗しました。"
+    },
+    "panel_not_ready": {
+      "message": "SPAN Panelの準備ができていません。パネルがオンラインであることを確認してください。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "show_panel": "サイドバーにダッシュボードを表示",
+          "panel_admin_only": "管理ユーザーのみ",
+          "enable_circuit_net_energy_sensors": "回路正味エネルギー",
+          "enable_energy_dip_compensation": "エネルギー低下を自動補正",
+          "enable_panel_net_energy_sensors": "パネル正味エネルギー",
+          "enable_unmapped_circuit_sensors": "未割当回路センサー",
+          "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
+          "snapshot_update_interval": "スナップショット更新間隔（秒）"
+        },
+        "data_description": {
+          "show_panel": "SPANパネルダッシュボードをサイドバーエントリとして表示します。",
+          "panel_admin_only": "ダッシュボードサイドバーエントリを管理ユーザーのみに制限します。",
+          "enable_circuit_net_energy_sensors": "無効電力を考慮した回路ごとの正味エネルギー。",
+          "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に補正します。無効にするとオフセットがクリアされます。",
+          "enable_panel_net_energy_sensors": "双方向フローを考慮した主幹メーターとフィードスルーの正味エネルギー。",
+          "enable_unmapped_circuit_sensors": "名前付きブレーカーに割り当てられていないタブのバッキングセンサー。",
+          "energy_reporting_grace_period": "パネルがオフライン時にセンサーが最後の値を保持する分数（0〜60）。デフォルト：15。",
+          "snapshot_update_interval": "スナップショット再構築の間隔（秒）（0〜15）。低い値＝高速、CPU負荷増。0＝デバウンスなし。"
+        },
+        "description": "SPAN Panel統合の設定を構成します。",
+        "title": "SPANパネルオプション"
+      }
     }
   },
   "selector": {
     "entity_naming_pattern": {
       "options": {
-        "friendly_names": "フレンドリ名（例：span_panel_kitchen_outlets_power）",
-        "circuit_numbers": "回路番号（例：span_panel_circuit_15_power）"
+        "circuit_numbers": "回路番号（例：span_panel_circuit_15_power）",
+        "friendly_names": "フレンドリ名（例：span_panel_kitchen_outlets_power）"
       }
+    }
+  },
+  "services": {
+    "export_circuit_manifest": {
+      "description": "設定済みのすべてのSPANパネルの構造化された回路マニフェストを返します：シリアル番号、ホスト、回路ごとの電力センサーエンティティID、レイアウトテンプレート識別子（clone_{{tab}}）、デバイスタイプ、ブレーカータブ番号。エンティティレジストリを照会せずにパネルトポロジーが必要なダッシュボードカードやオートメーション向けです。これはレスポンス専用サービスです。解決できるものがない場合、レスポンスにはパネルが含まれない場合があります。",
+      "name": "回路マニフェストのエクスポート"
+    },
+    "set_circuit_threshold": {
+      "name": "回路しきい値の設定",
+      "description": "特定の回路の電流モニタリングしきい値を設定します。",
+      "fields": {
+        "circuit_id": {
+          "name": "回路",
+          "description": "回路電力センサーエンティティ。"
+        },
+        "continuous_threshold_pct": {
+          "name": "連続しきい値（%）",
+          "description": "連続負荷アラート用のブレーカー定格に対する割合。"
+        },
+        "spike_threshold_pct": {
+          "name": "スパイクしきい値（%）",
+          "description": "瞬時スパイクアラート用のブレーカー定格に対する割合。"
+        },
+        "window_duration_m": {
+          "name": "ウィンドウ期間（分）",
+          "description": "アラート発報前に電流がしきい値を超えている必要がある時間。"
+        },
+        "cooldown_duration_m": {
+          "name": "クールダウン期間（分）",
+          "description": "同じ回路の繰り返しアラート間の分数。"
+        },
+        "monitoring_enabled": {
+          "name": "モニタリング有効",
+          "description": "この回路のモニタリングを有効または無効にします。"
+        }
+      }
+    },
+    "clear_circuit_threshold": {
+      "name": "回路しきい値のクリア",
+      "description": "回路ごとのしきい値オーバーライドを削除し、グローバルデフォルトに戻します。",
+      "fields": {
+        "circuit_id": {
+          "name": "回路",
+          "description": "回路電力センサーエンティティ。"
+        }
+      }
+    },
+    "set_mains_threshold": {
+      "name": "主幹しきい値の設定",
+      "description": "特定の主幹レグの電流モニタリングしきい値を設定します。",
+      "fields": {
+        "leg": {
+          "name": "主幹レグ",
+          "description": "主幹電流センサーエンティティ。"
+        },
+        "continuous_threshold_pct": {
+          "name": "連続しきい値（%）",
+          "description": "連続負荷アラート用のブレーカー定格に対する割合。"
+        },
+        "spike_threshold_pct": {
+          "name": "スパイクしきい値（%）",
+          "description": "瞬時スパイクアラート用のブレーカー定格に対する割合。"
+        },
+        "window_duration_m": {
+          "name": "ウィンドウ期間（分）",
+          "description": "アラート発報前に電流がしきい値を超えている必要がある時間。"
+        },
+        "cooldown_duration_m": {
+          "name": "クールダウン期間（分）",
+          "description": "同じ主幹レグの繰り返しアラート間の分数。"
+        },
+        "monitoring_enabled": {
+          "name": "モニタリング有効",
+          "description": "この主幹レグのモニタリングを有効または無効にします。"
+        }
+      }
+    },
+    "clear_mains_threshold": {
+      "name": "主幹しきい値のクリア",
+      "description": "主幹レグごとのしきい値オーバーライドを削除し、グローバルデフォルトに戻します。",
+      "fields": {
+        "leg": {
+          "name": "主幹レグ",
+          "description": "主幹電流センサーエンティティ。"
+        }
+      }
+    },
+    "get_monitoring_status": {
+      "name": "モニタリングステータスの取得",
+      "description": "すべての追跡対象回路と主幹レグの現在のモニタリング状態を返します。"
+    },
+    "set_global_monitoring": {
+      "name": "グローバル監視の設定",
+      "description": "グローバル監視のしきい値と通知設定を更新します。",
+      "fields": {
+        "continuous_threshold_pct": {
+          "name": "連続しきい値",
+          "description": "連続過負荷検出のためのブレーカー定格に対する割合。"
+        },
+        "spike_threshold_pct": {
+          "name": "スパイクしきい値",
+          "description": "スパイク検出のためのブレーカー定格に対する割合。"
+        },
+        "window_duration_m": {
+          "name": "ウィンドウ期間",
+          "description": "アラートを発する前の持続的過負荷の分数。"
+        },
+        "cooldown_duration_m": {
+          "name": "クールダウン期間",
+          "description": "同じポイントの繰り返しアラート間の分数。"
+        },
+        "notify_targets": {
+          "name": "通知ターゲット",
+          "description": "通知サービスターゲットのカンマ区切りリスト。"
+        },
+        "notification_title_template": {
+          "name": "通知タイトルテンプレート",
+          "description": "通知タイトルのテンプレート。プレースホルダー: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}。"
+        },
+        "notification_message_template": {
+          "name": "通知メッセージテンプレート",
+          "description": "通知メッセージ本文のテンプレート。プレースホルダー: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}。"
+        },
+        "notification_priority": {
+          "name": "通知優先度",
+          "description": "プッシュ通知の優先度レベル。モバイルデバイスでの割り込み動作を制御します（iOS: interruption-level、Android: priority/チャンネル）。"
+        }
+      }
+    },
+    "test_notification": {
+      "name": "テスト通知",
+      "description": "サンプル値を使用して設定されたすべてのターゲットにテスト通知を送信します。"
+    },
+    "set_graph_time_horizon": {
+      "name": "グラフの時間範囲を設定",
+      "description": "回路グラフのグローバルデフォルト時間範囲を設定します。",
+      "fields": {
+        "horizon": {
+          "name": "時間範囲",
+          "description": "グラフ表示用の時間ウィンドウプリセット。"
+        }
+      }
+    },
+    "set_circuit_graph_horizon": {
+      "name": "回路別グラフ時間範囲を設定",
+      "description": "回路別のグラフ時間範囲オーバーライドを設定します。",
+      "fields": {
+        "circuit_id": {
+          "name": "回路ID",
+          "description": "オーバーライドする回路の識別子。"
+        },
+        "horizon": {
+          "name": "時間範囲",
+          "description": "グラフ表示用の時間ウィンドウプリセット。"
+        }
+      }
+    },
+    "clear_circuit_graph_horizon": {
+      "name": "回路別グラフ時間範囲をクリア",
+      "description": "回路別のグラフ時間範囲オーバーライドを削除し、グローバルデフォルトに戻します。",
+      "fields": {
+        "circuit_id": {
+          "name": "回路ID",
+          "description": "オーバーライドをクリアする回路の識別子。"
+        }
+      }
+    },
+    "set_subdevice_graph_horizon": {
+      "name": "サブデバイス別グラフ時間範囲を設定",
+      "description": "サブデバイス別のグラフ時間範囲オーバーライドを設定します。",
+      "fields": {
+        "subdevice_id": {
+          "name": "サブデバイスID",
+          "description": "オーバーライドするサブデバイスの識別子。"
+        },
+        "horizon": {
+          "name": "時間範囲",
+          "description": "グラフ表示用の時間ウィンドウプリセット。"
+        }
+      }
+    },
+    "clear_subdevice_graph_horizon": {
+      "name": "サブデバイス別グラフ時間範囲をクリア",
+      "description": "サブデバイス別のグラフ時間範囲オーバーライドを削除し、グローバルデフォルトに戻します。",
+      "fields": {
+        "subdevice_id": {
+          "name": "サブデバイスID",
+          "description": "オーバーライドをクリアするサブデバイスの識別子。"
+        }
+      }
+    },
+    "get_graph_settings": {
+      "name": "グラフ設定を取得",
+      "description": "現在のグローバルおよび回路別のグラフ時間範囲設定を返します。"
     }
   }
 }

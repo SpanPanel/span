@@ -6,8 +6,14 @@ import pytest
 from span_panel_api import SpanBatterySnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
-from tests.factories import SpanPanelSnapshotFactory
+from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
+from custom_components.span_panel.button import (
+    GFE_OVERRIDE_DESCRIPTION,
+    SpanPanelGFEOverrideButton,
+)
+from custom_components.span_panel.helpers import has_bess
 
+from .factories import SpanPanelSnapshotFactory
 
 # ---------------------------------------------------------------------------
 # BESS Connected Binary Sensor
@@ -19,8 +25,6 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_connected_true(self) -> None:
         """Connected=True -> is_on=True."""
-        from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
-
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(soe_percentage=85.0, connected=True),
         )
@@ -28,8 +32,6 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_connected_false(self) -> None:
         """Connected=False -> is_on=False."""
-        from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
-
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(soe_percentage=85.0, connected=False),
         )
@@ -37,8 +39,6 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_connected_none(self) -> None:
         """Connected=None -> is_on=None."""
-        from custom_components.span_panel.binary_sensor import BESS_CONNECTED_SENSOR
-
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(soe_percentage=85.0, connected=None),
         )
@@ -46,8 +46,6 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_sensor_not_created_without_bess(self) -> None:
         """No BESS (soe_percentage=None) -> has_bess returns False."""
-        from custom_components.span_panel.helpers import has_bess
-
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(),
         )
@@ -55,8 +53,6 @@ class TestBessConnectedBinarySensor:
 
     def test_bess_sensor_created_with_bess(self) -> None:
         """BESS present (soe_percentage set) -> has_bess returns True."""
-        from custom_components.span_panel.helpers import has_bess
-
         snapshot = SpanPanelSnapshotFactory.create(
             battery=SpanBatterySnapshot(soe_percentage=85.0, connected=True),
         )
@@ -93,11 +89,6 @@ class TestGFEOverrideButtons:
 
     def test_grid_button_unique_id(self) -> None:
         """Grid override button has expected unique ID."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator()
         button = SpanPanelGFEOverrideButton(
             coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
@@ -108,11 +99,6 @@ class TestGFEOverrideButtons:
     @pytest.mark.asyncio
     async def test_grid_button_press_publishes_grid(self) -> None:
         """Pressing the grid button calls set_dominant_power_source with GRID."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator()
         button = SpanPanelGFEOverrideButton(
             coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
@@ -130,11 +116,6 @@ class TestGFEOverrideButtons:
     @pytest.mark.asyncio
     async def test_button_missing_control_method(self) -> None:
         """Client without set_dominant_power_source method logs warning."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator()
         button = SpanPanelGFEOverrideButton(
             coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
@@ -152,11 +133,6 @@ class TestGFEOverrideButtons:
     @pytest.mark.asyncio
     async def test_button_server_error(self) -> None:
         """SpanPanelServerError triggers a notification."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator()
 
         with patch(
@@ -179,11 +155,6 @@ class TestGFEOverrideButtons:
 
     def test_available_when_bess_offline_and_not_grid(self) -> None:
         """Button is available when BESS is offline and GFE is not GRID."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator(
             dominant_power_source="BATTERY",
             battery=SpanBatterySnapshot(soe_percentage=50.0, connected=False),
@@ -196,11 +167,6 @@ class TestGFEOverrideButtons:
 
     def test_unavailable_when_bess_online(self) -> None:
         """Button is unavailable when BESS is communicating."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator(
             dominant_power_source="BATTERY",
             battery=SpanBatterySnapshot(soe_percentage=50.0, connected=True),
@@ -213,11 +179,6 @@ class TestGFEOverrideButtons:
 
     def test_unavailable_when_gfe_is_grid(self) -> None:
         """Button is unavailable when GFE is already GRID."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator(
             dominant_power_source="GRID",
             battery=SpanBatterySnapshot(soe_percentage=50.0, connected=False),
@@ -230,11 +191,6 @@ class TestGFEOverrideButtons:
 
     def test_available_when_no_bess(self) -> None:
         """Button is available when no BESS is commissioned and GFE is not GRID."""
-        from custom_components.span_panel.button import (
-            GFE_OVERRIDE_DESCRIPTION,
-            SpanPanelGFEOverrideButton,
-        )
-
         coordinator = _make_gfe_coordinator(
             dominant_power_source="BATTERY",
             battery=SpanBatterySnapshot(),

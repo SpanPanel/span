@@ -5,31 +5,20 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import logging
-from typing import cast
 
-from homeassistant.components.persistent_notification import async_create as pn_create
+from homeassistant.components.frontend import async_remove_panel as async_remove_panel
+from homeassistant.components.panel_custom import async_register_panel as async_register_panel
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
-from homeassistant.core import (
-    CoreState,
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-)
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
     ConfigEntryNotReady,
-    ServiceValidationError,
 )
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
-from span_panel_api import (
-    SpanMqttClient,
-    SpanPanelSnapshot,
-    detect_api_version,
-)
+from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelConnectionError,
@@ -48,13 +37,35 @@ from .const import (
     CONF_HTTP_PORT,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
+    ENABLE_CURRENT_MONITORING,
 )
 from .coordinator import SpanPanelCoordinator
-from .helpers import build_circuit_unique_id
-from .migration import migrate_config_entry_sensors
+from .current_monitor import CurrentMonitor
+from .frontend import (
+    PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
+    PANEL_URL as PANEL_URL,
+    _async_ensure_lovelace_resource as _async_ensure_lovelace_resource,
+    async_apply_panel_registration,
+    async_load_panel_settings as async_load_panel_settings,
+    async_save_panel_settings as async_save_panel_settings,
+)
+from .graph_horizon import GraphHorizonManager
+from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .options import SNAPSHOT_UPDATE_INTERVAL
+from .services import (  # noqa: F401
+    _async_register_graph_horizon_services,
+    _async_register_monitoring_services,
+    _async_register_services,
+    _build_clear_circuit_threshold_schema,
+    _build_clear_mains_threshold_schema,
+    _build_set_circuit_threshold_schema,
+    _build_set_global_monitoring_schema,
+    _build_set_mains_threshold_schema,
+)
 from .util import snapshot_to_device_info
 from .websocket import async_register_commands
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 @dataclass
@@ -76,201 +87,14 @@ PLATFORMS: list[Platform] = [
 
 _LOGGER = logging.getLogger(__name__)
 
-# Config entry version — bumped to 6 for simulation removal
-CURRENT_CONFIG_VERSION = 6
-
-# Map internal device_type values to external manifest format
-_DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Span Panel integration (domain-level, called once)."""
     _async_register_services(hass)
-    return True
+    _async_register_monitoring_services(hass)
+    _async_register_graph_horizon_services(hass)
 
-
-async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Migrate config entry through successive versions."""
-
-    if config_entry.version >= CURRENT_CONFIG_VERSION:
-        return True
-
-    # --- Gate: verify panel firmware before any schema changes ---
-    # For entries from the v1 integration era (pre-v3 schema), probe the panel
-    # to confirm it is running v2 firmware.  If the panel is still on v1
-    # firmware, the v2 integration cannot operate it.  By returning False
-    # *before* touching the schema we leave the config entry at its original
-    # version so the user can safely roll back to the prior integration.
-    if config_entry.version < 3 and not config_entry.data.get("simulation_mode", False):
-        host = config_entry.data.get(CONF_HOST)
-        if not host:
-            _LOGGER.error(
-                "Config entry %s has no host — cannot verify panel firmware",
-                config_entry.entry_id,
-            )
-            return False
-
-        try:
-            detection = await detect_api_version(host)
-        except Exception as err:
-            _LOGGER.error(
-                "Could not reach panel at %s to verify firmware version: %s. "
-                "Migration deferred until the panel is reachable.",
-                host,
-                err,
-            )
-            pn_create(
-                hass,
-                f"Could not reach your SPAN Panel at **{host}** to verify its "
-                "firmware version. The integration will not load until the panel "
-                "is reachable. Please ensure the panel is online, then reload "
-                "the integration.",
-                title="SPAN Panel: Panel Unreachable During Migration",
-                notification_id=f"span_panel_unreachable_{config_entry.entry_id}",
-            )
-            return False
-
-        if detection.api_version != "v2":
-            _LOGGER.error(
-                "Panel at %s is running %s firmware. "
-                "This version of the integration requires v2 firmware. "
-                "Please upgrade your panel firmware, then reload the integration. "
-                "You can also roll back to the previous integration version.",
-                host,
-                detection.api_version,
-            )
-            pn_create(
-                hass,
-                f"Your SPAN Panel at **{host}** is running **{detection.api_version}** "
-                "firmware which is not compatible with this version of the "
-                "integration. Please either:\n\n"
-                "1. Upgrade the panel firmware to v2, then reload the integration.\n"
-                "2. Roll back to the previous integration version.",
-                title="SPAN Panel: Firmware Upgrade Required",
-                notification_id=f"span_panel_v1_firmware_{config_entry.entry_id}",
-            )
-            return False
-
-    _LOGGER.debug(
-        "Migrating config entry %s from version %s to %s",
-        config_entry.entry_id,
-        config_entry.version,
-        CURRENT_CONFIG_VERSION,
-    )
-
-    # --- v1 → v2: unique_id normalisation (existing logic) ---
-    if config_entry.version < 2:
-        migration_success = await migrate_config_entry_sensors(hass, config_entry)
-        if not migration_success:
-            _LOGGER.warning(
-                "Migration v1→v2 failed for config entry %s",
-                config_entry.entry_id,
-            )
-            return False
-
-        hass.config_entries.async_update_entry(
-            config_entry,
-            data=config_entry.data,
-            options=config_entry.options,
-            title=config_entry.title,
-            version=2,
-        )
-        _LOGGER.debug("Migrated config entry %s to version 2", config_entry.entry_id)
-
-    # --- v2 → v3: add api_version field ---
-    if config_entry.version < 3:
-        updated_data = dict(config_entry.data)
-
-        if updated_data.get("simulation_mode", False):
-            updated_data[CONF_API_VERSION] = "simulation"
-        else:
-            updated_data[CONF_API_VERSION] = "v1"
-
-        hass.config_entries.async_update_entry(
-            config_entry,
-            data=updated_data,
-            options=config_entry.options,
-            title=config_entry.title,
-            version=3,
-        )
-        _LOGGER.debug("Migrated config entry %s to version 3", config_entry.entry_id)
-
-    # --- v3 → v4: solar migration flag + remove solar/retry options ---
-    if config_entry.version < 4:
-        updated_options = dict(config_entry.options)
-        updated_data = dict(config_entry.data)
-
-        # Check if user had solar configured under v1 options layout
-        solar_was_enabled = updated_options.pop("enable_solar_circuit", False)
-        updated_options.pop("leg1", None)
-        updated_options.pop("leg2", None)
-
-        if solar_was_enabled:
-            # PV circuit UUID is only known at runtime (from MQTT data),
-            # so defer entity registry update to first coordinator refresh.
-            updated_data["solar_migration_pending"] = True
-            _LOGGER.info(
-                "Solar was configured — setting solar_migration_pending flag "
-                "for runtime entity registry migration"
-            )
-
-        # Remove v1 REST retry options (no longer applicable)
-        for key in ("api_retries", "api_retry_timeout", "api_retry_backoff_multiplier"):
-            updated_options.pop(key, None)
-
-        hass.config_entries.async_update_entry(
-            config_entry,
-            data=updated_data,
-            options=updated_options,
-            version=4,
-        )
-        _LOGGER.debug("Migrated config entry %s to version 4", config_entry.entry_id)
-
-    # --- v4 → v5: remove wwanLink binary sensor ---
-    if config_entry.version < 5:
-        entity_registry = er.async_get(hass)
-        entities = er.async_entries_for_config_entry(entity_registry, config_entry.entry_id)
-
-        removed = 0
-        for entity in entities:
-            # Remove wwanLink binary sensor (replaced by vendor_cloud regular sensor)
-            if entity.domain == "binary_sensor" and entity.unique_id.endswith("_wwanLink"):
-                entity_registry.async_remove(entity.entity_id)
-                _LOGGER.info("Removed deprecated wwanLink binary sensor: %s", entity.entity_id)
-                removed += 1
-
-        if removed:
-            _LOGGER.info("v4→v5 migration: removed %d deprecated entities", removed)
-
-        hass.config_entries.async_update_entry(
-            config_entry,
-            version=5,
-        )
-        _LOGGER.debug("Migrated config entry %s to version 5", config_entry.entry_id)
-
-    # --- v5 → v6: reject simulation entries ---
-    if config_entry.version < 6:
-        if config_entry.data.get(CONF_API_VERSION) == "simulation" or config_entry.data.get(
-            "simulation_mode", False
-        ):
-            pn_create(
-                hass,
-                "This SPAN Panel config entry was a **built-in simulator** which "
-                "has been removed in this version. Please remove this entry and "
-                "use the standalone SPAN simulator instead.",
-                title="SPAN Panel: Simulation Entry Removed",
-                notification_id=f"span_simulation_removed_{config_entry.entry_id}",
-            )
-            _LOGGER.warning(
-                "Config entry %s is a simulation entry — setup will be skipped",
-                config_entry.entry_id,
-            )
-
-        hass.config_entries.async_update_entry(
-            config_entry,
-            version=6,
-        )
-        _LOGGER.debug("Migrated config entry %s to version 6", config_entry.entry_id)
+    await async_apply_panel_registration(hass)
 
     return True
 
@@ -278,11 +102,6 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
-
-    # Simulation entries were removed in v6 — skip setup, notification was
-    # already created during migration.
-    if entry.data.get(CONF_API_VERSION) == "simulation" or entry.data.get("simulation_mode", False):
-        return False
 
     # Register WebSocket commands once per HA instance
     domain_data: dict[str, bool] = hass.data.setdefault(DOMAIN, {})
@@ -313,7 +132,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             )
             missing = [k for k in required_keys if not config.get(k)]
             if missing:
-                raise ConfigEntryAuthFailed(
+                raise ConfigEntryAuthFailed(  # noqa: TRY301
                     f"v2 panel is missing MQTT credentials ({', '.join(missing)}). "
                     "Please reauthenticate to provide a passphrase."
                 )
@@ -321,7 +140,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             host = config[CONF_HOST]
             serial_number = entry.unique_id
             if not serial_number:
-                raise ConfigEntryNotReady("Config entry has no unique_id (serial number)")
+                raise ConfigEntryNotReady(  # noqa: TRY301
+                    "Config entry has no unique_id (serial number)"
+                )
 
             # The MQTT broker runs on the panel itself. The panel advertises
             # its own mDNS hostname (.local) as ebusBrokerHost, but mDNS
@@ -368,8 +189,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             await coordinator.async_config_entry_first_refresh()
             await coordinator.async_setup_streaming()
 
+            if entry.options.get(
+                ENABLE_CURRENT_MONITORING, False
+            ) or await CurrentMonitor.async_is_enabled(hass, entry):
+                monitor = CurrentMonitor(hass, entry)
+                await monitor.async_start()
+                coordinator.current_monitor = monitor
+
+            graph_horizon = GraphHorizonManager(hass, entry)
+            await graph_horizon.async_load()
+            coordinator.graph_horizon_manager = graph_horizon
+
         else:
-            raise ConfigEntryError(f"Unknown api_version: {api_version}")
+            raise ConfigEntryError(  # noqa: TRY301
+                f"Unknown api_version: {api_version}"
+            )
 
         # --- Common setup for all transport modes ---
 
@@ -403,13 +237,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         await ensure_device_registered(hass, entry, snapshot, smart_device_name)
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-        return True
-
     except Exception:
         if coordinator is not None:
             await coordinator.async_shutdown()
         raise
+    else:
+        return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
@@ -417,6 +250,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     _LOGGER.debug("Unloading SPAN Panel integration")
 
     if hasattr(entry, "runtime_data") and entry.runtime_data is not None:
+        if entry.runtime_data.coordinator.current_monitor is not None:
+            entry.runtime_data.coordinator.current_monitor.async_stop()
         await entry.runtime_data.coordinator.async_shutdown()
 
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -462,8 +297,8 @@ async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> N
 
     except asyncio.CancelledError:
         raise
-    except Exception as e:
-        _LOGGER.error("Failed to reload SPAN Panel integration: %s", e, exc_info=True)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.error("Failed to reload SPAN Panel integration: %s", err)
 
 
 async def ensure_device_registered(
@@ -490,75 +325,3 @@ async def ensure_device_registered(
     else:
         device_info = snapshot_to_device_info(snapshot, device_name, host=host)
         device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
-
-
-def _async_register_services(hass: HomeAssistant) -> None:
-    """Register domain-level services (called once per HA instance)."""
-
-    async def async_handle_export_manifest(
-        _call: ServiceCall,
-    ) -> ServiceResponse:
-        """Export circuit manifest for all configured SPAN panels."""
-        if not hass.config_entries.async_loaded_entries(DOMAIN):
-            raise ServiceValidationError(
-                "No SPAN panel config entries are loaded. "
-                "Add and configure a SPAN panel before calling this service."
-            )
-
-        entity_reg = er.async_get(hass)
-        panels = []
-
-        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
-                continue
-
-            snapshot = entry.runtime_data.coordinator.data
-            if snapshot is None:
-                continue
-
-            serial = snapshot.serial_number
-            circuits = []
-
-            for circuit_id, circuit in snapshot.circuits.items():
-                if circuit_id.startswith("unmapped_tab_"):
-                    continue
-
-                tabs = getattr(circuit, "tabs", None)
-                if not tabs:
-                    continue
-
-                unique_id = build_circuit_unique_id(serial, circuit_id, "instantPowerW")
-                entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
-                if entity_id is None:
-                    continue
-
-                raw_type = getattr(circuit, "device_type", "circuit")
-
-                circuits.append(
-                    {
-                        "entity_id": entity_id,
-                        "template": f"clone_{min(tabs)}",
-                        "device_type": _DEVICE_TYPE_MAP.get(raw_type, raw_type),
-                        "tabs": list(tabs),
-                    }
-                )
-
-            if circuits:
-                panels.append(
-                    {
-                        "serial": serial,
-                        "host": entry.data[CONF_HOST],
-                        "circuits": circuits,
-                    }
-                )
-
-        return cast(ServiceResponse, {"panels": panels})
-
-    hass.services.async_register(
-        DOMAIN,
-        "export_circuit_manifest",
-        async_handle_export_manifest,
-        supports_response=SupportsResponse.ONLY,
-    )

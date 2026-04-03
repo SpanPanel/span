@@ -13,8 +13,8 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity import EntityCategory  # type: ignore[attr-defined]
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
@@ -178,6 +178,9 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
             if getattr(self.coordinator, "panel_offline", False):
                 return True
 
+        if getattr(self, "_attr_available", True) is False:
+            return False
+
         return super().available
 
     def _handle_coordinator_update(self) -> None:
@@ -202,11 +205,13 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
                 and self.entity_description.key in hardware_status_sensors
             ):
                 self._attr_is_on = None
+                self._attr_available = True
                 _LOGGER.debug(
                     "Hardware status sensor %s: panel offline or no data - showing as unknown",
                     self.entity_id,
                 )
             else:
+                self._attr_available = False
                 _LOGGER.debug(
                     "Binary sensor %s: panel offline or no data - will be unavailable",
                     self.entity_id,
@@ -337,7 +342,7 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up status sensor platform."""
 
@@ -347,10 +352,7 @@ async def async_setup_entry(
 
     entities: list[
         SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanEvseBinarySensor
-    ] = []
-
-    for description in BINARY_SENSORS:
-        entities.append(SpanPanelBinarySensor(coordinator, description))
+    ] = [SpanPanelBinarySensor(coordinator, description) for description in BINARY_SENSORS]
 
     # Add grid islandable binary sensor when v2 data is available
     snapshot: SpanPanelSnapshot = coordinator.data
@@ -374,10 +376,9 @@ async def async_setup_entry(
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:
         for evse_id in snapshot.evse:
-            for evse_desc in EVSE_BINARY_SENSORS:
-                entities.append(SpanEvseBinarySensor(coordinator, evse_desc, evse_id))
+            entities.extend(
+                SpanEvseBinarySensor(coordinator, evse_desc, evse_id)
+                for evse_desc in EVSE_BINARY_SENSORS
+            )
 
     async_add_entities(entities)
-
-    # Force immediate coordinator refresh to ensure hardware sensors update right away
-    await coordinator.async_request_refresh()
