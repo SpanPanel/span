@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Current monitoring and dashboard** — Real-time monitoring of circuit and mains current draw, managed entirely from a new sidebar panel with Panel,
+- **Current monitoring and dashboard** — Real-time monitoring of circuit and mains current draw, managed from a new sidebar panel with Panel,
   Monitoring, and Settings tabs.
   - Configurable spike and continuous overload thresholds (percentage of breaker rating, window duration, cooldown)
   - Per-circuit and per-mains-leg threshold overrides with reset-to-global
@@ -28,8 +28,9 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - **Services use entity IDs** — Monitoring services accept entity IDs instead of internal circuit UUIDs, matching HA conventions.
-
 - **`span-panel-api` updated to 2.5.1** — Improved HTTP connection handling and performance.
+- **`span-card`** no longer needs to be loaded through a custom HACS repository; it is loaded by the integration and can be embedded into dashboards. If using
+  the `span-card` separately from the built-in dashboard, remove the custom resource.
 
 ### Fixed
 
