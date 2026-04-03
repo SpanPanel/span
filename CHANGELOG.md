@@ -11,8 +11,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Current monitoring and dashboard** — Real-time monitoring of circuit and mains current draw, managed from a new sidebar panel with Panel,
-  Monitoring, and Settings tabs.
+- **Current monitoring and dashboard** — Real-time monitoring of circuit and mains current draw, managed from a new sidebar panel with Panel, Monitoring, and
+  Settings tabs.
   - Configurable spike and continuous overload thresholds (percentage of breaker rating, window duration, cooldown)
   - Per-circuit and per-mains-leg threshold overrides with reset-to-global
   - Notification targets and device trackers
