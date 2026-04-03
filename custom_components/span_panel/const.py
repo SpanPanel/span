@@ -68,7 +68,7 @@ DEFAULT_WINDOW_DURATION_M = 15
 DEFAULT_COOLDOWN_DURATION_M = 15
 DEFAULT_NOTIFICATION_TITLE_TEMPLATE = "SPAN: {name} {alert_type}"
 DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE = (
-    "{name} at {current_a}A ({utilization_pct}% of {breaker_rating_a}A rating)"
+    "{name} at {current_a}A ({utilization_pct}% of {breaker_rating_a}A rating) at {local_time}"
 )
 DEFAULT_NOTIFICATION_PRIORITY = "default"
 NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (

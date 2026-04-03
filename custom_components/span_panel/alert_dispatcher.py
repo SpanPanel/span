@@ -82,7 +82,7 @@ def format_notification(
     except (KeyError, ValueError):
         message = (
             f"{alert_name} at {current_a:.1f}A "
-            f"({utilization_pct}% of {breaker_rating_a:.0f}A rating)"
+            f"({utilization_pct}% of {breaker_rating_a:.0f}A rating) at {local_time or ''}"
         )
     return title, message
 
