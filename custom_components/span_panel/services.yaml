@@ -128,12 +128,6 @@ set_global_monitoring:
     notify_targets:
       selector:
         text:
-    enable_persistent_notifications:
-      selector:
-        boolean:
-    enable_event_bus:
-      selector:
-        boolean:
     notification_title_template:
       selector:
         text:
@@ -149,6 +143,8 @@ set_global_monitoring:
             - "active"
             - "time-sensitive"
             - "critical"
+
+test_notification:
 
 set_graph_time_horizon:
   fields:

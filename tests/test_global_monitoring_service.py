@@ -19,9 +19,7 @@ class TestSetGlobalMonitoringSchema:
             "spike_threshold_pct": 95,
             "window_duration_m": 20,
             "cooldown_duration_m": 30,
-            "notify_targets": "notify.mobile_app",
-            "enable_persistent_notifications": False,
-            "enable_event_bus": True,
+            "notify_targets": "notify.mobile_app, event_bus",
         })
         assert result["continuous_threshold_pct"] == 75
 

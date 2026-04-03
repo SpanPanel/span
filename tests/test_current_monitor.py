@@ -21,8 +21,6 @@ from custom_components.span_panel.current_monitor import CurrentMonitor
 from custom_components.span_panel.options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
-    ENABLE_EVENT_BUS,
-    ENABLE_PERSISTENT_NOTIFICATIONS,
     NOTIFY_TARGETS,
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
@@ -38,9 +36,7 @@ def _make_options(**overrides):
         SPIKE_THRESHOLD_PCT: DEFAULT_SPIKE_THRESHOLD_PCT,
         WINDOW_DURATION_M: DEFAULT_WINDOW_DURATION_M,
         COOLDOWN_DURATION_M: DEFAULT_COOLDOWN_DURATION_M,
-        NOTIFY_TARGETS: ["notify.notify"],
-        ENABLE_PERSISTENT_NOTIFICATIONS: True,
-        ENABLE_EVENT_BUS: True,
+        NOTIFY_TARGETS: "event_bus",
     }
     opts.update(overrides)
     return opts
@@ -560,7 +556,7 @@ class TestNotificationDispatch:
     def test_spike_fires_event_bus(self):
         """Spike alert fires event on the HA event bus."""
         hass = _make_hass()
-        monitor = _make_monitor(hass, _make_options(**{ENABLE_EVENT_BUS: True}))
+        monitor = _make_monitor(hass, _make_options(**{NOTIFY_TARGETS: "event_bus"}))
         circuit = SpanCircuitSnapshotFactory.create(
             circuit_id="1", name="Kitchen",
             current_a=20.0, breaker_rating_a=20.0,
@@ -584,9 +580,9 @@ class TestNotificationDispatch:
         assert event_data["panel_serial"] == "ABC123"
 
     def test_spike_does_not_fire_event_when_disabled(self):
-        """No event fired when event bus is disabled."""
+        """No event fired when event_bus target is not in notify_targets."""
         hass = _make_hass()
-        monitor = _make_monitor(hass, _make_options(**{ENABLE_EVENT_BUS: False}))
+        monitor = _make_monitor(hass, _make_options(**{NOTIFY_TARGETS: ""}))
         circuit = SpanCircuitSnapshotFactory.create(
             circuit_id="1", name="Kitchen",
             current_a=20.0, breaker_rating_a=20.0,
@@ -612,35 +608,12 @@ class TestNotificationDispatch:
         )
         monitor.process_snapshot(snapshot)
 
-        # Should have called notify service
+        # Should have called the notify service for the target
         notify_calls = [
             c for c in hass.services.async_call.call_args_list
             if c[0][0] == "notify"
         ]
         assert len(notify_calls) == 1
-        assert notify_calls[0][0][1] == "mobile_app_phone"
-
-    def test_spike_creates_persistent_notification(self):
-        """Spike alert creates persistent notification when enabled."""
-        hass = _make_hass()
-        monitor = _make_monitor(hass, _make_options(
-            **{ENABLE_PERSISTENT_NOTIFICATIONS: True}
-        ))
-        circuit = SpanCircuitSnapshotFactory.create(
-            circuit_id="1", name="Kitchen",
-            current_a=20.0, breaker_rating_a=20.0,
-        )
-        snapshot = SpanPanelSnapshotFactory.create(
-            circuits={"1": circuit}, main_breaker_rating_a=200,
-        )
-        monitor.process_snapshot(snapshot)
-
-        pn_calls = [
-            c for c in hass.services.async_call.call_args_list
-            if c[0][0] == "persistent_notification"
-        ]
-        assert len(pn_calls) == 1
-        assert pn_calls[0][0][2]["notification_id"] == "span_panel_circuit_1_spike"
 
     def test_no_notifications_during_startup(self):
         """Service calls are suppressed when HA is still starting."""
@@ -659,27 +632,6 @@ class TestNotificationDispatch:
         hass.services.async_call.assert_not_called()
         # Event bus should still fire
         hass.bus.async_fire.assert_called()
-
-    def test_no_persistent_notification_when_disabled(self):
-        """No persistent notification when disabled."""
-        hass = _make_hass()
-        monitor = _make_monitor(hass, _make_options(
-            **{ENABLE_PERSISTENT_NOTIFICATIONS: False}
-        ))
-        circuit = SpanCircuitSnapshotFactory.create(
-            circuit_id="1", name="Kitchen",
-            current_a=20.0, breaker_rating_a=20.0,
-        )
-        snapshot = SpanPanelSnapshotFactory.create(
-            circuits={"1": circuit}, main_breaker_rating_a=200,
-        )
-        monitor.process_snapshot(snapshot)
-
-        pn_calls = [
-            c for c in hass.services.async_call.call_args_list
-            if c[0][0] == "persistent_notification"
-        ]
-        assert len(pn_calls) == 0
 
     def test_notification_message_format_spike(self):
         """Spike notification message includes current and rating."""
@@ -850,9 +802,7 @@ class TestGlobalSettingsStorage:
         hass = _make_hass()
         monitor = _make_monitor(hass, _make_options())
         monitor._global_settings = {
-            ENABLE_EVENT_BUS: False,
             NOTIFY_TARGETS: "notify.test_target",
-            ENABLE_PERSISTENT_NOTIFICATIONS: False,
         }
         circuit = SpanCircuitSnapshotFactory.create(
             circuit_id="1", name="Kitchen",
@@ -862,7 +812,7 @@ class TestGlobalSettingsStorage:
             circuits={"1": circuit}, main_breaker_rating_a=200,
         )
         monitor.process_snapshot(snapshot)
-        # Event bus should NOT fire because global settings disabled it
+        # Event bus should NOT fire because event_bus is not in notify_targets
         hass.bus.async_fire.assert_not_called()
 
     @pytest.mark.asyncio

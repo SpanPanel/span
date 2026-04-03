@@ -169,8 +169,6 @@ def _build_set_global_monitoring_schema() -> vol.Schema:
             vol.Optional("window_duration_m"): vol.All(int, vol.Range(min=1, max=180)),
             vol.Optional("cooldown_duration_m"): vol.All(int, vol.Range(min=1, max=180)),
             vol.Optional("notify_targets"): str,
-            vol.Optional("enable_persistent_notifications"): bool,
-            vol.Optional("enable_event_bus"): bool,
             vol.Optional("notification_title_template"): str,
             vol.Optional("notification_message_template"): str,
             vol.Optional("notification_priority"): vol.In(
@@ -347,6 +345,21 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         "set_global_monitoring",
         async_handle_set_global_monitoring,
         schema=_build_set_global_monitoring_schema(),
+    )
+
+    async def async_handle_test_notification(call: ServiceCall) -> None:
+        from .alert_dispatcher import dispatch_test_alert  # pylint: disable=import-outside-toplevel
+
+        entry_id = call.data.get("config_entry_id")
+        monitor = await _get_or_create_monitor(entry_id)
+        settings = monitor.get_global_settings()
+        dispatch_test_alert(hass, settings)
+
+    hass.services.async_register(
+        DOMAIN,
+        "test_notification",
+        async_handle_test_notification,
+        schema=vol.Schema({vol.Optional("config_entry_id"): str}),
     )
 
 

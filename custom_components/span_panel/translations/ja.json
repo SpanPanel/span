@@ -507,14 +507,6 @@
           "name": "通知ターゲット",
           "description": "通知サービスターゲットのカンマ区切りリスト。"
         },
-        "enable_persistent_notifications": {
-          "name": "永続的通知",
-          "description": "アラートの永続的通知を作成します。"
-        },
-        "enable_event_bus": {
-          "name": "イベントバス",
-          "description": "アラートのHAイベントバスにイベントを発行します。"
-        },
         "notification_title_template": {
           "name": "通知タイトルテンプレート",
           "description": "通知タイトルのテンプレート。プレースホルダー: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}。"
@@ -528,6 +520,10 @@
           "description": "プッシュ通知の優先度レベル。モバイルデバイスでの割り込み動作を制御します（iOS: interruption-level、Android: priority/チャンネル）。"
         }
       }
+    },
+    "test_notification": {
+      "name": "テスト通知",
+      "description": "サンプル値を使用して設定されたすべてのターゲットにテスト通知を送信します。"
     },
     "set_graph_time_horizon": {
       "name": "グラフの時間範囲を設定",

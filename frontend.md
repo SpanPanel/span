@@ -43,9 +43,8 @@ circuit's breaker rating, then delivers notifications through configurable chann
 
 ### Notification Settings
 
-- **Notify Targets** — Home Assistant notification service targets (e.g., `notify.notify`)
-- **Persistent Alerts** — Create persistent HA notifications that remain until dismissed
-- **Event Bus** — Fire events on the HA event bus for automation triggers
+- **All Targets** — Select all notification targets at once
+- **Notify Targets** — Individual notification targets including mobile devices, persistent notification, and the HA event bus
 - **Priority** — Notification priority level
 - **Title/Message Templates** — Customizable templates with variables: `{name}`, `{current_a}`, `{utilization_pct}`, `{breaker_rating_a}`, `{alert_type}`
 

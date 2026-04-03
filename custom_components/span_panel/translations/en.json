@@ -507,14 +507,6 @@
           "name": "Notification Targets",
           "description": "Comma-separated list of notify service targets."
         },
-        "enable_persistent_notifications": {
-          "name": "Persistent Notifications",
-          "description": "Create persistent notifications for alerts."
-        },
-        "enable_event_bus": {
-          "name": "Event Bus",
-          "description": "Fire events on the HA event bus for alerts."
-        },
         "notification_title_template": {
           "name": "Notification Title Template",
           "description": "Template for notification title. Placeholders: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
@@ -528,6 +520,10 @@
           "description": "Push notification priority level. Controls interruption behavior on mobile devices (iOS: interruption-level, Android: priority/channel)."
         }
       }
+    },
+    "test_notification": {
+      "name": "Test Notification",
+      "description": "Send a test notification to all configured targets using sample values."
     },
     "set_graph_time_horizon": {
       "name": "Set graph time horizon",

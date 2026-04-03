@@ -507,14 +507,6 @@
           "name": "Cibles de notification",
           "description": "Liste séparée par des virgules des cibles de services de notification."
         },
-        "enable_persistent_notifications": {
-          "name": "Notifications persistantes",
-          "description": "Créer des notifications persistantes pour les alertes."
-        },
-        "enable_event_bus": {
-          "name": "Bus d'événements",
-          "description": "Émettre des événements sur le bus d'événements HA pour les alertes."
-        },
         "notification_title_template": {
           "name": "Modèle de titre de notification",
           "description": "Modèle pour le titre de la notification. Marqueurs : {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
@@ -528,6 +520,10 @@
           "description": "Niveau de priorité de la notification push. Contrôle le comportement d'interruption sur les appareils mobiles (iOS : interruption-level, Android : priority/canal)."
         }
       }
+    },
+    "test_notification": {
+      "name": "Notification de test",
+      "description": "Envoyer une notification de test à toutes les cibles configurées avec des valeurs d'exemple."
     },
     "set_graph_time_horizon": {
       "name": "Définir l'horizon temporel du graphique",

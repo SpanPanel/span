@@ -19,13 +19,13 @@ from .const import (
     EVENT_CURRENT_ALERT,
 )
 from .options import (
-    ENABLE_EVENT_BUS,
-    ENABLE_PERSISTENT_NOTIFICATIONS,
     NOTIFICATION_MESSAGE_TEMPLATE,
     NOTIFICATION_PRIORITY,
     NOTIFICATION_TITLE_TEMPLATE,
     NOTIFY_TARGETS,
 )
+
+EVENT_BUS_TARGET = "event_bus"
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -123,19 +123,18 @@ async def dispatch_to_target(
     message: str,
     push_data: dict[str, Any],
 ) -> None:
-    """Send a notification to a single target.
+    """Send a notification to a target.
 
-    Handles both entity-based targets (``notify.mobile_app_*``) which use
-    ``notify.send_message`` with an ``entity_id``, and legacy service-based
-    targets (``notify.notify``) which call the service directly.
+    Entity-based targets (present in ``hass.states``) use
+    ``notify.send_message`` with an ``entity_id``.  Service-only targets
+    (e.g. ``notify.persistent_notification`` on older HA versions) fall
+    back to calling the service directly.
     """
     service_data: dict[str, Any] = {"title": title, "message": message}
     if push_data:
         service_data["data"] = push_data
 
-    is_entity = target.startswith("notify.") and hass.states.get(target)
-
-    if is_entity:
+    if target.startswith("notify.") and hass.states.get(target):
         service_data["entity_id"] = target
         await hass.services.async_call("notify", "send_message", service_data)
     else:
@@ -177,7 +176,13 @@ def dispatch_alert(
     if over_threshold_since is not None:
         event_data["over_threshold_since"] = over_threshold_since
 
-    if settings.get(ENABLE_EVENT_BUS, True):
+    raw_targets = settings.get(NOTIFY_TARGETS, "")
+    if isinstance(raw_targets, str):
+        all_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
+    else:
+        all_targets = list(raw_targets)
+
+    if EVENT_BUS_TARGET in all_targets:
         hass.bus.async_fire(EVENT_CURRENT_ALERT, event_data)
 
     title, message = format_notification(
@@ -197,37 +202,19 @@ def dispatch_alert(
         ),
     )
 
+    notify_targets = [t for t in all_targets if t != EVENT_BUS_TARGET]
+
     if hass.state is not CoreState.running:
         _LOGGER.debug(
             "Skipping alert notifications during startup (state=%s)",
             hass.state,
         )
     else:
-        raw_targets = settings.get(NOTIFY_TARGETS, "notify.notify")
-        if isinstance(raw_targets, str):
-            notify_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
-        else:
-            notify_targets = raw_targets
-
         priority = settings.get(NOTIFICATION_PRIORITY, DEFAULT_NOTIFICATION_PRIORITY)
         push_data = build_push_data(priority)
 
         for target in notify_targets:
             hass.async_create_task(dispatch_to_target(hass, target, title, message, push_data))
-
-        if settings.get(ENABLE_PERSISTENT_NOTIFICATIONS, True):
-            notification_id = f"span_panel_{alert_source}_{alert_id}_{alert_type}"
-            hass.async_create_task(
-                hass.services.async_call(
-                    "persistent_notification",
-                    "create",
-                    {
-                        "title": title,
-                        "message": message,
-                        "notification_id": notification_id,
-                    },
-                )
-            )
 
     _LOGGER.warning(
         "Current alert: %s — %s at %.1fA (%.1f%% of %.0fA rating)",
@@ -237,3 +224,69 @@ def dispatch_alert(
         utilization_pct,
         breaker_rating_a,
     )
+
+
+def dispatch_test_alert(
+    hass: HomeAssistant,
+    settings: dict[str, Any],
+) -> None:
+    """Dispatch a test notification using sample values through all enabled channels."""
+    alert_type = "spike"
+    alert_name = "Kitchen Oven"
+    alert_id = "sensor.kitchen_oven_current"
+    alert_source = "circuit"
+    current_a = 18.3
+    breaker_rating_a = 20.0
+    threshold_pct = 100
+    utilization_pct = 91.5
+    panel_serial = "TEST"
+    window_duration_s = 300
+
+    raw_targets = settings.get(NOTIFY_TARGETS, "")
+    if isinstance(raw_targets, str):
+        all_targets = [t.strip() for t in raw_targets.split(",") if t.strip()]
+    else:
+        all_targets = list(raw_targets)
+
+    event_data: dict[str, Any] = {
+        "alert_source": alert_source,
+        "alert_id": alert_id,
+        "alert_name": alert_name,
+        "alert_type": alert_type,
+        "current_a": current_a,
+        "breaker_rating_a": breaker_rating_a,
+        "threshold_pct": threshold_pct,
+        "utilization_pct": utilization_pct,
+        "panel_serial": panel_serial,
+        "window_duration_s": window_duration_s,
+        "test": True,
+    }
+
+    if EVENT_BUS_TARGET in all_targets:
+        hass.bus.async_fire(EVENT_CURRENT_ALERT, event_data)
+
+    title, message = format_notification(
+        alert_type=alert_type,
+        alert_name=alert_name,
+        alert_id=alert_id,
+        current_a=current_a,
+        breaker_rating_a=breaker_rating_a,
+        threshold_pct=threshold_pct,
+        utilization_pct=utilization_pct,
+        window_duration_s=window_duration_s,
+        title_template=settings.get(
+            NOTIFICATION_TITLE_TEMPLATE, DEFAULT_NOTIFICATION_TITLE_TEMPLATE
+        ),
+        message_template=settings.get(
+            NOTIFICATION_MESSAGE_TEMPLATE, DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE
+        ),
+    )
+
+    notify_targets = [t for t in all_targets if t != EVENT_BUS_TARGET]
+    priority = settings.get(NOTIFICATION_PRIORITY, DEFAULT_NOTIFICATION_PRIORITY)
+    push_data = build_push_data(priority)
+
+    for target in notify_targets:
+        hass.async_create_task(dispatch_to_target(hass, target, title, message, push_data))
+
+    _LOGGER.info("Test notification dispatched to %d target(s)", len(all_targets))
