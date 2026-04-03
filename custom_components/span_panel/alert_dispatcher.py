@@ -51,7 +51,7 @@ def format_notification(
     Available placeholders:
         {name}            - Circuit/mains friendly name
         {entity_id}       - Entity ID (e.g. sensor.kitchen_current)
-        {alert_type}      - "spike" or "continuous"
+        {alert_type}      - "spike" or "continuous_overload"
         {current_a}       - Current draw in amps (e.g. 18.3)
         {breaker_rating_a}- Breaker rating in amps (e.g. 20)
         {threshold_pct}   - Configured threshold percentage

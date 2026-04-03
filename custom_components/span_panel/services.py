@@ -14,7 +14,7 @@ import voluptuous as vol
 from .const import DEFAULT_GRAPH_HORIZON, DOMAIN, VALID_GRAPH_HORIZONS
 from .current_monitor import CurrentMonitor
 from .graph_horizon import GraphHorizonManager
-from .helpers import build_circuit_unique_id
+from .id_builder import build_circuit_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
