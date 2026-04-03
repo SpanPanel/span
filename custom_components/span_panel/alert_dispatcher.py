@@ -11,6 +11,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import CoreState
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE,
@@ -45,6 +46,7 @@ def format_notification(
     window_duration_s: int | None,
     title_template: str,
     message_template: str,
+    local_time: str | None = None,
 ) -> tuple[str, str]:
     """Format notification title and message using templates.
 
@@ -57,6 +59,7 @@ def format_notification(
         {threshold_pct}   - Configured threshold percentage
         {utilization_pct} - Actual utilization percentage
         {window_m}        - Window duration in minutes (continuous only)
+        {local_time}      - Local time of the alert (e.g. 2:15 PM)
     """
     window_m = (window_duration_s or 0) // 60
     template_vars = {
@@ -68,6 +71,7 @@ def format_notification(
         "threshold_pct": str(threshold_pct),
         "utilization_pct": str(utilization_pct),
         "window_m": str(window_m),
+        "local_time": local_time or "",
     }
     try:
         title = title_template.format_map(template_vars)
@@ -160,6 +164,8 @@ def dispatch_alert(
     over_threshold_since: str | None = None,
 ) -> None:
     """Dispatch alert through all enabled notification channels."""
+    local_time = dt_util.now().strftime("%-I:%M %p")
+
     event_data: dict[str, Any] = {
         "alert_source": alert_source,
         "alert_id": alert_id,
@@ -170,6 +176,7 @@ def dispatch_alert(
         "threshold_pct": threshold_pct,
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,
+        "local_time": local_time,
     }
     if window_duration_s is not None:
         event_data["window_duration_s"] = window_duration_s
@@ -194,6 +201,7 @@ def dispatch_alert(
         threshold_pct=threshold_pct,
         utilization_pct=utilization_pct,
         window_duration_s=window_duration_s,
+        local_time=local_time,
         title_template=settings.get(
             NOTIFICATION_TITLE_TEMPLATE, DEFAULT_NOTIFICATION_TITLE_TEMPLATE
         ),
@@ -241,6 +249,7 @@ def dispatch_test_alert(
     utilization_pct = 91.5
     panel_serial = "TEST"
     window_duration_s = 300
+    local_time = dt_util.now().strftime("%-I:%M %p")
 
     raw_targets = settings.get(NOTIFY_TARGETS, "")
     if isinstance(raw_targets, str):
@@ -259,6 +268,7 @@ def dispatch_test_alert(
         "utilization_pct": utilization_pct,
         "panel_serial": panel_serial,
         "window_duration_s": window_duration_s,
+        "local_time": local_time,
         "test": True,
     }
 
@@ -274,6 +284,7 @@ def dispatch_test_alert(
         threshold_pct=threshold_pct,
         utilization_pct=utilization_pct,
         window_duration_s=window_duration_s,
+        local_time=local_time,
         title_template=settings.get(
             NOTIFICATION_TITLE_TEMPLATE, DEFAULT_NOTIFICATION_TITLE_TEMPLATE
         ),
