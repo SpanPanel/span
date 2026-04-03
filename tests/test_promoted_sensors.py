@@ -10,10 +10,12 @@ Covers:
 - BESS unique ID helpers
 """
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.helpers.entity import EntityCategory
+# ruff: noqa: D102
+
 from span_panel_api import SpanPVSnapshot
 
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from custom_components.span_panel.binary_sensor import GRID_ISLANDABLE_SENSOR
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.helpers import (
     build_bess_unique_id,
@@ -23,6 +25,8 @@ from custom_components.span_panel.helpers import (
 )
 from custom_components.span_panel.sensor_definitions import (
     BESS_METADATA_SENSORS,
+    CIRCUIT_BREAKER_RATING_SENSOR,
+    CIRCUIT_CURRENT_SENSOR,
     DOWNSTREAM_L1_CURRENT_SENSOR,
     DOWNSTREAM_L2_CURRENT_SENSOR,
     EVSE_SENSORS,
@@ -32,6 +36,14 @@ from custom_components.span_panel.sensor_definitions import (
     PV_METADATA_SENSORS,
     UPSTREAM_L1_CURRENT_SENSOR,
     UPSTREAM_L2_CURRENT_SENSOR,
+)
+from custom_components.span_panel.util import bess_device_info
+from homeassistant.helpers.entity import EntityCategory
+
+from .factories import (
+    SpanBatterySnapshotFactory,
+    SpanEvseSnapshotFactory,
+    SpanPanelSnapshotFactory,
 )
 
 PANEL_DIAGNOSTIC_SENSORS = (
@@ -43,13 +55,6 @@ PANEL_DIAGNOSTIC_SENSORS = (
     DOWNSTREAM_L2_CURRENT_SENSOR,
     MAIN_BREAKER_RATING_SENSOR,
 )
-from custom_components.span_panel.util import bess_device_info
-from tests.factories import (
-    SpanBatterySnapshotFactory,
-    SpanEvseSnapshotFactory,
-    SpanPanelSnapshotFactory,
-)
-
 
 # ---------------------------------------------------------------------------
 # Phase 1: Panel diagnostic sensors
@@ -72,21 +77,28 @@ class TestPanelDiagnosticSensorDefinitions:
         assert desc.device_class == SensorDeviceClass.VOLTAGE
 
     def test_upstream_l1_current_definition(self):
-        desc = next(d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "upstream_l1_current")
+        desc = next(
+            d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "upstream_l1_current"
+        )
         assert desc.translation_key == "upstream_l1_current"
         assert desc.device_class == SensorDeviceClass.CURRENT
         assert desc.state_class == SensorStateClass.MEASUREMENT
         assert desc.entity_category == EntityCategory.DIAGNOSTIC
 
     def test_downstream_l2_current_definition(self):
-        desc = next(d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "downstream_l2_current")
+        desc = next(
+            d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "downstream_l2_current"
+        )
         assert desc.device_class == SensorDeviceClass.CURRENT
 
     def test_main_breaker_rating_definition(self):
-        desc = next(d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating")
+        desc = next(
+            d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating"
+        )
         assert desc.translation_key == "main_breaker_rating"
-        assert desc.device_class == SensorDeviceClass.CURRENT
+        assert desc.device_class is None
         assert desc.entity_category == EntityCategory.DIAGNOSTIC
+        assert desc.entity_registry_enabled_default is False
 
     def test_voltage_value_functions(self):
         snapshot = SpanPanelSnapshotFactory.create(l1_voltage=121.5, l2_voltage=119.3)
@@ -98,23 +110,34 @@ class TestPanelDiagnosticSensorDefinitions:
     def test_lug_current_value_functions(self):
         snapshot = SpanPanelSnapshotFactory.create()
         # Default snapshot has None for these fields
-        for key in ("upstream_l1_current", "upstream_l2_current", "downstream_l1_current", "downstream_l2_current"):
+        for key in (
+            "upstream_l1_current",
+            "upstream_l2_current",
+            "downstream_l1_current",
+            "downstream_l2_current",
+        ):
             desc = next(d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == key)
             assert desc.value_fn(snapshot) is None
 
     def test_main_breaker_rating_value_function(self):
         snapshot = SpanPanelSnapshotFactory.create(main_breaker_rating_a=200)
-        desc = next(d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating")
+        desc = next(
+            d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating"
+        )
         assert desc.value_fn(snapshot) == 200
 
     def test_main_breaker_rating_none(self):
         snapshot = SpanPanelSnapshotFactory.create(main_breaker_rating_a=None)
-        desc = next(d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating")
+        desc = next(
+            d for d in PANEL_DIAGNOSTIC_SENSORS if d.key == "main_breaker_rating"
+        )
         assert desc.value_fn(snapshot) is None
 
     def test_all_diagnostic_sensors_have_translation_keys(self):
         for desc in PANEL_DIAGNOSTIC_SENSORS:
-            assert desc.translation_key is not None, f"Sensor {desc.key} missing translation_key"
+            assert desc.translation_key is not None, (
+                f"Sensor {desc.key} missing translation_key"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -126,27 +149,19 @@ class TestGridIslandableBinarySensor:
     """Test grid_islandable binary sensor definition."""
 
     def test_definition_exists(self):
-        from custom_components.span_panel.binary_sensor import GRID_ISLANDABLE_SENSOR
-
         assert GRID_ISLANDABLE_SENSOR.key == "grid_islandable"
         assert GRID_ISLANDABLE_SENSOR.translation_key == "grid_islandable"
         assert GRID_ISLANDABLE_SENSOR.entity_category == EntityCategory.DIAGNOSTIC
 
     def test_value_function_true(self):
-        from custom_components.span_panel.binary_sensor import GRID_ISLANDABLE_SENSOR
-
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=True)
         assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is True
 
     def test_value_function_false(self):
-        from custom_components.span_panel.binary_sensor import GRID_ISLANDABLE_SENSOR
-
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=False)
         assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
 
     def test_value_function_none(self):
-        from custom_components.span_panel.binary_sensor import GRID_ISLANDABLE_SENSOR
-
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=None)
         assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is None
 
@@ -160,20 +175,19 @@ class TestCircuitSensorDefinitions:
     """Test circuit-level promoted sensor definitions."""
 
     def test_circuit_current_definition(self):
-        from custom_components.span_panel.sensor_definitions import CIRCUIT_CURRENT_SENSOR
-
         assert CIRCUIT_CURRENT_SENSOR.key == "circuit_current"
         assert CIRCUIT_CURRENT_SENSOR.device_class == SensorDeviceClass.CURRENT
         assert CIRCUIT_CURRENT_SENSOR.state_class == SensorStateClass.MEASUREMENT
         assert CIRCUIT_CURRENT_SENSOR.name == "Current"
 
     def test_circuit_breaker_rating_definition(self):
-        from custom_components.span_panel.sensor_definitions import CIRCUIT_BREAKER_RATING_SENSOR
-
         assert CIRCUIT_BREAKER_RATING_SENSOR.key == "circuit_breaker_rating"
-        assert CIRCUIT_BREAKER_RATING_SENSOR.device_class == SensorDeviceClass.CURRENT
-        assert CIRCUIT_BREAKER_RATING_SENSOR.entity_category == EntityCategory.DIAGNOSTIC
+        assert CIRCUIT_BREAKER_RATING_SENSOR.device_class is None
+        assert (
+            CIRCUIT_BREAKER_RATING_SENSOR.entity_category == EntityCategory.DIAGNOSTIC
+        )
         assert CIRCUIT_BREAKER_RATING_SENSOR.name == "Breaker Rating"
+        assert CIRCUIT_BREAKER_RATING_SENSOR.entity_registry_enabled_default is False
 
 
 # ---------------------------------------------------------------------------
@@ -217,11 +231,15 @@ class TestBessMetadataSensorDefinitions:
 
     def test_all_have_translation_keys(self):
         for desc in BESS_METADATA_SENSORS:
-            assert desc.translation_key is not None, f"BESS sensor {desc.key} missing translation_key"
+            assert desc.translation_key is not None, (
+                f"BESS sensor {desc.key} missing translation_key"
+            )
 
     def test_all_are_diagnostic(self):
         for desc in BESS_METADATA_SENSORS:
-            assert desc.entity_category == EntityCategory.DIAGNOSTIC, f"BESS sensor {desc.key} not diagnostic"
+            assert desc.entity_category == EntityCategory.DIAGNOSTIC, (
+                f"BESS sensor {desc.key} not diagnostic"
+            )
 
     def test_vendor_value_function(self):
         battery = SpanBatterySnapshotFactory.create(vendor_name="Enphase")
@@ -247,7 +265,8 @@ class TestBessMetadataSensorDefinitions:
         battery = SpanBatterySnapshotFactory.create(nameplate_capacity_kwh=13.5)
         desc = next(d for d in BESS_METADATA_SENSORS if d.key == "nameplate_capacity")
         assert desc.value_fn(battery) == 13.5
-        assert desc.device_class == SensorDeviceClass.ENERGY_STORAGE
+        assert desc.device_class is None
+        assert desc.entity_registry_enabled_default is False
 
     def test_soe_kwh_value_function(self):
         battery = SpanBatterySnapshotFactory.create(soe_kwh=10.2)
@@ -271,7 +290,14 @@ class TestBessUniqueId:
         assert result == "span_sp3-serial-001_bess_vendor"
 
     def test_build_bess_unique_id_different_keys(self):
-        for key in ("vendor", "model", "serial_number", "firmware_version", "nameplate_capacity", "soe_kwh"):
+        for key in (
+            "vendor",
+            "model",
+            "serial_number",
+            "firmware_version",
+            "nameplate_capacity",
+            "soe_kwh",
+        ):
             result = build_bess_unique_id("serial", key)
             assert result == f"span_serial_bess_{key}"
 
@@ -289,11 +315,15 @@ class TestPVMetadataSensorDefinitions:
 
     def test_all_have_translation_keys(self):
         for desc in PV_METADATA_SENSORS:
-            assert desc.translation_key is not None, f"PV sensor {desc.key} missing translation_key"
+            assert desc.translation_key is not None, (
+                f"PV sensor {desc.key} missing translation_key"
+            )
 
     def test_all_are_diagnostic(self):
         for desc in PV_METADATA_SENSORS:
-            assert desc.entity_category == EntityCategory.DIAGNOSTIC, f"PV sensor {desc.key} not diagnostic"
+            assert desc.entity_category == EntityCategory.DIAGNOSTIC, (
+                f"PV sensor {desc.key} not diagnostic"
+            )
 
     def test_pv_vendor_value_function(self):
         snapshot = SpanPanelSnapshotFactory.create(
@@ -315,7 +345,8 @@ class TestPVMetadataSensorDefinitions:
         )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_nameplate_capacity")
         assert desc.value_fn(snapshot) == 7600.0
-        assert desc.device_class == SensorDeviceClass.POWER
+        assert desc.device_class is None
+        assert desc.entity_registry_enabled_default is False
 
     def test_pv_none_metadata(self):
         snapshot = SpanPanelSnapshotFactory.create(pv=SpanPVSnapshot())
@@ -336,7 +367,9 @@ class TestEvseSensorDefinitions:
 
     def test_all_have_translation_keys(self):
         for desc in EVSE_SENSORS:
-            assert desc.translation_key is not None, f"EVSE sensor {desc.key} missing translation_key"
+            assert desc.translation_key is not None, (
+                f"EVSE sensor {desc.key} missing translation_key"
+            )
 
     def test_evse_status_value_function(self):
         evse = SpanEvseSnapshotFactory.create(status="CHARGING")

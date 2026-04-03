@@ -11,6 +11,7 @@ xnotes/*
 !.vscode/tasks.json
 .git/
 .direnv/
+docs/
 env/
 .envrc
 .env
@@ -22,8 +23,15 @@ env/
 # Coverage files
 .coverage
 .coverage.*
+coverage_output.log
 .local_coverage_data
 htmlcov/
 .pytest_cache/
 docs/agile-readme.md
 .github/copilot-instructions.md
+.claude/
+.superpowers/
+docs/superpowers/
+
+# Docker dev environment
+ha-config/

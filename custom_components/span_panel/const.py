@@ -13,9 +13,9 @@ CONF_DEVICE_NAME = "device_name"
 CONF_API_VERSION = "api_version"
 CONF_EBUS_BROKER_HOST = "ebus_broker_host"
 CONF_EBUS_BROKER_USERNAME = "ebus_broker_username"
-CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"
+CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"  # nosec B105
 CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
-CONF_HOP_PASSPHRASE = "hop_passphrase"
+CONF_HOP_PASSPHRASE = "hop_passphrase"  # nosec B105
 CONF_HTTP_PORT = "http_port"
 CONF_PANEL_SERIAL = "panel_serial"
 CONF_REGISTERED_FQDN = "registered_fqdn"
@@ -56,6 +56,45 @@ ENTITY_NAMING_PATTERN = "entity_naming_pattern"
 ENABLE_PANEL_NET_ENERGY_SENSORS = "enable_panel_net_energy_sensors"
 ENABLE_CIRCUIT_NET_ENERGY_SENSORS = "enable_circuit_net_energy_sensors"
 ENABLE_ENERGY_DIP_COMPENSATION = "enable_energy_dip_compensation"
+
+# Unmapped circuit sensor configuration
+ENABLE_UNMAPPED_CIRCUIT_SENSORS = "enable_unmapped_circuit_sensors"
+
+# Current monitoring configuration
+ENABLE_CURRENT_MONITORING = "enable_current_monitoring"
+DEFAULT_CONTINUOUS_THRESHOLD_PCT = 80
+DEFAULT_SPIKE_THRESHOLD_PCT = 100
+DEFAULT_WINDOW_DURATION_M = 15
+DEFAULT_COOLDOWN_DURATION_M = 15
+DEFAULT_NOTIFICATION_TITLE_TEMPLATE = "SPAN: {name} {alert_type}"
+DEFAULT_NOTIFICATION_MESSAGE_TEMPLATE = (
+    "{name} at {current_a}A ({utilization_pct}% of {breaker_rating_a}A rating) at {local_time}"
+)
+DEFAULT_NOTIFICATION_PRIORITY = "default"
+NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
+    "default",
+    "passive",
+    "active",
+    "time-sensitive",
+    "critical",
+)
+EVENT_CURRENT_ALERT = "span_panel_current_alert"
+
+# Graph time horizon configuration
+VALID_GRAPH_HORIZONS: Final[tuple[str, ...]] = ("5m", "1h", "1d", "1w", "1M")
+DEFAULT_GRAPH_HORIZON = "5m"
+
+# Mains leg identifiers
+MAINS_LEGS: Final[tuple[str, ...]] = (
+    "upstream_l1",
+    "upstream_l2",
+    "downstream_l1",
+    "downstream_l2",
+)
+
+# Panel sidebar settings (domain-level, shared across config entries)
+PANEL_SHOW_SIDEBAR = "show_panel"
+PANEL_ADMIN_ONLY = "panel_admin_only"
 
 DEFAULT_SNAPSHOT_INTERVAL: Final[float] = 5.0
 

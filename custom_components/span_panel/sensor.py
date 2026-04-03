@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
@@ -17,10 +15,17 @@ from .const import (
     CONF_DEVICE_NAME,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
     ENABLE_PANEL_NET_ENERGY_SENSORS,
+    ENABLE_UNMAPPED_CIRCUIT_SENSORS,
     USE_CIRCUIT_NUMBERS,
 )
 from .coordinator import SpanPanelCoordinator
-from .helpers import has_bess, has_evse, has_power_flows, has_pv, resolve_evse_display_suffix
+from .helpers import (
+    has_bess,
+    has_evse,
+    has_power_flows,
+    has_pv,
+    resolve_evse_display_suffix,
+)
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_circuit import (
     SpanCircuitEnergySensor,
@@ -66,18 +71,18 @@ from .util import bess_device_info, evse_device_info
 
 # Export the sensor classes for backward compatibility with tests
 __all__ = [
-    "SpanSensorBase",
-    "SpanEnergySensorBase",
-    "SpanPanelPanelStatus",
-    "SpanPanelStatus",
-    "SpanPanelBattery",
-    "SpanPanelPowerSensor",
-    "SpanPanelEnergySensor",
-    "SpanCircuitPowerSensor",
-    "SpanCircuitEnergySensor",
-    "SpanUnmappedCircuitSensor",
     "SpanBessMetadataSensor",
+    "SpanCircuitEnergySensor",
+    "SpanCircuitPowerSensor",
+    "SpanEnergySensorBase",
     "SpanPVMetadataSensor",
+    "SpanPanelBattery",
+    "SpanPanelEnergySensor",
+    "SpanPanelPanelStatus",
+    "SpanPanelPowerSensor",
+    "SpanPanelStatus",
+    "SpanSensorBase",
+    "SpanUnmappedCircuitSensor",
 ]
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -88,7 +93,7 @@ PARALLEL_UPDATES = 0
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up sensor platform."""
     try:
@@ -101,33 +106,33 @@ async def async_setup_entry(
         # Add all native sensor entities
         async_add_entities(entities)
 
-        # Enable unmapped tab entities if they were disabled
-        enable_unmapped_tab_entities(hass, entities)
-
         # Force immediate coordinator refresh to ensure all sensors update right away
         await coordinator.async_request_refresh()
 
         _LOGGER.debug("Native sensor platform setup completed with %d entities", len(entities))
-    except Exception as e:
-        _LOGGER.error("Error in async_setup_entry: %s", e, exc_info=True)
+    except Exception:
+        _LOGGER.exception("Error in async_setup_entry")
         raise
 
 
 def create_panel_sensors(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, config_entry: ConfigEntry
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    config_entry: ConfigEntry,
 ) -> list[SpanPanelPanelStatus | SpanPanelStatus | SpanPanelPowerSensor | SpanPanelEnergySensor]:
     """Create panel-level sensors."""
     entities: list[
         SpanPanelPanelStatus | SpanPanelStatus | SpanPanelPowerSensor | SpanPanelEnergySensor
-    ] = []
-
-    # Add panel data status sensors (grid state, run config, relay, dominant power source, vendor cloud)
-    for description in PANEL_DATA_STATUS_SENSORS:
-        entities.append(SpanPanelPanelStatus(coordinator, description, snapshot))
+    ] = [
+        SpanPanelPanelStatus(coordinator, description, snapshot)
+        for description in PANEL_DATA_STATUS_SENSORS
+    ]
 
     # Add panel power sensors
-    for description in PANEL_POWER_SENSORS:
-        entities.append(SpanPanelPowerSensor(coordinator, description, snapshot))
+    entities.extend(
+        SpanPanelPowerSensor(coordinator, description, snapshot)
+        for description in PANEL_POWER_SENSORS
+    )
 
     # Add panel energy sensors
     # Filter out net energy sensors if disabled
@@ -142,8 +147,9 @@ def create_panel_sensors(
         entities.append(SpanPanelEnergySensor(coordinator, description, snapshot))
 
     # Add hardware status sensors (Door State, WiFi, Cellular, etc.)
-    for description_ss in STATUS_SENSORS:
-        entities.append(SpanPanelStatus(coordinator, description_ss, snapshot))
+    entities.extend(
+        SpanPanelStatus(coordinator, description, snapshot) for description in STATUS_SENSORS
+    )
 
     # Add v2 diagnostic sensors (conditionally created when data is available)
     if snapshot.l1_voltage is not None:
@@ -184,7 +190,7 @@ def _build_evse_device_info_map(
     use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
     mapping: dict[str, DeviceInfo] = {}
-    for _evse_id, evse in snapshot.evse.items():
+    for evse in snapshot.evse.values():
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
         info = evse_device_info(panel_identifier, evse, panel_name, display_suffix)
         mapping[evse.feed_circuit_id] = info
@@ -193,7 +199,9 @@ def _build_evse_device_info_map(
 
 
 def create_circuit_sensors(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, config_entry: ConfigEntry
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    config_entry: ConfigEntry,
 ) -> list[SpanCircuitPowerSensor | SpanCircuitEnergySensor]:
     """Create circuit-level sensors for named circuits."""
     entities: list[SpanCircuitPowerSensor | SpanCircuitEnergySensor] = []
@@ -276,10 +284,10 @@ def create_unmapped_circuit_sensors(
     # These are invisible sensors that provide stable entity IDs for solar synthetics
     unmapped_circuits = [cid for cid in snapshot.circuits if cid.startswith("unmapped_tab_")]
     for circuit_id in unmapped_circuits:
-        for unmapped_description in UNMAPPED_SENSORS:
-            entities.append(
-                SpanUnmappedCircuitSensor(coordinator, unmapped_description, snapshot, circuit_id)
-            )
+        entities.extend(
+            SpanUnmappedCircuitSensor(coordinator, unmapped_description, snapshot, circuit_id)
+            for unmapped_description in UNMAPPED_SENSORS
+        )
 
     return entities
 
@@ -317,8 +325,10 @@ def create_battery_sensors(
     ]
 
     # Add BESS metadata sensors
-    for desc in BESS_METADATA_SENSORS:
-        entities.append(SpanBessMetadataSensor(coordinator, desc, snapshot, bess_info))
+    entities.extend(
+        SpanBessMetadataSensor(coordinator, desc, snapshot, bess_info)
+        for desc in BESS_METADATA_SENSORS
+    )
 
     return entities
 
@@ -338,8 +348,9 @@ def create_power_flow_sensors(
         entities.append(SpanPanelPowerSensor(coordinator, PV_POWER_SENSOR, snapshot))
 
         # PV metadata sensors on the main panel device
-        for desc in PV_METADATA_SENSORS:
-            entities.append(SpanPVMetadataSensor(coordinator, desc, snapshot))
+        entities.extend(
+            SpanPVMetadataSensor(coordinator, desc, snapshot) for desc in PV_METADATA_SENSORS
+        )
 
     if has_power_flows(snapshot):
         entities.append(SpanPanelPowerSensor(coordinator, GRID_POWER_FLOW_SENSOR, snapshot))
@@ -356,13 +367,16 @@ def create_evse_sensors(
         return []
     entities: list[SpanEvseSensor] = []
     for evse_id in snapshot.evse:
-        for desc in EVSE_SENSORS:
-            entities.append(SpanEvseSensor(coordinator, desc, snapshot, evse_id))
+        entities.extend(
+            SpanEvseSensor(coordinator, desc, snapshot, evse_id) for desc in EVSE_SENSORS
+        )
     return entities
 
 
 def create_native_sensors(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot, config_entry: ConfigEntry
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    config_entry: ConfigEntry,
 ) -> list[
     SpanPanelPanelStatus
     | SpanPanelStatus
@@ -394,26 +408,10 @@ def create_native_sensors(
     # Create different sensor types
     entities.extend(create_panel_sensors(coordinator, snapshot, config_entry))
     entities.extend(create_circuit_sensors(coordinator, snapshot, config_entry))
-    entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
+    if config_entry.options.get(ENABLE_UNMAPPED_CIRCUIT_SENSORS, False):
+        entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
     entities.extend(create_battery_sensors(coordinator, snapshot))
     entities.extend(create_power_flow_sensors(coordinator, snapshot))
     entities.extend(create_evse_sensors(coordinator, snapshot))
 
     return entities
-
-
-def enable_unmapped_tab_entities(hass: HomeAssistant, entities: list[Any]) -> None:
-    """Enable unmapped tab entities in the entity registry if they were disabled."""
-    entity_registry = er.async_get(hass)
-    for entity in entities:
-        # Check if this is an unmapped tab circuit sensor
-        if (
-            hasattr(entity, "unique_id")
-            and entity.unique_id
-            and "unmapped_tab_" in entity.unique_id
-        ):
-            entity_id = entity.entity_id
-            registry_entry = entity_registry.async_get(entity_id)
-            if registry_entry and registry_entry.disabled:
-                _LOGGER.debug("Enabling previously disabled unmapped tab entity: %s", entity_id)
-                entity_registry.async_update_entity(entity_id, disabled_by=None)

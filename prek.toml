@@ -9,10 +9,25 @@ hooks = [
   { id = "check-json", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "check-added-large-files" },
   { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*', language_version = "python3.14" },
   { id = "trailing-whitespace", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "end-of-file-fixer", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+]
+
+# Sync translations/en.json from strings.json and validate translation files
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "sync-translations",
+    name = "sync and validate translations",
+    entry = "python scripts/sync_translations.py",
+    language = "system",
+    pass_filenames = false,
+    files = '(strings\.json|translations/.*\.json)$',
+    verbose = true,
+  },
 ]
 
 # Pylint check for import-outside-toplevel (run before ruff)
@@ -94,6 +109,22 @@ hooks = [
     id = "bandit",
     args = ["-c", "pyproject.toml"],
     additional_dependencies = ["bandit[toml]"],
+    exclude = '^tests/.*|^scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*',
+  },
+]
+
+# Vulture for dead code detection
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "vulture",
+    name = "vulture dead code check",
+    entry = "uv run vulture",
+    language = "system",
+    args = ["custom_components/span_panel/", "--min-confidence=80"],
+    pass_filenames = false,
+    files = '\.py$',
     exclude = '^tests/.*|^scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*',
   },
 ]

@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.5] - 4/2026
+
+**Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
+
+### Added
+
+- **Current monitoring and dashboard** — Real-time monitoring of circuit and mains current draw, managed from a new sidebar panel with Panel, Monitoring, and
+  Settings tabs.
+  - Configurable spike and continuous overload thresholds (percentage of breaker rating, window duration, cooldown)
+  - Per-circuit and per-mains-leg threshold overrides with reset-to-global
+  - Notification targets and device trackers
+  - Persistent HA notifications and event bus alerts
+  - Customizable notification title and message templates with placeholder substitution
+  - Breaker grid view with live utilization indicators, shedding icons, and per-circuit side panel
+
+- **Frontend i18n** — Dashboard panel and card editor translated into English, Spanish, French, Japanese, and Portuguese.
+
+- **Local brand images** — Icon and logo assets are now shipped inside the integration (`brand/` directory) instead of relying on the Home Assistant brands CDN.
+  Requires Home Assistant 2026.3 or later.
+
+### Changed
+
+- **Services use entity IDs** — Monitoring services accept entity IDs instead of internal circuit UUIDs, matching HA conventions.
+- **`span-panel-api` updated to 2.5.1** — Improved HTTP connection handling and performance.
+- **`span-card`** no longer needs to be loaded through a custom HACS repository; it is loaded by the integration and can be embedded into dashboards. If using
+  the `span-card` separately from the built-in dashboard, remove the custom resource.
+
+### Fixed
+
+- **Circuit switch toggle bounce** — Toggling a breaker switch no longer bounces (changes → reverts → settles).
+
+- **Breaker rating and nameplate capacity sensors** — Corrected device classes on breaker ratings (main and per-circuit) and BESS/PV nameplate capacity sensors.
+  These are static configuration values that rarely change, so they are now disabled by default in new installs to reduce recorder writes. The data is still
+  available via the panel topology service; enable the sensors from entity settings if you need them in dashboards or automations.
+
 ## [2.0.4] - 3/2026
 
 **Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
@@ -33,8 +71,8 @@ All notable changes to this project will be documented in this file.
 
 - **PV nameplate capacity unit** — Corrected the PV nameplate capacity sensor unit to watts.
 
-- **Recorder database growth** — Energy sensors still expose grace-period and dip-compensation diagnostics, plus circuit `tabs` and `voltage`, on the entity, but
-  those attributes are no longer written to the recorder, which greatly reduces churn in the `state_attributes` table (#197).
+- **Recorder database growth** — Energy sensors still expose grace-period and dip-compensation diagnostics, plus circuit `tabs` and `voltage`, on the entity,
+  but those attributes are no longer written to the recorder, which greatly reduces churn in the `state_attributes` table (#197).
 
 ## [2.0.3] - 3/2026
 

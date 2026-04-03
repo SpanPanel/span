@@ -26,7 +26,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfPower,
 )
-from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity import EntityCategory  # type: ignore[attr-defined]
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
@@ -103,6 +103,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         translation_key="dsm_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         options=["unknown"],
         value_fn=lambda s: s.dsm_state,
     ),
@@ -143,6 +144,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         translation_key="vendor_cloud",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         options=["unknown"],
         value_fn=lambda s: s.vendor_cloud or "unknown",
     ),
@@ -223,6 +225,7 @@ L1_VOLTAGE_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
     state_class=SensorStateClass.MEASUREMENT,
     native_unit_of_measurement=UnitOfElectricPotential.VOLT,
     entity_category=EntityCategory.DIAGNOSTIC,
+    entity_registry_enabled_default=False,
     suggested_display_precision=1,
     value_fn=lambda s: s.l1_voltage,
 )
@@ -234,6 +237,7 @@ L2_VOLTAGE_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
     state_class=SensorStateClass.MEASUREMENT,
     native_unit_of_measurement=UnitOfElectricPotential.VOLT,
     entity_category=EntityCategory.DIAGNOSTIC,
+    entity_registry_enabled_default=False,
     suggested_display_precision=1,
     value_fn=lambda s: s.l2_voltage,
 )
@@ -247,6 +251,7 @@ UPSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         suggested_display_precision=2,
         value_fn=lambda s: s.upstream_l1_current_a,
     )
@@ -260,6 +265,7 @@ UPSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         suggested_display_precision=2,
         value_fn=lambda s: s.upstream_l2_current_a,
     )
@@ -296,9 +302,9 @@ MAIN_BREAKER_RATING_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="main_breaker_rating",
         translation_key="main_breaker_rating",
-        device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda s: s.main_breaker_rating_a,
     )
 )
@@ -325,9 +331,9 @@ CIRCUIT_BREAKER_RATING_SENSOR: SpanPanelCircuitsSensorEntityDescription = (
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_breaker_rating",
         name="Breaker Rating",
-        device_class=SensorDeviceClass.CURRENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda c: c.breaker_rating_a,
     )
 )
@@ -386,9 +392,9 @@ BESS_METADATA_SENSORS: tuple[
     SpanBessMetadataSensorEntityDescription(
         key="nameplate_capacity",
         translation_key="bess_nameplate_capacity",
-        device_class=SensorDeviceClass.ENERGY_STORAGE,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda b: b.nameplate_capacity_kwh,
     ),
     SpanBessMetadataSensorEntityDescription(
@@ -442,9 +448,9 @@ PV_METADATA_SENSORS: tuple[
     SpanPVMetadataSensorEntityDescription(
         key="pv_nameplate_capacity",
         translation_key="pv_nameplate_capacity",
-        device_class=SensorDeviceClass.POWER,
         native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
         value_fn=lambda s: s.pv.nameplate_capacity_w,
     ),
 )
@@ -571,6 +577,7 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
+        entity_registry_enabled_default=False,
         value_fn=lambda s: (
             (s.main_meter_energy_consumed_wh or 0) - (s.main_meter_energy_produced_wh or 0)
         ),
@@ -582,6 +589,7 @@ PANEL_ENERGY_SENSORS: tuple[
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
+        entity_registry_enabled_default=False,
         value_fn=lambda s: (
             (s.feedthrough_energy_consumed_wh or 0) - (s.feedthrough_energy_produced_wh or 0)
         ),
@@ -675,7 +683,7 @@ EVSE_SENSORS: tuple[
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
         options=["unknown"],
-        value_fn=lambda e: e.status if e.status else "unknown",
+        value_fn=lambda e: e.status or "unknown",
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
@@ -691,6 +699,6 @@ EVSE_SENSORS: tuple[
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
         options=["unknown"],
-        value_fn=lambda e: e.lock_state if e.lock_state else "unknown",
+        value_fn=lambda e: e.lock_state or "unknown",
     ),
 )

@@ -6,15 +6,9 @@ import logging
 
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
-from .const import (
-    CONF_DEVICE_NAME,
-    USE_CIRCUIT_NUMBERS,
-)
+from .const import CONF_DEVICE_NAME, USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
-from .helpers import (
-    build_evse_unique_id_for_entry,
-    resolve_evse_display_suffix,
-)
+from .helpers import build_evse_unique_id_for_entry, resolve_evse_display_suffix
 from .sensor_base import SpanSensorBase
 from .sensor_definitions import SpanEvseSensorEntityDescription
 from .util import evse_device_info
@@ -60,7 +54,11 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
     ) -> str:
         """Generate unique ID for EVSE sensors."""
         return build_evse_unique_id_for_entry(
-            self.coordinator, snapshot, self._evse_id, description.key, self._device_name
+            self.coordinator,
+            snapshot,
+            self._evse_id,
+            description.key,
+            self._device_name,
         )
 
     def _generate_friendly_name(

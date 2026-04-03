@@ -1,92 +1,152 @@
 {
   "config": {
     "abort": {
-      "no_devices_found": "No se hallaron aparatos en la red",
       "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
-      "reauth_successful": "Autenticación exitosa.",
-      "v1_not_supported": "El firmware v1 no es compatible. Actualice el firmware de su panel a v2.",
+      "cannot_connect": "No se logró establecer conexión con Span Panel",
+      "no_devices_found": "No se hallaron aparatos en la red",
       "no_host": "No se proporcionó una dirección de host desde el complemento.",
       "no_serial": "No se pudo determinar el número de serie del panel.",
-      "cannot_connect": "No se logró establecer conexión con Span Panel"
+      "reauth_successful": "Autenticación exitosa.",
+      "reconfigure_successful": "Host actualizado exitosamente.",
+      "unique_id_mismatch": "El panel en esta dirección tiene un número de serie diferente. No puede cambiar a un panel diferente durante la reconfiguración.",
+      "v1_not_supported": "El firmware v1 no es compatible. Actualice el firmware de su panel a v2."
     },
     "error": {
       "cannot_connect": "No se logró establecer conexión con Span Panel",
-      "invalid_auth": "Autenticación invalida",
-      "unknown": "Error inesperado",
+      "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo.",
       "host_required": "Se requiere host",
-      "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo."
+      "invalid_auth": "Autenticación invalida",
+      "proximity_failed": "Proximidad no comprobada. Por favor abra y cierre la puerta del panel 3 veces e intente de nuevo.",
+      "unknown": "Error inesperado"
     },
+    "flow_title": "Span Panel ({host})",
     "progress": {
       "registering_fqdn": "Registrando el nombre de dominio en el panel y esperando la actualización del certificado TLS. Esto puede tardar hasta 60 segundos..."
     },
-    "flow_title": "Span Panel ({host})",
     "step": {
-      "confirm_discovery": {
-        "description": "¿Deseas configurar Span Panel en {host}?",
-        "title": "Establecer conexión al Span Panel"
-      },
-      "user": {
-        "data": {
-          "host": "Host",
-          "power_display_precision": "Precisión de Visualización de Potencia",
-          "energy_display_precision": "Precisión de Visualización de Energía",
-          "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente"
-        },
-        "data_description": {
-          "host": "Dirección IP o nombre de host del SPAN Panel",
-          "power_display_precision": "Número de lugares decimales para valores de potencia (0-3)",
-          "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)",
-          "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas, evitando picos en el panel de energía."
-        },
-        "description": "Ingrese los detalles de conexión para su SPAN Panel.",
-        "title": "Establecer conexión al Span Panel"
-      },
-      "auth_proximity": {
-        "title": "Autenticación de proximidad",
-        "description": "Por favor abra y cierre la puerta de Span Panel {remaining} veces."
-      },
       "auth_passphrase": {
-        "title": "Contraseña del Panel",
-        "description": "Ingrese la contraseña de su SPAN Panel. Está impresa en la etiqueta del panel o establecida por el propietario del panel.",
         "data": {
           "hop_passphrase": "Contraseña"
         },
         "data_description": {
           "hop_passphrase": "La contraseña utilizada para autenticar con la API v2 del SPAN Panel"
-        }
-      }
-    }
-  },
-  "options": {
-    "step": {
-      "general_options": {
-        "title": "Opciones Generales",
-        "description": "Configurar los ajustes de la integración SPAN Panel.",
+        },
+        "description": "Ingrese la contraseña de su SPAN Panel. Está impresa en la etiqueta del panel o establecida por el propietario del panel.",
+        "title": "Contraseña del Panel"
+      },
+      "auth_proximity": {
+        "description": "Abra y cierre la puerta del SPAN Panel 3 veces, luego seleccione la confirmación a continuación.",
+        "menu_options": {
+          "auth_passphrase": "Usar contraseña en su lugar",
+          "auth_proximity_confirm": "He abierto y cerrado la puerta"
+        },
+        "title": "Autenticación de proximidad"
+      },
+      "auth_proximity_confirm": {
+        "description": "Verificando proximidad con el panel.",
+        "title": "Autenticación de proximidad"
+      },
+      "choose_entity_naming_initial": {
         "data": {
-          "snapshot_update_interval": "Intervalo de Actualización de Snapshot (segundos)",
-          "enable_panel_net_energy_sensors": "Energía Neta del Panel",
-          "enable_circuit_net_energy_sensors": "Energía Neta del Circuito",
-          "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
-          "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente"
+          "entity_naming_pattern": "Patrón de nomenclatura"
         },
         "data_description": {
-          "snapshot_update_interval": "Con qué frecuencia reconstruir el snapshot del panel desde datos MQTT. Valores más bajos dan actualizaciones más rápidas pero usan más CPU. Aumente en hardware de baja potencia (ej., Raspberry Pi). Establezca en 0 para sin debounce. Rango: 0–15 segundos.",
-          "enable_panel_net_energy_sensors": "Crear sensores de energía neta para flujos de energía a nivel de panel (medidor principal y derivación). Muestra el verdadero balance de energía contabilizando flujos bidireccionales.",
-          "enable_circuit_net_energy_sensors": "Crear sensores de energía neta para circuitos individuales. Muestra el verdadero consumo de energía contabilizando potencia reactiva y flujos regenerativos.",
-          "energy_reporting_grace_period": "Cuánto tiempo los sensores de energía mantienen su último valor conocido cuando el panel no está disponible (0-60 minutos). Ayuda a preservar la integridad de las estadísticas de energía durante cortes breves. Predeterminado: 15 minutos.",
-          "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas. Al deshabilitar se borran todas las compensaciones acumuladas."
-        }
+          "entity_naming_pattern": "Los nombres amigables usan etiquetas de circuito del panel. Los nombres basados en pestañas usan números de pestaña de interruptor para IDs de entidad estables."
+        },
+        "description": "Elija cómo se nombran las entidades relacionadas con circuitos en Home Assistant.",
+        "title": "Nomenclatura de entidades de circuito"
+      },
+      "choose_v2_auth": {
+        "menu_options": {
+          "auth_passphrase": "Ingresar Contraseña del Panel",
+          "auth_proximity": "Prueba de Proximidad (abrir/cerrar puerta)"
+        },
+        "title": "Elegir Método de Autenticación"
+      },
+      "confirm_discovery": {
+        "description": "¿Deseas configurar Span Panel en {host}?",
+        "title": "Establecer conexión al Span Panel"
+      },
+      "fqdn_failed": {
+        "description": "No se pudo registrar el nombre de dominio en el panel, o el certificado TLS no se actualizó a tiempo. Puede continuar, pero la conexión MQTT puede fallar si el certificado del panel no incluye su nombre de dominio.",
+        "title": "Registro de Dominio"
+      },
+      "reauth_confirm": {
+        "description": "El Span Panel en {host} requiere re-autenticación.",
+        "menu_options": {
+          "auth_passphrase": "Ingresar Contraseña del Panel",
+          "auth_proximity": "Prueba de Proximidad (abrir/cerrar puerta)"
+        },
+        "title": "Re-autenticar Span Panel"
+      },
+      "reconfigure": {
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Dirección IP o nombre de host del SPAN Panel"
+        },
+        "description": "Actualice la dirección de host para este SPAN Panel. El número de serie del panel debe coincidir.",
+        "title": "Reconfigurar SPAN Panel"
+      },
+      "reconfigure_fqdn_done": {
+        "title": "Reconfiguración Completada"
+      },
+      "reconfigure_fqdn_failed": {
+        "description": "No se pudo registrar el nombre de dominio en el panel, o el certificado TLS no se actualizó a tiempo. Puede continuar, pero la conexión MQTT puede fallar si el certificado del panel no incluye su nombre de dominio.",
+        "title": "Registro de Dominio"
+      },
+      "reconfigure_register_fqdn": {
+        "title": "Registrando Nombre de Dominio"
+      },
+      "register_fqdn": {
+        "title": "Registrando Nombre de Dominio"
+      },
+      "user": {
+        "data": {
+          "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente",
+          "energy_display_precision": "Precisión de Visualización de Energía",
+          "host": "Host",
+          "http_port": "Puerto HTTP",
+          "power_display_precision": "Precisión de Visualización de Potencia"
+        },
+        "data_description": {
+          "enable_energy_dip_compensation": "Compensar automáticamente cuando el panel reporta lecturas de energía más bajas, evitando picos en el panel de energía.",
+          "energy_display_precision": "Número de lugares decimales para valores de energía (0-3)",
+          "host": "Dirección IP o nombre de host del SPAN Panel",
+          "http_port": "Puerto HTTP para la API del panel (predeterminado: 80)",
+          "power_display_precision": "Número de lugares decimales para valores de potencia (0-3)"
+        },
+        "description": "Ingrese los detalles de conexión para su SPAN Panel.",
+        "title": "Establecer conexión al Span Panel"
       }
     }
   },
   "entity": {
-    "select": {
-      "circuit_priority": {
-        "state": {
-          "never": "Permanece encendido en un apagón",
-          "soc_threshold": "Permanece encendido hasta el umbral de batería",
-          "off_grid": "Se apaga en un apagón"
-        }
+    "binary_sensor": {
+      "bess_connected": {
+        "name": "BESS Conectado"
+      },
+      "door_state": {
+        "name": "Estado de la Puerta"
+      },
+      "ethernet_link": {
+        "name": "Enlace Ethernet"
+      },
+      "evse_charging": {
+        "name": "Cargando"
+      },
+      "evse_ev_connected": {
+        "name": "VE Conectado"
+      },
+      "grid_islandable": {
+        "name": "Aislable de la Red"
+      },
+      "panel_status": {
+        "name": "Estado del Panel"
+      },
+      "wifi_link": {
+        "name": "Enlace Wi-Fi"
       }
     },
     "button": {
@@ -94,93 +154,438 @@
         "name": "Anulación GFE: Conectado a Red"
       }
     },
-    "sensor": {
-      "evse_status": {
+    "select": {
+      "circuit_priority": {
+        "name": "Prioridad del Circuito",
         "state": {
-          "unknown": "Desconocido",
-          "available": "Disponible",
-          "preparing": "Preparando",
-          "charging": "Cargando",
-          "suspended_ev": "Suspendido por Vehículo",
-          "suspended_evse": "Suspendido por Cargador",
-          "finishing": "Finalizando",
-          "reserved": "Reservado",
-          "faulted": "Averiado",
-          "unavailable": "No Disponible"
-        }
-      },
-      "evse_lock_state": {
-        "state": {
-          "unknown": "Desconocido",
-          "locked": "Bloqueado",
-          "unlocked": "Desbloqueado"
-        }
-      },
-      "dsm_state": {
-        "state": {
-          "unknown": "Desconocido",
-          "dsm_on_grid": "Conectado a Red",
-          "dsm_off_grid": "Desconectado de Red"
-        }
-      },
-      "dsm_grid_state": {
-        "state": {
-          "unknown": "Desconocido",
-          "dsm_on_grid": "Conectado a Red",
-          "dsm_off_grid": "Desconectado de Red"
-        }
-      },
-      "current_run_config": {
-        "state": {
-          "unknown": "Desconocido",
-          "panel_on_grid": "Conectado a Red",
-          "panel_off_grid": "Desconectado de Red",
-          "panel_backup": "Respaldo"
-        }
-      },
-      "main_relay_state": {
-        "state": {
-          "unknown": "Desconocido",
-          "closed": "Cerrado",
-          "open": "Abierto"
-        }
-      },
-      "vendor_cloud": {
-        "state": {
-          "unknown": "Desconocido",
-          "connected": "Conectado",
-          "unconnected": "Desconectado"
-        }
-      },
-      "grid_forming_entity": {
-        "state": {
-          "unknown": "Desconocido",
-          "grid": "Red",
-          "battery": "Batería",
-          "pv": "PV",
-          "generator": "Generador",
-          "none": "Ninguno"
+          "never": "Permanece encendido en un apagón",
+          "off_grid": "Se apaga en un apagón",
+          "soc_threshold": "Permanece encendido hasta el umbral de batería"
         }
       }
     },
-    "binary_sensor": {
-      "bess_connected": {
-        "name": "BESS Conectado"
+    "sensor": {
+      "battery_level": {
+        "name": "Nivel de Batería"
       },
-      "evse_charging": {
-        "name": "Cargando"
+      "battery_power": {
+        "name": "Potencia de Batería"
       },
-      "evse_ev_connected": {
-        "name": "VE Conectado"
+      "bess_firmware_version": {
+        "name": "Versión de Firmware"
+      },
+      "bess_model": {
+        "name": "Modelo"
+      },
+      "bess_nameplate_capacity": {
+        "name": "Capacidad Nominal"
+      },
+      "bess_serial_number": {
+        "name": "Número de Serie"
+      },
+      "bess_soe_kwh": {
+        "name": "Estado de Energía"
+      },
+      "bess_vendor": {
+        "name": "Fabricante"
+      },
+      "current_run_config": {
+        "name": "Configuración de Ejecución Actual",
+        "state": {
+          "panel_backup": "Respaldo",
+          "panel_off_grid": "Desconectado de Red",
+          "panel_on_grid": "Conectado a Red",
+          "unknown": "Desconocido"
+        }
+      },
+      "downstream_l1_current": {
+        "name": "Corriente Descendente L1"
+      },
+      "downstream_l2_current": {
+        "name": "Corriente Descendente L2"
+      },
+      "dsm_grid_state": {
+        "name": "Estado de Red DSM",
+        "state": {
+          "dsm_off_grid": "Desconectado de Red",
+          "dsm_on_grid": "Conectado a Red",
+          "unknown": "Desconocido"
+        }
+      },
+      "dsm_state": {
+        "name": "Estado DSM",
+        "state": {
+          "dsm_off_grid": "Desconectado de Red",
+          "dsm_on_grid": "Conectado a Red",
+          "unknown": "Desconocido"
+        }
+      },
+      "evse_advertised_current": {
+        "name": "Corriente Anunciada"
+      },
+      "evse_lock_state": {
+        "name": "Estado de Bloqueo",
+        "state": {
+          "locked": "Bloqueado",
+          "unknown": "Desconocido",
+          "unlocked": "Desbloqueado"
+        }
+      },
+      "evse_status": {
+        "name": "Estado del Cargador",
+        "state": {
+          "available": "Disponible",
+          "charging": "Cargando",
+          "faulted": "Averiado",
+          "finishing": "Finalizando",
+          "preparing": "Preparando",
+          "reserved": "Reservado",
+          "suspended_ev": "Suspendido por Vehículo",
+          "suspended_evse": "Suspendido por Cargador",
+          "unavailable": "No Disponible",
+          "unknown": "Desconocido"
+        }
+      },
+      "feedthrough_consumed_energy": {
+        "name": "Energía Consumida de Derivación"
+      },
+      "feedthrough_net_energy": {
+        "name": "Energía Neta de Derivación"
+      },
+      "feedthrough_power": {
+        "name": "Potencia de Derivación"
+      },
+      "feedthrough_produced_energy": {
+        "name": "Energía Producida de Derivación"
+      },
+      "grid_forming_entity": {
+        "name": "Entidad Formadora de Red",
+        "state": {
+          "battery": "Batería",
+          "generator": "Generador",
+          "grid": "Red",
+          "none": "Ninguno",
+          "pv": "PV",
+          "unknown": "Desconocido"
+        }
+      },
+      "grid_power_flow": {
+        "name": "Potencia de Red"
+      },
+      "instant_grid_power": {
+        "name": "Potencia Actual"
+      },
+      "l1_voltage": {
+        "name": "Voltaje L1"
+      },
+      "l2_voltage": {
+        "name": "Voltaje L2"
+      },
+      "main_breaker_rating": {
+        "name": "Capacidad del Interruptor Principal"
+      },
+      "main_meter_consumed_energy": {
+        "name": "Energía Consumida del Medidor Principal"
+      },
+      "main_meter_net_energy": {
+        "name": "Energía Neta del Medidor Principal"
+      },
+      "main_meter_produced_energy": {
+        "name": "Energía Producida del Medidor Principal"
+      },
+      "main_relay_state": {
+        "name": "Estado del Relé Principal",
+        "state": {
+          "closed": "Cerrado",
+          "open": "Abierto",
+          "unknown": "Desconocido"
+        }
+      },
+      "pv_nameplate_capacity": {
+        "name": "Capacidad Nominal PV"
+      },
+      "pv_power": {
+        "name": "Potencia PV"
+      },
+      "pv_product": {
+        "name": "Producto PV"
+      },
+      "pv_vendor": {
+        "name": "Fabricante PV"
+      },
+      "site_power": {
+        "name": "Potencia del Sitio"
+      },
+      "software_version": {
+        "name": "Versión de Software"
+      },
+      "upstream_l1_current": {
+        "name": "Corriente Ascendente L1"
+      },
+      "upstream_l2_current": {
+        "name": "Corriente Ascendente L2"
+      },
+      "vendor_cloud": {
+        "name": "Nube del Fabricante",
+        "state": {
+          "connected": "Conectado",
+          "unconnected": "Desconectado",
+          "unknown": "Desconocido"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "circuit_priority_failed": {
+      "message": "Error al establecer la prioridad del circuito para {circuit}."
+    },
+    "circuit_relay_failed": {
+      "message": "Error al establecer el estado del relé del circuito para {circuit}."
+    },
+    "export_manifest_no_entries": {
+      "message": "No hay entradas de configuración de SPAN Panel cargadas. Agregue y configure un SPAN Panel antes de llamar a este servicio."
+    },
+    "gfe_override_failed": {
+      "message": "Error al enviar la anulación GFE al panel."
+    },
+    "panel_auth_failed": {
+      "message": "La autenticación con el SPAN Panel falló. Por favor vuelva a autenticarse."
+    },
+    "panel_connection_failed": {
+      "message": "Error al conectar con el SPAN Panel en {host}."
+    },
+    "panel_not_ready": {
+      "message": "El SPAN Panel no está listo. Por favor verifique que el panel esté en línea."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "show_panel": "Mostrar Panel en la Barra Lateral",
+          "panel_admin_only": "Solo Usuarios Administradores",
+          "enable_circuit_net_energy_sensors": "Energía Neta del Circuito",
+          "enable_energy_dip_compensation": "Compensar Caídas de Energía Automáticamente",
+          "enable_panel_net_energy_sensors": "Energía Neta del Panel",
+          "enable_unmapped_circuit_sensors": "Sensores de Circuitos No Asignados",
+          "energy_reporting_grace_period": "Período de Gracia del Sensor de Energía (minutos)",
+          "snapshot_update_interval": "Intervalo de Actualización de Snapshot (segundos)"
+        },
+        "data_description": {
+          "show_panel": "Mostrar el panel de control de SPAN como entrada de barra lateral.",
+          "panel_admin_only": "Restringir la entrada de la barra lateral del panel de control solo a usuarios administradores.",
+          "enable_circuit_net_energy_sensors": "Energía neta por circuito, contabilizando potencia reactiva.",
+          "enable_energy_dip_compensation": "Compensar cuando el panel reporta lecturas de energía más bajas. Al deshabilitar se borran las compensaciones.",
+          "enable_panel_net_energy_sensors": "Energía neta para medidor principal y derivación, contabilizando flujos bidireccionales.",
+          "enable_unmapped_circuit_sensors": "Sensores de respaldo para pestañas no asignadas a interruptores con nombre.",
+          "energy_reporting_grace_period": "Minutos que los sensores mantienen el último valor cuando el panel está fuera de línea (0–60). Predeterminado: 15.",
+          "snapshot_update_interval": "Segundos entre reconstrucciones de snapshot (0–15). Menor = más rápido, más CPU. 0 = sin debounce."
+        },
+        "description": "Configurar los ajustes de la integración SPAN Panel.",
+        "title": "Opciones del Panel SPAN"
       }
     }
   },
   "selector": {
     "entity_naming_pattern": {
       "options": {
-        "friendly_names": "Nombres Amigables (ej., span_panel_cocina_tomacorrientes_power)",
-        "circuit_numbers": "Números de Circuito (ej., span_panel_circuit_15_power)"
+        "circuit_numbers": "Números de Circuito (ej., span_panel_circuit_15_power)",
+        "friendly_names": "Nombres Amigables (ej., span_panel_cocina_tomacorrientes_power)"
       }
+    }
+  },
+  "services": {
+    "export_circuit_manifest": {
+      "description": "Devuelve un manifiesto estructurado de circuitos para todos los paneles SPAN configurados: serial, host e IDs de entidad de sensores de potencia por circuito, identificadores de plantilla de diseño (clone_{{tab}}), tipos de dispositivo y números de pestaña de interruptor. Destinado a tarjetas de panel y automatizaciones que necesitan la topología del panel sin consultar el registro de entidades. Este es un servicio de solo respuesta; la respuesta puede listar cero paneles si no se puede resolver nada.",
+      "name": "Exportar manifiesto de circuitos"
+    },
+    "set_circuit_threshold": {
+      "name": "Establecer umbral de circuito",
+      "description": "Establecer umbrales de monitoreo de corriente para un circuito específico.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "La entidad del sensor de potencia del circuito."
+        },
+        "continuous_threshold_pct": {
+          "name": "Umbral continuo (%)",
+          "description": "Porcentaje de la capacidad del interruptor para alertas de carga continua."
+        },
+        "spike_threshold_pct": {
+          "name": "Umbral de pico (%)",
+          "description": "Porcentaje de la capacidad del interruptor para alertas de pico instantáneo."
+        },
+        "window_duration_m": {
+          "name": "Duración de ventana (minutos)",
+          "description": "Cuánto tiempo debe la corriente permanecer por encima del umbral antes de alertar."
+        },
+        "cooldown_duration_m": {
+          "name": "Duración de enfriamiento (minutos)",
+          "description": "Minutos entre alertas repetidas para el mismo circuito."
+        },
+        "monitoring_enabled": {
+          "name": "Monitoreo habilitado",
+          "description": "Habilitar o deshabilitar el monitoreo para este circuito."
+        }
+      }
+    },
+    "clear_circuit_threshold": {
+      "name": "Borrar umbral de circuito",
+      "description": "Eliminar las anulaciones de umbral por circuito, volviendo a los valores predeterminados globales.",
+      "fields": {
+        "circuit_id": {
+          "name": "Circuito",
+          "description": "La entidad del sensor de potencia del circuito."
+        }
+      }
+    },
+    "set_mains_threshold": {
+      "name": "Establecer umbral de alimentación principal",
+      "description": "Establecer umbrales de monitoreo de corriente para una fase de alimentación principal específica.",
+      "fields": {
+        "leg": {
+          "name": "Fase de alimentación principal",
+          "description": "La entidad del sensor de corriente de alimentación principal."
+        },
+        "continuous_threshold_pct": {
+          "name": "Umbral continuo (%)",
+          "description": "Porcentaje de la capacidad del interruptor para alertas de carga continua."
+        },
+        "spike_threshold_pct": {
+          "name": "Umbral de pico (%)",
+          "description": "Porcentaje de la capacidad del interruptor para alertas de pico instantáneo."
+        },
+        "window_duration_m": {
+          "name": "Duración de ventana (minutos)",
+          "description": "Cuánto tiempo debe la corriente permanecer por encima del umbral antes de alertar."
+        },
+        "cooldown_duration_m": {
+          "name": "Duración de enfriamiento (minutos)",
+          "description": "Minutos entre alertas repetidas para la misma fase de alimentación principal."
+        },
+        "monitoring_enabled": {
+          "name": "Monitoreo habilitado",
+          "description": "Habilitar o deshabilitar el monitoreo para esta fase de alimentación principal."
+        }
+      }
+    },
+    "clear_mains_threshold": {
+      "name": "Borrar umbral de alimentación principal",
+      "description": "Eliminar las anulaciones de umbral por fase de alimentación principal, volviendo a los valores predeterminados globales.",
+      "fields": {
+        "leg": {
+          "name": "Fase de alimentación principal",
+          "description": "La entidad del sensor de corriente de alimentación principal."
+        }
+      }
+    },
+    "get_monitoring_status": {
+      "name": "Obtener estado de monitoreo",
+      "description": "Devuelve el estado actual de monitoreo para todos los circuitos y fases de alimentación principal rastreados."
+    },
+    "set_global_monitoring": {
+      "name": "Configurar monitoreo global",
+      "description": "Actualizar los umbrales de monitoreo global y la configuración de notificaciones.",
+      "fields": {
+        "continuous_threshold_pct": {
+          "name": "Umbral continuo",
+          "description": "Porcentaje de la capacidad del interruptor para la detección de sobrecarga continua."
+        },
+        "spike_threshold_pct": {
+          "name": "Umbral de pico",
+          "description": "Porcentaje de la capacidad del interruptor para la detección de picos."
+        },
+        "window_duration_m": {
+          "name": "Duración de la ventana",
+          "description": "Minutos de sobrecarga sostenida antes de generar una alerta."
+        },
+        "cooldown_duration_m": {
+          "name": "Duración de enfriamiento",
+          "description": "Minutos entre alertas repetidas para el mismo punto."
+        },
+        "notify_targets": {
+          "name": "Destinos de notificación",
+          "description": "Lista separada por comas de destinos de servicios de notificación."
+        },
+        "notification_title_template": {
+          "name": "Plantilla de título de notificación",
+          "description": "Plantilla para el título de la notificación. Marcadores de posición: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+        },
+        "notification_message_template": {
+          "name": "Plantilla de mensaje de notificación",
+          "description": "Plantilla para el cuerpo del mensaje de notificación. Marcadores de posición: {name}, {entity_id}, {alert_type}, {current_a}, {breaker_rating_a}, {threshold_pct}, {utilization_pct}, {window_m}."
+        },
+        "notification_priority": {
+          "name": "Prioridad de notificación",
+          "description": "Nivel de prioridad de la notificación push. Controla el comportamiento de interrupción en dispositivos móviles (iOS: interruption-level, Android: priority/canal)."
+        }
+      }
+    },
+    "test_notification": {
+      "name": "Notificación de prueba",
+      "description": "Enviar una notificación de prueba a todos los destinos configurados con valores de ejemplo."
+    },
+    "set_graph_time_horizon": {
+      "name": "Establecer horizonte temporal del gráfico",
+      "description": "Establece el horizonte temporal predeterminado global para los gráficos de circuitos.",
+      "fields": {
+        "horizon": {
+          "name": "Horizonte",
+          "description": "Ventana de tiempo preestablecida para la visualización del gráfico."
+        }
+      }
+    },
+    "set_circuit_graph_horizon": {
+      "name": "Establecer horizonte de gráfico por circuito",
+      "description": "Establece una anulación de horizonte temporal por circuito para los gráficos.",
+      "fields": {
+        "circuit_id": {
+          "name": "ID del circuito",
+          "description": "El identificador del circuito a anular."
+        },
+        "horizon": {
+          "name": "Horizonte",
+          "description": "Ventana de tiempo preestablecida para la visualización del gráfico."
+        }
+      }
+    },
+    "clear_circuit_graph_horizon": {
+      "name": "Borrar horizonte de gráfico del circuito",
+      "description": "Elimina la anulación del horizonte de gráfico por circuito, volviendo al valor predeterminado global.",
+      "fields": {
+        "circuit_id": {
+          "name": "ID del circuito",
+          "description": "El identificador del circuito para borrar la anulación."
+        }
+      }
+    },
+    "set_subdevice_graph_horizon": {
+      "name": "Establecer horizonte de gráfico por subdispositivo",
+      "description": "Establece una anulación de horizonte temporal por subdispositivo para los gráficos.",
+      "fields": {
+        "subdevice_id": {
+          "name": "ID del subdispositivo",
+          "description": "El identificador del subdispositivo a anular."
+        },
+        "horizon": {
+          "name": "Horizonte",
+          "description": "Ventana de tiempo preestablecida para la visualización del gráfico."
+        }
+      }
+    },
+    "clear_subdevice_graph_horizon": {
+      "name": "Borrar horizonte de gráfico del subdispositivo",
+      "description": "Elimina la anulación del horizonte de gráfico por subdispositivo, volviendo al valor predeterminado global.",
+      "fields": {
+        "subdevice_id": {
+          "name": "ID del subdispositivo",
+          "description": "El identificador del subdispositivo para borrar la anulación."
+        }
+      }
+    },
+    "get_graph_settings": {
+      "name": "Obtener configuración de gráficos",
+      "description": "Devuelve la configuración actual de horizonte de gráficos global y por circuito."
     }
   }
 }

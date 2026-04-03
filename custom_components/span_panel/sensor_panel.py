@@ -41,7 +41,9 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         super().__init__(data_coordinator, description, snapshot)
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelDataSensorEntityDescription,
     ) -> str:
         """Generate unique ID for panel data sensors."""
         return construct_panel_unique_id_for_entry(
@@ -49,7 +51,9 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelDataSensorEntityDescription,
     ) -> str:
         """Generate friendly name for panel data sensors."""
         if description.name is not None and description.name is not UNDEFINED:
@@ -74,7 +78,9 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         super().__init__(data_coordinator, description, snapshot)
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelStatusSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelStatusSensorEntityDescription,
     ) -> str:
         """Generate unique ID for panel status sensors."""
         return construct_panel_unique_id_for_entry(
@@ -82,7 +88,9 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelStatusSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelStatusSensorEntityDescription,
     ) -> str:
         """Generate friendly name for panel status sensors."""
         if description.name is not None and description.name is not UNDEFINED:
@@ -106,7 +114,7 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         if snapshot.wifi_ssid is not None:
             attributes["wifi_ssid"] = snapshot.wifi_ssid
 
-        return attributes if attributes else None
+        return attributes or None
 
 
 class SpanPanelBattery(
@@ -128,7 +136,9 @@ class SpanPanelBattery(
             self._attr_device_info = device_info_override
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelBatterySensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelBatterySensorEntityDescription,
     ) -> str:
         """Generate unique ID for battery sensors."""
         return construct_panel_unique_id_for_entry(
@@ -136,7 +146,9 @@ class SpanPanelBattery(
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelBatterySensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelBatterySensorEntityDescription,
     ) -> str:
         """Generate friendly name for battery sensors."""
         if description.name is not None and description.name is not UNDEFINED:
@@ -166,17 +178,20 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             self._attr_device_info = device_info_override
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelDataSensorEntityDescription,
     ) -> str:
         """Generate unique ID for panel power sensors."""
         entity_suffix = get_panel_entity_suffix(description.key)
-        unique_id = construct_synthetic_unique_id_for_entry(
+        return construct_synthetic_unique_id_for_entry(
             self.coordinator, snapshot, entity_suffix, self._device_name
         )
-        return unique_id
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelDataSensorEntityDescription,
     ) -> str:
         """Generate friendly name for panel power sensors."""
         if description.name is not None and description.name is not UNDEFINED:
@@ -196,17 +211,17 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         attributes: dict[str, Any] = {}
 
         # Add voltage attribute (standard panel voltage)
-        attributes["voltage"] = "240"
+        attributes["voltage"] = 240
 
         # Calculate amperage from power (P = V * I, so I = P / V)
         if self.native_value is not None and isinstance(self.native_value, int | float):
             try:
                 amperage = float(self.native_value) / 240.0
-                attributes["amperage"] = str(round(amperage, 2))
+                attributes["amperage"] = round(amperage, 2)
             except (ValueError, ZeroDivisionError):
-                attributes["amperage"] = "0.0"
+                attributes["amperage"] = 0.0
         else:
-            attributes["amperage"] = "0.0"
+            attributes["amperage"] = 0.0
 
         return attributes
 
@@ -226,7 +241,9 @@ class SpanPanelEnergySensor(
         super().__init__(data_coordinator, description, snapshot)
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelDataSensorEntityDescription,
     ) -> str:
         """Generate unique ID for panel energy sensors."""
         entity_suffix = get_panel_entity_suffix(description.key)
@@ -235,7 +252,9 @@ class SpanPanelEnergySensor(
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPanelDataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPanelDataSensorEntityDescription,
     ) -> str:
         """Generate friendly name for panel energy sensors."""
         if description.name is not None and description.name is not UNDEFINED:
@@ -254,9 +273,9 @@ class SpanPanelEnergySensor(
         attributes = dict(base_attributes)
 
         # Add voltage attribute (standard panel voltage)
-        attributes["voltage"] = "240"
+        attributes["voltage"] = 240
 
-        return attributes if attributes else None
+        return attributes or None
 
 
 class SpanBessMetadataSensor(
@@ -276,7 +295,9 @@ class SpanBessMetadataSensor(
         self._attr_device_info = device_info_override
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanBessMetadataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanBessMetadataSensorEntityDescription,
     ) -> str:
         """Generate unique ID for BESS metadata sensors."""
         return build_bess_unique_id_for_entry(
@@ -284,7 +305,9 @@ class SpanBessMetadataSensor(
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanBessMetadataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanBessMetadataSensorEntityDescription,
     ) -> str:
         """Generate friendly name for BESS metadata sensors."""
         if description.name is not None and description.name is not UNDEFINED:
@@ -311,7 +334,9 @@ class SpanPVMetadataSensor(
         super().__init__(data_coordinator, description, snapshot)
 
     def _generate_unique_id(
-        self, snapshot: SpanPanelSnapshot, description: SpanPVMetadataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPVMetadataSensorEntityDescription,
     ) -> str:
         """Generate unique ID for PV metadata sensors."""
         return construct_panel_unique_id_for_entry(
@@ -319,7 +344,9 @@ class SpanPVMetadataSensor(
         )
 
     def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanPVMetadataSensorEntityDescription
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPVMetadataSensorEntityDescription,
     ) -> str:
         """Generate friendly name for PV metadata sensors."""
         if description.name is not None and description.name is not UNDEFINED:

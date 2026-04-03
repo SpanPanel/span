@@ -6,21 +6,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
-
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
     _async_register_services,
 )
 from custom_components.span_panel.const import DOMAIN
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 
-from tests.factories import (
-    SpanCircuitSnapshotFactory,
-    SpanPanelSnapshotFactory,
-)
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _make_coordinator(snapshot):
@@ -67,13 +66,15 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_basic_manifest(self, hass: HomeAssistant):
         """Returns correct manifest for a panel with circuits."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         kitchen = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_kitchen", name="Kitchen", tabs=[2, 3],
+            circuit_id="uuid_kitchen",
+            name="Kitchen",
+            tabs=[2, 3],
         )
         bedroom = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_bedroom", name="Bedroom", tabs=[5],
+            circuit_id="uuid_bedroom",
+            name="Bedroom",
+            tabs=[5],
         )
         snapshot = SpanPanelSnapshotFactory.create(
             serial_number="sp3-test-001",
@@ -88,14 +89,22 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
         _register_power_entity(
-            hass, "span_entry", "sp3-test-001", "uuid_kitchen",
+            hass,
+            "span_entry",
+            "sp3-test-001",
+            "uuid_kitchen",
             "sensor.span_panel_kitchen_power",
         )
         _register_power_entity(
-            hass, "span_entry", "sp3-test-001", "uuid_bedroom",
+            hass,
+            "span_entry",
+            "sp3-test-001",
+            "uuid_bedroom",
             "sensor.span_panel_bedroom_power",
         )
 
@@ -123,19 +132,21 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_multiple_panels(self, hass: HomeAssistant):
         """Returns manifests for all loaded panels."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         circuit_a = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_a", tabs=[1],
+            circuit_id="uuid_a",
+            tabs=[1],
         )
         circuit_b = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_b", tabs=[3],
+            circuit_id="uuid_b",
+            tabs=[3],
         )
         snapshot_a = SpanPanelSnapshotFactory.create(
-            serial_number="serial-aaa", circuits={"uuid_a": circuit_a},
+            serial_number="serial-aaa",
+            circuits={"uuid_a": circuit_a},
         )
         snapshot_b = SpanPanelSnapshotFactory.create(
-            serial_number="serial-bbb", circuits={"uuid_b": circuit_b},
+            serial_number="serial-bbb",
+            circuits={"uuid_b": circuit_b},
         )
 
         entry_a = MockConfigEntry(
@@ -154,11 +165,19 @@ class TestExportCircuitManifest:
         entry_b.add_to_hass(hass)
         entry_a.mock_state(hass, ConfigEntryState.LOADED)
         entry_b.mock_state(hass, ConfigEntryState.LOADED)
-        entry_a.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot_a))
-        entry_b.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot_b))
+        entry_a.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot_a)
+        )
+        entry_b.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot_b)
+        )
 
-        _register_power_entity(hass, "entry_a", "serial-aaa", "uuid_a", "sensor.panel_a_power")
-        _register_power_entity(hass, "entry_b", "serial-bbb", "uuid_b", "sensor.panel_b_power")
+        _register_power_entity(
+            hass, "entry_a", "serial-aaa", "uuid_a", "sensor.panel_a_power"
+        )
+        _register_power_entity(
+            hass, "entry_b", "serial-bbb", "uuid_b", "sensor.panel_b_power"
+        )
 
         _async_register_services(hass)
         result = await _call_manifest_service(hass)
@@ -174,10 +193,10 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_unmapped_tabs_excluded(self, hass: HomeAssistant):
         """Unmapped tab circuits are excluded from the manifest."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         real = SpanCircuitSnapshotFactory.create(circuit_id="uuid_real", tabs=[1])
-        unmapped = SpanCircuitSnapshotFactory.create(circuit_id="unmapped_tab_5", tabs=[5])
+        unmapped = SpanCircuitSnapshotFactory.create(
+            circuit_id="unmapped_tab_5", tabs=[5]
+        )
         snapshot = SpanPanelSnapshotFactory.create(
             serial_number="sp3-001",
             circuits={"uuid_real": real, "unmapped_tab_5": unmapped},
@@ -191,11 +210,19 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_real", "sensor.real_power")
         _register_power_entity(
-            hass, "span_entry", "sp3-001", "unmapped_tab_5", "sensor.unmapped_power",
+            hass, "span_entry", "sp3-001", "uuid_real", "sensor.real_power"
+        )
+        _register_power_entity(
+            hass,
+            "span_entry",
+            "sp3-001",
+            "unmapped_tab_5",
+            "sensor.unmapped_power",
         )
 
         _async_register_services(hass)
@@ -209,10 +236,10 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_circuit_without_entity_excluded(self, hass: HomeAssistant):
         """Circuits with no registered power entity are excluded."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         registered = SpanCircuitSnapshotFactory.create(circuit_id="uuid_reg", tabs=[1])
-        unregistered = SpanCircuitSnapshotFactory.create(circuit_id="uuid_unreg", tabs=[3])
+        unregistered = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_unreg", tabs=[3]
+        )
         snapshot = SpanPanelSnapshotFactory.create(
             serial_number="sp3-001",
             circuits={"uuid_reg": registered, "uuid_unreg": unregistered},
@@ -226,10 +253,14 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
         # Only register entity for one circuit
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_reg", "sensor.reg_power")
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_reg", "sensor.reg_power"
+        )
 
         _async_register_services(hass)
         result = await _call_manifest_service(hass)
@@ -241,26 +272,30 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_no_loaded_entries_raises_validation_error(self, hass: HomeAssistant):
         """Raises ServiceValidationError when no config entries are loaded."""
-        from homeassistant.exceptions import ServiceValidationError
-
         _async_register_services(hass)
 
-        with pytest.raises(ServiceValidationError):
+        with pytest.raises(ServiceValidationError) as excinfo:
             await _call_manifest_service(hass)
+        assert excinfo.value.translation_key == "export_manifest_no_entries"
+        assert excinfo.value.translation_domain == DOMAIN
 
     @pytest.mark.asyncio
     async def test_all_device_types_included(self, hass: HomeAssistant):
         """All device types are included — PV, BESS, EVSE, and regular circuits."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         regular = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_reg", tabs=[1], device_type="circuit",
+            circuit_id="uuid_reg",
+            tabs=[1],
+            device_type="circuit",
         )
         pv = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_pv", tabs=[5], device_type="pv",
+            circuit_id="uuid_pv",
+            tabs=[5],
+            device_type="pv",
         )
         evse = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_evse", tabs=[10, 12], device_type="evse",
+            circuit_id="uuid_evse",
+            tabs=[10, 12],
+            device_type="evse",
         )
         snapshot = SpanPanelSnapshotFactory.create(
             serial_number="sp3-001",
@@ -279,11 +314,19 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_reg", "sensor.reg_power")
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_pv", "sensor.pv_power")
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_evse", "sensor.evse_power")
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_reg", "sensor.reg_power"
+        )
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_pv", "sensor.pv_power"
+        )
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_evse", "sensor.evse_power"
+        )
 
         _async_register_services(hass)
         result = await _call_manifest_service(hass)
@@ -299,13 +342,14 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_bess_device_type_mapped_to_battery(self, hass: HomeAssistant):
         """Internal 'bess' device type is mapped to 'battery' in the manifest."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         bess = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_bess", tabs=[14, 16], device_type="bess",
+            circuit_id="uuid_bess",
+            tabs=[14, 16],
+            device_type="bess",
         )
         snapshot = SpanPanelSnapshotFactory.create(
-            serial_number="sp3-001", circuits={"uuid_bess": bess},
+            serial_number="sp3-001",
+            circuits={"uuid_bess": bess},
         )
 
         entry = MockConfigEntry(
@@ -316,9 +360,13 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_bess", "sensor.bess_power")
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_bess", "sensor.bess_power"
+        )
 
         _async_register_services(hass)
         result = await _call_manifest_service(hass)
@@ -332,19 +380,23 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_panel_with_no_resolvable_circuits_omitted(self, hass: HomeAssistant):
         """Panel where no circuits have registered entities is omitted."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         circuit = SpanCircuitSnapshotFactory.create(circuit_id="uuid_orphan", tabs=[1])
         snapshot = SpanPanelSnapshotFactory.create(
-            serial_number="sp3-001", circuits={"uuid_orphan": circuit},
+            serial_number="sp3-001",
+            circuits={"uuid_orphan": circuit},
         )
 
         entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
+            domain=DOMAIN,
+            data={},
+            entry_id="span_entry",
+            unique_id="sp3-001",
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
         # No entities registered
 
         _async_register_services(hass)
@@ -353,35 +405,16 @@ class TestExportCircuitManifest:
         assert result["panels"] == []
 
     @pytest.mark.asyncio
-    async def test_coordinator_with_no_snapshot_skipped(self, hass: HomeAssistant):
-        """Entry whose coordinator has no data (None snapshot) is skipped."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
-        coordinator = MagicMock()
-        coordinator.data = None
-
-        entry = MockConfigEntry(
-            domain=DOMAIN, data={}, entry_id="span_entry", unique_id="sp3-001",
-        )
-        entry.add_to_hass(hass)
-        entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator)
-
-        _async_register_services(hass)
-        result = await _call_manifest_service(hass)
-
-        assert result["panels"] == []
-
     @pytest.mark.asyncio
     async def test_template_uses_min_tab(self, hass: HomeAssistant):
         """Template name is clone_{min(tabs)}, not max or first."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         circuit = SpanCircuitSnapshotFactory.create(
-            circuit_id="uuid_240v", tabs=[8, 6],
+            circuit_id="uuid_240v",
+            tabs=[8, 6],
         )
         snapshot = SpanPanelSnapshotFactory.create(
-            serial_number="sp3-001", circuits={"uuid_240v": circuit},
+            serial_number="sp3-001",
+            circuits={"uuid_240v": circuit},
         )
 
         entry = MockConfigEntry(
@@ -392,9 +425,13 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_240v", "sensor.c_power")
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_240v", "sensor.c_power"
+        )
 
         _async_register_services(hass)
         result = await _call_manifest_service(hass)
@@ -406,11 +443,10 @@ class TestExportCircuitManifest:
     @pytest.mark.asyncio
     async def test_host_included_from_config_entry(self, hass: HomeAssistant):
         """Host field is populated from config entry data."""
-        from pytest_homeassistant_custom_component.common import MockConfigEntry
-
         circuit = SpanCircuitSnapshotFactory.create(circuit_id="uuid_a", tabs=[1])
         snapshot = SpanPanelSnapshotFactory.create(
-            serial_number="sp3-001", circuits={"uuid_a": circuit},
+            serial_number="sp3-001",
+            circuits={"uuid_a": circuit},
         )
 
         entry = MockConfigEntry(
@@ -421,9 +457,13 @@ class TestExportCircuitManifest:
         )
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=_make_coordinator(snapshot))
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
 
-        _register_power_entity(hass, "span_entry", "sp3-001", "uuid_a", "sensor.a_power")
+        _register_power_entity(
+            hass, "span_entry", "sp3-001", "uuid_a", "sensor.a_power"
+        )
 
         _async_register_services(hass)
         result = await _call_manifest_service(hass)

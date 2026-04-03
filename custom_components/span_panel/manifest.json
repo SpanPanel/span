@@ -5,13 +5,26 @@
     "@SpanPanel"
   ],
   "config_flow": true,
+  "dependencies": [
+    "diagnostics",
+    "frontend",
+    "http",
+    "panel_custom",
+    "persistent_notification"
+  ],
   "documentation": "https://github.com/SpanPanel/span",
+  "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/SpanPanel/span/issues",
-  "requirements": [
-    "span-panel-api==2.3.2"
+  "loggers": [
+    "custom_components.span_panel",
+    "span_panel_api"
   ],
-  "version": "2.0.4",
+  "quality_scale": "gold",
+  "requirements": [
+    "span-panel-api==2.5.1"
+  ],
+  "version": "2.0.5",
   "zeroconf": [
     {
       "type": "_span._tcp.local."
