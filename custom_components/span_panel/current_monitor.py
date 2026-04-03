@@ -210,14 +210,24 @@ class CurrentMonitor:
         self._hass.async_create_task(self.async_save_overrides())
 
     def _resolve_circuit_entity_id(self, circuit_id: str) -> str:
-        """Resolve circuit_id to the power sensor entity_id, or fall back to circuit_id."""
+        """Resolve circuit_id to a sensor entity_id for monitoring status keys.
+
+        Tries the current sensor first, then falls back to power, matching
+        the frontend lookup order (circuit.entities.current ?? .power).
+        """
         snapshot = self._last_snapshot
         if snapshot is None:
             return circuit_id
         serial = snapshot.serial_number
-        unique_id = build_circuit_unique_id(serial, circuit_id, "instantPowerW")
         entity_reg = er.async_get(self._hass)
-        entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        # Try current sensor first (matches frontend preference)
+        current_uid = build_circuit_unique_id(serial, circuit_id, "current")
+        entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, current_uid)
+        if entity_id is not None:
+            return entity_id
+        # Fall back to power sensor
+        power_uid = build_circuit_unique_id(serial, circuit_id, "instantPowerW")
+        entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, power_uid)
         return entity_id if entity_id is not None else circuit_id
 
     def resolve_entity_to_circuit_id(self, entity_id: str) -> str:
