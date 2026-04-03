@@ -27,6 +27,12 @@ set_circuit_threshold:
           min: 1
           max: 180
           unit_of_measurement: min
+    cooldown_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
     monitoring_enabled:
       selector:
         boolean:
@@ -63,6 +69,12 @@ set_mains_threshold:
           max: 200
           unit_of_measurement: "%"
     window_duration_m:
+      selector:
+        number:
+          min: 1
+          max: 180
+          unit_of_measurement: min
+    cooldown_duration_m:
       selector:
         number:
           min: 1

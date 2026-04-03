@@ -2,7 +2,7 @@
 
 # ruff: noqa: D102, D107
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from homeassistant.components.sensor import SensorStateClass
@@ -181,10 +181,10 @@ class TestGracePeriodRestorationLogic:
         # - Panel is offline
         # Expected: Should use last valid state
 
-        last_valid_changed = datetime.now() - timedelta(minutes=10)
+        last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=10)
         grace_period_minutes = 15
 
-        time_since_last_valid = datetime.now() - last_valid_changed
+        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         is_within_grace = time_since_last_valid <= grace_period_duration
@@ -199,10 +199,10 @@ class TestGracePeriodRestorationLogic:
         # - Panel is offline
         # Expected: Should report None (unknown)
 
-        last_valid_changed = datetime.now() - timedelta(minutes=20)
+        last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=20)
         grace_period_minutes = 15
 
-        time_since_last_valid = datetime.now() - last_valid_changed
+        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         is_within_grace = time_since_last_valid <= grace_period_duration
@@ -212,10 +212,10 @@ class TestGracePeriodRestorationLogic:
     def test_grace_period_edge_case_exactly_at_limit(self):
         """Test grace period at exactly the limit."""
         # Grace period of 15 minutes, exactly 15 minutes ago
-        last_valid_changed = datetime.now() - timedelta(minutes=15)
+        last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=15)
         grace_period_minutes = 15
 
-        time_since_last_valid = datetime.now() - last_valid_changed
+        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         # At exactly the limit, should still be within grace period (<= comparison)
@@ -230,10 +230,10 @@ class TestGracePeriodRestorationLogic:
 
     def test_grace_period_zero_disabled(self):
         """Test that grace period of 0 means no grace period."""
-        last_valid_changed = datetime.now() - timedelta(seconds=1)
+        last_valid_changed = datetime.now(tz=UTC) - timedelta(seconds=1)
         grace_period_minutes = 0
 
-        time_since_last_valid = datetime.now() - last_valid_changed
+        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         is_within_grace = time_since_last_valid <= grace_period_duration
@@ -244,10 +244,10 @@ class TestGracePeriodRestorationLogic:
     def test_grace_period_maximum_60_minutes(self):
         """Test grace period with maximum 60 minute setting."""
         # 59 minutes ago with 60 minute grace period - should still be valid
-        last_valid_changed = datetime.now() - timedelta(minutes=59)
+        last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=59)
         grace_period_minutes = 60
 
-        time_since_last_valid = datetime.now() - last_valid_changed
+        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         is_within_grace = time_since_last_valid <= grace_period_duration
@@ -255,8 +255,8 @@ class TestGracePeriodRestorationLogic:
         assert is_within_grace is True
 
         # 61 minutes ago with 60 minute grace period - should be expired
-        last_valid_changed_expired = datetime.now() - timedelta(minutes=61)
-        time_since_expired = datetime.now() - last_valid_changed_expired
+        last_valid_changed_expired = datetime.now(tz=UTC) - timedelta(minutes=61)
+        time_since_expired = datetime.now(tz=UTC) - last_valid_changed_expired
 
         is_within_grace_expired = time_since_expired <= grace_period_duration
 
@@ -277,7 +277,7 @@ class TestRestorationScenarios:
         # 6. Grace period: 15 minutes
         # Expected: Should restore and use last_valid_state
 
-        original_last_valid_changed = datetime.now() - timedelta(minutes=7)
+        original_last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=7)
         grace_period_minutes = 15
         stored_last_valid_state = 1000.0
 
@@ -296,7 +296,7 @@ class TestRestorationScenarios:
         restored_timestamp = datetime.fromisoformat(restored.last_valid_changed)
 
         # Check if still within grace period
-        time_since_last_valid = datetime.now() - restored_timestamp
+        time_since_last_valid = datetime.now(tz=UTC) - restored_timestamp
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         assert time_since_last_valid <= grace_period_duration
@@ -313,7 +313,7 @@ class TestRestorationScenarios:
         # 6. Grace period: 60 minutes (max)
         # Expected: Grace period expired, should report unknown
 
-        original_last_valid_changed = datetime.now() - timedelta(minutes=65)
+        original_last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=65)
         grace_period_minutes = 60
         stored_last_valid_state = 2000.0
 
@@ -332,7 +332,7 @@ class TestRestorationScenarios:
         restored_timestamp = datetime.fromisoformat(restored.last_valid_changed)
 
         # Check if still within grace period
-        time_since_last_valid = datetime.now() - restored_timestamp
+        time_since_last_valid = datetime.now(tz=UTC) - restored_timestamp
         grace_period_duration = timedelta(minutes=grace_period_minutes)
 
         # Should be OUTSIDE grace period
@@ -347,7 +347,7 @@ class TestRestorationScenarios:
         # 4. Panel comes back online - normal update takes over
 
         stored_last_valid_state = 5000.0
-        stored_timestamp = datetime.now() - timedelta(minutes=5)
+        stored_timestamp = datetime.now(tz=UTC) - timedelta(minutes=5)
 
         stored_data = SpanEnergyExtraStoredData(
             native_value=stored_last_valid_state,
@@ -438,7 +438,7 @@ class TestGracePeriodFallback:
 
         sensor = DummyEnergySensor(grace_minutes=5)
         sensor._last_valid_state = 10.0
-        sensor._last_valid_changed = datetime.now() - timedelta(minutes=10)
+        sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=10)
 
         sensor._handle_offline_grace_period()
 
@@ -449,7 +449,7 @@ class TestGracePeriodFallback:
 
         sensor = DummyEnergySensor(grace_minutes="15")
         sensor._last_valid_state = 50.0
-        sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+        sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
 
         sensor._handle_offline_grace_period()
 

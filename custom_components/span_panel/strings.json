@@ -419,6 +419,10 @@
           "name": "Window duration (minutes)",
           "description": "How long current must stay above threshold before alerting."
         },
+        "cooldown_duration_m": {
+          "name": "Cooldown duration (minutes)",
+          "description": "Minutes between repeated alerts for the same circuit."
+        },
         "monitoring_enabled": {
           "name": "Monitoring enabled",
           "description": "Enable or disable monitoring for this circuit."
@@ -454,6 +458,10 @@
         "window_duration_m": {
           "name": "Window duration (minutes)",
           "description": "How long current must stay above threshold before alerting."
+        },
+        "cooldown_duration_m": {
+          "name": "Cooldown duration (minutes)",
+          "description": "Minutes between repeated alerts for the same mains leg."
         },
         "monitoring_enabled": {
           "name": "Monitoring enabled",

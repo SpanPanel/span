@@ -419,6 +419,10 @@
           "name": "Duração da janela (minutos)",
           "description": "Quanto tempo a corrente deve permanecer acima do limiar antes de alertar."
         },
+        "cooldown_duration_m": {
+          "name": "Duração de arrefecimento (minutos)",
+          "description": "Minutos entre alertas repetidos para o mesmo circuito."
+        },
         "monitoring_enabled": {
           "name": "Monitorização ativada",
           "description": "Ativar ou desativar a monitorização para este circuito."
@@ -454,6 +458,10 @@
         "window_duration_m": {
           "name": "Duração da janela (minutos)",
           "description": "Quanto tempo a corrente deve permanecer acima do limiar antes de alertar."
+        },
+        "cooldown_duration_m": {
+          "name": "Duração de arrefecimento (minutos)",
+          "description": "Minutos entre alertas repetidos para a mesma fase da alimentação principal."
         },
         "monitoring_enabled": {
           "name": "Monitorização ativada",

@@ -419,6 +419,10 @@
           "name": "Duración de ventana (minutos)",
           "description": "Cuánto tiempo debe la corriente permanecer por encima del umbral antes de alertar."
         },
+        "cooldown_duration_m": {
+          "name": "Duración de enfriamiento (minutos)",
+          "description": "Minutos entre alertas repetidas para el mismo circuito."
+        },
         "monitoring_enabled": {
           "name": "Monitoreo habilitado",
           "description": "Habilitar o deshabilitar el monitoreo para este circuito."
@@ -454,6 +458,10 @@
         "window_duration_m": {
           "name": "Duración de ventana (minutos)",
           "description": "Cuánto tiempo debe la corriente permanecer por encima del umbral antes de alertar."
+        },
+        "cooldown_duration_m": {
+          "name": "Duración de enfriamiento (minutos)",
+          "description": "Minutos entre alertas repetidas para la misma fase de alimentación principal."
         },
         "monitoring_enabled": {
           "name": "Monitoreo habilitado",

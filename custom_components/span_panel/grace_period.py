@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import logging
 from typing import Any, Self
 
@@ -31,8 +31,14 @@ def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | 
     except (TypeError, ValueError):
         return None, None
 
-    # Normalize last_changed to naive datetime to match existing tracking
-    last_changed = state.last_changed.replace(tzinfo=None) if state.last_changed else None
+    # Ensure last_changed is a UTC-aware datetime to match our tracking
+    last_changed: datetime | None = None
+    if state.last_changed is not None:
+        last_changed = (
+            state.last_changed.replace(tzinfo=UTC)
+            if state.last_changed.tzinfo is None
+            else state.last_changed.astimezone(UTC)
+        )
     return value, last_changed
 
 
@@ -134,17 +140,17 @@ def handle_offline_grace_period(
     # brief offline period immediately after startup.
     if last_valid_state is None and isinstance(current_native_value, int | float):
         last_valid_state = float(current_native_value)
-        last_valid_changed = last_valid_changed or datetime.now()
+        last_valid_changed = last_valid_changed or datetime.now(tz=UTC)
 
     if last_valid_state is None:
         # No previous valid state, set to None (HA reports unknown)
         return None, None, last_valid_changed
 
     if last_valid_changed is None:
-        last_valid_changed = datetime.now()
+        last_valid_changed = datetime.now(tz=UTC)
 
     try:
-        time_since_last_valid = datetime.now() - last_valid_changed
+        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
         grace_period_duration = timedelta(minutes=grace_minutes)
     except Exception as err:  # noqa: BLE001  # pragma: no cover - defensive
         _LOGGER.debug("Grace period calculation failed: %s", err)
@@ -174,4 +180,4 @@ def initialize_from_last_state(
     if restored_value is None:
         return None, None
 
-    return restored_value, restored_changed or datetime.now()
+    return restored_value, restored_changed or datetime.now(tz=UTC)

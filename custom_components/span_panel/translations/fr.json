@@ -419,6 +419,10 @@
           "name": "Durée de la fenêtre (minutes)",
           "description": "Durée pendant laquelle le courant doit rester au-dessus du seuil avant déclenchement de l'alerte."
         },
+        "cooldown_duration_m": {
+          "name": "Durée de refroidissement (minutes)",
+          "description": "Minutes entre les alertes répétées pour le même circuit."
+        },
         "monitoring_enabled": {
           "name": "Surveillance activée",
           "description": "Activer ou désactiver la surveillance pour ce circuit."
@@ -454,6 +458,10 @@
         "window_duration_m": {
           "name": "Durée de la fenêtre (minutes)",
           "description": "Durée pendant laquelle le courant doit rester au-dessus du seuil avant déclenchement de l'alerte."
+        },
+        "cooldown_duration_m": {
+          "name": "Durée de refroidissement (minutes)",
+          "description": "Minutes entre les alertes répétées pour la même phase du réseau."
         },
         "monitoring_enabled": {
           "name": "Surveillance activée",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -209,7 +209,7 @@ def test_panel_energy_sensor_extra_attributes_include_voltage_and_grace() -> Non
     sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
 
     sensor._last_valid_state = 1250.0
-    sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+    sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
 
     attrs = sensor.extra_state_attributes
     assert attrs is not None
@@ -483,7 +483,7 @@ def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_m
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
 
     sensor._last_valid_state = 12.0
-    sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+    sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
 
     attrs = sensor.extra_state_attributes
     assert attrs is not None
@@ -528,7 +528,7 @@ def test_parse_numeric_state_returns_numeric_value_and_timestamp() -> None:
 
     assert value == 42.5
     assert changed is not None
-    assert changed.tzinfo is None
+    assert changed.tzinfo is UTC
 
 
 def test_parse_numeric_state_ignores_non_numeric_value() -> None:
@@ -656,7 +656,7 @@ def test_energy_sensor_coerces_invalid_grace_period_value() -> None:
     sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
 
     sensor._last_valid_state = 1250.0
-    sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+    sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
     sensor._grace_period_minutes = "abc"
 
     attrs = sensor.extra_state_attributes
@@ -997,7 +997,7 @@ def test_energy_sensor_initializes_grace_period_from_last_state() -> None:
         asyncio.run(sensor.async_added_to_hass())
 
     assert sensor._last_valid_state == 18.5
-    assert sensor._last_valid_changed == restored_changed
+    assert sensor._last_valid_changed == restored_changed.replace(tzinfo=UTC)
     assert sensor._restored_from_storage is True
 
 
@@ -1060,7 +1060,7 @@ def test_energy_sensor_negative_grace_period_is_coerced_to_zero() -> None:
     sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
 
     sensor._last_valid_state = 22.0
-    sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+    sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
     sensor._grace_period_minutes = -5
 
     attrs = sensor.extra_state_attributes
@@ -1082,7 +1082,7 @@ def test_energy_sensor_extra_attributes_mark_using_grace_period_when_offline() -
     sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
 
     sensor._last_valid_state = 22.0
-    sensor._last_valid_changed = datetime.now() - timedelta(minutes=1)
+    sensor._last_valid_changed = datetime.now(tz=UTC) - timedelta(minutes=1)
 
     attrs = sensor.extra_state_attributes
 

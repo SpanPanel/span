@@ -419,6 +419,10 @@
           "name": "ウィンドウ期間（分）",
           "description": "アラート発報前に電流がしきい値を超えている必要がある時間。"
         },
+        "cooldown_duration_m": {
+          "name": "クールダウン期間（分）",
+          "description": "同じ回路の繰り返しアラート間の分数。"
+        },
         "monitoring_enabled": {
           "name": "モニタリング有効",
           "description": "この回路のモニタリングを有効または無効にします。"
@@ -454,6 +458,10 @@
         "window_duration_m": {
           "name": "ウィンドウ期間（分）",
           "description": "アラート発報前に電流がしきい値を超えている必要がある時間。"
+        },
+        "cooldown_duration_m": {
+          "name": "クールダウン期間（分）",
+          "description": "同じ主幹レグの繰り返しアラート間の分数。"
         },
         "monitoring_enabled": {
           "name": "モニタリング有効",

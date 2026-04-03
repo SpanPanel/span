@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 import logging
 from typing import Any, cast
@@ -554,8 +554,10 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 # Restore last_valid_changed timestamp
                 if restored.last_valid_changed is not None:
                     try:
-                        self._last_valid_changed = datetime.fromisoformat(
-                            restored.last_valid_changed
+                        parsed = datetime.fromisoformat(restored.last_valid_changed)
+                        # Ensure UTC-aware: old storage may have naive timestamps
+                        self._last_valid_changed = (
+                            parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
                         )
                         self._restored_from_storage = True
                         _LOGGER.debug(
@@ -664,7 +666,7 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         """Update last valid state tracking when a numeric value is available."""
         if value is not None and isinstance(value, int | float | Decimal):
             self._last_valid_state = float(value)
-            self._last_valid_changed = datetime.now()
+            self._last_valid_changed = datetime.now(tz=UTC)
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator with grace period tracking."""
@@ -713,7 +715,7 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             grace_minutes = coerce_grace_period_minutes(self._grace_period_minutes)
             self._grace_period_minutes = grace_minutes
             if grace_minutes > 0:
-                time_since_last_valid = datetime.now() - self._last_valid_changed
+                time_since_last_valid = datetime.now(tz=UTC) - self._last_valid_changed
                 grace_period_duration = timedelta(minutes=grace_minutes)
                 remaining_seconds = (grace_period_duration - time_since_last_valid).total_seconds()
                 remaining_minutes = max(0, int(remaining_seconds / 60))
