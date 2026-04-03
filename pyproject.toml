@@ -7,7 +7,7 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.14.2,<3.15"
 dependencies = [
-    "homeassistant==2026.3.4",
+    "homeassistant==2026.4.0",
     "span-panel-api==2.5.1",
 ]
 
