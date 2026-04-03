@@ -13,13 +13,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "homeassistant-stubs==2026.3.4",
+    "homeassistant-stubs==2026.4.0",
     "types-requests",
     "types-PyYAML",
-    "mypy==1.19.1",
+    "mypy==1.20.0",
     "pyright==1.1.408",
-    "ruff==0.15.7",
-    "bandit[toml]==1.8.6",
+    "ruff==0.15.9",
+    "bandit[toml]==1.9.4",
     "prek>=0.3.6",
     "voluptuous-stubs",
     "python-direnv",
