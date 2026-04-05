@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.6] - 4/2026
+
+### Fixed
+
+- **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
+  Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
+
 ## [2.0.5] - 4/2026
 
 **Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
