@@ -204,7 +204,7 @@ class SpanCircuitPowerSensor(
         """Get the data source for the circuit power sensor."""
         circuit = snapshot.circuits.get(self.circuit_id)
         if circuit is None:
-            raise ValueError(f"Circuit {self.circuit_id} not found in panel data")
+            raise KeyError(f"Circuit {self.circuit_id} not found in panel data")
         return circuit
 
     @property
@@ -389,7 +389,10 @@ class SpanCircuitEnergySensor(
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the circuit energy sensor."""
-        return snapshot.circuits[self.circuit_id]
+        circuit = snapshot.circuits.get(self.circuit_id)
+        if circuit is None:
+            raise KeyError(f"Circuit {self.circuit_id} not found in panel data")
+        return circuit
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -471,4 +474,7 @@ class SpanUnmappedCircuitSensor(
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the unmapped circuit sensor."""
-        return snapshot.circuits[self.circuit_id]
+        circuit = snapshot.circuits.get(self.circuit_id)
+        if circuit is None:
+            raise KeyError(f"Circuit {self.circuit_id} not found in panel data")
+        return circuit

@@ -364,13 +364,13 @@ def test_circuit_power_sensor_missing_circuit_uses_unmapped_fallback_name() -> N
 
 
 def test_circuit_power_sensor_get_data_source_raises_for_missing_circuit() -> None:
-    """Missing circuit data should raise a clear ValueError."""
+    """Missing circuit data should raise a clear KeyError."""
     snapshot = SpanPanelSnapshotFactory.create(circuits={})
     coordinator = _make_coordinator(snapshot)
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    with pytest.raises(ValueError, match="Circuit c1 not found"):
+    with pytest.raises(KeyError, match="Circuit c1 not found"):
         sensor.get_data_source(snapshot)
 
 

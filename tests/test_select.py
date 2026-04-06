@@ -373,6 +373,34 @@ def test_handle_coordinator_update_requests_reload_on_name_change() -> None:
     assert select._previous_circuit_name == "Renamed Kitchen"
 
 
+def test_handle_coordinator_update_skips_when_circuit_missing_from_snapshot() -> None:
+    """Select entity should not crash when its circuit is temporarily absent from a snapshot."""
+    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
+    coordinator.hass = MagicMock()
+    with patch(
+        "custom_components.span_panel.select.er.async_get"
+    ) as mock_async_get:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = None
+        mock_async_get.return_value = registry
+
+        select = SpanPanelCircuitsSelect(
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Kitchen", "SPAN Panel"
+        )
+
+    # Simulate a partial snapshot missing this circuit
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={})
+    select.hass = MagicMock()
+    select.async_write_ha_state = MagicMock()
+    select.entity_id = "select.kitchen_circuit_priority"
+
+    # Should not raise KeyError
+    select._handle_coordinator_update()
+
+    # async_write_ha_state should NOT be called since we returned early
+    select.async_write_ha_state.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_async_setup_entry_filters_supported_circuits() -> None:
     """Platform setup should only create selects for supported controllable circuits."""
