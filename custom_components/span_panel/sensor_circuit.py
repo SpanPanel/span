@@ -25,6 +25,15 @@ from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
+
+def _get_circuit_data_source(circuit_id: str, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
+    """Look up a circuit in the snapshot, raising KeyError if temporarily missing."""
+    circuit = snapshot.circuits.get(circuit_id)
+    if circuit is None:
+        raise KeyError(f"Circuit {circuit_id} not found in panel data")
+    return circuit
+
+
 # Device types that use "Solar" as the fallback identifier when unnamed,
 # matching v1 naming conventions (e.g., "Solar Power", "Solar Produced Energy").
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
@@ -202,10 +211,7 @@ class SpanCircuitPowerSensor(
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the circuit power sensor."""
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if circuit is None:
-            raise KeyError(f"Circuit {self.circuit_id} not found in panel data")
-        return circuit
+        return _get_circuit_data_source(self.circuit_id, snapshot)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -389,10 +395,7 @@ class SpanCircuitEnergySensor(
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the circuit energy sensor."""
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if circuit is None:
-            raise KeyError(f"Circuit {self.circuit_id} not found in panel data")
-        return circuit
+        return _get_circuit_data_source(self.circuit_id, snapshot)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -474,7 +477,4 @@ class SpanUnmappedCircuitSensor(
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the unmapped circuit sensor."""
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if circuit is None:
-            raise KeyError(f"Circuit {self.circuit_id} not found in panel data")
-        return circuit
+        return _get_circuit_data_source(self.circuit_id, snapshot)
