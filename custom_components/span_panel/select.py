@@ -183,10 +183,10 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                 circuit.name,
             )
 
-    def _get_circuit(self) -> SpanCircuitSnapshot:
-        """Get the circuit for this entity."""
+    def _get_circuit(self) -> SpanCircuitSnapshot | None:
+        """Get the circuit for this entity, or None if temporarily missing."""
         snapshot: SpanPanelSnapshot = self.coordinator.data
-        return snapshot.circuits[self.id]
+        return snapshot.circuits.get(self.id)
 
     async def async_will_remove_from_hass(self) -> None:
         """Clean up when entity is removed."""
@@ -344,6 +344,12 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         # Update options and current option based on coordinator data
         circuit = self._get_circuit()
+        if circuit is None:
+            _LOGGER.debug(
+                "Circuit %s temporarily missing from snapshot, skipping select update",
+                self.id,
+            )
+            return
         self._attr_options = self.description_wrapper.options_fn(circuit)
         self._attr_current_option = self.description_wrapper.current_option_fn(circuit)
         super()._handle_coordinator_update()
