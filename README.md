@@ -71,7 +71,7 @@ See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel with firmware `spanos2/r202603/05` or later
-- Span Panel/span integration v1.3.0 or later
+- SPAN Panel integration v1.3.0 or later
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door
 
 ## Installation
@@ -239,16 +239,16 @@ device uses manufacturer, model, serial number, and software version from batter
 
 #### BESS Sensors
 
-| Sensor             | Device Class   | Unit | Notes                                     |
-| ------------------ | -------------- | ---- | ----------------------------------------- |
-| Battery Level      | Battery        | %    | State of energy as percentage             |
-| Battery Power      | Power          | W    | Charge/discharge (+discharge, -charge)    |
-| BESS Vendor        | —              | —    | Battery system vendor (diagnostic)        |
-| BESS Model         | —              | —    | Battery system model (diagnostic)         |
-| BESS Serial Number | —              | —    | Battery system serial number (diagnostic) |
-| BESS Firmware      | —              | —    | Battery system firmware (diagnostic)      |
-| Nameplate Capacity | Energy Storage | kWh  | Rated battery capacity (diagnostic)       |
-| Stored Energy      | Energy Storage | kWh  | Current stored energy (diagnostic)        |
+| Sensor             | Device Class   | Unit | Notes                                                             |
+| ------------------ | -------------- | ---- | ----------------------------------------------------------------- |
+| Battery Level      | Battery        | %    | State of energy as percentage                                     |
+| Battery Power      | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device |
+| BESS Vendor        | —              | —    | Battery system vendor (diagnostic)                                |
+| BESS Model         | —              | —    | Battery system model (diagnostic)                                 |
+| BESS Serial Number | —              | —    | Battery system serial number (diagnostic)                         |
+| BESS Firmware      | —              | —    | Battery system firmware (diagnostic)                              |
+| Nameplate Capacity | Energy Storage | kWh  | Rated battery capacity (diagnostic)                               |
+| Stored Energy      | Energy Storage | kWh  | Current stored energy (diagnostic)                                |
 
 #### BESS Binary Sensors
 
@@ -317,21 +317,11 @@ Applies to Main Meter and Feed Through energy sensors.
 | Breaker               | Switch | On/off relay control                                                       |
 | Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid (translated, see below) |
 
-### Circuit Shed Priority Options
-
-Labels match the SPAN Home On-Premise app. Translations are provided for all supported languages.
-
-| Option Key      | Display Label (EN)               | API Value     |
-| --------------- | -------------------------------- | ------------- |
-| `never`         | Stays on in an outage            | NEVER         |
-| `soc_threshold` | Stays on until battery threshold | SOC_THRESHOLD |
-| `off_grid`      | Turns off in an outage           | OFF_GRID      |
-
 ### Panel Controls
 
-| Entity                       | Type   | Notes                                                                                |
-| ---------------------------- | ------ | ------------------------------------------------------------------------------------ |
-| GFE Override: Grid Connected | Button | (v2) Tell the panel the grid is up. Only present on MQTT-connected panels. See below |
+| Entity                       | Type   | Notes                                                                  |
+| ---------------------------- | ------ | ---------------------------------------------------------------------- |
+| GFE Override: Grid Connected | Button | (v2) Tell the panel the grid is up when BESS communication interrupted |
 
 ### BESS & Grid Management
 
@@ -462,25 +452,16 @@ and select your preferred precision from the "Display Precision" menu.
 The integration provides a `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits with their
 breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities.
 
-Without this command, a custom card would need to query the device registry, entity registry, and individual entity states separately, then infer which entities
-belong to the same circuit by parsing naming patterns. That correlation is fragile (naming conventions can change, EVSE circuit sensors live on a different
-device than the panel) and requires multiple round-trips. The topology command provides all of these relationships explicitly, keyed by circuit UUID, so the
-card can render the panel layout without guessing.
-
 See [WebSocket API Reference](websocket-api.md) for the full schema, response format, and usage examples.
 
 ## Troubleshooting
 
 ### Energy Dashboard Spikes After Firmware Updates
 
-When the SPAN panel undergoes a firmware update or reset, it may report decreased energy values in otherwise `TOTAL_INCREASING` sensors, losing some range of
-data. This errant drop causes a massive spike in the Home Assistant Energy Dashboard. This issue is on the SPAN firmware/cloud side and the only remedy we have
-is to adjust Home Assistant statistics for SPAN sensors upward to their previous value. That adjustment is carried forward for all future stat-reporting times.
+When the SPAN panel undergoes a firmware update or reset, it may report decreased energy values in otherwise `TOTAL_INCREASING` sensors. This causes a massive
+spike in the Home Assistant Energy Dashboard.
 
-**Prevention:**
-
-Enable **Energy Dip Compensation** in General Options (on by default for new installs). This automatically compensates for counter dips so they never reach Home
-Assistant's statistics engine. See [Energy Dip Compensation](#energy-dip-compensation) above.
+**Prevention:** Enable [Energy Dip Compensation](#energy-dip-compensation) in General Options (on by default for new installs).
 
 **Symptoms (if compensation is not enabled):**
 
