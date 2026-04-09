@@ -2409,7 +2409,7 @@ dev = [
 
 [[package]]
 name = "span-panel-api"
-version = "2.5.2"
+version = "2.5.3"
 source = { editable = "../span-panel-api" }
 dependencies = [
     { name = "httpx" },
