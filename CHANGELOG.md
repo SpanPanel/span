@@ -9,8 +9,6 @@ All notable changes to this project will be documented in this file.
 - **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
   Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
 
-- **Panel reboot stability** — Entities no longer become unavailable or error during a panel reboot when circuits are temporarily missing from MQTT data.
-
 ## [2.0.5] - 4/2026
 
 **Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
