@@ -11,7 +11,14 @@ updates:
     allow:
       - dependency-type: "all"
     groups:
-      # Group development dependencies together
+      # Home Assistant core, stubs, and test component must upgrade together.
+      # A version mismatch between any of these causes resolution failures.
+      ha-core:
+        patterns:
+          - "homeassistant"
+          - "homeassistant-stubs"
+          - "pytest-homeassistant-custom-component"
+      # Group remaining development dependencies together
       dev-dependencies:
         patterns:
           - "pytest*"
@@ -26,9 +33,12 @@ updates:
           - "python-direnv"
           - "*-cov"
           - "types-*"
-          - "homeassistant-stubs"
           - "voluptuous-stubs"
           - "pyright"
+        exclude-patterns:
+          - "homeassistant"
+          - "homeassistant-stubs"
+          - "pytest-homeassistant-custom-component"
     reviewers:
       - "cayossarian"
     assignees:
@@ -40,14 +50,8 @@ updates:
       - "dependencies"
       - "python"
     ignore:
-      # Ignore major version updates for Home Assistant to prevent breaking changes
-      - dependency-name: "homeassistant"
-        update-types: ["version-update:semver-major"]
       # Ignore major version updates for span-panel-api since it's a local dependency
       - dependency-name: "span-panel-api"
-        update-types: ["version-update:semver-major"]
-      # Ignore pytest-homeassistant-custom-component major updates to maintain compatibility
-      - dependency-name: "pytest-homeassistant-custom-component"
         update-types: ["version-update:semver-major"]
 
   # GitHub Actions dependencies
