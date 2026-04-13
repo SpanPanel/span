@@ -13,21 +13,21 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "homeassistant-stubs==2026.4.1",
+    "homeassistant-stubs==2026.4.2",
     "types-requests",
     "types-PyYAML",
-    "mypy==1.20.0",
+    "mypy==1.20.1",
     "pyright==1.1.408",
-    "ruff==0.15.9",
+    "ruff==0.15.10",
     "bandit[toml]==1.9.4",
-    "prek>=0.3.6",
+    "prek>=0.3.8",
     "voluptuous-stubs",
     "python-direnv",
     "prettier",
     "radon==6.0.1",
     "pylint==4.0.5",
-    "pytest>=9.0.0",
-    "pytest-homeassistant-custom-component>=0.13.322",
+    "pytest>=9.0.3",
+    "pytest-homeassistant-custom-component>=0.13.323",
     "isort",
     "vulture>=2.14",
 ]
