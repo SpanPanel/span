@@ -113,7 +113,7 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     # Always register static paths so the card JS is reachable even when
     # the sidebar panel is hidden.
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=False)]
+        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
     )
 
     # Auto-register the Lovelace card as a resource so users don't need a
