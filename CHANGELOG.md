@@ -4,9 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.6] - 4/2026
 
+**Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
+
+- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
+- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
+
+### Added
+
+- **By Activity and By Area views** — Two new circuit views available in both the integration panel and the Lovelace card (span-card 0.9.2):
+  - By Activity: circuits sorted by power consumption with expandable graphs and search filtering
+  - By Area: circuits grouped by Home Assistant area with live area registry updates
+  - Shared tab bar across panel and card with configurable text/icon style
+
 ### Fixed
 
-- **Dashboard goes blank after idle** — Panel and card migrated to LitElement to survive HA's WebSocket reconnection lifecycle (span-card 0.9.1)
+- **Dashboard goes blank after idle** — Panel and card migrated to LitElement and refresh after losing focus (span-card 0.9.1)
 - **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
   Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
 
