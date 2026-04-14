@@ -14,7 +14,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
+from .const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
 
 PANEL_URL = "/span_panel_frontend"
 PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
@@ -113,7 +113,7 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
     # Always register static paths so the card JS is reachable even when
     # the sidebar panel is hidden.
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=True)]
+        [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_DIR, cache_headers=False)]
     )
 
     # Auto-register the Lovelace card as a resource so users don't need a
@@ -135,6 +135,7 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
             module_url=f"{PANEL_URL}/span-panel.js?v={cache_tag}",
             require_admin=admin_only,
             config={},
+            config_panel_domain=DOMAIN,
         )
     else:
         _remove_panel(hass, "span-panel", warn_if_unknown=False)
