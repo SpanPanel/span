@@ -13,9 +13,9 @@ import voluptuous as vol
 
 from .const import DEFAULT_GRAPH_HORIZON, DOMAIN, VALID_GRAPH_HORIZONS
 from .current_monitor import CurrentMonitor
-from .frontend import async_get_favorites, async_set_favorite
+from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
-from .id_builder import build_circuit_unique_id
+from .id_builder import build_circuit_unique_id, extract_circuit_uuid_from_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -502,19 +502,22 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
 def _async_register_favorites_services(hass: HomeAssistant) -> None:
     """Register cross-panel favorites services (domain-level).
 
-    The public API takes ``circuit_entity_id`` — an entity_id of one of a
-    circuit's sensors (e.g. current or power) — and resolves it server-side
-    to the internal (panel_device_id, circuit_uuid) tuple used in storage.
-    Circuit UUIDs are not part of the user-visible surface.
+    The public API takes ``entity_id`` — any sensor on a SPAN circuit or
+    sub-device — and resolves it server-side to the internal
+    ``(panel_device_id, kind, target_id)`` tuple used in storage. Circuit
+    UUIDs and HA device IDs are not part of the user-visible surface.
     """
 
-    def _resolve_entity_to_favorite_target(entity_id: str) -> tuple[str, str, str]:
+    def _resolve_entity_to_favorite_target(entity_id: str) -> tuple[str, FavoriteKind, str]:
         """Return ``(panel_device_id, kind, target_id)`` for a SPAN entity.
 
         ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
         ``target_id`` is the panel-local circuit uuid (extracted from the
         entity's unique_id). For sub-devices, ``target_id`` is the HA
         device id of the BESS/EVSE; the panel id walks up via ``via_device_id``.
+
+        Failure paths use distinct translation keys so users see the
+        actual reason their pick was rejected.
         """
         entity_reg = er.async_get(hass)
         entry = entity_reg.async_get(entity_id)
@@ -530,7 +533,7 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(
                 f"Entity {entity_id} is not attached to a device.",
                 translation_domain=DOMAIN,
-                translation_key="favorite_not_span_entity",
+                translation_key="favorite_no_device",
                 translation_placeholders={"entity_id": entity_id},
             )
 
@@ -547,7 +550,9 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             )
 
         # Sub-device branch: resolve the parent main panel and store the
-        # sub-device id directly. Sub-devices register with via_device_id.
+        # sub-device id directly. Sub-devices register with via_device_id;
+        # main panels never do, so via_device_id presence is a reliable
+        # discriminator (BESS / EVSE today).
         if device_entry.via_device_id is not None:
             parent_id = device_entry.via_device_id
             parent = device_registry.async_get(parent_id)
@@ -555,31 +560,27 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
                 raise ServiceValidationError(
                     f"Sub-device {entity_id} has no SPAN Panel parent.",
                     translation_domain=DOMAIN,
-                    translation_key="favorite_not_span_entity",
+                    translation_key="favorite_subdevice_no_span_parent",
                     translation_placeholders={"entity_id": entity_id},
                 )
             return parent.id, "sub_devices", device_entry.id
 
         # Main-panel branch: extract circuit uuid from unique_id.
-        # unique_id format: span_{serial}_{circuit_uuid}_{suffix}
+        # Format: ``span_{serial}_{circuit_uuid}_{suffix}``.
         if not entry.unique_id:
             raise ServiceValidationError(
                 f"Entity {entity_id} has no unique id to resolve.",
                 translation_domain=DOMAIN,
-                translation_key="favorite_not_span_entity",
+                translation_key="favorite_no_unique_id",
                 translation_placeholders={"entity_id": entity_id},
             )
-        circuit_uuid: str | None = None
-        for part in entry.unique_id.split("_"):
-            if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
-                circuit_uuid = part
-                break
+        circuit_uuid = extract_circuit_uuid_from_unique_id(entry.unique_id)
         if circuit_uuid is None:
             raise ServiceValidationError(
                 f"Could not derive a favorite target from entity {entity_id}. "
                 "Pick a circuit sensor (current/power) or a sub-device sensor.",
                 translation_domain=DOMAIN,
-                translation_key="favorite_not_span_entity",
+                translation_key="favorite_no_circuit_uuid",
                 translation_placeholders={"entity_id": entity_id},
             )
 

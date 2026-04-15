@@ -30,6 +30,7 @@ from .const import (
     DOMAIN,
 )
 from .helpers import build_circuit_unique_id, build_panel_unique_id
+from .id_builder import extract_circuit_uuid_from_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -239,13 +240,9 @@ class CurrentMonitor:
         entity_reg = er.async_get(self._hass)
         entry = entity_reg.async_get(entity_id)
         if entry is not None and entry.unique_id:
-            # unique_id format: span_{serial}_{circuit_id}_{suffix}
-            parts = entry.unique_id.split("_")
-            # Find the circuit_id — it's the UUID segment between serial and suffix
-            # Serial is parts[1], suffix is last part(s). The circuit UUID is a 32-char hex.
-            for part in parts:
-                if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
-                    return part
+            uuid = extract_circuit_uuid_from_unique_id(entry.unique_id)
+            if uuid is not None:
+                return uuid
         # Fall through: assume it's already a circuit_id
         return entity_id
 

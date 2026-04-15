@@ -187,6 +187,26 @@ def get_panel_entity_suffix(description_key: str) -> str:
     return get_user_friendly_suffix(description_key)
 
 
+def extract_circuit_uuid_from_unique_id(unique_id: str) -> str | None:
+    """Return the 32-char hex circuit UUID embedded in a SPAN entity unique_id.
+
+    SPAN entity unique_ids follow ``span_{serial}_{circuit_uuid}_{suffix}``.
+    The circuit UUID is a 32-char lowercase hex segment. Skips ``parts[0]``
+    (``span``) and ``parts[1]`` (the serial — never a circuit UUID) so a
+    serial that happens to be 32 hex chars cannot shadow the circuit id.
+
+    Returns ``None`` for unique_ids with no circuit UUID segment (e.g.
+    panel-level sensors).
+    """
+    if not unique_id:
+        return None
+    parts = unique_id.split("_")
+    for part in parts[2:]:
+        if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
+            return part
+    return None
+
+
 def build_circuit_unique_id(serial: str, circuit_id: str, description_key: str) -> str:
     """Build unique ID for circuit sensors using consistent pattern (pure function).
 

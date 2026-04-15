@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -199,6 +199,43 @@ class TestAsyncSetFavorite:
         hass = MagicMock()
         with pytest.raises(ValueError):
             await async_set_favorite(hass, "panel_a", "bogus", "c1", True)
+
+    @pytest.mark.asyncio
+    async def test_set_migrates_legacy_shape_in_place(self, _patched_store: Any) -> None:
+        """Touching a panel with legacy ``[uuid]`` storage rewrites it as the canonical dict."""
+        _FakeStore.preload(
+            "span_panel_settings",
+            {"favorites": {"panel_a": ["c1", "c2"]}},
+        )
+        hass = MagicMock()
+        # No new circuit added; the same uuid we already had.
+        result = await async_set_favorite(hass, "panel_a", "circuits", "c1", True)
+        assert result == {"panel_a": _panel_entry(["c1", "c2"])}
+        persisted = _FakeStore._shared_state["span_panel_settings"]["favorites"]
+        # Persisted shape is now the nested dict, not the legacy list.
+        assert persisted == {"panel_a": _panel_entry(["c1", "c2"])}
+
+    @pytest.mark.asyncio
+    async def test_concurrent_set_favorites_does_not_drop_writes(
+        self, _patched_store: Any
+    ) -> None:
+        """Two parallel adds must both end up in storage (lock prevents lost writes)."""
+        import asyncio
+
+        hass = MagicMock()
+        # Run both adds concurrently; each call goes through the lock so the
+        # second write picks up the first's mutation.
+        results = await asyncio.gather(
+            async_set_favorite(hass, "panel_a", "circuits", "c1", True),
+            async_set_favorite(hass, "panel_a", "circuits", "c2", True),
+        )
+        # Both calls return the favorites map at the time they wrote;
+        # the FINAL persisted state must contain both circuits.
+        persisted = _FakeStore._shared_state["span_panel_settings"]["favorites"]
+        assert sorted(persisted["panel_a"]["circuits"]) == ["c1", "c2"]
+        # Each call's returned map is at least non-empty.
+        for r in results:
+            assert "panel_a" in r
 
 
 def _capture_registered_handlers(hass: MagicMock) -> dict[str, Any]:
@@ -446,3 +483,80 @@ class TestFavoritesServiceHandlers:
         registered = _capture_registered_handlers(hass)
         assert registered["responses"]["add_favorite"] is SupportsResponse.OPTIONAL
         assert registered["responses"]["remove_favorite"] is SupportsResponse.OPTIONAL
+
+    @pytest.mark.asyncio
+    async def test_add_favorite_rejects_entity_with_no_device_id(
+        self, _patched_store: Any
+    ) -> None:
+        """Entities with no ``device_id`` are not favoritable."""
+        hass = MagicMock()
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        orphan = _make_entity_entry(device_id=None)
+        with _patch_registries(entity=orphan, device=None):
+            with pytest.raises(ServiceValidationError):
+                await handler(_make_service_call({"entity_id": "sensor.orphan"}))
+
+    @pytest.mark.asyncio
+    async def test_add_favorite_rejects_subdevice_with_non_span_parent(
+        self, _patched_store: Any
+    ) -> None:
+        """Sub-device whose ``via_device_id`` does NOT point at a SPAN panel."""
+        hass = MagicMock()
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        entity = _make_entity_entry(device_id="d_sub")
+        sub_device = _make_device_entry(
+            device_id="d_sub",
+            identifiers={(DOMAIN, "serial_a_bess")},
+            via_device_id="d_foreign",
+        )
+        # Parent exists but isn't a SPAN device (different domain identifier).
+        foreign_parent = _make_device_entry(
+            device_id="d_foreign",
+            identifiers={("other_domain", "xyz")},
+            via_device_id=None,
+        )
+
+        with _patch_registries_for_subdevice(entity, sub_device, foreign_parent):
+            with pytest.raises(ServiceValidationError):
+                await handler(
+                    _make_service_call({"entity_id": "sensor.bess_under_foreign"})
+                )
+
+    @pytest.mark.asyncio
+    async def test_add_favorite_rejects_subdevice_with_missing_parent(
+        self, _patched_store: Any
+    ) -> None:
+        """Sub-device whose ``via_device_id`` references a missing device."""
+        hass = MagicMock()
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        entity = _make_entity_entry(device_id="d_sub")
+        sub_device = _make_device_entry(
+            device_id="d_sub",
+            identifiers={(DOMAIN, "serial_a_bess")},
+            via_device_id="d_missing",
+        )
+
+        # Stub a registry where the parent lookup returns None.
+        entity_reg = MagicMock()
+        entity_reg.async_get = MagicMock(return_value=entity)
+
+        device_reg = MagicMock()
+        def _device_lookup(device_id: str) -> MagicMock | None:
+            return sub_device if device_id == "d_sub" else None
+        device_reg.async_get = MagicMock(side_effect=_device_lookup)
+
+        with patch.multiple(
+            "custom_components.span_panel.services",
+            er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
+            dr=MagicMock(async_get=MagicMock(return_value=device_reg)),
+        ):
+            with pytest.raises(ServiceValidationError):
+                await handler(
+                    _make_service_call({"entity_id": "sensor.bess_orphaned"})
+                )

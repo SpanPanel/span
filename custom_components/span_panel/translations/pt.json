@@ -348,6 +348,18 @@
     "favorite_not_span_entity": {
       "message": "A entidade {entity_id} não é uma entidade do SPAN Panel. Selecione um sensor de circuito, bateria (BESS) ou carregador EV (EVSE)."
     },
+    "favorite_no_device": {
+      "message": "A entidade {entity_id} não está associada a um dispositivo. Selecione um sensor de circuito ou sub-dispositivo SPAN."
+    },
+    "favorite_subdevice_no_span_parent": {
+      "message": "O sub-dispositivo {entity_id} não tem um painel SPAN pai — o seu via_device_id não aponta para um painel SPAN."
+    },
+    "favorite_no_unique_id": {
+      "message": "A entidade {entity_id} não tem um id único e não pode ser resolvida para um destino SPAN."
+    },
+    "favorite_no_circuit_uuid": {
+      "message": "Não foi possível derivar um destino favorito a partir da entidade {entity_id}. Selecione um sensor de circuito (corrente/potência) ou um sensor de sub-dispositivo."
+    },
     "gfe_override_failed": {
       "message": "Falha ao enviar substituição GFE para o painel."
     },
