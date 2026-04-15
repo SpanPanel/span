@@ -56,10 +56,9 @@ const Ce={attribute:!0,type:String,converter:N,reflect:!1,hasChanged:L},Ee=(e=Ce
                 ${this._panels.map(e=>oe` <option value=${e.id} ?selected=${e.id===this._selectedPanelId}>${e.name_by_user||e.name||e.id}</option> `)}
               </select>
             </span>
+            <div class="panel-tabs" @click=${this._onTabClick}>${Te((i=this._buildTabList(),s=this._activeTab,`<div class="shared-tab-bar">${i.map(e=>`<button class="shared-tab${e.id===s?" active":""}" data-tab="${De(e.id)}">${De(e.label)}</button>`).join("")}</div>`))}</div>
           </div>
         </div>
-
-        <div class="panel-tabs" @click=${this._onTabClick}>${Te((i=this._buildTabList(),s=this._activeTab,`<div class="shared-tab-bar">${i.map(e=>`<button class="shared-tab${e.id===s?" active":""}" data-tab="${De(e.id)}">${De(e.label)}</button>`).join("")}</div>`))}</div>
       </div>
 
       <div class="view">
@@ -117,6 +116,10 @@ const Ce={attribute:!0,type:String,converter:N,reflect:!1,hasChanged:L},Ee=(e=Ce
       margin: 0 0 0 24px;
       line-height: 20px;
       flex-grow: 1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
     }
     .panel-selector select {
       color: inherit;
@@ -133,10 +136,13 @@ const Ce={attribute:!0,type:String,converter:N,reflect:!1,hasChanged:L},Ee=(e=Ce
       color: var(--primary-text-color);
     }
     .panel-tabs {
-      margin-left: max(env(safe-area-inset-left), 24px);
-      margin-right: max(env(safe-area-inset-right), 24px);
       display: flex;
       gap: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .panel-tabs::-webkit-scrollbar {
+      display: none;
     }
     .panel-tab {
       padding: 8px 20px;
