@@ -345,6 +345,9 @@
     "export_manifest_no_entries": {
       "message": "Nenhuma entrada de configuração do painel SPAN está carregada. Adicione e configure um painel SPAN antes de chamar este serviço."
     },
+    "favorite_not_span_entity": {
+      "message": "A entidade {entity_id} não é uma entidade do SPAN Panel. Selecione um sensor de circuito, bateria (BESS) ou carregador EV (EVSE)."
+    },
     "gfe_override_failed": {
       "message": "Falha ao enviar substituição GFE para o painel."
     },
@@ -586,6 +589,30 @@
     "get_graph_settings": {
       "name": "Obter definições de gráfico",
       "description": "Retorna as definições atuais de horizonte de gráfico globais e por circuito."
+    },
+    "get_favorites": {
+      "name": "Obter favoritos",
+      "description": "Retorna o mapa de favoritos entre painéis, indexado pelo id de dispositivo do painel SPAN."
+    },
+    "add_favorite": {
+      "name": "Adicionar favorito",
+      "description": "Marca um circuito SPAN, bateria (BESS) ou carregador EV (EVSE) como favorito para que apareça na vista de Favoritos do painel de controlo.",
+      "fields": {
+        "entity_id": {
+          "name": "Entidade",
+          "description": "Qualquer sensor do circuito ou sub-dispositivo a marcar como favorito (corrente, potência, SoC, etc.)."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Remover favorito",
+      "description": "Remove um circuito ou sub-dispositivo da vista de Favoritos entre painéis.",
+      "fields": {
+        "entity_id": {
+          "name": "Entidade",
+          "description": "Qualquer sensor do circuito ou sub-dispositivo a remover dos favoritos."
+        }
+      }
     }
   }
 }

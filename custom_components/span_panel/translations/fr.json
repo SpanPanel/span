@@ -345,6 +345,9 @@
     "export_manifest_no_entries": {
       "message": "Aucune entrée de configuration SPAN Panel n'est chargée. Ajoutez et configurez un panneau SPAN avant d'appeler ce service."
     },
+    "favorite_not_span_entity": {
+      "message": "L'entité {entity_id} n'est pas une entité SPAN Panel. Sélectionnez un capteur de circuit, de batterie (BESS) ou de chargeur EV (EVSE)."
+    },
     "gfe_override_failed": {
       "message": "Échec de l'envoi du forçage GFE au panneau."
     },
@@ -586,6 +589,30 @@
     "get_graph_settings": {
       "name": "Obtenir les paramètres de graphique",
       "description": "Retourne les paramètres actuels d'horizon de graphique globaux et par circuit."
+    },
+    "get_favorites": {
+      "name": "Obtenir les favoris",
+      "description": "Retourne la liste des circuits favoris enregistrés, indexée par identifiant d'appareil de panneau SPAN."
+    },
+    "add_favorite": {
+      "name": "Ajouter un favori",
+      "description": "Marque un circuit SPAN, une batterie (BESS) ou un chargeur EV (EVSE) comme favori pour qu'il apparaisse dans la vue Favoris du tableau de bord.",
+      "fields": {
+        "entity_id": {
+          "name": "Entité",
+          "description": "N'importe quel capteur du circuit ou du sous-appareil à marquer comme favori (courant, puissance, SoC, etc.)."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Retirer un favori",
+      "description": "Retire un circuit ou un sous-appareil de la vue Favoris inter-panneaux.",
+      "fields": {
+        "entity_id": {
+          "name": "Entité",
+          "description": "N'importe quel capteur du circuit ou du sous-appareil à retirer des favoris."
+        }
+      }
     }
   }
 }

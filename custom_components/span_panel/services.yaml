@@ -208,3 +208,23 @@ clear_subdevice_graph_horizon:
         text:
 
 get_graph_settings:
+
+get_favorites:
+
+add_favorite:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel
+
+remove_favorite:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: sensor
+          integration: span_panel

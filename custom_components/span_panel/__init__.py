@@ -53,6 +53,7 @@ from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .options import SNAPSHOT_UPDATE_INTERVAL
 from .services import (  # noqa: F401
+    _async_register_favorites_services,
     _async_register_graph_horizon_services,
     _async_register_monitoring_services,
     _async_register_services,
@@ -93,6 +94,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
+    _async_register_favorites_services(hass)
 
     await async_apply_panel_registration(hass)
 

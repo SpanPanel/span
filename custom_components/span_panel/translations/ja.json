@@ -345,6 +345,9 @@
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"
     },
+    "favorite_not_span_entity": {
+      "message": "エンティティ {entity_id} はSPAN Panelのエンティティではありません。回路、バッテリー (BESS)、またはEV充電器 (EVSE) のセンサーを選択してください。"
+    },
     "gfe_override_failed": {
       "message": "パネルへのGFEオーバーライドの送信に失敗しました。"
     },
@@ -586,6 +589,30 @@
     "get_graph_settings": {
       "name": "グラフ設定を取得",
       "description": "現在のグローバルおよび回路別のグラフ時間範囲設定を返します。"
+    },
+    "get_favorites": {
+      "name": "お気に入りを取得",
+      "description": "SPANパネルのデバイスIDをキーとした、パネル横断のお気に入りマップを返します。"
+    },
+    "add_favorite": {
+      "name": "お気に入りを追加",
+      "description": "SPANの回路、バッテリー (BESS)、またはEV充電器 (EVSE) をお気に入りとしてマークし、ダッシュボードのお気に入りビューに表示します。",
+      "fields": {
+        "entity_id": {
+          "name": "エンティティ",
+          "description": "お気に入りに追加する回路またはサブデバイスの任意のセンサー (電流、電力、SoCなど)。"
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "お気に入りを削除",
+      "description": "パネル横断のお気に入りビューから回路またはサブデバイスを削除します。",
+      "fields": {
+        "entity_id": {
+          "name": "エンティティ",
+          "description": "お気に入りから削除する回路またはサブデバイスの任意のセンサー。"
+        }
+      }
     }
   }
 }

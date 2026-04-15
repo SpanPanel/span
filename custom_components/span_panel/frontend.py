@@ -55,6 +55,97 @@ async def async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any
     await store.async_save(settings)
 
 
+FavoriteKind = str  # "circuits" or "sub_devices"
+
+_FAVORITE_KINDS: tuple[str, ...] = ("circuits", "sub_devices")
+
+
+def _empty_panel_favorites() -> dict[str, list[str]]:
+    return {kind: [] for kind in _FAVORITE_KINDS}
+
+
+async def async_get_favorites(
+    hass: HomeAssistant,
+) -> dict[str, dict[str, list[str]]]:
+    """Return the stored favorites map.
+
+    Shape: ``{panel_device_id: {"circuits": [uuid, ...], "sub_devices": [devid, ...]}}``.
+
+    Empty/missing storage returns an empty dict. Old single-list per-panel
+    shape ``{panel_id: [uuid, ...]}`` is read transparently as circuits-only
+    so favorites that were stored before sub-device support are preserved.
+    """
+    settings = await async_load_panel_settings(hass)
+    raw = settings.get("favorites") or {}
+    result: dict[str, dict[str, list[str]]] = {}
+    for panel_id, value in raw.items():
+        if not isinstance(panel_id, str):
+            continue
+        # Legacy shape: panel_id maps to a flat list of circuit uuids.
+        if isinstance(value, list):
+            circuits = [u for u in value if isinstance(u, str) and u]
+            if circuits:
+                result[panel_id] = {"circuits": circuits, "sub_devices": []}
+            continue
+        if not isinstance(value, dict):
+            continue
+        circuits_raw = value.get("circuits", [])
+        sub_devices_raw = value.get("sub_devices", [])
+        circuits = (
+            [u for u in circuits_raw if isinstance(u, str) and u]
+            if isinstance(circuits_raw, list)
+            else []
+        )
+        sub_devices = (
+            [u for u in sub_devices_raw if isinstance(u, str) and u]
+            if isinstance(sub_devices_raw, list)
+            else []
+        )
+        if circuits or sub_devices:
+            result[panel_id] = {"circuits": circuits, "sub_devices": sub_devices}
+    return result
+
+
+async def async_set_favorite(
+    hass: HomeAssistant,
+    panel_device_id: str,
+    kind: FavoriteKind,
+    target_id: str,
+    favorited: bool,
+) -> dict[str, dict[str, list[str]]]:
+    """Add or remove a circuit or sub-device from the favorites map.
+
+    ``kind`` is either ``"circuits"`` or ``"sub_devices"``. ``target_id`` is
+    the circuit uuid or sub-device HA device id, respectively. Deduplicates
+    on add; drops empty lists and empty panel entries on remove. Returns
+    the updated full favorites map.
+    """
+    if kind not in _FAVORITE_KINDS:
+        raise ValueError(f"Unknown favorite kind: {kind!r}")
+
+    settings = await async_load_panel_settings(hass)
+    favorites = await async_get_favorites(hass)
+
+    panel_entry = favorites.get(panel_device_id) or _empty_panel_favorites()
+    current = list(panel_entry.get(kind, []))
+    if favorited:
+        if target_id not in current:
+            current.append(target_id)
+    else:
+        if target_id in current:
+            current.remove(target_id)
+
+    panel_entry[kind] = current
+    if any(panel_entry[k] for k in _FAVORITE_KINDS):
+        favorites[panel_device_id] = panel_entry
+    else:
+        favorites.pop(panel_device_id, None)
+
+    settings["favorites"] = favorites
+    await async_save_panel_settings(hass, settings)
+    return favorites
+
+
 async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
     """Ensure the card JS is registered as a Lovelace resource.
 

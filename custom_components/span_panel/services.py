@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING, cast
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import voluptuous as vol
 
 from .const import DEFAULT_GRAPH_HORIZON, DOMAIN, VALID_GRAPH_HORIZONS
 from .current_monitor import CurrentMonitor
+from .frontend import async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
 from .id_builder import build_circuit_unique_id
 from .options import (
@@ -495,4 +496,131 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         async_handle_get_graph_settings,
         schema=vol.Schema({vol.Optional("config_entry_id"): str}),
         supports_response=SupportsResponse.ONLY,
+    )
+
+
+def _async_register_favorites_services(hass: HomeAssistant) -> None:
+    """Register cross-panel favorites services (domain-level).
+
+    The public API takes ``circuit_entity_id`` — an entity_id of one of a
+    circuit's sensors (e.g. current or power) — and resolves it server-side
+    to the internal (panel_device_id, circuit_uuid) tuple used in storage.
+    Circuit UUIDs are not part of the user-visible surface.
+    """
+
+    def _resolve_entity_to_favorite_target(entity_id: str) -> tuple[str, str, str]:
+        """Return ``(panel_device_id, kind, target_id)`` for a SPAN entity.
+
+        ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
+        ``target_id`` is the panel-local circuit uuid (extracted from the
+        entity's unique_id). For sub-devices, ``target_id`` is the HA
+        device id of the BESS/EVSE; the panel id walks up via ``via_device_id``.
+        """
+        entity_reg = er.async_get(hass)
+        entry = entity_reg.async_get(entity_id)
+        if entry is None or entry.platform != DOMAIN:
+            raise ServiceValidationError(
+                f"Entity {entity_id} is not a SPAN Panel entity.",
+                translation_domain=DOMAIN,
+                translation_key="favorite_not_span_entity",
+                translation_placeholders={"entity_id": entity_id},
+            )
+
+        if entry.device_id is None:
+            raise ServiceValidationError(
+                f"Entity {entity_id} is not attached to a device.",
+                translation_domain=DOMAIN,
+                translation_key="favorite_not_span_entity",
+                translation_placeholders={"entity_id": entity_id},
+            )
+
+        device_registry = dr.async_get(hass)
+        device_entry = device_registry.async_get(entry.device_id)
+        if device_entry is None or not any(
+            domain == DOMAIN for domain, _ in device_entry.identifiers
+        ):
+            raise ServiceValidationError(
+                f"Entity {entity_id} does not belong to a SPAN Panel device.",
+                translation_domain=DOMAIN,
+                translation_key="favorite_not_span_entity",
+                translation_placeholders={"entity_id": entity_id},
+            )
+
+        # Sub-device branch: resolve the parent main panel and store the
+        # sub-device id directly. Sub-devices register with via_device_id.
+        if device_entry.via_device_id is not None:
+            parent_id = device_entry.via_device_id
+            parent = device_registry.async_get(parent_id)
+            if parent is None or not any(domain == DOMAIN for domain, _ in parent.identifiers):
+                raise ServiceValidationError(
+                    f"Sub-device {entity_id} has no SPAN Panel parent.",
+                    translation_domain=DOMAIN,
+                    translation_key="favorite_not_span_entity",
+                    translation_placeholders={"entity_id": entity_id},
+                )
+            return parent.id, "sub_devices", device_entry.id
+
+        # Main-panel branch: extract circuit uuid from unique_id.
+        # unique_id format: span_{serial}_{circuit_uuid}_{suffix}
+        if not entry.unique_id:
+            raise ServiceValidationError(
+                f"Entity {entity_id} has no unique id to resolve.",
+                translation_domain=DOMAIN,
+                translation_key="favorite_not_span_entity",
+                translation_placeholders={"entity_id": entity_id},
+            )
+        circuit_uuid: str | None = None
+        for part in entry.unique_id.split("_"):
+            if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
+                circuit_uuid = part
+                break
+        if circuit_uuid is None:
+            raise ServiceValidationError(
+                f"Could not derive a favorite target from entity {entity_id}. "
+                "Pick a circuit sensor (current/power) or a sub-device sensor.",
+                translation_domain=DOMAIN,
+                translation_key="favorite_not_span_entity",
+                translation_placeholders={"entity_id": entity_id},
+            )
+
+        return device_entry.id, "circuits", circuit_uuid
+
+    async def async_handle_get_favorites(_call: ServiceCall) -> ServiceResponse:
+        favorites = await async_get_favorites(hass)
+        return cast(ServiceResponse, {"favorites": favorites})
+
+    async def async_handle_add_favorite(call: ServiceCall) -> ServiceResponse:
+        entity_id = call.data["entity_id"]
+        panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
+        favorites = await async_set_favorite(hass, panel_device_id, kind, target_id, True)
+        return cast(ServiceResponse, {"favorites": favorites})
+
+    async def async_handle_remove_favorite(call: ServiceCall) -> ServiceResponse:
+        entity_id = call.data["entity_id"]
+        panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
+        favorites = await async_set_favorite(hass, panel_device_id, kind, target_id, False)
+        return cast(ServiceResponse, {"favorites": favorites})
+
+    _favorite_mutation_schema = vol.Schema({vol.Required("entity_id"): str})
+
+    hass.services.async_register(
+        DOMAIN,
+        "get_favorites",
+        async_handle_get_favorites,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "add_favorite",
+        async_handle_add_favorite,
+        schema=_favorite_mutation_schema,
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "remove_favorite",
+        async_handle_remove_favorite,
+        schema=_favorite_mutation_schema,
+        supports_response=SupportsResponse.OPTIONAL,
     )
