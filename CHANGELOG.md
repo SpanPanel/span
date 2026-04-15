@@ -15,12 +15,25 @@ All notable changes to this project will be documented in this file.
   - By Activity: circuits sorted by power consumption with expandable graphs and search filtering
   - By Area: circuits grouped by Home Assistant area with live area registry updates
   - Shared tab bar across panel and card with configurable text/icon style
+- **Cross-panel Favorites view** (span-card 0.9.3) — A synthetic "Favorites" entry in the dashboard panel dropdown aggregates favorited circuits and
+  sub-devices (BESS, EVSE) across every configured SPAN panel into a single workspace. Heart toggles in the Graph Settings and per-circuit / per-sub-device
+  side panels persist favorites to the integration via three new services — `get_favorites`, `add_favorite`, and `remove_favorite`. Services accept any SPAN
+  entity ID (current/power sensor for circuits, any sensor for sub-devices) and resolve server-side to the panel + target — internal UUIDs and HA device IDs
+  are not part of the user-facing surface. The Favorites view shows By Activity / By Area / Monitoring tabs with persisted active tab, expansions, and
+  search query.
+- **Persistent panel-stats header** (span-card 0.9.3) — Site / Grid / Upstream / Downstream / Solar / Battery stats stay visible across all tabs on real
+  panels.
 
 ### Fixed
 
 - **Dashboard goes blank after idle** — Panel and card migrated to LitElement and refresh after losing focus (span-card 0.9.1)
 - **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
   Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
+- **Sub-device horizon override on multi-panel installs** (span-card 0.9.3) — Setting an individual BESS or EVSE horizon from the sub-device side panel had no
+  effect when more than one SPAN panel was configured: the service call omitted `config_entry_id`, so the override was being written to the wrong panel's
+  manager.
+- **Dashboard load crash on `<ha-menu-button>`** (span-card 0.9.3) — Fixed a `kioskMode` property access on `undefined` during the dashboard panel's first
+  render.
 
 ## [2.0.5] - 4/2026
 
