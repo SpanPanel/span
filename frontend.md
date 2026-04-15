@@ -84,14 +84,14 @@ expose hearts because it has no Favorites view.
 
 There are three places to toggle a favorite:
 
-- **Panel-level "Graph Settings" side panel** — opened from the gear icon at the top of the panel header. The per-circuit and per-sub-device lists each render
-  a heart icon next to the time-horizon dropdown. Click the heart to favorite or un-favorite that target without leaving the list.
-- **Per-circuit side panel** — opened from a circuit's gear icon in the breaker grid (or in the By Activity / By Area rows). A "Favorite" section with a
-  switch sits between the relay control and the shedding priority.
+- **Panel-level "Graph Settings" side panel** — opened from the gear icon at the top of the panel header. The per-circuit and per-sub-device lists each render a
+  heart icon next to the time-horizon dropdown. Click the heart to favorite or un-favorite that target without leaving the list.
+- **Per-circuit side panel** — opened from a circuit's gear icon in the breaker grid (or in the By Activity / By Area rows). A "Favorite" section with a switch
+  sits between the relay control and the shedding priority.
 - **Per-sub-device side panel** — opened from the gear icon on a BESS or EVSE tile. Same Favorite section as the per-circuit panel.
 
-A circuit or sub-device can be favorited on any panel. The integration stores the favorites under the configured SPAN integration's storage, so they sync
-across browsers and devices.
+A circuit or sub-device can be favorited on any panel. The integration stores the favorites under the configured SPAN integration's storage, so they sync across
+browsers and devices.
 
 ### The Favorites entry
 
