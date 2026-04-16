@@ -23,7 +23,7 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelAuthError
+from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
 
 from .const import DOMAIN
 from .id_builder import build_circuit_unique_id
@@ -501,12 +501,20 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         except ConfigEntryAuthFailed:
             raise
 
-        except Exception as err:
+        except SpanPanelStaleDataError as err:
+            # Expected offline path — the library signals the client
+            # isn't live. Same handling as other offline errors.
             self._mark_panel_offline(err)
+            if self.data is not None:
+                return self.data
+            raise
 
-            # Return last known data to keep coordinator updating for grace period logic.
-            # On first refresh (self.data is None), re-raise so async_config_entry_first_refresh
-            # surfaces the error properly.
+        except Exception as err:
+            # Unexpected error — log the transition but keep the
+            # coordinator ticking on last-known data for grace-period logic.
+            # On first refresh (self.data is None), re-raise so
+            # async_config_entry_first_refresh surfaces the error properly.
+            self._mark_panel_offline(err)
             if self.data is not None:
                 return self.data
             raise

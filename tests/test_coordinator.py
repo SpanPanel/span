@@ -478,3 +478,32 @@ async def test_on_connection_change_noop_when_state_unchanged(
         coordinator._on_connection_change(False)
     notify_offline_case.assert_not_called()
     assert coordinator.panel_offline is True
+
+
+async def test_async_update_data_stale_data_error_marks_offline_and_returns_last_data(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A SpanPanelStaleDataError from get_snapshot() should be treated as an expected offline signal."""
+    from span_panel_api.exceptions import SpanPanelStaleDataError
+
+    last_snapshot = SpanPanelSnapshotFactory.create()
+
+    client = MagicMock()
+    client.get_snapshot = AsyncMock(
+        side_effect=SpanPanelStaleDataError("MQTT broker disconnected")
+    )
+
+    coordinator = _create_coordinator(hass, client=client)
+    # Simulate a prior successful update
+    coordinator.data = last_snapshot
+    assert coordinator.panel_offline is False
+
+    with caplog.at_level(logging.INFO):
+        result = await coordinator._async_update_data()
+
+    assert result is last_snapshot
+    assert coordinator.panel_offline is True
+    assert any(
+        "is unavailable" in r.message and "MQTT broker disconnected" in r.message
+        for r in caplog.records
+    )
