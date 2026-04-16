@@ -9,6 +9,8 @@ All notable changes to this project will be documented in this file.
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
 - You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
+This is low-risk, dashboard only, release other than services to support the dashboard changes.
+
 ### Added
 
 - **By Activity and By Area views** — Two new circuit views available in both the integration panel and the Lovelace card (span-card 0.9.2):
