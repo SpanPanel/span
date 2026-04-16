@@ -20,7 +20,7 @@ This is low-risk, dashboard only, release other than services to support the das
 - **Cross-panel Favorites view** (span-card 0.9.4) — A synthetic "Favorites" entry in the dashboard panel dropdown aggregates favorited circuits and sub-devices
   (BESS, EVSE) across every configured SPAN panel into a single workspace. Heart toggles in the Graph Settings and per-circuit / per-sub-device side panels
   persist favorites and the view to the integration storage so the Favorites view is reconstituted on restart. See the Favorites explanation in the frontend
-  dashboard link via the readme.md.
+  dashboard link via the README.md.
 
 ### Fixed
 

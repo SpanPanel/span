@@ -604,7 +604,7 @@
     },
     "get_favorites": {
       "name": "Obtenir les favoris",
-      "description": "Retourne la liste des circuits favoris enregistrés, indexée par identifiant d'appareil de panneau SPAN."
+      "description": "Retourne la carte des favoris inter-panneaux enregistrés pour les circuits et les sous-appareils, indexée par identifiant d'appareil de panneau SPAN."
     },
     "add_favorite": {
       "name": "Ajouter un favori",
