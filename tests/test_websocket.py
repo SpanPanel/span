@@ -745,6 +745,45 @@ class TestHandlePanelTopology:
         assert hvac_data["priority"] == "SOC_THRESHOLD"
 
     @pytest.mark.asyncio
+    async def test_topology_includes_panel_status_entity(self, hass: HomeAssistant):
+        """panel_status binary sensor entity_id is included in the topology panel_entities map."""
+        snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-242424-001")
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={},
+            entry_id="span_entry",
+            unique_id="sp3-242424-001",
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
+
+        panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
+
+        _register_entity(
+            hass,
+            "span_entry",
+            panel_device.id,
+            "binary_sensor",
+            "span_sp3-242424-001_panel_status",
+            "binary_sensor.span_panel_test_panel_status",
+        )
+
+        connection = _make_mock_connection()
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": panel_device.id}
+
+        await _handle_panel_topology_inner(hass, connection, msg)
+
+        connection.send_error.assert_not_called()
+        connection.send_result.assert_called_once()
+
+        result = connection.send_result.call_args[0][1]
+        assert result["panel_entities"]["panel_status"] == "binary_sensor.span_panel_test_panel_status"
+
+    @pytest.mark.asyncio
     @pytest.mark.asyncio
     async def test_registration(self, hass: HomeAssistant):
         """WebSocket commands can be registered without error."""

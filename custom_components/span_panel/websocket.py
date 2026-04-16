@@ -12,6 +12,7 @@ import voluptuous as vol
 
 from .const import DOMAIN
 from .helpers import build_panel_unique_id
+from .id_builder import build_binary_sensor_unique_id
 
 if TYPE_CHECKING:
     from . import SpanPanelRuntimeData
@@ -133,6 +134,10 @@ async def handle_panel_topology(
 
     # Resolve panel-level sensor entity_ids via unique_id registry lookup.
     panel_entities = _build_panel_entity_map(snapshot.serial_number, entity_registry)
+
+    panel_status_entity = _resolve_panel_status_entity(snapshot.serial_number, entity_registry)
+    if panel_status_entity is not None:
+        panel_entities["panel_status"] = panel_status_entity
 
     # Single pass over all entities to build circuit_id to role to entity_id
     # map. EVSE feed circuit sensors live on the EVSE sub-device, so we
@@ -296,6 +301,20 @@ def _build_panel_entity_map(
         if entity_id is not None:
             result[role] = entity_id
     return result
+
+
+def _resolve_panel_status_entity(
+    serial: str,
+    entity_registry: er.EntityRegistry,
+) -> str | None:
+    """Resolve the panel_status binary sensor entity_id for the frontend.
+
+    The frontend watches this entity to detect panel online/offline state.
+    The binary sensor is always available (see binary_sensor.py) so the
+    frontend can rely on its state regardless of coordinator offline status.
+    """
+    unique_id = build_binary_sensor_unique_id(serial.lower(), "panel_status")
+    return entity_registry.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
 
 
 def _classify_sensor_role(unique_id: str) -> str | None:
