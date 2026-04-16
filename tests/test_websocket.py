@@ -784,6 +784,37 @@ class TestHandlePanelTopology:
         assert result["panel_entities"]["panel_status"] == "binary_sensor.span_panel_test_panel_status"
 
     @pytest.mark.asyncio
+    async def test_topology_omits_panel_status_when_entity_missing(self, hass: HomeAssistant):
+        """panel_status is absent from the topology map when no binary_sensor entity exists."""
+        snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-242424-001")
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={},
+            entry_id="span_entry",
+            unique_id="sp3-242424-001",
+        )
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(snapshot)
+        )
+
+        panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
+
+        # Intentionally do NOT register a binary_sensor.*_panel_status entity
+
+        connection = _make_mock_connection()
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": panel_device.id}
+
+        await _handle_panel_topology_inner(hass, connection, msg)
+
+        connection.send_error.assert_not_called()
+        connection.send_result.assert_called_once()
+
+        result = connection.send_result.call_args[0][1]
+        assert "panel_status" not in result["panel_entities"]
+
     @pytest.mark.asyncio
     async def test_registration(self, hass: HomeAssistant):
         """WebSocket commands can be registered without error."""

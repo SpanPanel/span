@@ -313,7 +313,7 @@ def _resolve_panel_status_entity(
     The binary sensor is always available (see binary_sensor.py) so the
     frontend can rely on its state regardless of coordinator offline status.
     """
-    unique_id = build_binary_sensor_unique_id(serial.lower(), "panel_status")
+    unique_id = build_binary_sensor_unique_id(serial, "panel_status")
     return entity_registry.async_get_entity_id("binary_sensor", DOMAIN, unique_id)
 
 
