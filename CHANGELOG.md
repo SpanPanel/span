@@ -9,8 +9,6 @@ All notable changes to this project will be documented in this file.
 - Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
 - You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
-This is low-risk, dashboard only, release other than services to support the dashboard changes.
-
 ### Added
 
 - **By Activity and By Area views** — Two new circuit views available in both the integration panel and the Lovelace card (span-card 0.9.2):
@@ -27,6 +25,8 @@ This is low-risk, dashboard only, release other than services to support the das
 - **Dashboard goes blank after idle** — Panel and card migrated to LitElement and refresh after losing focus (span-card 0.9.1)
 - **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
   Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
+- **Panel status showing "Connected" while the panel is offline** — the panel status sensor now reflects the true connection state and updates within a second
+  of the panel going offline or coming back online.
 
 ## [2.0.5] - 4/2026
 
