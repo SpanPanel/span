@@ -82,6 +82,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         # Streaming state
         self._unregister_streaming: Callable[[], None] | None = None
+        self._unregister_connection: Callable[[], None] | None = None
 
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
@@ -142,13 +143,19 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             _LOGGER.info("%s is back online", self.config_entry.title or "SPAN Panel")
         self._panel_offline = False
 
-    def _mark_panel_offline(self, err: Exception) -> None:
-        """Mark the panel offline and log the transition once."""
+    def _mark_panel_offline(self, reason: Exception | str) -> None:
+        """Mark the panel offline and log the transition once.
+
+        `reason` is rendered with %s — both Exception and str format
+        correctly. The broker-disconnect path (from the MQTT client
+        connection callback) passes a short string; the snapshot-poll
+        path passes a SpanPanelStaleDataError or unexpected Exception.
+        """
         if not self._panel_offline:
             _LOGGER.info(
                 "%s is unavailable: %s",
                 self.config_entry.title or "SPAN Panel",
-                err,
+                reason,
             )
         self._panel_offline = True
 
@@ -209,10 +216,27 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     # --- Streaming ---
 
     async def async_setup_streaming(self) -> None:
-        """Set up push streaming."""
+        """Set up push streaming and broker-connection state listening."""
+        self._unregister_connection = self._client.register_connection_callback(
+            self._on_connection_change
+        )
         self._unregister_streaming = self._client.register_snapshot_callback(self._on_snapshot_push)
         await self._client.start_streaming()
         _LOGGER.info("MQTT push streaming started")
+
+    def _on_connection_change(self, connected: bool) -> None:
+        """Handle a broker connection state edge from the MQTT client.
+
+        Called synchronously on the event loop when the bridge transitions
+        between connected and disconnected. Flips the panel-offline flag
+        and pushes an immediate listener update so sensors enter or exit
+        grace-period logic without waiting for the 60 s fallback poll.
+        """
+        if connected:
+            self._mark_panel_online()
+        else:
+            self._mark_panel_offline("MQTT broker disconnected")
+        self.async_update_listeners()
 
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
@@ -223,6 +247,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
     async def async_shutdown(self) -> None:
         """Shut down the coordinator and release resources."""
+        if self._unregister_connection is not None:
+            self._unregister_connection()
+            self._unregister_connection = None
+
         if self._unregister_streaming is not None:
             self._unregister_streaming()
             self._unregister_streaming = None

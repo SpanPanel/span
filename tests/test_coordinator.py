@@ -386,3 +386,69 @@ async def test_async_reload_task_handles_expected_errors(
         await coordinator._async_reload_task()
 
     assert "Home Assistant error during reload: reload failed" in caplog.text
+
+
+async def test_connection_callback_registered_and_unregistered_on_lifecycle(
+    hass: HomeAssistant,
+) -> None:
+    """async_setup_streaming should register a connection callback; async_shutdown should unregister it."""
+    client = MagicMock()
+    client.register_connection_callback = MagicMock()
+    client.register_snapshot_callback = MagicMock()
+    client.start_streaming = AsyncMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+
+    # register_connection_callback returns an unregister function
+    unregister_connection = MagicMock()
+    client.register_connection_callback.return_value = unregister_connection
+    client.register_snapshot_callback.return_value = MagicMock()
+
+    coordinator = _create_coordinator(hass, client=client)
+
+    await coordinator.async_setup_streaming()
+
+    # Connection callback was registered exactly once with the coordinator's handler
+    client.register_connection_callback.assert_called_once_with(coordinator._on_connection_change)
+    assert coordinator._unregister_connection is unregister_connection
+
+    await coordinator.async_shutdown()
+
+    # Unregister was invoked and the field cleared
+    unregister_connection.assert_called_once_with()
+    assert coordinator._unregister_connection is None
+
+
+async def test_on_connection_change_false_flips_offline_and_notifies_listeners(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A False edge must flip panel_offline True, log once, and push a listener update."""
+    coordinator = _create_coordinator(hass)
+    assert coordinator.panel_offline is False
+
+    with patch.object(coordinator, "async_update_listeners") as notify:
+        with caplog.at_level(logging.INFO):
+            coordinator._on_connection_change(False)
+
+    assert coordinator.panel_offline is True
+    notify.assert_called_once_with()
+    assert any(
+        "is unavailable" in r.message and "MQTT broker disconnected" in r.message
+        for r in caplog.records
+    )
+
+
+async def test_on_connection_change_true_clears_offline_and_notifies_listeners(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A True edge must flip panel_offline False, log once, and push a listener update."""
+    coordinator = _create_coordinator(hass)
+    coordinator._panel_offline = True
+
+    with patch.object(coordinator, "async_update_listeners") as notify:
+        with caplog.at_level(logging.INFO):
+            coordinator._on_connection_change(True)
+
+    assert coordinator.panel_offline is False
+    notify.assert_called_once_with()
+    assert any("is back online" in r.message for r in caplog.records)
