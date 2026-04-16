@@ -37,6 +37,7 @@ class SpanCircuitEnergySensorProtocol(Protocol):
     @property
     def energy_offset(self) -> float:
         """Cumulative dip compensation offset."""
+        ...
 
 
 _LOGGER = logging.getLogger(__name__)

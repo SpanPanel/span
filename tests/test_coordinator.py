@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +17,7 @@ from span_panel_api.exceptions import (
 
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from homeassistant.core import HomeAssistant
+from span_panel_api import SpanMqttClient
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -34,13 +36,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 def _create_coordinator(
     hass: HomeAssistant,
     *,
-    client: MagicMock | None = None,
+    client: object | None = None,
     options: dict | None = None,
 ) -> SpanPanelCoordinator:
     """Create a coordinator with mocked dependencies."""
     return SpanPanelCoordinator(
         hass,
-        client or MagicMock(),
+        cast(SpanMqttClient, client or MagicMock()),
         MockConfigEntry(
             domain="span_panel",
             options=options or {},
@@ -419,7 +421,7 @@ async def test_connection_callback_registered_and_unregistered_on_lifecycle(
     await coordinator.async_shutdown()
 
     # Unregister was invoked and the field cleared
-    unregister_connection.assert_called_once_with()
+    cast(MagicMock, unregister_connection).assert_called_once_with()
     assert coordinator._unregister_connection is None
 
 
