@@ -187,8 +187,10 @@ async def test_fire_dip_notification_noops_without_events(hass: HomeAssistant) -
 async def test_async_setup_streaming_registers_callback_and_starts_client(
     hass: HomeAssistant,
 ) -> None:
-    """Streaming setup should register the callback and start the client."""
+    """Streaming setup should register both callbacks and start the client."""
     client = MagicMock()
+    unregister_connection = MagicMock()
+    client.register_connection_callback = MagicMock(return_value=unregister_connection)
     client.register_snapshot_callback = MagicMock(return_value=MagicMock())
     client.start_streaming = AsyncMock()
     coordinator = _create_coordinator(hass, client=client)
@@ -198,6 +200,8 @@ async def test_async_setup_streaming_registers_callback_and_starts_client(
     client.register_snapshot_callback.assert_called_once()
     client.start_streaming.assert_awaited_once()
     assert coordinator._unregister_streaming is not None
+    client.register_connection_callback.assert_called_once_with(coordinator._on_connection_change)
+    assert coordinator._unregister_connection is not None
 
 
 async def test_on_snapshot_push_updates_state_and_runs_post_tasks(
@@ -452,3 +456,23 @@ async def test_on_connection_change_true_clears_offline_and_notifies_listeners(
     assert coordinator.panel_offline is False
     notify.assert_called_once_with()
     assert any("is back online" in r.message for r in caplog.records)
+
+
+async def test_on_connection_change_noop_when_state_unchanged(
+    hass: HomeAssistant,
+) -> None:
+    """When connected state matches current panel_offline, no listener fan-out."""
+    coordinator = _create_coordinator(hass)
+
+    # Already online (panel_offline=False); receiving another True edge is a no-op
+    with patch.object(coordinator, "async_update_listeners") as notify_online_case:
+        coordinator._on_connection_change(True)
+    notify_online_case.assert_not_called()
+    assert coordinator.panel_offline is False
+
+    # Already offline; receiving another False edge is a no-op
+    coordinator._panel_offline = True
+    with patch.object(coordinator, "async_update_listeners") as notify_offline_case:
+        coordinator._on_connection_change(False)
+    notify_offline_case.assert_not_called()
+    assert coordinator.panel_offline is True

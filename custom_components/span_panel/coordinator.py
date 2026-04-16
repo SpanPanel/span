@@ -227,16 +227,22 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def _on_connection_change(self, connected: bool) -> None:
         """Handle a broker connection state edge from the MQTT client.
 
-        Called synchronously on the event loop when the bridge transitions
-        between connected and disconnected. Flips the panel-offline flag
-        and pushes an immediate listener update so sensors enter or exit
+        Called on the event loop when the bridge transitions between
+        connected and disconnected. Flips the panel-offline flag and
+        pushes an immediate listener update so sensors enter or exit
         grace-period logic without waiting for the 60 s fallback poll.
+
+        Listener fan-out is guarded by a real state change so a misbehaving
+        or future-version library that re-emits the same edge does not
+        trigger spurious entity re-renders.
         """
+        was_offline = self._panel_offline
         if connected:
             self._mark_panel_online()
         else:
             self._mark_panel_offline("MQTT broker disconnected")
-        self.async_update_listeners()
+        if self._panel_offline != was_offline:
+            self.async_update_listeners()
 
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
