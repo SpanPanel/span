@@ -29,6 +29,28 @@ Use the **Enable Switches** toggle in the banner to globally enable or disable c
 
 ![Panel Dashboard](images/frontend.png)
 
+## List Views — By Activity and By Area
+
+Beyond the panel grid, each panel (and the cross-panel Favorites view) exposes two list-oriented tabs:
+
+- **By Activity** — circuits sorted by live power (or current, when the unit toggle is on Amps), highest first. A search box filters rows by name.
+- **By Area** — circuits grouped by their Home Assistant area (entity-level assignment first, then device-level fallback). Unassigned circuits land in a
+  dedicated group at the bottom.
+
+Each row shows breaker rating, live utilization %, circuit name, shedding-priority icon, an ON/OFF toggle (tappable once the **Enable Switches** slider is
+armed), live power / current value, a gear icon that opens the side panel, and a chevron to expand the row's chart.
+
+### List view columns
+
+By default the list views stack circuits one per row. You can switch to a **2** or **3** column grid from the **Graph Settings** side panel (gear icon at the
+top of the panel header) → **List View Columns**.
+
+- Rows flow left-to-right, top-to-bottom, so the existing sort order (value-desc for By Activity, alphabetical-within-area for By Area) becomes top-left through
+  bottom-right.
+- Expanding a row shows its chart directly below, constrained to the same column as the row.
+- Viewports narrower than 600 px force single-column regardless of the setting.
+- The choice is stored per browser in `localStorage`, so you can keep a phone in single-column and a desktop in three columns.
+
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
