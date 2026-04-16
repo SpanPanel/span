@@ -15,7 +15,7 @@ All notable changes to this project will be documented in this file.
   - By Activity: circuits sorted by power consumption with expandable graphs and search filtering
   - By Area: circuits grouped by Home Assistant area with live area registry updates
   - Shared tab bar across panel and card with configurable text/icon style
-- **Cross-panel Favorites view** (span-card 0.9.3) — A synthetic "Favorites" entry in the dashboard panel dropdown aggregates favorited circuits and sub-devices
+- **Cross-panel Favorites view** (span-card 0.9.4) — A synthetic "Favorites" entry in the dashboard panel dropdown aggregates favorited circuits and sub-devices
   (BESS, EVSE) across every configured SPAN panel into a single workspace. Heart toggles in the Graph Settings and per-circuit / per-sub-device side panels
   persist favorites and the view to the integration storage so the Favorites view is reconstituted on restart. See the Favorites explanation in the frontend
   dashboard link via the readme.md.
