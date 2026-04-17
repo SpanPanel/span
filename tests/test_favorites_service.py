@@ -412,6 +412,41 @@ class TestFavoritesServiceHandlers:
         assert result == {"favorites": {"d_main": _panel_entry([], ["d_bess"])}}
 
     @pytest.mark.asyncio
+    async def test_add_favorite_on_evse_feed_circuit_sensor_favorites_circuit(
+        self, _patched_store: Any
+    ) -> None:
+        """EVSE feed-circuit sensors are re-assigned to the EVSE sub-device via
+        a device override, but their unique_id still carries the circuit UUID.
+        Favoriting such an entity must store a *circuit* favorite keyed by the
+        parent panel, not a sub-device favorite keyed by the EVSE."""
+        hass = MagicMock()
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        circuit_uuid = "abcdef0123456789abcdef0123456789"
+        entity = _make_entity_entry(
+            unique_id=f"span_sp3-242424_{circuit_uuid}_power",
+            device_id="d_evse",
+        )
+        evse_sub_device = _make_device_entry(
+            device_id="d_evse",
+            identifiers={(DOMAIN, "serial_a_evse")},
+            via_device_id="d_main",
+        )
+        parent = _make_device_entry(
+            device_id="d_main",
+            identifiers={(DOMAIN, "serial_a")},
+            via_device_id=None,
+        )
+
+        with _patch_registries_for_subdevice(entity, evse_sub_device, parent):
+            result = await handler(
+                _make_service_call({"entity_id": "sensor.evse_feed_power"})
+            )
+
+        assert result == {"favorites": {"d_main": _panel_entry([circuit_uuid])}}
+
+    @pytest.mark.asyncio
     async def test_add_favorite_rejects_entity_without_uuid_in_unique_id(
         self, _patched_store: Any
     ) -> None:

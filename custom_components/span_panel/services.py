@@ -549,13 +549,12 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
                 translation_placeholders={"entity_id": entity_id},
             )
 
-        # Sub-device branch: resolve the parent main panel and store the
-        # sub-device id directly. Sub-devices register with via_device_id;
-        # main panels never do, so via_device_id presence is a reliable
-        # discriminator (BESS / EVSE today).
+        # Resolve the panel device id. Sub-devices register with
+        # via_device_id; main panels never do, so via_device_id presence is a
+        # reliable discriminator (BESS / EVSE today) and we walk up to the
+        # parent SPAN Panel here.
         if device_entry.via_device_id is not None:
-            parent_id = device_entry.via_device_id
-            parent = device_registry.async_get(parent_id)
+            parent = device_registry.async_get(device_entry.via_device_id)
             if parent is None or not any(domain == DOMAIN for domain, _ in parent.identifiers):
                 raise ServiceValidationError(
                     f"Sub-device {entity_id} has no SPAN Panel parent.",
@@ -563,10 +562,29 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
                     translation_key="favorite_subdevice_no_span_parent",
                     translation_placeholders={"entity_id": entity_id},
                 )
-            return parent.id, "sub_devices", device_entry.id
+            panel_device_id = parent.id
+        else:
+            panel_device_id = device_entry.id
 
-        # Main-panel branch: extract circuit uuid from unique_id.
-        # Format: ``span_{serial}_{circuit_uuid}_{suffix}``.
+        # Circuit-favorite branch takes precedence over the sub-device branch.
+        # EVSE feed-circuit sensors are re-assigned to the EVSE sub-device via
+        # the device override in sensor.py, but their unique_id still encodes
+        # the underlying circuit. When the unique_id embeds a 32-char circuit
+        # UUID (``span_{serial}_{circuit_uuid}_{suffix}``), favorite the
+        # circuit keyed by the parent panel — not the sub-device it happens
+        # to be attached to.
+        circuit_uuid = (
+            extract_circuit_uuid_from_unique_id(entry.unique_id) if entry.unique_id else None
+        )
+        if circuit_uuid is not None:
+            return panel_device_id, "circuits", circuit_uuid
+
+        # No circuit UUID — sub-device metadata sensor (BESS %, EVSE status,
+        # etc.). Favorite the sub-device itself.
+        if device_entry.via_device_id is not None:
+            return panel_device_id, "sub_devices", device_entry.id
+
+        # Main-panel entity without a circuit UUID — not favoritable.
         if not entry.unique_id:
             raise ServiceValidationError(
                 f"Entity {entity_id} has no unique id to resolve.",
@@ -574,17 +592,13 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
                 translation_key="favorite_no_unique_id",
                 translation_placeholders={"entity_id": entity_id},
             )
-        circuit_uuid = extract_circuit_uuid_from_unique_id(entry.unique_id)
-        if circuit_uuid is None:
-            raise ServiceValidationError(
-                f"Could not derive a favorite target from entity {entity_id}. "
-                "Pick a circuit sensor (current/power) or a sub-device sensor.",
-                translation_domain=DOMAIN,
-                translation_key="favorite_no_circuit_uuid",
-                translation_placeholders={"entity_id": entity_id},
-            )
-
-        return device_entry.id, "circuits", circuit_uuid
+        raise ServiceValidationError(
+            f"Could not derive a favorite target from entity {entity_id}. "
+            "Pick a circuit sensor (current/power) or a sub-device sensor.",
+            translation_domain=DOMAIN,
+            translation_key="favorite_no_circuit_uuid",
+            translation_placeholders={"entity_id": entity_id},
+        )
 
     async def async_handle_get_favorites(_call: ServiceCall) -> ServiceResponse:
         favorites = await async_get_favorites(hass)
