@@ -250,7 +250,8 @@ def dispatch_test_alert(
     utilization_pct = 91.5
     panel_serial = "TEST"
     window_duration_s = 300
-    local_time = dt_util.now().strftime("%-I:%M %p")
+    # `%-I` is glibc-only; strip any leading zero ourselves for portability.
+    local_time = dt_util.now().strftime("%I:%M %p").lstrip("0")
 
     raw_targets = settings.get(NOTIFY_TARGETS, "")
     if isinstance(raw_targets, str):

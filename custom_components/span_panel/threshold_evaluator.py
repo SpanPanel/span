@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .const import (
     DEFAULT_CONTINUOUS_THRESHOLD_PCT,
@@ -28,6 +28,16 @@ if TYPE_CHECKING:
     from .current_monitor import MonitoredPointState
 
 
+# Monitoring settings / overrides hold only int, bool, and str values.
+# Keyed by the named constants in options.py (`"continuous_threshold_pct"`,
+# `"monitoring_enabled"`, …) rather than arbitrary strings; a TypedDict would
+# express that more precisely but requires Literal-typed constants throughout
+# the call chain, so we keep the lighter-weight alias and rely on the named
+# keys for discoverability.
+type MonitoringValue = int | bool | str
+type MonitoringSettings = dict[str, MonitoringValue]
+
+
 @dataclass
 class AlertEvent:
     """Describes an alert to be dispatched."""
@@ -42,8 +52,8 @@ class AlertEvent:
 
 
 def resolve_thresholds(
-    override: dict[str, Any],
-    global_settings: dict[str, Any],
+    override: MonitoringSettings,
+    global_settings: MonitoringSettings,
 ) -> tuple[int, int, int, int]:
     """Return (continuous_pct, spike_pct, window_m, cooldown_m) for a monitored point.
 
@@ -51,26 +61,34 @@ def resolve_thresholds(
     defaults when neither layer provides a value.
     """
     return (
-        override.get(
-            CONTINUOUS_THRESHOLD_PCT,
-            global_settings.get(CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT),
+        int(
+            override.get(
+                CONTINUOUS_THRESHOLD_PCT,
+                global_settings.get(CONTINUOUS_THRESHOLD_PCT, DEFAULT_CONTINUOUS_THRESHOLD_PCT),
+            )
         ),
-        override.get(
-            SPIKE_THRESHOLD_PCT,
-            global_settings.get(SPIKE_THRESHOLD_PCT, DEFAULT_SPIKE_THRESHOLD_PCT),
+        int(
+            override.get(
+                SPIKE_THRESHOLD_PCT,
+                global_settings.get(SPIKE_THRESHOLD_PCT, DEFAULT_SPIKE_THRESHOLD_PCT),
+            )
         ),
-        override.get(
-            WINDOW_DURATION_M,
-            global_settings.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
+        int(
+            override.get(
+                WINDOW_DURATION_M,
+                global_settings.get(WINDOW_DURATION_M, DEFAULT_WINDOW_DURATION_M),
+            )
         ),
-        override.get(
-            COOLDOWN_DURATION_M,
-            global_settings.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+        int(
+            override.get(
+                COOLDOWN_DURATION_M,
+                global_settings.get(COOLDOWN_DURATION_M, DEFAULT_COOLDOWN_DURATION_M),
+            )
         ),
     )
 
 
-def is_monitoring_disabled(override: dict[str, Any]) -> bool:
+def is_monitoring_disabled(override: MonitoringSettings) -> bool:
     """Check if monitoring is disabled via per-point override."""
     return override.get("monitoring_enabled") is False
 
