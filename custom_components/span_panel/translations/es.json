@@ -345,8 +345,29 @@
     "export_manifest_no_entries": {
       "message": "No hay entradas de configuración de SPAN Panel cargadas. Agregue y configure un SPAN Panel antes de llamar a este servicio."
     },
+    "favorite_no_circuit_uuid": {
+      "message": "No se pudo derivar un objetivo favorito de la entidad {entity_id}. Seleccione un sensor de circuito (corriente/potencia) o un sensor de subdispositivo."
+    },
+    "favorite_no_device": {
+      "message": "La entidad {entity_id} no está asociada a un dispositivo. Seleccione un sensor de circuito o subdispositivo SPAN."
+    },
+    "favorite_no_unique_id": {
+      "message": "La entidad {entity_id} no tiene un id único y no se puede resolver a un objetivo SPAN."
+    },
+    "favorite_not_span_entity": {
+      "message": "La entidad {entity_id} no es una entidad de SPAN Panel. Seleccione un sensor de circuito, batería (BESS) o cargador EV (EVSE)."
+    },
+    "favorite_subdevice_no_span_parent": {
+      "message": "El subdispositivo {entity_id} no tiene un dispositivo SPAN Panel principal — su via_device_id no apunta a un panel SPAN."
+    },
     "gfe_override_failed": {
       "message": "Error al enviar la anulación GFE al panel."
+    },
+    "graph_horizon_not_available": {
+      "message": "El gestor del horizonte del gráfico no está disponible para el SPAN Panel seleccionado."
+    },
+    "monitoring_not_enabled": {
+      "message": "Ningún SPAN Panel tiene el monitoreo de corriente habilitado."
     },
     "panel_auth_failed": {
       "message": "La autenticación con el SPAN Panel falló. Por favor vuelva a autenticarse."
@@ -426,6 +447,10 @@
         "monitoring_enabled": {
           "name": "Monitoreo habilitado",
           "description": "Habilitar o deshabilitar el monitoreo para este circuito."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -436,6 +461,10 @@
         "circuit_id": {
           "name": "Circuito",
           "description": "La entidad del sensor de potencia del circuito."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -466,6 +495,10 @@
         "monitoring_enabled": {
           "name": "Monitoreo habilitado",
           "description": "Habilitar o deshabilitar el monitoreo para esta fase de alimentación principal."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -476,17 +509,31 @@
         "leg": {
           "name": "Fase de alimentación principal",
           "description": "La entidad del sensor de corriente de alimentación principal."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
     "get_monitoring_status": {
       "name": "Obtener estado de monitoreo",
-      "description": "Devuelve el estado actual de monitoreo para todos los circuitos y fases de alimentación principal rastreados."
+      "description": "Devuelve el estado actual de monitoreo para todos los circuitos y fases de alimentación principal rastreados.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
     },
     "set_global_monitoring": {
       "name": "Configurar monitoreo global",
       "description": "Actualizar los umbrales de monitoreo global y la configuración de notificaciones.",
       "fields": {
+        "enabled": {
+          "name": "Habilitado",
+          "description": "Habilitar o deshabilitar el monitoreo de corriente globalmente para este SPAN Panel."
+        },
         "continuous_threshold_pct": {
           "name": "Umbral continuo",
           "description": "Porcentaje de la capacidad del interruptor para la detección de sobrecarga continua."
@@ -518,12 +565,22 @@
         "notification_priority": {
           "name": "Prioridad de notificación",
           "description": "Nivel de prioridad de la notificación push. Controla el comportamiento de interrupción en dispositivos móviles (iOS: interruption-level, Android: priority/canal)."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
     "test_notification": {
       "name": "Notificación de prueba",
-      "description": "Enviar una notificación de prueba a todos los destinos configurados con valores de ejemplo."
+      "description": "Enviar una notificación de prueba a todos los destinos configurados con valores de ejemplo.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
     },
     "set_graph_time_horizon": {
       "name": "Establecer horizonte temporal del gráfico",
@@ -532,6 +589,10 @@
         "horizon": {
           "name": "Horizonte",
           "description": "Ventana de tiempo preestablecida para la visualización del gráfico."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -546,6 +607,10 @@
         "horizon": {
           "name": "Horizonte",
           "description": "Ventana de tiempo preestablecida para la visualización del gráfico."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -556,6 +621,10 @@
         "circuit_id": {
           "name": "ID del circuito",
           "description": "El identificador del circuito para borrar la anulación."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -570,6 +639,10 @@
         "horizon": {
           "name": "Horizonte",
           "description": "Ventana de tiempo preestablecida para la visualización del gráfico."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
@@ -580,12 +653,46 @@
         "subdevice_id": {
           "name": "ID del subdispositivo",
           "description": "El identificador del subdispositivo para borrar la anulación."
+        },
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
         }
       }
     },
     "get_graph_settings": {
       "name": "Obtener configuración de gráficos",
-      "description": "Devuelve la configuración actual de horizonte de gráficos global y por circuito."
+      "description": "Devuelve la configuración actual de horizonte de gráficos global y por circuito.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuración",
+          "description": "Id de entrada de configuración opcional. Solo necesario cuando hay más de un SPAN Panel configurado."
+        }
+      }
+    },
+    "get_favorites": {
+      "name": "Obtener favoritos",
+      "description": "Devuelve el mapa de favoritos entre paneles, indexado por id de dispositivo del panel SPAN."
+    },
+    "add_favorite": {
+      "name": "Añadir favorito",
+      "description": "Marca un circuito SPAN, batería (BESS) o cargador EV (EVSE) como favorito para que aparezca en la vista de Favoritos del dashboard.",
+      "fields": {
+        "entity_id": {
+          "name": "Entidad",
+          "description": "Cualquier sensor del circuito o subdispositivo a marcar como favorito (corriente, potencia, SoC, etc.)."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Eliminar favorito",
+      "description": "Elimina un circuito o subdispositivo de la vista de Favoritos entre paneles.",
+      "fields": {
+        "entity_id": {
+          "name": "Entidad",
+          "description": "Cualquier sensor del circuito o subdispositivo a eliminar de favoritos."
+        }
+      }
     }
   }
 }

@@ -6,15 +6,19 @@ static path serving, and panel settings storage.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import logging
 import os
-from typing import Any
+from typing import Any, Literal
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
+from .const import PANEL_ADMIN_ONLY, PANEL_SHOW_SIDEBAR
+
+_LOGGER = logging.getLogger(__name__)
 
 PANEL_URL = "/span_panel_frontend"
 PANEL_FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend", "dist")
@@ -53,6 +57,128 @@ async def async_save_panel_settings(hass: HomeAssistant, settings: dict[str, Any
         hass, _PANEL_SETTINGS_STORAGE_VERSION, _PANEL_SETTINGS_STORAGE_KEY
     )
     await store.async_save(settings)
+
+
+FavoriteKind = Literal["circuits", "sub_devices"]
+
+_FAVORITE_KINDS: tuple[FavoriteKind, ...] = ("circuits", "sub_devices")
+
+
+def _empty_panel_favorites() -> dict[str, list[str]]:
+    return {kind: [] for kind in _FAVORITE_KINDS}
+
+
+def _normalize_favorites_blob(raw: Any) -> dict[str, dict[str, list[str]]]:
+    """Normalize raw stored favorites into the canonical nested shape.
+
+    Tolerates the legacy ``{panel_id: [uuid, ...]}`` shape (read transparently
+    as circuits-only). Logs a warning on dropped/malformed entries so storage
+    corruption is visible during debugging.
+    """
+    result: dict[str, dict[str, list[str]]] = {}
+    if not isinstance(raw, dict):
+        return result
+    for panel_id, value in raw.items():
+        if not isinstance(panel_id, str):
+            _LOGGER.warning(
+                "span_panel_settings: dropping favorites entry with non-string panel id %r",
+                panel_id,
+            )
+            continue
+        # Legacy shape: panel_id maps to a flat list of circuit uuids.
+        if isinstance(value, list):
+            circuits = [u for u in value if isinstance(u, str) and u]
+            if circuits:
+                result[panel_id] = {"circuits": circuits, "sub_devices": []}
+            continue
+        if not isinstance(value, dict):
+            _LOGGER.warning(
+                "span_panel_settings: dropping favorites entry %s with unsupported value type %s",
+                panel_id,
+                type(value).__name__,
+            )
+            continue
+        circuits_raw = value.get("circuits", [])
+        sub_devices_raw = value.get("sub_devices", [])
+        circuits = (
+            [u for u in circuits_raw if isinstance(u, str) and u]
+            if isinstance(circuits_raw, list)
+            else []
+        )
+        sub_devices = (
+            [u for u in sub_devices_raw if isinstance(u, str) and u]
+            if isinstance(sub_devices_raw, list)
+            else []
+        )
+        if circuits or sub_devices:
+            result[panel_id] = {"circuits": circuits, "sub_devices": sub_devices}
+    return result
+
+
+# Module-level lock serializing favorites read-then-write so concurrent
+# add/remove calls don't clobber each other. HA's Store serializes writes
+# but not the surrounding load → mutate → save sequence.
+_FAVORITES_LOCK = asyncio.Lock()
+
+
+async def async_get_favorites(
+    hass: HomeAssistant,
+) -> dict[str, dict[str, list[str]]]:
+    """Return the stored favorites map.
+
+    Shape: ``{panel_device_id: {"circuits": [uuid, ...], "sub_devices": [devid, ...]}}``.
+
+    Empty/missing storage returns an empty dict. Old single-list per-panel
+    shape ``{panel_id: [uuid, ...]}`` is read transparently as circuits-only
+    so favorites that were stored before sub-device support are preserved.
+    """
+    settings = await async_load_panel_settings(hass)
+    return _normalize_favorites_blob(settings.get("favorites"))
+
+
+async def async_set_favorite(
+    hass: HomeAssistant,
+    panel_device_id: str,
+    kind: FavoriteKind,
+    target_id: str,
+    favorited: bool,
+) -> dict[str, dict[str, list[str]]]:
+    """Add or remove a circuit or sub-device from the favorites map.
+
+    ``kind`` is either ``"circuits"`` or ``"sub_devices"``. ``target_id`` is
+    the circuit uuid or sub-device HA device id, respectively. Deduplicates
+    on add; drops empty lists and empty panel entries on remove. Returns
+    the updated full favorites map.
+
+    Holds a module-level lock around load → mutate → save so concurrent
+    callers can't race; also persists the normalized shape so legacy data
+    is migrated in place on the first write touching it.
+    """
+    if kind not in _FAVORITE_KINDS:
+        raise ValueError(f"Unknown favorite kind: {kind!r}")
+
+    async with _FAVORITES_LOCK:
+        settings = await async_load_panel_settings(hass)
+        favorites = _normalize_favorites_blob(settings.get("favorites"))
+
+        panel_entry = favorites.get(panel_device_id) or _empty_panel_favorites()
+        current = list(panel_entry.get(kind, []))
+        if favorited:
+            if target_id not in current:
+                current.append(target_id)
+        else:
+            if target_id in current:
+                current.remove(target_id)
+
+        panel_entry[kind] = current
+        if any(panel_entry[k] for k in _FAVORITE_KINDS):
+            favorites[panel_device_id] = panel_entry
+        else:
+            favorites.pop(panel_device_id, None)
+
+        settings["favorites"] = favorites
+        await async_save_panel_settings(hass, settings)
+        return favorites
 
 
 async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None:
@@ -135,7 +261,6 @@ async def async_apply_panel_registration(hass: HomeAssistant) -> None:
             module_url=f"{PANEL_URL}/span-panel.js?v={cache_tag}",
             require_admin=admin_only,
             config={},
-            config_panel_domain=DOMAIN,
         )
     else:
         _remove_panel(hass, "span-panel", warn_if_unknown=False)

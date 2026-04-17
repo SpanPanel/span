@@ -15,12 +15,18 @@ All notable changes to this project will be documented in this file.
   - By Activity: circuits sorted by power consumption with expandable graphs and search filtering
   - By Area: circuits grouped by Home Assistant area with live area registry updates
   - Shared tab bar across panel and card with configurable text/icon style
+- **Cross-panel Favorites view** (span-card 0.9.4) — A synthetic "Favorites" entry in the dashboard panel dropdown aggregates favorited circuits and sub-devices
+  (BESS, EVSE) across every configured SPAN panel into a single workspace. Heart toggles in the Graph Settings and per-circuit / per-sub-device side panels
+  persist favorites and the view to the integration storage so the Favorites view is reconstituted on restart. See the Favorites explanation in the frontend
+  dashboard link via the README.md.
 
 ### Fixed
 
 - **Dashboard goes blank after idle** — Panel and card migrated to LitElement and refresh after losing focus (span-card 0.9.1)
 - **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
   Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
+- **Panel status showing "Connected" while the panel is offline** — the panel status sensor now reflects the true connection state and updates within a second
+  of the panel going offline or coming back online (including the bump to span-panel-api v2.6.1)
 
 ## [2.0.5] - 4/2026
 

@@ -29,6 +29,28 @@ Use the **Enable Switches** toggle in the banner to globally enable or disable c
 
 ![Panel Dashboard](images/frontend.png)
 
+## List Views — By Activity and By Area
+
+Beyond the panel grid, each panel (and the cross-panel Favorites view) exposes two list-oriented tabs:
+
+- **By Activity** — circuits sorted by live power (or current, when the unit toggle is on Amps), highest first. A search box filters rows by name.
+- **By Area** — circuits grouped by their Home Assistant area (entity-level assignment first, then device-level fallback). Unassigned circuits land in a
+  dedicated group at the bottom.
+
+Each row shows breaker rating, live utilization %, circuit name, shedding-priority icon, an ON/OFF toggle (tappable once the **Enable Switches** slider is
+armed), live power / current value, a gear icon that opens the side panel, and a chevron to expand the row's chart.
+
+### List view columns
+
+By default the list views stack circuits one per row. You can switch to a **2** or **3** column grid from the **Graph Settings** side panel (gear icon at the
+top of the panel header) → **List View Columns**.
+
+- Rows flow left-to-right, top-to-bottom, so the existing sort order (value-desc for By Activity, alphabetical-within-area for By Area) becomes top-left through
+  bottom-right.
+- Expanding a row shows its chart directly below, constrained to the same column as the row.
+- Viewports narrower than 600 px force single-column regardless of the setting.
+- The choice is stored per browser in `localStorage`, so you can keep a phone in single-column and a desktop in three columns.
+
 ## Monitoring View
 
 The Monitoring tab provides current-based alerting for individual circuits. It detects sustained high utilization and transient spikes relative to each
@@ -71,6 +93,53 @@ values.
 
 ![Monitoring Configuration](images/monitoring.png)
 
-## Settings View
+## Favorites View
 
-The Settings tab provides access to integration configuration options without navigating through the Home Assistant settings menu.
+The dashboard supports a cross-panel **Favorites** view that lets you curate a single workspace from circuits and sub-devices (BESS, EVSE) belonging to any of
+your configured SPAN panels. This is useful when you want a single place to keep an eye on a small set of important loads — say, the EV charger on Panel A and
+the heat pump on Panel B — without switching panels in the dropdown.
+
+### Marking favorites
+
+Favorites are marked from the **side panels** that open via the gear icons in the dashboard. The standalone span-card (used in Lovelace dashboards) does not
+expose hearts because it has no Favorites view.
+
+There are three places to toggle a favorite:
+
+- **Panel-level "Graph Settings" side panel** — opened from the gear icon at the top of the panel header. The per-circuit and per-sub-device lists each render a
+  heart icon next to the time-horizon dropdown. Click the heart to favorite or un-favorite that target without leaving the list.
+- **Per-circuit side panel** — opened from a circuit's gear icon in the breaker grid (or in the By Activity / By Area rows). A "Favorite" section with a switch
+  sits between the relay control and the shedding priority.
+- **Per-sub-device side panel** — opened from the gear icon on a BESS or EVSE tile. Same Favorite section as the per-circuit panel.
+
+A circuit or sub-device can be favorited on any panel. The integration stores the favorites under the configured SPAN integration's storage, so they sync across
+browsers and devices.
+
+### The Favorites entry
+
+When you have at least one favorite configured, a synthetic **Favorites** entry appears at the top of the panel dropdown. Switching to it loads the aggregated
+view. Removing the last favorite while the Favorites view is active automatically switches the dropdown and view back to the first real panel.
+
+### Tabs in the Favorites view
+
+The Favorites view exposes **By Activity**, **By Area**, and **Monitoring** tabs. **By Panel** is not available because the physical breaker grid is inherently
+single-panel.
+
+- **By Activity / By Area** — Show the favorited circuits sorted by power (or grouped by area). Sub-device tiles render above the circuit list. When more than
+  one panel contributes favorites, circuit and sub-device names are prefixed with their panel name so you can tell them apart.
+- **Monitoring** — Stacks one Monitoring block per contributing panel, since threshold and notification settings are per-panel.
+
+The Favorites view is **stateful**: the active tab, expanded rows, and search query are remembered in the browser and restored when you come back to it.
+
+### Editing from the Favorites view
+
+Opening a circuit's or sub-device's gear from the Favorites view targets the originating panel for any side-panel edits (graph horizon, monitoring thresholds,
+relay state, etc.). Settings always go to the right panel even though the targets are aggregated in the Favorites view.
+
+### Services
+
+The favorites map is also exposed as services for automations and scripts:
+
+- `span_panel.get_favorites` — Returns the current map.
+- `span_panel.add_favorite` / `span_panel.remove_favorite` — Take a single `entity_id` (any sensor on the circuit or sub-device — current, power, SoC, etc.).
+  The integration resolves the entity to its panel and target, so you never need to know internal circuit UUIDs or HA device IDs.

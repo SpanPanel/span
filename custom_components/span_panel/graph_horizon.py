@@ -33,7 +33,7 @@ class GraphHorizonManager:
         self._global_horizon: str = DEFAULT_GRAPH_HORIZON
         self._circuit_overrides: dict[str, str] = {}
         self._subdevice_overrides: dict[str, str] = {}
-        self._store: Store = Store(
+        self._store: Store[dict[str, Any]] = Store(
             hass,
             _STORAGE_VERSION,
             f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",

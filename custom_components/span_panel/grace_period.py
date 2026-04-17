@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 import logging
 from typing import Any, Self
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
 from homeassistant.helpers.restore_state import ExtraStoredData
+
+# Matches SensorEntity.native_value: the broadest concrete union that the
+# HA sensor platform can hand us. We accept it verbatim so sensor_base can
+# pass `self._attr_native_value` through without extra narrowing.
+type NativeSensorValue = str | int | float | date | Decimal | None
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,7 +102,7 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
             return None
 
 
-def coerce_grace_period_minutes(raw_value: Any) -> int:
+def coerce_grace_period_minutes(raw_value: int | float | str | None) -> int:
     """Ensure grace period minutes is a non-negative integer.
 
     Args:
@@ -106,6 +112,8 @@ def coerce_grace_period_minutes(raw_value: Any) -> int:
         Validated integer (defaults to 15 if invalid, clamps to 0 minimum).
 
     """
+    if raw_value is None:
+        return 15
     try:
         minutes = int(raw_value)
     except (TypeError, ValueError):
@@ -120,9 +128,9 @@ def coerce_grace_period_minutes(raw_value: Any) -> int:
 def handle_offline_grace_period(
     last_valid_state: float | None,
     last_valid_changed: datetime | None,
-    current_native_value: Any,
+    current_native_value: NativeSensorValue,
     grace_minutes: int,
-) -> tuple[Any, float | None, datetime | None]:
+) -> tuple[NativeSensorValue, float | None, datetime | None]:
     """Handle grace period logic when panel is offline.
 
     Args:
@@ -150,7 +158,11 @@ def handle_offline_grace_period(
         last_valid_changed = datetime.now(tz=UTC)
 
     try:
-        time_since_last_valid = datetime.now(tz=UTC) - last_valid_changed
+        raw_delta = datetime.now(tz=UTC) - last_valid_changed
+        # Clamp to zero to handle backward clock jumps (DST / NTP sync) that would
+        # otherwise produce a negative delta and silently extend the grace window
+        # indefinitely.
+        time_since_last_valid = max(raw_delta, timedelta(0))
         grace_period_duration = timedelta(minutes=grace_minutes)
     except Exception as err:  # noqa: BLE001  # pragma: no cover - defensive
         _LOGGER.debug("Grace period calculation failed: %s", err)

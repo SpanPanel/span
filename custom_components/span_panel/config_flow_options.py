@@ -72,7 +72,7 @@ def get_general_options_defaults(
         ),
         ENERGY_REPORTING_GRACE_PERIOD: config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15),
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
-            ENABLE_ENERGY_DIP_COMPENSATION, False
+            ENABLE_ENERGY_DIP_COMPENSATION, True
         ),
     }
 

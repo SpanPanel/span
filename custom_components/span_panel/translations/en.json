@@ -345,8 +345,29 @@
     "export_manifest_no_entries": {
       "message": "No SPAN panel configuration entries are loaded. Add and configure a SPAN panel before calling this service."
     },
+    "favorite_not_span_entity": {
+      "message": "Entity {entity_id} is not a SPAN Panel entity. Pick a circuit, BESS, or EVSE sensor."
+    },
+    "favorite_no_device": {
+      "message": "Entity {entity_id} is not attached to a device. Pick a SPAN circuit or sub-device sensor."
+    },
+    "favorite_subdevice_no_span_parent": {
+      "message": "Sub-device {entity_id} has no SPAN Panel parent device — its via_device_id does not point at a SPAN panel."
+    },
+    "favorite_no_unique_id": {
+      "message": "Entity {entity_id} has no unique id and cannot be resolved to a SPAN target."
+    },
+    "favorite_no_circuit_uuid": {
+      "message": "Could not derive a favorite target from entity {entity_id}. Pick a circuit sensor (current/power) or a sub-device sensor."
+    },
     "gfe_override_failed": {
       "message": "Failed to send GFE override to the panel."
+    },
+    "graph_horizon_not_available": {
+      "message": "Graph horizon manager is not available for the selected SPAN panel."
+    },
+    "monitoring_not_enabled": {
+      "message": "No SPAN panel with current monitoring enabled."
     },
     "panel_auth_failed": {
       "message": "Authentication with the SPAN Panel failed. Please reauthenticate."
@@ -426,6 +447,10 @@
         "monitoring_enabled": {
           "name": "Monitoring enabled",
           "description": "Enable or disable monitoring for this circuit."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -436,6 +461,10 @@
         "circuit_id": {
           "name": "Circuit",
           "description": "The circuit power sensor entity."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -466,6 +495,10 @@
         "monitoring_enabled": {
           "name": "Monitoring enabled",
           "description": "Enable or disable monitoring for this mains leg."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -476,17 +509,31 @@
         "leg": {
           "name": "Mains leg",
           "description": "The mains current sensor entity."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
     "get_monitoring_status": {
       "name": "Get monitoring status",
-      "description": "Returns current monitoring state for all tracked circuits and mains legs."
+      "description": "Returns current monitoring state for all tracked circuits and mains legs.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
     },
     "set_global_monitoring": {
       "name": "Set Global Monitoring",
       "description": "Update global monitoring thresholds and notification settings.",
       "fields": {
+        "enabled": {
+          "name": "Enabled",
+          "description": "Enable or disable current monitoring globally for this SPAN panel."
+        },
         "continuous_threshold_pct": {
           "name": "Continuous Threshold",
           "description": "Percentage of breaker rating for continuous overload detection."
@@ -518,12 +565,22 @@
         "notification_priority": {
           "name": "Notification Priority",
           "description": "Push notification priority level. Controls interruption behavior on mobile devices (iOS: interruption-level, Android: priority/channel)."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
     "test_notification": {
       "name": "Test Notification",
-      "description": "Send a test notification to all configured targets using sample values."
+      "description": "Send a test notification to all configured targets using sample values.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
     },
     "set_graph_time_horizon": {
       "name": "Set graph time horizon",
@@ -532,6 +589,10 @@
         "horizon": {
           "name": "Horizon",
           "description": "Time window preset for graph display."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -546,6 +607,10 @@
         "horizon": {
           "name": "Horizon",
           "description": "Time window preset for graph display."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -556,6 +621,10 @@
         "circuit_id": {
           "name": "Circuit ID",
           "description": "The circuit identifier to clear the override for."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -570,6 +639,10 @@
         "horizon": {
           "name": "Horizon",
           "description": "Time window preset for graph display."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
@@ -580,12 +653,46 @@
         "subdevice_id": {
           "name": "Sub-device ID",
           "description": "The sub-device identifier to clear the override for."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     },
     "get_graph_settings": {
       "name": "Get graph settings",
-      "description": "Returns the current global and per-circuit graph horizon settings."
+      "description": "Returns the current global and per-circuit graph horizon settings.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+        }
+      }
+    },
+    "get_favorites": {
+      "name": "Get favorites",
+      "description": "Returns the saved cross-panel favorites map keyed by SPAN panel device id."
+    },
+    "add_favorite": {
+      "name": "Add favorite",
+      "description": "Mark a SPAN circuit, battery (BESS), or EV charger (EVSE) as a favorite so it appears in the dashboard's Favorites view.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity",
+          "description": "Any sensor of the circuit or sub-device to favorite (current, power, SoC, etc.)."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Remove favorite",
+      "description": "Remove a circuit or sub-device from the cross-panel Favorites view.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity",
+          "description": "Any sensor of the circuit or sub-device to remove from favorites."
+        }
+      }
     }
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +17,7 @@ from span_panel_api.exceptions import (
 
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from homeassistant.core import HomeAssistant
+from span_panel_api import SpanMqttClient
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -34,13 +36,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 def _create_coordinator(
     hass: HomeAssistant,
     *,
-    client: MagicMock | None = None,
+    client: object | None = None,
     options: dict | None = None,
 ) -> SpanPanelCoordinator:
     """Create a coordinator with mocked dependencies."""
     return SpanPanelCoordinator(
         hass,
-        client or MagicMock(),
+        cast(SpanMqttClient, client or MagicMock()),
         MockConfigEntry(
             domain="span_panel",
             options=options or {},
@@ -187,8 +189,10 @@ async def test_fire_dip_notification_noops_without_events(hass: HomeAssistant) -
 async def test_async_setup_streaming_registers_callback_and_starts_client(
     hass: HomeAssistant,
 ) -> None:
-    """Streaming setup should register the callback and start the client."""
+    """Streaming setup should register both callbacks and start the client."""
     client = MagicMock()
+    unregister_connection = MagicMock()
+    client.register_connection_callback = MagicMock(return_value=unregister_connection)
     client.register_snapshot_callback = MagicMock(return_value=MagicMock())
     client.start_streaming = AsyncMock()
     coordinator = _create_coordinator(hass, client=client)
@@ -198,6 +202,8 @@ async def test_async_setup_streaming_registers_callback_and_starts_client(
     client.register_snapshot_callback.assert_called_once()
     client.start_streaming.assert_awaited_once()
     assert coordinator._unregister_streaming is not None
+    client.register_connection_callback.assert_called_once_with(coordinator._on_connection_change)
+    assert coordinator._unregister_connection is not None
 
 
 async def test_on_snapshot_push_updates_state_and_runs_post_tasks(
@@ -386,3 +392,118 @@ async def test_async_reload_task_handles_expected_errors(
         await coordinator._async_reload_task()
 
     assert "Home Assistant error during reload: reload failed" in caplog.text
+
+
+async def test_connection_callback_registered_and_unregistered_on_lifecycle(
+    hass: HomeAssistant,
+) -> None:
+    """async_setup_streaming should register a connection callback; async_shutdown should unregister it."""
+    client = MagicMock()
+    client.register_connection_callback = MagicMock()
+    client.register_snapshot_callback = MagicMock()
+    client.start_streaming = AsyncMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+
+    # register_connection_callback returns an unregister function
+    unregister_connection = MagicMock()
+    client.register_connection_callback.return_value = unregister_connection
+    client.register_snapshot_callback.return_value = MagicMock()
+
+    coordinator = _create_coordinator(hass, client=client)
+
+    await coordinator.async_setup_streaming()
+
+    # Connection callback was registered exactly once with the coordinator's handler
+    client.register_connection_callback.assert_called_once_with(coordinator._on_connection_change)
+    assert coordinator._unregister_connection is unregister_connection
+
+    await coordinator.async_shutdown()
+
+    # Unregister was invoked and the field cleared
+    cast(MagicMock, unregister_connection).assert_called_once_with()
+    assert coordinator._unregister_connection is None
+
+
+async def test_on_connection_change_false_flips_offline_and_notifies_listeners(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A False edge must flip panel_offline True, log once, and push a listener update."""
+    coordinator = _create_coordinator(hass)
+    assert coordinator.panel_offline is False
+
+    with patch.object(coordinator, "async_update_listeners") as notify:
+        with caplog.at_level(logging.INFO):
+            coordinator._on_connection_change(False)
+
+    assert coordinator.panel_offline is True
+    notify.assert_called_once_with()
+    assert any(
+        "is unavailable" in r.message and "MQTT broker disconnected" in r.message
+        for r in caplog.records
+    )
+
+
+async def test_on_connection_change_true_clears_offline_and_notifies_listeners(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A True edge must flip panel_offline False, log once, and push a listener update."""
+    coordinator = _create_coordinator(hass)
+    coordinator._panel_offline = True
+
+    with patch.object(coordinator, "async_update_listeners") as notify:
+        with caplog.at_level(logging.INFO):
+            coordinator._on_connection_change(True)
+
+    assert coordinator.panel_offline is False
+    notify.assert_called_once_with()
+    assert any("is back online" in r.message for r in caplog.records)
+
+
+async def test_on_connection_change_noop_when_state_unchanged(
+    hass: HomeAssistant,
+) -> None:
+    """When connected state matches current panel_offline, no listener fan-out."""
+    coordinator = _create_coordinator(hass)
+
+    # Already online (panel_offline=False); receiving another True edge is a no-op
+    with patch.object(coordinator, "async_update_listeners") as notify_online_case:
+        coordinator._on_connection_change(True)
+    notify_online_case.assert_not_called()
+    assert coordinator.panel_offline is False
+
+    # Already offline; receiving another False edge is a no-op
+    coordinator._panel_offline = True
+    with patch.object(coordinator, "async_update_listeners") as notify_offline_case:
+        coordinator._on_connection_change(False)
+    notify_offline_case.assert_not_called()
+    assert coordinator.panel_offline is True
+
+
+async def test_async_update_data_stale_data_error_marks_offline_and_returns_last_data(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A SpanPanelStaleDataError from get_snapshot() should be treated as an expected offline signal."""
+    from span_panel_api.exceptions import SpanPanelStaleDataError
+
+    last_snapshot = SpanPanelSnapshotFactory.create()
+
+    client = MagicMock()
+    client.get_snapshot = AsyncMock(
+        side_effect=SpanPanelStaleDataError("MQTT broker disconnected")
+    )
+
+    coordinator = _create_coordinator(hass, client=client)
+    # Simulate a prior successful update
+    coordinator.data = last_snapshot
+    assert coordinator.panel_offline is False
+
+    with caplog.at_level(logging.INFO):
+        result = await coordinator._async_update_data()
+
+    assert result is last_snapshot
+    assert coordinator.panel_offline is True
+    assert any(
+        "is unavailable" in r.message and "MQTT broker disconnected" in r.message
+        for r in caplog.records
+    )

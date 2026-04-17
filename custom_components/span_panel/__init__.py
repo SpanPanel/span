@@ -27,7 +27,7 @@ from span_panel_api.exceptions import (
 from span_panel_api.mqtt.models import MqttClientConfig
 
 # Import config flow to ensure it's registered
-from . import config_flow  # noqa: F401  # type: ignore[misc]
+from . import config_flow  # noqa: F401
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -45,7 +45,7 @@ from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
     _async_ensure_lovelace_resource as _async_ensure_lovelace_resource,
-    async_apply_panel_registration,
+    async_apply_panel_registration as async_apply_panel_registration,
     async_load_panel_settings as async_load_panel_settings,
     async_save_panel_settings as async_save_panel_settings,
 )
@@ -53,6 +53,7 @@ from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .options import SNAPSHOT_UPDATE_INTERVAL
 from .services import (  # noqa: F401
+    _async_register_favorites_services,
     _async_register_graph_horizon_services,
     _async_register_monitoring_services,
     _async_register_services,
@@ -93,6 +94,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _async_register_services(hass)
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
+    _async_register_favorites_services(hass)
 
     await async_apply_panel_registration(hass)
 
@@ -246,15 +248,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry.
+
+    Unload the platforms first; only tear the coordinator down if that
+    succeeded. If a platform raises during unload, HA retries with the
+    coordinator still alive — shutting it down first would leave
+    entities pointing at a closed MQTT client.
+    """
     _LOGGER.debug("Unloading SPAN Panel integration")
+
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
 
     if hasattr(entry, "runtime_data") and entry.runtime_data is not None:
         if entry.runtime_data.coordinator.current_monitor is not None:
             entry.runtime_data.coordinator.current_monitor.async_stop()
         await entry.runtime_data.coordinator.async_shutdown()
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return True
 
 
 async def async_remove_config_entry_device(

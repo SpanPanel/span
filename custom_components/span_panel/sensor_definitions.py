@@ -26,7 +26,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfPower,
 )
-from homeassistant.helpers.entity import EntityCategory  # type: ignore[attr-defined]
+from homeassistant.helpers.entity import EntityCategory
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,

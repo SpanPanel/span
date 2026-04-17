@@ -187,6 +187,52 @@ def get_panel_entity_suffix(description_key: str) -> str:
     return get_user_friendly_suffix(description_key)
 
 
+def extract_circuit_uuid_from_unique_id(unique_id: str) -> str | None:
+    """Return the 32-char hex circuit UUID embedded in a SPAN entity unique_id.
+
+    SPAN entity unique_ids follow ``span_{serial}_{circuit_uuid}_{suffix}``.
+    The circuit UUID is a 32-char lowercase hex segment. Skips ``parts[0]``
+    (``span``) and ``parts[1]`` (the serial — never a circuit UUID) so a
+    serial that happens to be 32 hex chars cannot shadow the circuit id.
+
+    Returns ``None`` for unique_ids with no circuit UUID segment (e.g.
+    panel-level sensors).
+    """
+    if not unique_id:
+        return None
+    parts = unique_id.split("_")
+    for part in parts[2:]:
+        if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
+            return part
+    return None
+
+
+# ---------------------------------------------------------------------------
+# build_*_unique_id — DO NOT "normalise" without a migration path.
+#
+# Historically, build_circuit_unique_id, build_panel_unique_id, and
+# construct_synthetic_unique_id lower-case the serial; build_switch_unique_id,
+# build_binary_sensor_unique_id, build_select_unique_id, build_bess_unique_id,
+# and build_evse_unique_id do NOT. On panels with a mixed-case serial this
+# means a single install has some unique_ids with the serial lower-cased and
+# others with the serial preserved as-is.
+#
+# This is an inconsistency, but it is benign: HA's entity registry keys on
+# string equality, not case-folded equality, so every deployed entity still
+# matches itself on every restart. Unifying the casing would silently rewrite
+# what these functions return and orphan every existing switch, binary_sensor,
+# select, BESS, and EVSE entity on any live install whose serial contains
+# upper-case characters. The registry would then recreate those entities under
+# the new unique_ids with default names — breaking dashboards, automations,
+# and statistics history.
+#
+# If you ever truly need to align these, do it together with a config-entry
+# migration that walks the registry and renames stored unique_ids to match
+# the new convention. Do not change a single one of these return strings in
+# isolation.
+# ---------------------------------------------------------------------------
+
+
 def build_circuit_unique_id(serial: str, circuit_id: str, description_key: str) -> str:
     """Build unique ID for circuit sensors using consistent pattern (pure function).
 

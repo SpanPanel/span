@@ -30,6 +30,7 @@ from .const import (
     DOMAIN,
 )
 from .helpers import build_circuit_unique_id, build_panel_unique_id
+from .id_builder import extract_circuit_uuid_from_unique_id
 from .options import (
     CONTINUOUS_THRESHOLD_PCT,
     COOLDOWN_DURATION_M,
@@ -41,6 +42,7 @@ from .options import (
     WINDOW_DURATION_M,
 )
 from .threshold_evaluator import (
+    MonitoringSettings,
     check_continuous,
     check_spike,
     is_monitoring_disabled,
@@ -84,11 +86,11 @@ class CurrentMonitor:
         self._entry = entry
         self._circuit_states: dict[str, MonitoredPointState] = {}
         self._mains_states: dict[str, MonitoredPointState] = {}
-        self._circuit_overrides: dict[str, dict[str, Any]] = {}
-        self._mains_overrides: dict[str, dict[str, Any]] = {}
-        self._global_settings: dict[str, Any] = {}
+        self._circuit_overrides: dict[str, MonitoringSettings] = {}
+        self._mains_overrides: dict[str, MonitoringSettings] = {}
+        self._global_settings: MonitoringSettings = {}
         self._last_snapshot: SpanPanelSnapshot | None = None
-        self._store: Store = Store(
+        self._store: Store[dict[str, Any]] = Store(
             hass,
             _STORAGE_VERSION,
             f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
@@ -110,7 +112,7 @@ class CurrentMonitor:
         """Return tracking state for a mains leg, or None if not monitored."""
         return self._mains_states.get(leg)
 
-    def set_circuit_override(self, circuit_id: str, overrides: dict[str, Any]) -> None:
+    def set_circuit_override(self, circuit_id: str, overrides: MonitoringSettings) -> None:
         """Set per-circuit threshold overrides."""
         existing = self._circuit_overrides.get(circuit_id, {})
         existing.update(overrides)
@@ -126,7 +128,7 @@ class CurrentMonitor:
         self._circuit_states.pop(circuit_id, None)
         self._hass.async_create_task(self.async_save_overrides())
 
-    def set_mains_override(self, leg: str, overrides: dict[str, Any]) -> None:
+    def set_mains_override(self, leg: str, overrides: MonitoringSettings) -> None:
         """Set per-mains-leg threshold overrides."""
         existing = self._mains_overrides.get(leg, {})
         existing.update(overrides)
@@ -136,7 +138,7 @@ class CurrentMonitor:
             self._mains_overrides[leg] = existing
         self._hass.async_create_task(self.async_save_overrides())
 
-    def _is_redundant_override(self, override: dict[str, Any]) -> bool:
+    def _is_redundant_override(self, override: MonitoringSettings) -> bool:
         """Check if an override matches global defaults (and can be removed).
 
         An override is redundant if monitoring is enabled (or not set, defaulting
@@ -163,7 +165,7 @@ class CurrentMonitor:
         self._mains_states.pop(leg, None)
         self._hass.async_create_task(self.async_save_overrides())
 
-    def get_global_settings(self) -> dict[str, Any]:
+    def get_global_settings(self) -> MonitoringSettings:
         """Get the effective global monitoring settings.
 
         Returns stored global settings if available, otherwise falls back
@@ -191,7 +193,7 @@ class CurrentMonitor:
             NOTIFICATION_PRIORITY: opts.get(NOTIFICATION_PRIORITY, DEFAULT_NOTIFICATION_PRIORITY),
         }
 
-    def set_global_settings(self, settings: dict[str, Any]) -> None:
+    def set_global_settings(self, settings: MonitoringSettings) -> None:
         """Update global monitoring settings in storage."""
         valid_keys = {
             CONTINUOUS_THRESHOLD_PCT,
@@ -239,13 +241,9 @@ class CurrentMonitor:
         entity_reg = er.async_get(self._hass)
         entry = entity_reg.async_get(entity_id)
         if entry is not None and entry.unique_id:
-            # unique_id format: span_{serial}_{circuit_id}_{suffix}
-            parts = entry.unique_id.split("_")
-            # Find the circuit_id — it's the UUID segment between serial and suffix
-            # Serial is parts[1], suffix is last part(s). The circuit UUID is a 32-char hex.
-            for part in parts:
-                if len(part) == 32 and all(c in "0123456789abcdef" for c in part):
-                    return part
+            uuid = extract_circuit_uuid_from_unique_id(entry.unique_id)
+            if uuid is not None:
+                return uuid
         # Fall through: assume it's already a circuit_id
         return entity_id
 
@@ -415,7 +413,7 @@ class CurrentMonitor:
     @staticmethod
     async def async_is_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Check if monitoring was previously enabled by reading storage."""
-        store: Store = Store(
+        store: Store[dict[str, Any]] = Store(
             hass,
             _STORAGE_VERSION,
             f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
@@ -549,4 +547,4 @@ class CurrentMonitor:
                 )
 
     # Backward-compatible static alias kept for existing callers/tests.
-    _format_notification = staticmethod(format_notification)  # type: ignore[assignment]
+    _format_notification = staticmethod(format_notification)
