@@ -456,41 +456,13 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 
 ## Troubleshooting
 
-### Energy Dashboard Spikes After Firmware Updates
-
-When the SPAN panel undergoes a firmware update or reset, it may report decreased energy values in otherwise `TOTAL_INCREASING` sensors. This causes a massive
-spike in the Home Assistant Energy Dashboard.
-
-**Prevention:** Enable [Energy Dip Compensation](#energy-dip-compensation) in General Options (on by default for new installs).
-
-**Symptoms (if compensation is not enabled):**
-
-- Huge energy consumption spikes appearing after panel firmware updates
-- Charts showing unrealistic untracked values unrelated to a single sensor that dwarf normal usage
-- Negative energy values in statistics
-
-**Solution for existing spikes:**
-
-Use **Developer Tools > Statistics** to find and adjust individual statistics entries. Search for the affected sensor (e.g.,
-`sensor.span_panel_main_meter_consumed_energy`) to locate the errant spike and use the "Adjust sum" option to correct it.
-
-**Note:** The integration monitors for decreases in the main meter consumed (TOTAL_INCREASING) sensor and will display a notification when one is detected.
-
-### High CPU Usage
-
-The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default: 1 second). On low-power hardware such as a Raspberry Pi,
-this can contribute to elevated CPU usage.
-
-To reduce CPU load, increase the **Snapshot Update Interval** in **General Options**. A value of 10–15 seconds is recommended for resource-constrained systems.
-Setting the interval to 0 disables debouncing entirely and rebuilds on every MQTT message, which is not recommended for most setups.
-
-### Common Issues
-
-1. **Door Sensor Unavailable** - The SPAN API may return UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API — we
-   report that sensor as unavailable until it reports a proper value. Opening or closing the door will reflect the proper value. The door state is classified as
-   a tamper sensor (reflecting "Detected" or "Clear") to differentiate it from a normal entry door.
-2. **No Switch** - If a circuit is set in the SPAN App as one of the "Always on Circuits", it will not have a switch because the API does not allow the user to
-   control it.
+| Issue                                               | Symptoms                                                                                                                                                                                                                                                                                                                                                                                                                            | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Energy Dashboard spikes after firmware updates**  | Huge energy-consumption spikes after panel firmware updates; charts showing untracked values that dwarf normal usage; negative energy values in statistics. Caused by the panel reporting decreased values on otherwise `TOTAL_INCREASING` sensors.                                                                                                                                                                                 | **Prevention:** enable [Energy Dip Compensation](#energy-dip-compensation) in General Options (on by default for new installs). **Fix existing spikes:** in **Developer Tools → Statistics**, search for the affected sensor (e.g. `sensor.span_panel_main_meter_consumed_energy`) and use **Adjust sum** to correct the errant entry. The integration also notifies when a decrease in the main meter consumed sensor is detected. |
+| **High CPU usage**                                  | Elevated CPU on low-power hardware (e.g. Raspberry Pi). The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default 1 s).                                                                                                                                                                                                                                                                 | Increase **Snapshot Update Interval** in **General Options**. 10–15 s is recommended for resource-constrained systems. Setting it to 0 disables debouncing and rebuilds on every MQTT message — not recommended.                                                                                                                                                                                                                    |
+| **Replaced sub-device shows the old serial number** | After replacing a SPAN sub-device (Drive / EVSE, BESS, PV inverter), the device entry in Home Assistant keeps showing the previous hardware's serial number. The integration keys entities off the panel-assigned node identity, which is intentionally stable across hardware swaps so long-term history (e.g. lifetime charging kWh for a Drive) is preserved. The device-registry serial number, however, does not auto-refresh. | In **Settings → Devices & Services → Span Panel**, open the affected sub-device and delete it, then reload the integration (or restart Home Assistant). The device re-registers with the new serial number. Entity IDs and their recorded history are preserved.                                                                                                                                                                    |
+| **Door sensor unavailable**                         | The SPAN API returns UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API.                                                                                                                                                                                                                                                                                                                  | The integration reports the sensor as unavailable until a proper value arrives. Opening or closing the door publishes the correct state. The door is classified as a tamper sensor (`Detected` / `Clear`) to differentiate it from a normal entry door.                                                                                                                                                                             |
+| **No switch on a circuit**                          | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The circuit is configured in the SPAN App as one of the "Always on Circuits". The API does not permit user control of those circuits, so no switch is created.                                                                                                                                                                                                                                                                      |
 
 ## Development
 
