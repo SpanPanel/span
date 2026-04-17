@@ -207,6 +207,32 @@ def extract_circuit_uuid_from_unique_id(unique_id: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# build_*_unique_id — DO NOT "normalise" without a migration path.
+#
+# Historically, build_circuit_unique_id, build_panel_unique_id, and
+# construct_synthetic_unique_id lower-case the serial; build_switch_unique_id,
+# build_binary_sensor_unique_id, build_select_unique_id, build_bess_unique_id,
+# and build_evse_unique_id do NOT. On panels with a mixed-case serial this
+# means a single install has some unique_ids with the serial lower-cased and
+# others with the serial preserved as-is.
+#
+# This is an inconsistency, but it is benign: HA's entity registry keys on
+# string equality, not case-folded equality, so every deployed entity still
+# matches itself on every restart. Unifying the casing would silently rewrite
+# what these functions return and orphan every existing switch, binary_sensor,
+# select, BESS, and EVSE entity on any live install whose serial contains
+# upper-case characters. The registry would then recreate those entities under
+# the new unique_ids with default names — breaking dashboards, automations,
+# and statistics history.
+#
+# If you ever truly need to align these, do it together with a config-entry
+# migration that walks the registry and renames stored unique_ids to match
+# the new convention. Do not change a single one of these return strings in
+# isolation.
+# ---------------------------------------------------------------------------
+
+
 def build_circuit_unique_id(serial: str, circuit_id: str, description_key: str) -> str:
     """Build unique ID for circuit sensors using consistent pattern (pure function).
 
