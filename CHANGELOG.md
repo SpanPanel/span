@@ -26,7 +26,7 @@ All notable changes to this project will be documented in this file.
 - **Dashboard graph fidelity** — Circuit charts now use step interpolation instead of linear, eliminating misleading diagonal ramps between data points.
   Continuous signals (PV solar output, BESS SoC/SoE) retain linear interpolation to faithfully represent their gradual behavior.
 - **Panel status showing "Connected" while the panel is offline** — the panel status sensor now reflects the true connection state and updates within a second
-  of the panel going offline or coming back online (including the bump to span-panel-api v2.6.1)
+  of the panel going offline or coming back online (including the bump to span-panel-api v2.6.2)
 
 ## [2.0.5] - 4/2026
 
