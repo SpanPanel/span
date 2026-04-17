@@ -115,8 +115,17 @@
           "faulted": "mdi:alert-circle"
         }
       },
+      "feedthrough_consumed_energy": {
+        "default": "mdi:transmission-tower-import"
+      },
+      "feedthrough_net_energy": {
+        "default": "mdi:swap-horizontal-bold"
+      },
       "feedthrough_power": {
         "default": "mdi:flash"
+      },
+      "feedthrough_produced_energy": {
+        "default": "mdi:transmission-tower-export"
       },
       "grid_forming_entity": {
         "default": "mdi:lightning-bolt-circle",
@@ -142,6 +151,15 @@
       },
       "main_breaker_rating": {
         "default": "mdi:fuse"
+      },
+      "main_meter_consumed_energy": {
+        "default": "mdi:meter-electric"
+      },
+      "main_meter_net_energy": {
+        "default": "mdi:swap-horizontal-bold"
+      },
+      "main_meter_produced_energy": {
+        "default": "mdi:meter-electric-outline"
       },
       "main_relay_state": {
         "default": "mdi:electric-switch",
