@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
 from homeassistant.config_entries import (
-    ConfigEntry,
     ConfigFlowContext,
     ConfigFlowResult,
 )
@@ -634,7 +633,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
     def _update_v2_entry(self, entry_id: str) -> ConfigFlowResult:
         """Update an existing config entry with new v2 MQTT credentials."""
-        entry: ConfigEntry[Any] | None = self.hass.config_entries.async_get_entry(entry_id)
+        entry: SpanPanelConfigEntry | None = self.hass.config_entries.async_get_entry(entry_id)
         if entry is None:
             _LOGGER.error("Config entry %s does not exist during v2 reauth", entry_id)
             return self.async_abort(reason="reauth_failed")

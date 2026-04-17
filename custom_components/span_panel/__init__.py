@@ -27,7 +27,7 @@ from span_panel_api.exceptions import (
 from span_panel_api.mqtt.models import MqttClientConfig
 
 # Import config flow to ensure it's registered
-from . import config_flow  # noqa: F401  # type: ignore[misc]
+from . import config_flow  # noqa: F401
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -45,7 +45,7 @@ from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
     _async_ensure_lovelace_resource as _async_ensure_lovelace_resource,
-    async_apply_panel_registration,
+    async_apply_panel_registration as async_apply_panel_registration,
     async_load_panel_settings as async_load_panel_settings,
     async_save_panel_settings as async_save_panel_settings,
 )

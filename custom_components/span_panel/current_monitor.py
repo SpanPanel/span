@@ -89,7 +89,7 @@ class CurrentMonitor:
         self._mains_overrides: dict[str, dict[str, Any]] = {}
         self._global_settings: dict[str, Any] = {}
         self._last_snapshot: SpanPanelSnapshot | None = None
-        self._store: Store = Store(
+        self._store: Store[dict[str, Any]] = Store(
             hass,
             _STORAGE_VERSION,
             f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
@@ -412,7 +412,7 @@ class CurrentMonitor:
     @staticmethod
     async def async_is_enabled(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Check if monitoring was previously enabled by reading storage."""
-        store: Store = Store(
+        store: Store[dict[str, Any]] = Store(
             hass,
             _STORAGE_VERSION,
             f"{_STORAGE_KEY_PREFIX}.{entry.entry_id}",
@@ -546,4 +546,4 @@ class CurrentMonitor:
                 )
 
     # Backward-compatible static alias kept for existing callers/tests.
-    _format_notification = staticmethod(format_notification)  # type: ignore[assignment]
+    _format_notification = staticmethod(format_notification)

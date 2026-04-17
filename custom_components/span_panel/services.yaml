@@ -36,6 +36,10 @@ set_circuit_threshold:
     monitoring_enabled:
       selector:
         boolean:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 clear_circuit_threshold:
   fields:
@@ -46,6 +50,10 @@ clear_circuit_threshold:
           domain: sensor
           integration: span_panel
           device_class: current
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 set_mains_threshold:
   fields:
@@ -83,6 +91,10 @@ set_mains_threshold:
     monitoring_enabled:
       selector:
         boolean:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 clear_mains_threshold:
   fields:
@@ -93,8 +105,17 @@ clear_mains_threshold:
           domain: sensor
           integration: span_panel
           device_class: current
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 get_monitoring_status:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 set_global_monitoring:
   fields:
@@ -143,8 +164,17 @@ set_global_monitoring:
             - "active"
             - "time-sensitive"
             - "critical"
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 test_notification:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 set_graph_time_horizon:
   fields:
@@ -158,6 +188,10 @@ set_graph_time_horizon:
             - "1d"
             - "1w"
             - "1M"
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 set_circuit_graph_horizon:
   fields:
@@ -175,6 +209,10 @@ set_circuit_graph_horizon:
             - "1d"
             - "1w"
             - "1M"
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 clear_circuit_graph_horizon:
   fields:
@@ -182,6 +220,10 @@ clear_circuit_graph_horizon:
       required: true
       selector:
         text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 set_subdevice_graph_horizon:
   fields:
@@ -199,6 +241,10 @@ set_subdevice_graph_horizon:
             - "1d"
             - "1w"
             - "1M"
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 clear_subdevice_graph_horizon:
   fields:
@@ -206,8 +252,17 @@ clear_subdevice_graph_horizon:
       required: true
       selector:
         text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 get_graph_settings:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel
 
 get_favorites:
 

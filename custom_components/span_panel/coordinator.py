@@ -6,14 +6,14 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from . import SpanPanelConfigEntry
     from .current_monitor import CurrentMonitor
     from .graph_horizon import GraphHorizonManager
 
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -27,7 +27,6 @@ from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataErro
 
 from .const import DOMAIN
 from .id_builder import build_circuit_unique_id
-from .options import ENERGY_REPORTING_GRACE_PERIOD
 from .schema_validation import collect_sensor_definitions, validate_field_metadata
 
 
@@ -67,19 +66,17 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self,
         hass: HomeAssistant,
         client: SpanMqttClient,
-        config_entry: ConfigEntry,
+        config_entry: SpanPanelConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
         self._client = client
-        self.config_entry: ConfigEntry[Any] = config_entry
+        self.config_entry: SpanPanelConfigEntry = config_entry
         # Track last tick for visibility into cadence
         self._last_tick_epoch: float | None = None
         # Flag to track if a reload was requested
         self._reload_requested = False
         # Flag to track if panel is offline/unreachable
         self._panel_offline = False
-        # Track last grace period value for comparison
-        self._last_grace_period = config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15)
 
         # Streaming state
         self._unregister_streaming: Callable[[], None] | None = None

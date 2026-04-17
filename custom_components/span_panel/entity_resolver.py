@@ -243,7 +243,11 @@ def construct_multi_circuit_entity_id(
         # Use friendly name pattern: sensor.span_panel_solar_inverter_power
         circuit_part = slugify(friendly_name)
 
-    # Build the entity ID
+    # Build the entity ID.
+    # `False` default preserves legacy installs (no device prefix). Single-circuit
+    # entities default to True — see construct_single_circuit_entity_id below —
+    # because they never had a prefix-less form historically; multi-circuit
+    # synthetics did.
     use_device_prefix = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, False)
     parts = []
 

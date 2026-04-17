@@ -164,7 +164,8 @@ def dispatch_alert(
     over_threshold_since: str | None = None,
 ) -> None:
     """Dispatch alert through all enabled notification channels."""
-    local_time = dt_util.now().strftime("%-I:%M %p")
+    # `%-I` is glibc-only; strip any leading zero ourselves for portability.
+    local_time = dt_util.now().strftime("%I:%M %p").lstrip("0")
 
     event_data: dict[str, Any] = {
         "alert_source": alert_source,

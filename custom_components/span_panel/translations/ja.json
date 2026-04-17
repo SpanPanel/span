@@ -345,23 +345,29 @@
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"
     },
-    "favorite_not_span_entity": {
-      "message": "エンティティ {entity_id} はSPAN Panelのエンティティではありません。回路、バッテリー (BESS)、またはEV充電器 (EVSE) のセンサーを選択してください。"
+    "favorite_no_circuit_uuid": {
+      "message": "エンティティ {entity_id} からお気に入り対象を導出できませんでした。回路センサー (電流/電力) またはサブデバイスのセンサーを選択してください。"
     },
     "favorite_no_device": {
       "message": "エンティティ {entity_id} はデバイスに紐付いていません。SPANの回路またはサブデバイスのセンサーを選択してください。"
     },
-    "favorite_subdevice_no_span_parent": {
-      "message": "サブデバイス {entity_id} に親のSPAN Panelデバイスがありません。via_device_id がSPANパネルを指していません。"
-    },
     "favorite_no_unique_id": {
       "message": "エンティティ {entity_id} は unique_id を持たず、SPANの対象に解決できません。"
     },
-    "favorite_no_circuit_uuid": {
-      "message": "エンティティ {entity_id} からお気に入り対象を導出できませんでした。回路センサー (電流/電力) またはサブデバイスのセンサーを選択してください。"
+    "favorite_not_span_entity": {
+      "message": "エンティティ {entity_id} はSPAN Panelのエンティティではありません。回路、バッテリー (BESS)、またはEV充電器 (EVSE) のセンサーを選択してください。"
+    },
+    "favorite_subdevice_no_span_parent": {
+      "message": "サブデバイス {entity_id} に親のSPAN Panelデバイスがありません。via_device_id がSPANパネルを指していません。"
     },
     "gfe_override_failed": {
       "message": "パネルへのGFEオーバーライドの送信に失敗しました。"
+    },
+    "graph_horizon_not_available": {
+      "message": "選択されたSPANパネルではグラフホライズンマネージャーが利用できません。"
+    },
+    "monitoring_not_enabled": {
+      "message": "電流監視が有効なSPANパネルがありません。"
     },
     "panel_auth_failed": {
       "message": "SPAN Panelとの認証に失敗しました。再認証してください。"
@@ -441,6 +447,10 @@
         "monitoring_enabled": {
           "name": "モニタリング有効",
           "description": "この回路のモニタリングを有効または無効にします。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -451,6 +461,10 @@
         "circuit_id": {
           "name": "回路",
           "description": "回路電力センサーエンティティ。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -481,6 +495,10 @@
         "monitoring_enabled": {
           "name": "モニタリング有効",
           "description": "この主幹レグのモニタリングを有効または無効にします。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -491,17 +509,31 @@
         "leg": {
           "name": "主幹レグ",
           "description": "主幹電流センサーエンティティ。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
     "get_monitoring_status": {
       "name": "モニタリングステータスの取得",
-      "description": "すべての追跡対象回路と主幹レグの現在のモニタリング状態を返します。"
+      "description": "すべての追跡対象回路と主幹レグの現在のモニタリング状態を返します。",
+      "fields": {
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
+        }
+      }
     },
     "set_global_monitoring": {
       "name": "グローバル監視の設定",
       "description": "グローバル監視のしきい値と通知設定を更新します。",
       "fields": {
+        "enabled": {
+          "name": "有効",
+          "description": "このSPANパネルの電流監視をグローバルに有効または無効にします。"
+        },
         "continuous_threshold_pct": {
           "name": "連続しきい値",
           "description": "連続過負荷検出のためのブレーカー定格に対する割合。"
@@ -533,12 +565,22 @@
         "notification_priority": {
           "name": "通知優先度",
           "description": "プッシュ通知の優先度レベル。モバイルデバイスでの割り込み動作を制御します（iOS: interruption-level、Android: priority/チャンネル）。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
     "test_notification": {
       "name": "テスト通知",
-      "description": "サンプル値を使用して設定されたすべてのターゲットにテスト通知を送信します。"
+      "description": "サンプル値を使用して設定されたすべてのターゲットにテスト通知を送信します。",
+      "fields": {
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
+        }
+      }
     },
     "set_graph_time_horizon": {
       "name": "グラフの時間範囲を設定",
@@ -547,6 +589,10 @@
         "horizon": {
           "name": "時間範囲",
           "description": "グラフ表示用の時間ウィンドウプリセット。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -561,6 +607,10 @@
         "horizon": {
           "name": "時間範囲",
           "description": "グラフ表示用の時間ウィンドウプリセット。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -571,6 +621,10 @@
         "circuit_id": {
           "name": "回路ID",
           "description": "オーバーライドをクリアする回路の識別子。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -585,6 +639,10 @@
         "horizon": {
           "name": "時間範囲",
           "description": "グラフ表示用の時間ウィンドウプリセット。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
@@ -595,12 +653,22 @@
         "subdevice_id": {
           "name": "サブデバイスID",
           "description": "オーバーライドをクリアするサブデバイスの識別子。"
+        },
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
         }
       }
     },
     "get_graph_settings": {
       "name": "グラフ設定を取得",
-      "description": "現在のグローバルおよび回路別のグラフ時間範囲設定を返します。"
+      "description": "現在のグローバルおよび回路別のグラフ時間範囲設定を返します。",
+      "fields": {
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "オプションの設定エントリID。複数のSPANパネルが設定されている場合にのみ必要です。"
+        }
+      }
     },
     "get_favorites": {
       "name": "お気に入りを取得",
