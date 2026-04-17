@@ -248,15 +248,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry.
+
+    Unload the platforms first; only tear the coordinator down if that
+    succeeded. If a platform raises during unload, HA retries with the
+    coordinator still alive — shutting it down first would leave
+    entities pointing at a closed MQTT client.
+    """
     _LOGGER.debug("Unloading SPAN Panel integration")
+
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unload_ok:
+        return False
 
     if hasattr(entry, "runtime_data") and entry.runtime_data is not None:
         if entry.runtime_data.coordinator.current_monitor is not None:
             entry.runtime_data.coordinator.current_monitor.async_stop()
         await entry.runtime_data.coordinator.async_shutdown()
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return True
 
 
 async def async_remove_config_entry_device(
