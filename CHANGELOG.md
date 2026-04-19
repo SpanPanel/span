@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.7] - 4/2026
+
+### Fixed
+
+- **Favorites view no longer goes blank after leaving and returning to the browser tab** — If you navigated away from Home Assistant (switched to another app or
+  tab) and came back, the Favorites view would sometimes come up empty and stay that way until you changed tabs or hit refresh. It now automatically rebuilds
+  itself when you return.
+- **Circuit rows show the full name on narrow displays** — On phone-sized windows and narrow side panels, the circuit name now gets its own row and displays
+  fully instead of being cut off with an ellipsis. The breaker badge, utilization %, ON/OFF control, reading, and gear icon fold onto a second row beneath it.
+
 ## [2.0.6] - 4/2026
 
 **Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
