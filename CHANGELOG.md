@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Feedthrough (downstream lug) power and energy sensors now accurate** — bumped span-panel-api to 2.6.3 to patch a defect in the underlying firmware. The
+  firmware defect is tracked at [spanio/SPAN-API-Client-Docs#13](https://github.com/spanio/SPAN-API-Client-Docs/issues/13). The span-panel-api derives
+  downstream power and energy as `main − Σcircuits`.
 - **Favorites view no longer goes blank** after returning to Home Assistant from a backgrounded browser tab.
 - **Circuit names display fully on narrow displays** — the row folds to a second line when the name would otherwise truncate.
 - **Favoriting an EVSE now shows it as a device card** instead of a circuit row, matching the By Panel view.
