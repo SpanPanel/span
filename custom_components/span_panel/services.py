@@ -566,25 +566,28 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         else:
             panel_device_id = device_entry.id
 
-        # Circuit-favorite branch takes precedence over the sub-device branch.
-        # EVSE feed-circuit sensors are re-assigned to the EVSE sub-device via
-        # the device override in sensor.py, but their unique_id still encodes
-        # the underlying circuit. When the unique_id embeds a 32-char circuit
-        # UUID (``span_{serial}_{circuit_uuid}_{suffix}``), favorite the
-        # circuit keyed by the parent panel — not the sub-device it happens
-        # to be attached to.
+        # Sub-device-attached entities favorite the sub-device itself.
+        # Rationale: the device card on the dashboard already represents
+        # both the sub-device's status sensors AND its feed-circuit
+        # power. Routing a feed-circuit sensor (current/power, whose
+        # unique_id encodes a circuit UUID) to a circuit favorite would
+        # make a Favorites view show the same physical thing twice — a
+        # device card and a circuit row — and prevent the user from
+        # ever favoriting "the device" via a click on a feed-circuit
+        # entity. Treat any entity attached to a sub-device as the
+        # device-favorite for that sub-device.
+        if device_entry.via_device_id is not None:
+            return panel_device_id, "sub_devices", device_entry.id
+
+        # Main-panel entity (regular breaker circuit) — favorite the
+        # circuit. Requires a unique_id that embeds the 32-char circuit
+        # UUID (``span_{serial}_{circuit_uuid}_{suffix}``).
         circuit_uuid = (
             extract_circuit_uuid_from_unique_id(entry.unique_id) if entry.unique_id else None
         )
         if circuit_uuid is not None:
             return panel_device_id, "circuits", circuit_uuid
 
-        # No circuit UUID — sub-device metadata sensor (BESS %, EVSE status,
-        # etc.). Favorite the sub-device itself.
-        if device_entry.via_device_id is not None:
-            return panel_device_id, "sub_devices", device_entry.id
-
-        # Main-panel entity without a circuit UUID — not favoritable.
         if not entry.unique_id:
             raise ServiceValidationError(
                 f"Entity {entity_id} has no unique id to resolve.",

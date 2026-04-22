@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.7] - 4/2026
+
+### Fixed
+
+- **Favorites view no longer goes blank** after returning to Home Assistant from a backgrounded browser tab.
+- **Circuit names display fully on narrow displays** — the row folds to a second line when the name would otherwise truncate.
+- **Favoriting an EVSE now shows it as a device card** instead of a circuit row, matching the By Panel view.
+
+### Changed
+
+- **Dashboard now ships its own frontend components** so it no longer breaks when Home Assistant migrates its internal UI library (per
+  [Frontend Component Updates 2026.4](https://developers.home-assistant.io/blog/2026/03/25/frontend-component-updates-2026.4)). No visual change; bundle grows
+  ~500 KB.
+
 ## [2.0.6] - 4/2026
 
 **Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
