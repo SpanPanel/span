@@ -99,9 +99,7 @@ def test_panel_power_sensor_extra_state_attributes_include_amperage() -> None:
     """Panel power sensors should expose 240V and derived amperage."""
     snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=480.0)
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW"
-    )
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
 
@@ -115,9 +113,7 @@ def test_panel_power_sensor_defaults_amperage_when_value_not_numeric() -> None:
     """Panel power attributes should fall back to 0.0 amperage when value is unknown."""
     snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=480.0)
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW"
-    )
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
 
@@ -138,12 +134,8 @@ def test_panel_sensor_default_friendly_names_cover_fallback_branches() -> None:
     panel_data_desc = next(
         desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state"
     )
-    status_desc = next(
-        desc for desc in STATUS_SENSORS if desc.key == "software_version"
-    )
-    panel_power_desc = next(
-        desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW"
-    )
+    status_desc = next(desc for desc in STATUS_SENSORS if desc.key == "software_version")
+    panel_power_desc = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
     panel_energy_desc = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -160,23 +152,13 @@ def test_panel_sensor_default_friendly_names_cover_fallback_branches() -> None:
     )
     pv_sensor = SpanPVMetadataSensor(coordinator, PV_METADATA_SENSORS[0], snapshot)
 
-    assert (
-        panel_data_sensor._generate_friendly_name(snapshot, panel_data_desc) == "Sensor"
-    )
+    assert panel_data_sensor._generate_friendly_name(snapshot, panel_data_desc) == "Sensor"
     assert status_sensor._generate_friendly_name(snapshot, status_desc) == "Status"
     assert battery_sensor._generate_friendly_name(snapshot, BATTERY_SENSOR) == "Battery"
     assert power_sensor._generate_friendly_name(snapshot, panel_power_desc) == "Power"
-    assert (
-        energy_sensor._generate_friendly_name(snapshot, panel_energy_desc) == "Energy"
-    )
-    assert (
-        bess_sensor._generate_friendly_name(snapshot, BESS_METADATA_SENSORS[0])
-        == "BESS Sensor"
-    )
-    assert (
-        pv_sensor._generate_friendly_name(snapshot, PV_METADATA_SENSORS[0])
-        == "PV Sensor"
-    )
+    assert energy_sensor._generate_friendly_name(snapshot, panel_energy_desc) == "Energy"
+    assert bess_sensor._generate_friendly_name(snapshot, BESS_METADATA_SENSORS[0]) == "BESS Sensor"
+    assert pv_sensor._generate_friendly_name(snapshot, PV_METADATA_SENSORS[0]) == "PV Sensor"
 
 
 def test_panel_metadata_sensors_return_expected_data_sources() -> None:
@@ -253,9 +235,7 @@ def test_bess_metadata_sensor_uses_device_override() -> None:
     coordinator = _make_coordinator(snapshot)
     device_info = {"identifiers": {("span_panel", "sp3-242424-001_bess")}}
 
-    sensor = SpanBessMetadataSensor(
-        coordinator, BESS_METADATA_SENSORS[0], snapshot, device_info
-    )
+    sensor = SpanBessMetadataSensor(coordinator, BESS_METADATA_SENSORS[0], snapshot, device_info)
 
     assert sensor.device_info == device_info
 
@@ -295,21 +275,15 @@ def test_circuit_power_sensor_returns_none_name_for_unnamed_friendly_mode() -> N
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot, options={"use_circuit_numbers": False})
 
-    sensor = SpanCircuitPowerSensor(
-        coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snapshot, "c1"
-    )
+    sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snapshot, "c1")
 
     assert sensor.name is None
 
 
 def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
     """Unnamed PV and EVSE circuits should use special fallback labels."""
-    solar_circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="pv1", name="", device_type="pv"
-    )
-    evse_circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="ev1", name="", device_type="evse"
-    )
+    solar_circuit = SpanCircuitSnapshotFactory.create(circuit_id="pv1", name="", device_type="pv")
+    evse_circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="", device_type="evse")
 
     assert _unnamed_circuit_fallback(solar_circuit, "pv1") == "Solar"
     assert _unnamed_circuit_fallback(evse_circuit, "ev1") == "EV Charger"
@@ -317,9 +291,7 @@ def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
 
 def test_resolve_circuit_identifier_for_sync_falls_back_when_name_missing() -> None:
     """Panel-name sync should use unnamed fallback labels when needed."""
-    evse_circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="ev1", name="", device_type="evse"
-    )
+    evse_circuit = SpanCircuitSnapshotFactory.create(circuit_id="ev1", name="", device_type="evse")
 
     assert _resolve_circuit_identifier_for_sync(evse_circuit, "ev1") == "EV Charger"
 
@@ -338,9 +310,7 @@ def test_circuit_power_sensor_subdevice_uses_short_name() -> None:
         device_info_override={"identifiers": {("span_panel", "evse")}},
     )
 
-    assert (
-        sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Current"
-    )
+    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Current"
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Current"
 
 
@@ -379,9 +349,7 @@ def test_circuit_energy_sensor_registers_consumed_sensor_on_add() -> None:
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
 
@@ -396,9 +364,7 @@ def test_circuit_energy_sensor_registers_consumed_sensor_on_add() -> None:
     ):
         asyncio.run(sensor.async_added_to_hass())
 
-    coordinator.register_circuit_energy_sensor.assert_called_once_with(
-        "c1", "consumed", sensor
-    )
+    coordinator.register_circuit_energy_sensor.assert_called_once_with("c1", "consumed", sensor)
 
 
 def test_circuit_net_energy_sensor_applies_dip_offset_adjustment() -> None:
@@ -412,9 +378,7 @@ def test_circuit_net_energy_sensor_applies_dip_offset_adjustment() -> None:
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
     coordinator.get_circuit_dip_offset.side_effect = [5.0, 2.0]
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_net"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_net")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
 
@@ -427,9 +391,7 @@ def test_circuit_energy_sensor_missing_circuit_uses_fallback_names() -> None:
     """Circuit energy sensors should format fallback names when the circuit is gone."""
     snapshot = SpanPanelSnapshotFactory.create(circuits={})
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c9")
 
@@ -448,9 +410,7 @@ def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(
         coordinator,
@@ -460,25 +420,15 @@ def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
         device_info_override={"identifiers": {("span_panel", "evse")}},
     )
 
-    assert (
-        sensor._generate_friendly_name(snapshot, sensor.entity_description)
-        == "Consumed Energy"
-    )
-    assert (
-        sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Consumed Energy"
-    )
+    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Consumed Energy"
+    assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Consumed Energy"
 
 
-def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing() -> (
-    None
-):
+def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing() -> None:
     """Missing circuit data should still return grace-period attributes without tabs."""
     snapshot = SpanPanelSnapshotFactory.create(circuits={})
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
 
@@ -495,17 +445,11 @@ def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_m
 def test_unmapped_circuit_sensor_generates_unmapped_friendly_name() -> None:
     """Unmapped circuit sensors should use tab-based fallback names."""
     snapshot = SpanPanelSnapshotFactory.create(
-        circuits={
-            "unmapped_tab_7": SpanCircuitSnapshotFactory.create(
-                circuit_id="unmapped_tab_7"
-            )
-        }
+        circuits={"unmapped_tab_7": SpanCircuitSnapshotFactory.create(circuit_id="unmapped_tab_7")}
     )
     coordinator = _make_coordinator(snapshot)
 
-    sensor = SpanUnmappedCircuitSensor(
-        coordinator, UNMAPPED_SENSORS[0], snapshot, "unmapped_tab_7"
-    )
+    sensor = SpanUnmappedCircuitSensor(coordinator, UNMAPPED_SENSORS[0], snapshot, "unmapped_tab_7")
 
     assert (
         sensor._generate_friendly_name(snapshot, sensor.entity_description)
@@ -543,9 +487,7 @@ def test_panel_power_sensor_stays_available_while_panel_offline() -> None:
     snapshot = SpanPanelSnapshotFactory.create(instant_grid_power_w=250.0)
     coordinator = _make_coordinator(snapshot)
     coordinator.panel_offline = True
-    description = next(
-        desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW"
-    )
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
 
@@ -560,9 +502,7 @@ def test_panel_status_sensor_reports_unknown_when_offline() -> None:
     snapshot = SpanPanelSnapshotFactory.create(main_relay_state="CLOSED")
     coordinator = _make_coordinator(snapshot)
     coordinator.panel_offline = True
-    description = next(
-        desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state"
-    )
+    description = next(desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state")
 
     sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
 
@@ -707,9 +647,7 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
     """EVSE sensors should attach to the EVSE sub-device and keep static names."""
     evse = SpanEvseSnapshotFactory.create(node_id="evse-0", feed_circuit_id="c1")
     snapshot = SpanPanelSnapshotFactory.create(
-        circuits={
-            "c1": SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")
-        },
+        circuits={"c1": SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Garage")},
         evse={"evse-0": evse},
     )
     coordinator = _make_coordinator(snapshot, options={"use_circuit_numbers": False})
@@ -732,9 +670,7 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
 
 def test_evse_sensor_returns_empty_snapshot_when_missing_mid_session() -> None:
     """EVSE sensors should tolerate missing EVSE data after creation."""
-    snapshot = SpanPanelSnapshotFactory.create(
-        evse={"evse-0": SpanEvseSnapshotFactory.create()}
-    )
+    snapshot = SpanPanelSnapshotFactory.create(evse={"evse-0": SpanEvseSnapshotFactory.create()})
     coordinator = _make_coordinator(snapshot)
     description = next(desc for desc in EVSE_SENSORS if desc.key == "evse_status")
 
@@ -753,16 +689,12 @@ def test_existing_circuit_entity_uses_panel_name_on_init() -> None:
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
         registry.async_get_entity_id.return_value = "sensor.kitchen_current"
         mock_async_get.return_value = registry
 
-        sensor = SpanCircuitPowerSensor(
-            coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1"
-        )
+        sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     assert sensor._attr_name == "Kitchen Current"
     assert sensor._previous_circuit_name == "Kitchen"
@@ -774,25 +706,19 @@ def test_circuit_sensor_first_update_requests_reload_for_name_sync() -> None:
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
         registry.async_get_entity_id.return_value = None
         registry.async_get.return_value = None
         mock_async_get.return_value = registry
 
-        sensor = SpanCircuitPowerSensor(
-            coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1"
-        )
+        sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     sensor.hass = MagicMock()
     sensor.entity_id = "sensor.kitchen_current"
     sensor.async_write_ha_state = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         runtime_registry = MagicMock()
         runtime_registry.async_get.return_value = None
         mock_async_get.return_value = runtime_registry
@@ -808,32 +734,22 @@ def test_circuit_sensor_user_override_skips_reload_on_name_change() -> None:
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         init_registry = MagicMock()
         init_registry.async_get_entity_id.return_value = "sensor.kitchen_current"
         mock_async_get.return_value = init_registry
 
-        sensor = SpanCircuitPowerSensor(
-            coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1"
-        )
+        sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    updated_circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="c1", name="Renamed Kitchen"
-    )
+    updated_circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Renamed Kitchen")
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={"c1": updated_circuit})
     sensor.hass = MagicMock()
     sensor.entity_id = "sensor.kitchen_current"
     sensor.async_write_ha_state = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         runtime_registry = MagicMock()
-        runtime_registry.async_get.return_value = MagicMock(
-            name="Custom Kitchen Current"
-        )
+        runtime_registry.async_get.return_value = MagicMock(name="Custom Kitchen Current")
         mock_async_get.return_value = runtime_registry
         sensor._handle_coordinator_update()
 
@@ -931,6 +847,74 @@ def test_energy_sensor_restores_extra_data_on_add() -> None:
     assert sensor._last_dip_delta == 2.5
 
 
+def test_dip_offset_applied_before_coordinator_listener_fires() -> None:
+    """Dip offset must be set before the coordinator listener is registered.
+
+    If an MQTT push arrives right when the listener is registered inside
+    super().async_added_to_hass(), async_update_listeners() calls the callback
+    synchronously.  The offset must already be in place at that moment or
+    _process_raw_value() will apply offset=0 and report the bare panel counter.
+
+    This test captures the value of _energy_offset at the exact instant
+    async_add_listener is called and asserts it equals the stored offset, not 0.
+    With the original ordering (restore AFTER super) the captured value was 0.0.
+    """
+    stored_offset = 139355.1
+
+    snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=753930.6)
+    coordinator = _make_coordinator(
+        snapshot,
+        options={
+            ENABLE_ENERGY_DIP_COMPENSATION: True,
+            ENERGY_REPORTING_GRACE_PERIOD: 15,
+        },
+    )
+    description = next(
+        desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
+    )
+    sensor = SpanPanelEnergySensor(coordinator, description, snapshot)
+
+    sensor.hass = MagicMock()
+    sensor.entity_id = "sensor.main_meter_energy_consumed"
+    sensor.async_get_last_extra_data = AsyncMock(
+        return_value=MagicMock(
+            as_dict=MagicMock(
+                return_value={
+                    "last_valid_state": 893285.7,
+                    "last_valid_changed": "2026-05-11T17:31:46+00:00",
+                    "energy_offset": stored_offset,
+                    "last_panel_reading": 753930.6,
+                    "last_dip_delta": 65711.9,
+                }
+            )
+        )
+    )
+    sensor.async_get_last_state = AsyncMock(return_value=None)
+
+    # Capture the entity's _energy_offset at the moment the listener is
+    # registered (inside super().async_added_to_hass()).  With the fix, this
+    # must already equal the stored offset; before the fix it was 0.0.
+    offset_at_registration: list[float] = []
+
+    def capture_offset_on_register(update_callback, context=None):
+        offset_at_registration.append(sensor._energy_offset)
+        return MagicMock()
+
+    coordinator.async_add_listener = MagicMock(side_effect=capture_offset_on_register)
+
+    with patch(
+        "homeassistant.helpers.restore_state.async_get",
+        return_value=MagicMock(async_restore_entity_added=MagicMock(return_value=None)),
+    ):
+        asyncio.run(sensor.async_added_to_hass())
+
+    assert offset_at_registration, "async_add_listener was never called"
+    assert offset_at_registration[0] == stored_offset, (
+        f"_energy_offset at listener registration was {offset_at_registration[0]}, "
+        f"expected {stored_offset} — dip offset not restored before super() call"
+    )
+
+
 def test_energy_sensor_restores_invalid_timestamp_logs_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -1004,9 +988,7 @@ def test_energy_sensor_initializes_grace_period_from_last_state() -> None:
 def test_energy_sensor_extra_restore_state_data_includes_offsets() -> None:
     """Restore payload should include tracked grace and dip data."""
     snapshot = SpanPanelSnapshotFactory.create(main_meter_energy_consumed_wh=1250.0)
-    coordinator = _make_coordinator(
-        snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True}
-    )
+    coordinator = _make_coordinator(snapshot, options={ENABLE_ENERGY_DIP_COMPENSATION: True})
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -1095,13 +1077,9 @@ def test_energy_sensor_first_update_requests_reload_for_name_sync() -> None:
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
         registry.async_get_entity_id.return_value = None
         registry.async_get.return_value = None
@@ -1112,9 +1090,7 @@ def test_energy_sensor_first_update_requests_reload_for_name_sync() -> None:
     sensor.entity_id = "sensor.kitchen_consumed_energy"
     sensor.async_write_ha_state = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         runtime_registry = MagicMock()
         runtime_registry.async_get.return_value = None
         mock_async_get.return_value = runtime_registry
@@ -1129,31 +1105,21 @@ def test_energy_sensor_name_change_requests_reload() -> None:
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
-    description = next(
-        desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
-    )
+    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed")
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         init_registry = MagicMock()
-        init_registry.async_get_entity_id.return_value = (
-            "sensor.kitchen_consumed_energy"
-        )
+        init_registry.async_get_entity_id.return_value = "sensor.kitchen_consumed_energy"
         mock_async_get.return_value = init_registry
         sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
 
-    updated_circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="c1", name="Renamed Kitchen"
-    )
+    updated_circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Renamed Kitchen")
     coordinator.data = SpanPanelSnapshotFactory.create(circuits={"c1": updated_circuit})
     sensor.hass = MagicMock()
     sensor.entity_id = "sensor.kitchen_consumed_energy"
     sensor.async_write_ha_state = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         runtime_registry = MagicMock()
         runtime_registry.async_get.return_value = None
         mock_async_get.return_value = runtime_registry
@@ -1165,15 +1131,11 @@ def test_energy_sensor_name_change_requests_reload() -> None:
 
 def test_circuit_sensor_entity_id_stable_in_circuit_numbers_mode() -> None:
     """Entity name should be circuit-based in circuit-numbers mode for entity_id stability."""
-    circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="c1", name="Kitchen", tabs=[5]
-    )
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot, options={USE_CIRCUIT_NUMBERS: True})
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         registry = MagicMock()
         registry.async_get_entity_id.return_value = "sensor.circuit_5_current"
         entity_entry = MagicMock()
@@ -1181,9 +1143,7 @@ def test_circuit_sensor_entity_id_stable_in_circuit_numbers_mode() -> None:
         registry.async_get.return_value = entity_entry
         mock_async_get.return_value = registry
 
-        sensor = SpanCircuitPowerSensor(
-            coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1"
-        )
+        sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     # In circuit-numbers mode, _attr_name should be circuit-based (contains "Circuit")
     assert sensor._attr_name is not None
@@ -1193,15 +1153,11 @@ def test_circuit_sensor_entity_id_stable_in_circuit_numbers_mode() -> None:
 
 def test_circuit_sensor_name_change_updates_registry_in_circuit_numbers_mode() -> None:
     """In circuit-numbers mode, name changes update registry display name without reload."""
-    circuit = SpanCircuitSnapshotFactory.create(
-        circuit_id="c1", name="Kitchen", tabs=[5]
-    )
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot, options={USE_CIRCUIT_NUMBERS: True})
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         init_registry = MagicMock()
         init_registry.async_get_entity_id.return_value = "sensor.circuit_5_current"
         entity_entry = MagicMock()
@@ -1209,9 +1165,7 @@ def test_circuit_sensor_name_change_updates_registry_in_circuit_numbers_mode() -
         init_registry.async_get.return_value = entity_entry
         mock_async_get.return_value = init_registry
 
-        sensor = SpanCircuitPowerSensor(
-            coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1"
-        )
+        sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     # Simulate coordinator update with a name change
     updated_circuit = SpanCircuitSnapshotFactory.create(
@@ -1222,9 +1176,7 @@ def test_circuit_sensor_name_change_updates_registry_in_circuit_numbers_mode() -
     sensor.entity_id = "sensor.circuit_5_current"
     sensor.async_write_ha_state = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.sensor_base.er.async_get"
-    ) as mock_async_get:
+    with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         runtime_registry = MagicMock()
         runtime_entry = MagicMock()
         runtime_entry.name = "Kitchen Current"
