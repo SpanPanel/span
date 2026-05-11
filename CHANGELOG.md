@@ -6,10 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **Energy statistics no longer spike after a rapid integration reload** — If the panel reconnected within ~1 second of a reload (e.g. a firmware
-  restart), the dip compensation offset could fail to apply before the first coordinator update fired, causing HA statistics to record the raw
-  panel counter as a fresh counter-reset value and permanently inflate cumulative energy totals. The offset is now restored before the coordinator
-  listener is registered.
+- **Energy statistics no longer spike when the panel reconnects quickly after an integration reload** — If the panel came back online within
+  ~1 second of a reload (e.g. a brief network blip or panel restart), the dip compensation offset could fail to apply before the first
+  coordinator update fired, causing HA statistics to record the raw panel counter as a fresh counter-reset value and permanently inflate
+  cumulative energy totals. The offset is now restored before the coordinator listener is registered.
 
 - **Favorites view no longer goes blank** after returning to Home Assistant from a backgrounded browser tab.
 - **Circuit names display fully on narrow displays** — the row folds to a second line when the name would otherwise truncate.
