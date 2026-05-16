@@ -126,8 +126,8 @@ def test_bess_connected_sensor_becomes_unavailable_when_panel_offline() -> None:
     assert entity.available is False
 
 
-def test_binary_sensor_with_none_value_becomes_unavailable() -> None:
-    """Binary sensors should be unavailable when their value function returns None."""
+def test_binary_sensor_with_none_value_shows_unknown_not_unavailable() -> None:
+    """Binary sensors should show unknown (not unavailable) when value_fn returns None."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(soe_percentage=85.0, connected=None)
     )
@@ -138,7 +138,24 @@ def test_binary_sensor_with_none_value_becomes_unavailable() -> None:
     entity._handle_coordinator_update()
 
     assert entity.is_on is None
-    assert entity.available is False
+    assert entity.available is True
+
+
+def test_door_state_unknown_shows_unknown_not_unavailable() -> None:
+    """Door sensor with UNKNOWN state should show unknown, not unavailable.
+
+    Firmware may report UNKNOWN when the door has not been operated recently.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(door_state="UNKNOWN")
+    coordinator = _make_coordinator(snapshot)
+    description = next(desc for desc in BINARY_SENSORS if desc.key == SYSTEM_DOOR_STATE)
+    entity = SpanPanelBinarySensor(coordinator, description)
+    entity.async_write_ha_state = MagicMock()
+
+    entity._handle_coordinator_update()
+
+    assert entity.is_on is None
+    assert entity.available is True
 
 
 def test_evse_binary_sensor_uses_empty_snapshot_when_missing_mid_session() -> None:

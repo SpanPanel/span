@@ -225,7 +225,9 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         status_value = self._value_fn(snapshot)
 
         self._attr_is_on = status_value
-        self._attr_available = status_value is not None
+        # None means the panel reported an indeterminate state (e.g. door=UNKNOWN),
+        # not that the entity is broken — keep available so HA shows "unknown".
+        self._attr_available = True
 
         super()._handle_coordinator_update()
 
