@@ -540,55 +540,68 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         This method is called when the entity is added to HA, which happens
         during startup or when the integration is reloaded. We use this
         opportunity to restore the grace period tracking state from storage.
+
+        Dip compensation state is restored BEFORE calling super() because
+        super() registers the coordinator listener, and the SPAN coordinator
+        may immediately push a snapshot via async_set_updated_data() which
+        calls async_update_listeners() synchronously. If that push fires before
+        the offset is restored, _process_raw_value() runs with _energy_offset=0,
+        reports the raw panel counter to HA, and HA statistics treats the value
+        drop as a counter reset — permanently inflating the energy sum.
         """
+        # Pre-fetch stored extra data so dip state can be applied before the
+        # coordinator listener is registered inside super().
+        last_extra_data = await self.async_get_last_extra_data()
+        restored = (
+            SpanEnergyExtraStoredData.from_dict(last_extra_data.as_dict())
+            if last_extra_data is not None
+            else None
+        )
+
+        # Restore dip compensation state before super() registers the listener.
+        if restored and self._dip_compensation_enabled and self._is_total_increasing:
+            if restored.energy_offset is not None:
+                self._energy_offset = restored.energy_offset
+            if restored.last_panel_reading is not None:
+                self._last_panel_reading = restored.last_panel_reading
+            if restored.last_dip_delta is not None:
+                self._last_dip_delta = restored.last_dip_delta
+            _LOGGER.debug(
+                "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
+                self.entity_id or self._attr_unique_id,
+                self._energy_offset,
+                self._last_panel_reading,
+                self._last_dip_delta,
+            )
+
+        # Register the coordinator listener (and base RestoreSensor setup).
         await super().async_added_to_hass()
 
-        # Try to restore the grace period state from storage
-        if (last_extra_data := await self.async_get_last_extra_data()) is not None:
-            restored = SpanEnergyExtraStoredData.from_dict(last_extra_data.as_dict())
-            if restored:
-                # Restore last_valid_state
-                if restored.last_valid_state is not None:
-                    self._last_valid_state = restored.last_valid_state
+        # Complete grace period restoration from the already-fetched extra data.
+        if restored:
+            if restored.last_valid_state is not None:
+                self._last_valid_state = restored.last_valid_state
 
-                # Restore last_valid_changed timestamp
-                if restored.last_valid_changed is not None:
-                    try:
-                        parsed = datetime.fromisoformat(restored.last_valid_changed)
-                        # Ensure UTC-aware: old storage may have naive timestamps
-                        self._last_valid_changed = (
-                            parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
-                        )
-                        self._restored_from_storage = True
-                        _LOGGER.debug(
-                            "Restored grace period state for %s: "
-                            "last_valid_state=%s, last_valid_changed=%s",
-                            self.entity_id or self._attr_unique_id,
-                            self._last_valid_state,
-                            self._last_valid_changed,
-                        )
-                    except (ValueError, TypeError) as e:
-                        _LOGGER.warning(
-                            "Failed to parse restored last_valid_changed for %s: %s",
-                            self.entity_id or self._attr_unique_id,
-                            e,
-                        )
-
-                # Restore energy dip compensation state (only when enabled)
-                if self._dip_compensation_enabled and self._is_total_increasing:
-                    if restored.energy_offset is not None:
-                        self._energy_offset = restored.energy_offset
-                    if restored.last_panel_reading is not None:
-                        self._last_panel_reading = restored.last_panel_reading
-                    if restored.last_dip_delta is not None:
-                        self._last_dip_delta = restored.last_dip_delta
+            if restored.last_valid_changed is not None:
+                try:
+                    parsed = datetime.fromisoformat(restored.last_valid_changed)
+                    # Ensure UTC-aware: old storage may have naive timestamps
+                    self._last_valid_changed = (
+                        parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+                    )
+                    self._restored_from_storage = True
                     _LOGGER.debug(
-                        "Restored energy dip compensation for %s: "
-                        "offset=%s, last_reading=%s, last_dip=%s",
+                        "Restored grace period state for %s: "
+                        "last_valid_state=%s, last_valid_changed=%s",
                         self.entity_id or self._attr_unique_id,
-                        self._energy_offset,
-                        self._last_panel_reading,
-                        self._last_dip_delta,
+                        self._last_valid_state,
+                        self._last_valid_changed,
+                    )
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning(
+                        "Failed to parse restored last_valid_changed for %s: %s",
+                        self.entity_id or self._attr_unique_id,
+                        e,
                     )
 
         # Seed grace period tracking from the last stored HA state when extra data

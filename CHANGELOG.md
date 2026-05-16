@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.7] - 5/2026
+
+### Fixed
+
+- **Door sensor no longer shows "Unavailable" when the panel reports an unknown door state** — The underlying firmware reports the door state as `UNKNOWN`
+  rather than `OPEN` or `CLOSED` on boot. The door sensor now correctly shows "Unknown" state instead of becoming unavailable. The same fix applies to the
+  grid-islandable and BESS connected binary sensors.
+
+- **Energy statistics no longer spike when the panel reconnects quickly after an integration reload** — If the panel came back online within ~1 second of a
+  reload (e.g. a brief network blip or panel restart), the dip compensation offset could fail to apply before the first coordinator update fired, causing HA
+  statistics to record the raw panel counter as a fresh counter-reset value and permanently inflate cumulative energy totals. The offset is now restored before
+  the coordinator listener is registered.
+
+- **Favorites view no longer goes blank** after returning to Home Assistant from a backgrounded browser tab.
+- **Circuit names display fully on narrow displays** — the row folds to a second line when the name would otherwise truncate.
+- **Favoriting an EVSE now shows it as a device card** instead of a circuit row, matching the By Panel view.
+
+### Changed
+
+- **Dashboard now ships its own frontend components** so it no longer breaks when Home Assistant migrates its internal UI library (per
+  [Frontend Component Updates 2026.4](https://developers.home-assistant.io/blog/2026/03/25/frontend-component-updates-2026.4)). No visual change; bundle grows
+  ~500 KB.
+
 ## [2.0.6] - 4/2026
 
 **Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
