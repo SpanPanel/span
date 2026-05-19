@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.8] - 5/2026
+
+### Fixed
+
+- **Integration reconnects automatically after a panel firmware upgrade** — previously, if the panel renewed its security certificate (for example during a
+  firmware update), the integration could get stuck offline and require a manual reload from the Devices & Services page. It now recovers on its own.
+- **Non-default panel ports now connect correctly** — panels configured to use a port other than the default are reached on the right port at startup.
+
 ## [2.0.7] - 5/2026
 
 ### Fixed
