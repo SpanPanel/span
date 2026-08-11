@@ -1,5 +1,6 @@
 """Tests for GFE override buttons and BESS connected binary sensor."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from custom_components.span_panel.button import (
     SpanPanelGFEOverrideButton,
 )
 from custom_components.span_panel.helpers import has_bess
+from custom_components.span_panel.sensor_panel import _grid_forming_device_name
 
 from .factories import SpanPanelSnapshotFactory
 
@@ -206,3 +208,37 @@ class TestGFEOverrideButtons:
             coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
         )
         assert button.available is True
+
+
+class TestGridFormingDeviceAttribute:
+    """The GFE sensor's `grid_forming_device` attribute."""
+
+    def test_the_attribute_is_absent_when_the_library_has_no_mid(self) -> None:
+        """Degrades to nothing against span-panel-api 2.6.4, which has no `mid` field.
+
+        Also the correct answer on any flat panel: no flat firmware publishes a MID, so
+        there is no forming device to name.
+        """
+        snapshot = SpanPanelSnapshotFactory.create(dominant_power_source="BATTERY")
+
+        assert _grid_forming_device_name(snapshot) is None
+
+    def test_the_attribute_is_the_display_name_not_the_wire_id(self) -> None:
+        """A Homie device id is not a Home Assistant device id.
+
+        The state keeps the closed enum automations compare against; this refines it with
+        the part a person recognises.
+        """
+        mid = SimpleNamespace(
+            grid_forming_entity="sim-40t-001-SIM-BESS-40T-001",
+            grid_forming_device_name="Battery",
+        )
+        snapshot = SimpleNamespace(mid=mid)
+
+        assert _grid_forming_device_name(snapshot) == "Battery"
+
+    def test_no_name_when_the_grid_itself_is_forming(self) -> None:
+        """There is no device to name, so the attribute stays off the sensor."""
+        snapshot = SimpleNamespace(mid=SimpleNamespace(grid_forming_device_name=None))
+
+        assert _grid_forming_device_name(snapshot) is None

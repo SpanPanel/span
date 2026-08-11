@@ -28,6 +28,30 @@ from .sensor_definitions import (
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
+def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:
+    """Return the forming device's readable name, when the library knows it.
+
+    The state stays the source *class* — `GRID`, `BATTERY`, `PV` — because that is the
+    closed enum automations compare against and it must not change. v1.0 additionally
+    knows *which* device, which flat never did, and that belongs here: an attribute
+    refines a value already on screen without adding entity-list noise, and cannot break
+    an automation that never referenced it.
+
+    Deliberately the display name and not the wire id. `sim-40t-001-SIM-BESS-40T-001` is
+    a Homie device id, not a Home Assistant one, and an opaque string on a dashboard is
+    worse than none. The id stays in the snapshot for correlation and diagnostics.
+
+    `getattr` because `mid` arrived in span-panel-api 3.0.0b3 and this integration still
+    pins 2.6.4, where the field does not exist. Reads `None` there, which is also what it
+    reads on any flat panel — no flat firmware publishes a MID at all.
+    """
+    mid = getattr(snapshot, "mid", None)
+    if mid is None:
+        return None
+    name: str | None = getattr(mid, "grid_forming_device_name", None)
+    return name
+
+
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
     """Span Panel data status sensor entity."""
 
@@ -113,6 +137,11 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         attributes["panel_size"] = snapshot.panel_size
         if snapshot.wifi_ssid is not None:
             attributes["wifi_ssid"] = snapshot.wifi_ssid
+
+        if self.entity_description.key == "grid_forming_entity":
+            forming = _grid_forming_device_name(snapshot)
+            if forming is not None:
+                attributes["grid_forming_device"] = forming
 
         return attributes or None
 
