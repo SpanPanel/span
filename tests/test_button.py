@@ -101,10 +101,15 @@ async def test_gfe_override_button_server_error_creates_notification() -> None:
 
 
 def test_gfe_override_button_available_only_when_override_is_relevant() -> None:
-    """Availability should reflect panel state and whether firmware already has control."""
+    """Availability should reflect panel state and whether firmware already has control.
+
+    Keyed on `dsm_state` rather than `dominant_power_source`: the guard asks "are we
+    already on the grid", and that is populated on both wire schemas where the GFE is
+    not — under v1.0 it is `None`, so the old comparison never fired.
+    """
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
-        dominant_power_source="BATTERY",
+        dsm_state="DSM_OFF_GRID",
     )
     coordinator = _make_button_coordinator(snapshot)
     button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
@@ -114,16 +119,18 @@ def test_gfe_override_button_available_only_when_override_is_relevant() -> None:
     coordinator.panel_offline = True
     assert button.available is False
 
+    # BESS reachable: firmware sets the grid state itself, so there is nothing to assert.
     coordinator.panel_offline = False
     coordinator.data = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=True),
-        dominant_power_source="BATTERY",
+        dsm_state="DSM_OFF_GRID",
     )
     assert button.available is False
 
+    # Already on grid: the assertion would be a no-op, and firmware would reject it.
     coordinator.data = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
-        dominant_power_source="GRID",
+        dsm_state="DSM_ON_GRID",
     )
     assert button.available is False
 

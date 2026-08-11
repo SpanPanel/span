@@ -67,10 +67,16 @@ class TestBessConnectedBinarySensor:
 def _make_gfe_coordinator(
     dominant_power_source: str | None = "GRID",
     battery: SpanBatterySnapshot | None = None,
+    dsm_state: str = "DSM_ON_GRID",
 ) -> MagicMock:
-    """Build a mock coordinator for GFE button tests."""
+    """Build a mock coordinator for GFE button tests.
+
+    `dsm_state` is what the button's availability guard reads; `dominant_power_source`
+    stays because other tests here assert on the GFE sensor itself.
+    """
     snapshot = SpanPanelSnapshotFactory.create(
         dominant_power_source=dominant_power_source,
+        dsm_state=dsm_state,
         battery=battery if battery is not None else SpanBatterySnapshot(),
     )
 
@@ -154,9 +160,9 @@ class TestGFEOverrideButtons:
             mock_notification.assert_called_once()
 
     def test_available_when_bess_offline_and_not_grid(self) -> None:
-        """Button is available when BESS is offline and GFE is not GRID."""
+        """Button is available when BESS is offline and the panel is not on grid."""
         coordinator = _make_gfe_coordinator(
-            dominant_power_source="BATTERY",
+            dsm_state="DSM_OFF_GRID",
             battery=SpanBatterySnapshot(soe_percentage=50.0, connected=False),
         )
         coordinator.panel_offline = False
@@ -190,9 +196,9 @@ class TestGFEOverrideButtons:
         assert button.available is False
 
     def test_available_when_no_bess(self) -> None:
-        """Button is available when no BESS is commissioned and GFE is not GRID."""
+        """Button is available when no BESS is commissioned and the panel is not on grid."""
         coordinator = _make_gfe_coordinator(
-            dominant_power_source="BATTERY",
+            dsm_state="DSM_OFF_GRID",
             battery=SpanBatterySnapshot(),
         )
         coordinator.panel_offline = False

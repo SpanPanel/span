@@ -90,9 +90,19 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         """Return entity availability.
 
         The override is only relevant when BESS communication is lost and the
-        panel is not already reporting grid-connected. When BESS is online or
-        GFE is already GRID, firmware is managing correctly and the button
+        panel is not already reporting grid-connected. When BESS is online or the
+        panel already reads on-grid, firmware is managing correctly and the button
         should not be pressable.
+
+        The second check reads `dsm_state`, not the grid-forming entity. It asks
+        "are we already on the grid", which is what `dsm_state` answers directly and
+        the GFE answers only by implication -- and, unlike the GFE, it is populated on
+        both wire schemas, so this stays free of any knowledge of which one is
+        underneath. It used to compare `dominant_power_source` to `"GRID"`, which is
+        `None` under v1.0 and so never fired there at all.
+
+        One useful consequence: `dsm_state` folds in the user's own assertion, so once
+        a press takes effect the button disables itself rather than inviting a second.
         """
         if getattr(self.coordinator, "panel_offline", False):
             return False
@@ -100,10 +110,9 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
             return False
         snapshot: SpanPanelSnapshot = self.coordinator.data
         bess_connected = snapshot.battery.connected if snapshot.battery else None
-        gfe = snapshot.dominant_power_source
         if bess_connected is True:
             return False
-        if gfe == "GRID":
+        if snapshot.dsm_state == "DSM_ON_GRID":
             return False
         return True
 
