@@ -9,6 +9,12 @@ requires-python = ">=3.14.3,<3.15"
 dependencies = [
     "homeassistant==2026.5.4",
     "span-panel-api==3.0.0b3",
+    # Separate distributions, not dependencies of the bootstrap: adapters are found
+    # through the `span_panel_api.schema_adapters` entry-point group, so each one has
+    # to be installed for discovery to see it. manifest.json carries the same three,
+    # and that is the list Home Assistant actually reads.
+    "span-panel-api-schema-0==1.0.0b3",
+    "span-panel-api-schema-1==0.1.0b3",
 ]
 
 [dependency-groups]
@@ -38,6 +44,8 @@ package = false
 # This branch develops against the in-progress schema-1 adapter, which lives in a
 # worktree rather than the primary checkout the symlink points at.
 span-panel-api = { path = "../../span/span-panel-api-p2", editable = true }
+span-panel-api-schema-0 = { path = "../../span/span-panel-api-p2/packages/schema-0", editable = true }
+span-panel-api-schema-1 = { path = "../../span/span-panel-api-p2/packages/schema-1", editable = true }
 
 [tool.jscpd]
 path = ["custom_components/span_panel", "./*.{html,md}"]
