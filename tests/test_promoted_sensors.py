@@ -201,7 +201,7 @@ class TestBessDeviceInfo:
     def test_bess_device_info_basic(self):
         battery = SpanBatterySnapshotFactory.create(
             vendor_name="Tesla",
-            product_name="Powerwall 2",
+            model="Powerwall 2",
             serial_number="TW-001",
             software_version="2.1.0",
         )
@@ -247,7 +247,7 @@ class TestBessMetadataSensorDefinitions:
         assert desc.value_fn(battery) == "Enphase"
 
     def test_model_value_function(self):
-        battery = SpanBatterySnapshotFactory.create(product_name="IQ Battery 10")
+        battery = SpanBatterySnapshotFactory.create(model="IQ Battery 10")
         desc = next(d for d in BESS_METADATA_SENSORS if d.key == "model")
         assert desc.value_fn(battery) == "IQ Battery 10"
 
@@ -334,7 +334,7 @@ class TestPVMetadataSensorDefinitions:
 
     def test_pv_product_value_function(self):
         snapshot = SpanPanelSnapshotFactory.create(
-            pv=SpanPVSnapshot(product_name="SE7600H")
+            pv=SpanPVSnapshot(model="SE7600H")
         )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_product")
         assert desc.value_fn(snapshot) == "SE7600H"

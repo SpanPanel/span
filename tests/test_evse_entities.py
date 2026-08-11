@@ -172,7 +172,7 @@ class TestEvseDeviceInfo:
         evse = SpanEvseSnapshotFactory.create(
             node_id="evse-0",
             vendor_name="SPAN",
-            product_name="SPAN Drive",
+            model="SPAN Drive",
             serial_number="SN123",
             software_version="2.0.0",
         )
@@ -193,7 +193,7 @@ class TestEvseDeviceInfo:
     def test_evse_device_info_fallback_names(self):
         evse = SpanEvseSnapshotFactory.create(
             vendor_name=None,
-            product_name=None,
+            model=None,
         )
         info = evse_device_info("panel-serial", evse, "Span Panel", display_suffix=None)
         assert info.get("name") == "Span Panel EV Charger"
@@ -202,7 +202,7 @@ class TestEvseDeviceInfo:
 
     def test_evse_device_info_serial_suffix(self):
         evse = SpanEvseSnapshotFactory.create(
-            product_name="SPAN Drive",
+            model="SPAN Drive",
             serial_number="SN-EVSE-001",
         )
         info = evse_device_info(
@@ -263,7 +263,7 @@ class TestEvseSnapshotFactory:
         assert evse.lock_state == "LOCKED"
         assert evse.advertised_current_a == 32.0
         assert evse.vendor_name == "SPAN"
-        assert evse.product_name == "SPAN Drive"
+        assert evse.model == "SPAN Drive"
 
     def test_available_factory(self):
         evse = SpanEvseSnapshotFactory.create_available()

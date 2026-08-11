@@ -317,7 +317,7 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
     """Battery helpers should create battery power, SoE, and metadata sensors."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(
-            soe_percentage=75.0, vendor_name="Tesla", product_name="Powerwall"
+            soe_percentage=75.0, vendor_name="Tesla", model="Powerwall"
         )
     )
     coordinator = MagicMock()

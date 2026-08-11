@@ -75,12 +75,12 @@ SENSOR_FIELD_MAP: dict[str, str] = {
     "soe_kwh": "battery.soe_kwh",
     # --- BESS metadata sensors -----------------------------------------------
     "vendor": "battery.vendor_name",
-    "model": "battery.product_name",
+    "model": "battery.model",
     "serial_number": "battery.serial_number",
     "firmware_version": "battery.software_version",
     # --- PV metadata sensors -------------------------------------------------
     "pv_vendor": "pv.vendor_name",
-    "pv_product": "pv.product_name",
+    "pv_product": "pv.model",
     "pv_nameplate_capacity": "pv.nameplate_capacity_w",
     # --- EVSE sensors --------------------------------------------------------
     "evse_status": "evse.status",

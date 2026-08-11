@@ -375,7 +375,7 @@ BESS_METADATA_SENSORS: tuple[
         key="model",
         translation_key="bess_model",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda b: b.product_name,
+        value_fn=lambda b: b.model,
     ),
     SpanBessMetadataSensorEntityDescription(
         key="serial_number",
@@ -443,7 +443,7 @@ PV_METADATA_SENSORS: tuple[
         key="pv_product",
         translation_key="pv_product",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda s: s.pv.product_name,
+        value_fn=lambda s: s.pv.model,
     ),
     SpanPVMetadataSensorEntityDescription(
         key="pv_nameplate_capacity",

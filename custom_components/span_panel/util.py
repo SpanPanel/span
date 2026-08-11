@@ -39,7 +39,9 @@ def bess_device_info(
         identifiers={(DOMAIN, f"{panel_identifier}_bess")},
         name=name,
         manufacturer=battery.vendor_name or "Unknown",
-        model=battery.product_name or "Battery Storage",
+        # `model` is the human designation on both schemas now: v1.0 publishes it as
+        # `info/model` and schema_0 translates flat's `bess/product-name` into it.
+        model=battery.model or "Battery Storage",
         serial_number=battery.serial_number,
         sw_version=battery.software_version,
         via_device=(DOMAIN, panel_identifier),
@@ -53,14 +55,14 @@ def evse_device_info(
     display_suffix: str | None = None,
 ) -> DeviceInfo:
     """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
-    base_name = evse.product_name or "EV Charger"
+    base_name = evse.model or "EV Charger"
     name = f"{base_name} ({display_suffix})" if display_suffix else base_name
     name = f"{panel_name} {name}"
     return DeviceInfo(
         identifiers={(DOMAIN, f"{panel_identifier}_evse_{evse.node_id}")},
         name=name,
         manufacturer=evse.vendor_name or "SPAN",
-        model=evse.product_name or "SPAN Drive",
+        model=evse.model or "SPAN Drive",
         serial_number=evse.serial_number,
         sw_version=evse.software_version,
         via_device=(DOMAIN, panel_identifier),
