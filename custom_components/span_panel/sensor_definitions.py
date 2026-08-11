@@ -31,6 +31,7 @@ from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
     SpanEvseSnapshot,
+    SpanMidSnapshot,
     SpanPanelSnapshot,
 )
 
@@ -355,6 +356,41 @@ class SpanBessMetadataSensorEntityDescription(
     SensorEntityDescription, SpanBessMetadataRequiredKeysMixin
 ):
     """Describes a BESS metadata sensor entity."""
+
+
+@dataclass(frozen=True)
+class SpanMidRequiredKeysMixin:
+    """Required keys mixin for MID sensors."""
+
+    value_fn: Callable[[SpanMidSnapshot], str | None]
+
+
+@dataclass(frozen=True)
+class SpanMidSensorEntityDescription(SensorEntityDescription, SpanMidRequiredKeysMixin):
+    """Describes a sensor on the Microgrid Interconnect Device."""
+
+
+MID_SENSORS: tuple[SpanMidSensorEntityDescription, ...] = (
+    SpanMidSensorEntityDescription(
+        key="mid_grid_state",
+        translation_key="mid_grid_state",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        options=["up", "down", "degraded", "unknown"],
+        value_fn=lambda m: (m.grid_state or "unknown").lower(),
+    ),
+)
+"""Sensors on the MID device.
+
+Only `grid-state` — utility-supply health, genuinely new in v1.0 with no flat
+equivalent, and the one non-metadata addition the MID brings.
+
+Islanding state and the grid-forming entity are deliberately *not* duplicated here.
+Both already reach a user through entities that predate v1.0 — `dsm_state` and
+`grid_forming_entity` on the panel — and those must keep their ids and their history.
+Showing the same fact twice is not the benign cell of the absorb-or-surface policy;
+adding a fact nobody had is.
+"""
 
 
 BESS_METADATA_SENSORS: tuple[

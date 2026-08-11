@@ -189,6 +189,15 @@
       "bess_vendor": {
         "name": "Vendor"
       },
+      "mid_grid_state": {
+        "name": "Grid State",
+        "state": {
+          "up": "Up",
+          "down": "Down",
+          "degraded": "Degraded",
+          "unknown": "Unknown"
+        }
+      },
       "current_run_config": {
         "name": "Current Run Config",
         "state": {

@@ -10,6 +10,7 @@ from span_panel_api import (
     SpanBatterySnapshot,
     SpanCircuitSnapshot,
     SpanEvseSnapshot,
+    SpanMidSnapshot,
     SpanPanelSnapshot,
     SpanPVSnapshot,
 )
@@ -221,6 +222,8 @@ class SpanPanelSnapshotFactory:
         wwan_link: bool = False,
         circuits: dict[str, SpanCircuitSnapshot] | None = None,
         battery: SpanBatterySnapshot | None = None,
+        # v1.0 only. Defaults to None so every existing fixture stays a flat panel.
+        mid: SpanMidSnapshot | None = None,
         dominant_power_source: str | None = None,
         grid_state: str | None = None,
         grid_islandable: bool | None = None,
@@ -270,6 +273,7 @@ class SpanPanelSnapshotFactory:
             wwan_link=wwan_link,
             circuits=circuits,
             battery=battery,
+            mid=mid,
             dominant_power_source=dominant_power_source,
             grid_state=grid_state,
             grid_islandable=grid_islandable,

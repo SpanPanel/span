@@ -15,6 +15,7 @@ from .entity_resolver import (  # noqa: F401
     build_bess_unique_id_for_entry,
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
+    build_mid_unique_id_for_entry,
     build_select_unique_id_for_entry,
     build_switch_unique_id_for_entry,
     construct_circuit_unique_id_for_entry,
@@ -37,6 +38,7 @@ from .id_builder import (  # noqa: F401
     build_binary_sensor_unique_id,
     build_circuit_unique_id,
     build_evse_unique_id,
+    build_mid_unique_id,
     build_panel_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
@@ -59,7 +61,9 @@ __all__ = [
     "PANEL_SUFFIX_MAPPING",
     "async_create_span_notification",
     "build_bess_unique_id",
+    "build_mid_unique_id",
     "build_bess_unique_id_for_entry",
+    "build_mid_unique_id_for_entry",
     "build_binary_sensor_unique_id",
     "build_binary_sensor_unique_id_for_entry",
     "build_circuit_unique_id",
@@ -95,6 +99,7 @@ __all__ = [
     "get_user_friendly_suffix",
     "has_bess",
     "has_evse",
+    "has_mid",
     "has_power_flows",
     "has_pv",
     "is_panel_level_sensor_key",
@@ -251,6 +256,24 @@ def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.power_flow_site is not None
 
 
+def has_mid(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether a Microgrid Interconnect Device is published.
+
+    Unambiguous, unlike `has_bess`, which has to infer presence from
+    `soe_percentage is not None` because the battery field is always there. The library
+    makes `mid` optional precisely so presence needs no sentinel.
+
+    Always false on flat firmware, which publishes no MID at all.
+
+    DUAL-SCHEMA: this integration must serve flat and parent/child panels side by side until
+    every panel has hot-loaded v1.0. Grep this token to find every place that branches on
+    which schema a panel is publishing; when the flat path is finally retired, these are
+    the conditionals that become unconditional and the flat branches that get deleted.
+    Nothing here may *assume* parent/child before then.
+    """
+    return snapshot.mid is not None
+
+
 def has_evse(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether an EVSE (EV charger) is commissioned."""
     return len(snapshot.evse) > 0
@@ -259,7 +282,7 @@ def has_evse(snapshot: SpanPanelSnapshot) -> bool:
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """Derive the set of optional capabilities present in the snapshot.
 
-    Used by the coordinator to detect when new hardware (BESS, PV, EVSE) appears
+    Used by the coordinator to detect when new hardware (BESS, PV, EVSE, MID) appears
     and trigger a reload so new sensors are created.
     """
     caps: set[str] = set()
@@ -271,4 +294,6 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
         caps.add("power_flows")
     if has_evse(snapshot):
         caps.add("evse")
+    if has_mid(snapshot):
+        caps.add("mid")
     return frozenset(caps)

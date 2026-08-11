@@ -7,11 +7,12 @@ from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import UNDEFINED
-from span_panel_api import SpanBatterySnapshot, SpanPanelSnapshot
+from span_panel_api import SpanBatterySnapshot, SpanMidSnapshot, SpanPanelSnapshot
 
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_bess_unique_id_for_entry,
+    build_mid_unique_id_for_entry,
     construct_panel_unique_id_for_entry,
     construct_synthetic_unique_id_for_entry,
     get_panel_entity_suffix,
@@ -19,6 +20,7 @@ from .helpers import (
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import (
     SpanBessMetadataSensorEntityDescription,
+    SpanMidSensorEntityDescription,
     SpanPanelBatterySensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelStatusSensorEntityDescription,
@@ -41,15 +43,15 @@ def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:
     a Homie device id, not a Home Assistant one, and an opaque string on a dashboard is
     worse than none. The id stays in the snapshot for correlation and diagnostics.
 
-    `getattr` because `mid` arrived in span-panel-api 3.0.0b3 and this integration still
-    pins 2.6.4, where the field does not exist. Reads `None` there, which is also what it
-    reads on any flat panel — no flat firmware publishes a MID at all.
+    DUAL-SCHEMA: `None` on any flat panel, which publishes no MID, so the attribute simply
+    does not appear there. The library field is always present now that the pin is
+    3.0.0b3 — the conditional is about what the *panel* publishes, not about which
+    library is installed, and the earlier `getattr` guarding the latter has gone.
     """
-    mid = getattr(snapshot, "mid", None)
+    mid = snapshot.mid
     if mid is None:
         return None
-    name: str | None = getattr(mid, "grid_forming_device_name", None)
-    return name
+    return mid.grid_forming_device_name
 
 
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
@@ -346,6 +348,53 @@ class SpanBessMetadataSensor(
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanBatterySnapshot:
         """Get the data source for the BESS metadata sensor."""
         return snapshot.battery
+
+
+class SpanMidSensor(SpanSensorBase[SpanMidSensorEntityDescription, SpanMidSnapshot]):
+    """A sensor on the Microgrid Interconnect Device sub-device."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanMidSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+        device_info_override: DeviceInfo,
+    ) -> None:
+        """Initialize the MID sensor."""
+        super().__init__(data_coordinator, description, snapshot)
+        self._attr_device_info = device_info_override
+
+    def _generate_unique_id(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanMidSensorEntityDescription,
+    ) -> str:
+        """Generate unique ID for MID sensors."""
+        return build_mid_unique_id_for_entry(
+            self.coordinator, snapshot, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanMidSensorEntityDescription,
+    ) -> str:
+        """Generate friendly name for MID sensors."""
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "MID Sensor"
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanMidSnapshot:
+        """Get the data source for the MID sensor.
+
+        The MID is optional, so a snapshot without one has no data source. Entities are
+        only created when `has_mid` is true, and a panel that stops publishing its MID
+        makes them unavailable rather than reaching this.
+        """
+        mid = snapshot.mid
+        if mid is None:
+            raise ValueError("MID sensor asked for a data source on a snapshot with no MID")
+        return mid
 
 
 class SpanPVMetadataSensor(

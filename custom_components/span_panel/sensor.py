@@ -22,6 +22,7 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import (
     has_bess,
     has_evse,
+    has_mid,
     has_power_flows,
     has_pv,
     resolve_evse_display_suffix,
@@ -46,6 +47,7 @@ from .sensor_definitions import (
     L1_VOLTAGE_SENSOR,
     L2_VOLTAGE_SENSOR,
     MAIN_BREAKER_RATING_SENSOR,
+    MID_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
     PANEL_POWER_SENSORS,
@@ -60,6 +62,7 @@ from .sensor_definitions import (
 from .sensor_evse import SpanEvseSensor
 from .sensor_panel import (
     SpanBessMetadataSensor,
+    SpanMidSensor,
     SpanPanelBattery,
     SpanPanelEnergySensor,
     SpanPanelPanelStatus,
@@ -67,11 +70,12 @@ from .sensor_panel import (
     SpanPanelStatus,
     SpanPVMetadataSensor,
 )
-from .util import bess_device_info, evse_device_info
+from .util import bess_device_info, evse_device_info, mid_device_info
 
 # Export the sensor classes for backward compatibility with tests
 __all__ = [
     "SpanBessMetadataSensor",
+    "SpanMidSensor",
     "SpanCircuitEnergySensor",
     "SpanCircuitPowerSensor",
     "SpanEnergySensorBase",
@@ -304,6 +308,42 @@ def _build_bess_device_info(
     return bess_device_info(snapshot.serial_number, snapshot.battery, panel_name)
 
 
+def _build_mid_device_info(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> DeviceInfo:
+    """DeviceInfo for the Microgrid Interconnect sub-device."""
+    panel_name = (
+        coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
+        or "Span Panel"
+    )
+    mid = snapshot.mid
+    if mid is None:
+        raise ValueError("cannot build MID device info for a snapshot with no MID")
+    return mid_device_info(snapshot.serial_number, mid, panel_name)
+
+
+def create_mid_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanMidSensor]:
+    """Create the Microgrid Interconnect sub-device and its sensors.
+
+    v1.0 only, and purely additive: no flat panel publishes a MID, so `has_mid` is false
+    everywhere today and nothing a user has changes. Presence is the library's optional
+    `mid` field rather than a sentinel value, so there is nothing to infer.
+
+    DUAL-SCHEMA: gated on what the snapshot carries, never on a version or a config flag. A
+    panel that hot-loads parent/child mid-life gains the MID as a capability change, the
+    coordinator reloads, and the device appears; one that never does simply never sees
+    it. When the flat path retires, this gate can go and the sensors become
+    unconditional.
+    """
+    if not has_mid(snapshot):
+        return []
+
+    mid_info = _build_mid_device_info(coordinator, snapshot)
+    return [SpanMidSensor(coordinator, desc, snapshot, mid_info) for desc in MID_SENSORS]
+
+
 def create_battery_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
 ) -> list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor]:
@@ -389,6 +429,7 @@ def create_native_sensors(
     | SpanBessMetadataSensor
     | SpanPVMetadataSensor
     | SpanEvseSensor
+    | SpanMidSensor
 ]:
     """Create all native sensors for the platform."""
     entities: list[
@@ -403,6 +444,7 @@ def create_native_sensors(
         | SpanBessMetadataSensor
         | SpanPVMetadataSensor
         | SpanEvseSensor
+        | SpanMidSensor
     ] = []
 
     # Create different sensor types
@@ -411,6 +453,7 @@ def create_native_sensors(
     if config_entry.options.get(ENABLE_UNMAPPED_CIRCUIT_SENSORS, False):
         entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
     entities.extend(create_battery_sensors(coordinator, snapshot))
+    entities.extend(create_mid_sensors(coordinator, snapshot))
     entities.extend(create_power_flow_sensors(coordinator, snapshot))
     entities.extend(create_evse_sensors(coordinator, snapshot))
 

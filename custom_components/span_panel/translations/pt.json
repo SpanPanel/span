@@ -301,6 +301,15 @@
           "unknown": "Desconhecido"
         }
       },
+      "mid_grid_state": {
+        "name": "Estado da rede",
+        "state": {
+          "up": "Ativa",
+          "down": "Em falha",
+          "degraded": "Degradada",
+          "unknown": "Desconhecido"
+        }
+      },
       "pv_nameplate_capacity": {
         "name": "Capacidade Nominal PV"
       },

@@ -3,7 +3,12 @@
 import logging
 
 from homeassistant.helpers.device_registry import DeviceInfo
-from span_panel_api import SpanBatterySnapshot, SpanEvseSnapshot, SpanPanelSnapshot
+from span_panel_api import (
+    SpanBatterySnapshot,
+    SpanEvseSnapshot,
+    SpanMidSnapshot,
+    SpanPanelSnapshot,
+)
 
 from .const import DOMAIN
 
@@ -44,6 +49,36 @@ def bess_device_info(
         model=battery.model or "Battery Storage",
         serial_number=battery.serial_number,
         sw_version=battery.software_version,
+        via_device=(DOMAIN, panel_identifier),
+    )
+
+
+def mid_device_info(
+    panel_identifier: str,
+    mid: SpanMidSnapshot,
+    panel_name: str,
+) -> DeviceInfo:
+    """Create DeviceInfo for the Microgrid Interconnect Device.
+
+    v1.0 publishes the MID as a device of its own and puts the `grid` capability on it
+    rather than on the enclosure — "the enclosure device itself does not publish them" —
+    so islanding decisions belong to hardware with its own identity. Registering it here
+    keeps the integration's model in step with the library's rather than folding a
+    device's properties onto the panel.
+
+    Purely additive: no flat panel publishes a MID, so nothing a user has today changes.
+
+    `via_device` the panel, matching BESS and EVSE, even though the wire tree makes the
+    MID a child of the BESS. Home Assistant's device graph is about what a user navigates,
+    and every SPAN sub-device hangs off the panel there; mirroring the Homie parentage
+    would put the MID one level deeper than its siblings for no reader's benefit.
+    """
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{panel_identifier}_mid")},
+        name=f"{panel_name} Microgrid Interconnect",
+        manufacturer=mid.vendor_name or "Unknown",
+        model=mid.model or "Microgrid Interconnect Device",
+        serial_number=mid.serial_number,
         via_device=(DOMAIN, panel_identifier),
     )
 

@@ -20,6 +20,7 @@ from .id_builder import (
     build_binary_sensor_unique_id,
     build_circuit_unique_id,
     build_evse_unique_id,
+    build_mid_unique_id,
     build_panel_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
@@ -152,6 +153,17 @@ def build_bess_unique_id_for_entry(
     """Build BESS unique_id using the panel serial from the snapshot."""
     identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_bess_unique_id(identifier, description_key)
+
+
+def build_mid_unique_id_for_entry(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    description_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Build MID unique_id using the panel serial from the snapshot."""
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
+    return build_mid_unique_id(identifier, description_key)
 
 
 def get_device_identifier_for_entry(

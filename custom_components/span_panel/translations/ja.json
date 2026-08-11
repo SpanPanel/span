@@ -301,6 +301,15 @@
           "unknown": "不明"
         }
       },
+      "mid_grid_state": {
+        "name": "系統状態",
+        "state": {
+          "up": "正常",
+          "down": "停電",
+          "degraded": "劣化",
+          "unknown": "不明"
+        }
+      },
       "pv_nameplate_capacity": {
         "name": "PV定格容量"
       },

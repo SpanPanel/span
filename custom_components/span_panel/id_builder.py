@@ -314,6 +314,18 @@ def build_bess_unique_id(serial: str, description_key: str) -> str:
     return f"span_{serial}_bess_{description_key}"
 
 
+def build_mid_unique_id(serial: str, description_key: str) -> str:
+    """Build unique ID for Microgrid Interconnect Device sensors (pure function).
+
+    Returns: "span_{serial}_mid_{description_key}"
+
+    Keyed on the panel serial rather than the MID's own, matching `build_bess_unique_id`.
+    The MID is one per enclosure, so the panel serial already makes it unique, and a
+    device-derived key would move if the BESS the MID ships with were ever replaced.
+    """
+    return f"span_{serial}_mid_{description_key}"
+
+
 def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str:
     """Build unique ID for EVSE sensor/binary_sensor entities (pure function).
 
