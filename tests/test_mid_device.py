@@ -59,17 +59,19 @@ def test_presence_needs_no_sentinel() -> None:
 def test_the_mid_becomes_its_own_device_hung_off_the_panel() -> None:
     """Identity renders on a device card rather than being folded onto the panel.
 
-    `via_device` is the panel even though the wire tree makes the MID a child of the
+    Linked to the panel even though the wire tree makes the MID a child of the
     BESS: Home Assistant's device graph is what a user navigates, and every SPAN
     sub-device hangs off the panel there.
     """
-    info = mid_device_info("sim-40t-001", _mid(), "SPAN Panel")
+    info = mid_device_info(
+        "sim-40t-001", _mid(), "SPAN Panel", panel_device_id="panel-device-id"
+    )
 
     assert info["identifiers"] == {("span_panel", "sim-40t-001_mid")}
     assert info["name"] == "SPAN Panel Microgrid Interconnect"
     assert info["manufacturer"] == "Span"
     assert info["serial_number"] == "SIM-BESS-40T-001-mid"
-    assert info["via_device"] == ("span_panel", "sim-40t-001")
+    assert info["via_device_id"] == "panel-device-id"
     # The producer publishes no MID model today; the card still needs a legible one.
     assert info["model"] == "Microgrid Interconnect Device"
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.binary_sensor import (
     BESS_CONNECTED_SENSOR,
     BINARY_SENSORS,
@@ -41,6 +42,9 @@ def _make_coordinator(snapshot) -> MagicMock:
         options={},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
+    )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator

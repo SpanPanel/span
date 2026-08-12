@@ -46,7 +46,11 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
         self._attr_device_info = evse_device_info(
-            panel_identifier, evse, panel_name, display_suffix
+            panel_identifier,
+            evse,
+            panel_name,
+            display_suffix,
+            panel_device_id=data_coordinator.config_entry.runtime_data.panel_device_id,
         )
 
     def _generate_unique_id(

@@ -226,18 +226,20 @@ class TestBessDeviceInfo:
             serial_number="TW-001",
             software_version="2.1.0",
         )
-        info = bess_device_info("sp3-242424-001", battery, "My Panel")
+        info = bess_device_info(
+            "sp3-242424-001", battery, "My Panel", panel_device_id="panel-device-id"
+        )
         assert info.get("identifiers") == {(DOMAIN, "sp3-242424-001_bess")}
         assert info.get("name") == "My Panel Battery"
         assert info.get("manufacturer") == "Tesla"
         assert info.get("model") == "Powerwall 2"
         assert info.get("serial_number") == "TW-001"
         assert info.get("sw_version") == "2.1.0"
-        assert info.get("via_device") == (DOMAIN, "sp3-242424-001")
+        assert info.get("via_device_id") == "panel-device-id"
 
     def test_bess_device_info_defaults_when_none(self):
         battery = SpanBatterySnapshotFactory.create()
-        info = bess_device_info("serial", battery, "Panel")
+        info = bess_device_info("serial", battery, "Panel", panel_device_id="pd")
         assert info.get("manufacturer") == "Unknown"
         assert info.get("model") == "Battery Storage"
         assert info.get("serial_number") is None

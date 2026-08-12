@@ -90,7 +90,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(
@@ -166,10 +167,12 @@ class TestExportCircuitManifest:
         entry_a.mock_state(hass, ConfigEntryState.LOADED)
         entry_b.mock_state(hass, ConfigEntryState.LOADED)
         entry_a.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot_a)
+            coordinator=_make_coordinator(snapshot_a),
+            panel_device_id="panel-device-id",
         )
         entry_b.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot_b)
+            coordinator=_make_coordinator(snapshot_b),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(
@@ -211,7 +214,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(
@@ -254,7 +258,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         # Only register entity for one circuit
@@ -315,7 +320,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(
@@ -361,7 +367,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(
@@ -395,7 +402,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
         # No entities registered
 
@@ -426,7 +434,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(
@@ -458,7 +467,8 @@ class TestExportCircuitManifest:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         _register_power_entity(

@@ -392,7 +392,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(SpanPanelSnapshotFactory.create())
+            coordinator=_make_coordinator(SpanPanelSnapshotFactory.create()),
+            panel_device_id="panel-device-id",
         )
 
         panel_device = _register_panel_device(
@@ -479,7 +480,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
@@ -542,7 +544,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         device = _register_panel_device(hass, "span_entry")
@@ -571,7 +574,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-sub-001")
@@ -649,7 +653,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-evse-001")
@@ -722,7 +727,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-prio-001")
@@ -758,7 +764,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
@@ -797,7 +804,8 @@ class TestHandlePanelTopology:
         entry.add_to_hass(hass)
         entry.mock_state(hass, ConfigEntryState.LOADED)
         entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=_make_coordinator(snapshot)
+            coordinator=_make_coordinator(snapshot),
+            panel_device_id="panel-device-id",
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")

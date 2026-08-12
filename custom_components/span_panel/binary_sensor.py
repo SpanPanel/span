@@ -347,7 +347,11 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
         self._attr_device_info = evse_device_info(
-            panel_identifier, evse, panel_name, display_suffix
+            panel_identifier,
+            evse,
+            panel_name,
+            display_suffix,
+            panel_device_id=data_coordinator.config_entry.runtime_data.panel_device_id,
         )
 
         device_name = data_coordinator.config_entry.data.get(
@@ -400,7 +404,12 @@ async def async_setup_entry(
             or "Span Panel"
         )
 
-        bess_info = bess_device_info(snapshot.serial_number, snapshot.battery, panel_name)
+        bess_info = bess_device_info(
+            snapshot.serial_number,
+            snapshot.battery,
+            panel_name,
+            panel_device_id=config_entry.runtime_data.panel_device_id,
+        )
         entities.append(
             SpanPanelBinarySensor(
                 coordinator, BESS_CONNECTED_SENSOR, device_info_override=bess_info

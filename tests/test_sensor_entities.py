@@ -10,6 +10,7 @@ import pytest
 from span_panel_api import SpanPVSnapshot
 
 from homeassistant.components.sensor import SensorDeviceClass
+from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
     ENABLE_ENERGY_DIP_COMPENSATION,
     USE_CIRCUIT_NUMBERS,
@@ -88,6 +89,9 @@ def _make_coordinator(snapshot, *, options: dict | None = None) -> MagicMock:
         options=options or {},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
+    )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
     )
     coordinator.request_reload = MagicMock()
     coordinator.register_circuit_energy_sensor = MagicMock()
@@ -589,6 +593,9 @@ def test_energy_sensor_coerces_invalid_grace_period_value() -> None:
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
     )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
     )
@@ -657,6 +664,9 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
         options={"use_circuit_numbers": False},
         title="SPAN Panel",
         unique_id=snapshot.serial_number,
+    )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
     )
     description = next(desc for desc in EVSE_SENSORS if desc.key == "evse_status")
 

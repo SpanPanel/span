@@ -177,7 +177,11 @@ class TestEvseDeviceInfo:
             software_version="2.0.0",
         )
         info = evse_device_info(
-            "panel-serial", evse, "Main House", display_suffix="Garage"
+            "panel-serial",
+            evse,
+            "Main House",
+            display_suffix="Garage",
+            panel_device_id="panel-device-id",
         )
         identifiers = info.get("identifiers")
         assert identifiers is not None
@@ -187,15 +191,16 @@ class TestEvseDeviceInfo:
         assert info.get("model") == "SPAN Drive"
         assert info.get("serial_number") == "SN123"
         assert info.get("sw_version") == "2.0.0"
-        via = info.get("via_device")
-        assert via == ("span_panel", "panel-serial")
+        assert info.get("via_device_id") == "panel-device-id"
 
     def test_evse_device_info_fallback_names(self):
         evse = SpanEvseSnapshotFactory.create(
             vendor_name=None,
             model=None,
         )
-        info = evse_device_info("panel-serial", evse, "Span Panel", display_suffix=None)
+        info = evse_device_info(
+            "panel-serial", evse, "Span Panel", display_suffix=None, panel_device_id="pd"
+        )
         assert info.get("name") == "Span Panel EV Charger"
         assert info.get("manufacturer") == "SPAN"
         assert info.get("model") == "SPAN Drive"
@@ -206,13 +211,17 @@ class TestEvseDeviceInfo:
             serial_number="SN-EVSE-001",
         )
         info = evse_device_info(
-            "panel-serial", evse, "Museum Garage", display_suffix="SN-EVSE-001"
+            "panel-serial",
+            evse,
+            "Museum Garage",
+            display_suffix="SN-EVSE-001",
+            panel_device_id="pd",
         )
         assert info.get("name") == "Museum Garage SPAN Drive (SN-EVSE-001)"
 
     def test_evse_device_info_no_serial(self):
         evse = SpanEvseSnapshotFactory.create(serial_number=None)
-        info = evse_device_info("panel-serial", evse, "Span Panel")
+        info = evse_device_info("panel-serial", evse, "Span Panel", panel_device_id="pd")
         assert info.get("serial_number") is None
 
 
@@ -262,8 +271,8 @@ class TestEvseMultipleDevices:
     def test_multiple_evse_device_infos_are_distinct(self):
         evse_a = SpanEvseSnapshotFactory.create(node_id="evse-0")
         evse_b = SpanEvseSnapshotFactory.create(node_id="evse-1")
-        info_a = evse_device_info("panel", evse_a, "Span Panel")
-        info_b = evse_device_info("panel", evse_b, "Span Panel")
+        info_a = evse_device_info("panel", evse_a, "Span Panel", panel_device_id="pd")
+        info_b = evse_device_info("panel", evse_b, "Span Panel", panel_device_id="pd")
         assert info_a.get("identifiers") != info_b.get("identifiers")
 
 

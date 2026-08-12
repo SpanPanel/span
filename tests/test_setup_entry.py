@@ -76,7 +76,7 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
         ) as mock_coordinator_cls,
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(),
+            AsyncMock(return_value="panel-device-id"),
         ) as mock_ensure_device,
         patch.object(
             hass.config_entries, "async_forward_entry_setups", AsyncMock()
@@ -85,7 +85,11 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     ):
         assert await async_setup_entry(hass, entry) is True
 
-    assert entry.runtime_data == SpanPanelRuntimeData(coordinator=coordinator)
+    # The panel's registry id is carried forward, not recomputed: every sub-device
+    # links to it with `via_device_id`, and registration is the only place it is known.
+    assert entry.runtime_data == SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
     assert hass.data[DOMAIN]["websocket_registered"] is True
     mock_ws.assert_called_once_with(hass)
     mock_client_cls.assert_called_once()

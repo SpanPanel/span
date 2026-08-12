@@ -74,6 +74,12 @@ class SpanPanelRuntimeData:
     """Runtime data for a Span Panel config entry."""
 
     coordinator: SpanPanelCoordinator
+    # Registry id of the panel device, which every sub-device (BESS, MID, EVSE)
+    # hangs off with `via_device_id`. Resolved once during setup rather than
+    # per platform: sub-devices are only ever built after the panel device
+    # exists, so an id looked up here is one no caller has to handle the absence
+    # of. See `ensure_device_registered`.
+    panel_device_id: str
 
 
 type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
@@ -211,8 +217,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
         entry.async_on_unload(entry.add_update_listener(update_listener))
 
-        entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator)
-
         snapshot: SpanPanelSnapshot = coordinator.data
         serial_number = snapshot.serial_number
 
@@ -236,7 +240,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         if entry.title == serial_number:
             hass.config_entries.async_update_entry(entry, title=smart_device_name)
 
-        await ensure_device_registered(hass, entry, snapshot, smart_device_name)
+        # Populated here rather than earlier because the panel's registry id is
+        # part of it, and that only exists once the device is registered. Nothing
+        # between the coordinator's first refresh and this point reads
+        # runtime_data, and platforms — which all do — are forwarded below.
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator,
+            panel_device_id=await ensure_device_registered(
+                hass, entry, snapshot, smart_device_name
+            ),
+        )
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
@@ -318,22 +331,34 @@ async def ensure_device_registered(
     entry: SpanPanelConfigEntry,
     snapshot: SpanPanelSnapshot,
     device_name: str,
-) -> None:
+) -> str:
     """Register or reconcile the HA Device before creating sensors.
 
     Ensures the device exists in the device registry with proper naming and
-    identifiers.
+    identifiers, and returns its registry id — the value every sub-device links
+    to. Returned rather than looked up again by each platform because this is
+    the one place the device is known to exist: either it already did, or this
+    call is what created it.
     """
     device_registry = dr.async_get(hass)
 
     serial_number = snapshot.serial_number
     host = entry.data.get(CONF_HOST)
 
-    existing_device = device_registry.async_get_device(identifiers={(DOMAIN, serial_number)})
+    # Scoped to this config entry rather than searching every one. Identifiers
+    # are unique only within an entry, so the unscoped lookup is ambiguous by
+    # construction — it could answer with another integration's device that
+    # happens to share the identifier — which is why it is deprecated and stops
+    # working in 2027.8.
+    existing_device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, serial_number), entry.entry_id
+    )
 
-    if existing_device:
+    if existing_device is not None:
         if existing_device.name == serial_number:
             device_registry.async_update_device(existing_device.id, name=device_name)
-    else:
-        device_info = snapshot_to_device_info(snapshot, device_name, host=host)
-        device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+        return existing_device.id
+
+    device_info = snapshot_to_device_info(snapshot, device_name, host=host)
+    created = device_registry.async_get_or_create(config_entry_id=entry.entry_id, **device_info)
+    return created.id

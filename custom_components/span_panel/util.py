@@ -14,6 +14,15 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Every SPAN sub-device hangs off the panel and says so with `via_device_id` --
+# the panel's *registry* id, not its identifiers. Identifiers are unique only
+# within a config entry, so linking by them is ambiguous by construction; Home
+# Assistant deprecated `via_device` for that reason and stops honouring it in
+# 2027.8. The id is resolved once during setup and carried on the entry's
+# runtime data, because a sub-device is only ever built after the panel device
+# exists -- which is what lets the builders below take a plain `str` and leaves
+# no caller with an absence to handle.
+
 
 def snapshot_to_device_info(
     snapshot: SpanPanelSnapshot,
@@ -37,8 +46,15 @@ def bess_device_info(
     panel_identifier: str,
     battery: SpanBatterySnapshot,
     panel_name: str,
+    *,
+    panel_device_id: str,
 ) -> DeviceInfo:
-    """Create DeviceInfo for a BESS sub-device linked to the parent panel."""
+    """Create DeviceInfo for a BESS sub-device linked to the parent panel.
+
+    Two panel-shaped arguments doing different jobs: `panel_identifier` is the
+    serial this sub-device namespaces its own identity under, `panel_device_id`
+    is the registry id it links to.
+    """
     name = f"{panel_name} Battery"
     return DeviceInfo(
         identifiers={(DOMAIN, f"{panel_identifier}_bess")},
@@ -49,7 +65,7 @@ def bess_device_info(
         model=battery.model or "Battery Storage",
         serial_number=battery.serial_number,
         sw_version=battery.software_version,
-        via_device=(DOMAIN, panel_identifier),
+        via_device_id=panel_device_id,
     )
 
 
@@ -57,6 +73,8 @@ def mid_device_info(
     panel_identifier: str,
     mid: SpanMidSnapshot,
     panel_name: str,
+    *,
+    panel_device_id: str,
 ) -> DeviceInfo:
     """Create DeviceInfo for the Microgrid Interconnect Device.
 
@@ -68,7 +86,7 @@ def mid_device_info(
 
     Purely additive: no flat panel publishes a MID, so nothing a user has today changes.
 
-    `via_device` the panel, matching BESS and EVSE, even though the wire tree makes the
+    Linked to the panel, matching BESS and EVSE, even though the wire tree makes the
     MID a child of the BESS. Home Assistant's device graph is about what a user navigates,
     and every SPAN sub-device hangs off the panel there; mirroring the Homie parentage
     would put the MID one level deeper than its siblings for no reader's benefit.
@@ -79,7 +97,7 @@ def mid_device_info(
         manufacturer=mid.vendor_name or "Unknown",
         model=mid.model or "Microgrid Interconnect Device",
         serial_number=mid.serial_number,
-        via_device=(DOMAIN, panel_identifier),
+        via_device_id=panel_device_id,
     )
 
 
@@ -88,6 +106,8 @@ def evse_device_info(
     evse: SpanEvseSnapshot,
     panel_name: str,
     display_suffix: str | None = None,
+    *,
+    panel_device_id: str,
 ) -> DeviceInfo:
     """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
     base_name = evse.model or "EV Charger"
@@ -100,5 +120,5 @@ def evse_device_info(
         model=evse.model or "SPAN Drive",
         serial_number=evse.serial_number,
         sw_version=evse.software_version,
-        via_device=(DOMAIN, panel_identifier),
+        via_device_id=panel_device_id,
     )

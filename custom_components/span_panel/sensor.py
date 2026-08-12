@@ -196,7 +196,13 @@ def _build_evse_device_info_map(
     mapping: dict[str, DeviceInfo] = {}
     for evse in snapshot.evse.values():
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
-        info = evse_device_info(panel_identifier, evse, panel_name, display_suffix)
+        info = evse_device_info(
+            panel_identifier,
+            evse,
+            panel_name,
+            display_suffix,
+            panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+        )
         mapping[evse.feed_circuit_id] = info
 
     return mapping
@@ -305,7 +311,12 @@ def _build_bess_device_info(
         or "Span Panel"
     )
 
-    return bess_device_info(snapshot.serial_number, snapshot.battery, panel_name)
+    return bess_device_info(
+        snapshot.serial_number,
+        snapshot.battery,
+        panel_name,
+        panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+    )
 
 
 def _build_mid_device_info(
@@ -319,7 +330,12 @@ def _build_mid_device_info(
     mid = snapshot.mid
     if mid is None:
         raise ValueError("cannot build MID device info for a snapshot with no MID")
-    return mid_device_info(snapshot.serial_number, mid, panel_name)
+    return mid_device_info(
+        snapshot.serial_number,
+        mid,
+        panel_name,
+        panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+    )
 
 
 def create_mid_sensors(

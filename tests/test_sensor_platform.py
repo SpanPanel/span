@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
     DOMAIN,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
@@ -236,6 +237,9 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
         title="SPAN Panel",
         options={USE_CIRCUIT_NUMBERS: False},
     )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
 
     mapping = _build_evse_device_info_map(coordinator, snapshot)
 
@@ -274,6 +278,9 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry = entry
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
 
     entities = create_circuit_sensors(coordinator, snapshot, entry)
     keys = [entity.original_key for entity in entities]
@@ -306,6 +313,9 @@ def test_create_unmapped_circuit_sensors_only_creates_unmapped_entities() -> Non
     coordinator.config_entry = MockConfigEntry(
         domain=DOMAIN, data={}, title="SPAN Panel"
     )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
 
     entities = create_unmapped_circuit_sensors(coordinator, snapshot)
 
@@ -327,6 +337,9 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
         domain=DOMAIN,
         data={"device_name": "Main House"},
         title="SPAN Panel",
+    )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
     )
 
     entities = create_battery_sensors(coordinator, snapshot)
@@ -352,6 +365,9 @@ def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:
     coordinator.config_entry = MockConfigEntry(
         domain=DOMAIN, data={}, title="SPAN Panel"
     )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
 
     entities = create_power_flow_sensors(coordinator, snapshot)
     keys = [entity.entity_description.key for entity in entities]
@@ -375,6 +391,9 @@ def test_create_evse_sensors_creates_all_descriptions_for_each_charger() -> None
     coordinator.hass = MagicMock()
     coordinator.config_entry = MockConfigEntry(
         domain=DOMAIN, data={}, title="SPAN Panel"
+    )
+    coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
     )
 
     entities = create_evse_sensors(coordinator, snapshot)
