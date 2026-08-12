@@ -703,5 +703,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "grid_islandable_moved_to_mid": {
+      "title": "El estado de aislamiento se ha trasladado al Dispositivo de Interconexión de Microrred",
+      "description": "Su Panel SPAN se ha actualizado al modelo de datos eBus v1.0, que ya no publica una propiedad `grid-islandable` a nivel de panel. El sensor **Aislable de la Red** sigue funcionando: ahora indica si hay presente un Dispositivo de Interconexión de Microrred (MID), que es como v1.0 determina la capacidad de respaldo.\n\nLo que ha cambiado es dónde reside el estado de aislamiento *en tiempo real*. «Aislable de la Red» responde a «¿podría aislarse este panel?»; el MID responde a «¿se está aislando ahora mismo?». Si tiene automatizaciones que usaban Aislable de la Red para detectar un corte real, apúntelas a las entidades de red del dispositivo MID.\n\nEste aviso no requiere ninguna corrección y puede descartarse una vez revisadas sus automatizaciones."
+    }
   }
 }

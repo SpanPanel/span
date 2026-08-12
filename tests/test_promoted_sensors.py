@@ -161,9 +161,30 @@ class TestGridIslandableBinarySensor:
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=False)
         assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
 
-    def test_value_function_none(self):
+    def test_absent_flat_property_falls_back_to_mid_presence(self):
+        """v1.0 publishes no `grid-islandable`, and that is not "unknown".
+
+        `devices/bess.md` retires the panel-level boolean deliberately -- "there is no
+        single 'islanded?' bit to reconcile" -- and nominates the capability set as the
+        classifier: "a MID `grid` child means premises-segment backup ... neither means
+        no backup". So an absent property with no MID is a definite *no*, not a
+        missing reading.
+
+        This used to return None, which reached a user as the sensor going
+        `unavailable` with `restored: true` after a firmware upgrade -- indistinguishable
+        from a sensor that broke.
+        """
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=None)
-        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is None
+        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
+
+    def test_a_published_flat_value_still_wins(self):
+        """Flat firmware keeps answering for itself.
+
+        DUAL-SCHEMA: a flat panel publishes the property and has no MID, so reading MID
+        presence first would invert the answer for every panel not yet upgraded.
+        """
+        snapshot = SpanPanelSnapshotFactory.create(grid_islandable=True)
+        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is True
 
 
 # ---------------------------------------------------------------------------

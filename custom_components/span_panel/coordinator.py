@@ -21,6 +21,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
@@ -81,6 +82,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Streaming state
         self._unregister_streaming: Callable[[], None] | None = None
         self._unregister_connection: Callable[[], None] | None = None
+        self._unregister_schema_change: Callable[[], None] | None = None
 
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
@@ -218,9 +220,91 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._unregister_connection = self._client.register_connection_callback(
             self._on_connection_change
         )
+        self._unregister_schema_change = self._client.register_schema_change_callback(
+            self._on_schema_generation_change
+        )
         self._unregister_streaming = self._client.register_snapshot_callback(self._on_snapshot_push)
         await self._client.start_streaming()
         _LOGGER.info("MQTT push streaming started")
+
+    def _on_schema_generation_change(self, previous: str | None, current: str | None) -> None:
+        """Reload the entry when the panel changes schema generation underneath us.
+
+        The library rebuilds its parser on its own, which restores *reading* — values
+        resolve again straight away. It cannot restore *topology*: devices and
+        entities are created in `async_setup_entry` from the tree as it looked then.
+        v1.0 introduces a MID the flat tree has no equivalent for and re-keys the
+        EVSEs, so without a reload the panel reads correctly and still shows the old
+        device set. Observed exactly that on a live upgrade — data flowed, entities
+        did not appear, and a manual reload was needed.
+
+        Scheduled rather than awaited: this is called from the client's own callback
+        fan-out, and reloading the entry tears down that client. `async_schedule_reload`
+        defers to the loop so the teardown does not run inside the object being torn
+        down.
+        """
+        _LOGGER.warning(
+            "SPAN panel firmware upgraded its eBus schema generation: data-model-version "
+            "%s -> %s. Reloading the integration so devices and entities match the new "
+            "tree; the MID and any re-keyed chargers appear after the reload.",
+            previous or "absent (flat)",
+            current or "absent (flat)",
+        )
+        async_create(
+            self.hass,
+            (
+                f"Your SPAN Panel reported a new eBus data model "
+                f"(**{previous or 'flat'} → {current or 'flat'}**), which happens after a "
+                "firmware upgrade.\n\n"
+                "The integration is reloading so its devices and entities match what the "
+                "panel now publishes. New devices — such as the Microgrid Interconnect "
+                "Device — appear once that finishes.\n\n"
+                "Entities that were renamed or replaced by the upgrade may need to be "
+                "removed manually if they remain unavailable."
+            ),
+            title="SPAN Panel firmware upgraded",
+            notification_id=f"span_schema_upgrade_{self.config_entry.entry_id}",
+        )
+        self._flag_retired_entities(current)
+        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+
+    def _flag_retired_entities(self, current: str | None) -> None:
+        """Raise a repair for entities whose source moved in the new schema.
+
+        `binary_sensor.*_grid_islandable` is the worked example. Flat publishes
+        `core/grid-islandable`; v1.0 has no such property, on purpose --
+        `devices/bess.md` says a consumer reads backup capability from the capability
+        set, "a MID `grid` child means premises-segment backup", and that "there is no
+        single 'islanded?' bit to reconcile".
+
+        The entity itself survives: it now reads MID presence, which is the classifier
+        the spec nominates. What the repair explains is that the *live* islanding
+        state has moved onto the MID, because `grid_islandable` answers "could this
+        panel island" and the MID answers "is it islanding right now" -- an automation
+        written against the former on flat firmware may well have meant the latter.
+
+        A repair rather than a notification: notifications are dismissed and gone,
+        while this stays until acted on, which suits a change a user has to make in
+        their own automations.
+        """
+        # Absent means flat, present means parent/child -- the migration guide's own
+        # detection rule.
+        #
+        # Guarding on the direction even though panel firmware does not roll back:
+        # once a panel is on v1.0 it stays there, so in the field this only ever fires
+        # one way. The reverse happens solely in the upgrade rehearsal, where the two
+        # simulators are swapped under a live client, and raising a retirement repair
+        # there would be noise about a transition no user experiences.
+        if current is None:
+            return
+        async_create_issue(
+            self.hass,
+            DOMAIN,
+            f"grid_islandable_moved_to_mid_{self.config_entry.entry_id}",
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key="grid_islandable_moved_to_mid",
+        )
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle a broker connection state edge from the MQTT client.
@@ -254,6 +338,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         if self._unregister_connection is not None:
             self._unregister_connection()
             self._unregister_connection = None
+
+        if self._unregister_schema_change is not None:
+            self._unregister_schema_change()
+            self._unregister_schema_change = None
 
         if self._unregister_streaming is not None:
             self._unregister_streaming()

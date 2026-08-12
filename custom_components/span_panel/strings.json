@@ -408,8 +408,8 @@
           "enable_energy_dip_compensation": "Compensate when panel reports lower energy readings. Disabling clears offsets.",
           "enable_panel_net_energy_sensors": "Net energy for main meter and feed-through, accounting for bidirectional flows.",
           "enable_unmapped_circuit_sensors": "Backing sensors for tabs not assigned to named breakers.",
-          "energy_reporting_grace_period": "Minutes sensors hold last value when panel is offline (0\u201360). Default: 15.",
-          "snapshot_update_interval": "Seconds between snapshot rebuilds (0\u201315). Lower = faster, more CPU. 0 = no debounce."
+          "energy_reporting_grace_period": "Minutes sensors hold last value when panel is offline (0–60). Default: 15.",
+          "snapshot_update_interval": "Seconds between snapshot rebuilds (0–15). Lower = faster, more CPU. 0 = no debounce."
         },
         "description": "Configure SPAN Panel integration settings.",
         "title": "SPAN Panel Options"
@@ -702,6 +702,12 @@
           "description": "Any sensor of the circuit or sub-device to remove from favorites."
         }
       }
+    }
+  },
+  "issues": {
+    "grid_islandable_moved_to_mid": {
+      "title": "Islanding state has moved to the Microgrid Interconnect Device",
+      "description": "Your SPAN Panel upgraded to the eBus v1.0 data model, which no longer publishes a panel-level `grid-islandable` property. The **Grid Islandable** sensor still works — it now reports whether a Microgrid Interconnect Device (MID) is present, which is how v1.0 says backup capability is detected.\n\nWhat changed is where *live* islanding state lives. `Grid Islandable` answers \"could this panel island\"; the MID answers \"is it islanding right now\". If you have automations that used Grid Islandable to detect an actual outage, point them at the MID device's grid entities instead.\n\nThis notice does not need to be fixed and can be dismissed once your automations are checked."
     }
   }
 }

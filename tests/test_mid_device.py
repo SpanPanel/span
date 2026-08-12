@@ -125,7 +125,7 @@ def test_every_schema_conditional_is_findable() -> None:
         path.name for path in component.rglob("*.py") if "DUAL-SCHEMA" in path.read_text()
     )
 
-    assert marked == ["helpers.py", "sensor.py", "sensor_panel.py"], (
+    assert marked == ["binary_sensor.py", "helpers.py", "sensor.py", "sensor_panel.py"], (
         "the set of schema-conditional modules moved. If a conditional was added, mark it "
         "DUAL-SCHEMA so it can be found when flat support is dropped; if one was removed, "
         "update this list."

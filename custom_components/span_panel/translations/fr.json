@@ -703,5 +703,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "grid_islandable_moved_to_mid": {
+      "title": "L'état d'îlotage a été déplacé vers le Dispositif d'Interconnexion de Micro-réseau",
+      "description": "Votre Panneau SPAN est passé au modèle de données eBus v1.0, qui ne publie plus de propriété `grid-islandable` au niveau du panneau. Le capteur **Îlotage Réseau Possible** fonctionne toujours : il indique désormais la présence d'un Dispositif d'Interconnexion de Micro-réseau (MID), ce qui est la façon dont v1.0 détermine la capacité de secours.\n\nCe qui a changé, c'est l'emplacement de l'état d'îlotage *en temps réel*. « Îlotage Réseau Possible » répond à « ce panneau pourrait-il s'îloter ? » ; le MID répond à « s'îlote-t-il en ce moment ? ». Si vous avez des automatisations qui utilisaient Îlotage Réseau Possible pour détecter une panne réelle, dirigez-les vers les entités réseau du dispositif MID.\n\nCet avis ne nécessite aucune correction et peut être ignoré une fois vos automatisations vérifiées."
+    }
   }
 }

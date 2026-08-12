@@ -703,5 +703,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "grid_islandable_moved_to_mid": {
+      "title": "O estado de ilhamento foi movido para o Dispositivo de Interligação de Microrrede",
+      "description": "O seu Painel SPAN foi atualizado para o modelo de dados eBus v1.0, que já não publica uma propriedade `grid-islandable` ao nível do painel. O sensor **Isolável da Rede** continua a funcionar: agora indica se existe um Dispositivo de Interligação de Microrrede (MID), que é como a v1.0 determina a capacidade de reserva.\n\nO que mudou foi onde reside o estado de ilhamento *em tempo real*. «Isolável da Rede» responde a «este painel poderia ilhar-se?»; o MID responde a «está a ilhar-se neste momento?». Se tiver automações que usavam Isolável da Rede para detetar uma falha real, aponte-as para as entidades de rede do dispositivo MID.\n\nEste aviso não precisa de ser corrigido e pode ser dispensado depois de verificar as suas automações."
+    }
   }
 }

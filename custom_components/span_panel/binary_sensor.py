@@ -34,6 +34,7 @@ from .helpers import (
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
     has_bess,
+    has_mid,
     resolve_evse_display_suffix,
 )
 from .util import bess_device_info, evse_device_info
@@ -103,12 +104,40 @@ BINARY_SENSORS: tuple[
     ),
 )
 
+
+def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
+    """Whether this panel can island, across both schema generations.
+
+    Flat publishes `core/grid-islandable` outright. v1.0 has no such property and
+    that is deliberate -- `devices/bess.md` says a consumer "distinguishes the
+    variants without any dedicated type property: a MID `grid` child means
+    premises-segment backup ... neither means no backup", and "there is no single
+    'islanded?' bit to reconcile".
+
+    So under v1.0 the answer is read from the classifier the spec nominates rather
+    than from a property that no longer exists. That is a consumer deriving a
+    convenience from what is published, not a producer inventing a claim -- the
+    panel still says exactly what the spec says it should.
+
+    Keeping the entity alive matters because the alternative is what a firmware
+    upgrade did in practice: it went `unavailable` with `restored: true`, which
+    reaches a user as a sensor that broke rather than one whose source moved. The
+    deprecation is announced separately, as a repair issue.
+
+    DUAL-SCHEMA: when the flat path retires this becomes `has_mid(snapshot)` and the
+    first branch goes.
+    """
+    if snapshot.grid_islandable is not None:
+        return snapshot.grid_islandable
+    return has_mid(snapshot)
+
+
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
     entity_category=EntityCategory.DIAGNOSTIC,
-    value_fn=lambda s: s.grid_islandable,
+    value_fn=_grid_islandable,
 )
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
@@ -358,7 +387,10 @@ async def async_setup_entry(
 
     # Add grid islandable binary sensor when v2 data is available
     snapshot: SpanPanelSnapshot = coordinator.data
-    if snapshot.grid_islandable is not None:
+    # Created on either generation. Gating on the flat property alone is what left this
+    # entity `unavailable` after a v1.0 upgrade -- the panel had not lost the
+    # capability, only the property that used to report it.
+    if snapshot.grid_islandable is not None or has_mid(snapshot):
         entities.append(SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR))
 
     # Add BESS connected sensor on the BESS sub-device when battery is commissioned
