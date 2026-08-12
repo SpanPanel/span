@@ -265,27 +265,35 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             title="SPAN Panel firmware upgraded",
             notification_id=f"span_schema_upgrade_{self.config_entry.entry_id}",
         )
-        self._flag_retired_entities(current)
+        self._explain_the_upgrade(current)
         self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
 
-    def _flag_retired_entities(self, current: str | None) -> None:
-        """Raise a repair for entities whose source moved in the new schema.
+    def _explain_the_upgrade(self, current: str | None) -> None:
+        """Raise a repair describing what the new schema changed for the user.
 
-        `binary_sensor.*_grid_islandable` is the worked example. Flat publishes
-        `core/grid-islandable`; v1.0 has no such property, on purpose --
-        `devices/bess.md` says a consumer reads backup capability from the capability
-        set, "a MID `grid` child means premises-segment backup", and that "there is no
-        single 'islanded?' bit to reconcile".
+        Nothing they depend on goes away, which is worth saying plainly because a
+        firmware upgrade invites the opposite assumption.
 
-        The entity itself survives: it now reads MID presence, which is the classifier
-        the spec nominates. What the repair explains is that the *live* islanding
-        state has moved onto the MID, because `grid_islandable` answers "could this
-        panel island" and the MID answers "is it islanding right now" -- an automation
-        written against the former on flat firmware may well have meant the latter.
+        `sensor.*_dsm_grid_state` keeps its entity id and its history and gets *more*
+        trustworthy. Under flat, `schema_0` derived it: the battery's `grid-state` when
+        one was commissioned, otherwise an inference from `dominant-power-source` and
+        whether any power was crossing the grid connection. Under v1.0 it reads the
+        islanding state the MID actually senses -- the heuristic v1.0 exists to retire,
+        retired.
 
-        A repair rather than a notification: notifications are dismissed and gone,
-        while this stays until acted on, which suits a change a user has to make in
-        their own automations.
+        `binary_sensor.*_grid_islandable` also survives. v1.0 publishes no panel-level
+        `grid-islandable`, on purpose: `devices/bess.md` reads backup capability from
+        the capability set, "a MID `grid` child means premises-segment backup", and
+        "there is no single 'islanded?' bit to reconcile". So it now reflects MID
+        presence, the classifier the spec nominates.
+
+        What is genuinely new is the MID device itself and its `grid-state`, the health
+        of the utility supply, which flat did not report at all.
+
+        A repair rather than only a notification because notifications are dismissed
+        and gone: a user who was away when the panel upgraded should still find out
+        that a device appeared and why a sensor changed provenance. It asks for no
+        action, which is why it is the mildest severity available.
         """
         # Absent means flat, present means parent/child -- the migration guide's own
         # detection rule.
@@ -300,10 +308,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         async_create_issue(
             self.hass,
             DOMAIN,
-            f"grid_islandable_moved_to_mid_{self.config_entry.entry_id}",
+            f"panel_upgraded_to_ebus_v1_{self.config_entry.entry_id}",
             is_fixable=False,
             severity=IssueSeverity.WARNING,
-            translation_key="grid_islandable_moved_to_mid",
+            translation_key="panel_upgraded_to_ebus_v1",
         )
 
     def _on_connection_change(self, connected: bool) -> None:
