@@ -441,20 +441,36 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             str_value = str(raw_value)
             # For enum sensors, ensure the value is in the options list before
             # setting it — HA raises ValueError if the state is not in options.
-            # Options are built dynamically from observed MQTT values.
-            # Values are normalized to lowercase to satisfy HA's translation
-            # key requirement ([a-z0-9-_]+). HA uses the state value directly
-            # as the translation key lookup.
+            # Values are normalized to lowercase to satisfy HA's translation key
+            # requirement ([a-z0-9-_]+); HA uses the state value directly as the
+            # translation key lookup.
+            #
+            # Options are declared statically on each description, from the states
+            # `en.json` renders. They used to be discovered here instead, which could
+            # not work: options would only ever list states the panel had already
+            # reached, so a state it had not yet visited was absent from its own
+            # "Possible states" — and every panel advertised a different set
+            # depending on what it had lived through.
+            #
+            # The append survives as a last resort so an undeclared value degrades to
+            # a shown state rather than a ValueError. It is a warning rather than a
+            # debug line because reaching it means the panel published outside the
+            # enum its own catalog declares, which is a producer defect and not
+            # something a consumer should absorb quietly. It also renders untranslated,
+            # as a raw key.
             if self._attr_device_class is SensorDeviceClass.ENUM:
                 str_value = str_value.lower()
                 if not hasattr(self, "_attr_options") or self._attr_options is None:
                     self._attr_options = []
                 if str_value not in self._attr_options:
                     self._attr_options.append(str_value)
-                    _LOGGER.debug(
-                        "Added enum option '%s' for %s",
-                        str_value,
+                    _LOGGER.warning(
+                        "%s reported '%s', which is not one of its declared states %s. "
+                        "Showing it untranslated; the panel is publishing outside the "
+                        "enum its catalog declares.",
                         self.entity_id or self._attr_unique_id,
+                        str_value,
+                        sorted(o for o in self._attr_options if o != str_value),
                     )
             self._attr_native_value = str_value
 

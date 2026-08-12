@@ -83,13 +83,13 @@ class TestEvseSensorDefinitions:
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
         assert status_desc.device_class is not None
         assert status_desc.device_class.value == "enum"
-        assert status_desc.options == ["unknown"]
+        assert "charging" in (status_desc.options or [])
 
     def test_evse_lock_state_sensor_is_enum(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
         assert lock_desc.device_class is not None
         assert lock_desc.device_class.value == "enum"
-        assert lock_desc.options == ["unknown"]
+        assert "locked" in (lock_desc.options or [])
 
     def test_evse_advertised_current_is_measurement(self):
         current_desc = next(
@@ -217,15 +217,29 @@ class TestEvseDeviceInfo:
 
 
 class TestEvseStatusOptions:
-    """Test EVSE enum options seed with 'unknown' only."""
+    """EVSE enums declare every state they can report.
 
-    def test_status_options_seed_with_unknown(self):
+    These asserted the opposite -- that both seeded with `["unknown"]` and nothing
+    else -- pinning a bug rather than a contract. A sensor sitting at `charging` while
+    declaring only `unknown` as possible is what Home Assistant renders as
+    "Possible states: Unknown", and the runtime discovery meant to fill the gap could
+    only ever list states the charger had already reached.
+
+    The exhaustive comparison against the translations lives in
+    `test_enum_sensor_options.py`; these keep the EVSE-specific expectations local.
+    """
+
+    def test_status_declares_the_full_charging_lifecycle(self):
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
-        assert status_desc.options == ["unknown"]
+        options = set(status_desc.options or [])
 
-    def test_lock_state_options_seed_with_unknown(self):
+        assert {"available", "charging", "preparing", "finishing", "faulted"} <= options
+        assert "unknown" in options
+
+    def test_lock_state_declares_both_positions(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
-        assert lock_desc.options == ["unknown"]
+
+        assert set(lock_desc.options or []) == {"locked", "unlocked", "unknown"}
 
 
 class TestEvseMultipleDevices:

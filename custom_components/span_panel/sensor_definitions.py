@@ -105,7 +105,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        options=["unknown"],
+        options=["dsm_off_grid", "dsm_on_grid", "unknown"],
         value_fn=lambda s: s.dsm_state,
     ),
     SpanPanelDataSensorEntityDescription(
@@ -113,7 +113,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         translation_key="dsm_grid_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
-        options=["unknown"],
+        options=["dsm_off_grid", "dsm_on_grid", "unknown"],
         value_fn=lambda s: s.dsm_state,  # deprecated alias — reads dsm_state
     ),
     SpanPanelDataSensorEntityDescription(
@@ -121,7 +121,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         translation_key="current_run_config",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
-        options=["unknown"],
+        options=["panel_backup", "panel_off_grid", "panel_on_grid", "unknown"],
         value_fn=lambda s: s.current_run_config,
     ),
     SpanPanelDataSensorEntityDescription(
@@ -129,7 +129,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         translation_key="main_relay_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
-        options=["unknown"],
+        options=["closed", "open", "unknown"],
         value_fn=lambda s: s.main_relay_state,
     ),
     SpanPanelDataSensorEntityDescription(
@@ -137,7 +137,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
-        options=["unknown"],
+        options=["battery", "generator", "grid", "none", "pv", "unknown"],
         value_fn=lambda s: s.dominant_power_source or "unknown",
     ),
     SpanPanelDataSensorEntityDescription(
@@ -146,7 +146,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        options=["unknown"],
+        options=["connected", "unconnected", "unknown"],
         value_fn=lambda s: s.vendor_cloud or "unknown",
     ),
 )
@@ -718,7 +718,18 @@ EVSE_SENSORS: tuple[
         key="evse_status",
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
-        options=["unknown"],
+        options=[
+            "available",
+            "charging",
+            "faulted",
+            "finishing",
+            "preparing",
+            "reserved",
+            "suspended_ev",
+            "suspended_evse",
+            "unavailable",
+            "unknown",
+        ],
         value_fn=lambda e: e.status or "unknown",
     ),
     SpanEvseSensorEntityDescription(
@@ -734,7 +745,7 @@ EVSE_SENSORS: tuple[
         key="evse_lock_state",
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
-        options=["unknown"],
+        options=["locked", "unlocked", "unknown"],
         value_fn=lambda e: e.lock_state or "unknown",
     ),
 )
