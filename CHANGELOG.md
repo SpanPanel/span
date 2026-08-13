@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 8/2026
+
+Support for the eBus v1.0 (parent/child) data model your panel moves to on firmware r202633 and later, and a clean transition when it does.
+
+### Requires Home Assistant 2026.8.0 or newer
+
+This release raises the minimum from 2026.5.4. Home Assistant 2026.8 replaced the two device-registry calls this integration relies on — the old forms stop
+working entirely in 2027.8 — and their replacements do not exist in 2026.5 through 2026.7, so there is no version of this release that runs on both. If you are
+on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not offer you this release.
+
+### Added
+
+- **Your panel's Microgrid Interconnect Device appears as its own device** on the new data model, carrying **Grid State** — the health of the utility supply
+  itself, which the previous firmware never reported. Everything about it is additive; no existing entity moves or changes id.
+- **The integration notices a firmware upgrade and reloads itself.** A panel that becomes v1.0 while Home Assistant is running used to keep reading the tree
+  with the old parser, reporting every circuit as missing until you reloaded by hand. It now detects the change, reloads, writes a log line, and raises a
+  one-time notice explaining what changed.
+- **Grid-forming device name** as an attribute on the GFE sensor.
+
+### Changed
+
+- **`DSM Grid State` is now more trustworthy on the new data model.** It keeps its entity id and all of its history. Previously it was _inferred_ — from the
+  battery if one was fitted, otherwise from the dominant power source and whether power was crossing the grid connection. It now reads the islanding state the
+  Microgrid Interconnect Device actually senses.
+- **`Grid Islandable` keeps working** across the upgrade. v1.0 publishes no panel-level islandable property, so the entity now reflects whether a Microgrid
+  Interconnect Device is present, which is how v1.0 says backup capability is detected.
+- **Battery model** may read differently after upgrading: the new data model separates the human-readable designation from the SKU, and this entity now shows
+  the designation. This is a library-level normalisation applied to both data models, so it happens once, at this release, rather than unpredictably during a
+  firmware update.
+
+### Fixed
+
+- **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
+  "Possible states: Unknown". The lists are now derived from the translations and checked against them by a test.
+- **The GFE override button reads the right signal** for deciding when it applies, so it is no longer permanently enabled on the new data model.
+- **Sub-devices link to the panel by registry id**, replacing a form Home Assistant deprecated in 2026.8. No user-visible effect; required for the version bump
+  above.
+
 ## [2.0.8] - 5/2026
 
 ### Fixed
