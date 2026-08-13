@@ -27,6 +27,7 @@ from custom_components.span_panel import ensure_device_registered
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.util import (
     bess_device_info,
+    classify_sub_device_identifier,
     evse_device_info,
     mid_device_info,
 )
@@ -86,6 +87,35 @@ def _builders() -> list[tuple[str, Any]]:
             ),
         ),
     ]
+
+
+@pytest.mark.parametrize(("label", "build"), _builders(), ids=lambda v: v if isinstance(v, str) else "")
+def test_every_builders_identifier_classifies_as_its_own_kind(label: str, build: Any) -> None:
+    """The writing end and the reading end must agree, for every kind.
+
+    They did not: the topology command restated the identifier grammar instead of
+    reading it back, so when the MID was added it classified as `unknown` and a
+    card rendered it as a device with a name and no type. Parametrised over the
+    same builder list as the link test, so a fourth sub-device added to `util`
+    without teaching `classify_sub_device_identifier` fails here rather than in
+    someone's dashboard.
+    """
+    info = build()
+    identifiers = info.get("identifiers") or set()
+    kinds = {classify_sub_device_identifier(identifier) for _domain, identifier in identifiers}
+
+    assert kinds == {label}, f"{label} identifier classifies as {kinds}"
+
+
+def test_the_panel_is_not_mistaken_for_a_sub_device() -> None:
+    """A bare serial names the panel, and the panel is nobody's child.
+
+    The classifier reads suffixes, so the guard worth having is that an
+    identifier carrying no kind at all comes back as None rather than matching
+    something by accident.
+    """
+    assert classify_sub_device_identifier("sp3-link-001") is None
+    assert classify_sub_device_identifier("sim-40t-001") is None
 
 
 @pytest.mark.parametrize(("label", "build"), _builders(), ids=lambda v: v if isinstance(v, str) else "")

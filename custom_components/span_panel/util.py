@@ -1,6 +1,7 @@
 """Utility functions for the Span integration."""
 
 import logging
+from typing import Final
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import (
@@ -22,6 +23,36 @@ _LOGGER = logging.getLogger(__name__)
 # runtime data, because a sub-device is only ever built after the panel device
 # exists -- which is what lets the builders below take a plain `str` and leaves
 # no caller with an absence to handle.
+
+# A sub-device's registry identifier is `{panel serial}_{kind}`, with EVSE
+# carrying its node id after the kind because a panel can have several.
+#
+# Named here, beside the builders that construct them, because the topology
+# WebSocket command has to read the grammar back. It used to restate it, and the
+# MID shipped classifying as "unknown" for exactly that reason: a third kind was
+# added to the writing end and not to the reading one. `classify_sub_device_identifier`
+# is the reading end, so the two cannot drift again.
+SUB_DEVICE_BESS: Final = "bess"
+SUB_DEVICE_MID: Final = "mid"
+SUB_DEVICE_EVSE: Final = "evse"
+
+
+def classify_sub_device_identifier(identifier: str) -> str | None:
+    """Return the kind of sub-device an identifier names, or None if it names none.
+
+    None rather than an "unknown" string: the caller knows whether it is looking
+    at something that must be a sub-device, and a sentinel that reads like a kind
+    is what let an unclassified device render as a device with no type.
+    """
+    if identifier.endswith(f"_{SUB_DEVICE_BESS}"):
+        return SUB_DEVICE_BESS
+    if identifier.endswith(f"_{SUB_DEVICE_MID}"):
+        return SUB_DEVICE_MID
+    # Infix, not suffix: the node id follows, and it is what distinguishes one
+    # charger from another on the same panel.
+    if f"_{SUB_DEVICE_EVSE}_" in identifier:
+        return SUB_DEVICE_EVSE
+    return None
 
 
 def snapshot_to_device_info(
@@ -57,7 +88,7 @@ def bess_device_info(
     """
     name = f"{panel_name} Battery"
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_bess")},
+        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_BESS}")},
         name=name,
         manufacturer=battery.vendor_name or "Unknown",
         # `model` is the human designation on both schemas now: v1.0 publishes it as
@@ -92,7 +123,7 @@ def mid_device_info(
     would put the MID one level deeper than its siblings for no reader's benefit.
     """
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_mid")},
+        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_MID}")},
         name=f"{panel_name} Microgrid Interconnect",
         manufacturer=mid.vendor_name or "Unknown",
         model=mid.model or "Microgrid Interconnect Device",
@@ -114,7 +145,7 @@ def evse_device_info(
     name = f"{base_name} ({display_suffix})" if display_suffix else base_name
     name = f"{panel_name} {name}"
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_evse_{evse.node_id}")},
+        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_EVSE}_{evse.node_id}")},
         name=name,
         manufacturer=evse.vendor_name or "SPAN",
         model=evse.model or "SPAN Drive",

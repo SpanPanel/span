@@ -13,6 +13,7 @@ import voluptuous as vol
 from .const import DOMAIN
 from .helpers import build_panel_unique_id
 from .id_builder import build_binary_sensor_unique_id
+from .util import classify_sub_device_identifier
 
 if TYPE_CHECKING:
     from . import SpanPanelRuntimeData
@@ -224,12 +225,19 @@ def _find_config_entry_id(device_entry: dr.DeviceEntry) -> str | None:
 
 
 def _classify_sub_device(device_entry: dr.DeviceEntry) -> str:
-    """Classify a sub-device as 'bess' or 'evse' based on its identifiers."""
+    """Classify a sub-device by its identifiers: 'bess', 'mid', 'evse' or 'unknown'.
+
+    The grammar lives with the builders that write it, in `util`, rather than
+    being restated here. Restating it is how the MID went out as 'unknown' for a
+    release — it was added to the writing end and not to this one — and how a
+    consumer ended up rendering a device with a name and no type.
+
+    'unknown' is still returned rather than propagated as None, because it is the
+    documented wire value for this field and a consumer distinguishes on it.
+    """
     for _, identifier in device_entry.identifiers:
-        if "_bess" in identifier:
-            return "bess"
-        if "_evse_" in identifier:
-            return "evse"
+        if (kind := classify_sub_device_identifier(identifier)) is not None:
+            return kind
     return "unknown"
 
 
