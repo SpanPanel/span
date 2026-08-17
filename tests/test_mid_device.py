@@ -72,8 +72,13 @@ def test_the_mid_becomes_its_own_device_hung_off_the_panel() -> None:
     assert info["manufacturer"] == "Span"
     assert info["serial_number"] == "SIM-BESS-40T-001-mid"
     assert info["via_device_id"] == "panel-device-id"
-    # The producer publishes no MID model today; the card still needs a legible one.
+    # A panel that publishes no MID model still needs a legible card. This was written
+    # when no producer published one at all; panelbench does now, so this is the
+    # fallback path rather than the only path — `test_the_mid_card_carries_the_identity
+    # _a_producer_publishes` covers the other.
     assert info["model"] == "Microgrid Interconnect Device"
+    assert "sw_version" not in info or info["sw_version"] is None
+    assert "hw_version" not in info or info["hw_version"] is None
 
 
 def test_the_mid_carries_grid_state_and_nothing_already_surfaced() -> None:
@@ -148,3 +153,46 @@ def test_nothing_reads_the_mid_without_checking_it_is_there() -> None:
     assert create_mid_sensors(_coordinator(), flat) == []
     assert _grid_forming_device_name(flat) is None
     assert "mid" not in detect_capabilities(flat)
+
+
+def test_the_mid_card_carries_the_identity_a_producer_publishes() -> None:
+    """Model, firmware and hardware revision reach the device card when published.
+
+    r202633 documents all three on the MID's `info` node. Until the library carried the
+    latter two, `mid_device_info` could set a model and a serial and nothing else, so a
+    user saw a Microgrid Interconnect card with no firmware row beside a battery that
+    had one — the battery's identical property having been mapped from the start.
+
+    Not gated on schema. Flat publishes no MID at all, so `has_mid` keeps every caller
+    of this builder off a flat panel; a guard here would be unreachable code implying a
+    case that cannot arise.
+    """
+    info = mid_device_info(
+        "sim-40t-001",
+        _mid(model="SPAN MID", software_version="sim-mid/v0.1.0", hardware_version="rev1"),
+        "SPAN Panel",
+        panel_device_id="panel-device-id",
+    )
+
+    assert info["model"] == "SPAN MID"
+    assert info["sw_version"] == "sim-mid/v0.1.0"
+    assert info["hw_version"] == "rev1"
+
+
+def test_an_unpublished_revision_omits_the_row_rather_than_blanking_it() -> None:
+    """`None` and `""` are different to a user, so the library's distinction is kept.
+
+    `DeviceInfo` omits a `None` field and renders an empty string as a present-but-blank
+    row. Defaulting with `or ""` here would invent a firmware row reading empty for a
+    panel that published nothing, which is worse than no row: it asserts the panel
+    answered and the answer was nothing.
+    """
+    info = mid_device_info(
+        "sim-40t-001",
+        _mid(software_version=None, hardware_version=None),
+        "SPAN Panel",
+        panel_device_id="panel-device-id",
+    )
+
+    assert info.get("sw_version") is None
+    assert info.get("hw_version") is None

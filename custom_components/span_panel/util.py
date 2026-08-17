@@ -128,6 +128,17 @@ def mid_device_info(
         manufacturer=mid.vendor_name or "Unknown",
         model=mid.model or "Microgrid Interconnect Device",
         serial_number=mid.serial_number,
+        # Passed through unguarded, exactly as `bess_device_info` does: `DeviceInfo`
+        # omits a `None` field and renders an empty string as a present-but-blank row,
+        # so `or ""` here would invent a row for a panel that published nothing. The
+        # library preserves that distinction for the same reason.
+        #
+        # Unguarded on schema, deliberately: r202633 documents both on the MID's `info`
+        # node, and flat publishes no MID at all, so `has_mid` keeps every caller of this
+        # builder off a flat panel. A conditional here would be unreachable code implying
+        # a case that cannot arise.
+        sw_version=mid.software_version,
+        hw_version=mid.hardware_version,
         via_device_id=panel_device_id,
     )
 

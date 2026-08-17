@@ -2580,7 +2580,7 @@ dev = [
     { name = "ruff", specifier = ">=0.15.5" },
     { name = "span-panel-api-schema-0", editable = "../../span/span-panel-api-p2/packages/schema-0" },
     { name = "span-panel-api-schema-1", editable = "../../span/span-panel-api-p2/packages/schema-1" },
-    { name = "twine" },
+    { name = "twine", specifier = ">=7.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "vulture", specifier = ">=2.14" },
 ]
