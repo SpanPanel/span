@@ -75,6 +75,46 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
             return (description.field_path, *self._residual_field_paths)
         return self._residual_field_paths
 
+    @property
+    def _reads_an_unresolved_field(self) -> bool:
+        """True when this entity's own source field could not be resolved.
+
+        An O(1) membership test against a set that is empty on a healthy panel,
+        so the normal case costs one hash lookup per availability read.
+
+        Only the description's `field_path` counts -- the entity's value source.
+        Residual paths are deliberately excluded: `circuit.name` and
+        `circuit.tabs` feed naming and attributes, and a circuit's power reading
+        is still true when they are gone. The switch and select read their state
+        through residual paths and so are not covered here; the Repair still
+        names them.
+        """
+        description: object = getattr(self, "entity_description", None)
+        if (
+            isinstance(description, FieldPathDeclarationMixin)
+            and not description.derived
+            and description.field_path is not None
+        ):
+            return description.field_path in self.coordinator.unresolved_paths
+        return False
+
+    @property
+    def available(self) -> bool:
+        """False when this entity's snapshot field could not be resolved.
+
+        Any value we would report for an unresolvable field is a default rather
+        than a reading, and a default is indistinguishable from a real one at
+        the dashboard. Reporting unavailable is reporting, not correcting: the
+        entity keeps its shape and comes back when the field does.
+
+        This covers the resolution-failure case only. A field the adapter
+        resolves but the device stops publishing still reaches HA as a parsed
+        default; that needs the snapshot model to admit None.
+        """
+        if self._reads_an_unresolved_field:
+            return False
+        return super().available
+
     @staticmethod
     def _build_device_info(
         coordinator: SpanPanelCoordinator,

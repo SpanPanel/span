@@ -197,7 +197,17 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         - Panel status sensor: always available to show online/offline state
         - Hardware status sensors: remain available when offline to show Unknown state
         - Other binary sensors (switches): become unavailable when panel is offline
+
+        The unresolved-field probe runs ahead of all of that, for the same
+        reason it precedes the grace-period branch in `SpanSensorBase`: the
+        offline branch below returns True, so a probe after it would leave
+        `door_state`, `eth0_link` and `wlan_link` reporting a field the adapter
+        cannot resolve. `panel_status` and the derived sensors declare no
+        `field_path`, so the probe never fires for them.
         """
+        if self._reads_an_unresolved_field:
+            return False
+
         # Panel status sensor should always be available to show online/offline state
         if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
             return True
