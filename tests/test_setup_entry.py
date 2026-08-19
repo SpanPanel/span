@@ -24,6 +24,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .factories import SpanPanelSnapshotFactory
 
@@ -338,3 +339,71 @@ async def test_setup_syncs_schema_repairs_after_the_platforms(
         assert await async_setup_entry(hass, entry) is True
 
     assert order == ["forward", "sync"]
+
+
+async def test_setup_probes_the_registry_before_the_platforms_and_notices_after(
+    hass: HomeAssistant,
+) -> None:
+    """The new-entity notice brackets the forward, and both halves matter.
+
+    The probe has to run before forwarding, because forwarding is what registers
+    the entities -- probing afterwards would find every entity already known and
+    the notice could never fire. The notice has to run after, because a newly
+    added entity is only in the registry once its platform has added it.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = snapshot
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", DOMAIN, "already-there", config_entry=entry)
+
+    order: list[str] = []
+    coordinator.async_sync_schema_repairs = MagicMock(side_effect=lambda: order.append("sync"))
+
+    async def _forward(*_args, **_kwargs) -> None:
+        order.append("forward")
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            "added-by-the-forward",
+            config_entry=entry,
+            disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+        )
+
+    seen: list[frozenset[str]] = []
+
+    def _notice(_hass, _entry, known_unique_ids) -> None:
+        order.append("notice")
+        seen.append(frozenset(known_unique_ids))
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator",
+            return_value=coordinator,
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", AsyncMock(side_effect=_forward)
+        ),
+        patch.object(hass.config_entries, "async_update_entry"),
+        patch(
+            "custom_components.span_panel.async_notice_new_disabled_entities",
+            side_effect=_notice,
+        ),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert order == ["forward", "sync", "notice"]
+    assert seen == [frozenset({"already-there"})]

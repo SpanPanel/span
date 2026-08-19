@@ -52,7 +52,11 @@ from .frontend import (
 from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .options import SNAPSHOT_UPDATE_INTERVAL
-from .schema_repairs import async_clear_schema_issues
+from .schema_repairs import (
+    async_clear_schema_issues,
+    async_notice_new_disabled_entities,
+    async_registered_unique_ids,
+)
 from .services import (  # noqa: F401
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
@@ -252,6 +256,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             ),
         )
 
+        # Taken before the forward, because forwarding is what registers the
+        # entities: everything absent here and present afterwards is an entity
+        # this version of the integration added.
+        known_unique_ids = async_registered_unique_ids(hass, entry)
+
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
         # After the platforms, not before: schema validation runs on the first
@@ -259,6 +268,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # entities an unresolved field took down — and those entities only
         # register themselves once their platform has added them.
         coordinator.async_sync_schema_repairs()
+
+        # Also after the platforms, for the other half of the same reason: a
+        # newly added entity is only in the registry once its platform has added
+        # it. An addition that arrives disabled reaches the user through nothing
+        # else at all.
+        async_notice_new_disabled_entities(hass, entry, known_unique_ids)
     except Exception:
         if coordinator is not None:
             await coordinator.async_shutdown()

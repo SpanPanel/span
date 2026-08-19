@@ -708,6 +708,10 @@
     }
   },
   "issues": {
+    "new_entities_disabled": {
+      "title": "De nouvelles entités du Panneau SPAN sont disponibles",
+      "description": "Cette mise à jour a ajouté des données que votre panneau signalait déjà mais que cette intégration n'exposait pas encore. {count} nouvelle(s) entité(s) ont été créées pour cela (par exemple : {examples}).\n\nElles ont été créées **désactivées**, afin que rien n'apparaisse dans vos tableaux de bord ni dans votre historique sans votre accord. Rien n'est cassé et aucune action n'est requise : cet avis existe uniquement pour que cet ajout ne soit pas silencieux.\n\nPour en utiliser une, ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez. Ignorez cet avis une fois que vous y avez jeté un œil."
+    },
     "panel_upgraded_to_ebus_v1": {
       "title": "Votre Panneau SPAN signale désormais l'îlotage depuis son Dispositif d'Interconnexion de Micro-réseau",
       "description": "Votre Panneau SPAN est passé au modèle de données eBus v1.0. Rien de ce que vous utilisez n'a disparu et aucune modification de vos automatisations n'est nécessaire : cet avis explique simplement ce qui s'est amélioré.\n\n**État Réseau DSM** conserve son identifiant d'entité et son historique, et gagne en fiabilité. Avec le micrologiciel précédent, il était *déduit* : à partir de la batterie lorsqu'il y en avait une, sinon à partir de la source d'énergie dominante et de la présence de puissance transitant par le raccordement réseau. Il lit désormais l'état d'îlotage réellement mesuré par le Dispositif d'Interconnexion de Micro-réseau (MID).\n\n**Îlotage Réseau Possible** continue également de fonctionner. La v1.0 ne publie aucune propriété `grid-islandable` au niveau du panneau ; ce capteur indique donc maintenant la présence d'un MID, ce qui est la façon dont v1.0 détermine la capacité de secours.\n\n**Nouveau :** un Dispositif d'Interconnexion de Micro-réseau apparaît parmi vos appareils, avec **État du Réseau** — l'état de l'alimentation du réseau public, que le micrologiciel précédent ne signalait pas.\n\nVous pouvez ignorer cet avis après consultation."
