@@ -786,6 +786,50 @@ async def test_a_dead_relay_state_names_the_breaker_switches(hass) -> None:
         await _stop_scheduling(coordinator)
 
 
+async def test_a_dead_circuit_attribute_names_the_power_sensors(hass) -> None:
+    """The circuit power sensor's residual reads must name it, one by one.
+
+    Every other residual is claimed by more than one entity class, so dropping
+    it from any single class leaves the read enumerated somewhere and the panel
+    still describable. `circuit.relay_requester` is claimed by this class alone:
+    it is republished as a state attribute here and nowhere else, so if this
+    entity stopped declaring it, the path would leave
+    `field_paths.residual_field_paths()` entirely and the producible gate would
+    quietly stop covering a read that is still happening.
+
+    Stated as the Repair's own output rather than as a second copy of the
+    declaration, so it fails on the observable consequence -- a dead attribute
+    naming no entity -- instead of on a list disagreeing with a list.
+    """
+    from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
+
+    coordinator, config_entry, grouped = await _entities_by_declared_path(hass)
+    try:
+        power_sensors = [
+            entity
+            for entity in grouped["circuit.instant_power_w"]["sensor"]
+            if isinstance(entity, SpanCircuitPowerSensor)
+        ]
+        assert len(power_sensors) == 2, "fixture should build one power sensor per circuit"
+
+        await _add_to_platform(hass, config_entry, power_sensors, "sensor")
+
+        expected = sorted(sensor.entity_id for sensor in power_sensors)
+        assert coordinator.entity_ids_by_field_path == {
+            # The description's own declaration.
+            "circuit.instant_power_w": expected,
+            # Identity, read outside any value_fn.
+            "circuit.name": expected,
+            "circuit.tabs": expected,
+            # Republished as state attributes.
+            "circuit.relay_state": expected,
+            "circuit.relay_requester": expected,
+            "circuit.priority": expected,
+        }
+    finally:
+        await _stop_scheduling(coordinator)
+
+
 async def test_a_dead_priority_names_the_selects(hass) -> None:
     """The select's own state comes from `circuit.priority`."""
     from unittest.mock import MagicMock
