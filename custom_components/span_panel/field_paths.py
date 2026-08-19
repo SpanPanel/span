@@ -68,7 +68,7 @@ description instead.
 """
 
 
-RESIDUAL_DERIVED_PATHS: frozenset[str] = frozenset(
+RESIDUAL_EXEMPT_PATHS: frozenset[str] = frozenset(
     {
         # Homie `$target` values — a pending-command echo, not a schema field.
         # Neither adapter publishes a metadata row for them.
@@ -97,12 +97,21 @@ RESIDUAL_DERIVED_PATHS: frozenset[str] = frozenset(
         "battery.connected",
     }
 )
-"""Residual readers exempt from the producible check.
+"""Residual readers exempt from the producible check, for one of two reasons.
 
-Deliberately **not** returned by `declared_field_paths()`. Each entry is either
-produced by no adapter at all, or by only one of the two — so requiring it to be
-producible would fail against the other schema. Recorded here so the reads are
-still enumerated somewhere rather than being invisible.
+**Not produced by any adapter** — Homie `$target` echoes, values the library
+assembles from panel topology, and every `mid.*` field. There is no metadata row
+to check against on either schema.
+
+**Produced by only one adapter** — schema-conditional fields. The gate requires
+a path to be producible by *both* adapters, so a field present on one schema and
+absent from the other cannot satisfy it. Exempt is not the same as derived:
+these are read straight off a snapshot field, that field just is not on both
+schemas.
+
+Deliberately **not** returned by `declared_field_paths()`. Recorded here so the
+reads are still enumerated somewhere rather than being invisible. The per-entry
+comments say which of the two reasons applies.
 """
 
 
@@ -111,7 +120,7 @@ def declared_field_paths() -> frozenset[str]:
 
     Derived entities are excluded: they have no single source field, so there is
     nothing for an adapter to produce. Residual readers that no adapter (or only
-    one) produces are excluded too, and are listed in `RESIDUAL_DERIVED_PATHS`.
+    one) produces are excluded too, and are listed in `RESIDUAL_EXEMPT_PATHS`.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
     # here, and `binary_sensor` reaches the package root for its config-entry
