@@ -13,6 +13,7 @@ from custom_components.span_panel.button import (
     SpanPanelGFEOverrideButton,
 )
 from custom_components.span_panel.helpers import has_bess
+from custom_components.span_panel.sensor_definitions import BESS_METADATA_SENSORS
 from custom_components.span_panel.sensor_panel import _grid_forming_device_name
 
 from .factories import SpanPanelSnapshotFactory
@@ -242,3 +243,16 @@ class TestGridFormingDeviceAttribute:
         snapshot = SimpleNamespace(mid=SimpleNamespace(grid_forming_device_name=None))
 
         assert _grid_forming_device_name(snapshot) is None
+
+
+# ---------------------------------------------------------------------------
+# BESS metadata sensor declarations
+# ---------------------------------------------------------------------------
+
+
+def test_bess_part_number_sensor_is_declared() -> None:
+    """The BESS SKU is surfaced, and declares the field it reads."""
+    part = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
+
+    assert part.field_path == "battery.part_number"
+    assert part.derived is False

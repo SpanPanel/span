@@ -180,6 +180,9 @@
       "bess_nameplate_capacity": {
         "name": "定格容量"
       },
+      "bess_part_number": {
+        "name": "型番"
+      },
       "bess_serial_number": {
         "name": "シリアル番号"
       },

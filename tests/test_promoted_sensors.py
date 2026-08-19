@@ -250,7 +250,7 @@ class TestBessMetadataSensorDefinitions:
     """Test BESS metadata sensor definitions."""
 
     def test_sensor_count(self):
-        assert len(BESS_METADATA_SENSORS) == 6
+        assert len(BESS_METADATA_SENSORS) == 7
 
     def test_all_have_translation_keys(self):
         for desc in BESS_METADATA_SENSORS:

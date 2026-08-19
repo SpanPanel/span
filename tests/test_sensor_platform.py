@@ -345,10 +345,11 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
     entities = create_battery_sensors(coordinator, snapshot)
     keys = [entity.entity_description.key for entity in entities]
 
-    assert len(entities) == 8
+    assert len(entities) == 9
     assert "batteryPowerW" in keys
     assert "storage_battery_percentage" in keys
     assert "vendor" in keys
+    assert "part_number" in keys
 
 
 def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:

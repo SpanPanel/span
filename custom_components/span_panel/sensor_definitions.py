@@ -423,6 +423,7 @@ BESS_METADATA_SENSORS: tuple[
     SpanBessMetadataSensorEntityDescription,
     SpanBessMetadataSensorEntityDescription,
     SpanBessMetadataSensorEntityDescription,
+    SpanBessMetadataSensorEntityDescription,
 ] = (
     SpanBessMetadataSensorEntityDescription(
         key="vendor",
@@ -437,6 +438,14 @@ BESS_METADATA_SENSORS: tuple[
         translation_key="bess_model",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b: b.model,
+    ),
+    SpanBessMetadataSensorEntityDescription(
+        key="part_number",
+        field_path="battery.part_number",
+        translation_key="bess_part_number",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda b: b.part_number,
     ),
     SpanBessMetadataSensorEntityDescription(
         key="serial_number",

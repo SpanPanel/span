@@ -180,6 +180,9 @@
       "bess_nameplate_capacity": {
         "name": "Capacité Nominale"
       },
+      "bess_part_number": {
+        "name": "Référence"
+      },
       "bess_serial_number": {
         "name": "Numéro de Série"
       },
