@@ -6,12 +6,21 @@ declaration stays authoritative — this only stops it drifting from the reader.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from typing import Any, Protocol, runtime_checkable
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any, Protocol, get_args, get_type_hints, runtime_checkable
+
+from span_panel_api import (
+    SpanBatterySnapshot,
+    SpanCircuitSnapshot,
+    SpanEvseSnapshot,
+    SpanMidSnapshot,
+    SpanPanelSnapshot,
+)
 
 from custom_components.span_panel.field_paths import (
-    RESIDUAL_FIELD_PATHS,
+    DerivedReason,
     declared_field_paths,
+    residual_field_paths,
 )
 from custom_components.span_panel.sensor_definitions import all_sensor_descriptions
 from tests.adapter_fixtures import schema_one_metadata, schema_zero_metadata
@@ -93,7 +102,7 @@ class _DeclaringDescription(Protocol):
     def field_path(self) -> str | None: ...
 
     @property
-    def derived(self) -> bool: ...
+    def derived(self) -> DerivedReason | None: ...
 
     @property
     def value_fn(self) -> Callable[[Any], object]: ...
@@ -129,23 +138,82 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         yield description
 
 
-# Every description class, and the snapshot type its value_fn receives.
-# A class missing here is reported as a mismatch rather than skipped: a silent
-# skip is exactly the hole this test exists to close.
-_ROOT_PREFIX = {
-    "SpanPanelCircuitsSensorEntityDescription": "circuit",
-    "SpanPanelDataSensorEntityDescription": "panel",
-    "SpanPanelStatusSensorEntityDescription": "panel",
-    "SpanPanelBatterySensorEntityDescription": "battery",
-    "SpanBessMetadataSensorEntityDescription": "battery",
-    # PV metadata value_fns take the whole panel snapshot and reach through
-    # `s.pv.x`, so the root prefix is "panel" and _SUB_SNAPSHOTS rewrites it.
-    "SpanPVMetadataSensorEntityDescription": "panel",
-    "SpanEvseSensorEntityDescription": "evse",
-    "SpanMidSensorEntityDescription": "mid",
-    "SpanPanelBinarySensorEntityDescription": "panel",
-    "SpanEvseBinarySensorEntityDescription": "evse",
+# Every snapshot type a value_fn can take, and the prefix its fields are
+# addressed by. Keyed by the snapshot type rather than by description class
+# name: the class name map had to be edited for every new description class —
+# the recurring event — while this one grows only when the library grows a new
+# snapshot type. A new description class over an existing snapshot type needs no
+# edit here, and its prefix cannot be wrong, because it comes from the same
+# annotation mypy checks the value_fn bodies against.
+#
+# PV has no entry: PV metadata value_fns take the whole panel snapshot and reach
+# through `s.pv.x`, so their prefix is "panel" and `_SUB_SNAPSHOTS` rewrites it.
+_SNAPSHOT_PREFIX: Mapping[type, str] = {
+    SpanCircuitSnapshot: "circuit",
+    SpanPanelSnapshot: "panel",
+    SpanBatterySnapshot: "battery",
+    SpanEvseSnapshot: "evse",
+    SpanMidSnapshot: "mid",
 }
+
+
+class _UndeterminedPrefix(Exception):
+    """A description's snapshot prefix could not be determined.
+
+    Raised, never swallowed: a description whose prefix is unknown must be
+    reported by its caller as a mismatch. Skipping it is what let a description
+    class absent from the old class-name map drop out of verification entirely.
+    """
+
+
+def _snapshot_type(description: _DeclaringDescription) -> type:
+    """Return the snapshot type this description's `value_fn` is annotated to take.
+
+    `from __future__ import annotations` stringifies the annotation, so this
+    resolves it with `get_type_hints`, which evaluates it in the defining
+    module's namespace — every mixin's module imports the snapshot types it
+    names, so resolution succeeds.
+    """
+    cls = type(description)
+    try:
+        hints = get_type_hints(cls)
+    except Exception as err:  # noqa: BLE001
+        raise _UndeterminedPrefix(
+            f"{cls.__name__}: value_fn annotation does not resolve ({err!r})"
+        ) from err
+    annotation = hints.get("value_fn")
+    if annotation is None:
+        raise _UndeterminedPrefix(f"{cls.__name__} carries no value_fn annotation")
+    args = get_args(annotation)
+    if len(args) != 2 or not isinstance(args[0], list) or not args[0]:
+        raise _UndeterminedPrefix(
+            f"{cls.__name__}: value_fn annotated {annotation!r} names no parameter type"
+        )
+    parameter = args[0][0]
+    if not isinstance(parameter, type):
+        raise _UndeterminedPrefix(
+            f"{cls.__name__}: value_fn takes {parameter!r}, which is not a snapshot class"
+        )
+    return parameter
+
+
+def _record_reads(description: _DeclaringDescription) -> set[str]:
+    """Run a description's `value_fn` against the recorder, return what it read.
+
+    Raises `_UndeterminedPrefix` when the snapshot type cannot be resolved or is
+    absent from `_SNAPSHOT_PREFIX`; anything the `value_fn` itself raises
+    propagates unchanged.
+    """
+    snapshot_type = _snapshot_type(description)
+    prefix = _SNAPSHOT_PREFIX.get(snapshot_type)
+    if prefix is None:
+        raise _UndeterminedPrefix(
+            f"{type(description).__name__}: value_fn takes {snapshot_type.__name__}, "
+            "which is absent from _SNAPSHOT_PREFIX"
+        )
+    sink: set[str] = set()
+    description.value_fn(_Recorder(sink, prefix, root=snapshot_type is SpanPanelSnapshot))
+    return sink
 
 
 def test_declared_paths_match_what_value_fns_read() -> None:
@@ -154,18 +222,11 @@ def test_declared_paths_match_what_value_fns_read() -> None:
     for description in _declaring_descriptions():
         if description.derived or description.field_path is None:
             continue
-        class_name = type(description).__name__
-        prefix = _ROOT_PREFIX.get(class_name)
-        if prefix is None:
-            mismatches.append(
-                f"{description.key}: {class_name} is absent from _ROOT_PREFIX, so its "
-                "declaration would go unverified"
-            )
-            continue
-        sink: set[str] = set()
-        proxy = _Recorder(sink, prefix, root=(prefix == "panel"))
         try:
-            description.value_fn(proxy)
+            sink = _record_reads(description)
+        except _UndeterminedPrefix as err:
+            mismatches.append(f"{description.key}: {err}, so its declaration would go unverified")
+            continue
         except Exception as err:  # noqa: BLE001
             mismatches.append(f"{description.key}: value_fn raised {err!r}")
             continue
@@ -189,7 +250,7 @@ def test_introspection_covers_every_declared_path() -> None:
         for description in _declaring_descriptions()
         if not description.derived and description.field_path is not None
     }
-    assert declared_field_paths() == frozenset(introspected | set(RESIDUAL_FIELD_PATHS))
+    assert declared_field_paths() == frozenset(introspected | residual_field_paths())
 
 
 def test_no_derived_description_reads_one_producible_field() -> None:
@@ -211,26 +272,81 @@ def test_no_derived_description_reads_one_producible_field() -> None:
     for description in _declaring_descriptions():
         if not description.derived:
             continue
-        class_name = type(description).__name__
-        prefix = _ROOT_PREFIX.get(class_name)
-        if prefix is None:
+        try:
+            sink = _record_reads(description)
+        except _UndeterminedPrefix as err:
             offenders.append(
-                f"{description.key}: {class_name} is absent from _ROOT_PREFIX, so its "
-                "derived classification would go unverified"
+                f"{description.key}: {err}, so its derived classification would go unverified"
             )
             continue
-        sink: set[str] = set()
-        proxy = _Recorder(sink, prefix, root=(prefix == "panel"))
-        try:
-            description.value_fn(proxy)
         except Exception as err:  # noqa: BLE001
             offenders.append(f"{description.key}: value_fn raised {err!r}")
             continue
         read = sorted(sink & producible)
         if len(read) == 1:
             offenders.append(
-                f"{description.key}: derived=True but reads exactly one producible field, "
-                f"{read[0]!r} — that is a declaration, so set field_path={read[0]!r}"
+                f"{description.key}: derived={description.derived} but reads exactly one "
+                f"producible field, {read[0]!r} — that is a declaration, so set "
+                f"field_path={read[0]!r}"
             )
 
     assert not offenders, "Misclassified derived descriptions:\n" + "\n".join(offenders)
+
+
+def test_derived_reasons_match_what_value_fns_read() -> None:
+    """Each derived description's stated reason must be the one its reads imply.
+
+    `derived` used to be a `bool` covering four different situations, and it was
+    that conflation which hid `evse_ev_connected`: a single producible field
+    marked derived looked exactly like a genuine multi-field derivation. The
+    reason is only worth its syntax if it is checked, so each variant is a claim
+    about the recorder's output and is asserted as one:
+
+    * `NO_SOURCE_FIELD` — reads nothing either adapter publishes,
+    * `MULTIPLE_FIELDS` — reads two or more fields an adapter publishes,
+    * `SCHEMA_CONDITIONAL_FIELD` — reads exactly one, produced by one adapter
+      only. When the other adapter grows it, this fails and demands promotion to
+      a `field_path` declaration.
+
+    Intersecting with what the adapters emit is what makes the count meaningful:
+    the recorder also picks up method names and other noise.
+    """
+    schema_0 = set(schema_zero_metadata())
+    schema_1 = set(schema_one_metadata())
+    produced = schema_0 | schema_1
+    offenders: list[str] = []
+
+    for description in _declaring_descriptions():
+        reason = description.derived
+        if reason is None:
+            continue
+        try:
+            sink = _record_reads(description)
+        except _UndeterminedPrefix as err:
+            offenders.append(f"{description.key}: {err}, so its reason would go unverified")
+            continue
+        except Exception as err:  # noqa: BLE001
+            offenders.append(f"{description.key}: value_fn raised {err!r}")
+            continue
+        read = sorted(sink & produced)
+        if reason is DerivedReason.NO_SOURCE_FIELD and read:
+            offenders.append(
+                f"{description.key}: claims NO_SOURCE_FIELD but reads {read} — "
+                "the reason is MULTIPLE_FIELDS, SCHEMA_CONDITIONAL_FIELD, or it is a "
+                "declaration"
+            )
+        elif reason is DerivedReason.MULTIPLE_FIELDS and len(read) < 2:
+            offenders.append(
+                f"{description.key}: claims MULTIPLE_FIELDS but reads {read} — "
+                "one field or none is a different reason"
+            )
+        elif reason is DerivedReason.SCHEMA_CONDITIONAL_FIELD and (
+            len(read) != 1 or read[0] in schema_0 & schema_1
+        ):
+            offenders.append(
+                f"{description.key}: claims SCHEMA_CONDITIONAL_FIELD but reads {read}, "
+                f"of which {sorted(set(read) & schema_0 & schema_1)} are produced by both "
+                "adapters"
+            )
+
+    assert not offenders, "Derived reasons disagree with readers:\n" + "\n".join(offenders)

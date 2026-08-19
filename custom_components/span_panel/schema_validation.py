@@ -105,9 +105,11 @@ def evaluate_field_metadata(
         mismatches.append(UnitMismatch(field_path, str(ha_unit), schema_unit))
 
     # `RESIDUAL_EXEMPT_PATHS` are read by the integration; they are exempt from
-    # the *producible* gate because only one adapter emits them, so they are
-    # absent from `declared` without being unread.
-    unread = frozenset(set(field_metadata) - set(declared) - RESIDUAL_EXEMPT_PATHS)
+    # the *producible* gate because only one adapter emits them, or neither
+    # does, so they are absent from `declared` without being unread. Only the
+    # paths matter here; each entry's `Producibility` annotation is what the
+    # conformance tests verify.
+    unread = frozenset(set(field_metadata) - set(declared) - RESIDUAL_EXEMPT_PATHS.keys())
     for field_path in sorted(unread):
         # An addition is legal within a major version. This is an inventory for
         # us, never a user-facing finding.

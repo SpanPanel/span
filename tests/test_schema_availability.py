@@ -42,6 +42,7 @@ from custom_components.span_panel.const import (
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from custom_components.span_panel.entity import SpanPanelEntity
+from custom_components.span_panel.field_paths import DerivedReason
 from custom_components.span_panel.schema_validation import SchemaFindings
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
@@ -193,7 +194,7 @@ async def test_panel_status_binary_sensor_is_never_probed(hass: HomeAssistant) -
     coordinator = _make_coordinator(hass)
     coordinator._findings = SchemaFindings(frozenset({_ETHERNET_LINK_PATH}), (), frozenset())
     description = next(desc for desc in BINARY_SENSORS if desc.key == PANEL_STATUS)
-    assert description.derived is True
+    assert description.derived is DerivedReason.NO_SOURCE_FIELD
 
     entity = SpanPanelBinarySensor(coordinator, description)
 
@@ -209,7 +210,7 @@ async def test_derived_entity_is_never_probed(hass: HomeAssistant) -> None:
     """
     coordinator = _make_coordinator(hass)
     coordinator._findings = SchemaFindings(frozenset({"battery.connected"}), (), frozenset())
-    assert BESS_CONNECTED_SENSOR.derived is True
+    assert BESS_CONNECTED_SENSOR.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
 
     entity = SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR)
 

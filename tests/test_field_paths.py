@@ -10,8 +10,9 @@ from custom_components.span_panel.binary_sensor import (
 )
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    RESIDUAL_FIELD_PATHS,
+    DerivedReason,
     declared_field_paths,
+    residual_field_paths,
 )
 from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_SENSORS,
@@ -22,7 +23,7 @@ from custom_components.span_panel.sensor_definitions import (
 def test_circuit_power_declares_its_field_path() -> None:
     power = next(d for d in CIRCUIT_SENSORS if d.key == "circuit_power")
     assert power.field_path == "circuit.instant_power_w"
-    assert power.derived is False
+    assert power.derived is None
 
 
 def test_derived_sensor_declares_no_path() -> None:
@@ -30,7 +31,7 @@ def test_derived_sensor_declares_no_path() -> None:
     from custom_components.span_panel.sensor_definitions import PANEL_DATA_STATUS_SENSORS
 
     dsm = next(d for d in PANEL_DATA_STATUS_SENSORS if d.key == "dsm_state")
-    assert dsm.derived is True
+    assert dsm.derived is DerivedReason.NO_SOURCE_FIELD
     assert dsm.field_path is None
 
 
@@ -59,12 +60,12 @@ def test_every_description_declares_exactly_one() -> None:
         BESS_CONNECTED_SENSOR,
     ):
         declares_path = description.field_path is not None
-        assert declares_path != description.derived, (
-            f"{description.key} must declare exactly one of field_path / derived=True"
+        assert declares_path != (description.derived is not None), (
+            f"{description.key} must declare exactly one of field_path / a DerivedReason"
         )
 
 
 def test_residual_buckets_are_disjoint() -> None:
     """A residual path is either producible or exempt, never both."""
-    assert not (RESIDUAL_FIELD_PATHS & RESIDUAL_EXEMPT_PATHS)
-    assert not (declared_field_paths() & RESIDUAL_EXEMPT_PATHS)
+    assert not (residual_field_paths() & RESIDUAL_EXEMPT_PATHS.keys())
+    assert not (declared_field_paths() & RESIDUAL_EXEMPT_PATHS.keys())

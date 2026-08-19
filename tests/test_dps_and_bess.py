@@ -255,4 +255,4 @@ def test_bess_part_number_sensor_is_declared() -> None:
     part = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
 
     assert part.field_path == "battery.part_number"
-    assert part.derived is False
+    assert part.derived is None
