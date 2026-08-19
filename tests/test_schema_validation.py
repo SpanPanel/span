@@ -1,17 +1,31 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 from span_panel_api.models import FieldMetadata
 
 from custom_components.span_panel import sensor_definitions
-from custom_components.span_panel.field_paths import declared_field_paths
+from custom_components.span_panel.field_paths import (
+    RESIDUAL_EXEMPT_PATHS,
+    FieldPathDeclarationMixin,
+    declared_field_paths,
+)
 from custom_components.span_panel.schema_validation import (
     SchemaFindings,
     evaluate_field_metadata,
 )
 from custom_components.span_panel.sensor_definitions import (
+    all_sensor_descriptions,
     sensor_descriptions_by_field_path,
 )
+from tests.adapter_fixtures import (
+    schema_one_metadata,
+    schema_one_metadata_batteryless,
+    schema_zero_metadata,
+)
+
+MetadataFn = Callable[[], dict[str, FieldMetadata]]
 
 
 def test_unresolved_entry_is_degradation() -> None:
@@ -29,18 +43,23 @@ def test_absent_entry_is_not_degradation() -> None:
 
 
 def test_unit_mismatch_is_reported() -> None:
+    """Deliberately not `circuit.instant_power_w`/"kW".
+
+    That pair is the one entry in `KNOWN_BAD_SCHEMA_UNITS`, so it would prove the
+    exception rather than the check.
+    """
     from homeassistant.components.sensor import SensorEntityDescription
-    from homeassistant.const import UnitOfPower
+    from homeassistant.const import UnitOfElectricPotential
 
     description = SensorEntityDescription(
-        key="circuit_power", native_unit_of_measurement=UnitOfPower.WATT
+        key="l1_voltage", native_unit_of_measurement=UnitOfElectricPotential.VOLT
     )
     findings = evaluate_field_metadata(
-        {"circuit.instant_power_w": FieldMetadata("kW", "float")},
-        sensor_defs={"circuit.instant_power_w": description},
+        {"panel.l1_voltage": FieldMetadata("kV", "float")},
+        sensor_defs={"panel.l1_voltage": description},
     )
-    assert findings.unit_mismatches[0].field_path == "circuit.instant_power_w"
-    assert findings.unit_mismatches[0].schema_unit == "kW"
+    assert findings.unit_mismatches[0].field_path == "panel.l1_voltage"
+    assert findings.unit_mismatches[0].schema_unit == "kV"
 
 
 def test_unitless_sensor_still_checked_for_resolution() -> None:
@@ -111,13 +130,14 @@ def test_declared_and_resolved_fields_are_not_unread() -> None:
     assert findings.unread == frozenset()
 
 
-def test_none_metadata_yields_empty_findings() -> None:
-    """The module-level fallback.
+def test_empty_metadata_is_healthy_not_unknown() -> None:
+    """A pass over a healthy panel is expressible and is not the None sentinel.
 
-    Callers that must distinguish "unknown" from "healthy" — the coordinator
-    does — check for None before calling.
+    Task 7 needs three distinct states; this is the middle one. "Unknown" is the
+    coordinator's `schema_findings is None`, which `evaluate_field_metadata` can
+    no longer produce — it no longer accepts the sentinel at all.
     """
-    findings = evaluate_field_metadata(None)
+    findings = evaluate_field_metadata({})
     assert findings == SchemaFindings(frozenset(), (), frozenset())
 
 
@@ -148,14 +168,14 @@ def test_resolved_unitless_sensor_yields_no_mismatch() -> None:
     assert findings.unit_mismatches == ()
 
 
-def test_descriptions_without_a_declaration_are_not_keyed(
+def test_descriptions_without_a_declaration_raise(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`declared_field_paths` is the enforcement point; here there is no key.
+    """Both consumers of the shared traversal reject an undeclared description.
 
-    A description that carries no `FieldPathDeclarationMixin` names no field, so
-    it cannot appear in a field-path-keyed map. `declared_field_paths` raises on
-    the same input, which is where the drift is caught.
+    Skipping it would drop the sensor from the unit cross-check silently, which
+    is the drift `field_paths` exists to prevent. `declared_field_paths` raises
+    on the same input, and both now do so from one place.
     """
     from homeassistant.components.sensor import SensorEntityDescription
 
@@ -164,4 +184,100 @@ def test_descriptions_without_a_declaration_are_not_keyed(
         "all_sensor_descriptions",
         lambda: (SensorEntityDescription(key="undeclared"),),
     )
-    assert sensor_definitions.sensor_descriptions_by_field_path() == {}
+    with pytest.raises(TypeError, match="carries no field-path declaration"):
+        sensor_definitions.sensor_descriptions_by_field_path()
+
+
+@pytest.mark.parametrize(
+    "metadata_fn",
+    [
+        pytest.param(schema_zero_metadata, id="schema_0"),
+        pytest.param(schema_one_metadata, id="schema_1"),
+    ],
+)
+def test_real_adapter_metadata_produces_no_findings(metadata_fn: MetadataFn) -> None:
+    """A healthy panel of either generation must be finding-free.
+
+    The rest of this file drives the evaluator with synthetic single-entry dicts,
+    which cannot show what real firmware actually declares. This is the standing
+    guard against a day-one Repair that no user can act on.
+    """
+    findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
+
+
+def test_known_bad_schema_unit_exception_is_narrow() -> None:
+    """Only the exact known-bad unit is excused; anything else is new information."""
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfPower
+
+    description = SensorEntityDescription(
+        key="circuit_power", native_unit_of_measurement=UnitOfPower.WATT
+    )
+    findings = evaluate_field_metadata(
+        {"circuit.instant_power_w": FieldMetadata("MW", "float")},
+        sensor_defs={"circuit.instant_power_w": description},
+    )
+    assert [m.schema_unit for m in findings.unit_mismatches] == ["MW"]
+
+
+def test_absent_hardware_on_real_metadata_is_not_degradation() -> None:
+    """A batteryless panel simply omits the battery rows — nothing is wrong.
+
+    Stronger than the empty-dict case, which passes whether or not the
+    `entry is None` arm exists: here 8 `battery.*` paths are declared and read,
+    and every one of them is missing from the adapter's output.
+    """
+    metadata = schema_one_metadata_batteryless()
+    battery_paths = {p for p in declared_field_paths() if p.startswith("battery.")}
+    assert battery_paths
+    assert battery_paths.isdisjoint(metadata)
+
+    findings = evaluate_field_metadata(metadata, sensor_descriptions_by_field_path())
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
+
+
+@pytest.mark.parametrize(
+    "metadata_fn",
+    [
+        pytest.param(schema_zero_metadata, id="schema_0"),
+        pytest.param(schema_one_metadata, id="schema_1"),
+    ],
+)
+def test_unread_excludes_readers_exempt_from_the_producible_gate(
+    metadata_fn: MetadataFn,
+) -> None:
+    """`RESIDUAL_EXEMPT_PATHS` are read, just not required of both adapters.
+
+    They are absent from `declared_field_paths()`, so a plain set difference
+    reports them as produced-but-unread — false for 10 of schema_0's 17.
+    """
+    findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
+    assert findings.unread.isdisjoint(RESIDUAL_EXEMPT_PATHS)
+
+
+def test_readers_of_the_same_field_path_agree_on_unit() -> None:
+    """`sensor_descriptions_by_field_path` keeps one reader per path.
+
+    Several field paths are read by two descriptions (an unmapped-circuit raw
+    key and its named-circuit twin). Dropping one is only safe while they agree
+    on what the unit check would compare, so pin that here rather than trusting
+    it.
+    """
+    from collections import defaultdict
+
+    by_path: defaultdict[str, list[object]] = defaultdict(list)
+    for description in all_sensor_descriptions():
+        if not isinstance(description, FieldPathDeclarationMixin):
+            continue
+        if description.derived or description.field_path is None:
+            continue
+        by_path[description.field_path].append(description)
+
+    colliding = {path: ds for path, ds in by_path.items() if len(ds) > 1}
+    assert colliding, "expected at least one field path with two readers"
+    for path, descriptions in colliding.items():
+        units = {d.native_unit_of_measurement for d in descriptions}
+        assert len(units) == 1, f"readers of {path} disagree on unit: {units}"

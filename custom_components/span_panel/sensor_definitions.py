@@ -35,7 +35,7 @@ from span_panel_api import (
     SpanPanelSnapshot,
 )
 
-from .field_paths import FieldPathDeclarationMixin
+from .field_paths import FieldPathDeclarationMixin, iter_field_path_declarations
 
 
 @dataclass(frozen=True)
@@ -814,9 +814,11 @@ EVSE_SENSORS: tuple[
 def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
     """Every sensor description, without deduplication.
 
-    Deliberately not keyed by `description.key`: keys such as "model" and
-    "serial_number" repeat across device classes, so a dict keyed on them
-    silently drops descriptions.
+    A tuple rather than a dict because no one key identifies a description:
+    `description.key` and `field_path` are different namespaces, and neither is
+    unique across the whole set — several field paths are read by two
+    descriptions. Callers key by whichever suits them; see
+    `sensor_descriptions_by_field_path`.
     """
     return (
         *PANEL_DATA_STATUS_SENSORS,
@@ -849,22 +851,22 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
 def sensor_descriptions_by_field_path() -> dict[str, SensorEntityDescription]:
     """Every non-derived sensor description, keyed by the field path it reads.
 
-    Keyed by field path rather than `description.key` for the reason
-    `all_sensor_descriptions` returns a tuple: keys such as "model" and
-    "serial_number" repeat across device classes, so a dict keyed on them
-    silently drops descriptions. Derived descriptions are excluded — they read
-    several fields, or none, so no single path identifies them.
+    Keyed by field path because that is how the adapter keys its metadata;
+    `description.key` is a different namespace and would not line up. Derived
+    descriptions are excluded — they read several fields, or none, so no single
+    path identifies them.
 
-    Lives here rather than at the call site so the narrowing to
-    `FieldPathDeclarationMixin` stays with the descriptions that carry it.
+    A few field paths are read by two descriptions (an unmapped-circuit raw key
+    and its named-circuit twin), and only the first is kept. That is safe only
+    while such readers agree on `native_unit_of_measurement`, which is all this
+    map is consulted for; `test_readers_of_the_same_field_path_agree_on_unit`
+    pins that rather than leaving it to chance.
+
+    Lives here rather than at the call site so no consumer has to know how a
+    description declares its field; `field_paths.iter_field_path_declarations`
+    holds that rule.
     """
     by_field_path: dict[str, SensorEntityDescription] = {}
-    for description in all_sensor_descriptions():
-        if not isinstance(description, FieldPathDeclarationMixin):
-            # `declared_field_paths` raises on this; here it is simply nothing
-            # to key on.
-            continue
-        if description.derived or description.field_path is None:
-            continue
-        by_field_path[description.field_path] = description
+    for field_path, description in iter_field_path_declarations(all_sensor_descriptions()):
+        by_field_path.setdefault(field_path, description)
     return by_field_path

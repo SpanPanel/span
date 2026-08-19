@@ -15,7 +15,10 @@ Field path convention: ``{snapshot_type}.{field_name}`` — ``panel``,
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+
+from homeassistant.helpers.entity import EntityDescription
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -145,6 +148,31 @@ comments say which of the two reasons applies.
 """
 
 
+def iter_field_path_declarations[DescriptionT: EntityDescription](
+    descriptions: Iterable[DescriptionT],
+) -> Iterator[tuple[str, DescriptionT]]:
+    """Yield ``(field_path, description)`` for each description that declares one.
+
+    The single copy of the traversal rule — which descriptions declare a field,
+    and which are exempt — so a caller that only wants the paths and a caller
+    that wants the descriptions cannot drift apart on it.
+
+    Raises `TypeError` for a description that carries no
+    `FieldPathDeclarationMixin` at all: such a description would be dropped
+    silently, which is the drift this module exists to prevent. Descriptions
+    that carry the mixin but declare nothing (`derived`, or `field_path is
+    None`) are skipped, which is the declared-exempt case rather than drift.
+    """
+    for description in descriptions:
+        if not isinstance(description, FieldPathDeclarationMixin):
+            raise TypeError(
+                f"entity description '{description.key}' carries no field-path declaration"
+            )
+        if description.derived or description.field_path is None:
+            continue
+        yield description.field_path, description
+
+
 def declared_field_paths() -> frozenset[str]:
     """Field paths the integration reads that must be producible by an adapter.
 
@@ -166,20 +194,16 @@ def declared_field_paths() -> frozenset[str]:
     )
 
     paths: set[str] = set(RESIDUAL_FIELD_PATHS)
-    for description in (
-        *all_sensor_descriptions(),
-        *BINARY_SENSORS,
-        *EVSE_BINARY_SENSORS,
-        GRID_ISLANDABLE_SENSOR,
-        BESS_CONNECTED_SENSOR,
-    ):
-        if not isinstance(description, FieldPathDeclarationMixin):
-            # A description that cannot declare anything would be dropped
-            # silently, which is the drift this module exists to prevent.
-            raise TypeError(
-                f"entity description '{description.key}' carries no field-path declaration"
+    paths.update(
+        field_path
+        for field_path, _ in iter_field_path_declarations(
+            (
+                *all_sensor_descriptions(),
+                *BINARY_SENSORS,
+                *EVSE_BINARY_SENSORS,
+                GRID_ISLANDABLE_SENSOR,
+                BESS_CONNECTED_SENSOR,
             )
-        if description.derived or description.field_path is None:
-            continue
-        paths.add(description.field_path)
+        )
+    )
     return frozenset(paths)
