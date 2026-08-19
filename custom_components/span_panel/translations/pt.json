@@ -718,7 +718,7 @@
     },
     "schema_unit_mismatch": {
       "title": "Discrepância de unidades do Painel SPAN",
-      "description": "O seu painel comunica `{field_path}` em {schema_unit}, mas esta integração espera {ha_unit}. As leituras e as estatísticas de longo prazo das entidades afetadas podem estar erradas. A entidade não foi alterada automaticamente."
+      "description": "O seu painel comunica `{field_path}` em {schema_unit}, mas esta integração espera {ha_unit}. Há {count} entidade(s) afetada(s) (por exemplo: {examples}). As suas leituras e estatísticas de longo prazo podem estar erradas. Não foram alteradas automaticamente."
     }
   }
 }

@@ -718,7 +718,7 @@
     },
     "schema_unit_mismatch": {
       "title": "SPAN Panel unit mismatch",
-      "description": "Your panel reports `{field_path}` in {schema_unit}, but this integration expects {ha_unit}. Readings and long-term statistics for the affected entities may be wrong. The entity has not been changed automatically."
+      "description": "Your panel reports `{field_path}` in {schema_unit}, but this integration expects {ha_unit}. {count} entity/entities are affected (for example: {examples}). Their readings and long-term statistics may be wrong. They have not been changed automatically."
     }
   }
 }

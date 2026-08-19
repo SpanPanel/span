@@ -718,7 +718,7 @@
     },
     "schema_unit_mismatch": {
       "title": "Incohérence d'unité du Panneau SPAN",
-      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. Les relevés et les statistiques à long terme des entités concernées peuvent être erronés. L'entité n'a pas été modifiée automatiquement."
+      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. {count} entité(s) sont concernées (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
     }
   }
 }

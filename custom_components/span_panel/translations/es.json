@@ -718,7 +718,7 @@
     },
     "schema_unit_mismatch": {
       "title": "Discrepancia de unidades del Panel SPAN",
-      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Las lecturas y las estadísticas a largo plazo de las entidades afectadas pueden ser incorrectas. La entidad no se ha modificado automáticamente."
+      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Sus lecturas y estadísticas a largo plazo pueden ser incorrectas. No se han modificado automáticamente."
     }
   }
 }

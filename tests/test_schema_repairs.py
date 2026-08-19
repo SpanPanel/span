@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from homeassistant.helpers import issue_registry as ir
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -12,6 +14,13 @@ from custom_components.span_panel.schema_repairs import (
 from custom_components.span_panel.schema_validation import SchemaFindings, UnitMismatch
 
 _PATH = "circuit.instant_power_w"
+_UNIT_PATH = "panel.l1_voltage"
+
+# Both Repairs claim something the user owns is broken, so nothing is raised for a
+# field path no enabled entity reads. Every call below that expects an issue has
+# to name the entities the finding took down.
+_AFFECTED = {_PATH: ["sensor.a"]}
+_UNIT_AFFECTED = {_UNIT_PATH: ["sensor.voltage"]}
 
 
 @pytest.fixture
@@ -32,15 +41,17 @@ def _unit_issue_id(entry: MockConfigEntry, path: str = _PATH) -> str:
 
 async def test_unresolved_path_raises_one_issue(hass, entry) -> None:
     findings = SchemaFindings(frozenset({_PATH}), (), frozenset())
-    async_sync_schema_issues(hass, entry, findings, {})
+    async_sync_schema_issues(hass, entry, findings, _AFFECTED)
 
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(entry))
 
 
 async def test_issue_cleared_when_condition_resolves(hass, entry) -> None:
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), {})
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (), frozenset()), {})
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), _AFFECTED
+    )
+    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (), frozenset()), _AFFECTED)
 
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
@@ -53,7 +64,7 @@ async def test_dismissal_survives_reconciliation(hass, entry) -> None:
     accepted notice into a permanent nag.
     """
     findings = SchemaFindings(frozenset({_PATH}), (), frozenset())
-    async_sync_schema_issues(hass, entry, findings, {})
+    async_sync_schema_issues(hass, entry, findings, _AFFECTED)
 
     issue_id = _issue_id(entry)
     ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
@@ -62,7 +73,7 @@ async def test_dismissal_survives_reconciliation(hass, entry) -> None:
     assert dismissed is not None
 
     for _ in range(3):
-        async_sync_schema_issues(hass, entry, findings, {})
+        async_sync_schema_issues(hass, entry, findings, _AFFECTED)
 
     assert registry.async_get_issue(DOMAIN, issue_id).dismissed_version == dismissed
 
@@ -92,9 +103,12 @@ async def test_dismissal_survives_a_changing_affected_entity_payload(hass, entry
 
 async def test_distinct_paths_get_distinct_issues(hass, entry) -> None:
     """Dismissing one finding must not swallow a later, different one."""
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset({"a.one"}), (), frozenset()), {})
+    affected = {"a.one": ["sensor.one"], "b.two": ["sensor.two"]}
     async_sync_schema_issues(
-        hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), {}
+        hass, entry, SchemaFindings(frozenset({"a.one"}), (), frozenset()), affected
+    )
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), affected
     )
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(entry, "b.two"))
@@ -106,11 +120,14 @@ async def test_a_dismissed_finding_does_not_swallow_a_later_one(hass, entry) -> 
     Dismissing an aggregate would silence every finding that joined it later,
     because the update branch preserves `dismissed_version`.
     """
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset({"a.one"}), (), frozenset()), {})
+    affected = {"a.one": ["sensor.one"], "b.two": ["sensor.two"]}
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"a.one"}), (), frozenset()), affected
+    )
     ir.async_ignore_issue(hass, DOMAIN, _issue_id(entry, "a.one"), True)
 
     async_sync_schema_issues(
-        hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), {}
+        hass, entry, SchemaFindings(frozenset({"a.one", "b.two"}), (), frozenset()), affected
     )
 
     registry = ir.async_get(hass)
@@ -125,17 +142,26 @@ async def test_one_entry_does_not_clear_another(hass) -> None:
     well = MockConfigEntry(domain=DOMAIN, data={}, unique_id="well")
     well.add_to_hass(hass)
 
-    async_sync_schema_issues(hass, sick, SchemaFindings(frozenset({_PATH}), (), frozenset()), {})
-    async_sync_schema_issues(hass, well, SchemaFindings(frozenset(), (), frozenset()), {})
+    async_sync_schema_issues(
+        hass, sick, SchemaFindings(frozenset({_PATH}), (), frozenset()), _AFFECTED
+    )
+    async_sync_schema_issues(hass, well, SchemaFindings(frozenset(), (), frozenset()), _AFFECTED)
 
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(sick))
 
 
 async def test_circuit_rename_and_commissioning_raise_no_issue(hass, entry) -> None:
-    """Tier-1 and Tier-2 changes are handled elsewhere and must stay silent."""
+    """Tier-1 and Tier-2 changes are handled elsewhere and must stay silent.
+
+    Silent because of what they are, not because nothing reads them: the map
+    names a live entity for the field, and it still raises nothing.
+    """
     async_sync_schema_issues(
-        hass, entry, SchemaFindings(frozenset(), (), frozenset({"pv.model"})), {}
+        hass,
+        entry,
+        SchemaFindings(frozenset(), (), frozenset({"pv.model"})),
+        {"pv.model": ["sensor.pv_model"]},
     )
     registry = ir.async_get(hass)
     assert not [k for k in registry.issues if k[0] == DOMAIN]
@@ -143,28 +169,36 @@ async def test_circuit_rename_and_commissioning_raise_no_issue(hass, entry) -> N
 
 async def test_unit_mismatch_raises_its_own_issue(hass, entry) -> None:
     """The second of the two user-facing defects: a reading may be wrong."""
-    mismatch = UnitMismatch("panel.l1_voltage", "V", "kV")
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (mismatch,), frozenset()), {})
+    mismatch = UnitMismatch(_UNIT_PATH, "V", "kV")
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset(), (mismatch,), frozenset()), _UNIT_AFFECTED
+    )
 
     registry = ir.async_get(hass)
-    issue = registry.async_get_issue(DOMAIN, _unit_issue_id(entry, "panel.l1_voltage"))
+    issue = registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH))
     assert issue is not None
     assert issue.translation_key == "schema_unit_mismatch"
     assert issue.translation_placeholders == {
-        "field_path": "panel.l1_voltage",
+        "field_path": _UNIT_PATH,
         "ha_unit": "V",
         "schema_unit": "kV",
+        "count": "1",
+        "examples": "sensor.voltage",
     }
 
 
 async def test_unit_mismatch_issue_is_cleared_on_its_own(hass, entry) -> None:
     """Reconciliation must scope both classes, not just the unresolved one."""
-    mismatch = UnitMismatch("panel.l1_voltage", "V", "kV")
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (mismatch,), frozenset()), {})
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (), frozenset()), {})
+    mismatch = UnitMismatch(_UNIT_PATH, "V", "kV")
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset(), (mismatch,), frozenset()), _UNIT_AFFECTED
+    )
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset(), (), frozenset()), _UNIT_AFFECTED
+    )
 
     registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, "panel.l1_voltage")) is None
+    assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH)) is None
 
 
 async def test_issues_are_not_persistent(hass, entry) -> None:
@@ -173,13 +207,16 @@ async def test_issues_are_not_persistent(hass, entry) -> None:
     A non-persistent issue reloads as a tombstone carrying only the dismissal,
     which is exactly what lets re-assertion happen without resurrecting one.
     """
-    mismatch = UnitMismatch("panel.l1_voltage", "V", "kV")
+    mismatch = UnitMismatch(_UNIT_PATH, "V", "kV")
     async_sync_schema_issues(
-        hass, entry, SchemaFindings(frozenset({_PATH}), (mismatch,), frozenset()), {}
+        hass,
+        entry,
+        SchemaFindings(frozenset({_PATH}), (mismatch,), frozenset()),
+        _AFFECTED | _UNIT_AFFECTED,
     )
 
     registry = ir.async_get(hass)
-    for issue_id in (_issue_id(entry), _unit_issue_id(entry, "panel.l1_voltage")):
+    for issue_id in (_issue_id(entry), _unit_issue_id(entry, _UNIT_PATH)):
         issue = registry.async_get_issue(DOMAIN, issue_id)
         assert issue.is_persistent is False
         assert issue.is_fixable is False
@@ -207,14 +244,104 @@ async def test_affected_entities_are_bounded_and_counted(hass, entry) -> None:
     assert "sensor.circuit_0_power" in placeholders["examples"]
 
 
-async def test_no_affected_entities_still_reads_sensibly(hass, entry) -> None:
-    """An empty example list must not render as an empty string in the notice."""
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), {})
+# --- Findings nobody owns -------------------------------------------------
+#
+# `vendor_cloud` is `entity_registry_enabled_default=False`, so it is registered
+# and never added to hass. A fresh install against the flat simulator raised
+# "`panel.vendor_cloud` ... 0 entity/entities are affected (for example: none)"
+# beside two genuine notices, which is how a category of Repair gets ignored.
+
+
+async def test_a_finding_no_enabled_entity_reads_raises_no_issue(hass, entry) -> None:
+    """The disabled-by-default case: nothing the user owns is affected."""
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"panel.vendor_cloud"}), (), frozenset()), {}
+    )
 
     registry = ir.async_get(hass)
-    placeholders = registry.async_get_issue(DOMAIN, _issue_id(entry)).translation_placeholders
-    assert placeholders["count"] == "0"
-    assert placeholders["examples"]
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "panel.vendor_cloud")) is None
+    assert not [k for k in registry.issues if k[0] == DOMAIN]
+
+
+async def test_a_unit_mismatch_no_enabled_entity_reads_raises_no_issue(hass, entry) -> None:
+    """The same rule for the second class: no reading of the user's is wrong."""
+    mismatch = UnitMismatch(_UNIT_PATH, "V", "kV")
+    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (mismatch,), frozenset()), {})
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH)) is None
+    assert not [k for k in registry.issues if k[0] == DOMAIN]
+
+
+async def test_suppression_only_silences_the_path_nobody_reads(hass, entry) -> None:
+    """The real install: two genuine notices, one suppressed, in one pass."""
+    async_sync_schema_issues(
+        hass,
+        entry,
+        SchemaFindings(frozenset({_PATH, "panel.vendor_cloud"}), (), frozenset()),
+        _AFFECTED,
+    )
+
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry))
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry, "panel.vendor_cloud")) is None
+
+
+async def test_a_suppressed_finding_is_logged(hass, entry, caplog) -> None:
+    """Suppressed is not discarded: the field path stays reachable in the log."""
+    with caplog.at_level(logging.DEBUG, logger="custom_components.span_panel.schema_repairs"):
+        async_sync_schema_issues(
+            hass, entry, SchemaFindings(frozenset({"panel.vendor_cloud"}), (), frozenset()), {}
+        )
+
+    assert "panel.vendor_cloud" in caplog.text
+    assert "no enabled entity reads" in caplog.text
+
+
+async def test_an_issue_is_deleted_when_its_last_affected_entity_goes(hass, entry) -> None:
+    """The transition the reconcile pass has to cover.
+
+    A path raised while entities read it, then disabled or removed, must have its
+    issue deleted rather than left orphaned at "0 affected".
+    """
+    findings = SchemaFindings(frozenset({_PATH}), (), frozenset())
+    async_sync_schema_issues(hass, entry, findings, _AFFECTED)
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry))
+
+    async_sync_schema_issues(hass, entry, findings, {})
+
+    assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
+
+
+async def test_a_unit_mismatch_issue_is_deleted_when_its_entities_go(hass, entry) -> None:
+    """The same transition for the second class."""
+    findings = SchemaFindings(frozenset(), (UnitMismatch(_UNIT_PATH, "V", "kV"),), frozenset())
+    async_sync_schema_issues(hass, entry, findings, _UNIT_AFFECTED)
+    registry = ir.async_get(hass)
+    assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH))
+
+    async_sync_schema_issues(hass, entry, findings, {})
+
+    assert registry.async_get_issue(DOMAIN, _unit_issue_id(entry, _UNIT_PATH)) is None
+
+
+async def test_a_dismissal_survives_the_entity_leaving_and_returning(hass, entry) -> None:
+    """Suppression deletes, and a delete is the one thing that clears a dismissal.
+
+    That is the accepted cost of not nagging about a finding nobody owns: the
+    notice is genuinely new when an entity starts reading the field again.
+    """
+    findings = SchemaFindings(frozenset({_PATH}), (), frozenset())
+    async_sync_schema_issues(hass, entry, findings, _AFFECTED)
+    ir.async_ignore_issue(hass, DOMAIN, _issue_id(entry), True)
+
+    async_sync_schema_issues(hass, entry, findings, {})
+    async_sync_schema_issues(hass, entry, findings, _AFFECTED)
+
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, _issue_id(entry))
+    assert issue is not None
+    assert issue.dismissed_version is None
 
 
 async def test_findings_fire_an_event(hass, entry) -> None:
@@ -222,9 +349,12 @@ async def test_findings_fire_an_event(hass, entry) -> None:
     events = []
     hass.bus.async_listen(EVENT_SCHEMA_ISSUE, events.append)
 
-    mismatch = UnitMismatch("panel.l1_voltage", "V", "kV")
+    mismatch = UnitMismatch(_UNIT_PATH, "V", "kV")
     async_sync_schema_issues(
-        hass, entry, SchemaFindings(frozenset({_PATH}), (mismatch,), frozenset()), {}
+        hass,
+        entry,
+        SchemaFindings(frozenset({_PATH}), (mismatch,), frozenset()),
+        _AFFECTED | _UNIT_AFFECTED,
     )
     await hass.async_block_till_done()
 
@@ -232,8 +362,42 @@ async def test_findings_fire_an_event(hass, entry) -> None:
     assert events[0].data == {
         "entry_id": entry.entry_id,
         "unresolved": [_PATH],
-        "unit_mismatches": ["panel.l1_voltage"],
+        "unit_mismatches": [_UNIT_PATH],
     }
+
+
+async def test_the_event_carries_only_what_the_user_was_told(hass, entry) -> None:
+    """A suppressed finding is not user-facing, so it is not in the event either.
+
+    Otherwise an automation would react to a defect that took nothing down, and
+    an all-suppressed pass — which fires nothing at all — would disagree with a
+    partly-suppressed one.
+    """
+    events = []
+    hass.bus.async_listen(EVENT_SCHEMA_ISSUE, events.append)
+
+    async_sync_schema_issues(
+        hass,
+        entry,
+        SchemaFindings(frozenset({_PATH, "panel.vendor_cloud"}), (), frozenset()),
+        _AFFECTED,
+    )
+    await hass.async_block_till_done()
+
+    assert len(events) == 1
+    assert events[0].data["unresolved"] == [_PATH]
+
+
+async def test_an_all_suppressed_pass_fires_no_event(hass, entry) -> None:
+    events = []
+    hass.bus.async_listen(EVENT_SCHEMA_ISSUE, events.append)
+
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({"panel.vendor_cloud"}), (), frozenset()), {}
+    )
+    await hass.async_block_till_done()
+
+    assert events == []
 
 
 async def test_a_healthy_pass_fires_no_event(hass, entry) -> None:
@@ -256,8 +420,8 @@ async def test_clearing_removes_only_this_entry(hass) -> None:
     kept.add_to_hass(hass)
 
     findings = SchemaFindings(frozenset({_PATH}), (), frozenset())
-    async_sync_schema_issues(hass, removed, findings, {})
-    async_sync_schema_issues(hass, kept, findings, {})
+    async_sync_schema_issues(hass, removed, findings, _AFFECTED)
+    async_sync_schema_issues(hass, kept, findings, _AFFECTED)
 
     async_clear_schema_issues(hass, removed)
 
@@ -288,7 +452,9 @@ async def test_remove_entry_clears_this_entry_issues(hass, entry) -> None:
     """Core does not delete our issues when the entry is removed."""
     from custom_components.span_panel import async_remove_entry
 
-    async_sync_schema_issues(hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), {})
+    async_sync_schema_issues(
+        hass, entry, SchemaFindings(frozenset({_PATH}), (), frozenset()), _AFFECTED
+    )
     registry = ir.async_get(hass)
     assert registry.async_get_issue(DOMAIN, _issue_id(entry))
 
