@@ -15,8 +15,10 @@ Field path convention: ``{snapshot_type}.{field_name}`` — ``panel``,
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
+from enum import Enum
+from types import MappingProxyType
 
 from homeassistant.helpers.entity import EntityDescription
 
@@ -91,80 +93,96 @@ description instead.
 """
 
 
-RESIDUAL_EXEMPT_PATHS: frozenset[str] = frozenset(
+class Producibility(Enum):
+    """Which adapters publish a metadata row for an exempt residual path.
+
+    There is deliberately no `BOTH` member. A path both adapters produce
+    satisfies the producible gate, so it belongs in `declared_field_paths()`
+    rather than in an exemption; `test_no_exempt_path_is_producible_by_both`
+    turns that missing member into a failure naming the path to promote.
+    """
+
+    NEITHER = "neither"
+    """No metadata row on either adapter."""
+
+    SCHEMA_0_ONLY = "schema_0_only"
+    """Produced by the schema_0 adapter, absent from schema_1."""
+
+    SCHEMA_1_ONLY = "schema_1_only"
+    """Produced by the schema_1 adapter, absent from schema_0."""
+
+
+RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
     {
         # Homie `$target` values — a pending-command echo, not a schema field.
-        # Neither adapter publishes a metadata row for them.
-        "circuit.relay_state_target",
-        "circuit.priority_target",
+        "circuit.relay_state_target": Producibility.NEITHER,
+        "circuit.priority_target": Producibility.NEITHER,
         # Assembled by the library from panel topology rather than read from a
-        # schema property; no metadata row in either adapter.
-        "circuit.device_type",
-        "circuit.relative_position",
-        # No metadata row in either adapter — the panel reports it outside the
-        # typed field surface.
-        "panel.panel_size",
+        # schema property.
+        "circuit.device_type": Producibility.NEITHER,
+        "circuit.relative_position": Producibility.NEITHER,
+        # The panel reports it outside the typed field surface.
+        "panel.panel_size": Producibility.NEITHER,
         # The panel identity key behind every unique_id and the panel DeviceInfo
-        # (~30 read sites). Neither adapter publishes a row for it.
-        "panel.serial_number",
-        # Gates button availability at button.py:115. No row in either adapter —
-        # the same reason the `dsm_state` sensor is `derived=True`.
-        "panel.dsm_state",
+        # (~30 read sites).
+        "panel.serial_number": Producibility.NEITHER,
+        # Gates button availability at button.py:115 — the same reason the
+        # `dsm_state` sensor is `derived=True`.
+        "panel.dsm_state": Producibility.NEITHER,
         # The circuit's own identity key, used for lookups and id construction
-        # (helpers.py, coordinator.py, entity_resolver.py). No row in either
-        # adapter.
-        "circuit.circuit_id",
-        # Neither adapter emits any `mid.*` metadata rows at all; util.py reads
-        # these off the MID snapshot for device_info, and sensor_panel.py reads
-        # the grid-forming name for an attribute.
-        "mid.hardware_version",
-        "mid.software_version",
-        "mid.vendor_name",
-        "mid.model",
-        "mid.serial_number",
-        "mid.grid_forming_device_name",
+        # (helpers.py, coordinator.py, entity_resolver.py).
+        "circuit.circuit_id": Producibility.NEITHER,
+        # util.py reads these off the MID snapshot for device_info, and
+        # sensor_panel.py reads the grid-forming name for an attribute.
+        "mid.hardware_version": Producibility.NEITHER,
+        "mid.software_version": Producibility.NEITHER,
+        "mid.vendor_name": Producibility.NEITHER,
+        "mid.model": Producibility.NEITHER,
+        "mid.serial_number": Producibility.NEITHER,
+        "mid.grid_forming_device_name": Producibility.NEITHER,
         # The EVSE's Homie node id — an addressing handle used to build the
-        # sub-device identifier, not a published field. No row in either adapter.
-        "evse.node_id",
-        # Schema-conditional: schema_1 publishes it, schema_0 has no row.
-        "circuit.is_user_controllable",
-        # Schema-conditional: schema_0 publishes these, schema_1 has no row.
-        "circuit.always_on",
-        "circuit.is_sheddable",
-        "panel.wifi_ssid",
-        # Schema-conditional: schema_0 publishes these, schema_1 has no row.
-        # util.py builds the EVSE DeviceInfo from them; entity_resolver.py and
+        # sub-device identifier, not a published field.
+        "evse.node_id": Producibility.NEITHER,
+        "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
+        "circuit.always_on": Producibility.SCHEMA_0_ONLY,
+        "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
+        "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,
+        # util.py builds the EVSE DeviceInfo from these; entity_resolver.py and
         # sensor.py resolve the fed circuit through `feed_circuit_id`.
-        "evse.vendor_name",
-        "evse.model",
-        "evse.serial_number",
-        "evse.software_version",
-        "evse.feed_circuit_id",
-        # Schema-conditional: schema_0 publishes it, schema_1 derives islanding
-        # via `resolve_grid_islandable(inverters)`. Read at binary_sensor.py:408
-        # as an entity-creation gate, outside any description.
-        "panel.grid_islandable",
-        # Schema-conditional: schema_0 publishes it, schema_1's
-        # `_PROPERTY_FIELD_MAP` has no `connected` row — the same gap that makes
-        # the `bess_connected` binary sensor `derived=True`.
-        "battery.connected",
+        "evse.vendor_name": Producibility.SCHEMA_0_ONLY,
+        "evse.model": Producibility.SCHEMA_0_ONLY,
+        "evse.serial_number": Producibility.SCHEMA_0_ONLY,
+        "evse.software_version": Producibility.SCHEMA_0_ONLY,
+        "evse.feed_circuit_id": Producibility.SCHEMA_0_ONLY,
+        # schema_1 derives islanding via `resolve_grid_islandable(inverters)`
+        # instead. Read at binary_sensor.py:408 as an entity-creation gate,
+        # outside any description.
+        "panel.grid_islandable": Producibility.SCHEMA_0_ONLY,
+        # schema_1's `_PROPERTY_FIELD_MAP` has no `connected` row — the same gap
+        # that makes the `bess_connected` binary sensor `derived=True`.
+        "battery.connected": Producibility.SCHEMA_0_ONLY,
     }
 )
-"""Residual readers exempt from the producible check, for one of two reasons.
+"""Residual readers exempt from the producible check, and why each is exempt.
 
-**Not produced by any adapter** — Homie `$target` echoes, values the library
-assembles from panel topology, and every `mid.*` field. There is no metadata row
-to check against on either schema.
+The gate requires a path to be producible by *both* adapters, so a read is
+exempt for one of two reasons, and the annotation says which:
+`Producibility.NEITHER` for values no adapter publishes a metadata row for —
+Homie `$target` echoes, values the library assembles from panel topology, every
+`mid.*` field; `SCHEMA_0_ONLY` / `SCHEMA_1_ONLY` for schema-conditional fields
+present on one schema and absent from the other.
 
-**Produced by only one adapter** — schema-conditional fields. The gate requires
-a path to be producible by *both* adapters, so a field present on one schema and
-absent from the other cannot satisfy it. Exempt is not the same as derived:
-these are read straight off a snapshot field, that field just is not on both
-schemas.
+Exempt is not the same as derived: these are read straight off a snapshot field,
+that field just is not on both schemas.
+
+The annotations are not documentation. `tests/test_field_path_conformance.py`
+builds both adapters' metadata from the vendored fixtures and asserts every
+entry's annotation against what those adapters actually produce, so a stale
+reason fails the build instead of misleading a reader. A path that becomes
+producible by both fails there too, demanding promotion to a declaration.
 
 Deliberately **not** returned by `declared_field_paths()`. Recorded here so the
-reads are still enumerated somewhere rather than being invisible. The per-entry
-comments say which of the two reasons applies.
+reads are still enumerated somewhere rather than being invisible.
 """
 
 

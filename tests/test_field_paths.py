@@ -66,5 +66,5 @@ def test_every_description_declares_exactly_one() -> None:
 
 def test_residual_buckets_are_disjoint() -> None:
     """A residual path is either producible or exempt, never both."""
-    assert not (RESIDUAL_FIELD_PATHS & RESIDUAL_EXEMPT_PATHS)
-    assert not (declared_field_paths() & RESIDUAL_EXEMPT_PATHS)
+    assert not (RESIDUAL_FIELD_PATHS & RESIDUAL_EXEMPT_PATHS.keys())
+    assert not (declared_field_paths() & RESIDUAL_EXEMPT_PATHS.keys())
