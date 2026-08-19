@@ -113,6 +113,8 @@ class SpanCircuitPowerSensor(
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
+            field_path=description.field_path,
+            derived=description.derived,
             entity_registry_enabled_default=description.entity_registry_enabled_default,
             entity_registry_visible_default=description.entity_registry_visible_default,
             entity_category=description.entity_category,
@@ -270,6 +272,8 @@ class SpanCircuitEnergySensor(
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
+            field_path=description.field_path,
+            derived=description.derived,
             entity_registry_enabled_default=description.entity_registry_enabled_default,
             entity_registry_visible_default=description.entity_registry_visible_default,
         )
@@ -445,6 +449,8 @@ class SpanUnmappedCircuitSensor(
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
+            field_path=description.field_path,
+            derived=description.derived,
             entity_registry_enabled_default=True,
             entity_registry_visible_default=False,
         )

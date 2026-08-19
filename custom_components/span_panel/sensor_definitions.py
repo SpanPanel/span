@@ -35,15 +35,17 @@ from span_panel_api import (
     SpanPanelSnapshot,
 )
 
+from .field_paths import FieldPathDeclarationMixin
+
 
 @dataclass(frozen=True)
-class SpanPanelCircuitsRequiredKeysMixin:
+class SpanPanelCircuitsRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for Span Panel circuit sensors."""
 
     value_fn: Callable[[SpanCircuitSnapshot], float | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanPanelCircuitsSensorEntityDescription(
     SensorEntityDescription, SpanPanelCircuitsRequiredKeysMixin
 ):
@@ -51,25 +53,25 @@ class SpanPanelCircuitsSensorEntityDescription(
 
 
 @dataclass(frozen=True)
-class SpanPanelDataRequiredKeysMixin:
+class SpanPanelDataRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for Span Panel data sensors."""
 
     value_fn: Callable[[SpanPanelSnapshot], float | str | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanPanelDataSensorEntityDescription(SensorEntityDescription, SpanPanelDataRequiredKeysMixin):
     """Describes a Span Panel data sensor entity."""
 
 
 @dataclass(frozen=True)
-class SpanPanelStatusRequiredKeysMixin:
+class SpanPanelStatusRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for Span Panel status sensors."""
 
     value_fn: Callable[[SpanPanelSnapshot], str]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanPanelStatusSensorEntityDescription(
     SensorEntityDescription, SpanPanelStatusRequiredKeysMixin
 ):
@@ -77,13 +79,13 @@ class SpanPanelStatusSensorEntityDescription(
 
 
 @dataclass(frozen=True)
-class SpanPanelBatteryRequiredKeysMixin:
+class SpanPanelBatteryRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for Span Panel battery sensors."""
 
     value_fn: Callable[[SpanBatterySnapshot], float | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanPanelBatterySensorEntityDescription(
     SensorEntityDescription, SpanPanelBatteryRequiredKeysMixin
 ):
@@ -101,6 +103,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="dsm_state",
+        derived=True,
         translation_key="dsm_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -110,6 +113,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
+        derived=True,
         translation_key="dsm_grid_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -118,6 +122,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="current_run_config",
+        derived=True,
         translation_key="current_run_config",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -126,6 +131,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="main_relay_state",
+        field_path="panel.main_relay_state",
         translation_key="main_relay_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -134,6 +140,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="grid_forming_entity",
+        derived=True,
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -142,6 +149,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="vendor_cloud",
+        field_path="panel.vendor_cloud",
         translation_key="vendor_cloud",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -155,6 +163,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
 STATUS_SENSORS: tuple[SpanPanelStatusSensorEntityDescription,] = (
     SpanPanelStatusSensorEntityDescription(
         key="software_version",
+        field_path="panel.firmware_version",
         translation_key="software_version",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.firmware_version,
@@ -170,6 +179,7 @@ UNMAPPED_SENSORS: tuple[
 ] = (
     SpanPanelCircuitsSensorEntityDescription(
         key="instantPowerW",
+        field_path="circuit.instant_power_w",
         name="Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -181,6 +191,7 @@ UNMAPPED_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="producedEnergyWh",
+        field_path="circuit.produced_energy_wh",
         name="Produced Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -192,6 +203,7 @@ UNMAPPED_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="consumedEnergyWh",
+        field_path="circuit.consumed_energy_wh",
         name="Consumed Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -206,6 +218,7 @@ UNMAPPED_SENSORS: tuple[
 # Battery sensor definition (conditionally created when battery data available)
 BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensorEntityDescription(
     key="storage_battery_percentage",
+    field_path="battery.soe_percentage",
     translation_key="battery_level",
     native_unit_of_measurement=PERCENTAGE,
     state_class=SensorStateClass.MEASUREMENT,
@@ -221,6 +234,7 @@ BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensor
 # L1/L2 voltage sensors (v2 only, conditionally created)
 L1_VOLTAGE_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="l1_voltage",
+    field_path="panel.l1_voltage",
     translation_key="l1_voltage",
     device_class=SensorDeviceClass.VOLTAGE,
     state_class=SensorStateClass.MEASUREMENT,
@@ -233,6 +247,7 @@ L1_VOLTAGE_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
 
 L2_VOLTAGE_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="l2_voltage",
+    field_path="panel.l2_voltage",
     translation_key="l2_voltage",
     device_class=SensorDeviceClass.VOLTAGE,
     state_class=SensorStateClass.MEASUREMENT,
@@ -247,6 +262,7 @@ L2_VOLTAGE_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEnt
 UPSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="upstream_l1_current",
+        field_path="panel.upstream_l1_current_a",
         translation_key="upstream_l1_current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -261,6 +277,7 @@ UPSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
 UPSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="upstream_l2_current",
+        field_path="panel.upstream_l2_current_a",
         translation_key="upstream_l2_current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -275,6 +292,7 @@ UPSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
 DOWNSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="downstream_l1_current",
+        field_path="panel.downstream_l1_current_a",
         translation_key="downstream_l1_current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -288,6 +306,7 @@ DOWNSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
 DOWNSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="downstream_l2_current",
+        field_path="panel.downstream_l2_current_a",
         translation_key="downstream_l2_current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -302,6 +321,7 @@ DOWNSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
 MAIN_BREAKER_RATING_SENSOR: SpanPanelDataSensorEntityDescription = (
     SpanPanelDataSensorEntityDescription(
         key="main_breaker_rating",
+        field_path="panel.main_breaker_rating_a",
         translation_key="main_breaker_rating",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -318,6 +338,7 @@ MAIN_BREAKER_RATING_SENSOR: SpanPanelDataSensorEntityDescription = (
 CIRCUIT_CURRENT_SENSOR: SpanPanelCircuitsSensorEntityDescription = (
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_current",
+        field_path="circuit.current_a",
         name="Current",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -331,6 +352,7 @@ CIRCUIT_CURRENT_SENSOR: SpanPanelCircuitsSensorEntityDescription = (
 CIRCUIT_BREAKER_RATING_SENSOR: SpanPanelCircuitsSensorEntityDescription = (
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_breaker_rating",
+        field_path="circuit.breaker_rating_a",
         name="Breaker Rating",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -345,13 +367,13 @@ CIRCUIT_BREAKER_RATING_SENSOR: SpanPanelCircuitsSensorEntityDescription = (
 
 
 @dataclass(frozen=True)
-class SpanBessMetadataRequiredKeysMixin:
+class SpanBessMetadataRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for BESS metadata sensors."""
 
     value_fn: Callable[[SpanBatterySnapshot], float | str | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanBessMetadataSensorEntityDescription(
     SensorEntityDescription, SpanBessMetadataRequiredKeysMixin
 ):
@@ -359,13 +381,13 @@ class SpanBessMetadataSensorEntityDescription(
 
 
 @dataclass(frozen=True)
-class SpanMidRequiredKeysMixin:
+class SpanMidRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for MID sensors."""
 
     value_fn: Callable[[SpanMidSnapshot], str | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanMidSensorEntityDescription(SensorEntityDescription, SpanMidRequiredKeysMixin):
     """Describes a sensor on the Microgrid Interconnect Device."""
 
@@ -373,6 +395,7 @@ class SpanMidSensorEntityDescription(SensorEntityDescription, SpanMidRequiredKey
 MID_SENSORS: tuple[SpanMidSensorEntityDescription, ...] = (
     SpanMidSensorEntityDescription(
         key="mid_grid_state",
+        derived=True,
         translation_key="mid_grid_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -403,30 +426,35 @@ BESS_METADATA_SENSORS: tuple[
 ] = (
     SpanBessMetadataSensorEntityDescription(
         key="vendor",
+        field_path="battery.vendor_name",
         translation_key="bess_vendor",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b: b.vendor_name,
     ),
     SpanBessMetadataSensorEntityDescription(
         key="model",
+        field_path="battery.model",
         translation_key="bess_model",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b: b.model,
     ),
     SpanBessMetadataSensorEntityDescription(
         key="serial_number",
+        field_path="battery.serial_number",
         translation_key="bess_serial_number",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b: b.serial_number,
     ),
     SpanBessMetadataSensorEntityDescription(
         key="firmware_version",
+        field_path="battery.software_version",
         translation_key="bess_firmware_version",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda b: b.software_version,
     ),
     SpanBessMetadataSensorEntityDescription(
         key="nameplate_capacity",
+        field_path="battery.nameplate_capacity_kwh",
         translation_key="bess_nameplate_capacity",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -435,6 +463,7 @@ BESS_METADATA_SENSORS: tuple[
     ),
     SpanBessMetadataSensorEntityDescription(
         key="soe_kwh",
+        field_path="battery.soe_kwh",
         translation_key="bess_soe_kwh",
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -451,13 +480,13 @@ BESS_METADATA_SENSORS: tuple[
 
 
 @dataclass(frozen=True)
-class SpanPVMetadataRequiredKeysMixin:
+class SpanPVMetadataRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for PV metadata sensors."""
 
     value_fn: Callable[[SpanPanelSnapshot], float | str | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanPVMetadataSensorEntityDescription(
     SensorEntityDescription, SpanPVMetadataRequiredKeysMixin
 ):
@@ -471,18 +500,21 @@ PV_METADATA_SENSORS: tuple[
 ] = (
     SpanPVMetadataSensorEntityDescription(
         key="pv_vendor",
+        field_path="pv.vendor_name",
         translation_key="pv_vendor",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.pv.vendor_name,
     ),
     SpanPVMetadataSensorEntityDescription(
         key="pv_product",
+        field_path="pv.model",
         translation_key="pv_product",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda s: s.pv.model,
     ),
     SpanPVMetadataSensorEntityDescription(
         key="pv_nameplate_capacity",
+        field_path="pv.nameplate_capacity_w",
         translation_key="pv_nameplate_capacity",
         native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -499,6 +531,7 @@ PANEL_POWER_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="instantGridPowerW",
+        field_path="panel.instant_grid_power_w",
         translation_key="instant_grid_power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -508,6 +541,7 @@ PANEL_POWER_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
+        field_path="panel.feedthrough_power_w",
         translation_key="feedthrough_power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -520,6 +554,7 @@ PANEL_POWER_SENSORS: tuple[
 # Battery power sensor (conditionally created when BESS is commissioned)
 BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="batteryPowerW",
+    field_path="panel.power_flow_battery",
     translation_key="battery_power",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
@@ -531,6 +566,7 @@ BATTERY_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensor
 # PV power sensor (conditionally created when PV is commissioned)
 PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="pvPowerW",
+    field_path="panel.power_flow_pv",
     translation_key="pv_power",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
@@ -542,6 +578,7 @@ PV_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntit
 # Grid power flow sensor (conditionally created when power-flows data is available)
 GRID_POWER_FLOW_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="gridPowerFlowW",
+    field_path="panel.power_flow_grid",
     translation_key="grid_power_flow",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
@@ -553,6 +590,7 @@ GRID_POWER_FLOW_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSens
 # Site power sensor (conditionally created when power-flows data is available)
 SITE_POWER_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
     key="sitePowerW",
+    field_path="panel.power_flow_site",
     translation_key="site_power",
     native_unit_of_measurement=UnitOfPower.WATT,
     state_class=SensorStateClass.MEASUREMENT,
@@ -572,6 +610,7 @@ PANEL_ENERGY_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyProducedWh",
+        field_path="panel.main_meter_energy_produced_wh",
         translation_key="main_meter_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -581,6 +620,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterEnergyConsumedWh",
+        field_path="panel.main_meter_energy_consumed_wh",
         translation_key="main_meter_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -590,6 +630,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyProducedWh",
+        field_path="panel.feedthrough_energy_produced_wh",
         translation_key="feedthrough_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -599,6 +640,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyConsumedWh",
+        field_path="panel.feedthrough_energy_consumed_wh",
         translation_key="feedthrough_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -608,6 +650,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterNetEnergyWh",
+        derived=True,
         translation_key="main_meter_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -620,6 +663,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
+        derived=True,
         translation_key="feedthrough_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -641,6 +685,7 @@ CIRCUIT_SENSORS: tuple[
 ] = (
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_power",
+        field_path="circuit.instant_power_w",
         name="Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -654,6 +699,7 @@ CIRCUIT_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_produced",
+        field_path="circuit.produced_energy_wh",
         name="Produced Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -665,6 +711,7 @@ CIRCUIT_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_consumed",
+        field_path="circuit.consumed_energy_wh",
         name="Consumed Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -676,6 +723,7 @@ CIRCUIT_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_net",
+        derived=True,
         name="Net Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -698,13 +746,13 @@ CIRCUIT_SENSORS: tuple[
 
 
 @dataclass(frozen=True)
-class SpanEvseRequiredKeysMixin:
+class SpanEvseRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for EVSE sensors."""
 
     value_fn: Callable[[SpanEvseSnapshot], float | str | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanEvseSensorEntityDescription(SensorEntityDescription, SpanEvseRequiredKeysMixin):
     """Describes an EVSE sensor entity."""
 
@@ -716,6 +764,7 @@ EVSE_SENSORS: tuple[
 ] = (
     SpanEvseSensorEntityDescription(
         key="evse_status",
+        field_path="evse.status",
         translation_key="evse_status",
         device_class=SensorDeviceClass.ENUM,
         options=[
@@ -734,6 +783,7 @@ EVSE_SENSORS: tuple[
     ),
     SpanEvseSensorEntityDescription(
         key="evse_advertised_current",
+        field_path="evse.advertised_current_a",
         translation_key="evse_advertised_current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -743,9 +793,45 @@ EVSE_SENSORS: tuple[
     ),
     SpanEvseSensorEntityDescription(
         key="evse_lock_state",
+        field_path="evse.lock_state",
         translation_key="evse_lock_state",
         device_class=SensorDeviceClass.ENUM,
         options=["locked", "unlocked", "unknown"],
         value_fn=lambda e: e.lock_state or "unknown",
     ),
 )
+
+
+def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
+    """Every sensor description, without deduplication.
+
+    Deliberately not keyed by `description.key`: keys such as "model" and
+    "serial_number" repeat across device classes, so a dict keyed on them
+    silently drops descriptions.
+    """
+    return (
+        *PANEL_DATA_STATUS_SENSORS,
+        *STATUS_SENSORS,
+        *UNMAPPED_SENSORS,
+        *MID_SENSORS,
+        *BESS_METADATA_SENSORS,
+        *PV_METADATA_SENSORS,
+        *PANEL_POWER_SENSORS,
+        *PANEL_ENERGY_SENSORS,
+        *CIRCUIT_SENSORS,
+        *EVSE_SENSORS,
+        BATTERY_SENSOR,
+        BATTERY_POWER_SENSOR,
+        PV_POWER_SENSOR,
+        GRID_POWER_FLOW_SENSOR,
+        SITE_POWER_SENSOR,
+        L1_VOLTAGE_SENSOR,
+        L2_VOLTAGE_SENSOR,
+        UPSTREAM_L1_CURRENT_SENSOR,
+        UPSTREAM_L2_CURRENT_SENSOR,
+        DOWNSTREAM_L1_CURRENT_SENSOR,
+        DOWNSTREAM_L2_CURRENT_SENSOR,
+        MAIN_BREAKER_RATING_SENSOR,
+        CIRCUIT_CURRENT_SENSOR,
+        CIRCUIT_BREAKER_RATING_SENSOR,
+    )
