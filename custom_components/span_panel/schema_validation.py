@@ -1,176 +1,82 @@
-"""Schema validation — cross-check field metadata against sensor definitions.
+"""Compare adapter field metadata against what this integration declares it reads.
 
-Compares the ``span-panel-api`` library's field metadata (schema-derived units
-and datatypes keyed by snapshot field paths) against the integration's sensor
-definitions. All Homie/MQTT knowledge stays in the library; this module only
-sees snapshot field paths and HA sensor metadata.
+Consumes the library's three-way signal:
 
-Schema drift detection (diffing schema versions between firmware updates) is
-the library's responsibility. The integration only consumes the result.
+- entry, ``resolved=True`` — produced; the unit is meaningful
+- entry, ``resolved=False`` — a device is present but does not declare the
+  property. Degradation.
+- **no entry** — no device of that type. Hardware absent; not a defect.
 
-All output is log-only. No entity creation or sensor behavior changes.
-
-Phase 1 of the schema-driven changes plan.
-
-Usage:
-    Called from the coordinator after the first successful data refresh.
-    Requires ``span-panel-api`` to expose field metadata via the client protocol.
-    Until that library change lands, ``validate_field_metadata()`` is a safe no-op.
+Because the adapter classifies absence, this module needs no capability table
+and never infers hardware presence from telemetry.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 
 from homeassistant.components.sensor import SensorEntityDescription
+from span_panel_api.models import FieldMetadata
 
-from .schema_expectations import SENSOR_FIELD_MAP, all_referenced_field_paths
-from .sensor_definitions import (
-    BATTERY_POWER_SENSOR,
-    BATTERY_SENSOR,
-    BESS_METADATA_SENSORS,
-    CIRCUIT_BREAKER_RATING_SENSOR,
-    CIRCUIT_CURRENT_SENSOR,
-    CIRCUIT_SENSORS,
-    DOWNSTREAM_L1_CURRENT_SENSOR,
-    DOWNSTREAM_L2_CURRENT_SENSOR,
-    EVSE_SENSORS,
-    GRID_POWER_FLOW_SENSOR,
-    L1_VOLTAGE_SENSOR,
-    L2_VOLTAGE_SENSOR,
-    MAIN_BREAKER_RATING_SENSOR,
-    PANEL_DATA_STATUS_SENSORS,
-    PANEL_ENERGY_SENSORS,
-    PANEL_POWER_SENSORS,
-    PV_METADATA_SENSORS,
-    PV_POWER_SENSOR,
-    SITE_POWER_SENSOR,
-    STATUS_SENSORS,
-    UNMAPPED_SENSORS,
-    UPSTREAM_L1_CURRENT_SENSOR,
-    UPSTREAM_L2_CURRENT_SENSOR,
-)
+from .field_paths import declared_field_paths
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _cross_check_units(
-    field_metadata: dict[str, dict[str, object]],
-    sensor_defs: dict[str, SensorEntityDescription],
-) -> None:
-    """Compare library-reported units against sensor definition units.
+@dataclass(frozen=True, slots=True)
+class UnitMismatch:
+    """A declared unit that disagrees with the schema's."""
 
-    For each sensor in SENSOR_FIELD_MAP that has a ``native_unit_of_measurement``,
-    look up the corresponding field path in the library's metadata and compare
-    the declared unit.
-    """
-    for sensor_key, field_path in SENSOR_FIELD_MAP.items():
-        sensor_def = sensor_defs.get(sensor_key)
-        if sensor_def is None:
-            continue
-
-        ha_unit = sensor_def.native_unit_of_measurement
-        if ha_unit is None:
-            # Sensor has no unit (enum, string) — nothing to cross-check
-            continue
-
-        field_info = field_metadata.get(field_path)
-        if field_info is None:
-            _LOGGER.debug(
-                "Schema cross-check: sensor '%s' reads field '%s' but "
-                "library reports no metadata for it",
-                sensor_key,
-                field_path,
-            )
-            continue
-
-        schema_unit = field_info.get("unit")
-        if schema_unit is None:
-            _LOGGER.debug(
-                "Schema cross-check: field '%s' (sensor '%s') has no unit "
-                "in library metadata, integration expects '%s'",
-                field_path,
-                sensor_key,
-                ha_unit,
-            )
-        elif str(schema_unit) != str(ha_unit):
-            _LOGGER.debug(
-                "Schema cross-check: field '%s' (sensor '%s') unit is '%s' "
-                "in library metadata, integration expects '%s'",
-                field_path,
-                sensor_key,
-                schema_unit,
-                ha_unit,
-            )
+    field_path: str
+    ha_unit: str
+    schema_unit: str
 
 
-def _report_unmapped_fields(
-    field_metadata: dict[str, dict[str, object]],
-) -> None:
-    """Log fields in library metadata that no sensor definition references."""
-    referenced = all_referenced_field_paths()
-    for field_path in sorted(set(field_metadata) - referenced):
-        _LOGGER.debug(
-            "Schema: field '%s' in library metadata is not mapped to any sensor",
-            field_path,
-        )
+@dataclass(frozen=True, slots=True)
+class SchemaFindings:
+    """Outcome of one validation pass."""
+
+    unresolved: frozenset[str]
+    unit_mismatches: tuple[UnitMismatch, ...]
+    unread: frozenset[str]
 
 
-def validate_field_metadata(
-    field_metadata: dict[str, dict[str, object]] | None,
+def evaluate_field_metadata(
+    field_metadata: dict[str, FieldMetadata] | None,
     sensor_defs: dict[str, SensorEntityDescription] | None = None,
-) -> None:
-    """Run integration-side schema validation checks.
-
-    Args:
-        field_metadata: The library's field metadata, keyed by snapshot field
-            path (e.g. ``"panel.instant_grid_power_w"``). Each value is a dict
-            with at least ``"unit"`` and ``"datatype"`` keys. None if the
-            library does not yet expose metadata.
-        sensor_defs: Dict of sensor_key → SensorEntityDescription for unit
-            cross-checking. None skips the cross-check.
-
-    """
+) -> SchemaFindings:
+    """Classify one snapshot of adapter metadata against our declarations."""
     if field_metadata is None:
-        _LOGGER.debug("Schema validation skipped — library does not expose field metadata")
-        return
+        return SchemaFindings(frozenset(), (), frozenset())
 
-    if sensor_defs is not None:
-        _cross_check_units(field_metadata, sensor_defs)
+    declared = declared_field_paths()
+    sensor_defs = sensor_defs or {}
 
-    _report_unmapped_fields(field_metadata)
+    unresolved: set[str] = set()
+    mismatches: list[UnitMismatch] = []
 
+    for field_path in declared:
+        entry = field_metadata.get(field_path)
+        if entry is None:
+            # Hardware not present. Not a defect, and deliberately silent.
+            continue
+        if not entry.resolved:
+            unresolved.add(field_path)
+            continue
+        description = sensor_defs.get(field_path)
+        if description is None:
+            continue
+        ha_unit = description.native_unit_of_measurement
+        if ha_unit is None or entry.unit is None:
+            continue
+        if str(entry.unit) != str(ha_unit):
+            mismatches.append(UnitMismatch(field_path, str(ha_unit), str(entry.unit)))
 
-def collect_sensor_definitions() -> dict[str, SensorEntityDescription]:
-    """Collect all sensor definitions into a dict keyed by sensor key.
+    unread = frozenset(set(field_metadata) - set(declared))
+    for field_path in sorted(unread):
+        # An addition is legal within a major version. This is an inventory for
+        # us, never a user-facing finding.
+        _LOGGER.debug("Schema: %s is produced but no platform reads it", field_path)
 
-    Only includes sensors that appear in SENSOR_FIELD_MAP (i.e. sensors
-    that read a single snapshot field and are eligible for cross-checking).
-    """
-    all_defs: list[SensorEntityDescription] = [
-        *PANEL_DATA_STATUS_SENSORS,
-        *STATUS_SENSORS,
-        *UNMAPPED_SENSORS,
-        BATTERY_SENSOR,
-        L1_VOLTAGE_SENSOR,
-        L2_VOLTAGE_SENSOR,
-        UPSTREAM_L1_CURRENT_SENSOR,
-        UPSTREAM_L2_CURRENT_SENSOR,
-        DOWNSTREAM_L1_CURRENT_SENSOR,
-        DOWNSTREAM_L2_CURRENT_SENSOR,
-        MAIN_BREAKER_RATING_SENSOR,
-        CIRCUIT_CURRENT_SENSOR,
-        CIRCUIT_BREAKER_RATING_SENSOR,
-        *BESS_METADATA_SENSORS,
-        *PV_METADATA_SENSORS,
-        *PANEL_POWER_SENSORS,
-        BATTERY_POWER_SENSOR,
-        PV_POWER_SENSOR,
-        GRID_POWER_FLOW_SENSOR,
-        SITE_POWER_SENSOR,
-        *PANEL_ENERGY_SENSORS,
-        *CIRCUIT_SENSORS,
-        *EVSE_SENSORS,
-    ]
-    mapped_keys = set(SENSOR_FIELD_MAP.keys())
-    return {d.key: d for d in all_defs if d.key in mapped_keys}
+    return SchemaFindings(frozenset(unresolved), tuple(mismatches), unread)

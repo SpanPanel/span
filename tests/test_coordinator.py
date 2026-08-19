@@ -18,6 +18,8 @@ from span_panel_api.exceptions import (
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from homeassistant.core import HomeAssistant
 from span_panel_api import SpanMqttClient
+from span_panel_api.models import FieldMetadata
+from span_panel_api.protocol import SpanPanelClientProtocol
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -230,61 +232,58 @@ async def test_on_snapshot_push_updates_state_and_runs_post_tasks(
 async def test_run_schema_validation_skips_without_metadata(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Schema validation should skip cleanly when no metadata is available."""
+    """No metadata means "unknown", so the pass must leave findings untouched.
 
-    class FakeSpanMqttClient:
-        field_metadata = None
-
-    client = FakeSpanMqttClient()
+    `field_metadata` is None for the whole _on_pre_rebuild -> retained-message
+    window, which an ordinary reconnect opens. Producing empty findings here
+    would read as "every issue is resolved" to the Repairs reconciler.
+    """
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = None
     coordinator = _create_coordinator(hass, client=client)
 
     caplog.set_level(logging.DEBUG)
-
-    with patch(
-        "custom_components.span_panel.coordinator.SpanMqttClient",
-        FakeSpanMqttClient,
-    ):
-        coordinator._run_schema_validation()
+    coordinator._run_schema_validation()
 
     assert "Schema validation skipped" in caplog.text
+    assert coordinator.schema_findings is None
+    assert coordinator.unresolved_paths == frozenset()
 
 
-async def test_run_schema_validation_validates_field_metadata(
+async def test_run_schema_validation_preserves_prior_findings(
     hass: HomeAssistant,
 ) -> None:
-    """Schema validation should pass field metadata to the validator."""
-
-    class FakeField:
-        def __init__(self, unit: str, datatype: str) -> None:
-            self.unit = unit
-            self.datatype = datatype
-
-    class FakeSpanMqttClient:
-        field_metadata = {"instantPowerW": FakeField("W", "number")}
-
-    client = FakeSpanMqttClient()
+    """A later pass without metadata must not erase what an earlier one found."""
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = {
+        "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
+    }
     coordinator = _create_coordinator(hass, client=client)
 
-    with (
-        patch(
-            "custom_components.span_panel.coordinator.SpanMqttClient",
-            FakeSpanMqttClient,
-        ),
-        patch(
-            "custom_components.span_panel.coordinator.collect_sensor_definitions",
-            return_value={"sensor_defs": "ok"},
-        ) as mock_collect,
-        patch(
-            "custom_components.span_panel.coordinator.validate_field_metadata"
-        ) as mock_validate,
-    ):
-        coordinator._run_schema_validation()
+    coordinator._run_schema_validation()
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
 
-    mock_collect.assert_called_once()
-    mock_validate.assert_called_once_with(
-        {"instantPowerW": {"unit": "W", "datatype": "number"}},
-        sensor_defs={"sensor_defs": "ok"},
-    )
+    client.field_metadata = None
+    coordinator._run_schema_validation()
+
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
+
+
+async def test_run_schema_validation_reads_metadata_through_the_protocol(
+    hass: HomeAssistant,
+) -> None:
+    """The unit cross-check must key sensor definitions by field path."""
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = {"circuit.instant_power_w": FieldMetadata("kW", "float")}
+    coordinator = _create_coordinator(hass, client=client)
+
+    coordinator._run_schema_validation()
+
+    findings = coordinator.schema_findings
+    assert findings is not None
+    assert [m.field_path for m in findings.unit_mismatches] == ["circuit.instant_power_w"]
+    assert findings.unit_mismatches[0].schema_unit == "kW"
+    assert findings.unit_mismatches[0].ha_unit == "W"
 
 
 @pytest.mark.parametrize(

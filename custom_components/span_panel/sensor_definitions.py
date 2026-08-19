@@ -844,3 +844,27 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
         CIRCUIT_CURRENT_SENSOR,
         CIRCUIT_BREAKER_RATING_SENSOR,
     )
+
+
+def sensor_descriptions_by_field_path() -> dict[str, SensorEntityDescription]:
+    """Every non-derived sensor description, keyed by the field path it reads.
+
+    Keyed by field path rather than `description.key` for the reason
+    `all_sensor_descriptions` returns a tuple: keys such as "model" and
+    "serial_number" repeat across device classes, so a dict keyed on them
+    silently drops descriptions. Derived descriptions are excluded — they read
+    several fields, or none, so no single path identifies them.
+
+    Lives here rather than at the call site so the narrowing to
+    `FieldPathDeclarationMixin` stays with the descriptions that carry it.
+    """
+    by_field_path: dict[str, SensorEntityDescription] = {}
+    for description in all_sensor_descriptions():
+        if not isinstance(description, FieldPathDeclarationMixin):
+            # `declared_field_paths` raises on this; here it is simply nothing
+            # to key on.
+            continue
+        if description.derived or description.field_path is None:
+            continue
+        by_field_path[description.field_path] = description
+    return by_field_path

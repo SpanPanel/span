@@ -4,8 +4,8 @@ Most declarations live on the entity descriptions that read them, so they
 cannot drift from the reader. A few readers are in entity code rather than on a
 description; those are listed here.
 
-This module replaces `schema_expectations.SENSOR_FIELD_MAP`, a hand-maintained
-parallel dict that had already drifted once (it pointed at
+This module replaced `schema_expectations.SENSOR_FIELD_MAP` (since deleted), a
+hand-maintained parallel dict that had already drifted once (it pointed at
 `battery.product_name` and `pv.product_name` after the library renamed those
 fields to `battery.model` / `pv.model`).
 

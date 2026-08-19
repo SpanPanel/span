@@ -23,12 +23,13 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot
+from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
 
 from .const import DOMAIN
 from .id_builder import build_circuit_unique_id
-from .schema_validation import collect_sensor_definitions, validate_field_metadata
+from .schema_validation import SchemaFindings, evaluate_field_metadata
+from .sensor_definitions import sensor_descriptions_by_field_path
 
 
 class SpanCircuitEnergySensorProtocol(Protocol):
@@ -90,6 +91,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
         # Schema validation — run once after first successful refresh
         self._schema_validated = False
+        self._findings: SchemaFindings | None = None
 
         # Energy dip compensation — sensors append events here during updates;
         # drained and surfaced as a persistent notification after each cycle.
@@ -363,26 +365,41 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     # --- Schema validation ---
 
     def _run_schema_validation(self) -> None:
-        """Run schema field metadata validation once at startup.
+        """Classify the adapter's field metadata once at startup.
 
-        Compares the library's schema-derived field metadata against the
-        integration's sensor definitions to detect unit mismatches. Also
-        reports fields the integration doesn't map to any sensor.
+        Reads the metadata through ``SpanPanelClientProtocol`` so this module
+        never names a transport class, and stores the result for the platforms
+        and the Repairs reconciler to read.
         """
-        field_metadata: dict[str, dict[str, object]] | None = None
-        if isinstance(self._client, SpanMqttClient):
-            raw = self._client.field_metadata
-            if raw is not None:
-                field_metadata = {
-                    k: {"unit": v.unit, "datatype": v.datatype} for k, v in raw.items()
-                }
+        field_metadata = (
+            self._client.field_metadata
+            if isinstance(self._client, SpanPanelClientProtocol)
+            else None
+        )
 
         if field_metadata is None:
-            _LOGGER.debug("Schema validation skipped — no field metadata available")
+            # "Unknown", NOT "nothing is wrong". `field_metadata` is None for the
+            # whole _on_pre_rebuild -> retained-message window, and that fires on
+            # an ORDINARY reconnect (after MQTT_FULL_REBUILD_AFTER_FAILURES), not
+            # only on a generation change. Reconciling against empty findings here
+            # would delete every schema issue — and with it every dismissal the
+            # user has made. Keep the previous findings and skip this pass.
+            _LOGGER.debug("Schema validation skipped: metadata not available yet")
             return
 
-        sensor_defs = collect_sensor_definitions()
-        validate_field_metadata(field_metadata, sensor_defs=sensor_defs)
+        self._findings = evaluate_field_metadata(
+            field_metadata, sensor_descriptions_by_field_path()
+        )
+
+    @property
+    def unresolved_paths(self) -> frozenset[str]:
+        """Field paths the adapter could not resolve. Empty when healthy."""
+        return self._findings.unresolved if self._findings is not None else frozenset()
+
+    @property
+    def schema_findings(self) -> SchemaFindings | None:
+        """Findings from the last completed validation pass, if any."""
+        return self._findings
 
     # --- Hardware capability detection ---
 
