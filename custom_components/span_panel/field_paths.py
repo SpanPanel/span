@@ -10,7 +10,7 @@ parallel dict that had already drifted once (it pointed at
 fields to `battery.model` / `pv.model`).
 
 Field path convention: ``{snapshot_type}.{field_name}`` — ``panel``,
-``circuit``, ``battery``, ``pv`` and ``evse``.
+``circuit``, ``battery``, ``pv``, ``evse`` and ``mid``.
 """
 
 from __future__ import annotations
@@ -81,16 +81,46 @@ RESIDUAL_EXEMPT_PATHS: frozenset[str] = frozenset(
         # No metadata row in either adapter — the panel reports it outside the
         # typed field surface.
         "panel.panel_size",
+        # The panel identity key behind every unique_id and the panel DeviceInfo
+        # (~30 read sites). Neither adapter publishes a row for it.
+        "panel.serial_number",
+        # Gates button availability at button.py:115. No row in either adapter —
+        # the same reason the `dsm_state` sensor is `derived=True`.
+        "panel.dsm_state",
+        # The circuit's own identity key, used for lookups and id construction
+        # (helpers.py, coordinator.py, entity_resolver.py). No row in either
+        # adapter.
+        "circuit.circuit_id",
         # Neither adapter emits any `mid.*` metadata rows at all; util.py reads
-        # these off the MID snapshot for device_info only.
+        # these off the MID snapshot for device_info, and sensor_panel.py reads
+        # the grid-forming name for an attribute.
         "mid.hardware_version",
         "mid.software_version",
+        "mid.vendor_name",
+        "mid.model",
+        "mid.serial_number",
+        "mid.grid_forming_device_name",
+        # The EVSE's Homie node id — an addressing handle used to build the
+        # sub-device identifier, not a published field. No row in either adapter.
+        "evse.node_id",
         # Schema-conditional: schema_1 publishes it, schema_0 has no row.
         "circuit.is_user_controllable",
         # Schema-conditional: schema_0 publishes these, schema_1 has no row.
         "circuit.always_on",
         "circuit.is_sheddable",
         "panel.wifi_ssid",
+        # Schema-conditional: schema_0 publishes these, schema_1 has no row.
+        # util.py builds the EVSE DeviceInfo from them; entity_resolver.py and
+        # sensor.py resolve the fed circuit through `feed_circuit_id`.
+        "evse.vendor_name",
+        "evse.model",
+        "evse.serial_number",
+        "evse.software_version",
+        "evse.feed_circuit_id",
+        # Schema-conditional: schema_0 publishes it, schema_1 derives islanding
+        # via `resolve_grid_islandable(inverters)`. Read at binary_sensor.py:408
+        # as an entity-creation gate, outside any description.
+        "panel.grid_islandable",
         # Schema-conditional: schema_0 publishes it, schema_1's
         # `_PROPERTY_FIELD_MAP` has no `connected` row — the same gap that makes
         # the `bess_connected` binary sensor `derived=True`.
