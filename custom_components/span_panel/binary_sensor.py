@@ -30,7 +30,7 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
-from .field_paths import FieldPathDeclarationMixin
+from .field_paths import DerivedReason, FieldPathDeclarationMixin
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
@@ -103,7 +103,7 @@ BINARY_SENSORS: tuple[
         key=PANEL_STATUS,
         # Reports coordinator reachability, not a snapshot field — the value_fn
         # is a placeholder the entity class overrides.
-        derived=True,
+        derived=DerivedReason.NO_SOURCE_FIELD,
         translation_key="panel_status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -141,7 +141,7 @@ def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
 
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
-    derived=True,
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -150,7 +150,7 @@ GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
-    derived=True,
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,

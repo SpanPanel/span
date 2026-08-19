@@ -35,7 +35,11 @@ from span_panel_api import (
     SpanPanelSnapshot,
 )
 
-from .field_paths import FieldPathDeclarationMixin, iter_field_path_declarations
+from .field_paths import (
+    DerivedReason,
+    FieldPathDeclarationMixin,
+    iter_field_path_declarations,
+)
 
 
 @dataclass(frozen=True)
@@ -103,7 +107,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
 ] = (
     SpanPanelDataSensorEntityDescription(
         key="dsm_state",
-        derived=True,
+        derived=DerivedReason.NO_SOURCE_FIELD,
         translation_key="dsm_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -113,7 +117,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="dsm_grid_state",
-        derived=True,
+        derived=DerivedReason.NO_SOURCE_FIELD,
         translation_key="dsm_grid_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -122,7 +126,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="current_run_config",
-        derived=True,
+        derived=DerivedReason.NO_SOURCE_FIELD,
         translation_key="current_run_config",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -140,7 +144,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="grid_forming_entity",
-        derived=True,
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -395,7 +399,7 @@ class SpanMidSensorEntityDescription(SensorEntityDescription, SpanMidRequiredKey
 MID_SENSORS: tuple[SpanMidSensorEntityDescription, ...] = (
     SpanMidSensorEntityDescription(
         key="mid_grid_state",
-        derived=True,
+        derived=DerivedReason.NO_SOURCE_FIELD,
         translation_key="mid_grid_state",
         device_class=SensorDeviceClass.ENUM,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -659,7 +663,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="mainMeterNetEnergyWh",
-        derived=True,
+        derived=DerivedReason.MULTIPLE_FIELDS,
         translation_key="main_meter_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -672,7 +676,7 @@ PANEL_ENERGY_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="feedthroughNetEnergyWh",
-        derived=True,
+        derived=DerivedReason.MULTIPLE_FIELDS,
         translation_key="feedthrough_net_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -732,7 +736,7 @@ CIRCUIT_SENSORS: tuple[
     ),
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_net",
-        derived=True,
+        derived=DerivedReason.MULTIPLE_FIELDS,
         name="Net Energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,

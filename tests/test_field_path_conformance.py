@@ -69,7 +69,7 @@ def test_every_declared_path_is_producible(adapter: str, metadata_fn: MetadataFn
     missing = sorted(path for path in declared_field_paths() if path not in metadata)
     assert not missing, (
         f"{adapter} does not produce declared field paths: {missing}. "
-        "Either the declaration is stale, or the entity should be derived=True."
+        "Either the declaration is stale, or the entity should declare a DerivedReason."
     )
 
 

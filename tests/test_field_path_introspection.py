@@ -18,6 +18,7 @@ from span_panel_api import (
 )
 
 from custom_components.span_panel.field_paths import (
+    DerivedReason,
     declared_field_paths,
     residual_field_paths,
 )
@@ -101,7 +102,7 @@ class _DeclaringDescription(Protocol):
     def field_path(self) -> str | None: ...
 
     @property
-    def derived(self) -> bool: ...
+    def derived(self) -> DerivedReason | None: ...
 
     @property
     def value_fn(self) -> Callable[[Any], object]: ...
@@ -284,8 +285,68 @@ def test_no_derived_description_reads_one_producible_field() -> None:
         read = sorted(sink & producible)
         if len(read) == 1:
             offenders.append(
-                f"{description.key}: derived=True but reads exactly one producible field, "
-                f"{read[0]!r} — that is a declaration, so set field_path={read[0]!r}"
+                f"{description.key}: derived={description.derived} but reads exactly one "
+                f"producible field, {read[0]!r} — that is a declaration, so set "
+                f"field_path={read[0]!r}"
             )
 
     assert not offenders, "Misclassified derived descriptions:\n" + "\n".join(offenders)
+
+
+def test_derived_reasons_match_what_value_fns_read() -> None:
+    """Each derived description's stated reason must be the one its reads imply.
+
+    `derived` used to be a `bool` covering four different situations, and it was
+    that conflation which hid `evse_ev_connected`: a single producible field
+    marked derived looked exactly like a genuine multi-field derivation. The
+    reason is only worth its syntax if it is checked, so each variant is a claim
+    about the recorder's output and is asserted as one:
+
+    * `NO_SOURCE_FIELD` — reads nothing either adapter publishes,
+    * `MULTIPLE_FIELDS` — reads two or more fields an adapter publishes,
+    * `SCHEMA_CONDITIONAL_FIELD` — reads exactly one, produced by one adapter
+      only. When the other adapter grows it, this fails and demands promotion to
+      a `field_path` declaration.
+
+    Intersecting with what the adapters emit is what makes the count meaningful:
+    the recorder also picks up method names and other noise.
+    """
+    schema_0 = set(schema_zero_metadata())
+    schema_1 = set(schema_one_metadata())
+    produced = schema_0 | schema_1
+    offenders: list[str] = []
+
+    for description in _declaring_descriptions():
+        reason = description.derived
+        if reason is None:
+            continue
+        try:
+            sink = _record_reads(description)
+        except _UndeterminedPrefix as err:
+            offenders.append(f"{description.key}: {err}, so its reason would go unverified")
+            continue
+        except Exception as err:  # noqa: BLE001
+            offenders.append(f"{description.key}: value_fn raised {err!r}")
+            continue
+        read = sorted(sink & produced)
+        if reason is DerivedReason.NO_SOURCE_FIELD and read:
+            offenders.append(
+                f"{description.key}: claims NO_SOURCE_FIELD but reads {read} — "
+                "the reason is MULTIPLE_FIELDS, SCHEMA_CONDITIONAL_FIELD, or it is a "
+                "declaration"
+            )
+        elif reason is DerivedReason.MULTIPLE_FIELDS and len(read) < 2:
+            offenders.append(
+                f"{description.key}: claims MULTIPLE_FIELDS but reads {read} — "
+                "one field or none is a different reason"
+            )
+        elif reason is DerivedReason.SCHEMA_CONDITIONAL_FIELD and (
+            len(read) != 1 or read[0] in schema_0 & schema_1
+        ):
+            offenders.append(
+                f"{description.key}: claims SCHEMA_CONDITIONAL_FIELD but reads {read}, "
+                f"of which {sorted(set(read) & schema_0 & schema_1)} are produced by both "
+                "adapters"
+            )
+
+    assert not offenders, "Derived reasons disagree with readers:\n" + "\n".join(offenders)

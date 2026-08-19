@@ -23,6 +23,80 @@ from types import MappingProxyType
 from homeassistant.helpers.entity import EntityDescription
 
 
+class DerivedReason(Enum):
+    """Why an entity description declares no single source field.
+
+    A description is derived for exactly one of these reasons, and which one is
+    mechanical — count the snapshot fields its `value_fn` reads.
+    `test_derived_reasons_match_what_value_fns_read` runs every derived
+    description against the recorder and asserts the reason it claims, so a
+    wrong reason fails the build rather than misinforming a reader.
+
+    Reading exactly one producible field is **always** a declaration, however
+    much arithmetic, mapping or membership-testing is applied on top. "Computed
+    from `status`" is not derivation: `field_path="evse.status"` with a
+    `value_fn` of `status in {...}` declares its source correctly and still
+    computes whatever it likes. `evse_ev_connected` was misclassified as derived
+    this way, which cost it both a Repair mention and its unavailability, while
+    its sibling `evse_charging` — same field, same shape — got both. That is the
+    conflation this enum exists to break: as a bare `bool`, all three reasons
+    below and that mistake looked identical.
+    """
+
+    NO_SOURCE_FIELD = "no_source_field"
+    """Reads no field either adapter publishes a metadata row for.
+
+    Either it reads nothing off the snapshot at all (`panel_status` reports
+    coordinator reachability) or the field it reads is one no adapter produces
+    (`dsm_state`, every `mid.*` read). Deliberately one member rather than two:
+    the recorder cannot tell those apart — both leave an empty intersection with
+    what the adapters emit — and a variant nothing can verify is exactly what
+    this enum replaces.
+    """
+
+    MULTIPLE_FIELDS = "multiple_fields"
+    """Combines two or more producible fields, so no one of them is the source.
+
+    The net-energy sensors subtract produced from consumed; blaming either field
+    alone for the entity would be wrong.
+    """
+
+    SCHEMA_CONDITIONAL_FIELD = "schema_conditional_field"
+    """Reads exactly one field, which only one adapter produces.
+
+    Keeps the producible gate satisfiable: the gate requires a path both
+    adapters emit, so a schema-conditional field cannot be declared. If the
+    other adapter ever grows the field, this stops being true and the
+    verification fails, demanding promotion to a `field_path` declaration.
+    """
+
+
+class Producibility(Enum):
+    """Which adapters publish a metadata row for an exempt residual path.
+
+    A *path's* producibility, not a *description's* classification: kept beside
+    `DerivedReason` because the two are verified from the same pair of adapter
+    metadata sets, and deliberately separate because they describe different
+    subjects. `bess_connected` is `SCHEMA_CONDITIONAL_FIELD` while the
+    `battery.connected` path it reads is `SCHEMA_0_ONLY` — two facts about two
+    things.
+
+    There is deliberately no `BOTH` member. A path both adapters produce
+    satisfies the producible gate, so it belongs in `declared_field_paths()`
+    rather than in an exemption; `test_no_exempt_path_is_producible_by_both`
+    turns that missing member into a failure naming the path to promote.
+    """
+
+    NEITHER = "neither"
+    """No metadata row on either adapter."""
+
+    SCHEMA_0_ONLY = "schema_0_only"
+    """Produced by the schema_0 adapter, absent from schema_1."""
+
+    SCHEMA_1_ONLY = "schema_1_only"
+    """Produced by the schema_1 adapter, absent from schema_0."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class FieldPathDeclarationMixin:
     """Declares which snapshot field an entity description reads.
@@ -44,51 +118,20 @@ class FieldPathDeclarationMixin:
     in tests/test_field_path_introspection.py.
     """
 
-    derived: bool = False
-    """True only when there is no single source field to declare.
+    derived: DerivedReason | None = None
+    """Why this entity has no single source field to declare, or `None`.
 
-    Exactly one of these three must hold, and the test is mechanical — count the
-    snapshot fields the `value_fn` reads:
+    Set only when `field_path` is not: the two are alternatives, pinned by
+    `test_every_description_declares_exactly_one`. Which reason applies is not
+    a matter of opinion — see `DerivedReason`, whose members are each asserted
+    against what the `value_fn` actually reads.
 
-    1. it reads **no** snapshot field, or
-    2. it reads **more than one**, or
-    3. it reads exactly one that no adapter, or only one adapter, produces.
-
-    Reading exactly one producible field is **always** a declaration, however
-    much arithmetic, mapping or membership-testing is applied on top. "Computed
-    from `status`" is not derivation: `field_path="evse.status"` with a
-    `value_fn` of `status in {...}` declares its source correctly and still
-    computes whatever it likes. `evse_ev_connected` was misclassified this way,
-    which cost it both a Repair mention and its unavailability, while its
-    sibling `evse_charging` — same field, same shape — got both.
-
-    Case 3 keeps the producible gate satisfiable: it requires a path both
-    adapters emit, so a schema-conditional field cannot be declared. Those are
-    listed in `RESIDUAL_EXEMPT_PATHS` when the integration reads them outside a
-    description.
-
-    `test_no_derived_description_reads_one_producible_field` enforces this rule
-    against every derived description rather than against any one instance.
+    A reason rather than a flag because `bool` conflated four situations, and
+    that conflation is how `evse_ev_connected` — one producible field, marked
+    derived — stayed invisible to both the Repair count and the availability
+    probe. Every consumer tests this by truthiness, which an enum member and
+    `None` answer exactly as `True` and `False` did.
     """
-
-
-class Producibility(Enum):
-    """Which adapters publish a metadata row for an exempt residual path.
-
-    There is deliberately no `BOTH` member. A path both adapters produce
-    satisfies the producible gate, so it belongs in `declared_field_paths()`
-    rather than in an exemption; `test_no_exempt_path_is_producible_by_both`
-    turns that missing member into a failure naming the path to promote.
-    """
-
-    NEITHER = "neither"
-    """No metadata row on either adapter."""
-
-    SCHEMA_0_ONLY = "schema_0_only"
-    """Produced by the schema_0 adapter, absent from schema_1."""
-
-    SCHEMA_1_ONLY = "schema_1_only"
-    """Produced by the schema_1 adapter, absent from schema_0."""
 
 
 RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
