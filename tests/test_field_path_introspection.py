@@ -6,8 +6,16 @@ declaration stays authoritative — this only stops it drifting from the reader.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
-from typing import Any, Protocol, runtime_checkable
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any, Protocol, get_args, get_type_hints, runtime_checkable
+
+from span_panel_api import (
+    SpanBatterySnapshot,
+    SpanCircuitSnapshot,
+    SpanEvseSnapshot,
+    SpanMidSnapshot,
+    SpanPanelSnapshot,
+)
 
 from custom_components.span_panel.field_paths import (
     declared_field_paths,
@@ -129,23 +137,82 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         yield description
 
 
-# Every description class, and the snapshot type its value_fn receives.
-# A class missing here is reported as a mismatch rather than skipped: a silent
-# skip is exactly the hole this test exists to close.
-_ROOT_PREFIX = {
-    "SpanPanelCircuitsSensorEntityDescription": "circuit",
-    "SpanPanelDataSensorEntityDescription": "panel",
-    "SpanPanelStatusSensorEntityDescription": "panel",
-    "SpanPanelBatterySensorEntityDescription": "battery",
-    "SpanBessMetadataSensorEntityDescription": "battery",
-    # PV metadata value_fns take the whole panel snapshot and reach through
-    # `s.pv.x`, so the root prefix is "panel" and _SUB_SNAPSHOTS rewrites it.
-    "SpanPVMetadataSensorEntityDescription": "panel",
-    "SpanEvseSensorEntityDescription": "evse",
-    "SpanMidSensorEntityDescription": "mid",
-    "SpanPanelBinarySensorEntityDescription": "panel",
-    "SpanEvseBinarySensorEntityDescription": "evse",
+# Every snapshot type a value_fn can take, and the prefix its fields are
+# addressed by. Keyed by the snapshot type rather than by description class
+# name: the class name map had to be edited for every new description class —
+# the recurring event — while this one grows only when the library grows a new
+# snapshot type. A new description class over an existing snapshot type needs no
+# edit here, and its prefix cannot be wrong, because it comes from the same
+# annotation mypy checks the value_fn bodies against.
+#
+# PV has no entry: PV metadata value_fns take the whole panel snapshot and reach
+# through `s.pv.x`, so their prefix is "panel" and `_SUB_SNAPSHOTS` rewrites it.
+_SNAPSHOT_PREFIX: Mapping[type, str] = {
+    SpanCircuitSnapshot: "circuit",
+    SpanPanelSnapshot: "panel",
+    SpanBatterySnapshot: "battery",
+    SpanEvseSnapshot: "evse",
+    SpanMidSnapshot: "mid",
 }
+
+
+class _UndeterminedPrefix(Exception):
+    """A description's snapshot prefix could not be determined.
+
+    Raised, never swallowed: a description whose prefix is unknown must be
+    reported by its caller as a mismatch. Skipping it is what let a description
+    class absent from the old class-name map drop out of verification entirely.
+    """
+
+
+def _snapshot_type(description: _DeclaringDescription) -> type:
+    """Return the snapshot type this description's `value_fn` is annotated to take.
+
+    `from __future__ import annotations` stringifies the annotation, so this
+    resolves it with `get_type_hints`, which evaluates it in the defining
+    module's namespace — every mixin's module imports the snapshot types it
+    names, so resolution succeeds.
+    """
+    cls = type(description)
+    try:
+        hints = get_type_hints(cls)
+    except Exception as err:  # noqa: BLE001
+        raise _UndeterminedPrefix(
+            f"{cls.__name__}: value_fn annotation does not resolve ({err!r})"
+        ) from err
+    annotation = hints.get("value_fn")
+    if annotation is None:
+        raise _UndeterminedPrefix(f"{cls.__name__} carries no value_fn annotation")
+    args = get_args(annotation)
+    if len(args) != 2 or not isinstance(args[0], list) or not args[0]:
+        raise _UndeterminedPrefix(
+            f"{cls.__name__}: value_fn annotated {annotation!r} names no parameter type"
+        )
+    parameter = args[0][0]
+    if not isinstance(parameter, type):
+        raise _UndeterminedPrefix(
+            f"{cls.__name__}: value_fn takes {parameter!r}, which is not a snapshot class"
+        )
+    return parameter
+
+
+def _record_reads(description: _DeclaringDescription) -> set[str]:
+    """Run a description's `value_fn` against the recorder, return what it read.
+
+    Raises `_UndeterminedPrefix` when the snapshot type cannot be resolved or is
+    absent from `_SNAPSHOT_PREFIX`; anything the `value_fn` itself raises
+    propagates unchanged.
+    """
+    snapshot_type = _snapshot_type(description)
+    prefix = _SNAPSHOT_PREFIX.get(snapshot_type)
+    if prefix is None:
+        raise _UndeterminedPrefix(
+            f"{type(description).__name__}: value_fn takes {snapshot_type.__name__}, "
+            "which is absent from _SNAPSHOT_PREFIX"
+        )
+    sink: set[str] = set()
+    description.value_fn(_Recorder(sink, prefix, root=snapshot_type is SpanPanelSnapshot))
+    return sink
 
 
 def test_declared_paths_match_what_value_fns_read() -> None:
@@ -154,18 +221,11 @@ def test_declared_paths_match_what_value_fns_read() -> None:
     for description in _declaring_descriptions():
         if description.derived or description.field_path is None:
             continue
-        class_name = type(description).__name__
-        prefix = _ROOT_PREFIX.get(class_name)
-        if prefix is None:
-            mismatches.append(
-                f"{description.key}: {class_name} is absent from _ROOT_PREFIX, so its "
-                "declaration would go unverified"
-            )
-            continue
-        sink: set[str] = set()
-        proxy = _Recorder(sink, prefix, root=(prefix == "panel"))
         try:
-            description.value_fn(proxy)
+            sink = _record_reads(description)
+        except _UndeterminedPrefix as err:
+            mismatches.append(f"{description.key}: {err}, so its declaration would go unverified")
+            continue
         except Exception as err:  # noqa: BLE001
             mismatches.append(f"{description.key}: value_fn raised {err!r}")
             continue
@@ -211,18 +271,13 @@ def test_no_derived_description_reads_one_producible_field() -> None:
     for description in _declaring_descriptions():
         if not description.derived:
             continue
-        class_name = type(description).__name__
-        prefix = _ROOT_PREFIX.get(class_name)
-        if prefix is None:
+        try:
+            sink = _record_reads(description)
+        except _UndeterminedPrefix as err:
             offenders.append(
-                f"{description.key}: {class_name} is absent from _ROOT_PREFIX, so its "
-                "derived classification would go unverified"
+                f"{description.key}: {err}, so its derived classification would go unverified"
             )
             continue
-        sink: set[str] = set()
-        proxy = _Recorder(sink, prefix, root=(prefix == "panel"))
-        try:
-            description.value_fn(proxy)
         except Exception as err:  # noqa: BLE001
             offenders.append(f"{description.key}: value_fn raised {err!r}")
             continue
