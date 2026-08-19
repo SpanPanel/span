@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping
 import logging
-from typing import Any, Final
+from typing import Any, ClassVar, Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
@@ -83,6 +83,16 @@ CIRCUIT_PRIORITY_DESCRIPTION: Final = SpanPanelSelectEntityDescriptionWrapper(
 
 class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
     """Represent a select entity for Span Panel circuits."""
+
+    # Read in entity code rather than through a description: the wrapper
+    # class is not a frozen dataclass description, so it cannot carry the
+    # declaration. `priority` is the selected option (~80); `name` and
+    # `tabs` build the display name (~125-148).
+    _residual_field_paths: ClassVar[tuple[str, ...]] = (
+        "circuit.priority",
+        "circuit.name",
+        "circuit.tabs",
+    )
 
     def __init__(
         self,

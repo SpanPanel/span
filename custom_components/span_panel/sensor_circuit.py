@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
@@ -91,6 +91,17 @@ class SpanCircuitPowerSensor(
 ):
     """Circuit power/current/breaker-rating sensor with extra state attributes."""
 
+    # Beyond the value the description declares: `name` and `tabs` build the
+    # entity's identity (~56-83), and `tabs`, `relay_state`, `relay_requester`
+    # and `priority` are republished as state attributes (~231-243).
+    _residual_field_paths: ClassVar[tuple[str, ...]] = (
+        "circuit.name",
+        "circuit.tabs",
+        "circuit.relay_state",
+        "circuit.relay_requester",
+        "circuit.priority",
+    )
+
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
@@ -113,6 +124,8 @@ class SpanCircuitPowerSensor(
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
+            field_path=description.field_path,
+            derived=description.derived,
             entity_registry_enabled_default=description.entity_registry_enabled_default,
             entity_registry_visible_default=description.entity_registry_visible_default,
             entity_category=description.entity_category,
@@ -248,6 +261,9 @@ class SpanCircuitEnergySensor(
 ):
     """Circuit energy sensor with grace period tracking."""
 
+    # Naming only; this sensor publishes no circuit attributes.
+    _residual_field_paths: ClassVar[tuple[str, ...]] = ("circuit.name", "circuit.tabs")
+
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
@@ -270,6 +286,8 @@ class SpanCircuitEnergySensor(
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
+            field_path=description.field_path,
+            derived=description.derived,
             entity_registry_enabled_default=description.entity_registry_enabled_default,
             entity_registry_visible_default=description.entity_registry_visible_default,
         )
@@ -445,6 +463,8 @@ class SpanUnmappedCircuitSensor(
             suggested_display_precision=description.suggested_display_precision,
             device_class=description.device_class,
             value_fn=description.value_fn,
+            field_path=description.field_path,
+            derived=description.derived,
             entity_registry_enabled_default=True,
             entity_registry_visible_default=False,
         )

@@ -30,6 +30,7 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
+from .field_paths import FieldPathDeclarationMixin
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
@@ -48,13 +49,13 @@ PARALLEL_UPDATES = 0
 
 
 @dataclass(frozen=True)
-class SpanPanelRequiredKeysMixin:
+class SpanPanelRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for Span Panel binary sensors."""
 
     value_fn: Callable[[SpanPanelSnapshot], bool | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanPanelBinarySensorEntityDescription(
     BinarySensorEntityDescription, SpanPanelRequiredKeysMixin
 ):
@@ -72,6 +73,7 @@ BINARY_SENSORS: tuple[
 ] = (
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_DOOR_STATE,
+        field_path="panel.door_state",
         translation_key="door_state",
         device_class=BinarySensorDeviceClass.TAMPER,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -83,6 +85,7 @@ BINARY_SENSORS: tuple[
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_ETHERNET_LINK,
+        field_path="panel.eth0_link",
         translation_key="ethernet_link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -90,6 +93,7 @@ BINARY_SENSORS: tuple[
     ),
     SpanPanelBinarySensorEntityDescription(
         key=SYSTEM_WIFI_LINK,
+        field_path="panel.wlan_link",
         translation_key="wifi_link",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -97,6 +101,9 @@ BINARY_SENSORS: tuple[
     ),
     SpanPanelBinarySensorEntityDescription(
         key=PANEL_STATUS,
+        # Reports coordinator reachability, not a snapshot field — the value_fn
+        # is a placeholder the entity class overrides.
+        derived=True,
         translation_key="panel_status",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -134,6 +141,7 @@ def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
 
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
+    derived=True,
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -142,6 +150,7 @@ GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
+    derived=True,
     translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -188,7 +197,17 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         - Panel status sensor: always available to show online/offline state
         - Hardware status sensors: remain available when offline to show Unknown state
         - Other binary sensors (switches): become unavailable when panel is offline
+
+        The unresolved-field probe runs ahead of all of that, for the same
+        reason it precedes the grace-period branch in `SpanSensorBase`: the
+        offline branch below returns True, so a probe after it would leave
+        `door_state`, `eth0_link` and `wlan_link` reporting a field the adapter
+        cannot resolve. `panel_status` and the derived sensors declare no
+        `field_path`, so the probe never fires for them.
         """
+        if self._reads_an_unresolved_field:
+            return False
+
         # Panel status sensor should always be available to show online/offline state
         if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
             return True
@@ -278,13 +297,13 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
 
 
 @dataclass(frozen=True)
-class SpanEvseBinarySensorRequiredKeysMixin:
+class SpanEvseBinarySensorRequiredKeysMixin(FieldPathDeclarationMixin):
     """Required keys mixin for EVSE binary sensors."""
 
     value_fn: Callable[[SpanEvseSnapshot], bool | None]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SpanEvseBinarySensorEntityDescription(
     BinarySensorEntityDescription, SpanEvseBinarySensorRequiredKeysMixin
 ):
@@ -301,12 +320,14 @@ EVSE_BINARY_SENSORS: tuple[
 ] = (
     SpanEvseBinarySensorEntityDescription(
         key="evse_charging",
+        field_path="evse.status",
         translation_key="evse_charging",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
         value_fn=lambda e: (e.status or "") == "CHARGING",
     ),
     SpanEvseBinarySensorEntityDescription(
         key="evse_ev_connected",
+        field_path="evse.status",
         translation_key="evse_ev_connected",
         device_class=BinarySensorDeviceClass.PLUG,
         value_fn=lambda e: (e.status or "") in _EV_CONNECTED_STATUSES,

@@ -95,9 +95,7 @@ rules:
   exception-translations: done
   icon-translations: done
   reconfiguration-flow: done
-  repair-issues:
-    status: exempt
-    comment: No actionable repair scenarios identified for this integration.
+  repair-issues: done
   stale-devices: done
 
   # Platinum

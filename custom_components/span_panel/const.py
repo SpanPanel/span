@@ -80,6 +80,10 @@ NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
 )
 EVENT_CURRENT_ALERT = "span_panel_current_alert"
 
+# Fired alongside a schema Repair so an automation can react without polling
+# the issue registry. Same bus-event shape as the current alert above.
+EVENT_SCHEMA_ISSUE = "span_panel_schema_issue"
+
 # Graph time horizon configuration
 VALID_GRAPH_HORIZONS: Final[tuple[str, ...]] = ("5m", "1h", "1d", "1w", "1M")
 DEFAULT_GRAPH_HORIZON = "5m"

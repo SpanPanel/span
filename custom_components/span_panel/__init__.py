@@ -52,6 +52,7 @@ from .frontend import (
 from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .options import SNAPSHOT_UPDATE_INTERVAL
+from .schema_repairs import async_clear_schema_issues
 from .services import (  # noqa: F401
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
@@ -252,6 +253,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         )
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # After the platforms, not before: schema validation runs on the first
+        # refresh, which is awaited above, but the Repairs it raises name the
+        # entities an unresolved field took down — and those entities only
+        # register themselves once their platform has added them.
+        coordinator.async_sync_schema_repairs()
     except Exception:
         if coordinator is not None:
             await coordinator.async_shutdown()
@@ -280,6 +287,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
         await entry.runtime_data.coordinator.async_shutdown()
 
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
+    """Clean up the Repairs this entry raised.
+
+    Core deletes neither issues nor their dismissals when a config entry is
+    removed, so a panel that is taken out of the system would otherwise leave
+    its schema notices behind forever. Scoped to this entry: another panel's
+    issues share the domain and must survive.
+    """
+    async_clear_schema_issues(hass, entry)
 
 
 async def async_remove_config_entry_device(

@@ -1,269 +1,305 @@
-"""Tests for schema validation and sensor-to-field mapping."""
-
 from __future__ import annotations
 
-import logging
-from unittest.mock import MagicMock
+from collections.abc import Callable
 
 import pytest
-from span_panel_api import (
-    SpanBatterySnapshot,
-    SpanCircuitSnapshot,
-    SpanEvseSnapshot,
-    SpanPanelSnapshot,
-    SpanPVSnapshot,
-)
+from span_panel_api.models import FieldMetadata
 
-from custom_components.span_panel.schema_expectations import (
-    SENSOR_FIELD_MAP,
-    all_referenced_field_paths,
+from custom_components.span_panel import sensor_definitions
+from custom_components.span_panel.field_paths import (
+    RESIDUAL_EXEMPT_PATHS,
+    FieldPathDeclarationMixin,
+    declared_field_paths,
 )
 from custom_components.span_panel.schema_validation import (
-    validate_field_metadata,
+    SchemaFindings,
+    evaluate_field_metadata,
 )
 from custom_components.span_panel.sensor_definitions import (
-    BATTERY_POWER_SENSOR,
-    BATTERY_SENSOR,
-    BESS_METADATA_SENSORS,
-    CIRCUIT_BREAKER_RATING_SENSOR,
-    CIRCUIT_CURRENT_SENSOR,
-    CIRCUIT_SENSORS,
-    DOWNSTREAM_L1_CURRENT_SENSOR,
-    DOWNSTREAM_L2_CURRENT_SENSOR,
-    EVSE_SENSORS,
-    GRID_POWER_FLOW_SENSOR,
-    L1_VOLTAGE_SENSOR,
-    L2_VOLTAGE_SENSOR,
-    MAIN_BREAKER_RATING_SENSOR,
-    PANEL_DATA_STATUS_SENSORS,
-    PANEL_ENERGY_SENSORS,
-    PANEL_POWER_SENSORS,
-    PV_METADATA_SENSORS,
-    PV_POWER_SENSOR,
-    SITE_POWER_SENSOR,
-    STATUS_SENSORS,
-    UNMAPPED_SENSORS,
-    UPSTREAM_L1_CURRENT_SENSOR,
-    UPSTREAM_L2_CURRENT_SENSOR,
+    all_sensor_descriptions,
+    sensor_descriptions_by_field_path,
+)
+from tests.adapter_fixtures import (
+    schema_one_metadata,
+    schema_one_metadata_batteryless,
+    schema_zero_metadata,
 )
 
-_LOGGER_NAME = "custom_components.span_panel.schema_validation"
+MetadataFn = Callable[[], dict[str, FieldMetadata]]
 
 
-# ---------------------------------------------------------------------------
-# Sensor field mapping tests
-# ---------------------------------------------------------------------------
+def test_unresolved_entry_is_degradation() -> None:
+    findings = evaluate_field_metadata(
+        {"circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)},
+        sensor_defs={},
+    )
+    assert "circuit.instant_power_w" in findings.unresolved
 
 
-class TestSensorFieldMap:
-    """Tests for the sensor-to-snapshot-field mapping."""
-
-    def test_no_empty_keys_or_paths(self) -> None:
-        """Every entry must have non-empty sensor key and field path."""
-        for sensor_key, field_path in SENSOR_FIELD_MAP.items():
-            assert sensor_key, "Empty sensor key in SENSOR_FIELD_MAP"
-            assert field_path, f"Empty field path for sensor key '{sensor_key}'"
-
-    def test_field_paths_follow_convention(self) -> None:
-        """All field paths must be {snapshot_type}.{field_name}."""
-        valid_prefixes = {"panel", "circuit", "battery", "pv", "evse"}
-        for sensor_key, field_path in SENSOR_FIELD_MAP.items():
-            parts = field_path.split(".", 1)
-            assert len(parts) == 2, (
-                f"Field path '{field_path}' for sensor '{sensor_key}' "
-                f"does not follow 'type.field' convention"
-            )
-            assert parts[0] in valid_prefixes, (
-                f"Field path '{field_path}' for sensor '{sensor_key}' "
-                f"has unknown prefix '{parts[0]}'"
-            )
-
-    def test_sensor_keys_exist_in_definitions(self) -> None:
-        """Every sensor key should match a real sensor definition."""
-        all_defs = [
-            *PANEL_DATA_STATUS_SENSORS,
-            *STATUS_SENSORS,
-            *UNMAPPED_SENSORS,
-            BATTERY_SENSOR,
-            L1_VOLTAGE_SENSOR,
-            L2_VOLTAGE_SENSOR,
-            UPSTREAM_L1_CURRENT_SENSOR,
-            UPSTREAM_L2_CURRENT_SENSOR,
-            DOWNSTREAM_L1_CURRENT_SENSOR,
-            DOWNSTREAM_L2_CURRENT_SENSOR,
-            MAIN_BREAKER_RATING_SENSOR,
-            CIRCUIT_CURRENT_SENSOR,
-            CIRCUIT_BREAKER_RATING_SENSOR,
-            *BESS_METADATA_SENSORS,
-            *PV_METADATA_SENSORS,
-            *PANEL_POWER_SENSORS,
-            BATTERY_POWER_SENSOR,
-            PV_POWER_SENSOR,
-            GRID_POWER_FLOW_SENSOR,
-            SITE_POWER_SENSOR,
-            *PANEL_ENERGY_SENSORS,
-            *CIRCUIT_SENSORS,
-            *EVSE_SENSORS,
-        ]
-        known_keys = {d.key for d in all_defs}
-
-        for sensor_key in SENSOR_FIELD_MAP:
-            assert sensor_key in known_keys, (
-                f"Sensor key '{sensor_key}' in SENSOR_FIELD_MAP not found in sensor definitions"
-            )
-
-    def test_field_paths_match_snapshot_attrs(self) -> None:
-        """Field names should match actual snapshot dataclass attributes."""
-        snapshot_classes = {
-            "panel": SpanPanelSnapshot,
-            "circuit": SpanCircuitSnapshot,
-            "battery": SpanBatterySnapshot,
-            "pv": SpanPVSnapshot,
-            "evse": SpanEvseSnapshot,
-        }
-
-        for sensor_key, field_path in SENSOR_FIELD_MAP.items():
-            prefix, field_name = field_path.split(".", 1)
-            cls = snapshot_classes[prefix]
-            assert hasattr(cls, field_name) or field_name in {
-                f.name for f in cls.__dataclass_fields__.values()
-            }, (
-                f"Field '{field_name}' from path '{field_path}' "
-                f"(sensor '{sensor_key}') not found on {cls.__name__}"
-            )
-
-    def test_all_referenced_field_paths(self) -> None:
-        """all_referenced_field_paths should return all unique values."""
-        paths = all_referenced_field_paths()
-        assert paths == frozenset(SENSOR_FIELD_MAP.values())
+def test_absent_entry_is_not_degradation() -> None:
+    """No entry means the hardware is not installed — not a defect."""
+    findings = evaluate_field_metadata({}, sensor_defs={})
+    assert findings.unresolved == frozenset()
 
 
-# ---------------------------------------------------------------------------
-# Unit cross-check tests
-# ---------------------------------------------------------------------------
+def test_unit_mismatch_is_reported() -> None:
+    """Deliberately not `circuit.instant_power_w`/"kW".
+
+    That pair is the one entry in `KNOWN_BAD_SCHEMA_UNITS`, so it would prove the
+    exception rather than the check.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfElectricPotential
+
+    description = SensorEntityDescription(
+        key="l1_voltage", native_unit_of_measurement=UnitOfElectricPotential.VOLT
+    )
+    findings = evaluate_field_metadata(
+        {"panel.l1_voltage": FieldMetadata("kV", "float")},
+        sensor_defs={"panel.l1_voltage": description},
+    )
+    assert findings.unit_mismatches[0].field_path == "panel.l1_voltage"
+    assert findings.unit_mismatches[0].schema_unit == "kV"
 
 
-def _make_sensor_def(key: str, unit: str | None) -> MagicMock:
-    """Create a minimal mock SensorEntityDescription with key and unit."""
-    mock = MagicMock(spec=["key", "native_unit_of_measurement"])
-    mock.key = key
-    mock.native_unit_of_measurement = unit
-    return mock
+def test_unitless_sensor_still_checked_for_resolution() -> None:
+    """Resolution is checked before the unit is.
+
+    The old code short-circuited on `ha_unit is None` BEFORE the lookup, so enum
+    and string sensors could go dead with no signal.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+
+    description = SensorEntityDescription(key="evse_status")
+    findings = evaluate_field_metadata(
+        {"evse.status": FieldMetadata(None, "unknown", resolved=False)},
+        sensor_defs={"evse.status": description},
+    )
+    assert "evse.status" in findings.unresolved
 
 
-class TestUnitCrossCheck:
-    """Tests for field metadata unit vs sensor definition unit cross-checking."""
+def test_unresolved_entry_is_never_a_unit_mismatch() -> None:
+    """An unresolved entry carries `unit=None` by construction.
 
-    def test_matching_units_no_cross_check_message(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Matching units should produce no cross-check log messages."""
-        metadata = {"panel.instant_grid_power_w": {"unit": "W", "datatype": "float"}}
-        sensor_defs = {"instantGridPowerW": _make_sensor_def("instantGridPowerW", "W")}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata, sensor_defs=sensor_defs)
-        assert not any("cross-check" in r.lower() for r in caplog.messages)
+    Comparing that against a declared unit would raise a false mismatch on every
+    affected sensor, so resolution must be branched on first.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfPower
 
-    def test_mismatched_units_logs_debug(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Unit mismatch should produce a debug message naming both units."""
-        metadata = {"panel.instant_grid_power_w": {"unit": "kW", "datatype": "float"}}
-        sensor_defs = {"instantGridPowerW": _make_sensor_def("instantGridPowerW", "W")}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata, sensor_defs=sensor_defs)
-        cross_msgs = [m for m in caplog.messages if "cross-check" in m.lower()]
-        assert len(cross_msgs) == 1
-        assert "'kW'" in cross_msgs[0]
-        assert "'W'" in cross_msgs[0]
-
-    def test_missing_metadata_logs_debug(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Sensor reading a field with no metadata should log debug."""
-        metadata: dict[str, dict[str, object]] = {}
-        sensor_defs = {"l1_voltage": _make_sensor_def("l1_voltage", "V")}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata, sensor_defs=sensor_defs)
-        assert any("no metadata" in m for m in caplog.messages)
-
-    def test_missing_schema_unit_logs_debug(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Field with no unit in metadata but unit in sensor def should log debug."""
-        metadata = {"panel.l1_voltage": {"datatype": "float"}}
-        sensor_defs = {"l1_voltage": _make_sensor_def("l1_voltage", "V")}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata, sensor_defs=sensor_defs)
-        assert any("no unit" in m for m in caplog.messages)
-
-    def test_sensor_without_unit_skipped(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Sensor with no native_unit_of_measurement should be skipped."""
-        metadata = {"panel.main_relay_state": {"datatype": "enum"}}
-        sensor_defs = {"main_relay_state": _make_sensor_def("main_relay_state", None)}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata, sensor_defs=sensor_defs)
-        assert not any("cross-check" in m.lower() for m in caplog.messages)
-
-    def test_all_output_is_debug_level(self, caplog: pytest.LogCaptureFixture) -> None:
-        """All schema validation output should be DEBUG — never visible to users."""
-        metadata = {
-            "panel.instant_grid_power_w": {"unit": "kW", "datatype": "float"},
-            "panel.l1_voltage": {"datatype": "float"},
-            "panel.new_fancy_field": {"unit": "W", "datatype": "float"},
-        }
-        sensor_defs = {
-            "instantGridPowerW": _make_sensor_def("instantGridPowerW", "W"),
-            "l1_voltage": _make_sensor_def("l1_voltage", "V"),
-        }
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata, sensor_defs=sensor_defs)
-        above_debug = [r for r in caplog.records if r.levelno > logging.DEBUG]
-        assert len(above_debug) == 0, (
-            f"Expected all DEBUG, got: {[(r.levelname, r.getMessage()) for r in above_debug]}"
-        )
+    description = SensorEntityDescription(
+        key="circuit_power", native_unit_of_measurement=UnitOfPower.WATT
+    )
+    findings = evaluate_field_metadata(
+        {"circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)},
+        sensor_defs={"circuit.instant_power_w": description},
+    )
+    assert findings.unresolved == frozenset({"circuit.instant_power_w"})
+    assert findings.unit_mismatches == ()
 
 
-# ---------------------------------------------------------------------------
-# Unmapped field detection tests
-# ---------------------------------------------------------------------------
+def test_matching_unit_is_not_a_mismatch() -> None:
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfPower
+
+    description = SensorEntityDescription(
+        key="circuit_power", native_unit_of_measurement=UnitOfPower.WATT
+    )
+    findings = evaluate_field_metadata(
+        {"circuit.instant_power_w": FieldMetadata("W", "float")},
+        sensor_defs={"circuit.instant_power_w": description},
+    )
+    assert findings.unit_mismatches == ()
+    assert findings.unresolved == frozenset()
 
 
-class TestUnmappedFields:
-    """Tests for detecting fields the integration doesn't consume."""
-
-    def test_unmapped_field_logs_debug(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Field not in SENSOR_FIELD_MAP values should log at DEBUG."""
-        metadata = {"panel.new_fancy_field": {"unit": "W", "datatype": "float"}}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata)
-        assert any(
-            r.levelno == logging.DEBUG and "new_fancy_field" in r.getMessage()
-            for r in caplog.records
-        )
-
-    def test_mapped_field_not_reported(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Field that IS in SENSOR_FIELD_MAP should not be reported as unmapped."""
-        metadata = {"panel.instant_grid_power_w": {"unit": "W", "datatype": "float"}}
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(metadata)
-        assert not any("not mapped" in m for m in caplog.messages)
+def test_produced_but_unread_fields_are_inventoried() -> None:
+    """An addition is legal within a major version — inventory, not a defect."""
+    findings = evaluate_field_metadata(
+        {"panel.some_future_field": FieldMetadata("W", "float")}, sensor_defs={}
+    )
+    assert findings.unread == frozenset({"panel.some_future_field"})
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
 
 
-# ---------------------------------------------------------------------------
-# No-op when metadata unavailable
-# ---------------------------------------------------------------------------
+def test_declared_and_resolved_fields_are_not_unread() -> None:
+    findings = evaluate_field_metadata(
+        {"circuit.instant_power_w": FieldMetadata("W", "float")}, sensor_defs={}
+    )
+    assert findings.unread == frozenset()
 
 
-class TestNoOp:
-    """Tests for graceful handling when library doesn't expose metadata."""
+def test_empty_metadata_is_healthy_not_unknown() -> None:
+    """A pass over a healthy panel is expressible and is not the None sentinel.
 
-    def test_none_metadata_is_noop(self, caplog: pytest.LogCaptureFixture) -> None:
-        """None metadata should produce no output above DEBUG."""
-        with caplog.at_level(logging.DEBUG, logger=_LOGGER_NAME):
-            validate_field_metadata(None)
-        assert any("skipped" in m for m in caplog.messages)
-        above_debug = [r for r in caplog.records if r.levelno > logging.DEBUG]
-        assert len(above_debug) == 0
+    Task 7 needs three distinct states; this is the middle one. "Unknown" is the
+    coordinator's `schema_findings is None`, which `evaluate_field_metadata` can
+    no longer produce — it no longer accepts the sentinel at all.
+    """
+    findings = evaluate_field_metadata({})
+    assert findings == SchemaFindings(frozenset(), (), frozenset())
+
+
+def test_every_declared_field_path_keys_a_sensor_or_a_residual_reader() -> None:
+    """`sensor_descriptions_by_field_path` must not drop descriptions.
+
+    Keys such as "model" and "serial_number" repeat across device classes, so a
+    dict keyed on `description.key` would silently collapse them.
+    """
+    by_path = sensor_descriptions_by_field_path()
+    assert by_path.keys() <= declared_field_paths()
+    assert {"battery.model", "pv.model"} <= by_path.keys()
+    for field_path, description in by_path.items():
+        assert description.field_path == field_path
+        assert not description.derived
+
+
+def test_resolved_unitless_sensor_yields_no_mismatch() -> None:
+    """A resolved field read by an enum or string sensor has nothing to compare."""
+    from homeassistant.components.sensor import SensorEntityDescription
+
+    description = SensorEntityDescription(key="evse_status")
+    findings = evaluate_field_metadata(
+        {"evse.status": FieldMetadata(None, "enum")},
+        sensor_defs={"evse.status": description},
+    )
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
+
+
+def test_descriptions_without_a_declaration_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both consumers of the shared traversal reject an undeclared description.
+
+    Skipping it would drop the sensor from the unit cross-check silently, which
+    is the drift `field_paths` exists to prevent. `declared_field_paths` raises
+    on the same input, and both now do so from one place.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+
+    monkeypatch.setattr(
+        sensor_definitions,
+        "all_sensor_descriptions",
+        lambda: (SensorEntityDescription(key="undeclared"),),
+    )
+    with pytest.raises(TypeError, match="carries no field-path declaration"):
+        sensor_definitions.sensor_descriptions_by_field_path()
+
+
+@pytest.mark.parametrize(
+    "metadata_fn",
+    [
+        pytest.param(schema_zero_metadata, id="schema_0"),
+        pytest.param(schema_one_metadata, id="schema_1"),
+    ],
+)
+def test_real_adapter_metadata_produces_no_findings(metadata_fn: MetadataFn) -> None:
+    """A healthy panel of either generation must be finding-free.
+
+    The rest of this file drives the evaluator with synthetic single-entry dicts,
+    which cannot show what real firmware actually declares. This is the standing
+    guard against a day-one Repair that no user can act on.
+    """
+    findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
+
+
+def test_known_bad_schema_unit_exception_is_narrow() -> None:
+    """Only the exact known-bad unit is excused; anything else is new information."""
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfPower
+
+    description = SensorEntityDescription(
+        key="circuit_power", native_unit_of_measurement=UnitOfPower.WATT
+    )
+    findings = evaluate_field_metadata(
+        {"circuit.instant_power_w": FieldMetadata("MW", "float")},
+        sensor_defs={"circuit.instant_power_w": description},
+    )
+    assert [m.schema_unit for m in findings.unit_mismatches] == ["MW"]
+
+
+def test_absent_hardware_on_real_metadata_is_not_degradation() -> None:
+    """A batteryless panel simply omits the battery rows — nothing is wrong.
+
+    Stronger than the empty-dict case, which passes whether or not the
+    `entry is None` arm exists: here 8 `battery.*` paths are declared and read,
+    and every one of them is missing from the adapter's output.
+    """
+    metadata = schema_one_metadata_batteryless()
+    battery_paths = {p for p in declared_field_paths() if p.startswith("battery.")}
+    assert battery_paths
+    assert battery_paths.isdisjoint(metadata)
+
+    findings = evaluate_field_metadata(metadata, sensor_descriptions_by_field_path())
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
+
+
+@pytest.mark.parametrize(
+    "metadata_fn",
+    [
+        pytest.param(schema_zero_metadata, id="schema_0"),
+        pytest.param(schema_one_metadata, id="schema_1"),
+    ],
+)
+def test_unread_excludes_readers_exempt_from_the_producible_gate(
+    metadata_fn: MetadataFn,
+) -> None:
+    """`RESIDUAL_EXEMPT_PATHS` are read, just not required of both adapters.
+
+    They are absent from `declared_field_paths()`, so a plain set difference
+    reports them as produced-but-unread — false for 10 of schema_0's 17.
+    """
+    findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
+    assert findings.unread.isdisjoint(RESIDUAL_EXEMPT_PATHS)
+
+
+def test_readers_of_the_same_field_path_agree_on_unit() -> None:
+    """`sensor_descriptions_by_field_path` keeps one reader per path.
+
+    Several field paths are read by two descriptions (an unmapped-circuit raw
+    key and its named-circuit twin). Dropping one is only safe while they agree
+    on what the unit check would compare, so pin that here rather than trusting
+    it.
+    """
+    from collections import defaultdict
+
+    by_path: defaultdict[str, list[object]] = defaultdict(list)
+    for description in all_sensor_descriptions():
+        if not isinstance(description, FieldPathDeclarationMixin):
+            continue
+        if description.derived or description.field_path is None:
+            continue
+        by_path[description.field_path].append(description)
+
+    colliding = {path: ds for path, ds in by_path.items() if len(ds) > 1}
+    assert colliding, "expected at least one field path with two readers"
+    for path, descriptions in colliding.items():
+        units = {d.native_unit_of_measurement for d in descriptions}
+        assert len(units) == 1, f"readers of {path} disagree on unit: {units}"
+
+
+def test_known_bad_schema_unit_exception_is_keyed_on_the_field_path() -> None:
+    """The other half of the pair: only `circuit.instant_power_w` is excused.
+
+    `test_known_bad_schema_unit_exception_is_narrow` pins the unit half — a
+    different unit on the same path is still reported. Without this, widening
+    the check to a unit-only membership test ("is kW ever known-bad?") would
+    pass the whole suite while silently excusing every field that declares kW.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfPower
+
+    description = SensorEntityDescription(
+        key="grid_power", native_unit_of_measurement=UnitOfPower.WATT
+    )
+    findings = evaluate_field_metadata(
+        {"panel.instant_grid_power_w": FieldMetadata("kW", "float")},
+        sensor_defs={"panel.instant_grid_power_w": description},
+    )
+    assert [m.field_path for m in findings.unit_mismatches] == ["panel.instant_grid_power_w"]
+    assert findings.unit_mismatches[0].schema_unit == "kW"

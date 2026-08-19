@@ -8,13 +8,13 @@ readme = "README.md"
 requires-python = ">=3.14.3,<3.15"
 dependencies = [
     "homeassistant==2026.8.0",
-    "span-panel-api==3.0.0b3",
+    "span-panel-api==3.0.0b4",
     # Separate distributions, not dependencies of the bootstrap: adapters are found
     # through the `span_panel_api.schema_adapters` entry-point group, so each one has
     # to be installed for discovery to see it. manifest.json carries the same three,
     # and that is the list Home Assistant actually reads.
-    "span-panel-api-schema-0==1.0.0b3",
-    "span-panel-api-schema-1==0.1.0b3",
+    "span-panel-api-schema-0==1.0.0b4",
+    "span-panel-api-schema-1==0.1.0b4",
 ]
 
 [dependency-groups]
@@ -47,9 +47,9 @@ package = false
 [tool.uv.sources]
 # This branch develops against the in-progress schema-1 adapter, which lives in a
 # worktree rather than the primary checkout the symlink points at.
-span-panel-api = { path = "../../span/span-panel-api-p2", editable = true }
-span-panel-api-schema-0 = { path = "../../span/span-panel-api-p2/packages/schema-0", editable = true }
-span-panel-api-schema-1 = { path = "../../span/span-panel-api-p2/packages/schema-1", editable = true }
+span-panel-api = { path = "../../span/span-panel-api-p3", editable = true }
+span-panel-api-schema-0 = { path = "../../span/span-panel-api-p3/packages/schema-0", editable = true }
+span-panel-api-schema-1 = { path = "../../span/span-panel-api-p3/packages/schema-1", editable = true }
 
 [tool.jscpd]
 path = ["custom_components/span_panel", "./*.{html,md}"]
@@ -129,7 +129,7 @@ exclude = [
 ]
 extraPaths = [
     "./custom_components",
-    "../../span/span-panel-api-p2/src",
+    "../../span/span-panel-api-p3/src",
     "../ha-synthetic-sensors/src"
 ]
 pythonPlatform = "Darwin"

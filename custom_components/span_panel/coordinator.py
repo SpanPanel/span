@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .graph_horizon import GraphHorizonManager
 
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -23,12 +23,14 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot
+from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
 
 from .const import DOMAIN
 from .id_builder import build_circuit_unique_id
-from .schema_validation import collect_sensor_definitions, validate_field_metadata
+from .schema_repairs import async_sync_schema_issues
+from .schema_validation import SchemaFindings, evaluate_field_metadata
+from .sensor_definitions import sensor_descriptions_by_field_path
 
 
 class SpanCircuitEnergySensorProtocol(Protocol):
@@ -88,8 +90,21 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
 
-        # Schema validation — run once after first successful refresh
+        # Schema validation — runs once SUCCESSFULLY; a pass that finds no
+        # metadata yet leaves the flag unset so a later one can still answer.
         self._schema_validated = False
+        self._findings: SchemaFindings | None = None
+        # True once `async_setup_entry` has forwarded the platforms and asked for
+        # the first reconcile. Before that there are no entities for a finding to
+        # name; after it, a late first success must reconcile itself.
+        self._platforms_ready = False
+
+        # Which entities read which snapshot field, recorded by the entities
+        # themselves as they are added to hass. Authoritative rather than
+        # reverse-engineered: three platforms build unique_ids three different
+        # ways, so deriving entity ids from entity descriptions gets most of
+        # them wrong. See `SpanPanelEntity.async_added_to_hass`.
+        self._entity_ids_by_field_path: dict[str, set[str]] = {}
 
         # Energy dip compensation — sensors append events here during updates;
         # drained and surfaced as a persistent notification after each cycle.
@@ -363,26 +378,106 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     # --- Schema validation ---
 
     def _run_schema_validation(self) -> None:
-        """Run schema field metadata validation once at startup.
+        """Classify the adapter's field metadata once at startup.
 
-        Compares the library's schema-derived field metadata against the
-        integration's sensor definitions to detect unit mismatches. Also
-        reports fields the integration doesn't map to any sensor.
+        Reads the metadata through ``SpanPanelClientProtocol`` so this module
+        never names a transport class, and stores the result for the platforms
+        and the Repairs reconciler to read.
         """
-        field_metadata: dict[str, dict[str, object]] | None = None
-        if isinstance(self._client, SpanMqttClient):
-            raw = self._client.field_metadata
-            if raw is not None:
-                field_metadata = {
-                    k: {"unit": v.unit, "datatype": v.datatype} for k, v in raw.items()
-                }
+        field_metadata = (
+            self._client.field_metadata
+            if isinstance(self._client, SpanPanelClientProtocol)
+            else None
+        )
 
         if field_metadata is None:
-            _LOGGER.debug("Schema validation skipped — no field metadata available")
+            # "Unknown", NOT "nothing is wrong". `field_metadata` is None for the
+            # whole _on_pre_rebuild -> retained-message window, and that fires on
+            # an ORDINARY reconnect (after MQTT_FULL_REBUILD_AFTER_FAILURES), not
+            # only on a generation change. Reconciling against empty findings here
+            # would delete every schema issue — and with it every dismissal the
+            # user has made. Keep the previous findings and skip this pass.
+            _LOGGER.debug("Schema validation skipped: metadata not available yet")
             return
 
-        sensor_defs = collect_sensor_definitions()
-        validate_field_metadata(field_metadata, sensor_defs=sensor_defs)
+        self._findings = evaluate_field_metadata(
+            field_metadata, sensor_descriptions_by_field_path()
+        )
+        # Only now: metadata is static within a session, so one success is
+        # enough and re-reading identical inputs on every pass would be waste.
+        self._schema_validated = True
+
+        if self._platforms_ready:
+            # A late first success. Setup already passed its reconcile point, so
+            # nothing else will raise these — do it here, where the entities that
+            # the findings name are guaranteed to exist.
+            self._sync_repairs()
+
+    @callback
+    def async_register_field_path_entity(self, field_path: str, entity_id: str) -> None:
+        """Record that `entity_id` reads `field_path`.
+
+        Called by the entity itself, which is the only thing that knows both
+        halves for certain. Circuit, panel-data and binary-sensor entities each
+        build their unique_id from a different suffix rule, so a mapping derived
+        from entity descriptions would silently miss most of them.
+        """
+        self._entity_ids_by_field_path.setdefault(field_path, set()).add(entity_id)
+
+    @callback
+    def async_unregister_field_path_entity(self, field_path: str, entity_id: str) -> None:
+        """Forget an entity that is leaving hass, so it stops inflating counts."""
+        entity_ids = self._entity_ids_by_field_path.get(field_path)
+        if entity_ids is None:
+            return
+        entity_ids.discard(entity_id)
+        if not entity_ids:
+            del self._entity_ids_by_field_path[field_path]
+
+    @property
+    def entity_ids_by_field_path(self) -> dict[str, list[str]]:
+        """Entities currently in hass, by the snapshot field each one reads."""
+        return {
+            field_path: sorted(entity_ids)
+            for field_path, entity_ids in self._entity_ids_by_field_path.items()
+        }
+
+    @callback
+    def async_sync_schema_repairs(self) -> None:
+        """Reconcile Repairs now that the platforms are up.
+
+        Called by `async_setup_entry` after the platforms are forwarded, which is
+        the earliest point the entities a finding names exist: validation runs on
+        the first refresh, and setup awaits that *before* forwarding anything.
+
+        Also records that the reconcile point has passed, so a validation pass
+        that first succeeds later reconciles itself rather than waiting for the
+        next reload.
+        """
+        self._platforms_ready = True
+        self._sync_repairs()
+
+    def _sync_repairs(self) -> None:
+        """Reconcile Repairs against the findings, if there are any yet.
+
+        Findings of None means "not yet known", never "healthy" — reconciling
+        against that would delete every issue and every dismissal with it.
+        """
+        if self._findings is None:
+            return
+        async_sync_schema_issues(
+            self.hass, self.config_entry, self._findings, self.entity_ids_by_field_path
+        )
+
+    @property
+    def unresolved_paths(self) -> frozenset[str]:
+        """Field paths the adapter could not resolve. Empty when healthy."""
+        return self._findings.unresolved if self._findings is not None else frozenset()
+
+    @property
+    def schema_findings(self) -> SchemaFindings | None:
+        """Findings from the last completed validation pass, if any."""
+        return self._findings
 
     # --- Hardware capability detection ---
 
@@ -540,9 +635,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         streaming the polling path effectively never fires. This shared method
         ensures reload requests are processed regardless of transport mode.
         """
-        # One-shot schema validation after first successful refresh
+        # Schema validation: at most once SUCCESSFULLY, retried only while the
+        # answer is still unknown. The guard is set inside `_run_schema_validation`
+        # for that reason — setting it here disabled the feature for the life of
+        # the entry whenever the very first pass landed in the metadata-not-ready
+        # window, which an ordinary reconnect opens.
         if not self._schema_validated:
-            self._schema_validated = True
             self._run_schema_validation()
 
         # Check for pending solar entity migration (v1 solar → v2 PV circuit)

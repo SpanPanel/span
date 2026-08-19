@@ -321,7 +321,13 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         Keep entities available during a panel_offline condition so sensors can show
         their grace period state (last_valid_state) or None when grace period expires.
+
+        The unresolved-field probe runs first: the grace-period branch below
+        returns True unconditionally, so probing after it would let every
+        offline sensor keep reporting a field the adapter cannot resolve.
         """
+        if self._reads_an_unresolved_field:
+            return False
         try:
             if getattr(self.coordinator, "panel_offline", False):
                 return True

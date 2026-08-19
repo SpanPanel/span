@@ -18,6 +18,8 @@ from span_panel_api.exceptions import (
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
 from homeassistant.core import HomeAssistant
 from span_panel_api import SpanMqttClient
+from span_panel_api.models import FieldMetadata
+from span_panel_api.protocol import SpanPanelClientProtocol
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -117,8 +119,17 @@ async def test_run_post_update_tasks_validates_once_and_schedules_reload(
     snapshot = SpanPanelSnapshotFactory.create()
     coordinator._reload_requested = True
 
+    # The real `_run_schema_validation` sets the guard itself, and only once it
+    # has actually produced findings; the stand-in has to emulate that or the
+    # second pass would legitimately retry. `_a_none_first_pass...` below covers
+    # the retry side.
+    def _succeed() -> None:
+        coordinator._schema_validated = True
+
     with (
-        patch.object(coordinator, "_run_schema_validation") as mock_validate,
+        patch.object(
+            coordinator, "_run_schema_validation", side_effect=_succeed
+        ) as mock_validate,
         patch.object(coordinator, "_fire_dip_notification", AsyncMock()) as mock_notify,
         patch.object(coordinator, "_async_reload_task", AsyncMock()) as mock_reload,
         patch.object(hass, "async_create_task") as mock_create_task,
@@ -230,61 +241,62 @@ async def test_on_snapshot_push_updates_state_and_runs_post_tasks(
 async def test_run_schema_validation_skips_without_metadata(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Schema validation should skip cleanly when no metadata is available."""
+    """No metadata means "unknown", so the pass must leave findings untouched.
 
-    class FakeSpanMqttClient:
-        field_metadata = None
-
-    client = FakeSpanMqttClient()
+    `field_metadata` is None for the whole _on_pre_rebuild -> retained-message
+    window, which an ordinary reconnect opens. Producing empty findings here
+    would read as "every issue is resolved" to the Repairs reconciler.
+    """
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = None
     coordinator = _create_coordinator(hass, client=client)
 
     caplog.set_level(logging.DEBUG)
-
-    with patch(
-        "custom_components.span_panel.coordinator.SpanMqttClient",
-        FakeSpanMqttClient,
-    ):
-        coordinator._run_schema_validation()
+    coordinator._run_schema_validation()
 
     assert "Schema validation skipped" in caplog.text
+    assert coordinator.schema_findings is None
+    assert coordinator.unresolved_paths == frozenset()
 
 
-async def test_run_schema_validation_validates_field_metadata(
+async def test_run_schema_validation_preserves_prior_findings(
     hass: HomeAssistant,
 ) -> None:
-    """Schema validation should pass field metadata to the validator."""
-
-    class FakeField:
-        def __init__(self, unit: str, datatype: str) -> None:
-            self.unit = unit
-            self.datatype = datatype
-
-    class FakeSpanMqttClient:
-        field_metadata = {"instantPowerW": FakeField("W", "number")}
-
-    client = FakeSpanMqttClient()
+    """A later pass without metadata must not erase what an earlier one found."""
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = {
+        "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
+    }
     coordinator = _create_coordinator(hass, client=client)
 
-    with (
-        patch(
-            "custom_components.span_panel.coordinator.SpanMqttClient",
-            FakeSpanMqttClient,
-        ),
-        patch(
-            "custom_components.span_panel.coordinator.collect_sensor_definitions",
-            return_value={"sensor_defs": "ok"},
-        ) as mock_collect,
-        patch(
-            "custom_components.span_panel.coordinator.validate_field_metadata"
-        ) as mock_validate,
-    ):
-        coordinator._run_schema_validation()
+    coordinator._run_schema_validation()
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
 
-    mock_collect.assert_called_once()
-    mock_validate.assert_called_once_with(
-        {"instantPowerW": {"unit": "W", "datatype": "number"}},
-        sensor_defs={"sensor_defs": "ok"},
-    )
+    client.field_metadata = None
+    coordinator._run_schema_validation()
+
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
+
+
+async def test_run_schema_validation_reads_metadata_through_the_protocol(
+    hass: HomeAssistant,
+) -> None:
+    """The unit cross-check must key sensor definitions by field path.
+
+    Not `circuit.instant_power_w`/"kW": that pair is in
+    `KNOWN_BAD_SCHEMA_UNITS`, so it would prove the exception, not the wiring.
+    """
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = {"panel.l1_voltage": FieldMetadata("kV", "float")}
+    coordinator = _create_coordinator(hass, client=client)
+
+    coordinator._run_schema_validation()
+
+    findings = coordinator.schema_findings
+    assert findings is not None
+    assert [m.field_path for m in findings.unit_mismatches] == ["panel.l1_voltage"]
+    assert findings.unit_mismatches[0].schema_unit == "kV"
+    assert findings.unit_mismatches[0].ha_unit == "V"
 
 
 @pytest.mark.parametrize(
@@ -507,3 +519,176 @@ async def test_async_update_data_stale_data_error_marks_offline_and_returns_last
         "is unavailable" in r.message and "MQTT broker disconnected" in r.message
         for r in caplog.records
     )
+
+
+async def test_entities_register_themselves_against_the_field_they_read(
+    hass: HomeAssistant,
+) -> None:
+    """The affected-entity map is recorded by entities, never derived from them.
+
+    Three unique_id builders are in play and they disagree, so reconstructing
+    entity ids from entity descriptions reported "0 affected" for most fields.
+    tests/test_schema_repairs.py drives real entities through a real platform;
+    this pins the coordinator side of the contract.
+    """
+    coordinator = _create_coordinator(hass)
+
+    coordinator.async_register_field_path_entity("panel.door_state", "binary_sensor.door")
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.b")
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.a")
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.a")
+
+    assert coordinator.entity_ids_by_field_path == {
+        "panel.door_state": ["binary_sensor.door"],
+        "circuit.instant_power_w": ["sensor.a", "sensor.b"],
+    }
+
+    coordinator.async_unregister_field_path_entity("circuit.instant_power_w", "sensor.a")
+    coordinator.async_unregister_field_path_entity("panel.door_state", "binary_sensor.door")
+    # Unknown pairs are ignored rather than raising: removal can outlive setup.
+    coordinator.async_unregister_field_path_entity("panel.door_state", "binary_sensor.gone")
+
+    assert coordinator.entity_ids_by_field_path == {
+        "circuit.instant_power_w": ["sensor.b"]
+    }
+
+
+async def test_sync_schema_repairs_raises_a_repair_naming_the_dead_entities(
+    hass: HomeAssistant,
+) -> None:
+    """The whole point of the feature: a dead field names the sensors it killed."""
+    from homeassistant.helpers import issue_registry as ir
+
+    entry = MockConfigEntry(domain="span_panel", entry_id="entry-affected")
+    entry.add_to_hass(hass)
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = {
+        "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
+    }
+    coordinator = SpanPanelCoordinator(hass, cast(SpanMqttClient, client), entry)
+    coordinator.async_register_field_path_entity(
+        "circuit.instant_power_w", "sensor.span_panel_kitchen_power"
+    )
+
+    coordinator._run_schema_validation()
+    coordinator.async_sync_schema_repairs()
+
+    issue = ir.async_get(hass).async_get_issue(
+        "span_panel", "unresolved_entry-affected_circuit.instant_power_w"
+    )
+    assert issue is not None
+    assert issue.translation_placeholders["count"] == "1"
+    assert issue.translation_placeholders["examples"] == "sensor.span_panel_kitchen_power"
+
+
+async def test_sync_schema_repairs_is_a_no_op_while_findings_are_unknown(
+    hass: HomeAssistant,
+) -> None:
+    """"Unknown" must not reconcile at all.
+
+    `field_metadata` is None for the whole retained-message window, which an
+    ordinary reconnect opens. Reconciling against no findings would delete every
+    schema issue, and with it every dismissal the user has made.
+    """
+    from homeassistant.helpers import issue_registry as ir
+
+    entry = MockConfigEntry(domain="span_panel", entry_id="entry-unknown")
+    entry.add_to_hass(hass)
+    ir.async_create_issue(
+        hass,
+        "span_panel",
+        "unresolved_entry-unknown_circuit.instant_power_w",
+        is_fixable=False,
+        is_persistent=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="schema_field_unresolved",
+        translation_placeholders={"field_path": "x", "count": "0", "examples": "none"},
+    )
+
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = None
+    coordinator = SpanPanelCoordinator(hass, cast(SpanMqttClient, client), entry)
+
+    coordinator._run_schema_validation()
+    coordinator.async_sync_schema_repairs()
+
+    assert coordinator.schema_findings is None
+    assert ir.async_get(hass).async_get_issue(
+        "span_panel", "unresolved_entry-unknown_circuit.instant_power_w"
+    )
+
+
+async def test_a_none_first_pass_does_not_disable_validation_for_the_session(
+    hass: HomeAssistant,
+) -> None:
+    """One unlucky first pass must not silence the feature until the next reload.
+
+    `field_metadata` is None for the whole not-ready / pre-rebuild window, which
+    an ordinary reconnect opens. Setting the once-only guard before validation
+    ran meant that a first pass landing in that window left findings at None
+    forever: the guard was set, later passes skipped, and the single reconcile at
+    setup had nothing to raise. Zero issues, for the life of the entry.
+    """
+    from homeassistant.helpers import issue_registry as ir
+
+    entry = MockConfigEntry(domain="span_panel", entry_id="entry-late")
+    entry.add_to_hass(hass)
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = None
+    coordinator = SpanPanelCoordinator(hass, cast(SpanMqttClient, client), entry)
+    coordinator.async_register_field_path_entity(
+        "circuit.instant_power_w", "sensor.kitchen_power"
+    )
+    snapshot = SpanPanelSnapshotFactory.create()
+
+    with patch.object(coordinator, "_fire_dip_notification", AsyncMock()):
+        # The pass that happens during setup's first refresh — metadata not ready.
+        await coordinator._run_post_update_tasks(snapshot)
+        assert coordinator.schema_findings is None
+        assert coordinator._schema_validated is False
+
+        # Setup finishes and reconciles; there is nothing to raise yet.
+        coordinator.async_sync_schema_repairs()
+        assert not [k for k in ir.async_get(hass).issues if k[0] == "span_panel"]
+
+        # Metadata arrives, and the panel turns out to be degraded.
+        client.field_metadata = {
+            "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
+        }
+        for _ in range(5):
+            await coordinator._run_post_update_tasks(snapshot)
+
+    assert coordinator.schema_findings is not None
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
+
+    issue = ir.async_get(hass).async_get_issue(
+        "span_panel", "unresolved_entry-late_circuit.instant_power_w"
+    )
+    assert issue is not None
+    assert issue.translation_placeholders["count"] == "1"
+    assert issue.translation_placeholders["examples"] == "sensor.kitchen_power"
+
+
+async def test_validation_runs_at_most_once_successfully(hass: HomeAssistant) -> None:
+    """Metadata is static within a session; re-reading it every pass is waste.
+
+    The retry above must not turn into revalidation. Once a pass has produced
+    findings, later passes leave them alone.
+    """
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = {
+        "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
+    }
+    coordinator = _create_coordinator(hass, client=client)
+    snapshot = SpanPanelSnapshotFactory.create()
+
+    with patch.object(coordinator, "_fire_dip_notification", AsyncMock()):
+        await coordinator._run_post_update_tasks(snapshot)
+        assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
+
+        # A later pass sees different metadata and must not act on it.
+        client.field_metadata = {}
+        for _ in range(3):
+            await coordinator._run_post_update_tasks(snapshot)
+
+    assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
