@@ -14,6 +14,7 @@ from custom_components.span_panel.field_paths import (
     declared_field_paths,
 )
 from custom_components.span_panel.sensor_definitions import all_sensor_descriptions
+from tests.adapter_fixtures import schema_one_metadata, schema_zero_metadata
 
 # Attributes of the panel snapshot that are themselves sub-snapshots. Their
 # fields are addressed as "battery.x", not "panel.battery.x".
@@ -189,3 +190,47 @@ def test_introspection_covers_every_declared_path() -> None:
         if not description.derived and description.field_path is not None
     }
     assert declared_field_paths() == frozenset(introspected | set(RESIDUAL_FIELD_PATHS))
+
+
+def test_no_derived_description_reads_one_producible_field() -> None:
+    """`derived` must mean no field, several fields, or an unproducible one.
+
+    Pins the rule, not the instance that broke it. `evse_ev_connected` read
+    exactly `evse.status` — one field both adapters produce — while declaring
+    itself derived, so `_declared_field_paths` skipped it: the Repair for a dead
+    `evse.status` never named it and the availability probe never fired for it,
+    though its sibling `evse_charging` got both from the very same field.
+
+    Producibility is what makes this checkable: the recorder also picks up
+    method names and other noise, and intersecting with what both adapters
+    actually emit leaves only real fields.
+    """
+    producible = set(schema_zero_metadata()) & set(schema_one_metadata())
+    offenders: list[str] = []
+
+    for description in _declaring_descriptions():
+        if not description.derived:
+            continue
+        class_name = type(description).__name__
+        prefix = _ROOT_PREFIX.get(class_name)
+        if prefix is None:
+            offenders.append(
+                f"{description.key}: {class_name} is absent from _ROOT_PREFIX, so its "
+                "derived classification would go unverified"
+            )
+            continue
+        sink: set[str] = set()
+        proxy = _Recorder(sink, prefix, root=(prefix == "panel"))
+        try:
+            description.value_fn(proxy)
+        except Exception as err:  # noqa: BLE001
+            offenders.append(f"{description.key}: value_fn raised {err!r}")
+            continue
+        read = sorted(sink & producible)
+        if len(read) == 1:
+            offenders.append(
+                f"{description.key}: derived=True but reads exactly one producible field, "
+                f"{read[0]!r} — that is a declaration, so set field_path={read[0]!r}"
+            )
+
+    assert not offenders, "Misclassified derived descriptions:\n" + "\n".join(offenders)

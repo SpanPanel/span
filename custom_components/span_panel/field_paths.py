@@ -43,10 +43,30 @@ class FieldPathDeclarationMixin:
     """
 
     derived: bool = False
-    """True when the value is computed from several fields, or none.
+    """True only when there is no single source field to declare.
 
-    Derived entities have no single source field, so they are exempt from the
-    producible check.
+    Exactly one of these three must hold, and the test is mechanical — count the
+    snapshot fields the `value_fn` reads:
+
+    1. it reads **no** snapshot field, or
+    2. it reads **more than one**, or
+    3. it reads exactly one that no adapter, or only one adapter, produces.
+
+    Reading exactly one producible field is **always** a declaration, however
+    much arithmetic, mapping or membership-testing is applied on top. "Computed
+    from `status`" is not derivation: `field_path="evse.status"` with a
+    `value_fn` of `status in {...}` declares its source correctly and still
+    computes whatever it likes. `evse_ev_connected` was misclassified this way,
+    which cost it both a Repair mention and its unavailability, while its
+    sibling `evse_charging` — same field, same shape — got both.
+
+    Case 3 keeps the producible gate satisfiable: it requires a path both
+    adapters emit, so a schema-conditional field cannot be declared. Those are
+    listed in `RESIDUAL_EXEMPT_PATHS` when the integration reads them outside a
+    description.
+
+    `test_no_derived_description_reads_one_producible_field` enforces this rule
+    against every derived description rather than against any one instance.
     """
 
 

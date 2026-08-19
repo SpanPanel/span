@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 
@@ -215,19 +216,26 @@ async def test_derived_entity_is_never_probed(hass: HomeAssistant) -> None:
     assert entity.available is True
 
 
-async def test_evse_binary_sensor_is_covered_by_the_base_class(hass: HomeAssistant) -> None:
+@pytest.mark.parametrize("key", ["evse_charging", "evse_ev_connected"])
+async def test_evse_binary_sensor_is_covered_by_the_base_class(
+    hass: HomeAssistant, key: str
+) -> None:
     """`SpanEvseBinarySensor` defines no `available`, so it exercises `entity.py`.
 
     The circuit sensor goes through `SpanSensorBase.available` and the panel
     binary sensor through `SpanPanelBinarySensor.available`; neither reaches the
     override on `SpanPanelEntity` itself. This one does.
+
+    Both EVSE binary sensors read `evse.status`, so both must answer the same
+    way. `evse_ev_connected` used to be `derived=True` and so stayed available
+    while its sibling went dark on the very same dead field.
     """
     coordinator = _make_coordinator(hass)
     coordinator.data = SpanPanelSnapshotFactory.create(
         evse={"evse-0": SpanEvseSnapshotFactory.create()}
     )
     coordinator._findings = SchemaFindings(frozenset({"evse.status"}), (), frozenset())
-    description = next(desc for desc in EVSE_BINARY_SENSORS if desc.key == "evse_charging")
+    description = next(desc for desc in EVSE_BINARY_SENSORS if desc.key == key)
     assert description.field_path == "evse.status"
     assert "available" not in vars(SpanEvseBinarySensor)
 

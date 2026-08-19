@@ -327,7 +327,7 @@ EVSE_BINARY_SENSORS: tuple[
     ),
     SpanEvseBinarySensorEntityDescription(
         key="evse_ev_connected",
-        derived=True,
+        field_path="evse.status",
         translation_key="evse_ev_connected",
         device_class=BinarySensorDeviceClass.PLUG,
         value_fn=lambda e: (e.status or "") in _EV_CONNECTED_STATUSES,
