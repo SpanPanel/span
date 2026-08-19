@@ -6,8 +6,13 @@ declaration stays authoritative — this only stops it drifting from the reader.
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable, Iterator
+from typing import Any, Protocol, runtime_checkable
 
+from custom_components.span_panel.field_paths import (
+    RESIDUAL_FIELD_PATHS,
+    declared_field_paths,
+)
 from custom_components.span_panel.sensor_definitions import all_sensor_descriptions
 
 # Attributes of the panel snapshot that are themselves sub-snapshots. Their
@@ -71,9 +76,61 @@ class _Recorder:
         return 0
 
 
+@runtime_checkable
+class _DeclaringDescription(Protocol):
+    """The surface this test needs from an entity description.
+
+    A protocol rather than a concrete type because the eight sensor classes and
+    the two binary-sensor classes share no base beyond
+    `FieldPathDeclarationMixin`, which does not carry `value_fn`.
+    """
+
+    @property
+    def key(self) -> str: ...
+
+    @property
+    def field_path(self) -> str | None: ...
+
+    @property
+    def derived(self) -> bool: ...
+
+    @property
+    def value_fn(self) -> Callable[[Any], object]: ...
+
+
+def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
+    """Every entity description that carries a field-path declaration.
+
+    Mirrors the collections `declared_field_paths()` walks, so the gate and this
+    verifier cover the same descriptions;
+    `test_introspection_covers_every_declared_path` pins that they still do.
+    """
+    # Deferred for the same reason `field_paths` defers it: `binary_sensor`
+    # reaches the package root, and the root imports the platforms.
+    from custom_components.span_panel.binary_sensor import (  # noqa: PLC0415
+        BESS_CONNECTED_SENSOR,
+        BINARY_SENSORS,
+        EVSE_BINARY_SENSORS,
+        GRID_ISLANDABLE_SENSOR,
+    )
+
+    for description in (
+        *all_sensor_descriptions(),
+        *BINARY_SENSORS,
+        *EVSE_BINARY_SENSORS,
+        GRID_ISLANDABLE_SENSOR,
+        BESS_CONNECTED_SENSOR,
+    ):
+        if not isinstance(description, _DeclaringDescription):
+            raise TypeError(
+                f"entity description '{description.key}' carries no field-path declaration"
+            )
+        yield description
+
+
 # Every description class, and the snapshot type its value_fn receives.
-# A class missing here is silently skipped by the `prefix is None` guard below —
-# which is exactly the hole this test exists to close, so keep it complete.
+# A class missing here is reported as a mismatch rather than skipped: a silent
+# skip is exactly the hole this test exists to close.
 _ROOT_PREFIX = {
     "SpanPanelCircuitsSensorEntityDescription": "circuit",
     "SpanPanelDataSensorEntityDescription": "panel",
@@ -85,17 +142,24 @@ _ROOT_PREFIX = {
     "SpanPVMetadataSensorEntityDescription": "panel",
     "SpanEvseSensorEntityDescription": "evse",
     "SpanMidSensorEntityDescription": "mid",
+    "SpanPanelBinarySensorEntityDescription": "panel",
+    "SpanEvseBinarySensorEntityDescription": "evse",
 }
 
 
 def test_declared_paths_match_what_value_fns_read() -> None:
     mismatches: list[str] = []
 
-    for description in all_sensor_descriptions():
+    for description in _declaring_descriptions():
         if description.derived or description.field_path is None:
             continue
-        prefix = _ROOT_PREFIX.get(type(description).__name__)
+        class_name = type(description).__name__
+        prefix = _ROOT_PREFIX.get(class_name)
         if prefix is None:
+            mismatches.append(
+                f"{description.key}: {class_name} is absent from _ROOT_PREFIX, so its "
+                "declaration would go unverified"
+            )
             continue
         sink: set[str] = set()
         proxy = _Recorder(sink, prefix, root=(prefix == "panel"))
@@ -110,3 +174,18 @@ def test_declared_paths_match_what_value_fns_read() -> None:
             )
 
     assert not mismatches, "Declarations disagree with readers:\n" + "\n".join(mismatches)
+
+
+def test_introspection_covers_every_declared_path() -> None:
+    """Every path the gate accepts must be one this test verified, or residual.
+
+    `_declaring_descriptions` restates the collections `declared_field_paths()`
+    walks. Without this, a platform collection added to the gate but not here
+    would be gated for producibility and never checked against its reader.
+    """
+    introspected = {
+        description.field_path
+        for description in _declaring_descriptions()
+        if not description.derived and description.field_path is not None
+    }
+    assert declared_field_paths() == frozenset(introspected | set(RESIDUAL_FIELD_PATHS))
