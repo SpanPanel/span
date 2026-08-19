@@ -711,6 +711,14 @@
     "panel_upgraded_to_ebus_v1": {
       "title": "Your SPAN Panel now reports islanding from its Microgrid Interconnect Device",
       "description": "Your SPAN Panel upgraded to the eBus v1.0 data model. Nothing you rely on has gone away, and no automation changes are required — this is a note about what improved.\n\n**DSM Grid State** keeps its entity ID and its history, and is now more trustworthy. On the previous firmware it was *inferred* — from the battery when one was fitted, otherwise from the dominant power source and whether any power was crossing the grid connection. It now reads the islanding state the Microgrid Interconnect Device (MID) actually senses.\n\n**Grid Islandable** also keeps working. v1.0 publishes no panel-level `grid-islandable` property, so it now reflects whether a MID is present, which is how v1.0 says backup capability is detected.\n\n**New:** a Microgrid Interconnect Device appears among your devices, carrying **Grid State** — the health of the utility supply itself, which the previous firmware did not report.\n\nDismiss this once you have had a look."
+    },
+    "schema_field_unresolved": {
+      "title": "SPAN Panel data field unavailable",
+      "description": "Your panel's firmware no longer provides `{field_path}`. {count} entity/entities are affected (for example: {examples}). They will show as unavailable until an integration update adds support for the new firmware."
+    },
+    "schema_unit_mismatch": {
+      "title": "SPAN Panel unit mismatch",
+      "description": "Your panel reports `{field_path}` in {schema_unit}, but this integration expects {ha_unit}. Readings and long-term statistics for the affected entities may be wrong. The entity has not been changed automatically."
     }
   }
 }

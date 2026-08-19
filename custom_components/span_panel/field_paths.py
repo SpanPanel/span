@@ -173,12 +173,13 @@ def iter_field_path_declarations[DescriptionT: EntityDescription](
         yield description.field_path, description
 
 
-def declared_field_paths() -> frozenset[str]:
-    """Field paths the integration reads that must be producible by an adapter.
+def iter_all_field_path_declarations() -> Iterator[tuple[str, EntityDescription]]:
+    """Yield every ``(field_path, description)`` pair across all platforms.
 
-    Derived entities are excluded: they have no single source field, so there is
-    nothing for an adapter to produce. Residual readers that no adapter (or only
-    one) produces are excluded too, and are listed in `RESIDUAL_EXEMPT_PATHS`.
+    The one place that knows which platforms carry declarations. Both consumers
+    read it: `declared_field_paths` wants only the paths, and the Repairs call
+    site wants the descriptions, so it can name the entities a dead field killed.
+    Keeping the assembly here is what stops those two views from drifting.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
     # here, and `binary_sensor` reaches the package root for its config-entry
@@ -193,17 +194,24 @@ def declared_field_paths() -> frozenset[str]:
         all_sensor_descriptions,
     )
 
-    paths: set[str] = set(RESIDUAL_FIELD_PATHS)
-    paths.update(
-        field_path
-        for field_path, _ in iter_field_path_declarations(
-            (
-                *all_sensor_descriptions(),
-                *BINARY_SENSORS,
-                *EVSE_BINARY_SENSORS,
-                GRID_ISLANDABLE_SENSOR,
-                BESS_CONNECTED_SENSOR,
-            )
+    yield from iter_field_path_declarations(
+        (
+            *all_sensor_descriptions(),
+            *BINARY_SENSORS,
+            *EVSE_BINARY_SENSORS,
+            GRID_ISLANDABLE_SENSOR,
+            BESS_CONNECTED_SENSOR,
         )
     )
+
+
+def declared_field_paths() -> frozenset[str]:
+    """Field paths the integration reads that must be producible by an adapter.
+
+    Derived entities are excluded: they have no single source field, so there is
+    nothing for an adapter to produce. Residual readers that no adapter (or only
+    one) produces are excluded too, and are listed in `RESIDUAL_EXEMPT_PATHS`.
+    """
+    paths: set[str] = set(RESIDUAL_FIELD_PATHS)
+    paths.update(field_path for field_path, _ in iter_all_field_path_declarations())
     return frozenset(paths)

@@ -27,7 +27,9 @@ from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSna
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
 
 from .const import DOMAIN
-from .id_builder import build_circuit_unique_id
+from .field_paths import iter_all_field_path_declarations
+from .id_builder import build_circuit_unique_id, get_user_friendly_suffix
+from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
 from .sensor_definitions import sensor_descriptions_by_field_path
 
@@ -390,6 +392,37 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._findings = evaluate_field_metadata(
             field_metadata, sensor_descriptions_by_field_path()
         )
+        async_sync_schema_issues(
+            self.hass,
+            self.config_entry,
+            self._findings,
+            self._affected_entity_ids(self._findings.unresolved),
+        )
+
+    def _affected_entity_ids(self, field_paths: frozenset[str]) -> dict[str, list[str]]:
+        """Entity ids this entry owns that read each of `field_paths`.
+
+        Matched through `get_user_friendly_suffix(description.key)`, not the
+        snapshot field name: a unique_id ends in the suffix ("_power"), never in
+        the field ("instant_power_w"), so matching on the field would silently
+        find nothing and report every dead field as affecting zero entities.
+        """
+        entity_registry = er.async_get(self.hass)
+        entries = er.async_entries_for_config_entry(entity_registry, self.config_entry.entry_id)
+
+        suffixes_by_path: dict[str, set[str]] = {path: set() for path in field_paths}
+        for field_path, description in iter_all_field_path_declarations():
+            if field_path in suffixes_by_path:
+                suffixes_by_path[field_path].add(get_user_friendly_suffix(description.key))
+
+        return {
+            path: [
+                entry.entity_id
+                for entry in entries
+                if any(entry.unique_id.endswith(suffix) for suffix in suffixes)
+            ]
+            for path, suffixes in suffixes_by_path.items()
+        }
 
     @property
     def unresolved_paths(self) -> frozenset[str]:

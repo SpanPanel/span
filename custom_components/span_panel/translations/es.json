@@ -711,6 +711,14 @@
     "panel_upgraded_to_ebus_v1": {
       "title": "Su Panel SPAN ahora informa del aislamiento desde su Dispositivo de Interconexión de Microrred",
       "description": "Su Panel SPAN se ha actualizado al modelo de datos eBus v1.0. Nada de lo que usted utiliza ha desaparecido y no es necesario modificar ninguna automatización: este aviso solo explica lo que ha mejorado.\n\n**Estado de Red DSM** conserva su ID de entidad y su historial, y ahora es más fiable. Con el firmware anterior se *deducía*: a partir de la batería cuando había una instalada y, en su defecto, de la fuente de energía dominante y de si circulaba potencia por la conexión a la red. Ahora lee el estado de aislamiento que el Dispositivo de Interconexión de Microrred (MID) detecta realmente.\n\n**Aislable de la Red** también sigue funcionando. La v1.0 no publica ninguna propiedad `grid-islandable` a nivel de panel, por lo que ahora refleja si hay un MID presente, que es como la v1.0 determina la capacidad de respaldo.\n\n**Novedad:** aparece un Dispositivo de Interconexión de Microrred entre sus dispositivos, con **Estado de la Red**, es decir, el estado del suministro eléctrico, que el firmware anterior no informaba.\n\nPuede descartar este aviso cuando lo haya revisado."
+    },
+    "schema_field_unresolved": {
+      "title": "Campo de datos del Panel SPAN no disponible",
+      "description": "El firmware de su panel ya no proporciona `{field_path}`. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Aparecerán como no disponibles hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
+    },
+    "schema_unit_mismatch": {
+      "title": "Discrepancia de unidades del Panel SPAN",
+      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Las lecturas y las estadísticas a largo plazo de las entidades afectadas pueden ser incorrectas. La entidad no se ha modificado automáticamente."
     }
   }
 }

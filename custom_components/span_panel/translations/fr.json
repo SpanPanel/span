@@ -711,6 +711,14 @@
     "panel_upgraded_to_ebus_v1": {
       "title": "Votre Panneau SPAN signale désormais l'îlotage depuis son Dispositif d'Interconnexion de Micro-réseau",
       "description": "Votre Panneau SPAN est passé au modèle de données eBus v1.0. Rien de ce que vous utilisez n'a disparu et aucune modification de vos automatisations n'est nécessaire : cet avis explique simplement ce qui s'est amélioré.\n\n**État Réseau DSM** conserve son identifiant d'entité et son historique, et gagne en fiabilité. Avec le micrologiciel précédent, il était *déduit* : à partir de la batterie lorsqu'il y en avait une, sinon à partir de la source d'énergie dominante et de la présence de puissance transitant par le raccordement réseau. Il lit désormais l'état d'îlotage réellement mesuré par le Dispositif d'Interconnexion de Micro-réseau (MID).\n\n**Îlotage Réseau Possible** continue également de fonctionner. La v1.0 ne publie aucune propriété `grid-islandable` au niveau du panneau ; ce capteur indique donc maintenant la présence d'un MID, ce qui est la façon dont v1.0 détermine la capacité de secours.\n\n**Nouveau :** un Dispositif d'Interconnexion de Micro-réseau apparaît parmi vos appareils, avec **État du Réseau** — l'état de l'alimentation du réseau public, que le micrologiciel précédent ne signalait pas.\n\nVous pouvez ignorer cet avis après consultation."
+    },
+    "schema_field_unresolved": {
+      "title": "Champ de données du Panneau SPAN indisponible",
+      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. {count} entité(s) sont concernées (par exemple : {examples}). Elles resteront indisponibles jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
+    },
+    "schema_unit_mismatch": {
+      "title": "Incohérence d'unité du Panneau SPAN",
+      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. Les relevés et les statistiques à long terme des entités concernées peuvent être erronés. L'entité n'a pas été modifiée automatiquement."
     }
   }
 }

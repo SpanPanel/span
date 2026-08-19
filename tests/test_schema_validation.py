@@ -281,3 +281,25 @@ def test_readers_of_the_same_field_path_agree_on_unit() -> None:
     for path, descriptions in colliding.items():
         units = {d.native_unit_of_measurement for d in descriptions}
         assert len(units) == 1, f"readers of {path} disagree on unit: {units}"
+
+
+def test_known_bad_schema_unit_exception_is_keyed_on_the_field_path() -> None:
+    """The other half of the pair: only `circuit.instant_power_w` is excused.
+
+    `test_known_bad_schema_unit_exception_is_narrow` pins the unit half — a
+    different unit on the same path is still reported. Without this, widening
+    the check to a unit-only membership test ("is kW ever known-bad?") would
+    pass the whole suite while silently excusing every field that declares kW.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+    from homeassistant.const import UnitOfPower
+
+    description = SensorEntityDescription(
+        key="grid_power", native_unit_of_measurement=UnitOfPower.WATT
+    )
+    findings = evaluate_field_metadata(
+        {"panel.instant_grid_power_w": FieldMetadata("kW", "float")},
+        sensor_defs={"panel.instant_grid_power_w": description},
+    )
+    assert [m.field_path for m in findings.unit_mismatches] == ["panel.instant_grid_power_w"]
+    assert findings.unit_mismatches[0].schema_unit == "kW"
