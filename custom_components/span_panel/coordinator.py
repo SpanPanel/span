@@ -90,9 +90,14 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
 
-        # Schema validation — run once after first successful refresh
+        # Schema validation — runs once SUCCESSFULLY; a pass that finds no
+        # metadata yet leaves the flag unset so a later one can still answer.
         self._schema_validated = False
         self._findings: SchemaFindings | None = None
+        # True once `async_setup_entry` has forwarded the platforms and asked for
+        # the first reconcile. Before that there are no entities for a finding to
+        # name; after it, a late first success must reconcile itself.
+        self._platforms_ready = False
 
         # Which entities read which snapshot field, recorded by the entities
         # themselves as they are added to hass. Authoritative rather than
@@ -398,6 +403,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._findings = evaluate_field_metadata(
             field_metadata, sensor_descriptions_by_field_path()
         )
+        # Only now: metadata is static within a session, so one success is
+        # enough and re-reading identical inputs on every pass would be waste.
+        self._schema_validated = True
+
+        if self._platforms_ready:
+            # A late first success. Setup already passed its reconcile point, so
+            # nothing else will raise these — do it here, where the entities that
+            # the findings name are guaranteed to exist.
+            self._sync_repairs()
 
     @callback
     def async_register_field_path_entity(self, field_path: str, entity_id: str) -> None:
@@ -430,12 +444,21 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
     @callback
     def async_sync_schema_repairs(self) -> None:
-        """Reconcile Repairs against the last validation pass.
+        """Reconcile Repairs now that the platforms are up.
 
-        Deliberately separate from `_run_schema_validation`: that runs on the
-        first refresh, which `async_setup_entry` awaits *before* forwarding the
-        platforms, so no entity exists yet and every Repair would report zero
-        affected entities. Called once the platforms are up instead.
+        Called by `async_setup_entry` after the platforms are forwarded, which is
+        the earliest point the entities a finding names exist: validation runs on
+        the first refresh, and setup awaits that *before* forwarding anything.
+
+        Also records that the reconcile point has passed, so a validation pass
+        that first succeeds later reconciles itself rather than waiting for the
+        next reload.
+        """
+        self._platforms_ready = True
+        self._sync_repairs()
+
+    def _sync_repairs(self) -> None:
+        """Reconcile Repairs against the findings, if there are any yet.
 
         Findings of None means "not yet known", never "healthy" — reconciling
         against that would delete every issue and every dismissal with it.
@@ -612,9 +635,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         streaming the polling path effectively never fires. This shared method
         ensures reload requests are processed regardless of transport mode.
         """
-        # One-shot schema validation after first successful refresh
+        # Schema validation: at most once SUCCESSFULLY, retried only while the
+        # answer is still unknown. The guard is set inside `_run_schema_validation`
+        # for that reason — setting it here disabled the feature for the life of
+        # the entry whenever the very first pass landed in the metadata-not-ready
+        # window, which an ordinary reconnect opens.
         if not self._schema_validated:
-            self._schema_validated = True
             self._run_schema_validation()
 
         # Check for pending solar entity migration (v1 solar → v2 PV circuit)

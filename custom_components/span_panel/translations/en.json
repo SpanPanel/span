@@ -714,7 +714,7 @@
     },
     "schema_field_unresolved": {
       "title": "SPAN Panel data field unavailable",
-      "description": "Your panel's firmware no longer provides `{field_path}`. {count} entity/entities are affected (for example: {examples}). They will show as unavailable until an integration update adds support for the new firmware."
+      "description": "Your panel's firmware no longer provides `{field_path}`. {count} entity/entities are affected (for example: {examples}). They may become unavailable, or report incomplete data, until an integration update adds support for the new firmware."
     },
     "schema_unit_mismatch": {
       "title": "SPAN Panel unit mismatch",

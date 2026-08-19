@@ -714,7 +714,7 @@
     },
     "schema_field_unresolved": {
       "title": "Campo de dados do Painel SPAN indisponível",
-      "description": "O firmware do seu painel já não fornece `{field_path}`. Há {count} entidade(s) afetada(s) (por exemplo: {examples}). Ficarão indisponíveis até que uma atualização da integração adicione suporte ao novo firmware."
+      "description": "O firmware do seu painel já não fornece `{field_path}`. Há {count} entidade(s) afetada(s) (por exemplo: {examples}). Podem ficar indisponíveis, ou comunicar dados incompletos, até que uma atualização da integração adicione suporte ao novo firmware."
     },
     "schema_unit_mismatch": {
       "title": "Discrepância de unidades do Painel SPAN",

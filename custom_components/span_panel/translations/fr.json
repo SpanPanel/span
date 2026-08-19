@@ -714,7 +714,7 @@
     },
     "schema_field_unresolved": {
       "title": "Champ de données du Panneau SPAN indisponible",
-      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. {count} entité(s) sont concernées (par exemple : {examples}). Elles resteront indisponibles jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
+      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. {count} entité(s) sont concernées (par exemple : {examples}). Elles peuvent devenir indisponibles, ou renvoyer des données incomplètes, jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
     },
     "schema_unit_mismatch": {
       "title": "Incohérence d'unité du Panneau SPAN",

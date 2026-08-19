@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
@@ -90,6 +90,17 @@ class SpanCircuitPowerSensor(
     SpanSensorBase[SpanPanelCircuitsSensorEntityDescription, SpanCircuitSnapshot]
 ):
     """Circuit power/current/breaker-rating sensor with extra state attributes."""
+
+    # Beyond the value the description declares: `name` and `tabs` build the
+    # entity's identity (~56-83), and `tabs`, `relay_state`, `relay_requester`
+    # and `priority` are republished as state attributes (~231-243).
+    _residual_field_paths: ClassVar[tuple[str, ...]] = (
+        "circuit.name",
+        "circuit.tabs",
+        "circuit.relay_state",
+        "circuit.relay_requester",
+        "circuit.priority",
+    )
 
     def __init__(
         self,
@@ -249,6 +260,9 @@ class SpanCircuitEnergySensor(
     SpanEnergySensorBase[SpanPanelCircuitsSensorEntityDescription, SpanCircuitSnapshot]
 ):
     """Circuit energy sensor with grace period tracking."""
+
+    # Naming only; this sensor publishes no circuit attributes.
+    _residual_field_paths: ClassVar[tuple[str, ...]] = ("circuit.name", "circuit.tabs")
 
     def __init__(
         self,

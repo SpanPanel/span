@@ -514,25 +514,22 @@ async def test_removing_an_entity_drops_it_from_the_map(hass) -> None:
         await _stop_scheduling(coordinator)
 
 
-async def test_entities_without_a_declaration_are_not_tracked(hass) -> None:
-    """A derived entity must not be blamed for a field it only partly reads.
+async def test_derived_entities_are_not_tracked(hass) -> None:
+    """A derived entity must not be blamed for one of the fields it combines.
 
-    Derived entities compute from several fields or none, and the circuit switch
-    carries no entity description at all. Tracking either would attribute an
-    entity to a field whose loss may not have taken it down.
+    Derived entities compute from several fields or none, so no single field's
+    loss can be said to have taken them down. They declare no `field_path` and
+    no residual reads, and must therefore land in no bucket at all.
     """
+    from unittest.mock import MagicMock
+
+    from custom_components.span_panel.binary_sensor import (
+        BESS_CONNECTED_SENSOR,
+        async_setup_entry as binary_setup,
+    )
+
     coordinator, config_entry, _ = await _entities_by_declared_path(hass)
     try:
-        from unittest.mock import MagicMock
-
-        from custom_components.span_panel.binary_sensor import (
-            BESS_CONNECTED_SENSOR,
-            async_setup_entry as binary_setup,
-        )
-        from custom_components.span_panel.switch import (
-            async_setup_entry as switch_setup,
-        )
-
         assert BESS_CONNECTED_SENSOR.derived, "fixture assumes a derived description"
 
         added = MagicMock()
@@ -544,15 +541,139 @@ async def test_entities_without_a_declaration_are_not_tracked(hass) -> None:
         ]
         assert derived
 
+        await _add_to_platform(hass, config_entry, derived, "binary_sensor")
+
+        assert coordinator.entity_ids_by_field_path == {}
+    finally:
+        await _stop_scheduling(coordinator)
+
+
+async def test_a_platform_with_no_description_still_registers_its_residuals(
+    hass,
+) -> None:
+    """The circuit switch carries no entity description at all.
+
+    It is tracked purely through `_residual_field_paths`, which is the whole
+    reason that hook exists.
+    """
+    from unittest.mock import MagicMock
+
+    from custom_components.span_panel.switch import async_setup_entry as switch_setup
+
+    coordinator, config_entry, _ = await _entities_by_declared_path(hass)
+    try:
         added = MagicMock()
         await switch_setup(hass, config_entry, added)
         switches = list(added.call_args.args[0])
         assert switches
         assert not hasattr(switches[0], "entity_description")
 
-        await _add_to_platform(hass, config_entry, derived, "binary_sensor")
         await _add_to_platform(hass, config_entry, switches, "switch")
 
-        assert coordinator.entity_ids_by_field_path == {}
+        expected = sorted(s.entity_id for s in switches)
+        assert coordinator.entity_ids_by_field_path == {
+            "circuit.relay_state": expected,
+            "circuit.name": expected,
+            "circuit.tabs": expected,
+        }
     finally:
         await _stop_scheduling(coordinator)
+
+
+# --- Residual reads -------------------------------------------------------
+#
+# Five field paths are read from entity code rather than from a description's
+# `field_path`: the switch's relay state, the select's priority, and the name,
+# tabs and relay requester a circuit entity uses for its identity and its
+# attributes. `RESIDUAL_FIELD_PATHS` lists them for the producible gate. Nothing
+# declared them on the entities, so a dead `circuit.relay_state` reported "0
+# entity/entities are affected" while every breaker switch on the panel was out.
+
+
+async def test_a_dead_relay_state_names_the_breaker_switches(hass) -> None:
+    """The residual set must not reproduce the "0 affected" lie."""
+    from unittest.mock import MagicMock
+
+    from custom_components.span_panel.switch import async_setup_entry as switch_setup
+
+    coordinator, config_entry, _ = await _entities_by_declared_path(hass)
+    try:
+        added = MagicMock()
+        await switch_setup(hass, config_entry, added)
+        switches = list(added.call_args.args[0])
+        assert len(switches) == 2, "fixture should build one switch per circuit"
+
+        await _add_to_platform(hass, config_entry, switches, "switch")
+
+        affected = coordinator.entity_ids_by_field_path
+        assert affected["circuit.relay_state"] == sorted(s.entity_id for s in switches)
+
+        async_sync_schema_issues(
+            hass,
+            config_entry,
+            SchemaFindings(frozenset({"circuit.relay_state"}), (), frozenset()),
+            affected,
+        )
+        issue = ir.async_get(hass).async_get_issue(
+            DOMAIN, f"unresolved_{config_entry.entry_id}_circuit.relay_state"
+        )
+        assert issue is not None
+        assert issue.translation_placeholders["count"] == "2"
+        assert issue.translation_placeholders["examples"] != "none"
+    finally:
+        await _stop_scheduling(coordinator)
+
+
+async def test_a_dead_priority_names_the_selects(hass) -> None:
+    """The select's own state comes from `circuit.priority`."""
+    from unittest.mock import MagicMock
+
+    from custom_components.span_panel.select import async_setup_entry as select_setup
+
+    coordinator, config_entry, _ = await _entities_by_declared_path(hass)
+    try:
+        added = MagicMock()
+        await select_setup(hass, config_entry, added)
+        selects = list(added.call_args.args[0])
+        assert selects
+
+        await _add_to_platform(hass, config_entry, selects, "select")
+
+        affected = coordinator.entity_ids_by_field_path
+        assert affected["circuit.priority"] == sorted(s.entity_id for s in selects)
+    finally:
+        await _stop_scheduling(coordinator)
+
+
+def test_every_residual_field_path_is_claimed_by_an_entity() -> None:
+    """No residual read may be left with nothing to name.
+
+    `RESIDUAL_FIELD_PATHS` exists because these reads live in entity code rather
+    than on a description. That is exactly why they cannot be discovered — so
+    each one is declared on the entity that makes it, and this pins the two lists
+    together. A new residual entry with no declaring entity would otherwise ship
+    a Repair that says "0 affected" when the answer is "all of them".
+    """
+    from custom_components.span_panel.field_paths import RESIDUAL_FIELD_PATHS
+    from custom_components.span_panel.select import SpanPanelCircuitsSelect
+    from custom_components.span_panel.sensor_circuit import (
+        SpanCircuitEnergySensor,
+        SpanCircuitPowerSensor,
+    )
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
+
+    declared: set[str] = set()
+    for entity_class in (
+        SpanPanelCircuitsSwitch,
+        SpanPanelCircuitsSelect,
+        SpanCircuitPowerSensor,
+        SpanCircuitEnergySensor,
+    ):
+        declared.update(entity_class._residual_field_paths)
+
+    assert RESIDUAL_FIELD_PATHS <= declared, (
+        f"undeclared residual reads: {RESIDUAL_FIELD_PATHS - declared}"
+    )
+    assert declared <= RESIDUAL_FIELD_PATHS, (
+        f"declared but not in the residual set: {declared - RESIDUAL_FIELD_PATHS}"
+    )

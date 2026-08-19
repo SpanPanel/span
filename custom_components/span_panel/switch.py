@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
@@ -42,6 +42,15 @@ def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> s
 
 class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     """Represent a switch entity."""
+
+    # Read in entity code rather than through a description: this platform
+    # has no entity description at all. `relay_state` is the switch's own
+    # state (line ~262); `name` and `tabs` build its display name (~77-101).
+    _residual_field_paths: ClassVar[tuple[str, ...]] = (
+        "circuit.relay_state",
+        "circuit.name",
+        "circuit.tabs",
+    )
 
     def __init__(
         self,

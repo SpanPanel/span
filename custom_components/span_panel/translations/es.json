@@ -714,7 +714,7 @@
     },
     "schema_field_unresolved": {
       "title": "Campo de datos del Panel SPAN no disponible",
-      "description": "El firmware de su panel ya no proporciona `{field_path}`. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Aparecerán como no disponibles hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
+      "description": "El firmware de su panel ya no proporciona `{field_path}`. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Pueden quedar no disponibles, o informar datos incompletos, hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
     },
     "schema_unit_mismatch": {
       "title": "Discrepancia de unidades del Panel SPAN",
