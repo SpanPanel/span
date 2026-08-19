@@ -26,12 +26,15 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
     A handful of reads cannot be expressed as a description `field_path`: the
     switch has no entity description at all, the select wraps one, and a circuit
     entity's name, tabs and attributes are read outside any `value_fn`.
-    `field_paths.RESIDUAL_FIELD_PATHS` already names that exact set for the
-    producible gate; declaring the same paths here is what lets a Repair say
-    which entities a dead one takes with it, instead of "0 affected".
+    Declaring them here is what lets a Repair say which entities a dead field
+    takes with it, instead of "0 affected".
 
-    `test_every_residual_field_path_is_claimed_by_an_entity` pins the two lists
-    to each other in both directions.
+    This is the only place these paths are written down:
+    `field_paths.residual_field_paths()` collects them from every subclass, so
+    the producible gate covers exactly what the entities claim.
+
+    Keep the list short. A new entry is a hint that the reader belongs on a
+    description instead, where the declaration and the reader are one object.
     """
 
     async def async_added_to_hass(self) -> None:

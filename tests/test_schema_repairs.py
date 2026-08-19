@@ -536,9 +536,7 @@ async def _entities_by_declared_path(hass):
     # refuses to add an entity whose via_device is not a registered device id.
     config_entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
-        panel_device_id=await ensure_device_registered(
-            hass, config_entry, snapshot, "SPAN Panel"
-        ),
+        panel_device_id=await ensure_device_registered(hass, config_entry, snapshot, "SPAN Panel"),
     )
 
     grouped: dict[str, dict[str, list[object]]] = {}
@@ -551,9 +549,9 @@ async def _entities_by_declared_path(hass):
                 continue
             if description.derived or description.field_path not in _STYLE_PATHS:
                 continue
-            grouped.setdefault(description.field_path, {}).setdefault(
-                platform_domain, []
-            ).append(entity)
+            grouped.setdefault(description.field_path, {}).setdefault(platform_domain, []).append(
+                entity
+            )
 
     return coordinator, config_entry, grouped
 
@@ -590,9 +588,7 @@ async def test_affected_entities_span_all_three_unique_id_styles(hass) -> None:
     """
     coordinator, config_entry, grouped = await _entities_by_declared_path(hass)
     try:
-        assert _STYLE_PATHS <= grouped.keys(), (
-            f"fixture missed {_STYLE_PATHS - grouped.keys()}"
-        )
+        assert _STYLE_PATHS <= grouped.keys(), f"fixture missed {_STYLE_PATHS - grouped.keys()}"
 
         # The fixture really does cover three different builders: circuit suffix,
         # panel entity suffix, raw camelCase key.
@@ -600,9 +596,7 @@ async def test_affected_entities_span_all_three_unique_id_styles(hass) -> None:
             return grouped[path][platform_domain][0]
 
         assert _first("circuit.instant_power_w", "sensor").unique_id.endswith("_power")
-        assert _first("panel.instant_grid_power_w", "sensor").unique_id.endswith(
-            "_current_power"
-        )
+        assert _first("panel.instant_grid_power_w", "sensor").unique_id.endswith("_current_power")
         assert _first("panel.door_state", "binary_sensor").unique_id.endswith("doorState")
 
         # One platform per domain, as HA does — several platforms sharing a
@@ -751,9 +745,11 @@ async def test_a_platform_with_no_description_still_registers_its_residuals(
 # Five field paths are read from entity code rather than from a description's
 # `field_path`: the switch's relay state, the select's priority, and the name,
 # tabs and relay requester a circuit entity uses for its identity and its
-# attributes. `RESIDUAL_FIELD_PATHS` lists them for the producible gate. Nothing
-# declared them on the entities, so a dead `circuit.relay_state` reported "0
-# entity/entities are affected" while every breaker switch on the panel was out.
+# attributes. Each is declared on the entity that reads it, which is where
+# `field_paths.residual_field_paths()` collects them from for the producible
+# gate. Nothing declared them on the entities, so a dead `circuit.relay_state`
+# reported "0 entity/entities are affected" while every breaker switch on the
+# panel was out.
 
 
 async def test_a_dead_relay_state_names_the_breaker_switches(hass) -> None:
@@ -809,37 +805,3 @@ async def test_a_dead_priority_names_the_selects(hass) -> None:
         assert affected["circuit.priority"] == sorted(s.entity_id for s in selects)
     finally:
         await _stop_scheduling(coordinator)
-
-
-def test_every_residual_field_path_is_claimed_by_an_entity() -> None:
-    """No residual read may be left with nothing to name.
-
-    `RESIDUAL_FIELD_PATHS` exists because these reads live in entity code rather
-    than on a description. That is exactly why they cannot be discovered — so
-    each one is declared on the entity that makes it, and this pins the two lists
-    together. A new residual entry with no declaring entity would otherwise ship
-    a Repair that says "0 affected" when the answer is "all of them".
-    """
-    from custom_components.span_panel.field_paths import RESIDUAL_FIELD_PATHS
-    from custom_components.span_panel.select import SpanPanelCircuitsSelect
-    from custom_components.span_panel.sensor_circuit import (
-        SpanCircuitEnergySensor,
-        SpanCircuitPowerSensor,
-    )
-    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
-
-    declared: set[str] = set()
-    for entity_class in (
-        SpanPanelCircuitsSwitch,
-        SpanPanelCircuitsSelect,
-        SpanCircuitPowerSensor,
-        SpanCircuitEnergySensor,
-    ):
-        declared.update(entity_class._residual_field_paths)
-
-    assert RESIDUAL_FIELD_PATHS <= declared, (
-        f"undeclared residual reads: {RESIDUAL_FIELD_PATHS - declared}"
-    )
-    assert declared <= RESIDUAL_FIELD_PATHS, (
-        f"declared but not in the residual set: {declared - RESIDUAL_FIELD_PATHS}"
-    )

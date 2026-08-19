@@ -10,8 +10,8 @@ from collections.abc import Callable, Iterator
 from typing import Any, Protocol, runtime_checkable
 
 from custom_components.span_panel.field_paths import (
-    RESIDUAL_FIELD_PATHS,
     declared_field_paths,
+    residual_field_paths,
 )
 from custom_components.span_panel.sensor_definitions import all_sensor_descriptions
 from tests.adapter_fixtures import schema_one_metadata, schema_zero_metadata
@@ -189,7 +189,7 @@ def test_introspection_covers_every_declared_path() -> None:
         for description in _declaring_descriptions()
         if not description.derived and description.field_path is not None
     }
-    assert declared_field_paths() == frozenset(introspected | set(RESIDUAL_FIELD_PATHS))
+    assert declared_field_paths() == frozenset(introspected | residual_field_paths())
 
 
 def test_no_derived_description_reads_one_producible_field() -> None:

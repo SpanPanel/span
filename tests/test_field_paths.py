@@ -10,8 +10,8 @@ from custom_components.span_panel.binary_sensor import (
 )
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
-    RESIDUAL_FIELD_PATHS,
     declared_field_paths,
+    residual_field_paths,
 )
 from custom_components.span_panel.sensor_definitions import (
     CIRCUIT_SENSORS,
@@ -66,5 +66,5 @@ def test_every_description_declares_exactly_one() -> None:
 
 def test_residual_buckets_are_disjoint() -> None:
     """A residual path is either producible or exempt, never both."""
-    assert not (RESIDUAL_FIELD_PATHS & RESIDUAL_EXEMPT_PATHS.keys())
+    assert not (residual_field_paths() & RESIDUAL_EXEMPT_PATHS.keys())
     assert not (declared_field_paths() & RESIDUAL_EXEMPT_PATHS.keys())

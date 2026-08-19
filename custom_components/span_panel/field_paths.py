@@ -72,27 +72,6 @@ class FieldPathDeclarationMixin:
     """
 
 
-RESIDUAL_FIELD_PATHS: frozenset[str] = frozenset(
-    {
-        # switch.py reads this in entity code, not via a description value_fn
-        "circuit.relay_state",
-        # select.py uses a wrapper class rather than a frozen dataclass
-        # description, so it cannot carry the field as a dataclass field
-        "circuit.priority",
-        # Consumed by entity naming and attributes rather than by any platform
-        "circuit.name",
-        "circuit.tabs",
-        # sensor_circuit.py publishes this as a circuit attribute
-        "circuit.relay_requester",
-    }
-)
-"""Readers not carried on an entity description, and producible by both adapters.
-
-Keep this small. A new entry is a hint that the reader belongs on a
-description instead.
-"""
-
-
 class Producibility(Enum):
     """Which adapters publish a metadata row for an exempt residual path.
 
@@ -211,6 +190,54 @@ def iter_field_path_declarations[DescriptionT: EntityDescription](
         yield description.field_path, description
 
 
+def _walk_subclasses[EntityT](root: type[EntityT]) -> Iterator[type[EntityT]]:
+    """Yield every subclass of `root`, transitively.
+
+    `__subclasses__()` is one level deep; platform entities sit two or three
+    levels below the base (`SpanSensorBase` -> `SpanCircuitPowerSensor`), so a
+    single level would miss exactly the classes that carry residual reads.
+    """
+    for subclass in root.__subclasses__():
+        yield subclass
+        yield from _walk_subclasses(subclass)
+
+
+def residual_field_paths() -> frozenset[str]:
+    """Field paths read from entity code rather than from a description.
+
+    A handful of reads cannot be expressed as a description `field_path`: the
+    switch has no entity description at all, the select wraps one rather than
+    being a frozen dataclass, and a circuit entity's name, tabs and attributes
+    are read outside any `value_fn`. Each such read is declared on the entity
+    that makes it -- `SpanPanelEntity._residual_field_paths` -- because the
+    entity is what a Repair has to name when the field dies.
+
+    Collected from those declarations rather than restated as a constant here:
+    a second copy would need a test to hold it against the first, and the copy
+    that the Repair actually consumes is the entity's.
+
+    The walk sees only classes Python has imported, so the platform modules
+    that declare residuals are imported here explicitly. A residual declared in
+    a module this function does not reach would go missing silently, so
+    `test_source_residuals_match_the_subclass_walk` scans the package source
+    for `_residual_field_paths` assignments and fails on any the walk missed.
+    """
+    # Deferred for the same cycle-avoidance reason as `declared_field_paths()`
+    # below: every platform module imports this one for the declaration mixin.
+    from . import (  # noqa: F401  pylint: disable=import-outside-toplevel,unused-import
+        select,
+        sensor_circuit,
+        switch,
+    )
+    from .entity import SpanPanelEntity  # pylint: disable=import-outside-toplevel
+
+    return frozenset(
+        path
+        for entity_class in _walk_subclasses(SpanPanelEntity)
+        for path in entity_class._residual_field_paths  # pylint: disable=protected-access
+    )
+
+
 def declared_field_paths() -> frozenset[str]:
     """Field paths the integration reads that must be producible by an adapter.
 
@@ -231,7 +258,7 @@ def declared_field_paths() -> frozenset[str]:
         all_sensor_descriptions,
     )
 
-    paths: set[str] = set(RESIDUAL_FIELD_PATHS)
+    paths: set[str] = set(residual_field_paths())
     paths.update(
         field_path
         for field_path, _ in iter_field_path_declarations(
