@@ -57,20 +57,61 @@ RESIDUAL_FIELD_PATHS: frozenset[str] = frozenset(
         # Consumed by entity naming and attributes rather than by any platform
         "circuit.name",
         "circuit.tabs",
+        # sensor_circuit.py publishes this as a circuit attribute
+        "circuit.relay_requester",
     }
 )
-"""Readers not carried on an entity description.
+"""Readers not carried on an entity description, and producible by both adapters.
 
 Keep this small. A new entry is a hint that the reader belongs on a
 description instead.
 """
 
 
-def declared_field_paths() -> dict[str, bool]:
-    """Every field path the integration reads, mapped to whether it is derived.
+RESIDUAL_DERIVED_PATHS: frozenset[str] = frozenset(
+    {
+        # Homie `$target` values — a pending-command echo, not a schema field.
+        # Neither adapter publishes a metadata row for them.
+        "circuit.relay_state_target",
+        "circuit.priority_target",
+        # Assembled by the library from panel topology rather than read from a
+        # schema property; no metadata row in either adapter.
+        "circuit.device_type",
+        "circuit.relative_position",
+        # No metadata row in either adapter — the panel reports it outside the
+        # typed field surface.
+        "panel.panel_size",
+        # Neither adapter emits any `mid.*` metadata rows at all; util.py reads
+        # these off the MID snapshot for device_info only.
+        "mid.hardware_version",
+        "mid.software_version",
+        # Schema-conditional: schema_1 publishes it, schema_0 has no row.
+        "circuit.is_user_controllable",
+        # Schema-conditional: schema_0 publishes these, schema_1 has no row.
+        "circuit.always_on",
+        "circuit.is_sheddable",
+        "panel.wifi_ssid",
+        # Schema-conditional: schema_0 publishes it, schema_1's
+        # `_PROPERTY_FIELD_MAP` has no `connected` row — the same gap that makes
+        # the `bess_connected` binary sensor `derived=True`.
+        "battery.connected",
+    }
+)
+"""Residual readers exempt from the producible check.
 
-    Derived paths are exempt from the producible check because they have no
-    single source field.
+Deliberately **not** returned by `declared_field_paths()`. Each entry is either
+produced by no adapter at all, or by only one of the two — so requiring it to be
+producible would fail against the other schema. Recorded here so the reads are
+still enumerated somewhere rather than being invisible.
+"""
+
+
+def declared_field_paths() -> frozenset[str]:
+    """Field paths the integration reads that must be producible by an adapter.
+
+    Derived entities are excluded: they have no single source field, so there is
+    nothing for an adapter to produce. Residual readers that no adapter (or only
+    one) produces are excluded too, and are listed in `RESIDUAL_DERIVED_PATHS`.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
     # here, and `binary_sensor` reaches the package root for its config-entry
@@ -85,7 +126,7 @@ def declared_field_paths() -> dict[str, bool]:
         all_sensor_descriptions,
     )
 
-    paths: dict[str, bool] = dict.fromkeys(RESIDUAL_FIELD_PATHS, False)
+    paths: set[str] = set(RESIDUAL_FIELD_PATHS)
     for description in (
         *all_sensor_descriptions(),
         *BINARY_SENSORS,
@@ -101,5 +142,5 @@ def declared_field_paths() -> dict[str, bool]:
             )
         if description.derived or description.field_path is None:
             continue
-        paths[description.field_path] = False
-    return paths
+        paths.add(description.field_path)
+    return frozenset(paths)
