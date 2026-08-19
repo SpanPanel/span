@@ -2523,9 +2523,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "homeassistant", specifier = "==2026.8.0" },
-    { name = "span-panel-api", editable = "../../span/span-panel-api-p3" },
-    { name = "span-panel-api-schema-0", editable = "../../span/span-panel-api-p3/packages/schema-0" },
-    { name = "span-panel-api-schema-1", editable = "../../span/span-panel-api-p3/packages/schema-1" },
+    { name = "span-panel-api", editable = "../../span/span-panel-api-p2" },
+    { name = "span-panel-api-schema-0", editable = "../../span/span-panel-api-p2/packages/schema-0" },
+    { name = "span-panel-api-schema-1", editable = "../../span/span-panel-api-p2/packages/schema-1" },
 ]
 
 [package.metadata.requires-dev]
@@ -2551,7 +2551,7 @@ dev = [
 [[package]]
 name = "span-panel-api"
 version = "3.0.0b4"
-source = { editable = "../../span/span-panel-api-p3" }
+source = { editable = "../../span/span-panel-api-p2" }
 dependencies = [
     { name = "httpx" },
     { name = "paho-mqtt" },
@@ -2578,8 +2578,8 @@ dev = [
     { name = "pytest-cov" },
     { name = "radon" },
     { name = "ruff", specifier = ">=0.15.5" },
-    { name = "span-panel-api-schema-0", editable = "../../span/span-panel-api-p3/packages/schema-0" },
-    { name = "span-panel-api-schema-1", editable = "../../span/span-panel-api-p3/packages/schema-1" },
+    { name = "span-panel-api-schema-0", editable = "../../span/span-panel-api-p2/packages/schema-0" },
+    { name = "span-panel-api-schema-1", editable = "../../span/span-panel-api-p2/packages/schema-1" },
     { name = "twine", specifier = ">=7.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "vulture", specifier = ">=2.14" },
@@ -2588,18 +2588,18 @@ dev = [
 [[package]]
 name = "span-panel-api-schema-0"
 version = "1.0.0b4"
-source = { editable = "../../span/span-panel-api-p3/packages/schema-0" }
+source = { editable = "../../span/span-panel-api-p2/packages/schema-0" }
 dependencies = [
     { name = "span-panel-api" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-api-p3" }]
+requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-api-p2" }]
 
 [[package]]
 name = "span-panel-api-schema-1"
 version = "0.1.0b4"
-source = { editable = "../../span/span-panel-api-p3/packages/schema-1" }
+source = { editable = "../../span/span-panel-api-p2/packages/schema-1" }
 dependencies = [
     { name = "ebus-sdk" },
     { name = "span-panel-api" },
@@ -2608,7 +2608,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "ebus-sdk", specifier = ">=0.19.0,<1.0" },
-    { name = "span-panel-api", editable = "../../span/span-panel-api-p3" },
+    { name = "span-panel-api", editable = "../../span/span-panel-api-p2" },
 ]
 
 [[package]]
