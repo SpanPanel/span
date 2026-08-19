@@ -40,6 +40,9 @@ _LOGGER = logging.getLogger(__name__)
 
 _MAX_EXAMPLES = 3
 
+# Issue-id prefixes. `_DEFECT_PREFIXES` is what the reconcile pass owns; the
+# new-entity notice is deliberately not among them. See `_scoped_issue_ids`.
+_DEFECT_PREFIXES = ("unresolved_", "unit_mismatch_")
 _NEW_ENTITIES_PREFIX = "new_entities_"
 
 
@@ -177,7 +180,9 @@ def async_sync_schema_issues(
             },
         )
 
-    for issue_id in _ours(registry, entry.entry_id) - wanted:
+    # Defect prefixes only: everything in this scope is re-derived on every pass,
+    # and the new-entity notice is not re-derivable at all.
+    for issue_id in _scoped_issue_ids(registry, entry.entry_id, _DEFECT_PREFIXES) - wanted:
         ir.async_delete_issue(hass, DOMAIN, issue_id)
 
     if wanted:
@@ -250,12 +255,15 @@ def async_notice_new_disabled_entities(
       the notice exists to prevent.
     * It is never reconciled away. `async_sync_schema_issues` deletes the defect
       ids it does not re-derive, and applying that here would delete this notice
-      on the very next startup. `_ours` is deliberately scoped to the two defect
-      prefixes so the reconcile pass cannot reach these ids.
-    * Raising is skipped outright when the id already exists, so the notice is
-      asserted once and then left alone. Nothing re-derives it, so an update pass
-      could only rewrite the placeholders of a notice the user has already read
-      or dismissed.
+      on the very next startup. Its reconcile scope is `_DEFECT_PREFIXES`, which
+      deliberately does not include this one.
+    * Raising is skipped outright when the id already exists. What that buys is
+      narrow and worth stating exactly: a repeat of the same set cannot rewrite
+      the text of a notice the user has already read. Without it the repeat would
+      take `async_get_or_create`'s update branch, which replaces the placeholders
+      — so a set that came back with a renamed entity would silently restate
+      itself. It buys nothing against duplication, which the shared id already
+      rules out.
 
     Severity is the mildest Home Assistant offers. `IssueSeverity` has no
     informational member — it is CRITICAL, ERROR, WARNING — so WARNING is the
@@ -300,33 +308,27 @@ def async_notice_new_disabled_entities(
     )
 
 
-def _ours(registry: ir.IssueRegistry, entry_id: str) -> set[str]:
-    """Return the reconcilable issue ids for ONE config entry.
+def _scoped_issue_ids(
+    registry: ir.IssueRegistry, entry_id: str, prefixes: tuple[str, ...]
+) -> set[str]:
+    """Return this entry's issue ids under the given id prefixes.
 
     Scoping by entry is not cosmetic: with a shared namespace, a healthy panel's
     reconcile pass would delete a degraded panel's issues on every cycle, and
     removing one panel would clear every panel's issues.
 
-    Scoping to the two defect prefixes is not cosmetic either. Everything in here
-    is re-derived on every pass and deleted when it stops being derived; the
-    new-entity notice is derived exactly once and must survive a pass that cannot
-    re-derive it. See `_new_entity_notices`.
+    Which prefixes is not cosmetic either, and is why this takes them rather than
+    answering for the whole domain. The reconcile pass deletes every id it did
+    not re-derive, so it may only ever see `_DEFECT_PREFIXES`; the new-entity
+    notice is derived exactly once and would not survive being reconciled against
+    a pass that cannot re-derive it. Removal, which deletes unconditionally, is
+    the one caller that passes every prefix.
     """
-    prefixes = (f"unresolved_{entry_id}_", f"unit_mismatch_{entry_id}_")
+    scoped = tuple(f"{prefix}{entry_id}_" for prefix in prefixes)
     return {
         issue_id
         for (domain, issue_id) in registry.issues
-        if domain == DOMAIN and issue_id.startswith(prefixes)
-    }
-
-
-def _new_entity_notices(registry: ir.IssueRegistry, entry_id: str) -> set[str]:
-    """Return this entry's new-entity notices. Cleared on removal, never reconciled."""
-    prefix = f"{_NEW_ENTITIES_PREFIX}{entry_id}_"
-    return {
-        issue_id
-        for (domain, issue_id) in registry.issues
-        if domain == DOMAIN and issue_id.startswith(prefix)
+        if domain == DOMAIN and issue_id.startswith(scoped)
     }
 
 
@@ -340,5 +342,6 @@ def async_clear_schema_issues(hass: HomeAssistant, entry: ConfigEntry) -> None:
     standing forever.
     """
     registry = ir.async_get(hass)
-    for issue_id in _ours(registry, entry.entry_id) | _new_entity_notices(registry, entry.entry_id):
+    every_prefix = (*_DEFECT_PREFIXES, _NEW_ENTITIES_PREFIX)
+    for issue_id in _scoped_issue_ids(registry, entry.entry_id, every_prefix):
         ir.async_delete_issue(hass, DOMAIN, issue_id)

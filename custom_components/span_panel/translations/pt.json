@@ -710,7 +710,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "Estão disponíveis novas entidades do Painel SPAN",
-      "description": "Esta atualização acrescentou dados que o seu painel já comunicava mas que esta integração ainda não expunha. Foram criadas {count} nova(s) entidade(s) para o efeito (por exemplo: {examples}).\n\nForam criadas **desativadas**, pelo que nada apareceu nos seus painéis nem no seu histórico sem ter sido pedido. Não há nada avariado e não é necessária qualquer ação: este aviso existe apenas para que a novidade não passe despercebida.\n\nPara usar alguma, abra a página do dispositivo Painel SPAN, mostre as suas entidades desativadas e ative as que quiser. Dispense este aviso depois de o ter visto."
+      "description": "Apareceram {count} nova(s) entidade(s) no seu Painel SPAN (por exemplo: {examples}). Foram criadas **desativadas**, pelo que nada apareceu nos seus painéis nem no seu histórico sem ter sido pedido.\n\nPodem aparecer novas entidades por vários motivos: uma atualização da integração que expõe mais do que o seu painel comunica, um circuito acrescentado ao painel, ou hardware como uma bateria ou energia solar que entra em funcionamento. Não há nada avariado e não é necessária qualquer ação: este aviso existe apenas para que a novidade não passe despercebida.\n\nPara usar alguma, abra a página do dispositivo Painel SPAN, mostre as suas entidades desativadas e ative as que quiser. Dispense este aviso depois de o ter visto."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "O seu Painel SPAN comunica agora o ilhamento a partir do Dispositivo de Interligação de Microrrede",

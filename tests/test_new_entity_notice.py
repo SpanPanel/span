@@ -267,6 +267,34 @@ async def test_a_restart_with_no_new_entities_neither_duplicates_nor_re_raises(h
     assert notices[0].created == created
 
 
+async def test_a_repeat_of_the_same_set_cannot_rewrite_the_notice(hass, entry) -> None:
+    """What the already-raised guard actually buys.
+
+    It buys nothing against duplication -- the shared id rules that out. It buys
+    exactly this: a set that comes back cannot silently restate a notice the user
+    has already read. Without the guard the repeat takes `async_get_or_create`'s
+    update branch, which replaces the placeholders in place.
+
+    The set comes back when an entity is removed from the registry and later
+    re-registered -- a BESS taken off the panel and put back -- because the
+    unique_ids, and therefore the digest, are unchanged.
+    """
+    _register(hass, entry, "sp3-001_bess_serial_number", disabled=False)
+    known = async_registered_unique_ids(hass, entry)
+    added = _register(hass, entry, _PART_NUMBER, name="Part Number")
+    async_notice_new_disabled_entities(hass, entry, known)
+    issue_id = _notices(hass, entry)[0].issue_id
+
+    er.async_get(hass).async_remove(added.entity_id)
+    _register(hass, entry, _PART_NUMBER, name="BESS Part Number")
+    async_notice_new_disabled_entities(hass, entry, known)
+
+    notices = _notices(hass, entry)
+    assert len(notices) == 1
+    assert notices[0].issue_id == issue_id
+    assert notices[0].translation_placeholders["examples"] == "Part Number"
+
+
 async def test_a_dismissed_notice_is_not_resurrected_by_a_restart(hass, entry) -> None:
     """Dismissing it must end it, not defer it to the next startup."""
     _register(hass, entry, "sp3-001_bess_serial_number", disabled=False)

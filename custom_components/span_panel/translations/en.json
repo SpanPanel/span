@@ -710,7 +710,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "New SPAN Panel entities are available",
-      "description": "This update added data your panel was already reporting but this integration did not yet expose. {count} new entity/entities were created for it (for example: {examples}).\n\nThey were created **disabled**, so nothing appeared in your dashboards or history uninvited. Nothing is broken and no action is required — this notice exists only so the addition is not silent.\n\nTo use one, open the SPAN Panel device page, show its disabled entities, and enable the ones you want. Dismiss this once you have had a look."
+      "description": "{count} new entity/entities have appeared for your SPAN Panel (for example: {examples}). They were created **disabled**, so nothing appeared in your dashboards or history uninvited.\n\nEntities can appear for several reasons: an integration update that exposes more of what your panel reports, a circuit added to the panel, or hardware such as a battery or solar coming online. Nothing is broken and no action is required — this notice exists only so the addition is not silent.\n\nTo use one, open the SPAN Panel device page, show its disabled entities, and enable the ones you want. Dismiss this once you have had a look."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "Your SPAN Panel now reports islanding from its Microgrid Interconnect Device",
