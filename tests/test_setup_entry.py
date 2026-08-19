@@ -288,3 +288,53 @@ async def test_async_setup_entry_shutdowns_coordinator_on_forward_failure(
         await async_setup_entry(hass, entry)
 
     coordinator.async_shutdown.assert_awaited_once()
+
+
+async def test_setup_syncs_schema_repairs_after_the_platforms(
+    hass: HomeAssistant,
+) -> None:
+    """Repairs must be reconciled after the platforms, never before.
+
+    A schema Repair names the entities an unresolved field took down, and those
+    entities record themselves only once their platform has added them. Schema
+    validation itself runs on the first refresh, which setup awaits well before
+    forwarding the platforms — reconciling there would report every dead field
+    as affecting zero entities.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = snapshot
+
+    order: list[str] = []
+    coordinator.async_sync_schema_repairs = MagicMock(
+        side_effect=lambda: order.append("sync")
+    )
+
+    async def _forward(*_args, **_kwargs) -> None:
+        order.append("forward")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator",
+            return_value=coordinator,
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", AsyncMock(side_effect=_forward)
+        ),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert order == ["forward", "sync"]

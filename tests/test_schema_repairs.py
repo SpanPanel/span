@@ -295,3 +295,220 @@ async def test_remove_entry_clears_this_entry_issues(hass, entry) -> None:
     await async_remove_entry(hass, entry)
 
     assert registry.async_get_issue(DOMAIN, _issue_id(entry)) is None
+
+
+# --- The affected-entity map, built from real entities ---------------------
+#
+# The map is populated by the entities themselves rather than reverse-engineered
+# from entity descriptions. Reverse-engineering was wrong three ways at once:
+# panel-data sensors build their unique_id from `get_panel_entity_suffix`, whose
+# `PANEL_ENTITY_SUFFIX_MAPPING` deliberately disagrees with the general mapping
+# (`instantGridPowerW` -> "current_power", not "grid_power"); binary sensors use
+# the raw camelCase key ("doorState"), which a lowercasing suffix helper can
+# never match; and an `endswith("power")` test claims every power entity on the
+# panel. Self-registration cannot drift from the builders because it never
+# consults them.
+
+_STYLE_PATHS = {
+    # circuit style — `get_user_friendly_suffix`, and the over-match case
+    "circuit.instant_power_w",
+    # panel-data style — `get_panel_entity_suffix`, which disagrees
+    "panel.instant_grid_power_w",
+    "panel.power_flow_battery",
+    "panel.power_flow_pv",
+    "panel.power_flow_site",
+    # binary-sensor style — the raw camelCase description key
+    "panel.door_state",
+}
+
+
+async def _entities_by_declared_path(hass):
+    """Build the real entities for a healthy panel, grouped by declared field.
+
+    Real platform setup, real entity classes, real unique_id builders — the
+    three id styles only differ because the builders differ, so anything less
+    faithful would not exercise the bug this replaced.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
+    from custom_components.span_panel.binary_sensor import (
+        async_setup_entry as binary_setup,
+    )
+    from custom_components.span_panel.coordinator import SpanPanelCoordinator
+    from custom_components.span_panel.field_paths import FieldPathDeclarationMixin
+    from custom_components.span_panel.sensor import async_setup_entry as sensor_setup
+
+    from .factories import (
+        SpanBatterySnapshotFactory,
+        SpanCircuitSnapshotFactory,
+        SpanPanelSnapshotFactory,
+    )
+
+    # Two circuits and the three power flows, so the over-match case has real
+    # panel power sensors to be wrongly claimed by.
+    snapshot = SpanPanelSnapshotFactory.create(
+        circuits={
+            "1": SpanCircuitSnapshotFactory.create(circuit_id="1", name="Kitchen"),
+            "2": SpanCircuitSnapshotFactory.create(circuit_id="2", name="Garage"),
+        },
+        battery=SpanBatterySnapshotFactory.create(soe_percentage=85.0, connected=True),
+        power_flow_battery=-250.0,
+        power_flow_pv=1250.0,
+        power_flow_site=3000.0,
+    )
+    config_entry = MockConfigEntry(
+        domain=DOMAIN, data={}, title="SPAN Panel", unique_id=snapshot.serial_number
+    )
+    config_entry.add_to_hass(hass)
+    client = MagicMock()
+    client.stop_streaming = AsyncMock()
+    client.close = AsyncMock()
+    coordinator = SpanPanelCoordinator(hass, client, config_entry)
+    coordinator.data = snapshot
+    # A real panel device: the BESS sub-device declares `via_device`, and HA
+    # refuses to add an entity whose via_device is not a registered device id.
+    config_entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id=await ensure_device_registered(
+            hass, config_entry, snapshot, "SPAN Panel"
+        ),
+    )
+
+    grouped: dict[str, dict[str, list[object]]] = {}
+    for platform_domain, setup in (("sensor", sensor_setup), ("binary_sensor", binary_setup)):
+        added = MagicMock()
+        await setup(hass, config_entry, added)
+        for entity in added.call_args.args[0]:
+            description = getattr(entity, "entity_description", None)
+            if not isinstance(description, FieldPathDeclarationMixin):
+                continue
+            if description.derived or description.field_path not in _STYLE_PATHS:
+                continue
+            grouped.setdefault(description.field_path, {}).setdefault(
+                platform_domain, []
+            ).append(entity)
+
+    return coordinator, config_entry, grouped
+
+
+async def _add_to_platform(hass, config_entry, entities, platform_domain: str) -> None:
+    """Add real entities to a real entity platform, as HA does at setup."""
+    from pytest_homeassistant_custom_component.common import MockEntityPlatform
+
+    platform = MockEntityPlatform(hass, domain=platform_domain, platform_name=DOMAIN)
+    platform.config_entry = config_entry
+    await platform.async_add_entities(entities)
+    await hass.async_block_till_done()
+
+
+async def _stop_scheduling(coordinator) -> None:
+    """Cancel the coordinator's refresh timer and debouncer.
+
+    `SpanPanelCoordinator.async_shutdown` releases the client but does not chain
+    to the base implementation; in production the timer is unscheduled when the
+    last entity listener goes away, which these tests deliberately do not do.
+    """
+    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
+    await DataUpdateCoordinator.async_shutdown(coordinator)
+
+
+async def test_affected_entities_span_all_three_unique_id_styles(hass) -> None:
+    """A dead field must name the entities that actually died — every style.
+
+    Three unique_id builders are in play and they do not agree, so any scheme
+    that re-derives entity ids from entity descriptions gets at least two of the
+    three wrong: it reports "0 affected" for a panel field whose sensor is dead,
+    and over-claims for a circuit field.
+    """
+    coordinator, config_entry, grouped = await _entities_by_declared_path(hass)
+    try:
+        assert _STYLE_PATHS <= grouped.keys(), (
+            f"fixture missed {_STYLE_PATHS - grouped.keys()}"
+        )
+
+        # The fixture really does cover three different builders: circuit suffix,
+        # panel entity suffix, raw camelCase key.
+        def _first(path: str, platform_domain: str):
+            return grouped[path][platform_domain][0]
+
+        assert _first("circuit.instant_power_w", "sensor").unique_id.endswith("_power")
+        assert _first("panel.instant_grid_power_w", "sensor").unique_id.endswith(
+            "_current_power"
+        )
+        assert _first("panel.door_state", "binary_sensor").unique_id.endswith("doorState")
+
+        # One platform per domain, as HA does — several platforms sharing a
+        # domain and platform name is not a shape the real integration produces.
+        for platform_domain in ("sensor", "binary_sensor"):
+            batch = [
+                entity
+                for by_domain in grouped.values()
+                for entity in by_domain.get(platform_domain, [])
+            ]
+            await _add_to_platform(hass, config_entry, batch, platform_domain)
+
+        affected = coordinator.entity_ids_by_field_path
+
+        for path, by_domain in grouped.items():
+            expected = sorted(
+                entity.entity_id for entities in by_domain.values() for entity in entities
+            )
+            assert affected[path] == expected, path
+            assert all(expected), f"{path} recorded an entity with no entity_id"
+
+        # The over-match case: a dead circuit power field must claim only circuit
+        # power entities, never the panel's own power sensors.
+        circuit_power = set(affected["circuit.instant_power_w"])
+        assert circuit_power
+        for other in _STYLE_PATHS - {"circuit.instant_power_w"}:
+            assert affected[other]
+            assert set(affected[other]).isdisjoint(circuit_power), (
+                f"{other} entities were claimed by circuit.instant_power_w"
+            )
+    finally:
+        await _stop_scheduling(coordinator)
+
+
+async def test_the_repair_payload_names_the_real_entities(hass) -> None:
+    """End to end: the notice a user reads carries real, resolvable entity ids."""
+    coordinator, config_entry, grouped = await _entities_by_declared_path(hass)
+    try:
+        entities = grouped["panel.instant_grid_power_w"]["sensor"]
+        await _add_to_platform(hass, config_entry, entities, "sensor")
+
+        async_sync_schema_issues(
+            hass,
+            config_entry,
+            SchemaFindings(frozenset({"panel.instant_grid_power_w"}), (), frozenset()),
+            coordinator.entity_ids_by_field_path,
+        )
+
+        issue = ir.async_get(hass).async_get_issue(
+            DOMAIN, f"unresolved_{config_entry.entry_id}_panel.instant_grid_power_w"
+        )
+        assert issue is not None
+        placeholders = issue.translation_placeholders
+        assert placeholders["count"] == str(len(entities))
+        assert placeholders["examples"] == entities[0].entity_id
+        assert hass.states.get(entities[0].entity_id) is not None
+    finally:
+        await _stop_scheduling(coordinator)
+
+
+async def test_removing_an_entity_drops_it_from_the_map(hass) -> None:
+    """A removed entity must stop inflating the count."""
+    coordinator, config_entry, grouped = await _entities_by_declared_path(hass)
+    try:
+        entities = grouped["panel.instant_grid_power_w"]["sensor"]
+        await _add_to_platform(hass, config_entry, entities, "sensor")
+        assert coordinator.entity_ids_by_field_path["panel.instant_grid_power_w"]
+
+        for entity in entities:
+            await entity.async_remove()
+        await hass.async_block_till_done()
+
+        assert "panel.instant_grid_power_w" not in coordinator.entity_ids_by_field_path
+    finally:
+        await _stop_scheduling(coordinator)

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .graph_horizon import GraphHorizonManager
 
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
@@ -27,8 +27,7 @@ from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSna
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
 
 from .const import DOMAIN
-from .field_paths import iter_all_field_path_declarations
-from .id_builder import build_circuit_unique_id, get_user_friendly_suffix
+from .id_builder import build_circuit_unique_id
 from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
 from .sensor_definitions import sensor_descriptions_by_field_path
@@ -94,6 +93,13 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Schema validation — run once after first successful refresh
         self._schema_validated = False
         self._findings: SchemaFindings | None = None
+
+        # Which entities read which snapshot field, recorded by the entities
+        # themselves as they are added to hass. Authoritative rather than
+        # reverse-engineered: three platforms build unique_ids three different
+        # ways, so deriving entity ids from entity descriptions gets most of
+        # them wrong. See `SpanPanelEntity.async_added_to_hass`.
+        self._entity_ids_by_field_path: dict[str, set[str]] = {}
 
         # Energy dip compensation — sensors append events here during updates;
         # drained and surfaced as a persistent notification after each cycle.
@@ -392,37 +398,53 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._findings = evaluate_field_metadata(
             field_metadata, sensor_descriptions_by_field_path()
         )
-        async_sync_schema_issues(
-            self.hass,
-            self.config_entry,
-            self._findings,
-            self._affected_entity_ids(self._findings.unresolved),
-        )
 
-    def _affected_entity_ids(self, field_paths: frozenset[str]) -> dict[str, list[str]]:
-        """Entity ids this entry owns that read each of `field_paths`.
+    @callback
+    def async_register_field_path_entity(self, field_path: str, entity_id: str) -> None:
+        """Record that `entity_id` reads `field_path`.
 
-        Matched through `get_user_friendly_suffix(description.key)`, not the
-        snapshot field name: a unique_id ends in the suffix ("_power"), never in
-        the field ("instant_power_w"), so matching on the field would silently
-        find nothing and report every dead field as affecting zero entities.
+        Called by the entity itself, which is the only thing that knows both
+        halves for certain. Circuit, panel-data and binary-sensor entities each
+        build their unique_id from a different suffix rule, so a mapping derived
+        from entity descriptions would silently miss most of them.
         """
-        entity_registry = er.async_get(self.hass)
-        entries = er.async_entries_for_config_entry(entity_registry, self.config_entry.entry_id)
+        self._entity_ids_by_field_path.setdefault(field_path, set()).add(entity_id)
 
-        suffixes_by_path: dict[str, set[str]] = {path: set() for path in field_paths}
-        for field_path, description in iter_all_field_path_declarations():
-            if field_path in suffixes_by_path:
-                suffixes_by_path[field_path].add(get_user_friendly_suffix(description.key))
+    @callback
+    def async_unregister_field_path_entity(self, field_path: str, entity_id: str) -> None:
+        """Forget an entity that is leaving hass, so it stops inflating counts."""
+        entity_ids = self._entity_ids_by_field_path.get(field_path)
+        if entity_ids is None:
+            return
+        entity_ids.discard(entity_id)
+        if not entity_ids:
+            del self._entity_ids_by_field_path[field_path]
 
+    @property
+    def entity_ids_by_field_path(self) -> dict[str, list[str]]:
+        """Entities currently in hass, by the snapshot field each one reads."""
         return {
-            path: [
-                entry.entity_id
-                for entry in entries
-                if any(entry.unique_id.endswith(suffix) for suffix in suffixes)
-            ]
-            for path, suffixes in suffixes_by_path.items()
+            field_path: sorted(entity_ids)
+            for field_path, entity_ids in self._entity_ids_by_field_path.items()
         }
+
+    @callback
+    def async_sync_schema_repairs(self) -> None:
+        """Reconcile Repairs against the last validation pass.
+
+        Deliberately separate from `_run_schema_validation`: that runs on the
+        first refresh, which `async_setup_entry` awaits *before* forwarding the
+        platforms, so no entity exists yet and every Repair would report zero
+        affected entities. Called once the platforms are up instead.
+
+        Findings of None means "not yet known", never "healthy" — reconciling
+        against that would delete every issue and every dismissal with it.
+        """
+        if self._findings is None:
+            return
+        async_sync_schema_issues(
+            self.hass, self.config_entry, self._findings, self.entity_ids_by_field_path
+        )
 
     @property
     def unresolved_paths(self) -> frozenset[str]:

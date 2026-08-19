@@ -512,46 +512,57 @@ async def test_async_update_data_stale_data_error_marks_offline_and_returns_last
     )
 
 
-async def test_schema_validation_raises_a_repair_naming_the_dead_entities(
+async def test_entities_register_themselves_against_the_field_they_read(
     hass: HomeAssistant,
 ) -> None:
-    """The whole point of the feature: a dead field names the sensors it killed.
+    """The affected-entity map is recorded by entities, never derived from them.
 
-    Entity ids are matched through `get_user_friendly_suffix(description.key)`.
-    A unique_id ends in the suffix ("_power"), never in the snapshot field name
-    ("instant_power_w"), so matching on the field would report every dead field
-    as affecting zero entities while still looking like it worked.
+    Three unique_id builders are in play and they disagree, so reconstructing
+    entity ids from entity descriptions reported "0 affected" for most fields.
+    tests/test_schema_repairs.py drives real entities through a real platform;
+    this pins the coordinator side of the contract.
     """
-    from homeassistant.helpers import (
-        entity_registry as er,
-        issue_registry as ir,
-    )
+    coordinator = _create_coordinator(hass)
+
+    coordinator.async_register_field_path_entity("panel.door_state", "binary_sensor.door")
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.b")
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.a")
+    coordinator.async_register_field_path_entity("circuit.instant_power_w", "sensor.a")
+
+    assert coordinator.entity_ids_by_field_path == {
+        "panel.door_state": ["binary_sensor.door"],
+        "circuit.instant_power_w": ["sensor.a", "sensor.b"],
+    }
+
+    coordinator.async_unregister_field_path_entity("circuit.instant_power_w", "sensor.a")
+    coordinator.async_unregister_field_path_entity("panel.door_state", "binary_sensor.door")
+    # Unknown pairs are ignored rather than raising: removal can outlive setup.
+    coordinator.async_unregister_field_path_entity("panel.door_state", "binary_sensor.gone")
+
+    assert coordinator.entity_ids_by_field_path == {
+        "circuit.instant_power_w": ["sensor.b"]
+    }
+
+
+async def test_sync_schema_repairs_raises_a_repair_naming_the_dead_entities(
+    hass: HomeAssistant,
+) -> None:
+    """The whole point of the feature: a dead field names the sensors it killed."""
+    from homeassistant.helpers import issue_registry as ir
 
     entry = MockConfigEntry(domain="span_panel", entry_id="entry-affected")
     entry.add_to_hass(hass)
-    entity_registry = er.async_get(hass)
-    entity_registry.async_get_or_create(
-        "sensor",
-        "span_panel",
-        "span_sp3-001_0dad2f16cd514812ae1807b0457d473e_power",
-        suggested_object_id="span_panel_kitchen_power",
-        config_entry=entry,
-    )
-    entity_registry.async_get_or_create(
-        "sensor",
-        "span_panel",
-        "span_sp3-001_0dad2f16cd514812ae1807b0457d473e_energy_produced",
-        suggested_object_id="span_panel_kitchen_energy_produced",
-        config_entry=entry,
-    )
-
     client = MagicMock(spec=SpanPanelClientProtocol)
     client.field_metadata = {
         "circuit.instant_power_w": FieldMetadata(None, "unknown", resolved=False)
     }
     coordinator = SpanPanelCoordinator(hass, cast(SpanMqttClient, client), entry)
+    coordinator.async_register_field_path_entity(
+        "circuit.instant_power_w", "sensor.span_panel_kitchen_power"
+    )
 
     coordinator._run_schema_validation()
+    coordinator.async_sync_schema_repairs()
 
     issue = ir.async_get(hass).async_get_issue(
         "span_panel", "unresolved_entry-affected_circuit.instant_power_w"
@@ -561,13 +572,14 @@ async def test_schema_validation_raises_a_repair_naming_the_dead_entities(
     assert issue.translation_placeholders["examples"] == "sensor.span_panel_kitchen_power"
 
 
-async def test_schema_validation_without_metadata_raises_no_repair(
+async def test_sync_schema_repairs_is_a_no_op_while_findings_are_unknown(
     hass: HomeAssistant,
 ) -> None:
-    """The "unknown" pass must not reconcile at all.
+    """"Unknown" must not reconcile at all.
 
-    Reconciling against empty findings during the retained-message window would
-    delete every schema issue, and with it every dismissal the user has made.
+    `field_metadata` is None for the whole retained-message window, which an
+    ordinary reconnect opens. Reconciling against no findings would delete every
+    schema issue, and with it every dismissal the user has made.
     """
     from homeassistant.helpers import issue_registry as ir
 
@@ -589,7 +601,9 @@ async def test_schema_validation_without_metadata_raises_no_repair(
     coordinator = SpanPanelCoordinator(hass, cast(SpanMqttClient, client), entry)
 
     coordinator._run_schema_validation()
+    coordinator.async_sync_schema_repairs()
 
+    assert coordinator.schema_findings is None
     assert ir.async_get(hass).async_get_issue(
         "span_panel", "unresolved_entry-unknown_circuit.instant_power_w"
     )

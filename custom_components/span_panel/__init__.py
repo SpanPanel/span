@@ -253,6 +253,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         )
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # After the platforms, not before: schema validation runs on the first
+        # refresh, which is awaited above, but the Repairs it raises name the
+        # entities an unresolved field took down — and those entities only
+        # register themselves once their platform has added them.
+        coordinator.async_sync_schema_repairs()
     except Exception:
         if coordinator is not None:
             await coordinator.async_shutdown()
