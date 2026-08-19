@@ -274,6 +274,20 @@ class TestBessMetadataSensorDefinitions:
         desc = next(d for d in BESS_METADATA_SENSORS if d.key == "model")
         assert desc.value_fn(battery) == "IQ Battery 10"
 
+    def test_part_number_value_function(self):
+        battery = SpanBatterySnapshotFactory.create(part_number="830-01234-01")
+        desc = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
+        assert desc.value_fn(battery) == "830-01234-01"
+
+    def test_part_number_is_disabled_by_default(self):
+        """A new entity on an existing install must not appear uninvited.
+
+        Asserted separately from the value function so a flip of this flag names
+        itself in the failure rather than hiding inside a value test.
+        """
+        desc = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
+        assert desc.entity_registry_enabled_default is False
+
     def test_serial_number_value_function(self):
         battery = SpanBatterySnapshotFactory.create(serial_number="BESS-12345")
         desc = next(d for d in BESS_METADATA_SENSORS if d.key == "serial_number")
@@ -316,6 +330,7 @@ class TestBessUniqueId:
         for key in (
             "vendor",
             "model",
+            "part_number",
             "serial_number",
             "firmware_version",
             "nameplate_capacity",
