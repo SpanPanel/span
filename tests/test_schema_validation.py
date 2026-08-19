@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
 from span_panel_api.models import FieldMetadata
 
+from custom_components.span_panel import sensor_definitions
 from custom_components.span_panel.field_paths import declared_field_paths
 from custom_components.span_panel.schema_validation import (
     SchemaFindings,
@@ -131,3 +133,35 @@ def test_every_declared_field_path_keys_a_sensor_or_a_residual_reader() -> None:
     for field_path, description in by_path.items():
         assert description.field_path == field_path
         assert not description.derived
+
+
+def test_resolved_unitless_sensor_yields_no_mismatch() -> None:
+    """A resolved field read by an enum or string sensor has nothing to compare."""
+    from homeassistant.components.sensor import SensorEntityDescription
+
+    description = SensorEntityDescription(key="evse_status")
+    findings = evaluate_field_metadata(
+        {"evse.status": FieldMetadata(None, "enum")},
+        sensor_defs={"evse.status": description},
+    )
+    assert findings.unresolved == frozenset()
+    assert findings.unit_mismatches == ()
+
+
+def test_descriptions_without_a_declaration_are_not_keyed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`declared_field_paths` is the enforcement point; here there is no key.
+
+    A description that carries no `FieldPathDeclarationMixin` names no field, so
+    it cannot appear in a field-path-keyed map. `declared_field_paths` raises on
+    the same input, which is where the drift is caught.
+    """
+    from homeassistant.components.sensor import SensorEntityDescription
+
+    monkeypatch.setattr(
+        sensor_definitions,
+        "all_sensor_descriptions",
+        lambda: (SensorEntityDescription(key="undeclared"),),
+    )
+    assert sensor_definitions.sensor_descriptions_by_field_path() == {}
