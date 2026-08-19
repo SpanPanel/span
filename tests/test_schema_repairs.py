@@ -512,3 +512,47 @@ async def test_removing_an_entity_drops_it_from_the_map(hass) -> None:
         assert "panel.instant_grid_power_w" not in coordinator.entity_ids_by_field_path
     finally:
         await _stop_scheduling(coordinator)
+
+
+async def test_entities_without_a_declaration_are_not_tracked(hass) -> None:
+    """A derived entity must not be blamed for a field it only partly reads.
+
+    Derived entities compute from several fields or none, and the circuit switch
+    carries no entity description at all. Tracking either would attribute an
+    entity to a field whose loss may not have taken it down.
+    """
+    coordinator, config_entry, _ = await _entities_by_declared_path(hass)
+    try:
+        from unittest.mock import MagicMock
+
+        from custom_components.span_panel.binary_sensor import (
+            BESS_CONNECTED_SENSOR,
+            async_setup_entry as binary_setup,
+        )
+        from custom_components.span_panel.switch import (
+            async_setup_entry as switch_setup,
+        )
+
+        assert BESS_CONNECTED_SENSOR.derived, "fixture assumes a derived description"
+
+        added = MagicMock()
+        await binary_setup(hass, config_entry, added)
+        derived = [
+            entity
+            for entity in added.call_args.args[0]
+            if getattr(entity, "entity_description", None) is BESS_CONNECTED_SENSOR
+        ]
+        assert derived
+
+        added = MagicMock()
+        await switch_setup(hass, config_entry, added)
+        switches = list(added.call_args.args[0])
+        assert switches
+        assert not hasattr(switches[0], "entity_description")
+
+        await _add_to_platform(hass, config_entry, derived, "binary_sensor")
+        await _add_to_platform(hass, config_entry, switches, "switch")
+
+        assert coordinator.entity_ids_by_field_path == {}
+    finally:
+        await _stop_scheduling(coordinator)
