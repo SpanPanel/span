@@ -323,6 +323,30 @@ node rule, creates no entity, and so had nothing to call `async_get_or_create` f
 Running it before the platforms also makes the identity freeze single-valued: `resolve_identifier` runs once, at registration, so every entity created
 afterwards resolves against a device that already exists and cannot disagree.
 
+### The proxy link is recorded, and the nesting is not built
+
+`AdoptedDevice` carries `parent` (the device id it declares as its parent) and `proxied` (whether that parent is a peer rather than the tree root). Adoption
+does not act on either: every adopted device is registered under the panel with `via_device_id`, exactly as every curated sub-device is.
+
+They are carried because a _proxied_ unmodelled device is a real shape we would otherwise flatten away without leaving evidence. The library's own reference
+tree contains one — `bess-mid` declares `parent: bess`, which is the `{proxier-id}-{proxied-id}` naming of the specification's `devices/proxy.md`. A vendor
+gateway proxying its own sub-devices arrives the same way, and the parent link is the only structural information about how they relate.
+
+**Diagnostics report `proxied`, never `parent`.** A device id can embed a serial — producers derive a DER's id preferring a serial over a default slug, which is
+why the library holds PV's `info/serial-number` unvalued — so reporting the parent verbatim would leak the serial the block deliberately withholds. The boolean
+answers a maintainer's actual question, which is whether a proxied unmodelled device has appeared at all.
+
+**Why the nesting waits.** [python-sdk#49](https://github.com/electrification-bus/python-sdk/issues/49#issuecomment-5359203067) settled that proxied ids differ
+by design — several enclosures on a shared broker each proxying the same physical device produce different ids on purpose — and that consumers correlate by
+`info/serial-number`, never by device id. It also records that `ebus-sdk` 0.21.0 shipped `DeviceSpec` and `DeviceTreeBuilder`
+([python-sdk#57](https://github.com/electrification-bus/python-sdk/issues/57)), with the existing graph builder still to be reconciled against it. The tree
+model is under active reshaping upstream, so the fields capture the evidence and the topology waits.
+
+That comment also strengthens two things already here. Its deferral mechanism — a `device_id` callable returning `None` defers the device until
+`resolve_deferred()` — is the producer-side form of settling identity _before_ a device exists, which is what registering adopted devices ahead of the platforms
+does from this end. And "there is deliberately no existence predicate … expressing it by not calling `add()` is right" is the rule the capability gates already
+follow: presence in the tree is the signal, and there is no flag to consult.
+
 ### Identity freezes at first sighting
 
 `resolve_identifier` looks up **both** candidate spellings — `{panel serial}_adopted_{wire id}` and `{panel serial}_adopted_{serial}` — before minting either,

@@ -6,6 +6,9 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Diagnostics now say whether an adopted device is proxied by another device rather than by the panel.** Reported as a yes/no, never as the parent's
+  identifier: a device identifier can contain a serial number, and diagnostics deliberately carry no serials.
+
 - **New entities are now announced in a notification that names them — whether or not they arrived switched on.** Previously only entities added _disabled_ were
   mentioned, on the reasoning that an enabled one is already visible in your entity list and its history. That is only true if you are watching your entity
   list, which nobody is: an addition that breaks nothing was indistinguishable from no addition at all. The notification names every entity that was added,

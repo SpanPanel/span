@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 from dataclasses import replace
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
@@ -38,6 +39,7 @@ from custom_components.span_panel.adoption import (
     resolve_identifier,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.diagnostics import _adoption
 from custom_components.span_panel.id_builder import build_panel_unique_id
 from custom_components.span_panel.util import (
     ADOPTED_IDENTIFIER_TOKEN,
@@ -613,3 +615,23 @@ def test_curation_changes_two_of_the_three_segments(hass: HomeAssistant) -> None
     assert adopted != curated_if_modelled
     assert ADOPTED_IDENTIFIER_TOKEN in adopted
     assert ADOPTED_IDENTIFIER_TOKEN not in curated_if_modelled
+
+
+# -- Diagnostics report the proxy relationship, never the parent's id ---------
+
+
+def test_diagnostics_report_whether_a_device_is_proxied_and_not_by_whom() -> None:
+    """A device id can embed a serial, so the id must not go in the payload.
+
+    Producers derive a DER's id preferring a serial over a default slug -- which
+    is why this repository holds PV's `info/serial-number` unvalued -- so
+    reporting `parent` verbatim would leak the serial the block deliberately
+    withholds. The boolean answers the maintainer's actual question.
+    """
+    device = replace(_device("gateway-1-sensor"), parent="gateway-1", proxied=True)
+    block = _adoption(_snapshot(device))
+
+    (row,) = block["devices"]
+    assert row["proxied"] is True
+    assert "parent" not in row
+    assert "gateway-1" not in json.dumps(block)

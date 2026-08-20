@@ -102,10 +102,19 @@ class AdoptedDeviceRow(TypedDict):
     device card, but neither answers the question this block exists to ask -- and
     a vendor-set device name is free text a household chose. The type, the shape
     and the counts are what a maintainer needs.
+
+    **`proxied` rather than `parent`.** The parent is a device id, and a device id
+    can embed a serial: producers derive a DER's id preferring a serial over a
+    default slug, which is why this repository holds PV's `info/serial-number`
+    unvalued. Reporting the id verbatim would leak the serial this block
+    deliberately withholds. The boolean answers the question a maintainer
+    actually has -- has a *proxied* unmodelled device appeared -- and carries no
+    identity.
     """
 
     device_type: str
     model: str | None
+    proxied: bool
     property_count: int
     properties: list[AdoptedPropertyRow]
 
@@ -154,6 +163,7 @@ def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
             {
                 "device_type": device.device_type,
                 "model": device.model,
+                "proxied": device.proxied,
                 "property_count": len(device.properties),
                 "properties": [
                     {
