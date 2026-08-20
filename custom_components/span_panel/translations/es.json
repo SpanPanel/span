@@ -147,11 +147,25 @@
       },
       "wifi_link": {
         "name": "Enlace Wi-Fi"
+      },
+      "pcs_active": {
+        "name": "PCS Activo"
+      },
+      "pv_panel_link": {
+        "name": "Enlace del Panel FV"
+      },
+      "evse_panel_link": {
+        "name": "Enlace del Panel EVSE"
       }
     },
     "button": {
       "gfe_override": {
         "name": "Anulación GFE: Conectado a Red"
+      }
+    },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "Límite de Corriente de Carga EVSE"
       }
     },
     "select": {
@@ -176,6 +190,18 @@
       },
       "bess_model": {
         "name": "Modelo"
+      },
+      "bess_communication_state": {
+        "name": "Estado de Comunicación",
+        "state": {
+          "ok": "Correcto",
+          "degraded": "Degradado",
+          "lost": "Perdido",
+          "unknown": "Desconocido"
+        }
+      },
+      "bess_meter_power": {
+        "name": "Potencia del Medidor"
       },
       "bess_nameplate_capacity": {
         "name": "Capacidad Nominal"
@@ -233,6 +259,9 @@
           "unknown": "Desconocido",
           "unlocked": "Desbloqueado"
         }
+      },
+      "evse_part_number": {
+        "name": "Número de Pieza"
       },
       "evse_status": {
         "name": "Estado del Cargador",
@@ -325,11 +354,17 @@
       "pv_vendor": {
         "name": "Fabricante PV"
       },
+      "shed_total_time_remaining": {
+        "name": "Tiempo de Respaldo Restante"
+      },
       "site_power": {
         "name": "Potencia del Sitio"
       },
       "software_version": {
         "name": "Versión de Software"
+      },
+      "time_to_priority_shed": {
+        "name": "Tiempo hasta el Corte por Prioridad"
       },
       "upstream_l1_current": {
         "name": "Corriente Ascendente L1"
@@ -344,6 +379,22 @@
           "unconnected": "Desconectado",
           "unknown": "Desconocido"
         }
+      },
+      "pcs_import_limit": {
+        "name": "Límite de Importación"
+      },
+      "pcs_binding_constraint": {
+        "name": "Restricción Vinculante",
+        "state": {
+          "fsr": "Capacidad Firme del Servicio",
+          "doe": "Envolvente de Red",
+          "voltage": "Soporte de Tensión",
+          "off_grid": "Fuera de Red",
+          "requested": "Solicitado",
+          "operator": "Operador",
+          "none": "Ninguno",
+          "unknown": "Desconocido"
+        }
       }
     }
   },
@@ -353,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Error al establecer el estado del relé del circuito para {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "No se pudo establecer el límite de corriente de carga para el cargador {charger}: {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "Este panel SPAN no ofrece control de corriente de carga para el cargador {charger}."
     },
     "export_manifest_no_entries": {
       "message": "No hay entradas de configuración de SPAN Panel cargadas. Agregue y configure un SPAN Panel antes de llamar a este servicio."
@@ -710,7 +767,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "Hay nuevas entidades del Panel SPAN disponibles",
-      "description": "Han aparecido {count} entidad(es) nueva(s) en su Panel SPAN (por ejemplo: {examples}). Se han creado **deshabilitadas**, por lo que no ha aparecido nada en sus paneles de control ni en su historial sin haberlo pedido.\n\nPueden aparecer entidades nuevas por varios motivos: una actualización de la integración que expone más de lo que informa su panel, un circuito añadido al panel, o hardware como una batería o energía solar que se pone en marcha. No hay nada averiado ni es necesaria ninguna acción: este aviso existe solo para que la novedad no pase desapercibida.\n\nPara usar alguna, abra la página del dispositivo Panel SPAN, muestre sus entidades deshabilitadas y habilite las que desee. Descarte este aviso cuando lo haya revisado."
+      "description": "Entidades nuevas creadas **deshabilitadas**: {count} (por ejemplo: {examples}). No ha aparecido nada en sus paneles de control ni en su historial sin haberlo pedido.\n\nEste recuento incluye solo las entidades que se crearon desactivadas. Todo lo que se añade habilitado ya es visible en su lista de entidades y en su historial.\n\nPueden aparecer entidades nuevas por varios motivos: una actualización de la integración que expone más de lo que informa su panel, un circuito añadido al panel, o hardware como una batería o energía solar que se pone en marcha. No hay nada averiado ni es necesaria ninguna acción: este aviso existe solo para que la novedad no pase desapercibida.\n\nPara usar alguna, abra la página del dispositivo Panel SPAN, muestre sus entidades deshabilitadas y habilite las que desee. Descarte este aviso cuando lo haya revisado."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "Su Panel SPAN ahora informa del aislamiento desde su Dispositivo de Interconexión de Microrred",
@@ -718,11 +775,11 @@
     },
     "schema_field_unresolved": {
       "title": "Campo de datos del Panel SPAN no disponible",
-      "description": "El firmware de su panel ya no proporciona `{field_path}`. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Pueden quedar no disponibles, o informar datos incompletos, hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
+      "description": "El firmware de su panel ya no proporciona `{field_path}`. Entidades afectadas: {count} (por ejemplo: {examples}). Pueden quedar no disponibles, o informar datos incompletos, hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
     },
     "schema_unit_mismatch": {
       "title": "Discrepancia de unidades del Panel SPAN",
-      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Sus lecturas y estadísticas a largo plazo pueden ser incorrectas. No se han modificado automáticamente."
+      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Entidades afectadas: {count} (por ejemplo: {examples}). Sus lecturas y estadísticas a largo plazo pueden ser incorrectas. No se han modificado automáticamente."
     }
   }
 }

@@ -1,0 +1,12 @@
+{
+  "circuit/breaker/poles": "reaches circuit.is_240v and stops there; the voltage attribute is derived from the tab count instead, so no entity or attribute reads the field",
+  "circuit/connection/count": "microinverter/pack count; no producer publishes it, so there is no fixture value an entity could be tested against",
+  "circuit/connection/feeds-device-type": "redundant: the library resolves a DER's class by dereferencing feeds-device-id against the tree's declared $type",
+  "distribution-enclosure/status/postal-code": "deliberate skip: location data with no Home Assistant value, and surfacing it would copy the user's location into recorder history",
+  "distribution-enclosure/status/time-zone": "deliberate skip: Home Assistant owns the time zone, so a mismatch is a Repair rather than an entity",
+  "lugs/connection/count": "the lugs counterpart of circuit/connection/count, with no fed-device story upstream and no producer publishing it",
+  "lugs/connection/fed-by-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
+  "lugs/connection/feeds-device-status": "feedthrough link-health; the feeds-* half of the downstream lugs record is topology to consume, and no producer publishes it",
+  "lugs/connection/feeds-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
+  "pv/info/serial-number": "held, and the PV device identifier deliberately does not use it: _der_identifier prefers a serial over instance_id, so valuing it would move the PV device id from <panel>-pv-1 to <panel>-<serial> - a device replacement, not an upgrade. The Home Assistant sub-device is keyed <panel serial>_pv for the same reason, so a serial arriving on the wire moves nothing"
+}

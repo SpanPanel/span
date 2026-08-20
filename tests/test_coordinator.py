@@ -26,6 +26,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 
+from .adapter_fixtures import schema_one_snapshot
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanEvseSnapshotFactory,
@@ -692,3 +693,30 @@ async def test_validation_runs_at_most_once_successfully(hass: HomeAssistant) ->
             await coordinator._run_post_update_tasks(snapshot)
 
     assert coordinator.unresolved_paths == frozenset({"circuit.instant_power_w"})
+
+
+def test_the_reload_trigger_sees_every_capability_the_platforms_gate_on() -> None:
+    """The coordinator must not derive its own, narrower capability set.
+
+    It used to. `_detect_capabilities` was a hand-rolled copy that knew only
+    bess/pv/power_flows/evse, so a panel that gained `mid`, `shed_forecast`,
+    `bess_telemetry`, `pcs` or `der_link_health` on a firmware upgrade
+    published the properties, created no entities, and asked for no reload --
+    the user saw nothing until they restarted Home Assistant.
+
+    Asserting equality on a snapshot that exercises the capabilities is what
+    catches a re-divergence; asserting the two names are the same object would
+    pass the moment someone re-inlined the logic.
+    """
+    snapshot = schema_one_snapshot()
+
+    from custom_components.span_panel.helpers import detect_capabilities
+
+    assert SpanPanelCoordinator._detect_capabilities(snapshot) == detect_capabilities(
+        snapshot
+    )
+    # The capabilities the old copy was blind to are present in this capture,
+    # so the assertion above is not comparing two empty sets.
+    assert {"shed_forecast", "pcs", "bess_telemetry", "der_link_health"} <= (
+        detect_capabilities(snapshot)
+    )

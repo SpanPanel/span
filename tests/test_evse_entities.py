@@ -77,7 +77,7 @@ class TestEvseSensorDefinitions:
     """Test EVSE sensor definition structure."""
 
     def test_evse_sensors_count(self):
-        assert len(EVSE_SENSORS) == 3
+        assert len(EVSE_SENSORS) == 4
 
     def test_evse_status_sensor_is_enum(self):
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")

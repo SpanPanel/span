@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import logging
+from types import MappingProxyType
+from typing import Any, ClassVar
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -36,9 +38,10 @@ from .helpers import (
     build_evse_unique_id_for_entry,
     has_bess,
     has_mid,
+    has_pcs,
     resolve_evse_display_suffix,
 )
-from .util import bess_device_info, evse_device_info
+from .util import bess_device_info, evse_device_info, pv_device_info
 
 # pylint: disable=invalid-overridden-method
 
@@ -141,6 +144,7 @@ def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
 
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
+    field_path="panel.grid_islandable",
     derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
@@ -150,12 +154,75 @@ GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
+    field_path="battery.connected",
     derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
     entity_category=EntityCategory.DIAGNOSTIC,
     value_fn=lambda s: s.battery.connected,
 )
+
+PV_PANEL_LINK_SENSOR = SpanPanelBinarySensorEntityDescription(
+    key="pv_panel_link",
+    field_path="pv.connected",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key="pv_panel_link",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda s: s.pv.connected,
+)
+"""Can the enclosure talk to the solar inverter?
+
+`bess_connected`'s counterpart for the other DER the panel feeds through a
+circuit. The BESS got one because the upstream lugs' `connection/fed-by-*`
+record was already read; the PV's and the charger's live on the *circuit* that
+feeds them, as `connection` 0.1 specifies, and nothing read that half — so the
+one device class whose link the panel happened to report through the lugs was
+the only one a user could see.
+
+On the inverter's own sub-device, beside `pv_vendor` and `pv_product`, which is
+where it moved when the PV got a device of its own -- the same place
+`bess_connected` sits relative to the battery.
+
+`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`: flat firmware publishes
+`connected` on the BESS and on nothing else, so the both-adapters gate cannot be
+satisfied, while the entity still needs its Repair mention and its
+unavailability when the panel stops resolving the property.
+"""
+
+
+PCS_ACTIVE_SENSOR = SpanPanelBinarySensorEntityDescription(
+    key="pcs_active",
+    field_path="pcs.active",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key="pcs_active",
+    device_class=BinarySensorDeviceClass.RUNNING,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda s: None if s.pcs is None else s.pcs.active,
+)
+"""Is the Power Control System limiting import right now?
+
+The one property of this capability that changes on its own, and therefore the
+one an automation triggers on: `pcs/enabled` is a commissioning fact and the four
+constraint limits move only on reconfiguration, but `active` flips when the panel
+starts throttling. A binary sensor rather than a third enum, because the question
+is binary and `pcs_binding_constraint` already answers "which limit" for anyone
+who needs it.
+
+Diagnostic, and enabled by default. It reports the panel constraining the user's
+supply, which is worth seeing, but it belongs beside the other panel-state
+sensors rather than among the power readings.
+
+`None` when the panel runs no PCS, which is what a flat panel and any v1.0
+firmware without the node report — but the entity is not created there at all, so
+the branch is reached only if the node disappears mid-session, where unknown is
+the right answer.
+
+`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`, by the producible rule: flat
+declares no `pcs` capability, so the both-adapters gate cannot be satisfied,
+while the entity still needs its Repair mention and its unavailability when the
+panel stops resolving the property.
+"""
 
 
 class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
@@ -291,6 +358,80 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         )
 
 
+class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]):
+    """The Wi-Fi link, which also reports the network the link is to.
+
+    Its own class, not a branch on `SpanPanelBinarySensor`, because
+    `_residual_field_paths` is a `ClassVar` and that base class serves every
+    panel binary sensor — the door, the two links, the panel status, the PCS
+    activity, the PV link. Declaring the SSID there would claim all of them read
+    it, and the declaration is not decoration: it is what a Repair consults to
+    name the entities a dead field took down with it, so an unresolved
+    `panel.wifi_ssid` would name the door sensor. `SpanPanelStatus` is its own
+    class in `sensor_panel` for exactly this reason.
+    """
+
+    _residual_field_paths: ClassVar[tuple[str, ...]] = ("panel.wifi_ssid",)
+    """The SSID, read for an attribute rather than by the `value_fn`.
+
+    A plain residual and not an exemption: both adapters map the property
+    (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
+    gate covers it.
+
+    The only declaration of this path in the integration. It was on
+    `SpanPanelStatus` while that sensor rendered the SSID, and it moved with the
+    read rather than being left behind: the declaration is what a Repair
+    consults to name the entity a dead field took down with it, so a stale copy
+    would name a sensor that no longer reads the field. Because this is now the
+    only declaration, `residual_field_paths()` has to import `binary_sensor` for
+    the subclass walk to see it -- the walk sees only imported modules, and this
+    path would otherwise leave the producible gate silently.
+    """
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The network this link is up on, when the panel names it.
+
+        The coherent host for the SSID: the entity that reports whether Wi-Fi is
+        up is the one that should report which network it is up on. Both values
+        come from the same node on the wire — `status/wifi` and
+        `status/wifi-ssid` on v1.0, `core/wifi` and `core/wifi-ssid` on flat.
+
+        The Software Version sensor used to publish it, for the historical
+        reason that `panel_size` was already occupying its attribute block. That
+        copy is gone -- see `SpanPanelStatus.extra_state_attributes` for why the
+        compatibility argument for keeping one did not hold up.
+
+        Omitted rather than reported as `None` when the panel publishes no SSID:
+        an attribute present and empty reads as a reading that failed, which is
+        a different claim from the panel never having made one.
+        """
+        snapshot = self.coordinator.data
+        if snapshot is None or snapshot.wifi_ssid is None:
+            return None
+        return {"wifi_ssid": snapshot.wifi_ssid}
+
+
+_PANEL_BINARY_SENSOR_CLASSES: Mapping[
+    str, type[SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]]
+] = MappingProxyType({SYSTEM_WIFI_LINK: SpanPanelWifiLinkBinarySensor})
+"""Panel binary sensors needing a class of their own, by description key.
+
+Everything absent from this map is a plain `SpanPanelBinarySensor`. A named map
+rather than a conditional inside the setup comprehension: the comprehension says
+"build one entity per description" and should keep saying only that, and the
+next description that needs its own class is then a one-line addition here
+rather than a second branch to read past.
+"""
+
+
+def _panel_binary_sensor_class(
+    description: SpanPanelBinarySensorEntityDescription,
+) -> type[SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]]:
+    """Return the entity class that serves one panel binary sensor description."""
+    return _PANEL_BINARY_SENSOR_CLASSES.get(description.key, SpanPanelBinarySensor)
+
+
 # ---------------------------------------------------------------------------
 # EVSE (EV Charger) binary sensors
 # ---------------------------------------------------------------------------
@@ -333,6 +474,32 @@ EVSE_BINARY_SENSORS: tuple[
         value_fn=lambda e: (e.status or "") in _EV_CONNECTED_STATUSES,
     ),
 )
+
+EVSE_PANEL_LINK_SENSOR = SpanEvseBinarySensorEntityDescription(
+    key="evse_panel_link",
+    field_path="evse.connected",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key="evse_panel_link",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda e: e.connected,
+)
+"""Can the enclosure talk to this charger?
+
+**Not `evse_ev_connected`, which sits two definitions above it.** That one reads
+the charger's own `status/status` and answers "is a vehicle plugged in" — a
+`PLUG` device class, enabled by default, the fact a user builds a charging
+automation on. This reads the *feeding circuit's* `connection/feeds-device-status`
+and answers "can the panel reach the charger at all" — a `CONNECTIVITY` device
+class, diagnostic. The two disagree exactly when it matters: a charger
+mid-session over a lost link reports a plugged-in vehicle and a dead link at the
+same time, because the last session state the panel heard is still the last
+session state the panel heard.
+
+Deliberately outside `EVSE_BINARY_SENSORS`, which is the unconditional pair.
+This one is created per charger and only where the record exists, following
+`bess_connected` and `pcs_active` rather than its two neighbours.
+"""
 
 # Fallback EVSE snapshot used when the EVSE disappears mid-session
 _EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
@@ -408,7 +575,10 @@ async def async_setup_entry(
 
     entities: list[
         SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanEvseBinarySensor
-    ] = [SpanPanelBinarySensor(coordinator, description) for description in BINARY_SENSORS]
+    ] = [
+        _panel_binary_sensor_class(description)(coordinator, description)
+        for description in BINARY_SENSORS
+    ]
 
     # Add grid islandable binary sensor when v2 data is available
     snapshot: SpanPanelSnapshot = coordinator.data
@@ -437,12 +607,46 @@ async def async_setup_entry(
             )
         )
 
+    # Add the PCS activity sensor where the panel runs a Power Control System.
+    # Gated on the node, not on a value: every property this capability publishes
+    # is legally zero or false, so a value gate would delete the entity of every
+    # panel whose PCS is merely switched off — see `has_pcs`.
+    if has_pcs(snapshot):
+        entities.append(SpanPanelBinarySensor(coordinator, PCS_ACTIVE_SENSOR))
+
+    # The enclosure's view of the link to the solar inverter, where a circuit
+    # publishes one. Gated on the record existing and never on what kind of
+    # circuit publishes it — `distribution-enclosure.md` makes a mixed-load
+    # circuit publishing no `feeds-*` the normal case, so absence is the panel
+    # saying it does not know rather than a fault, and the enum it does publish
+    # has no UNKNOWN member for it to say that with. See `PV_PANEL_LINK_SENSOR`.
+    if snapshot.pv.connected is not None:
+        configured_name = coordinator.config_entry.data.get(
+            CONF_DEVICE_NAME, coordinator.config_entry.title
+        )
+        entities.append(
+            SpanPanelBinarySensor(
+                coordinator,
+                PV_PANEL_LINK_SENSOR,
+                device_info_override=pv_device_info(
+                    snapshot.serial_number,
+                    snapshot.pv,
+                    configured_name or "Span Panel",
+                    panel_device_id=config_entry.runtime_data.panel_device_id,
+                ),
+            )
+        )
+
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:
-        for evse_id in snapshot.evse:
+        for evse_id, evse in snapshot.evse.items():
             entities.extend(
                 SpanEvseBinarySensor(coordinator, evse_desc, evse_id)
                 for evse_desc in EVSE_BINARY_SENSORS
             )
+            # Per charger, not per panel: two chargers can be fed by two
+            # circuits of which only one publishes the record.
+            if evse.connected is not None:
+                entities.append(SpanEvseBinarySensor(coordinator, EVSE_PANEL_LINK_SENSOR, evse_id))
 
     async_add_entities(entities)

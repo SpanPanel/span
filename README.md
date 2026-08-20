@@ -149,14 +149,57 @@ The following terms appear throughout this document and in the integration's sen
 | Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
 | Main Breaker Rating   | Current      | A    | Main breaker amperage      |
 
+### Shed Forecast Sensors (v1.0 data model only)
+
+Created only when your panel publishes the `shed-forecast` capability, and only for the estimates it actually publishes.
+
+| Sensor                | Device Class | Unit | Notes                                                            |
+| --------------------- | ------------ | ---- | ---------------------------------------------------------------- |
+| Time to Priority Shed | Duration     | min  | Estimated time before the next priority tier of circuits is shed |
+| Backup Time Remaining | Duration     | min  | Estimated time before every sheddable circuit is shed (off-grid) |
+
+#### Shed Forecast Sensor Attributes
+
+Present only when the panel publishes them.
+
+| Attribute                           | Type   | On                    | Notes                                                  |
+| ----------------------------------- | ------ | --------------------- | ------------------------------------------------------ |
+| `full_charge_time_to_priority_shed` | int    | Time to Priority Shed | The same estimate assuming the battery starts full     |
+| `full_charge_total_time_remaining`  | int    | Backup Time Remaining | The same estimate assuming the battery starts full     |
+| `forecast_confidence`               | string | both                  | The panel's own assessment: `LOW`, `MEDIUM`, or `HIGH` |
+
+### Power Control System Sensors (v1.0 data model only)
+
+Created only when your panel publishes the `pcs` capability, and created whether or not the PCS is switched on — a PCS reporting a limit of 0 A is reporting a
+state, not an absence.
+
+| Sensor             | Device Class | Unit | Notes                                                                                                                      |
+| ------------------ | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| Import Limit       | Current      | A    | The limit actually being enforced: the most restrictive of every active constraint                                         |
+| Binding Constraint | Enum         | —    | Which constraint sets that limit: Firm Service Rating, Grid Envelope, Voltage Support, Off-Grid, Requested, Operator, None |
+
+#### Power Control System Sensor Attributes
+
+On **Import Limit**, and present only when the panel publishes them. These are the inputs the panel reconciled to produce the enforced limit above.
+
+| Attribute                | Type   | Notes                                                           |
+| ------------------------ | ------ | --------------------------------------------------------------- |
+| `pcs_enabled`            | bool   | Whether the panel's PCS is enabled at all                       |
+| `feed_import_limit`      | float  | The Firm Service Rating: the commissioned, always-on floor (A)  |
+| `operator_import_limit`  | float  | A cap imposed by a fleet or aggregator operator (A)             |
+| `off_grid_import_limit`  | float  | The import cap while islanded (A)                               |
+| `requested_import_limit` | float  | A voluntary limit requested by the owner or installer (A)       |
+| `<name>_enablement`      | string | Per limit: `UNSPECIFIED`, `UNCONFIGURED`, `DISABLED`, `ENABLED` |
+| `<name>_active`          | bool   | Per limit: whether that constraint is currently enforcing       |
+
 ### Power Flow Sensors (v2 only)
 
-| Sensor        | Device Class | Unit | Notes                                                                       |
-| ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
-| Grid Power    | Power        | W    | Grid power flow                                                             |
-| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                      |
-| Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
-| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
+| Sensor        | Device Class | Unit | Notes                                                                           |
+| ------------- | ------------ | ---- | ------------------------------------------------------------------------------- |
+| Grid Power    | Power        | W    | Grid power flow                                                                 |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                          |
+| Battery Power | Power        | W    | Battery charge/discharge (+charging, -discharging). Only when BESS commissioned |
+| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                           |
 
 ### PV Metadata Sensors (v2 only, on main panel device)
 
@@ -183,10 +226,17 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 
 ### Software Version Sensor Attributes
 
-| Attribute    | Type   | Notes                               |
-| ------------ | ------ | ----------------------------------- |
-| `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
-| `wifi_ssid`  | string | Current Wi-Fi network               |
+| Attribute    | Type | Notes                               |
+| ------------ | ---- | ----------------------------------- |
+| `panel_size` | int  | Total breaker spaces (e.g., 32, 40) |
+
+`wifi_ssid` used to appear here. It moved to the Wi-Fi Link binary sensor below; a template reading it from this sensor should be pointed there.
+
+### Wi-Fi Link Binary Sensor Attributes
+
+| Attribute   | Type   | Notes                                                            |
+| ----------- | ------ | ---------------------------------------------------------------- |
+| `wifi_ssid` | string | Network this link is to. Absent when the panel publishes no SSID |
 
 ### EVSE (EV Charger) Entities
 
@@ -218,10 +268,26 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 
 #### EVSE Binary Sensors (per charger)
 
-| Sensor       | Device Class     | Notes                                                              |
-| ------------ | ---------------- | ------------------------------------------------------------------ |
-| Charging     | Battery Charging | ON when status is CHARGING                                         |
-| EV Connected | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING |
+| Sensor          | Device Class     | Notes                                                                                                   |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------- |
+| Charging        | Battery Charging | ON when status is CHARGING                                                                              |
+| EV Connected    | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING — a vehicle is plugged in            |
+| EVSE Panel Link | Connectivity     | (v1.0) Whether the panel can reach the charger. A different fact from EV Connected, and it can disagree |
+
+**EVSE Panel Link is not EV Connected.** EV Connected is what the charger says about the cable in front of it; EVSE Panel Link is what the panel says about
+whether it can reach the charger at all. A charger part-way through a session behind a lost link reports a plugged-in vehicle and a dead link at the same time.
+EVSE Panel Link is a diagnostic and appears only where the circuit feeding that charger publishes the link record.
+
+#### EVSE Controls (per charger, v1.0)
+
+| Control                   | Platform | Unit | Notes                                                                                   |
+| ------------------------- | -------- | ---- | --------------------------------------------------------------------------------------- |
+| EVSE Charge Current Limit | Number   | A    | The charge-current ceiling you can lower. Bounded by the installer-commissioned maximum |
+
+The maximum is read from the panel, never assumed: it is the current the charger was commissioned for, and a value above it is refused rather than clamped. The
+control is created only where the panel declares the limit settable, and reports unavailable while the panel has not published the commissioned maximum that
+bounds it. A change the panel has acknowledged but not yet applied appears as a `charge_current_limit_target` attribute while the state stays the limit the
+charger is still enforcing.
 
 #### EVSE Device Info Attributes
 
@@ -239,16 +305,18 @@ device uses manufacturer, model, serial number, and software version from batter
 
 #### BESS Sensors
 
-| Sensor             | Device Class   | Unit | Notes                                                             |
-| ------------------ | -------------- | ---- | ----------------------------------------------------------------- |
-| Battery Level      | Battery        | %    | State of energy as percentage                                     |
-| Battery Power      | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device |
-| BESS Vendor        | —              | —    | Battery system vendor (diagnostic)                                |
-| BESS Model         | —              | —    | Battery system model (diagnostic)                                 |
-| BESS Serial Number | —              | —    | Battery system serial number (diagnostic)                         |
-| BESS Firmware      | —              | —    | Battery system firmware (diagnostic)                              |
-| Nameplate Capacity | Energy Storage | kWh  | Rated battery capacity (diagnostic)                               |
-| Stored Energy      | Energy Storage | kWh  | Current stored energy (diagnostic)                                |
+| Sensor              | Device Class   | Unit | Notes                                                                                            |
+| ------------------- | -------------- | ---- | ------------------------------------------------------------------------------------------------ |
+| Battery Level       | Battery        | %    | State of energy as percentage                                                                    |
+| Battery Power       | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device                                |
+| Meter Power         | Power          | W    | The BESS's own meter (+charging, -discharging). v1.0 data model only                             |
+| Communication State | —              | —    | The BESS's report of its own link health (diagnostic, disabled by default). v1.0 data model only |
+| BESS Vendor         | —              | —    | Battery system vendor (diagnostic)                                                               |
+| BESS Model          | —              | —    | Battery system model (diagnostic)                                                                |
+| BESS Serial Number  | —              | —    | Battery system serial number (diagnostic)                                                        |
+| BESS Firmware       | —              | —    | Battery system firmware (diagnostic)                                                             |
+| Nameplate Capacity  | Energy Storage | kWh  | Rated battery capacity (diagnostic)                                                              |
+| Stored Energy       | Energy Storage | kWh  | Current stored energy (diagnostic)                                                               |
 
 #### BESS Binary Sensors
 
@@ -277,15 +345,17 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit Power Sensor Attributes
 
-| Attribute         | Type   | Notes                                                 |
-| ----------------- | ------ | ----------------------------------------------------- |
-| `tabs`            | string | Breaker slot position(s)                              |
-| `voltage`         | string | 120 or 240 (derived from tab count)                   |
-| `always_on`       | bool   | Whether circuit is always-on                          |
-| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                               |
-| `relay_requester` | string | Who requested relay state                             |
-| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
-| `is_sheddable`    | bool   | Whether circuit can be shed                           |
+| Attribute         | Type   | Notes                                                                                                                   |
+| ----------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `tabs`            | string | Breaker slot position(s)                                                                                                |
+| `voltage`         | string | 120 or 240 (derived from tab count)                                                                                     |
+| `always_on`       | bool   | Whether circuit is always-on                                                                                            |
+| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                                                                                                 |
+| `relay_requester` | string | Who requested relay state                                                                                               |
+| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                                   |
+| `is_sheddable`    | bool   | Whether circuit can be shed                                                                                             |
+| `pcs_managed`     | bool   | (v1.0) Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it          |
+| `pcs_priority`    | int    | (v1.0) This circuit's shed order under an active import limit — distinct from `shed_priority`, which is the backup tier |
 
 ### Circuit Energy Sensor Attributes
 
@@ -296,13 +366,15 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Binary Sensors
 
-| Sensor          | Device Class | Notes                                                               |
-| --------------- | ------------ | ------------------------------------------------------------------- |
-| Door State      | Tamper       | Panel door open/closed                                              |
-| Ethernet Link   | Connectivity | Wired network status                                                |
-| Wi-Fi Link      | Connectivity | Wireless network status                                             |
-| Panel Status    | Connectivity | Overall panel online/offline                                        |
-| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported |
+| Sensor          | Device Class | Notes                                                                                              |
+| --------------- | ------------ | -------------------------------------------------------------------------------------------------- |
+| Door State      | Tamper       | Panel door open/closed                                                                             |
+| Ethernet Link   | Connectivity | Wired network status                                                                               |
+| Wi-Fi Link      | Connectivity | Wireless network status                                                                            |
+| Panel Status    | Connectivity | Overall panel online/offline                                                                       |
+| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported                                |
+| PCS Active      | Running      | (v1.0) Whether the Power Control System is limiting import right now. Only when the panel runs one |
+| PV Panel Link   | Connectivity | (v1.0) Whether the panel can reach the solar inverter. Only when the feeding circuit reports it    |
 
 **Removed from binary sensors:**
 

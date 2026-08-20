@@ -28,10 +28,12 @@ from homeassistant.components.sensor import SensorDeviceClass
 
 from custom_components.span_panel.sensor_definitions import (
     BESS_METADATA_SENSORS,
+    BESS_TELEMETRY_SENSORS,
     CIRCUIT_SENSORS,
     EVSE_SENSORS,
     MID_SENSORS,
     PANEL_DATA_STATUS_SENSORS,
+    PCS_SENSORS,
     PV_METADATA_SENSORS,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
@@ -56,6 +58,8 @@ def _enum_descriptions() -> list[Any]:
         UNMAPPED_SENSORS,
         MID_SENSORS,
         BESS_METADATA_SENSORS,
+        BESS_TELEMETRY_SENSORS,
+        PCS_SENSORS,
         PV_METADATA_SENSORS,
         CIRCUIT_SENSORS,
         EVSE_SENSORS,

@@ -147,11 +147,25 @@
       },
       "wifi_link": {
         "name": "Wi-Fi Link"
+      },
+      "pcs_active": {
+        "name": "PCS Active"
+      },
+      "pv_panel_link": {
+        "name": "PV Panel Link"
+      },
+      "evse_panel_link": {
+        "name": "EVSE Panel Link"
       }
     },
     "button": {
       "gfe_override": {
         "name": "GFE Override: Grid Connected"
+      }
+    },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "EVSE Charge Current Limit"
       }
     },
     "select": {
@@ -177,6 +191,18 @@
       "bess_model": {
         "name": "Model"
       },
+      "bess_communication_state": {
+        "name": "Communication State",
+        "state": {
+          "ok": "OK",
+          "degraded": "Degraded",
+          "lost": "Lost",
+          "unknown": "Unknown"
+        }
+      },
+      "bess_meter_power": {
+        "name": "Meter Power"
+      },
       "bess_nameplate_capacity": {
         "name": "Nameplate Capacity"
       },
@@ -191,15 +217,6 @@
       },
       "bess_vendor": {
         "name": "Vendor"
-      },
-      "mid_grid_state": {
-        "name": "Grid State",
-        "state": {
-          "up": "Up",
-          "down": "Down",
-          "degraded": "Degraded",
-          "unknown": "Unknown"
-        }
       },
       "current_run_config": {
         "name": "Current Run Config",
@@ -242,6 +259,9 @@
           "unknown": "Unknown",
           "unlocked": "Unlocked"
         }
+      },
+      "evse_part_number": {
+        "name": "Part Number"
       },
       "evse_status": {
         "name": "Charger Status",
@@ -313,6 +333,15 @@
           "unknown": "Unknown"
         }
       },
+      "mid_grid_state": {
+        "name": "Grid State",
+        "state": {
+          "up": "Up",
+          "down": "Down",
+          "degraded": "Degraded",
+          "unknown": "Unknown"
+        }
+      },
       "pv_nameplate_capacity": {
         "name": "PV Nameplate Capacity"
       },
@@ -325,11 +354,17 @@
       "pv_vendor": {
         "name": "PV Vendor"
       },
+      "shed_total_time_remaining": {
+        "name": "Backup Time Remaining"
+      },
       "site_power": {
         "name": "Site Power"
       },
       "software_version": {
         "name": "Software Version"
+      },
+      "time_to_priority_shed": {
+        "name": "Time to Priority Shed"
       },
       "upstream_l1_current": {
         "name": "Upstream L1 Current"
@@ -344,6 +379,22 @@
           "unconnected": "Disconnected",
           "unknown": "Unknown"
         }
+      },
+      "pcs_import_limit": {
+        "name": "Import Limit"
+      },
+      "pcs_binding_constraint": {
+        "name": "Binding Constraint",
+        "state": {
+          "fsr": "Firm Service Rating",
+          "doe": "Grid Envelope",
+          "voltage": "Voltage Support",
+          "off_grid": "Off-Grid",
+          "requested": "Requested",
+          "operator": "Operator",
+          "none": "None",
+          "unknown": "Unknown"
+        }
       }
     }
   },
@@ -353,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Failed to set circuit relay state for {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "Failed to set the charge-current limit for charger {charger}: {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "This SPAN panel offers no charge-current control for charger {charger}."
     },
     "export_manifest_no_entries": {
       "message": "No SPAN panel configuration entries are loaded. Add and configure a SPAN panel before calling this service."
@@ -710,7 +767,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "New SPAN Panel entities are available",
-      "description": "{count} new entity/entities have appeared for your SPAN Panel (for example: {examples}). They were created **disabled**, so nothing appeared in your dashboards or history uninvited.\n\nEntities can appear for several reasons: an integration update that exposes more of what your panel reports, a circuit added to the panel, or hardware such as a battery or solar coming online. Nothing is broken and no action is required — this notice exists only so the addition is not silent.\n\nTo use one, open the SPAN Panel device page, show its disabled entities, and enable the ones you want. Dismiss this once you have had a look."
+      "description": "New entities added and left **disabled**: {count} (for example: {examples}). Nothing appeared in your dashboards or history uninvited.\n\nThis count covers only entities that were switched off. Anything added enabled is already visible in your entity list and history.\n\nEntities can appear for several reasons: an integration update that exposes more of what your panel reports, a circuit added to the panel, or hardware such as a battery or solar coming online. Nothing is broken and no action is required — this notice exists only so the addition is not silent.\n\nTo use one, open the SPAN Panel device page, show its disabled entities, and enable the ones you want. Dismiss this once you have had a look."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "Your SPAN Panel now reports islanding from its Microgrid Interconnect Device",
@@ -718,11 +775,11 @@
     },
     "schema_field_unresolved": {
       "title": "SPAN Panel data field unavailable",
-      "description": "Your panel's firmware no longer provides `{field_path}`. {count} entity/entities are affected (for example: {examples}). They may become unavailable, or report incomplete data, until an integration update adds support for the new firmware."
+      "description": "Your panel's firmware no longer provides `{field_path}`. Entities affected: {count} (for example: {examples}). They may become unavailable, or report incomplete data, until an integration update adds support for the new firmware."
     },
     "schema_unit_mismatch": {
       "title": "SPAN Panel unit mismatch",
-      "description": "Your panel reports `{field_path}` in {schema_unit}, but this integration expects {ha_unit}. {count} entity/entities are affected (for example: {examples}). Their readings and long-term statistics may be wrong. They have not been changed automatically."
+      "description": "Your panel reports `{field_path}` in {schema_unit}, but this integration expects {ha_unit}. Entities affected: {count} (for example: {examples}). Their readings and long-term statistics may be wrong. They have not been changed automatically."
     }
   }
 }

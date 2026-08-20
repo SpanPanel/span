@@ -92,6 +92,11 @@ type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    # Added with the EVSE charge-current control -- the first number this
+    # integration has ever had, and forwarded unconditionally like every other
+    # platform: `number.async_setup_entry` creates nothing on a panel with no
+    # charger that declares a settable limit.
+    Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,

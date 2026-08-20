@@ -253,6 +253,27 @@ class SpanCircuitPowerSensor(
         attributes["shed_priority"] = circuit.priority
         attributes["is_sheddable"] = circuit.is_sheddable
 
+        # This circuit's participation in the enclosure's Power Control System,
+        # beside its load-shed participation above. Two policies on the same
+        # relay, and the catalog keeps them apart because they answer different
+        # questions — limit site import, versus preserve backup runtime — so the
+        # attribute names do too: `pcs_priority` is an integer shed ordering
+        # under an import limit, `shed_priority` the backup tier.
+        #
+        # Attributes rather than entities: a 40-space panel would otherwise gain
+        # eighty entities carrying two facts that change only when somebody
+        # reconfigures the panel.
+        #
+        # Omitted when the circuit publishes neither, which is every flat
+        # circuit and any v1.0 circuit outside a PCS. Both properties are `MAY`,
+        # so absence is conformant firmware; an attribute present and empty would
+        # read as a reading that failed, and `False` / `0` would each be a claim
+        # the panel never made.
+        if circuit.pcs_managed is not None:
+            attributes["pcs_managed"] = circuit.pcs_managed
+        if circuit.pcs_priority is not None:
+            attributes["pcs_priority"] = circuit.pcs_priority
+
         return attributes
 
 

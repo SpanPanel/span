@@ -10,6 +10,7 @@ from homeassistant.const import (
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfTime,
 )
 import pytest
 from span_panel_api.models import FieldMetadata
@@ -23,6 +24,10 @@ _KNOWN: set[str] = {
     *(u.value for u in UnitOfEnergy),
     *(u.value for u in UnitOfElectricCurrent),
     *(u.value for u in UnitOfElectricPotential),
+    # `shed-forecast` declares its four estimates in `min`, which is
+    # `UnitOfTime.MINUTES` — the first non-electrical quantity a SPAN panel
+    # publishes, and the reason a time vocabulary belongs here at all.
+    *(u.value for u in UnitOfTime),
     PERCENTAGE,
 }
 

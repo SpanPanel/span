@@ -401,7 +401,7 @@ class TestEvseSensorDefinitions:
     """Test EVSE sensor definitions."""
 
     def test_sensor_count(self):
-        assert len(EVSE_SENSORS) == 3
+        assert len(EVSE_SENSORS) == 4
 
     def test_all_have_translation_keys(self):
         for desc in EVSE_SENSORS:

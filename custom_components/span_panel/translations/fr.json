@@ -147,11 +147,25 @@
       },
       "wifi_link": {
         "name": "Liaison Wi-Fi"
+      },
+      "pcs_active": {
+        "name": "PCS Actif"
+      },
+      "pv_panel_link": {
+        "name": "Liaison du panneau PV"
+      },
+      "evse_panel_link": {
+        "name": "Liaison du panneau EVSE"
       }
     },
     "button": {
       "gfe_override": {
         "name": "Forçage GFE : Connecté au Réseau"
+      }
+    },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "Limite de Courant de Charge EVSE"
       }
     },
     "select": {
@@ -176,6 +190,18 @@
       },
       "bess_model": {
         "name": "Modèle"
+      },
+      "bess_communication_state": {
+        "name": "État de Communication",
+        "state": {
+          "ok": "Correct",
+          "degraded": "Dégradé",
+          "lost": "Perdu",
+          "unknown": "Inconnu"
+        }
+      },
+      "bess_meter_power": {
+        "name": "Puissance du Compteur"
       },
       "bess_nameplate_capacity": {
         "name": "Capacité Nominale"
@@ -233,6 +259,9 @@
           "unknown": "Inconnu",
           "unlocked": "Déverrouillé"
         }
+      },
+      "evse_part_number": {
+        "name": "Référence"
       },
       "evse_status": {
         "name": "État du Chargeur",
@@ -325,11 +354,17 @@
       "pv_vendor": {
         "name": "Fournisseur PV"
       },
+      "shed_total_time_remaining": {
+        "name": "Autonomie de Secours Restante"
+      },
       "site_power": {
         "name": "Puissance du Site"
       },
       "software_version": {
         "name": "Version du Logiciel"
+      },
+      "time_to_priority_shed": {
+        "name": "Temps avant Délestage Prioritaire"
       },
       "upstream_l1_current": {
         "name": "Courant Amont L1"
@@ -344,6 +379,22 @@
           "unconnected": "Déconnecté",
           "unknown": "Inconnu"
         }
+      },
+      "pcs_import_limit": {
+        "name": "Limite d'Importation"
+      },
+      "pcs_binding_constraint": {
+        "name": "Contrainte Contraignante",
+        "state": {
+          "fsr": "Capacité Ferme du Service",
+          "doe": "Enveloppe Réseau",
+          "voltage": "Support de Tension",
+          "off_grid": "Hors Réseau",
+          "requested": "Demandé",
+          "operator": "Opérateur",
+          "none": "Aucun",
+          "unknown": "Inconnu"
+        }
       }
     }
   },
@@ -353,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Échec de la définition de l'état du relais du circuit pour {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "Échec du réglage de la limite de courant de charge pour le chargeur {charger} : {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "Ce panneau SPAN n'offre aucun contrôle du courant de charge pour le chargeur {charger}."
     },
     "export_manifest_no_entries": {
       "message": "Aucune entrée de configuration SPAN Panel n'est chargée. Ajoutez et configurez un panneau SPAN avant d'appeler ce service."
@@ -710,7 +767,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "De nouvelles entités du Panneau SPAN sont disponibles",
-      "description": "{count} nouvelle(s) entité(s) sont apparues pour votre Panneau SPAN (par exemple : {examples}). Elles ont été créées **désactivées**, afin que rien n'apparaisse dans vos tableaux de bord ni dans votre historique sans votre accord.\n\nDe nouvelles entités peuvent apparaître pour plusieurs raisons : une mise à jour de l'intégration qui expose davantage de ce que votre panneau signale, un circuit ajouté au panneau, ou du matériel tel qu'une batterie ou du solaire qui entre en service. Rien n'est cassé et aucune action n'est requise : cet avis existe uniquement pour que cet ajout ne soit pas silencieux.\n\nPour en utiliser une, ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez. Ignorez cet avis une fois que vous y avez jeté un œil."
+      "description": "Nouvelles entités créées **désactivées** : {count} (par exemple : {examples}). Rien n'est apparu dans vos tableaux de bord ni dans votre historique sans votre accord.\n\nCe décompte ne couvre que les entités créées désactivées. Tout ce qui est ajouté activé est déjà visible dans votre liste d'entités et votre historique.\n\nDe nouvelles entités peuvent apparaître pour plusieurs raisons : une mise à jour de l'intégration qui expose davantage de ce que votre panneau signale, un circuit ajouté au panneau, ou du matériel tel qu'une batterie ou du solaire qui entre en service. Rien n'est cassé et aucune action n'est requise : cet avis existe uniquement pour que cet ajout ne soit pas silencieux.\n\nPour en utiliser une, ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez. Ignorez cet avis une fois que vous y avez jeté un œil."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "Votre Panneau SPAN signale désormais l'îlotage depuis son Dispositif d'Interconnexion de Micro-réseau",
@@ -718,11 +775,11 @@
     },
     "schema_field_unresolved": {
       "title": "Champ de données du Panneau SPAN indisponible",
-      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. {count} entité(s) sont concernées (par exemple : {examples}). Elles peuvent devenir indisponibles, ou renvoyer des données incomplètes, jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
+      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. Entités concernées : {count} (par exemple : {examples}). Elles peuvent devenir indisponibles, ou renvoyer des données incomplètes, jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
     },
     "schema_unit_mismatch": {
       "title": "Incohérence d'unité du Panneau SPAN",
-      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. {count} entité(s) sont concernées (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
+      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. Entités concernées : {count} (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
     }
   }
 }

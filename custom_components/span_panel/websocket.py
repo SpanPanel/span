@@ -75,8 +75,9 @@ async def handle_panel_topology(
     """Return the full panel topology with entity mappings.
 
     Admin users must pass the HA device registry ID for the **main SPAN panel**
-    device only (not BESS/EVSE sub-devices). Returns panel metadata, circuits
-    with tabs/entity mappings, and sub-devices (BESS, EVSE).
+    device only (not a sub-device). Returns panel metadata, circuits with
+    tabs/entity mappings, and sub-devices -- every kind
+    `classify_sub_device_identifier` names, which is BESS, MID, EVSE and PV.
     """
     device_id = msg["device_id"]
 
@@ -92,12 +93,12 @@ async def handle_panel_topology(
         connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
         return
 
-    # Sub-devices (BESS, EVSE) register with via_device_id pointing at the panel.
+    # Every sub-device registers with via_device_id pointing at the panel.
     if device_entry.via_device_id is not None:
         connection.send_error(
             msg["id"],
             "not_panel_device",
-            "Use the SPAN panel device registry ID, not a BESS or EVSE sub-device.",
+            "Use the SPAN panel device registry ID, not a sub-device.",
         )
         return
 
@@ -225,7 +226,7 @@ def _find_config_entry_id(device_entry: dr.DeviceEntry) -> str | None:
 
 
 def _classify_sub_device(device_entry: dr.DeviceEntry) -> str:
-    """Classify a sub-device by its identifiers: 'bess', 'mid', 'evse' or 'unknown'.
+    """Classify a sub-device by its identifiers, or 'unknown'.
 
     The grammar lives with the builders that write it, in `util`, rather than
     being restated here. Restating it is how the MID went out as 'unknown' for a

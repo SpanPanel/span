@@ -2,6 +2,108 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Your solar inverter gets a device of its own, on panels running the v1.0 data model.** Its vendor, model and nameplate capacity used to render as diagnostic
+  sensors on the _panel's_ card, beside the panel's own manufacturer and model — so the card whose job is telling you which enclosure this is read as though the
+  enclosure were an Enphase inverter. It now has a card like the battery and the chargers already do, carrying the firmware version the panel has been
+  publishing all along.
+- **If you already have these sensors, nothing about them changes.** The five entities that move to the new card — PV Power, PV Vendor, PV Product, PV Nameplate
+  Capacity and PV Panel Link — keep the entity ids and unique ids they have today, so dashboards, automations and history follow them across untouched. Only the
+  card they appear on changes.
+- **New installations get different entity ids for these five, and that is intended.** Home Assistant derives a new entity's id from the name of the device it
+  sits on, so a system installed from now on gets `sensor.span_panel_solar_pv_vendor` where a system installed before this release keeps
+  `sensor.span_panel_pv_vendor`. Both are correct and neither will change again: an existing system must never have an id renamed under it, and a new one gets
+  the id Home Assistant would give it. If you are comparing two SPAN systems and their PV entity ids differ, install date is why. The unique ids are the same on
+  both, and both sets of entities sit on the same new card.
+
+- **Your panel's own card now shows what the panel says it is** — manufacturer, model and hardware revision, read from the enclosure rather than assumed. A
+  panel on the older data model publishes none of the three and keeps exactly the card it has today; the hardware revision row is left off rather than shown
+  blank where no revision is published.
+- **Every SPAN Drive gets a Part Number** diagnostic sensor, matching the one the battery already has. Off by default.
+- **Circuit Priority's shed policy is readable.** The `dsm_state` sensor gains `shed_algorithm` and the two state-of-charge thresholds that decide when circuits
+  shed and when they come back — the numbers that make the panel's shed behaviour predictable rather than surprising. A policy this integration does not
+  recognise keeps its name and carries the panel's raw document beside it, so you can read what a parser could not.
+
+- **A charge-current limit you can set, on panels running the v1.0 data model.** Each commissioned SPAN Drive gets an **EVSE Charge Current Limit** number on
+  its own device — the ceiling the charger offers your vehicle, which you can lower to charge more slowly and raise back. It is the first control this
+  integration has that changes something on a charger rather than on the panel.
+- The maximum you can ask for is the one your installer commissioned, read from the panel rather than assumed: the box will not accept a value above the
+  charger's rated current, and neither will anything else — a value beyond it is refused before it is sent, not quietly rounded down to something you did not
+  ask for. If the panel has not yet published what the charger is rated for, the control reports unavailable instead of offering an invented range.
+- The control appears only where the panel says the limit can be changed. A charger that publishes its limit as read-only gets no control, which is the same
+  distinction **Circuit Priority** already makes for a circuit commissioned never-backup.
+- While the panel is acknowledging a change it has not yet applied, the requested value shows as a `charge_current_limit_target` attribute and the state stays
+  the limit the charger is still enforcing — the same way Circuit Priority reports a priority change in flight.
+
+- **Whether your panel can reach your solar inverter and each of your chargers, on panels running the v1.0 data model.** **PV Panel Link** and **EVSE Panel
+  Link** are the same fact **BESS Connected** has always shown for the battery: the panel's own report of the link to a device it feeds. The battery's version
+  worked because the panel publishes it on the main lugs; the inverter's and each charger's are published by the circuit that feeds them, and nothing read that
+  half — so one of your three device classes had a link sensor and the others did not.
+- **EVSE Panel Link is not EV Connected.** EV Connected is the charger reporting that a vehicle is plugged in. EVSE Panel Link is the panel reporting that it
+  can reach the charger at all. A charger part-way through a session behind a link the panel has lost shows a plugged-in vehicle and a dead link at the same
+  time, which is exactly the case where you want to know which of the two you are looking at. The new sensors are diagnostics; EV Connected is unchanged.
+- Each sensor is created only where a circuit publishes the link record for that device, and per charger rather than per panel — two chargers whose circuits
+  report differently get two sensors that say different things. A circuit that feeds ordinary loads publishes no such record, which is normal and is not
+  reported as a fault, and a panel that starts publishing one picks the sensors up on the reload the integration already performs.
+
+- **Your battery's own meter and its own link health, on panels running the v1.0 data model.** **Meter Power** is what the BESS itself reports it is charging or
+  discharging at, as distinct from the panel's **Battery Power**, which is the enclosure's arbitrated figure. Both have been on the wire since firmware r202633
+  and nothing read either. Meter Power is enabled by default; **Communication State** — the BESS's own `OK` / `DEGRADED` / `LOST` / `UNKNOWN` report on its link
+  — is a diagnostic and is off by default, since it is only interesting when something is wrong.
+- **Both battery power sensors read positive when the battery is charging.** They come off the wire in opposite sign conventions and are normalised to one, so
+  the two sitting side by side on the BESS device can never point opposite ways.
+- **Communication State is not the same thing as BESS Connected.** The binary sensor is the _panel's_ view of the link, from the enclosure's connection record;
+  the new sensor is the _battery's_ view of it. A BESS can report its own link lost while the panel still claims it, and now you can see that.
+- Both sensors are created only where the BESS publishes the reading behind them — a battery on the older data model, or one whose firmware publishes only one
+  of the two, gets no entity for what it cannot report rather than one permanently unknown, and a BESS that gains the capability on a firmware upgrade picks the
+  sensors up on the reload the integration already performs.
+- **Backup planning, in minutes: two new sensors on panels running the v1.0 data model.** **Time to Priority Shed** is how long before the panel starts shedding
+  circuits, and **Backup Time Remaining** is how long before the battery is spent. Your panel has been publishing both since firmware r202633 and nothing read
+  them; they are the numbers you would actually set an alarm on, so they are enabled by default and sit beside the power and energy sensors rather than under
+  diagnostics.
+- **Each forecast sensor carries the refinements that qualify it** as attributes: `full_charge_time_to_priority_shed` / `full_charge_total_time_remaining` —
+  what the same estimate would be from a full battery — and `forecast_confidence`, the panel's own `LOW` / `MEDIUM` / `HIGH` assessment of the estimate. They
+  refine a number already on screen rather than adding two near-constant entities to your entity list.
+- Both sensors are created only where the panel publishes the estimate behind them. A panel on the older data model, or one whose firmware publishes only part
+  of the forecast, gets no entity for what it cannot report rather than one permanently unknown — and a panel that gains the capability on a firmware upgrade
+  picks the sensors up on the reload the integration already performs.
+- **What is limiting your import, in amps: three new entities on panels running the v1.0 data model.** **Import Limit** is the current limit your panel is
+  actually enforcing, **Binding Constraint** names which rule set it — your service rating, a utility envelope, an operator cap, a limit you asked for — and
+  **PCS Active** says whether anything is being throttled right now. Your panel has published all of this since firmware r202633 and nothing read it.
+- **Import Limit carries the whole arbitration as attributes**: the four constraint limits the panel reconciled (`feed_import_limit`, `operator_import_limit`,
+  `off_grid_import_limit`, `requested_import_limit`), each one's `_enablement` and `_active` flag, and `pcs_enabled`. They explain the enforced number rather
+  than being numbers to watch, and most of them change only when somebody reconfigures the panel — so they refine an entity you already have instead of adding
+  twelve to your entity list.
+- **Every circuit's power sensor gains `pcs_managed` and `pcs_priority`** where the circuit reports them: whether the Power Control System manages that circuit,
+  and where it sits in the shed order when an import limit binds. `pcs_priority` is a different thing from the existing `shed_priority`, which is the backup
+  tier — a circuit may take part in one policy, both, or neither.
+- All three entities are created wherever the panel publishes the capability, **including when the PCS is switched off**. A panel reporting a 0 A limit with
+  everything unconfigured is reporting a state, and that is the state most panels are in; entities that vanished until somebody configured a limit would be
+  entities nobody could build a dashboard on.
+
+- **The Wi-Fi network name moved to the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now also tells
+  you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID.
+- **It is no longer an attribute of the Software Version sensor.** A network name on a firmware-version sensor never made sense — it sat there because
+  `panel_size` was already in that attribute block. If you have a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')`, point it at
+  the Wi-Fi Link binary sensor instead. `panel_size` is unaffected and stays where it is.
+
+### Fixed
+
+- **The Wi-Fi network name came back.** Panels on the older data model report the SSID they are joined to, and this integration has shown it as an attribute on
+  the panel status sensor for as long as it has existed. On the v1.0 data model nothing read it, so the attribute quietly emptied when your panel upgraded — a
+  value you had, silently gone, with no error and nothing in the log. It is read again, and it is now published on the Wi-Fi Link binary sensor rather than on
+  the Software Version sensor — see above.
+- **A firmware upgrade that adds a capability now actually reloads.** The check that decides whether new hardware warrants a reload knew about four capabilities
+  where the rest of the integration knew about nine. A panel that gained the shed forecast, the power control system, battery telemetry or DER link health while
+  Home Assistant was running published the data, matched every rule for creating the entities, and asked for no reload — so the new entities appeared only the
+  next time you restarted. This affected the Microgrid Interconnect Device before this release too.
+
+- **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
+  was wrong. No entity changed.
+
 ## [2.1.0] - 8/2026
 
 Support for the eBus v1.0 (parent/child) data model your panel moves to on firmware r202633 and later, and a clean transition when it does.

@@ -202,24 +202,33 @@ class TestPanelSensors:
         assert attrs is not None
         assert attrs["panel_size"] == 32
 
-    def test_software_version_extra_state_attributes_wifi_ssid(
+    def test_software_version_no_longer_carries_the_wifi_ssid(
         self, mock_coordinator: MagicMock
     ) -> None:
-        """Test that wifi_ssid appears in extra_state_attributes when present."""
+        """The SSID moved to the Wi-Fi Link binary sensor, deliberately.
+
+        A network name on a firmware-version sensor was incoherent; it only sat
+        here because `panel_size` was already occupying the attribute block. The
+        value is not lost -- `SpanPanelWifiLinkBinarySensor` publishes it, and
+        `tests/test_metadata_sweep.py` reads it back out of the capture there.
+        Asserted even with an SSID published, so a restored read fails here
+        rather than passing on a snapshot that happens to carry none.
+        """
         description = next(d for d in STATUS_SENSORS if d.key == "software_version")
 
-        snapshot = SpanPanelSnapshotFactory.create(panel_size=24, wifi_ssid="MyNetwork")
+        snapshot = SpanPanelSnapshotFactory.create(panel_size=24, wifi_ssid="synthetic-network")
         mock_coordinator.data = snapshot
         sensor = SpanPanelStatus(mock_coordinator, description, snapshot)
         attrs = sensor.extra_state_attributes
         assert attrs is not None
+        assert "wifi_ssid" not in attrs
+        # The attribute block did not collapse; only the SSID left it.
         assert attrs["panel_size"] == 24
-        assert attrs["wifi_ssid"] == "MyNetwork"
 
-    def test_software_version_extra_state_attributes_no_wifi(
+    def test_software_version_keeps_panel_size_without_a_wifi_ssid(
         self, mock_coordinator: MagicMock
     ) -> None:
-        """Test that wifi_ssid is omitted when None."""
+        """A panel publishing no SSID is indistinguishable here, which is the point."""
         description = next(d for d in STATUS_SENSORS if d.key == "software_version")
 
         snapshot = SpanPanelSnapshotFactory.create(panel_size=16, wifi_ssid=None)

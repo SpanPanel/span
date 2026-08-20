@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import ast
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 import pathlib
 
 import pytest
@@ -87,8 +87,15 @@ def test_gate_covers_every_declaration_in_the_source() -> None:
     when a collection is emptied rather than unreferenced.
     """
     declared = declared_field_paths()
+    # A `SCHEMA_CONDITIONAL_FIELD` description names its source field too, and
+    # that path is by definition one adapter short of this gate. It is covered
+    # instead by `RESIDUAL_EXEMPT_PATHS`, whose annotation is checked against
+    # both adapters below — so being enumerated there is the alternative to
+    # being in `declared`, not an escape from being checked.
     uncovered = sorted(
-        (path, module) for path, module in _source_declared_paths().items() if path not in declared
+        (path, module)
+        for path, module in _source_declared_paths().items()
+        if path not in declared and path not in RESIDUAL_EXEMPT_PATHS
     )
     assert not uncovered, (
         "declared_field_paths() does not cover field paths declared in the source: "
@@ -98,15 +105,18 @@ def test_gate_covers_every_declaration_in_the_source() -> None:
     )
 
 
-def _source_residual_paths() -> dict[str, str]:
-    """Every `_residual_field_paths` tuple literal in the integration source, by module.
+def _iter_source_residuals() -> Iterator[tuple[str, str]]:
+    """Yield ``(field_path, module_filename)`` for every residual literal in the source.
 
     The runtime counterpart, `residual_field_paths()`, unions the class
     attribute over a `SpanPanelEntity.__subclasses__()` walk, and a walk sees
     only what has been imported. This reads the same declarations out of the
     source text, where importedness is not a factor.
+
+    A path declared by two modules yields twice, deliberately: which *paths*
+    exist and which *modules* declare one are different questions, and collapsing
+    to the first module that mentions a path answers the second wrongly.
     """
-    found: dict[str, str] = {}
     for source in sorted(_PACKAGE_ROOT.rglob("*.py")):
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
@@ -126,8 +136,20 @@ def _source_residual_paths() -> dict[str, str]:
                 continue
             for element in node.value.elts:
                 if isinstance(element, ast.Constant) and isinstance(element.value, str):
-                    found.setdefault(element.value, source.name)
+                    yield element.value, source.name
+
+
+def _source_residual_paths() -> dict[str, str]:
+    """Every residual path in the integration source, against a module declaring it."""
+    found: dict[str, str] = {}
+    for path, module in _iter_source_residuals():
+        found.setdefault(path, module)
     return found
+
+
+def _source_residual_modules() -> set[str]:
+    """Every integration module that declares at least one residual path."""
+    return {module.removesuffix(".py") for _, module in _iter_source_residuals()}
 
 
 def test_source_residuals_match_the_subclass_walk() -> None:
@@ -163,6 +185,56 @@ def test_source_residuals_match_the_subclass_walk() -> None:
         f"residual paths the source scan cannot see: {unscanned}. They are not written "
         "as string literals in a `_residual_field_paths` tuple, so this pin no longer "
         "covers them — declare them literally."
+    )
+
+
+def _walk_imported_modules() -> set[str]:
+    """Return the sibling modules `residual_field_paths()` imports for its walk.
+
+    Read out of the source rather than by calling the function, because what is
+    under test is the import list itself: a module missing from it still gets
+    walked in-process whenever some *other* importer has already pulled it in,
+    which is true of every module in the test suite and is exactly why the walk
+    test below cannot see the omission.
+    """
+    tree = ast.parse((_PACKAGE_ROOT / "field_paths.py").read_text(encoding="utf-8"))
+    function = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "residual_field_paths"
+    )
+    return {
+        alias.name
+        for node in ast.walk(function)
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module is None
+        for alias in node.names
+    }
+
+
+def test_the_residual_walk_imports_exactly_the_modules_that_declare_one() -> None:
+    """The walk's import list, pinned against the declarations it exists to reach.
+
+    `residual_field_paths()` walks `SpanPanelEntity.__subclasses__()`, which sees
+    only classes Python has already imported, so it imports the declaring
+    platform modules itself. Nothing held that list to the declarations: a module
+    dropped from it goes on being walked under pytest, where the platform modules
+    are imported many times over for other reasons, and fails only in production
+    where `field_paths` may be reached first. A path that leaves the walk leaves
+    the producible gate and the Repair's affected-entity count with it, silently.
+
+    Both directions. An unlisted module is the failure above; a listed module
+    that declares nothing is a stale import, which is how the list stops meaning
+    what its docstring says and starts being copied forward unread.
+    """
+    declaring = _source_residual_modules()
+    imported = _walk_imported_modules()
+
+    assert declaring, "the source scan found no residual declarations at all"
+    assert imported == declaring, (
+        f"`residual_field_paths()` imports {sorted(imported)} for its subclass walk but "
+        f"residuals are declared in {sorted(declaring)}. Unlisted modules drop out of the "
+        "producible gate in any process that reaches `field_paths` first; listed modules "
+        "that declare nothing are stale."
     )
 
 
@@ -253,9 +325,74 @@ def test_no_exempt_path_is_producible_by_both() -> None:
 
 
 _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
-    Producibility.NEITHER: 15,
+    # +3 with the shed forecast: the two full-charge refinements and the
+    # confidence enum, read as attributes on the two forecast sensors and
+    # carried by no adapter's metadata map.
+    # +1 for `mid.grid_state`, the `mid_grid_state` sensor's source field. Like
+    # `panel.dominant_power_source` below it was read by a description and
+    # enumerated nowhere, so nothing held it against the adapters and
+    # `evaluate_field_metadata` had no way to tell it from an unread field.
+    # +15 with the PCS: the twelve arbitration inputs and `pcs.enabled` behind
+    # `pcs_import_limit`'s attributes, plus the two circuit participation fields
+    # read as attributes on the circuit power sensor. schema_1 reads all fifteen
+    # and maps none of them, deliberately — they explain the effective limit
+    # rather than being readings of their own.
+    # +3 for the enclosure's own build identity -- `panel.vendor_name`,
+    # `panel.model`, `panel.hardware_version` -- read by `snapshot_to_device_info`
+    # for the panel's device card. Flat declares none of the three, and a
+    # schema_1 row exists to carry a unit and a datatype for a reading, which an
+    # identity string is not; the `mid.*` device-card reads sit here for the
+    # same reason.
+    # +4 for the shed policy -- the raw `shed/policy` document plus the
+    # algorithm and the two SoC thresholds parsed out of it -- read as
+    # attributes on `dsm_state`. Flat has no `shed` node, and a JSON document
+    # has no unit surface for a schema_1 row to describe.
+    # +2 for the EVSE charge-current control's two non-readings:
+    # `charge_current_limit_settable`, the `$settable` flag `number.py` gates
+    # entity creation on, and `charge_current_limit_target_a`, the Homie
+    # `$target` echo it renders as an attribute. Facts about a command rather
+    # than readings, so no adapter carries a row for either -- the same shape as
+    # the `circuit.*_target` pair.
+    # +1 for `pv.software_version`, the firmware row on the solar inverter's own
+    # device card. Flat's `pv` device class declares no firmware version, and a
+    # version string is identity rather than a reading -- the same argument as
+    # the `mid.*` and `panel.*` card reads above.
+    Producibility.NEITHER: 44,
+    # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
+    # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
+    # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
+    # but-unread while an entity was reading it.
+    # -1 for `panel.wifi_ssid`, which left this map entirely: schema_1 grew the
+    # `status/wifi-ssid` row, both adapters produce the path, and
+    # `test_no_exempt_path_is_producible_by_both` demanded it become a
+    # declaration -- `SpanPanelStatus._residual_field_paths`. Its time here as a
+    # true `SCHEMA_0_ONLY` annotation is what sanctioned a flat -> v1.0
+    # regression: the attribute a flat panel filled, a v1.0 panel did not.
     Producibility.SCHEMA_0_ONLY: 10,
-    Producibility.SCHEMA_1_ONLY: 1,
+    # +2 with the shed forecast: the two live estimates, which schema_1 maps and
+    # flat firmware does not publish at all.
+    # +2 for `battery.power_w` and `battery.communication_state`, the BESS's own
+    # meter and link health behind `bess_meter_power` and
+    # `bess_communication_state`. schema_1 maps both; flat's BESS device class
+    # declares neither property, so neither can ever satisfy the both-adapters
+    # gate.
+    # +3 for the PCS's result: `pcs.import_limit_a`, `pcs.binding_constraint`
+    # and `pcs.active`, behind the two PCS sensors and the `pcs_active` binary
+    # sensor. schema_1 maps all three; no flat panel declares the capability at
+    # all, so none can ever satisfy the both-adapters gate.
+    # +2 for `pv.connected` and `evse.connected`, the enclosure's view of the
+    # link to each circuit-fed DER, behind `pv_panel_link` and
+    # `evse_panel_link`. schema_1 maps both from one property — the feeding
+    # circuit's `connection/feeds-device-status` — while flat publishes
+    # `connected` on the BESS and on no other device class, so neither can
+    # satisfy the both-adapters gate.
+    # +2 for the EVSE charge-current pair behind the
+    # `evse_charge_current_limit` number: the settable limit its description
+    # names, and the commissioned ceiling the entity reads for
+    # `native_max_value`. schema_1 resolves both from the charger's own
+    # `$description`; flat's `evse` type declares no settable ceiling at all, so
+    # neither can satisfy the both-adapters gate.
+    Producibility.SCHEMA_1_ONLY: 12,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

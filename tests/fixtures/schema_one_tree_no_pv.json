@@ -62,8 +62,11 @@
   "bess": {
     "$description": "{\"homie\": \"5.0\", \"version\": 1785909496596, \"type\": \"energy.ebus.device.bess\", \"name\": \"Battery\", \"nodes\": {\"info\": {\"name\": \"info\", \"type\": \"energy.ebus.capability.info\", \"properties\": {\"vendor-name\": {\"name\": \"Vendor name\", \"datatype\": \"string\"}, \"model\": {\"name\": \"Model\", \"datatype\": \"string\"}, \"part-number\": {\"name\": \"Part number\", \"datatype\": \"string\"}, \"serial-number\": {\"name\": \"Serial number\", \"datatype\": \"string\"}, \"firmware-version\": {\"name\": \"Firmware version\", \"datatype\": \"string\"}, \"nameplate-capacity\": {\"name\": \"Nameplate capacity\", \"datatype\": \"float\", \"unit\": \"kWh\"}}}, \"soc\": {\"name\": \"soc\", \"type\": \"energy.ebus.capability.soc\", \"properties\": {\"soc\": {\"name\": \"State of charge\", \"datatype\": \"float\", \"unit\": \"%\"}, \"soe\": {\"name\": \"State of energy\", \"datatype\": \"float\", \"unit\": \"kWh\"}}}, \"meter\": {\"name\": \"meter\", \"type\": \"energy.ebus.capability.meter\", \"properties\": {\"active-power\": {\"name\": \"Active power\", \"datatype\": \"float\", \"unit\": \"W\"}}}, \"status\": {\"name\": \"status\", \"type\": \"energy.ebus.capability.status\", \"properties\": {\"communication-state\": {\"name\": \"Communication state\", \"datatype\": \"enum\", \"format\": \"OK,DEGRADED,LOST,UNKNOWN\"}}}}, \"children\": [\"bess-mid\"], \"root\": \"example-40t-001\", \"parent\": \"example-40t-001\", \"extensions\": []}",
     "$state": "ready",
+    "info/firmware-version": "example-bess/v0.1.0",
     "info/model": "Example BESS",
     "info/nameplate-capacity": "13.5",
+    "info/part-number": "SPN-BESS-001",
+    "info/serial-number": "EXAMPLE-BESS-40T-001",
     "info/vendor-name": "Span",
     "meter/active-power": "-3500.0",
     "soc/soc": "50.410493827160494",
@@ -76,6 +79,10 @@
     "grid/grid-forming-entity": "GRID",
     "grid/grid-state": "UP",
     "grid/islanding-state": "ON_GRID",
+    "info/firmware-version": "example-mid/v0.1.0",
+    "info/hardware-version": "rev1",
+    "info/model": "SPAN MID",
+    "info/serial-number": "EXAMPLE-BESS-40T-001-mid",
     "info/vendor-name": "Span"
   },
   "d3724e0d660ba506aa79c1cafe5d1181": {
@@ -169,7 +176,8 @@
     "status/postal-code": "94103",
     "status/relay": "CLOSED",
     "status/time-zone": "America/Los_Angeles",
-    "status/wifi": "true"
+    "status/wifi": "true",
+    "status/wifi-ssid": "example-wifi"
   },
   "fe8b85c15bc9610c1b8b4ebc6f82488d": {
     "$description": "{\"homie\": \"5.0\", \"version\": 1785909496596, \"type\": \"energy.ebus.device.circuit\", \"name\": \"SPAN Drive - Driveway\", \"nodes\": {\"switch\": {\"name\": \"switch\", \"type\": \"energy.ebus.capability.switch\", \"properties\": {\"relay\": {\"name\": \"Circuit relay state\", \"datatype\": \"enum\", \"format\": \"UNKNOWN,OPEN,CLOSED\", \"settable\": true}, \"relay-requester\": {\"name\": \"Actor requesting the relay state\", \"datatype\": \"enum\", \"format\": \"UNKNOWN,NONE,LOAD_SHED,USER,PCS,CONFIGURATION,FAULT\"}, \"relay-controllable\": {\"name\": \"Can the circuit's relay be commanded by the user?\", \"datatype\": \"boolean\"}}}, \"breaker\": {\"name\": \"breaker\", \"type\": \"energy.ebus.capability.breaker\", \"properties\": {\"rating\": {\"name\": \"Circuit breaker rating\", \"datatype\": \"integer\", \"unit\": \"A\"}, \"poles\": {\"name\": \"Number of breaker poles\", \"datatype\": \"integer\", \"format\": \"1:4:1\"}}}, \"meter\": {\"name\": \"meter\", \"type\": \"energy.ebus.capability.meter\", \"properties\": {\"current\": {\"name\": \"Measured current\", \"datatype\": \"float\", \"unit\": \"A\"}, \"active-power\": {\"name\": \"Measured active power\", \"datatype\": \"float\", \"unit\": \"W\"}, \"imported-energy\": {\"name\": \"Measured energy imported\", \"datatype\": \"float\", \"unit\": \"Wh\"}, \"exported-energy\": {\"name\": \"Measured energy exported\", \"datatype\": \"float\", \"unit\": \"Wh\"}}}, \"load-shed\": {\"name\": \"load-shed\", \"type\": \"energy.ebus.capability.load-shed\", \"properties\": {\"priority\": {\"name\": \"Configured priority of circuit shedding when off-grid (dominant-power-source != GRID)\", \"datatype\": \"enum\", \"format\": \"UNKNOWN,OFF_GRID,SOC_THRESHOLD,NEVER\", \"settable\": true}}}, \"pcs\": {\"name\": \"pcs\", \"type\": \"energy.ebus.capability.pcs\", \"properties\": {\"managed\": {\"name\": \"Is circuit managed by PCS?\", \"datatype\": \"boolean\"}, \"priority\": {\"name\": \"Circuit PCS priority ranking\", \"datatype\": \"integer\"}}}, \"connection\": {\"name\": \"connection\", \"type\": \"energy.ebus.capability.connection\", \"properties\": {\"feeds-device-id\": {\"name\": \"Homie device-id of the downstream device fed by this circuit\", \"datatype\": \"string\"}, \"feeds-device-type\": {\"name\": \"Homie $type of the downstream device\", \"datatype\": \"string\"}, \"feeds-device-status\": {\"name\": \"Panel's view of comm health to the downstream device\", \"datatype\": \"enum\", \"format\": \"OK,LOST,DEGRADED\"}, \"count\": {\"name\": \"Number of physical units aggregated downstream (e.g. microinverters, packs)\", \"datatype\": \"integer\"}}}, \"info\": {\"name\": \"info\", \"type\": \"energy.ebus.capability.info\", \"properties\": {\"name\": {\"name\": \"Circuit name\", \"datatype\": \"string\"}, \"spaces\": {\"name\": \"Circuit breaker space number(s) within the load center (comma-separated for multi-pole)\", \"datatype\": \"string\"}}}}, \"children\": [], \"root\": \"example-40t-001\", \"parent\": \"example-40t-001\", \"extensions\": []}",
