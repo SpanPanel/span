@@ -325,11 +325,17 @@
       "pv_vendor": {
         "name": "PVベンダー"
       },
+      "shed_total_time_remaining": {
+        "name": "バックアップ残り時間"
+      },
       "site_power": {
         "name": "サイト電力"
       },
       "software_version": {
         "name": "ソフトウェアバージョン"
+      },
+      "time_to_priority_shed": {
+        "name": "優先遮断までの時間"
       },
       "upstream_l1_current": {
         "name": "上流側L1電流"

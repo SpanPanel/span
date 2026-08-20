@@ -25,6 +25,7 @@ from .sensor_definitions import (
     SpanPanelDataSensorEntityDescription,
     SpanPanelStatusSensorEntityDescription,
     SpanPVMetadataSensorEntityDescription,
+    SpanShedForecastSensorEntityDescription,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -89,6 +90,98 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the panel data status sensor."""
         return snapshot
+
+
+class SpanShedForecastSensor(
+    SpanSensorBase[SpanShedForecastSensorEntityDescription, SpanPanelSnapshot]
+):
+    """One of the two backup-planning estimates, with its refinements attached.
+
+    Created only where the panel publishes the estimate this sensor reads, so a
+    panel with no `shed-forecast` node — every flat panel, and any v1.0 panel
+    whose firmware omits the capability — gets no entity rather than one stuck
+    at unknown. See `create_shed_forecast_sensors`.
+    """
+
+    # `_residual_field_paths` stays empty on purpose. The attribute reads below
+    # are not declarable: neither adapter carries a metadata row for those three
+    # fields, so declaring them here would put them in `declared_field_paths()`
+    # where the producible gate rejects anything one adapter cannot emit. They
+    # are enumerated in `RESIDUAL_EXEMPT_PATHS` as `Producibility.NEITHER`
+    # instead, which is where the `mid.*` attribute reads live for the same
+    # reason.
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanShedForecastSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+    ) -> None:
+        """Initialize the shed-forecast sensor, keeping a typed handle on its description.
+
+        `SensorEntity.entity_description` is annotated as the base
+        `SensorEntityDescription`, so reading the two extra members off it would
+        need either a narrowing override — which mypy rejects on a mutable
+        attribute — or a `getattr`, which is the same thing with the check
+        removed. Keeping the description under a name of our own is what makes
+        `full_charge_fn` and `full_charge_attribute` statically checked; the same
+        move `SpanPanelPowerSensor` makes for `_description_key`.
+        """
+        super().__init__(data_coordinator, description, snapshot)
+        self._forecast = description
+
+    def _generate_unique_id(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanShedForecastSensorEntityDescription,
+    ) -> str:
+        """Generate unique ID for a shed-forecast sensor."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, snapshot, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanShedForecastSensorEntityDescription,
+    ) -> str:
+        """Generate friendly name for a shed-forecast sensor."""
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "Shed Forecast"
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
+        """Get the data source for the shed-forecast sensor."""
+        return snapshot
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The hypothetical-full-charge twin, and the estimate's confidence.
+
+        Both are omitted when the panel does not publish them, rather than
+        appearing as `None`. An attribute that is present and empty reads as a
+        reading the panel failed to produce; an absent one reads as a firmware
+        that does not carry it, which is what this is.
+
+        Which twin belongs to this sensor comes from the description, not from a
+        comparison against `key` — the pairing is stated once, where the two
+        readers sit beside each other.
+        """
+        snapshot = self.coordinator.data
+        if snapshot is None:
+            return None
+
+        attributes: dict[str, Any] = {}
+
+        full_charge = self._forecast.full_charge_fn(snapshot)
+        if full_charge is not None:
+            attributes[self._forecast.full_charge_attribute] = full_charge
+
+        confidence = snapshot.shed_forecast_confidence
+        if confidence is not None:
+            attributes["forecast_confidence"] = confidence
+
+        return attributes or None
 
 
 class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, SpanPanelSnapshot]):

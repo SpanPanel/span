@@ -325,11 +325,17 @@
       "pv_vendor": {
         "name": "Fournisseur PV"
       },
+      "shed_total_time_remaining": {
+        "name": "Autonomie de Secours Restante"
+      },
       "site_power": {
         "name": "Puissance du Site"
       },
       "software_version": {
         "name": "Version du Logiciel"
+      },
+      "time_to_priority_shed": {
+        "name": "Temps avant Délestage Prioritaire"
       },
       "upstream_l1_current": {
         "name": "Courant Amont L1"

@@ -25,6 +25,7 @@ from homeassistant.const import (
     UnitOfElectricPotential,
     UnitOfEnergy,
     UnitOfPower,
+    UnitOfTime,
 )
 from homeassistant.helpers.entity import EntityCategory
 from span_panel_api import (
@@ -333,6 +334,97 @@ MAIN_BREAKER_RATING_SENSOR: SpanPanelDataSensorEntityDescription = (
         value_fn=lambda s: s.main_breaker_rating_a,
     )
 )
+
+# ---------------------------------------------------------------------------
+# Shed forecast (v1.0 `shed-forecast`, conditionally created)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SpanShedForecastRequiredKeysMixin(FieldPathDeclarationMixin):
+    """Required keys mixin for the backup-planning forecast sensors.
+
+    Carries a second reader beside `value_fn`, which the other panel mixins do
+    not need. The capability publishes each live estimate with a
+    hypothetical-full-charge twin, and the twin refines the number on screen
+    rather than standing on its own — so it belongs to the sensor as an
+    attribute, and which twin belongs to which sensor is a fact about the
+    pairing rather than about the entity class.
+
+    Declared here so that pairing is data. Reading it off `description.key`
+    inside the entity would put a string comparison between the two halves of
+    something the catalog states outright, which is how a rename silently
+    swaps two plausible-looking durations.
+    """
+
+    value_fn: Callable[[SpanPanelSnapshot], int | None]
+
+    full_charge_attribute: str
+    """Attribute name the hypothetical twin is published under."""
+
+    full_charge_fn: Callable[[SpanPanelSnapshot], int | None]
+    """Reads the twin. `None` when the panel does not publish it."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SpanShedForecastSensorEntityDescription(
+    SensorEntityDescription, SpanShedForecastRequiredKeysMixin
+):
+    """Describes one of the two backup-planning forecast sensors."""
+
+
+SHED_FORECAST_SENSORS: tuple[
+    SpanShedForecastSensorEntityDescription,
+    SpanShedForecastSensorEntityDescription,
+] = (
+    SpanShedForecastSensorEntityDescription(
+        key="time_to_priority_shed",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="time_to_priority_shed",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        suggested_display_precision=0,
+        value_fn=lambda s: s.shed_time_to_priority_shed_min,
+        full_charge_attribute="full_charge_time_to_priority_shed",
+        full_charge_fn=lambda s: s.shed_full_charge_time_to_priority_shed_min,
+    ),
+    SpanShedForecastSensorEntityDescription(
+        key="shed_total_time_remaining",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="shed_total_time_remaining",
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        suggested_display_precision=0,
+        value_fn=lambda s: s.shed_total_time_remaining_min,
+        full_charge_attribute="full_charge_total_time_remaining",
+        full_charge_fn=lambda s: s.shed_full_charge_total_time_remaining_min,
+    ),
+)
+"""The two live estimates from `energy.ebus.capability.shed-forecast` 0.1.
+
+**Enabled by default, and not diagnostic.** These are the numbers a user plans a
+backup around — how long before the panel starts shedding circuits, how long
+before the battery is spent — so they belong beside the power and energy
+sensors rather than under the diagnostics fold. That is the whole argument for
+surfacing them ahead of the rest of the unread v1.0 surface.
+
+**`derived` rather than a `field_path` declaration, by the producible rule.**
+The gate requires a path *both* adapters produce, and no flat panel publishes
+this capability at all; `SCHEMA_CONDITIONAL_FIELD` is what that situation is
+called. The paths are enumerated in `RESIDUAL_EXEMPT_PATHS` instead, annotated
+`SCHEMA_1_ONLY`, and the conformance suite checks that annotation against what
+the adapters actually emit — so if flat firmware ever grew the capability, the
+build would fail and demand promotion rather than leaving the read ungated.
+
+The two hypothetical-full-charge figures ride as attributes rather than as
+sensors of their own. They answer "what would this installation give me from a
+full battery", which moves when the hardware does and not as the battery
+drains; a separate entity would put a near-constant on a graph beside the
+countdown it qualifies.
+"""
+
 
 # ---------------------------------------------------------------------------
 # Circuit diagnostic sensors (promoted from attributes)
@@ -835,6 +927,7 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
         *PANEL_ENERGY_SENSORS,
         *CIRCUIT_SENSORS,
         *EVSE_SENSORS,
+        *SHED_FORECAST_SENSORS,
         BATTERY_SENSOR,
         BATTERY_POWER_SENSOR,
         PV_POWER_SENSOR,

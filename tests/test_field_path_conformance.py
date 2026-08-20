@@ -253,9 +253,14 @@ def test_no_exempt_path_is_producible_by_both() -> None:
 
 
 _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
-    Producibility.NEITHER: 15,
+    # +3 with the shed forecast: the two full-charge refinements and the
+    # confidence enum, read as attributes on the two forecast sensors and
+    # carried by no adapter's metadata map.
+    Producibility.NEITHER: 18,
     Producibility.SCHEMA_0_ONLY: 10,
-    Producibility.SCHEMA_1_ONLY: 1,
+    # +2 with the shed forecast: the two live estimates, which schema_1 maps and
+    # flat firmware does not publish at all.
+    Producibility.SCHEMA_1_ONLY: 3,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

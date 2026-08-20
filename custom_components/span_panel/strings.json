@@ -192,15 +192,6 @@
       "bess_vendor": {
         "name": "Vendor"
       },
-      "mid_grid_state": {
-        "name": "Grid State",
-        "state": {
-          "up": "Up",
-          "down": "Down",
-          "degraded": "Degraded",
-          "unknown": "Unknown"
-        }
-      },
       "current_run_config": {
         "name": "Current Run Config",
         "state": {
@@ -313,6 +304,15 @@
           "unknown": "Unknown"
         }
       },
+      "mid_grid_state": {
+        "name": "Grid State",
+        "state": {
+          "up": "Up",
+          "down": "Down",
+          "degraded": "Degraded",
+          "unknown": "Unknown"
+        }
+      },
       "pv_nameplate_capacity": {
         "name": "PV Nameplate Capacity"
       },
@@ -325,11 +325,17 @@
       "pv_vendor": {
         "name": "PV Vendor"
       },
+      "shed_total_time_remaining": {
+        "name": "Backup Time Remaining"
+      },
       "site_power": {
         "name": "Site Power"
       },
       "software_version": {
         "name": "Software Version"
+      },
+      "time_to_priority_shed": {
+        "name": "Time to Priority Shed"
       },
       "upstream_l1_current": {
         "name": "Upstream L1 Current"

@@ -325,11 +325,17 @@
       "pv_vendor": {
         "name": "Fornecedor PV"
       },
+      "shed_total_time_remaining": {
+        "name": "Tempo de Reserva Restante"
+      },
       "site_power": {
         "name": "Potência do Local"
       },
       "software_version": {
         "name": "Versão do Software"
+      },
+      "time_to_priority_shed": {
+        "name": "Tempo até o Corte por Prioridade"
       },
       "upstream_l1_current": {
         "name": "Corrente Upstream L1"

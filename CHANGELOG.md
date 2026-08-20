@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Backup planning, in minutes: two new sensors on panels running the v1.0 data model.** **Time to Priority Shed** is how long before the panel starts shedding
+  circuits, and **Backup Time Remaining** is how long before the battery is spent. Your panel has been publishing both since firmware r202633 and nothing read
+  them; they are the numbers you would actually set an alarm on, so they are enabled by default and sit beside the power and energy sensors rather than under
+  diagnostics.
+- **Each forecast sensor carries the refinements that qualify it** as attributes: `full_charge_time_to_priority_shed` / `full_charge_total_time_remaining` —
+  what the same estimate would be from a full battery — and `forecast_confidence`, the panel's own `LOW` / `MEDIUM` / `HIGH` assessment of the estimate. They
+  refine a number already on screen rather than adding two near-constant entities to your entity list.
+- Both sensors are created only where the panel publishes the estimate behind them. A panel on the older data model, or one whose firmware publishes only part
+  of the forecast, gets no entity for what it cannot report rather than one permanently unknown — and a panel that gains the capability on a firmware upgrade
+  picks the sensors up on the reload the integration already performs.
+
 ## [2.1.0] - 8/2026
 
 Support for the eBus v1.0 (parent/child) data model your panel moves to on firmware r202633 and later, and a clean transition when it does.

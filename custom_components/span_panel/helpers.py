@@ -102,6 +102,7 @@ __all__ = [
     "has_mid",
     "has_power_flows",
     "has_pv",
+    "has_shed_forecast",
     "is_panel_level_sensor_key",
     "resolve_evse_display_suffix",
 ]
@@ -274,6 +275,36 @@ def has_mid(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.mid is not None
 
 
+def has_shed_forecast(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the panel publishes an `energy.ebus.capability.shed-forecast` node.
+
+    Presence of the *capability*, from presence of any of the five fields it
+    fills. The library models each one as `None` when unpublished, and a panel
+    with no such node fills none of them, so any non-`None` field is the node —
+    there is no telemetry value that could be mistaken for it. That is why this
+    reads all five rather than only the two that back sensors: a firmware
+    publishing the node with a partial property set still has the capability,
+    and the per-sensor gate in `create_shed_forecast_sensors` is what decides
+    which entities that firmware can actually support.
+
+    Always false on flat firmware, which publishes no such node at all.
+
+    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
+    version, so a panel that hot-loads parent/child mid-life gains the
+    capability, reloads, and the sensors appear.
+    """
+    return any(
+        value is not None
+        for value in (
+            snapshot.shed_time_to_priority_shed_min,
+            snapshot.shed_total_time_remaining_min,
+            snapshot.shed_full_charge_time_to_priority_shed_min,
+            snapshot.shed_full_charge_total_time_remaining_min,
+            snapshot.shed_forecast_confidence,
+        )
+    )
+
+
 def has_evse(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether an EVSE (EV charger) is commissioned."""
     return len(snapshot.evse) > 0
@@ -282,8 +313,11 @@ def has_evse(snapshot: SpanPanelSnapshot) -> bool:
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """Derive the set of optional capabilities present in the snapshot.
 
-    Used by the coordinator to detect when new hardware (BESS, PV, EVSE, MID) appears
-    and trigger a reload so new sensors are created.
+    Used by the coordinator to detect when new hardware (BESS, PV, EVSE, MID) or a
+    new published capability (shed-forecast) appears, and trigger a reload so new
+    sensors are created. A capability is not hardware, but it reaches this the same
+    way — the panel starts publishing a node it did not publish before — and the
+    consequence is identical: entities that could not be created at setup now can.
     """
     caps: set[str] = set()
     if has_bess(snapshot):
@@ -296,4 +330,6 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
         caps.add("evse")
     if has_mid(snapshot):
         caps.add("mid")
+    if has_shed_forecast(snapshot):
+        caps.add("shed_forecast")
     return frozenset(caps)

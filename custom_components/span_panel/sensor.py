@@ -25,6 +25,7 @@ from .helpers import (
     has_mid,
     has_power_flows,
     has_pv,
+    has_shed_forecast,
     resolve_evse_display_suffix,
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
@@ -53,6 +54,7 @@ from .sensor_definitions import (
     PANEL_POWER_SENSORS,
     PV_METADATA_SENSORS,
     PV_POWER_SENSOR,
+    SHED_FORECAST_SENSORS,
     SITE_POWER_SENSOR,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
@@ -69,6 +71,7 @@ from .sensor_panel import (
     SpanPanelPowerSensor,
     SpanPanelStatus,
     SpanPVMetadataSensor,
+    SpanShedForecastSensor,
 )
 from .util import bess_device_info, evse_device_info, mid_device_info
 
@@ -86,6 +89,7 @@ __all__ = [
     "SpanPanelPowerSensor",
     "SpanPanelStatus",
     "SpanSensorBase",
+    "SpanShedForecastSensor",
     "SpanUnmappedCircuitSensor",
 ]
 
@@ -360,6 +364,38 @@ def create_mid_sensors(
     return [SpanMidSensor(coordinator, desc, snapshot, mid_info) for desc in MID_SENSORS]
 
 
+def create_shed_forecast_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanShedForecastSensor]:
+    """Create the backup-planning forecast sensors the panel can actually fill.
+
+    Two gates, not one, because absence has two shapes here. `has_shed_forecast`
+    answers whether the panel publishes the capability at all — false on every
+    flat panel and on any v1.0 firmware that omits the node, and the reason a
+    reload creates these when a panel gains it mid-life. The per-description
+    check then answers whether *this* estimate is among what the node publishes:
+    the catalog marks all four times SHOULD rather than MUST, so a partial
+    node is legal and the half it omits must produce no entity rather than one
+    permanently unknown.
+
+    The presence test is the description's own `value_fn`. The field a sensor
+    reads is exactly the field whose absence should suppress it, so asking the
+    reader is what keeps the gate from drifting away from the read.
+
+    DUAL-SCHEMA: gated on what the snapshot carries, never on a version or a
+    config flag. When the flat path retires, the first gate goes and the second
+    stays — a v1.0 panel may still publish a partial node.
+    """
+    if not has_shed_forecast(snapshot):
+        return []
+
+    return [
+        SpanShedForecastSensor(coordinator, description, snapshot)
+        for description in SHED_FORECAST_SENSORS
+        if description.value_fn(snapshot) is not None
+    ]
+
+
 def create_battery_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
 ) -> list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor]:
@@ -446,6 +482,7 @@ def create_native_sensors(
     | SpanPVMetadataSensor
     | SpanEvseSensor
     | SpanMidSensor
+    | SpanShedForecastSensor
 ]:
     """Create all native sensors for the platform."""
     entities: list[
@@ -461,6 +498,7 @@ def create_native_sensors(
         | SpanPVMetadataSensor
         | SpanEvseSensor
         | SpanMidSensor
+        | SpanShedForecastSensor
     ] = []
 
     # Create different sensor types
@@ -470,6 +508,7 @@ def create_native_sensors(
         entities.extend(create_unmapped_circuit_sensors(coordinator, snapshot))
     entities.extend(create_battery_sensors(coordinator, snapshot))
     entities.extend(create_mid_sensors(coordinator, snapshot))
+    entities.extend(create_shed_forecast_sensors(coordinator, snapshot))
     entities.extend(create_power_flow_sensors(coordinator, snapshot))
     entities.extend(create_evse_sensors(coordinator, snapshot))
 

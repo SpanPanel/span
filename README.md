@@ -149,6 +149,25 @@ The following terms appear throughout this document and in the integration's sen
 | Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
 | Main Breaker Rating   | Current      | A    | Main breaker amperage      |
 
+### Shed Forecast Sensors (v1.0 data model only)
+
+Created only when your panel publishes the `shed-forecast` capability, and only for the estimates it actually publishes.
+
+| Sensor                | Device Class | Unit | Notes                                                            |
+| --------------------- | ------------ | ---- | ---------------------------------------------------------------- |
+| Time to Priority Shed | Duration     | min  | Estimated time before the next priority tier of circuits is shed |
+| Backup Time Remaining | Duration     | min  | Estimated time before every sheddable circuit is shed (off-grid) |
+
+#### Shed Forecast Sensor Attributes
+
+Present only when the panel publishes them.
+
+| Attribute                           | Type   | On                    | Notes                                                  |
+| ----------------------------------- | ------ | --------------------- | ------------------------------------------------------ |
+| `full_charge_time_to_priority_shed` | int    | Time to Priority Shed | The same estimate assuming the battery starts full     |
+| `full_charge_total_time_remaining`  | int    | Backup Time Remaining | The same estimate assuming the battery starts full     |
+| `forecast_confidence`               | string | both                  | The panel's own assessment: `LOW`, `MEDIUM`, or `HIGH` |
+
 ### Power Flow Sensors (v2 only)
 
 | Sensor        | Device Class | Unit | Notes                                                                       |

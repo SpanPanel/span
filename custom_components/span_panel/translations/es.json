@@ -325,11 +325,17 @@
       "pv_vendor": {
         "name": "Fabricante PV"
       },
+      "shed_total_time_remaining": {
+        "name": "Tiempo de Respaldo Restante"
+      },
       "site_power": {
         "name": "Potencia del Sitio"
       },
       "software_version": {
         "name": "Versión de Software"
+      },
+      "time_to_priority_shed": {
+        "name": "Tiempo hasta el Corte por Prioridad"
       },
       "upstream_l1_current": {
         "name": "Corriente Ascendente L1"

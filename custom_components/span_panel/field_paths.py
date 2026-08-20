@@ -165,7 +165,26 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # The EVSE's Homie node id — an addressing handle used to build the
         # sub-device identifier, not a published field.
         "evse.node_id": Producibility.NEITHER,
+        # The shed-forecast refinements, read for attributes on the two forecast
+        # sensors (`SpanShedForecastSensor.extra_state_attributes`). schema_1
+        # reads all three into the snapshot but carries a `_PROPERTY_FIELD_MAP`
+        # row for neither: they qualify the two live estimates rather than being
+        # readings of their own, so there is no unit surface for a row to
+        # describe. Same shape as the `mid.*` attribute reads above.
+        "panel.shed_full_charge_time_to_priority_shed_min": Producibility.NEITHER,
+        "panel.shed_full_charge_total_time_remaining_min": Producibility.NEITHER,
+        "panel.shed_forecast_confidence": Producibility.NEITHER,
         "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
+        # The two backup-planning estimates behind `time_to_priority_shed` and
+        # `shed_total_time_remaining`, whose descriptions are
+        # `SCHEMA_CONDITIONAL_FIELD` for exactly this reason: no flat panel
+        # publishes `energy.ebus.capability.shed-forecast` at all, so the
+        # producible gate — which demands both adapters — cannot be satisfied.
+        # schema_1 does carry a metadata row for each, which is what makes the
+        # annotation SCHEMA_1_ONLY rather than NEITHER and buys the pair unit
+        # and datatype validation against the panel's own `$description`.
+        "panel.shed_time_to_priority_shed_min": Producibility.SCHEMA_1_ONLY,
+        "panel.shed_total_time_remaining_min": Producibility.SCHEMA_1_ONLY,
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
         "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,
