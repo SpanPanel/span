@@ -12,9 +12,14 @@ Both are byte-identical copies from the `span-panel-api` repository:
 | File here | Source in `span-panel-api` |
 |---|---|
 | `schema_zero_types.json` | `tests/fixtures/v2/homie_schema.json` |
-| `schema_one_tree.json` | `tests/fixtures/parent_child_tree.json` |
+| `schema_one_tree.json` | `packages/schema-1/src/.../reference_payloads/parent_child_tree.json` |
 
-Refresh by copying them again. If a copy changes shape rather than content, the
+Refresh by copying them again, and keep `schema_one_tree.json` byte-identical to
+its source: the library pins what that capture leaves unvalued against
+panelbench's own baseline (`tests/test_reference_tree_values.py` there), so a
+copy that has drifted puts these tests on a wire no producer sends.
+
+If a copy changes shape rather than content, the
 loader in `tests/adapter_fixtures.py` is what needs updating — note that
 `schema_one_tree.json` is a **dict keyed by device id**, whose `$description`
 value is a **JSON string**, not a parsed object.
@@ -36,7 +41,7 @@ def drop(marker: str, out_name: str) -> None:
         for device_id, topics in tree.items()
         if marker not in json.loads(topics.get("$description", "{}")).get("type", "")
     }
-    pathlib.Path(f"tests/fixtures/{out_name}").write_text(json.dumps(kept, indent=2))
+    pathlib.Path(f"tests/fixtures/{out_name}").write_text(json.dumps(kept, indent=2) + "\n")
     print(f"{out_name}: {len(tree)} -> {len(kept)} devices")
 
 drop(".bess", "schema_one_tree_batteryless.json")

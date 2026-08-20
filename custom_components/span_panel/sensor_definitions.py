@@ -830,8 +830,7 @@ BESS_TELEMETRY_SENSORS: tuple[
 
 Separate from `BESS_METADATA_SENSORS` because these are created conditionally and
 those are not. Every metadata sensor exists on any commissioned BESS, filled or
-empty — `bess_part_number` sits at `None` on this fixture and has since it
-shipped. These two come from capability nodes a BESS may simply not have, so
+empty. These two come from capability nodes a BESS may simply not have, so
 absence has to mean no entity rather than a permanently unknown one, and mixing
 the two rules into one tuple would mean deciding per description which applied.
 
@@ -1150,6 +1149,7 @@ EVSE_SENSORS: tuple[
     SpanEvseSensorEntityDescription,
     SpanEvseSensorEntityDescription,
     SpanEvseSensorEntityDescription,
+    SpanEvseSensorEntityDescription,
 ] = (
     SpanEvseSensorEntityDescription(
         key="evse_status",
@@ -1187,6 +1187,19 @@ EVSE_SENSORS: tuple[
         device_class=SensorDeviceClass.ENUM,
         options=["locked", "unlocked", "unknown"],
         value_fn=lambda e: e.lock_state or "unknown",
+    ),
+    # The charger's SKU, shaped like `bess_part_number`: build metadata, so
+    # diagnostic and off by default, and a plain `field_path` because both
+    # adapters map the property (`evse/part-number` on flat, `info/part-number`
+    # on v1.0). It was the one unread declaration whose promotion the producible
+    # gate could demand, and adding the schema_1 metadata row is what demanded it.
+    SpanEvseSensorEntityDescription(
+        key="evse_part_number",
+        field_path="evse.part_number",
+        translation_key="evse_part_number",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda e: e.part_number,
     ),
 )
 

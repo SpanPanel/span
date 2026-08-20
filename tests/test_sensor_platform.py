@@ -26,6 +26,7 @@ from custom_components.span_panel.sensor import (
     create_power_flow_sensors,
     create_unmapped_circuit_sensors,
 )
+from custom_components.span_panel.sensor_definitions import EVSE_SENSORS
 from homeassistant.core import HomeAssistant
 
 from .factories import (
@@ -399,5 +400,5 @@ def test_create_evse_sensors_creates_all_descriptions_for_each_charger() -> None
 
     entities = create_evse_sensors(coordinator, snapshot)
 
-    assert len(entities) == 6
+    assert len(entities) == len(EVSE_SENSORS) * 2
     assert {entity._evse_id for entity in entities} == {"evse-0", "evse-1"}

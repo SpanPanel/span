@@ -60,15 +60,32 @@ def snapshot_to_device_info(
     device_name: str | None = None,
     host: str | None = None,
 ) -> DeviceInfo:
-    """Convert a SpanPanelSnapshot to a Home Assistant device info object."""
+    """Convert a SpanPanelSnapshot to a Home Assistant device info object.
+
+    Manufacturer, model and hardware revision come from the enclosure's own
+    `info` node where it publishes them, and fall back to the strings this
+    integration has always shown where it does not.
+
+    **The fallbacks are the point, not a courtesy.** Flat firmware declares none
+    of the three, so every existing installation lands on them; a panel that
+    omits one must keep the card it has rather than losing a row. `hw_version`
+    has no such string to fall back to and so is simply absent on flat --
+    `DeviceInfo` omits a `None` field, which is the difference between "this
+    panel does not report a revision" and "this panel reports a blank one".
+    """
     configuration_url = f"http://{host}" if host else None
 
     return DeviceInfo(
         identifiers={(DOMAIN, snapshot.serial_number)},
-        manufacturer="Span",
-        model="SPAN Panel",
+        manufacturer=snapshot.vendor_name or "Span",
+        # The published designation is the panel's own model code (`MAIN_40`),
+        # which is also what `panel_size` is derived from. Showing it beats
+        # "SPAN Panel" on a card whose whole job is saying which hardware this
+        # is -- and the generic string remains for anything that publishes none.
+        model=snapshot.model or "SPAN Panel",
         name=device_name or "Span Panel",
         sw_version=snapshot.firmware_version,
+        hw_version=snapshot.hardware_version,
         configuration_url=configuration_url,
     )
 

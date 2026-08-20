@@ -166,6 +166,25 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "circuit.relative_position": Producibility.NEITHER,
         # The panel reports it outside the typed field surface.
         "panel.panel_size": Producibility.NEITHER,
+        # The enclosure's build identity, read by `snapshot_to_device_info` for
+        # the panel's device card. No row on either adapter, and deliberately:
+        # flat declares none of the three, and schema_1 rows exist to carry a
+        # unit and a datatype for a *reading*, which an identity string is not.
+        # Same shape as the `mid.*` device-card reads below.
+        "panel.vendor_name": Producibility.NEITHER,
+        "panel.model": Producibility.NEITHER,
+        "panel.hardware_version": Producibility.NEITHER,
+        # `shed/policy` parsed, read for the attributes on `dsm_state`
+        # (`SpanPanelPanelStatus.extra_state_attributes`). The raw document is
+        # kept beside the parsed members because the policy schema is versioned
+        # in its own `$id`: an algorithm this library does not recognise still
+        # reaches a user as the string the panel published. No row on either
+        # adapter -- flat has no `shed` node, and a JSON document has no unit
+        # surface for a schema_1 row to describe.
+        "panel.shed_policy": Producibility.NEITHER,
+        "panel.shed_policy_algorithm": Producibility.NEITHER,
+        "panel.shed_soc_threshold_shed_percent": Producibility.NEITHER,
+        "panel.shed_soc_threshold_release_percent": Producibility.NEITHER,
         # The panel identity key behind every unique_id and the panel DeviceInfo
         # (~30 read sites).
         "panel.serial_number": Producibility.NEITHER,
@@ -282,7 +301,6 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "evse.connected": Producibility.SCHEMA_1_ONLY,
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
-        "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,
         # The `grid_forming_entity` sensor's source field. schema_1 answers the
         # same question through `resolve_dominant_power_source` over the MID's
         # `grid/grid-forming-entity` instead of publishing a row of its own,
@@ -422,6 +440,7 @@ def residual_field_paths() -> frozenset[str]:
     from . import (  # noqa: F401  pylint: disable=import-outside-toplevel,unused-import
         select,
         sensor_circuit,
+        sensor_panel,
         switch,
     )
     from .entity import SpanPanelEntity  # pylint: disable=import-outside-toplevel

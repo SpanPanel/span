@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import UNDEFINED
@@ -61,8 +61,52 @@ def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:
     return mid.grid_forming_device_name
 
 
+def _shed_policy_attributes(snapshot: SpanPanelSnapshot) -> dict[str, Any]:
+    """Render the shed policy for a person rather than as a JSON blob.
+
+    `shed/policy` is one `json` property carrying an algorithm name and its
+    parameters, and the two SoC thresholds inside it are the numbers that make
+    the panel's shedding behaviour predictable -- what state of charge sheds the
+    SOC_THRESHOLD circuits, and what state of charge brings them back.
+
+    **The raw document survives whenever the parse did not fully succeed.** The
+    property's `$format` schema is versioned in its own `$id`, which is the
+    publisher saying a different algorithm may arrive; when one does, the
+    library reports its name and no thresholds, and showing the document beside
+    the name is strictly more than showing nothing. A user can read it; an
+    exception would have taken the sensor down instead.
+
+    Absent members are omitted rather than rendered as `None`, matching the
+    forecast sensors: an empty attribute reads as a value the panel failed to
+    produce, a missing one as firmware that does not carry it.
+    """
+    attributes: dict[str, Any] = {}
+    if snapshot.shed_policy_algorithm is not None:
+        attributes["shed_algorithm"] = snapshot.shed_policy_algorithm
+    if snapshot.shed_soc_threshold_shed_percent is not None:
+        attributes["soc_threshold_shed"] = snapshot.shed_soc_threshold_shed_percent
+    if snapshot.shed_soc_threshold_release_percent is not None:
+        attributes["soc_threshold_release"] = snapshot.shed_soc_threshold_release_percent
+    thresholds_complete = (
+        snapshot.shed_soc_threshold_shed_percent is not None
+        and snapshot.shed_soc_threshold_release_percent is not None
+    )
+    if not thresholds_complete and snapshot.shed_policy is not None:
+        attributes["shed_policy"] = snapshot.shed_policy
+    return attributes
+
+
 class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
     """Span Panel data status sensor entity."""
+
+    # `_residual_field_paths` stays empty on purpose. The four `panel.shed_*`
+    # policy fields read for `dsm_state`'s attributes are not declarable here:
+    # everything declared on an entity flows into `declared_field_paths()`,
+    # where the producible gate demands both adapters emit it, and no adapter
+    # carries a row for any of them -- flat has no `shed` node at all, and a
+    # JSON policy document has no unit surface for a schema_1 row to describe.
+    # They are enumerated in `RESIDUAL_EXEMPT_PATHS` as `Producibility.NEITHER`
+    # instead, beside the shed-forecast refinements and the PCS attributes.
 
     def __init__(
         self,
@@ -96,6 +140,23 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the panel data status sensor."""
         return snapshot
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The shed policy, on the sensor that says whether shedding is in force.
+
+        `dsm_state` is the entity a user already looks at to know whether the
+        panel is on grid or off it, and the policy is what says what happens
+        next. Attached to that one description rather than to every sensor this
+        class renders, the same way `SpanPanelStatus` attaches the grid-forming
+        device name to `grid_forming_entity` alone.
+        """
+        if self.entity_description.key != "dsm_state":
+            return None
+        snapshot = self.coordinator.data
+        if snapshot is None:
+            return None
+        return _shed_policy_attributes(snapshot) or None
 
 
 class SpanShedForecastSensor(
@@ -278,6 +339,17 @@ class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapsh
 
 class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, SpanPanelSnapshot]):
     """Span Panel hardware status sensor entity."""
+
+    _residual_field_paths: ClassVar[tuple[str, ...]] = ("panel.wifi_ssid",)
+    """The SSID, read for an attribute rather than by a `value_fn`.
+
+    A plain residual and not an exemption: both adapters map the property
+    (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
+    gate covers it, and `test_no_exempt_path_is_producible_by_both` is what
+    demanded the move the moment schema_1 grew its row. Until then the path sat
+    in `RESIDUAL_EXEMPT_PATHS` annotated `SCHEMA_0_ONLY` -- true, and the reason
+    a v1.0 panel silently stopped filling an attribute a flat panel filled.
+    """
 
     def __init__(
         self,

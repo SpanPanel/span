@@ -255,6 +255,9 @@
           "unlocked": "アンロック"
         }
       },
+      "evse_part_number": {
+        "name": "型番"
+      },
       "evse_status": {
         "name": "充電器ステータス",
         "state": {

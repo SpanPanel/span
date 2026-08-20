@@ -272,12 +272,28 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # read as attributes on the circuit power sensor. schema_1 reads all fifteen
     # and maps none of them, deliberately — they explain the effective limit
     # rather than being readings of their own.
-    Producibility.NEITHER: 34,
+    # +3 for the enclosure's own build identity -- `panel.vendor_name`,
+    # `panel.model`, `panel.hardware_version` -- read by `snapshot_to_device_info`
+    # for the panel's device card. Flat declares none of the three, and a
+    # schema_1 row exists to carry a unit and a datatype for a reading, which an
+    # identity string is not; the `mid.*` device-card reads sit here for the
+    # same reason.
+    # +4 for the shed policy -- the raw `shed/policy` document plus the
+    # algorithm and the two SoC thresholds parsed out of it -- read as
+    # attributes on `dsm_state`. Flat has no `shed` node, and a JSON document
+    # has no unit surface for a schema_1 row to describe.
+    Producibility.NEITHER: 41,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
     # but-unread while an entity was reading it.
-    Producibility.SCHEMA_0_ONLY: 11,
+    # -1 for `panel.wifi_ssid`, which left this map entirely: schema_1 grew the
+    # `status/wifi-ssid` row, both adapters produce the path, and
+    # `test_no_exempt_path_is_producible_by_both` demanded it become a
+    # declaration -- `SpanPanelStatus._residual_field_paths`. Its time here as a
+    # true `SCHEMA_0_ONLY` annotation is what sanctioned a flat -> v1.0
+    # regression: the attribute a flat panel filled, a v1.0 panel did not.
+    Producibility.SCHEMA_0_ONLY: 10,
     # +2 with the shed forecast: the two live estimates, which schema_1 maps and
     # flat firmware does not publish at all.
     # +2 for `battery.power_w` and `battery.communication_state`, the BESS's own

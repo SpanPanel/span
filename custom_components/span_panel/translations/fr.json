@@ -255,6 +255,9 @@
           "unlocked": "Déverrouillé"
         }
       },
+      "evse_part_number": {
+        "name": "Référence"
+      },
       "evse_status": {
         "name": "État du Chargeur",
         "state": {

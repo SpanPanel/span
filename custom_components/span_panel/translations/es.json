@@ -255,6 +255,9 @@
           "unlocked": "Desbloqueado"
         }
       },
+      "evse_part_number": {
+        "name": "Número de Pieza"
+      },
       "evse_status": {
         "name": "Estado del Cargador",
         "state": {
