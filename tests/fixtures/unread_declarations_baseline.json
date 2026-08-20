@@ -1,7 +1,6 @@
 {
   "circuit/breaker/poles": "reaches circuit.is_240v and stops there; the voltage attribute is derived from the tab count instead, so no entity or attribute reads the field",
   "circuit/connection/count": "microinverter/pack count; no producer publishes it, so there is no fixture value an entity could be tested against",
-  "circuit/connection/feeds-device-status": "the enclosure's link-health view of a circuit-fed DER; only the lugs fed-by-* route is read today, so PV and EVSE get no connected sensor (Task 3)",
   "circuit/connection/feeds-device-type": "redundant: the library resolves a DER's class by dereferencing feeds-device-id against the tree's declared $type",
   "distribution-enclosure/info/hardware-version": "no panel.hardware_version snapshot field, and the panel DeviceInfo declares no hw_version (Task 5)",
   "distribution-enclosure/info/vendor-name": "DeviceInfo.manufacturer is hardcoded to \"Span\"; the declared value is never consulted, even as a fallback (Task 5)",

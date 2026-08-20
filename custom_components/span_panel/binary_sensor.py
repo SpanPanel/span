@@ -160,6 +160,33 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     value_fn=lambda s: s.battery.connected,
 )
 
+PV_PANEL_LINK_SENSOR = SpanPanelBinarySensorEntityDescription(
+    key="pv_panel_link",
+    field_path="pv.connected",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key="pv_panel_link",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda s: s.pv.connected,
+)
+"""Can the enclosure talk to the solar inverter?
+
+`bess_connected`'s counterpart for the other DER the panel feeds through a
+circuit. The BESS got one because the upstream lugs' `connection/fed-by-*`
+record was already read; the PV's and the charger's live on the *circuit* that
+feeds them, as `connection` 0.1 specifies, and nothing read that half — so the
+one device class whose link the panel happened to report through the lugs was
+the only one a user could see.
+
+On the panel device, beside `pv_vendor` and `pv_product`, because the PV is not
+yet a sub-device of its own. It moves with them when it becomes one.
+
+`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`: flat firmware publishes
+`connected` on the BESS and on nothing else, so the both-adapters gate cannot be
+satisfied, while the entity still needs its Repair mention and its
+unavailability when the panel stops resolving the property.
+"""
+
 
 PCS_ACTIVE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="pcs_active",
@@ -371,6 +398,32 @@ EVSE_BINARY_SENSORS: tuple[
     ),
 )
 
+EVSE_PANEL_LINK_SENSOR = SpanEvseBinarySensorEntityDescription(
+    key="evse_panel_link",
+    field_path="evse.connected",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key="evse_panel_link",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda e: e.connected,
+)
+"""Can the enclosure talk to this charger?
+
+**Not `evse_ev_connected`, which sits two definitions above it.** That one reads
+the charger's own `status/status` and answers "is a vehicle plugged in" — a
+`PLUG` device class, enabled by default, the fact a user builds a charging
+automation on. This reads the *feeding circuit's* `connection/feeds-device-status`
+and answers "can the panel reach the charger at all" — a `CONNECTIVITY` device
+class, diagnostic. The two disagree exactly when it matters: a charger
+mid-session over a lost link reports a plugged-in vehicle and a dead link at the
+same time, because the last session state the panel heard is still the last
+session state the panel heard.
+
+Deliberately outside `EVSE_BINARY_SENSORS`, which is the unconditional pair.
+This one is created per charger and only where the record exists, following
+`bess_connected` and `pcs_active` rather than its two neighbours.
+"""
+
 # Fallback EVSE snapshot used when the EVSE disappears mid-session
 _EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
 
@@ -481,12 +534,25 @@ async def async_setup_entry(
     if has_pcs(snapshot):
         entities.append(SpanPanelBinarySensor(coordinator, PCS_ACTIVE_SENSOR))
 
+    # The enclosure's view of the link to the solar inverter, where a circuit
+    # publishes one. Gated on the record existing and never on what kind of
+    # circuit publishes it — `distribution-enclosure.md` makes a mixed-load
+    # circuit publishing no `feeds-*` the normal case, so absence is the panel
+    # saying it does not know rather than a fault, and the enum it does publish
+    # has no UNKNOWN member for it to say that with. See `PV_PANEL_LINK_SENSOR`.
+    if snapshot.pv.connected is not None:
+        entities.append(SpanPanelBinarySensor(coordinator, PV_PANEL_LINK_SENSOR))
+
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:
-        for evse_id in snapshot.evse:
+        for evse_id, evse in snapshot.evse.items():
             entities.extend(
                 SpanEvseBinarySensor(coordinator, evse_desc, evse_id)
                 for evse_desc in EVSE_BINARY_SENSORS
             )
+            # Per charger, not per panel: two chargers can be fed by two
+            # circuits of which only one publishes the record.
+            if evse.connected is not None:
+                entities.append(SpanEvseBinarySensor(coordinator, EVSE_PANEL_LINK_SENSOR, evse_id))
 
     async_add_entities(entities)

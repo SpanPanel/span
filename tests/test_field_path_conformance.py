@@ -289,7 +289,13 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # and `pcs.active`, behind the two PCS sensors and the `pcs_active` binary
     # sensor. schema_1 maps all three; no flat panel declares the capability at
     # all, so none can ever satisfy the both-adapters gate.
-    Producibility.SCHEMA_1_ONLY: 8,
+    # +2 for `pv.connected` and `evse.connected`, the enclosure's view of the
+    # link to each circuit-fed DER, behind `pv_panel_link` and
+    # `evse_panel_link`. schema_1 maps both from one property — the feeding
+    # circuit's `connection/feeds-device-status` — while flat publishes
+    # `connected` on the BESS and on no other device class, so neither can
+    # satisfy the both-adapters gate.
+    Producibility.SCHEMA_1_ONLY: 10,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

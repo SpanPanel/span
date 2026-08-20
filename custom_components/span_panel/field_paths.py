@@ -266,6 +266,20 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "pcs.import_limit_a": Producibility.SCHEMA_1_ONLY,
         "pcs.binding_constraint": Producibility.SCHEMA_1_ONLY,
         "pcs.active": Producibility.SCHEMA_1_ONLY,
+        # The enclosure's view of the link to each circuit-fed DER, behind the
+        # `pv_panel_link` and `evse_panel_link` binary sensors. Both descriptions
+        # are `SCHEMA_CONDITIONAL_FIELD` for the usual reason: flat firmware
+        # publishes `connected` on the BESS and on no other device class, so the
+        # both-adapters gate cannot be satisfied. schema_1 maps both — from one
+        # property, the feeding circuit's `connection/feeds-device-status` —
+        # which is what makes these SCHEMA_1_ONLY rather than NEITHER.
+        #
+        # `battery.connected` is the same fact for the third DER and sits below
+        # as SCHEMA_0_ONLY, which is the whole shape of this gap: the link the
+        # enclosure reported through the lugs was read, and the one it reports
+        # through a circuit was not.
+        "pv.connected": Producibility.SCHEMA_1_ONLY,
+        "evse.connected": Producibility.SCHEMA_1_ONLY,
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
         "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,

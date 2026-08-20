@@ -122,8 +122,10 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         BESS_CONNECTED_SENSOR,
         BINARY_SENSORS,
         EVSE_BINARY_SENSORS,
+        EVSE_PANEL_LINK_SENSOR,
         GRID_ISLANDABLE_SENSOR,
         PCS_ACTIVE_SENSOR,
+        PV_PANEL_LINK_SENSOR,
     )
 
     for description in (
@@ -133,6 +135,8 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,
+        PV_PANEL_LINK_SENSOR,
+        EVSE_PANEL_LINK_SENSOR,
     ):
         if not isinstance(description, _DeclaringDescription):
             raise TypeError(

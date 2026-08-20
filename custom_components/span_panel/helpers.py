@@ -356,6 +356,37 @@ def has_evse(snapshot: SpanPanelSnapshot) -> bool:
     return len(snapshot.evse) > 0
 
 
+def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the panel reports the link to any circuit-fed DER.
+
+    Presence of the *record*, from presence of the field it fills. The library
+    models `connected` as `None` for a DER no circuit claims, and the enum a
+    circuit does publish is `OK,LOST,DEGRADED` with no UNKNOWN member — so an
+    absent property is the only way the panel can say it does not know, and
+    `None` is the only reading that can mean it.
+
+    A value gate would be wrong here in a way it is not for the PCS: the
+    question is not what the link is doing but whether the panel says anything
+    about it, and `distribution-enclosure.md` makes silence the normal state for
+    a circuit that feeds an ordinary load rather than a DER.
+
+    Coarse on purpose. This decides whether a *reload* is worth requesting, not
+    which entities exist — the per-DER gate in `binary_sensor.async_setup_entry`
+    does that, because two chargers can be fed by two circuits of which only one
+    publishes the record.
+
+    Always false on flat firmware, which publishes this only for the BESS, and
+    reaches `battery.connected` rather than either field here.
+
+    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
+    version, so a panel that starts publishing the record reaches
+    `detect_capabilities`, the coordinator reloads, and the sensors appear.
+    """
+    return snapshot.pv.connected is not None or any(
+        evse.connected is not None for evse in snapshot.evse.values()
+    )
+
+
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """Derive the set of optional capabilities present in the snapshot.
 
@@ -382,4 +413,6 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
         caps.add("bess_telemetry")
     if has_pcs(snapshot):
         caps.add("pcs")
+    if has_der_link_health(snapshot):
+        caps.add("der_link_health")
     return frozenset(caps)

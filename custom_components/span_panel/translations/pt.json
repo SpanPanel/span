@@ -150,6 +150,12 @@
       },
       "pcs_active": {
         "name": "PCS Ativo"
+      },
+      "pv_panel_link": {
+        "name": "Ligação do Painel FV"
+      },
+      "evse_panel_link": {
+        "name": "Ligação do Painel EVSE"
       }
     },
     "button": {

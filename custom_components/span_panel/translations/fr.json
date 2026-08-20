@@ -150,6 +150,12 @@
       },
       "pcs_active": {
         "name": "PCS Actif"
+      },
+      "pv_panel_link": {
+        "name": "Liaison du panneau PV"
+      },
+      "evse_panel_link": {
+        "name": "Liaison du panneau EVSE"
       }
     },
     "button": {

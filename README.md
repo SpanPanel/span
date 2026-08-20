@@ -261,10 +261,15 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 
 #### EVSE Binary Sensors (per charger)
 
-| Sensor       | Device Class     | Notes                                                              |
-| ------------ | ---------------- | ------------------------------------------------------------------ |
-| Charging     | Battery Charging | ON when status is CHARGING                                         |
-| EV Connected | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING |
+| Sensor          | Device Class     | Notes                                                                                                   |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------- |
+| Charging        | Battery Charging | ON when status is CHARGING                                                                              |
+| EV Connected    | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING — a vehicle is plugged in            |
+| EVSE Panel Link | Connectivity     | (v1.0) Whether the panel can reach the charger. A different fact from EV Connected, and it can disagree |
+
+**EVSE Panel Link is not EV Connected.** EV Connected is what the charger says about the cable in front of it; EVSE Panel Link is what the panel says about
+whether it can reach the charger at all. A charger part-way through a session behind a lost link reports a plugged-in vehicle and a dead link at the same time.
+EVSE Panel Link is a diagnostic and appears only where the circuit feeding that charger publishes the link record.
 
 #### EVSE Device Info Attributes
 
@@ -351,6 +356,7 @@ Applies to Main Meter and Feed Through energy sensors.
 | Panel Status    | Connectivity | Overall panel online/offline                                                                       |
 | Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported                                |
 | PCS Active      | Running      | (v1.0) Whether the Power Control System is limiting import right now. Only when the panel runs one |
+| PV Panel Link   | Connectivity | (v1.0) Whether the panel can reach the solar inverter. Only when the feeding circuit reports it    |
 
 **Removed from binary sensors:**
 

@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Whether your panel can reach your solar inverter and each of your chargers, on panels running the v1.0 data model.** **PV Panel Link** and **EVSE Panel
+  Link** are the same fact **BESS Connected** has always shown for the battery: the panel's own report of the link to a device it feeds. The battery's version
+  worked because the panel publishes it on the main lugs; the inverter's and each charger's are published by the circuit that feeds them, and nothing read that
+  half — so one of your three device classes had a link sensor and the others did not.
+- **EVSE Panel Link is not EV Connected.** EV Connected is the charger reporting that a vehicle is plugged in. EVSE Panel Link is the panel reporting that it
+  can reach the charger at all. A charger part-way through a session behind a link the panel has lost shows a plugged-in vehicle and a dead link at the same
+  time, which is exactly the case where you want to know which of the two you are looking at. The new sensors are diagnostics; EV Connected is unchanged.
+- Each sensor is created only where a circuit publishes the link record for that device, and per charger rather than per panel — two chargers whose circuits
+  report differently get two sensors that say different things. A circuit that feeds ordinary loads publishes no such record, which is normal and is not
+  reported as a fault, and a panel that starts publishing one picks the sensors up on the reload the integration already performs.
+
 - **Your battery's own meter and its own link health, on panels running the v1.0 data model.** **Meter Power** is what the BESS itself reports it is charging or
   discharging at, as distinct from the panel's **Battery Power**, which is the enclosure's arbitrated figure. Both have been on the wire since firmware r202633
   and nothing read either. Meter Power is enabled by default; **Communication State** — the BESS's own `OK` / `DEGRADED` / `LOST` / `UNKNOWN` report on its link

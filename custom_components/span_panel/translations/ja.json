@@ -150,6 +150,12 @@
       },
       "pcs_active": {
         "name": "PCS 動作中"
+      },
+      "pv_panel_link": {
+        "name": "PVパネルリンク"
+      },
+      "evse_panel_link": {
+        "name": "EVSEパネルリンク"
       }
     },
     "button": {

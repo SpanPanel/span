@@ -35,6 +35,12 @@
       },
       "pcs_active": {
         "default": "mdi:speedometer"
+      },
+      "pv_panel_link": {
+        "default": "mdi:solar-power-variant"
+      },
+      "evse_panel_link": {
+        "default": "mdi:lan-connect"
       }
     },
     "button": {
