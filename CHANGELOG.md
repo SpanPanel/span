@@ -6,14 +6,6 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Your solar inverter gets a device of its own, on panels running the v1.0 data model.** Its vendor, model and nameplate capacity used to render as diagnostic
-  sensors on the _panel's_ card, beside the panel's own manufacturer and model — so the card whose job is telling you which enclosure this is read as though the
-  enclosure were an Enphase inverter. It now has a card like the battery and the chargers already do, carrying the firmware version the panel has been
-  publishing all along.
-- **Nothing about the move changes an entity.** The five sensors that relocate keep the entity ids and unique ids they already have, so dashboards, automations
-  and history follow them across. A freshly installed system and an upgraded one end up with identical entity ids — they would otherwise have diverged, because
-  Home Assistant derives a new entity's id from the name of the device it sits on.
-
 - **Your panel's own card now shows what the panel says it is** — manufacturer, model and hardware revision, read from the enclosure rather than assumed. A
   panel on the older data model publishes none of the three and keeps exactly the card it has today; the hardware revision row is left off rather than shown
   blank where no revision is published.

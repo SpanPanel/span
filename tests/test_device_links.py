@@ -21,12 +21,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import SpanMidSnapshot, SpanPVSnapshot
 
 from custom_components.span_panel import ensure_device_registered
 from custom_components.span_panel.const import DOMAIN
@@ -35,14 +30,19 @@ from custom_components.span_panel.util import (
     classify_sub_device_identifier,
     evse_device_info,
     mid_device_info,
-    pv_device_info,
 )
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
+from span_panel_api import SpanMidSnapshot
 
 from .factories import (
     SpanBatterySnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
 )
+
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 _PANEL_ID = "a-registry-id"
 
@@ -75,15 +75,6 @@ def _builders() -> list[tuple[str, Any]]:
             "mid",
             lambda: mid_device_info(
                 "sp3-link-001", _mid(), "Panel", panel_device_id=_PANEL_ID
-            ),
-        ),
-        (
-            "pv",
-            lambda: pv_device_info(
-                "sp3-link-001",
-                SpanPVSnapshot(vendor_name="Enphase", model="IQ8", software_version="v1"),
-                "Panel",
-                panel_device_id=_PANEL_ID,
             ),
         ),
         (
@@ -125,19 +116,6 @@ def test_the_panel_is_not_mistaken_for_a_sub_device() -> None:
     """
     assert classify_sub_device_identifier("sp3-link-001") is None
     assert classify_sub_device_identifier("sim-40t-001") is None
-
-
-def test_a_charger_node_ending_in_a_kind_is_still_a_charger() -> None:
-    """The infix wins over the suffixes, which is why it is tested first.
-
-    A charger's identifier carries its Homie node id, and nothing stops a node id
-    from ending in `_pv` or `_bess`. Testing the suffix rules first would classify
-    such a charger as whatever its node id happened to end with -- a device
-    rendering as the wrong type on a dashboard, which is the failure the MID
-    already shipped once.
-    """
-    assert classify_sub_device_identifier("sp3-link-001_evse_inverter_pv") == "evse"
-    assert classify_sub_device_identifier("sp3-link-001_evse_garage_bess") == "evse"
 
 
 @pytest.mark.parametrize(("label", "build"), _builders(), ids=lambda v: v if isinstance(v, str) else "")

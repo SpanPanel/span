@@ -202,19 +202,6 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "mid.model": Producibility.NEITHER,
         "mid.serial_number": Producibility.NEITHER,
         "mid.grid_forming_device_name": Producibility.NEITHER,
-        # `pv_device_info` reads the inverter's firmware version for its device
-        # card. `pv.vendor_name` and `pv.model` are not here beside it because
-        # they are `field_path` declarations on the three PV metadata sensors
-        # already, and the card reads the same two fields those sensors do.
-        #
-        # `NEITHER` for the same reason as the `mid.*` and `panel.*` card reads
-        # above: flat's `pv` device class declares no firmware version at all,
-        # and a schema_1 metadata row carries a unit and a datatype for a
-        # *reading*, which a version string is not.
-        #
-        # `pv.serial_number` is deliberately absent -- from this table, from the
-        # card and from the snapshot. See `pv_device_info`.
-        "pv.software_version": Producibility.NEITHER,
         # The `mid_grid_state` sensor's source field — utility-supply health,
         # the one non-metadata entity the MID brings. Neither adapter maps the
         # MID at all, which is why the description is `NO_SOURCE_FIELD`.

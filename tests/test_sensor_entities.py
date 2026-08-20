@@ -154,13 +154,7 @@ def test_panel_sensor_default_friendly_names_cover_fallback_branches() -> None:
         snapshot,
         {"identifiers": {("span_panel", "bess")}},
     )
-    pv_sensor = SpanPVMetadataSensor(
-        coordinator,
-        PV_METADATA_SENSORS[0],
-        snapshot,
-        {"identifiers": {("span_panel", "pv")}},
-        "sensor.span_panel_pv_vendor",
-    )
+    pv_sensor = SpanPVMetadataSensor(coordinator, PV_METADATA_SENSORS[0], snapshot)
 
     assert panel_data_sensor._generate_friendly_name(snapshot, panel_data_desc) == "Sensor"
     assert status_sensor._generate_friendly_name(snapshot, status_desc) == "Status"
@@ -184,13 +178,7 @@ def test_panel_metadata_sensors_return_expected_data_sources() -> None:
         snapshot,
         {"identifiers": {("span_panel", "bess")}},
     )
-    pv_sensor = SpanPVMetadataSensor(
-        coordinator,
-        PV_METADATA_SENSORS[0],
-        snapshot,
-        {"identifiers": {("span_panel", "pv")}},
-        "sensor.span_panel_pv_vendor",
-    )
+    pv_sensor = SpanPVMetadataSensor(coordinator, PV_METADATA_SENSORS[0], snapshot)
 
     assert bess_sensor.get_data_source(snapshot) is battery
     assert pv_sensor.get_data_source(snapshot) is snapshot

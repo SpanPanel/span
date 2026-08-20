@@ -9,7 +9,6 @@ from span_panel_api import (
     SpanEvseSnapshot,
     SpanMidSnapshot,
     SpanPanelSnapshot,
-    SpanPVSnapshot,
 )
 
 from .const import DOMAIN
@@ -36,7 +35,6 @@ _LOGGER = logging.getLogger(__name__)
 SUB_DEVICE_BESS: Final = "bess"
 SUB_DEVICE_MID: Final = "mid"
 SUB_DEVICE_EVSE: Final = "evse"
-SUB_DEVICE_PV: Final = "pv"
 
 
 def classify_sub_device_identifier(identifier: str) -> str | None:
@@ -45,23 +43,15 @@ def classify_sub_device_identifier(identifier: str) -> str | None:
     None rather than an "unknown" string: the caller knows whether it is looking
     at something that must be a sub-device, and a sentinel that reads like a kind
     is what let an unclassified device render as a device with no type.
-
-    **Most specific first.** EVSE is the one kind whose token is an infix rather
-    than a suffix, and a suffix test cannot tell `..._evse_inverter_pv` from a PV
-    identifier. Testing the infix first makes the charger's node id opaque to the
-    suffix rules below, which is the only ordering that stays right whatever a
-    panel names its nodes.
     """
-    # Infix, not suffix: the node id follows, and it is what distinguishes one
-    # charger from another on the same panel.
-    if f"_{SUB_DEVICE_EVSE}_" in identifier:
-        return SUB_DEVICE_EVSE
     if identifier.endswith(f"_{SUB_DEVICE_BESS}"):
         return SUB_DEVICE_BESS
     if identifier.endswith(f"_{SUB_DEVICE_MID}"):
         return SUB_DEVICE_MID
-    if identifier.endswith(f"_{SUB_DEVICE_PV}"):
-        return SUB_DEVICE_PV
+    # Infix, not suffix: the node id follows, and it is what distinguishes one
+    # charger from another on the same panel.
+    if f"_{SUB_DEVICE_EVSE}_" in identifier:
+        return SUB_DEVICE_EVSE
     return None
 
 
@@ -189,47 +179,5 @@ def evse_device_info(
         model=evse.model or "SPAN Drive",
         serial_number=evse.serial_number,
         sw_version=evse.software_version,
-        via_device_id=panel_device_id,
-    )
-
-
-def pv_device_info(
-    panel_identifier: str,
-    pv: SpanPVSnapshot,
-    panel_name: str,
-    *,
-    panel_device_id: str,
-) -> DeviceInfo:
-    """Create DeviceInfo for the solar inverter, linked to the parent panel.
-
-    The last DER to get a card of its own. Its vendor, model and nameplate
-    capacity have been readable all along and were shown as three diagnostic
-    sensors on the *panel's* card, beside the panel's own manufacturer and model,
-    which reads as if the enclosure were an Enphase inverter. The firmware
-    version the library also reads reached nothing at all, because a version has
-    no home but a device card.
-
-    **The identifier deliberately does not mention the inverter's serial.**
-    `info/serial-number` is declared by every PV `$description` and published by
-    no producer today, so an identifier preferring it would be `<panel>_pv` on
-    every panel now and `<panel>_<serial>` on the first panel whose firmware
-    starts publishing one -- and a device identifier is what a consumer keys its
-    registry on, so that day would read as the inverter being replaced rather
-    than as a value arriving. `{panel serial}_pv` answers the only question an
-    identifier has to answer, "which panel's inverter", and a panel has exactly
-    one `pv` node, so nothing distinguishes two of them. The serial is not on the
-    card either, for the same reason it is not in the identifier: nothing in this
-    integration should start depending on it before a producer publishes one.
-    """
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_PV}")},
-        name=f"{panel_name} Solar",
-        manufacturer=pv.vendor_name or "Unknown",
-        model=pv.model or "Solar Inverter",
-        # Passed through unguarded, as on the BESS and the MID: `DeviceInfo`
-        # omits a `None` field and renders an empty string as a present-but-blank
-        # row, so `or ""` would invent a version row for an inverter that
-        # published none.
-        sw_version=pv.software_version,
         via_device_id=panel_device_id,
     )

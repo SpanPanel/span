@@ -184,12 +184,6 @@ class TestClassifySubDevice:
         device.identifiers = {(DOMAIN, "sp3-242424-001_evse_0")}
         assert _classify_sub_device(device) == "evse"
 
-    def test_pv(self):
-        """Classify the solar inverter sub-device from its identifier."""
-        device = MagicMock()
-        device.identifiers = {(DOMAIN, "sp3-242424-001_pv")}
-        assert _classify_sub_device(device) == "pv"
-
     def test_unknown(self):
         """Treat the panel device itself as an unknown sub-device type."""
         device = MagicMock()
@@ -388,7 +382,7 @@ class TestHandlePanelTopology:
 
     @pytest.mark.asyncio
     async def test_sub_device_id_rejected(self, hass: HomeAssistant):
-        """Error when device_id is a sub-device, not the panel."""
+        """Error when device_id is a BESS/EVSE sub-device, not the panel."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={},
@@ -425,7 +419,7 @@ class TestHandlePanelTopology:
         connection.send_error.assert_called_once_with(
             1,
             "not_panel_device",
-            "Use the SPAN panel device registry ID, not a sub-device.",
+            "Use the SPAN panel device registry ID, not a BESS or EVSE sub-device.",
         )
 
     @pytest.mark.asyncio

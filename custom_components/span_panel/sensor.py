@@ -20,7 +20,6 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
-    construct_panel_scoped_entity_id,
     has_bess,
     has_bess_telemetry,
     has_evse,
@@ -79,7 +78,7 @@ from .sensor_panel import (
     SpanPVMetadataSensor,
     SpanShedForecastSensor,
 )
-from .util import bess_device_info, evse_device_info, mid_device_info, pv_device_info
+from .util import bess_device_info, evse_device_info, mid_device_info
 
 # Export the sensor classes for backward compatibility with tests
 __all__ = [
@@ -479,22 +478,6 @@ def create_battery_sensors(
     return entities
 
 
-def _build_pv_device_info(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
-) -> DeviceInfo:
-    """DeviceInfo for the solar inverter sub-device."""
-    panel_name = (
-        coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
-        or "Span Panel"
-    )
-    return pv_device_info(
-        snapshot.serial_number,
-        snapshot.pv,
-        panel_name,
-        panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
-    )
-
-
 def create_power_flow_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
 ) -> list[SpanPanelPowerSensor | SpanPVMetadataSensor]:
@@ -503,43 +486,15 @@ def create_power_flow_sensors(
     PV Power — only when PV is commissioned.
     Site Power — only when the power-flows node is publishing.
     PV metadata sensors — only when PV is commissioned.
-
-    The PV sensors land on the inverter's own sub-device, matching what the BESS
-    has done since v1.0: `battery_power` is the enclosure's reading of the
-    battery and it sits on the battery's card, so `pv_power` -- the enclosure's
-    reading of the inverter -- belongs on the inverter's. Each keeps the
-    panel-scoped entity_id it already has; see `construct_panel_scoped_entity_id`.
     """
     entities: list[SpanPanelPowerSensor | SpanPVMetadataSensor] = []
 
     if has_pv(snapshot):
-        pv_info = _build_pv_device_info(coordinator, snapshot)
-        panel_name = coordinator.config_entry.data.get(
-            CONF_DEVICE_NAME, coordinator.config_entry.title
-        )
-        entities.append(
-            SpanPanelPowerSensor(
-                coordinator,
-                PV_POWER_SENSOR,
-                snapshot,
-                device_info_override=pv_info,
-                entity_id_override=construct_panel_scoped_entity_id(
-                    snapshot, "sensor", PV_POWER_SENSOR.translation_key or "", panel_name
-                ),
-            )
-        )
+        entities.append(SpanPanelPowerSensor(coordinator, PV_POWER_SENSOR, snapshot))
 
+        # PV metadata sensors on the main panel device
         entities.extend(
-            SpanPVMetadataSensor(
-                coordinator,
-                desc,
-                snapshot,
-                pv_info,
-                construct_panel_scoped_entity_id(
-                    snapshot, "sensor", desc.translation_key or "", panel_name
-                ),
-            )
-            for desc in PV_METADATA_SENSORS
+            SpanPVMetadataSensor(coordinator, desc, snapshot) for desc in PV_METADATA_SENSORS
         )
 
     if has_power_flows(snapshot):

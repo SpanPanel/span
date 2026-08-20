@@ -513,10 +513,8 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
         ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
         ``target_id`` is the panel-local circuit uuid (extracted from the
-        entity's unique_id). For sub-devices, ``target_id`` is the HA device id
-        of the sub-device; the panel id walks up via ``via_device_id``. Nothing
-        here enumerates the kinds, so a new one -- the PV inverter most recently
-        -- is favouritable the day its device exists.
+        entity's unique_id). For sub-devices, ``target_id`` is the HA
+        device id of the BESS/EVSE; the panel id walks up via ``via_device_id``.
 
         Failure paths use distinct translation keys so users see the
         actual reason their pick was rejected.
@@ -553,7 +551,7 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
         # Resolve the panel device id. Sub-devices register with
         # via_device_id; main panels never do, so via_device_id presence is a
-        # reliable discriminator whatever kinds exist, and we walk up to the
+        # reliable discriminator (BESS / EVSE today) and we walk up to the
         # parent SPAN Panel here.
         if device_entry.via_device_id is not None:
             parent = device_registry.async_get(device_entry.via_device_id)
