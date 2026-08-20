@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Your solar inverter gets a device of its own, on panels running the v1.0 data model.** Its vendor, model and nameplate capacity used to render as diagnostic
+  sensors on the _panel's_ card, beside the panel's own manufacturer and model — so the card whose job is telling you which enclosure this is read as though the
+  enclosure were an Enphase inverter. It now has a card like the battery and the chargers already do, carrying the firmware version the panel has been
+  publishing all along.
+- **If you already have these sensors, nothing about them changes.** The five entities that move to the new card — PV Power, PV Vendor, PV Product, PV Nameplate
+  Capacity and PV Panel Link — keep the entity ids and unique ids they have today, so dashboards, automations and history follow them across untouched. Only the
+  card they appear on changes.
+- **New installations get different entity ids for these five, and that is intended.** Home Assistant derives a new entity's id from the name of the device it
+  sits on, so a system installed from now on gets `sensor.span_panel_solar_pv_vendor` where a system installed before this release keeps
+  `sensor.span_panel_pv_vendor`. Both are correct and neither will change again: an existing system must never have an id renamed under it, and a new one gets
+  the id Home Assistant would give it. If you are comparing two SPAN systems and their PV entity ids differ, install date is why. The unique ids are the same on
+  both, and both sets of entities sit on the same new card.
+
 - **Your panel's own card now shows what the panel says it is** — manufacturer, model and hardware revision, read from the enclosure rather than assumed. A
   panel on the older data model publishes none of the three and keeps exactly the card it has today; the hardware revision row is left off rather than shown
   blank where no revision is published.

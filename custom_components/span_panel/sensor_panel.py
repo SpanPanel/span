@@ -657,16 +657,34 @@ class SpanMidSensor(SpanSensorBase[SpanMidSensorEntityDescription, SpanMidSnapsh
 class SpanPVMetadataSensor(
     SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPanelSnapshot]
 ):
-    """PV metadata sensor entity on the main panel device."""
+    """PV metadata sensor entity on the PV sub-device.
+
+    On the panel's own card until the inverter got one of its own, which put the
+    inverter's vendor and model beside the *panel's* vendor and model on the card
+    whose job is saying which enclosure this is.
+
+    The unique_id stays the panel-scoped one `construct_panel_unique_id_for_entry`
+    has always built, because a unique_id is an identity and these are the same
+    three entities they were. Only the device they hang off changes, which is a
+    registry update Home Assistant performs itself when the entity re-registers.
+
+    The `entity_id` is not touched either way. An installation that already has
+    these three keeps the panel-scoped ids it has, because the registry never
+    renames an entity it already knows; a new one gets the id Home Assistant
+    derives from the inverter's device name. That asymmetry is intended -- see
+    `test_pv_device.py`.
+    """
 
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
         description: SpanPVMetadataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
+        device_info_override: DeviceInfo,
     ) -> None:
         """Initialize the PV metadata sensor."""
         super().__init__(data_coordinator, description, snapshot)
+        self._attr_device_info = device_info_override
 
     def _generate_unique_id(
         self,

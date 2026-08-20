@@ -39,7 +39,7 @@ from .helpers import (
     has_pcs,
     resolve_evse_display_suffix,
 )
-from .util import bess_device_info, evse_device_info
+from .util import bess_device_info, evse_device_info, pv_device_info
 
 # pylint: disable=invalid-overridden-method
 
@@ -178,8 +178,9 @@ feeds them, as `connection` 0.1 specifies, and nothing read that half — so the
 one device class whose link the panel happened to report through the lugs was
 the only one a user could see.
 
-On the panel device, beside `pv_vendor` and `pv_product`, because the PV is not
-yet a sub-device of its own. It moves with them when it becomes one.
+On the inverter's own sub-device, beside `pv_vendor` and `pv_product`, which is
+where it moved when the PV got a device of its own -- the same place
+`bess_connected` sits relative to the battery.
 
 `SCHEMA_CONDITIONAL_FIELD` *and* `field_path`: flat firmware publishes
 `connected` on the BESS and on nothing else, so the both-adapters gate cannot be
@@ -541,7 +542,21 @@ async def async_setup_entry(
     # saying it does not know rather than a fault, and the enum it does publish
     # has no UNKNOWN member for it to say that with. See `PV_PANEL_LINK_SENSOR`.
     if snapshot.pv.connected is not None:
-        entities.append(SpanPanelBinarySensor(coordinator, PV_PANEL_LINK_SENSOR))
+        configured_name = coordinator.config_entry.data.get(
+            CONF_DEVICE_NAME, coordinator.config_entry.title
+        )
+        entities.append(
+            SpanPanelBinarySensor(
+                coordinator,
+                PV_PANEL_LINK_SENSOR,
+                device_info_override=pv_device_info(
+                    snapshot.serial_number,
+                    snapshot.pv,
+                    configured_name or "Span Panel",
+                    panel_device_id=config_entry.runtime_data.panel_device_id,
+                ),
+            )
+        )
 
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:
