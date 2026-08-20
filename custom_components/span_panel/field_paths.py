@@ -477,6 +477,7 @@ def residual_field_paths() -> frozenset[str]:
     # Deferred for the same cycle-avoidance reason as `declared_field_paths()`
     # below: every platform module imports this one for the declaration mixin.
     from . import (  # noqa: F401  pylint: disable=import-outside-toplevel,unused-import
+        binary_sensor,
         select,
         sensor_circuit,
         sensor_panel,

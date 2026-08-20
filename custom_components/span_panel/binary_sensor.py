@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import logging
+from types import MappingProxyType
+from typing import Any, ClassVar
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -356,6 +358,77 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         )
 
 
+class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]):
+    """The Wi-Fi link, which also reports the network the link is to.
+
+    Its own class, not a branch on `SpanPanelBinarySensor`, because
+    `_residual_field_paths` is a `ClassVar` and that base class serves every
+    panel binary sensor — the door, the two links, the panel status, the PCS
+    activity, the PV link. Declaring the SSID there would claim all of them read
+    it, and the declaration is not decoration: it is what a Repair consults to
+    name the entities a dead field took down with it, so an unresolved
+    `panel.wifi_ssid` would name the door sensor. `SpanPanelStatus` is its own
+    class in `sensor_panel` for exactly this reason.
+    """
+
+    _residual_field_paths: ClassVar[tuple[str, ...]] = ("panel.wifi_ssid",)
+    """The SSID, read for an attribute rather than by the `value_fn`.
+
+    A plain residual and not an exemption: both adapters map the property
+    (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
+    gate covers it.
+
+    `SpanPanelStatus` declares the same path, and that is deliberate — see
+    `extra_state_attributes` below. `residual_field_paths()` unions a set, and
+    the coordinator's `field_path -> entity_id` map holds a set of entity ids
+    per path, so two readers of one path is the case both were built for: the
+    Repair names both entities, which is what a user needs to see.
+    """
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The network this link is up on, when the panel names it.
+
+        The coherent host for the SSID: the entity that reports whether Wi-Fi is
+        up is the one that should report which network it is up on. Both values
+        come from the same node on the wire — `status/wifi` and
+        `status/wifi-ssid` on v1.0, `core/wifi` and `core/wifi-ssid` on flat.
+
+        The same attribute is still published by the Software Version sensor,
+        which is where it has always lived. That duplication is deliberate and
+        is documented at `SpanPanelStatus.extra_state_attributes`; do not remove
+        either half without reading it.
+
+        Omitted rather than reported as `None` when the panel publishes no SSID:
+        an attribute present and empty reads as a reading that failed, which is
+        a different claim from the panel never having made one.
+        """
+        snapshot = self.coordinator.data
+        if snapshot is None or snapshot.wifi_ssid is None:
+            return None
+        return {"wifi_ssid": snapshot.wifi_ssid}
+
+
+_PANEL_BINARY_SENSOR_CLASSES: Mapping[
+    str, type[SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]]
+] = MappingProxyType({SYSTEM_WIFI_LINK: SpanPanelWifiLinkBinarySensor})
+"""Panel binary sensors needing a class of their own, by description key.
+
+Everything absent from this map is a plain `SpanPanelBinarySensor`. A named map
+rather than a conditional inside the setup comprehension: the comprehension says
+"build one entity per description" and should keep saying only that, and the
+next description that needs its own class is then a one-line addition here
+rather than a second branch to read past.
+"""
+
+
+def _panel_binary_sensor_class(
+    description: SpanPanelBinarySensorEntityDescription,
+) -> type[SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]]:
+    """Return the entity class that serves one panel binary sensor description."""
+    return _PANEL_BINARY_SENSOR_CLASSES.get(description.key, SpanPanelBinarySensor)
+
+
 # ---------------------------------------------------------------------------
 # EVSE (EV Charger) binary sensors
 # ---------------------------------------------------------------------------
@@ -499,7 +572,10 @@ async def async_setup_entry(
 
     entities: list[
         SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanEvseBinarySensor
-    ] = [SpanPanelBinarySensor(coordinator, description) for description in BINARY_SENSORS]
+    ] = [
+        _panel_binary_sensor_class(description)(coordinator, description)
+        for description in BINARY_SENSORS
+    ]
 
     # Add grid islandable binary sensor when v2 data is available
     snapshot: SpanPanelSnapshot = coordinator.data

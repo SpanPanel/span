@@ -349,6 +349,11 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
     demanded the move the moment schema_1 grew its row. Until then the path sat
     in `RESIDUAL_EXEMPT_PATHS` annotated `SCHEMA_0_ONLY` -- true, and the reason
     a v1.0 panel silently stopped filling an attribute a flat panel filled.
+
+    `SpanPanelWifiLinkBinarySensor` declares the same path, which is the
+    duplication `extra_state_attributes` explains. Nothing breaks: the collector
+    unions a frozenset, and the coordinator maps a path to a *set* of entity
+    ids, so the Repair names both readers.
     """
 
     def __init__(
@@ -386,7 +391,19 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return additional state attributes for the software version sensor."""
+        """Return additional state attributes for the software version sensor.
+
+        **`wifi_ssid` is published here and on the Wi-Fi Link binary sensor, on
+        purpose. Do not "tidy" it away from either place.** The coherent host is
+        the binary sensor — a network name on a firmware-version sensor is
+        incoherent, and it only sits here because `panel_size` was already
+        occupying this attribute block. But it has been here for as long as the
+        integration has existed, so a user's
+        `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` template
+        keeps working. One duplicated attribute string is the price of not
+        breaking those; this copy comes out at a future major version, not
+        before. `test_the_ssid_stays_on_the_software_version_sensor_too` pins it.
+        """
         if not self.coordinator.data:
             return None
 

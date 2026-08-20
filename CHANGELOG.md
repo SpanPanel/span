@@ -84,6 +84,10 @@ All notable changes to this project will be documented in this file.
   everything unconfigured is reporting a state, and that is the state most panels are in; entities that vanished until somebody configured a limit would be
   entities nobody could build a dashboard on.
 
+- **The Wi-Fi network name is now on the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now also tells
+  you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID. The same attribute stays on the
+  Software Version sensor, where it has always been, so existing templates reading it there keep working unchanged.
+
 ### Fixed
 
 - **The Wi-Fi network name came back.** Panels on the older data model report the SSID they are joined to, and this integration has shown it as an attribute on

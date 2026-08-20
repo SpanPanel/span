@@ -226,10 +226,16 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 
 ### Software Version Sensor Attributes
 
-| Attribute    | Type   | Notes                               |
-| ------------ | ------ | ----------------------------------- |
-| `panel_size` | int    | Total breaker spaces (e.g., 32, 40) |
-| `wifi_ssid`  | string | Current Wi-Fi network               |
+| Attribute    | Type   | Notes                                                                                                                              |
+| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `panel_size` | int    | Total breaker spaces (e.g., 32, 40)                                                                                                |
+| `wifi_ssid`  | string | Current Wi-Fi network. Also on the Wi-Fi Link binary sensor, which is where it belongs; this copy stays for template compatibility |
+
+### Wi-Fi Link Binary Sensor Attributes
+
+| Attribute   | Type   | Notes                                                            |
+| ----------- | ------ | ---------------------------------------------------------------- |
+| `wifi_ssid` | string | Network this link is to. Absent when the panel publishes no SSID |
 
 ### EVSE (EV Charger) Entities
 

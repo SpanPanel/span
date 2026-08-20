@@ -885,3 +885,58 @@ async def test_a_dead_priority_names_the_selects(hass) -> None:
         assert affected["circuit.priority"] == sorted(s.entity_id for s in selects)
     finally:
         await _stop_scheduling(coordinator)
+
+
+async def test_two_entities_reading_one_residual_path_are_both_named(hass) -> None:
+    """`panel.wifi_ssid` has two readers, and the Repair has to name both.
+
+    The Wi-Fi Link binary sensor is the coherent host for the SSID; the Software
+    Version sensor keeps publishing it so existing templates go on working. Two
+    entities therefore declare one residual path, which the apparatus is built
+    for -- `residual_field_paths()` unions a frozenset and the coordinator maps a
+    path to a *set* of entity ids -- but "built for" is not "verified", and a map
+    that dropped one of the two would report half the damage without failing.
+    """
+    import dataclasses
+    from unittest.mock import MagicMock
+
+    from custom_components.span_panel.binary_sensor import (
+        async_setup_entry as binary_setup,
+    )
+    from custom_components.span_panel.const import SYSTEM_WIFI_LINK
+    from custom_components.span_panel.sensor import async_setup_entry as sensor_setup
+
+    coordinator, config_entry, _ = await _entities_by_declared_path(hass)
+    try:
+        coordinator.data = dataclasses.replace(coordinator.data, wifi_ssid="synthetic-network")
+
+        added_sensors = MagicMock()
+        await sensor_setup(hass, config_entry, added_sensors)
+        software_version = [
+            entity
+            for entity in added_sensors.call_args.args[0]
+            if getattr(entity.entity_description, "key", None) == "software_version"
+        ]
+        assert len(software_version) == 1
+
+        added_binary = MagicMock()
+        await binary_setup(hass, config_entry, added_binary)
+        wifi_link = [
+            entity
+            for entity in added_binary.call_args.args[0]
+            if getattr(entity.entity_description, "key", None) == SYSTEM_WIFI_LINK
+        ]
+        assert len(wifi_link) == 1
+
+        await _add_to_platform(hass, config_entry, software_version, "sensor")
+        await _add_to_platform(hass, config_entry, wifi_link, "binary_sensor")
+
+        assert coordinator.entity_ids_by_field_path["panel.wifi_ssid"] == sorted(
+            entity.entity_id for entity in (*software_version, *wifi_link)
+        )
+        # Both really do publish it, so the pair the Repair names is the pair a
+        # user would see go blank.
+        assert software_version[0].extra_state_attributes["wifi_ssid"] == "synthetic-network"
+        assert wifi_link[0].extra_state_attributes == {"wifi_ssid": "synthetic-network"}
+    finally:
+        await _stop_scheduling(coordinator)
