@@ -352,8 +352,17 @@ def has_pcs(snapshot: SpanPanelSnapshot) -> bool:
 
 
 def has_evse(snapshot: SpanPanelSnapshot) -> bool:
-    """Detect whether an EVSE (EV charger) is commissioned."""
-    return len(snapshot.evse) > 0
+    """Detect whether an EVSE (EV charger) is commissioned.
+
+    A circuit typed `evse` counts even before the charger appears in
+    `snapshot.evse`: the panel has commissioned it and the device usually
+    arrives on a later snapshot. Creation still iterates `snapshot.evse`, so
+    the wider signal adds no entities -- it makes the coordinator ask for a
+    reload at the moment the panel first admits the charger exists.
+    """
+    return len(snapshot.evse) > 0 or any(
+        circuit.device_type == "evse" for circuit in snapshot.circuits.values()
+    )
 
 
 def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:

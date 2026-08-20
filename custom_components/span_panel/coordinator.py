@@ -27,6 +27,7 @@ from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSna
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
 
 from .const import DOMAIN
+from .helpers import detect_capabilities
 from .id_builder import build_circuit_unique_id
 from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
@@ -483,22 +484,17 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
     @staticmethod
     def _detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-        """Derive optional hardware capabilities present in the snapshot."""
-        caps: set[str] = set()
-        if snapshot.battery.soe_percentage is not None:
-            caps.add("bess")
-        if snapshot.power_flow_pv is not None or any(
-            c.device_type == "pv" for c in snapshot.circuits.values()
-        ):
-            caps.add("pv")
-        if snapshot.power_flow_site is not None:
-            caps.add("power_flows")
-        if (
-            any(c.device_type == "evse" for c in snapshot.circuits.values())
-            or len(snapshot.evse) > 0
-        ):
-            caps.add("evse")
-        return frozenset(caps)
+        """Derive optional hardware capabilities present in the snapshot.
+
+        Delegates to `helpers.detect_capabilities` rather than deriving its
+        own set. This was a second, hand-rolled copy that never learned about
+        `mid`, `shed_forecast`, `bess_telemetry`, `pcs` or `der_link_health` --
+        so a panel that gained any of them on a firmware upgrade published the
+        properties, grew no entities, and requested no reload. The platforms
+        gate creation on the helper; the reload trigger has to read the same
+        set or the two silently disagree about what the panel can do.
+        """
+        return detect_capabilities(snapshot)
 
     def _check_capability_change(self, snapshot: SpanPanelSnapshot) -> None:
         """Check if hardware capabilities changed and request reload if expanded."""
