@@ -162,6 +162,44 @@ python -m pytest tests/test_current_monitor.py -q
 python -m pytest tests/ --cov=custom_components/span_panel --cov-report=term-missing
 ```
 
+## Knowing what the panel publishes that nothing reads
+
+The panel declares more than this integration surfaces, and the gap is tracked mechanically rather than by memory.
+
+### The gate
+
+`tests/test_declared_but_unread.py` asserts that **every property declared in a device's `$description`** is one of three things: mapped to a snapshot field by
+an adapter, consumed by a known internal route (topology, dispatch, device_info, role resolution), or listed in
+`tests/fixtures/unread_declarations_baseline.json` with a one-line reason.
+
+It decides "read" **by experiment**, not by inspecting a map. For each declared property it republishes a legal different value derived from the property's own
+`datatype`/`format`, rebuilds the snapshot through the real adapter, and checks whether any field a consumer reads actually moved. That is why it sees
+consumption the `_PROPERTY_FIELD_MAP` cannot express, and why it caught a case where a metadata row existed while nothing read the value.
+
+It fails in **both** directions:
+
+- A newly declared property that reaches nothing fails the build until somebody triages it.
+- A property that becomes read fails until its baseline line is deleted.
+
+### Working with the baseline
+
+When you surface a property, delete its baseline line in the same change. The test will tell you if you deleted one you did not surface, or surfaced one whose
+line you left.
+
+When you decide a property should _stay_ unread, add a line with an honest reason. The reasons are load-bearing — they are what stops the file becoming a list
+of things nobody remembers deciding. The current entries are all permanent: deliberate skips (`status/postal-code` copies location into recorder history; Home
+Assistant owns `status/time-zone`), values held for identity reasons (`pv/info/serial-number`), redundant echoes (`connection/*-device-type` dereferences to a
+declared `$type`), and properties no producer publishes (`connection/count`).
+
+### What it does not cover
+
+The gate reads the **vendored fixture**, so it answers "what does our capture declare that we do not read". It cannot see a property a real panel starts
+publishing in the field. That is the purpose of the runtime discovery work on `feat/discovery-and-catalog-validation`: the same question asked of a live panel
+and surfaced in diagnostics, so a maintainer triaging an issue can see what that fleet declares that this integration ignores.
+
+Note also that a property can be _read on one device and not another_ and the gate will not see it — it asks whether anything moved, not whether everything did.
+`snapshot.pv` keeps the first `energy.ebus.device.pv` child and discards the rest, so a second inverter is invisible while the property still counts as read.
+
 ## Linting and Type Checking
 
 ```bash
