@@ -31,10 +31,11 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er, issue_registry as ir
+from homeassistant.helpers import device_registry as dr, entity_registry as er, issue_registry as ir
 
 from .const import DOMAIN, EVENT_SCHEMA_ISSUE
 from .schema_validation import SchemaFindings
+from .util import ADOPTED_IDENTIFIER_TOKEN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -225,6 +226,53 @@ def _label(registry_entry: er.RegistryEntry) -> str:
     return registry_entry.name or registry_entry.original_name or registry_entry.entity_id
 
 
+def _labels(hass: HomeAssistant, new_disabled: list[er.RegistryEntry]) -> list[str]:
+    """Return what to call the new entities, with adopted ones counted rather than listed.
+
+    A curated addition is a handful of entities a maintainer chose, so naming each
+    one is the notice doing its job. An adopted device is the opposite shape:
+    every property a vendor device declares becomes an entity at once, so listing
+    them would spend the whole notice on one device and teach the user that this
+    category is noise -- which would cost them the curated additions too.
+
+    So an adopted device contributes exactly one line carrying its own count, and
+    the notice reads "Backup Generator (6 entities)" beside whatever else the
+    release added.
+    """
+    devices = dr.async_get(hass)
+    adopted: dict[str, int] = {}
+    labels: list[str] = []
+    for registry_entry in new_disabled:
+        device_name = _adopted_device_name(devices, registry_entry)
+        if device_name is None:
+            labels.append(_label(registry_entry))
+        else:
+            adopted[device_name] = adopted.get(device_name, 0) + 1
+    labels.extend(f"{name} ({count} entities)" for name, count in adopted.items())
+    return sorted(labels)
+
+
+def _adopted_device_name(
+    devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry
+) -> str | None:
+    """Return the adopted device this entity belongs to, or None when it belongs to none.
+
+    Read off the device identifier rather than off the entity, because the entity
+    carries nothing that distinguishes an adopted reading from a curated one --
+    by design, since an adopted entity is meant to be indistinguishable once it
+    is enabled.
+    """
+    if registry_entry.device_id is None:
+        return None
+    device = devices.async_get(registry_entry.device_id)
+    if device is None:
+        return None
+    token = f"_{ADOPTED_IDENTIFIER_TOKEN}_"
+    if not any(token in identifier for _domain, identifier in device.identifiers):
+        return None
+    return device.name_by_user or device.name or registry_entry.entity_id
+
+
 @callback
 def async_notice_new_disabled_entities(
     hass: HomeAssistant,
@@ -294,7 +342,7 @@ def async_notice_new_disabled_entities(
         _LOGGER.debug("New-entity notice %s already raised; leaving it alone", issue_id)
         return
 
-    labels = sorted(_label(registry_entry) for registry_entry in new_disabled)
+    labels = _labels(hass, new_disabled)
     _LOGGER.debug("Raising new-entity notice %s for %s", issue_id, labels)
     ir.async_create_issue(
         hass,

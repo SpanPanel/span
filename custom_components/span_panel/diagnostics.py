@@ -7,8 +7,10 @@ from typing import Any, TypedDict
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
+from span_panel_api import SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
+from .adoption import adopted_control_count, classify
 from .const import (
     CONF_EBUS_BROKER_PASSWORD,
     CONF_EBUS_BROKER_USERNAME,
@@ -93,6 +95,83 @@ def _discovery(findings: SchemaFindings | None) -> DiscoveryBlock:
     }
 
 
+class AdoptedDeviceRow(TypedDict):
+    """One adopted device, as it appears in the payload.
+
+    No `name`, no `serial_number`. Both are on `AdoptedDevice` and both reach the
+    device card, but neither answers the question this block exists to ask -- and
+    a vendor-set device name is free text a household chose. The type, the shape
+    and the counts are what a maintainer needs.
+    """
+
+    device_type: str
+    model: str | None
+    property_count: int
+    properties: list[AdoptedPropertyRow]
+
+
+class AdoptedPropertyRow(TypedDict):
+    """One adopted property's declaration, with no value.
+
+    The same rule `DiscoveredRow` follows and for the same reason: `TO_REDACT` is
+    key-based over the config entry and cannot protect a wire value put here.
+    `platform` is included because it is derived from the other three and is the
+    decision a maintainer would otherwise recompute by hand.
+    """
+
+    path: str
+    datatype: str
+    unit: str | None
+    settable: bool
+    platform: str
+
+
+class AdoptionBlock(TypedDict):
+    """The `adopted_devices` section.
+
+    `pending_controls` is the measurement that decides whether a generic write
+    path earns its contract bump -- how many declared properties would be
+    controls if one existed. Zero on every panel seen so far, and the number
+    stays invisible unless it is reported.
+    """
+
+    count: int
+    pending_controls: int
+    devices: list[AdoptedDeviceRow]
+
+
+def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
+    """Report the devices this integration models nothing for.
+
+    Declarations, never values -- see `AdoptedPropertyRow`. Empty on every panel
+    that publishes only device types this integration reads, which is every panel
+    seen so far, and a non-empty block is the first evidence that the schema's
+    vendor extensibility is being used in the field.
+    """
+    return {
+        "count": len(snapshot.adopted_devices),
+        "pending_controls": adopted_control_count(snapshot),
+        "devices": [
+            {
+                "device_type": device.device_type,
+                "model": device.model,
+                "property_count": len(device.properties),
+                "properties": [
+                    {
+                        "path": declaration.path,
+                        "datatype": declaration.datatype,
+                        "unit": declaration.unit,
+                        "settable": declaration.settable,
+                        "platform": classify(declaration).value,
+                    }
+                    for declaration in device.properties
+                ],
+            }
+            for device in snapshot.adopted_devices
+        ],
+    }
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
@@ -162,4 +241,5 @@ async def async_get_config_entry_diagnostics(
             "last_update_success": coordinator.last_update_success,
         },
         "schema_discovery": _discovery(coordinator.schema_findings),
+        "adopted_devices": _adoption(snapshot),
     }

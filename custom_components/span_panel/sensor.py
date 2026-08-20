@@ -6,11 +6,13 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
+from .adoption import create_adopted_sensors
 from .const import (
     CONF_DEVICE_NAME,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
@@ -117,8 +119,19 @@ async def async_setup_entry(
         # Create all native sensors (panel, circuit, and battery sensors)
         entities = create_native_sensors(coordinator, snapshot, config_entry)
 
+        # Readings from devices this integration models nothing for. Appended
+        # rather than merged into `create_native_sensors`: those are curated
+        # descriptions and these are declarations, and the two inventories answer
+        # different questions -- see `adoption`.
+        adopted = create_adopted_sensors(
+            coordinator,
+            snapshot,
+            dr.async_get(hass),
+            panel_device_id=config_entry.runtime_data.panel_device_id,
+        )
+
         # Add all native sensor entities
-        async_add_entities(entities)
+        async_add_entities([*entities, *adopted])
 
         # Force immediate coordinator refresh to ensure all sensors update right away
         await coordinator.async_request_refresh()

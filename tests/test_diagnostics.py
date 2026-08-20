@@ -154,6 +154,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         },
         evse={},
         battery=None,
+        adopted_devices=(),
     )
     coordinator = MagicMock()
     coordinator.data = snapshot

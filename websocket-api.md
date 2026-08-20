@@ -109,14 +109,14 @@ relationships explicitly, keyed by circuit UUID, so the card reads a single stru
 
 #### Top Level
 
-| Field         | Type        | Description                                     |
-| ------------- | ----------- | ----------------------------------------------- |
-| `serial`      | string      | Panel serial number                             |
-| `firmware`    | string      | Panel firmware version                          |
-| `panel_size`  | int or null | Total breaker spaces (e.g., 32, 40)             |
-| `device_id`   | string      | HA device registry ID (echoed from request)     |
-| `device_name` | string      | HA device display name                          |
-| `circuits`    | object      | Circuit UUID keyed map (see below)              |
+| Field         | Type        | Description                                         |
+| ------------- | ----------- | --------------------------------------------------- |
+| `serial`      | string      | Panel serial number                                 |
+| `firmware`    | string      | Panel firmware version                              |
+| `panel_size`  | int or null | Total breaker spaces (e.g., 32, 40)                 |
+| `device_id`   | string      | HA device registry ID (echoed from request)         |
+| `device_name` | string      | HA device display name                              |
+| `circuits`    | object      | Circuit UUID keyed map (see below)                  |
 | `sub_devices` | object      | HA device ID keyed map of BESS/MID/EVSE (see below) |
 
 #### Circuit Object

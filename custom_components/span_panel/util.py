@@ -38,6 +38,17 @@ SUB_DEVICE_MID: Final = "mid"
 SUB_DEVICE_EVSE: Final = "evse"
 SUB_DEVICE_PV: Final = "pv"
 
+ADOPTED_IDENTIFIER_TOKEN: Final = "adopted"
+"""The infix marking a sub-device identifier as adopted rather than curated.
+
+An adopted device is `{panel serial}_adopted_{anchor}`, where the anchor is
+whatever the device was first seen under. Kept here beside the curated kinds
+because the two namespaces have to be readable apart, and the reading end below
+is what would otherwise mistake one for the other: a vendor device whose id
+happens to end in `pv` would classify as the solar sub-device under a suffix
+rule that had never heard of adoption.
+"""
+
 
 def classify_sub_device_identifier(identifier: str) -> str | None:
     """Return the kind of sub-device an identifier names, or None if it names none.
@@ -52,6 +63,13 @@ def classify_sub_device_identifier(identifier: str) -> str | None:
     suffix rules below, which is the only ordering that stays right whatever a
     panel names its nodes.
     """
+    # Adopted devices are not a curated kind and must not be read as one. Tested
+    # before every suffix rule below, because the anchor that follows the token
+    # is vendor vocabulary: a device id ending in `pv` would otherwise classify
+    # as the panel's solar sub-device.
+    if f"_{ADOPTED_IDENTIFIER_TOKEN}_" in identifier:
+        return None
+
     # Infix, not suffix: the node id follows, and it is what distinguishes one
     # charger from another on the same panel.
     if f"_{SUB_DEVICE_EVSE}_" in identifier:

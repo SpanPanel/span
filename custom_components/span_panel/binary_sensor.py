@@ -14,12 +14,14 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
+from .adoption import create_adopted_binary_sensors
 from .const import (
     CONF_DEVICE_NAME,
     PANEL_STATUS,
@@ -649,4 +651,17 @@ async def async_setup_entry(
             if evse.connected is not None:
                 entities.append(SpanEvseBinarySensor(coordinator, EVSE_PANEL_LINK_SENSOR, evse_id))
 
-    async_add_entities(entities)
+    # Declared booleans on devices this integration models nothing for. Disabled
+    # and diagnostic, so a panel that gains a vendor device gains no dashboard
+    # clutter -- only something the user can find and enable.
+    async_add_entities(
+        [
+            *entities,
+            *create_adopted_binary_sensors(
+                coordinator,
+                snapshot,
+                dr.async_get(hass),
+                panel_device_id=config_entry.runtime_data.panel_device_id,
+            ),
+        ]
+    )

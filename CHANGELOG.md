@@ -6,6 +6,34 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **A device the panel publishes that this integration has never modelled now appears, instead of appearing nowhere.** SPAN positions the panel as the hub for
+  whatever plugs into it and the eBus schema is explicitly vendor-extensible, so a device type nobody modelled is an expected arrival — and until now it
+  produced no device, no entity and no sign it was there. Such a device now gets a card of its own hanging off the panel, carrying whatever `info` it publishes,
+  with its readings as entities beneath it. Everything adopted arrives **disabled and diagnostic**: nothing reaches a dashboard uninvited, and the new-entity
+  notice names the device so you can find it.
+- **Devices this integration does model are left alone, deliberately.** A new property on a circuit, the battery, a charger or the panel is not adopted — it is
+  curated in a release, because that is where the judgement lives about whether it should be an entity, an attribute, or a line on a device card. Automatic
+  adoption would spend an `entity_id` permanently on a machine-derived shape before anyone made that call. The sixteen Power Control System properties that
+  curation collapsed into one entity and thirteen attributes are the worked example of what a rule cannot produce.
+- **Nothing adopted enters long-term statistics, and that is a decision rather than an omission.** No adopted entity carries a `state_class`. It is not declared
+  on the wire and cannot be derived from one — this integration ships `feedthroughEnergyProducedWh` as `TOTAL` beside `mainMeterEnergyProducedWh` as
+  `TOTAL_INCREASING`, same unit and same device class — and a wrong one writes corrupt statistics that fixing the panel afterwards does not repair. Enrolling a
+  property nobody asked for into long-term statistics is also a permanent write to your recorder database. If you want statistics from an adopted reading, wrap
+  it in a template sensor, a Riemann-sum integration or a utility meter: that is your call, made on an entity you chose to enable.
+- **`info` becomes the device card and `connection` becomes the device link — neither becomes entities.** A panel publishing its own build metadata and its own
+  wiring topology should not arrive as a handful of sensors holding version strings and opaque device ids. The split is keyed on the Homie node rather than on
+  property names, because the capability catalogs carry no marker for "this value is a device reference" and a hard-coded name list goes stale silently.
+- **An adopted device keeps the identity it was first seen under.** A serial number arriving after the device was adopted is recorded on its card and moves
+  nothing, and a device adopted under its serial survives its wire id changing. Either move would read to Home Assistant as a device _replacement_ and would
+  take the device's entities and their history with it.
+- **The new-entity notice counts an adopted device rather than listing its entities.** A vendor device declaring a dozen properties would otherwise spend the
+  whole notice on itself and teach you that the category is noise — which would cost you the curated additions too.
+- **Diagnostics report which device types and properties were adopted, and never their values.** The same rule the declared-but-unread report follows: a
+  diagnostics attachment leaves the house, and the redaction that protects your config entry is key-based and knows nothing about wire property names.
+- **Controls are classified but not yet built.** A property the panel accepts writes to is recognised as a switch, a select or a number, and surfaces as a
+  reading until the write path exists — every write this integration performs today goes through a curated, adapter-named topic, and a generic one is a change
+  to the adapter contract with its own version bump. Diagnostics count how many properties are waiting on it, so the decision is made on a measurement.
+
 - **Your solar inverter gets a device of its own, on panels running the v1.0 data model.** Its vendor, model and nameplate capacity used to render as diagnostic
   sensors on the _panel's_ card, beside the panel's own manufacturer and model — so the card whose job is telling you which enclosure this is read as though the
   enclosure were an Enphase inverter. It now has a card like the battery and the chargers already do, carrying the firmware version the panel has been
