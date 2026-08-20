@@ -263,7 +263,11 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # +3 with the shed forecast: the two full-charge refinements and the
     # confidence enum, read as attributes on the two forecast sensors and
     # carried by no adapter's metadata map.
-    Producibility.NEITHER: 18,
+    # +1 for `mid.grid_state`, the `mid_grid_state` sensor's source field. Like
+    # `panel.dominant_power_source` below it was read by a description and
+    # enumerated nowhere, so nothing held it against the adapters and
+    # `evaluate_field_metadata` had no way to tell it from an unread field.
+    Producibility.NEITHER: 19,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-

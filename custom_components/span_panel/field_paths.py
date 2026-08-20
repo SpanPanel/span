@@ -183,6 +183,10 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "mid.model": Producibility.NEITHER,
         "mid.serial_number": Producibility.NEITHER,
         "mid.grid_forming_device_name": Producibility.NEITHER,
+        # The `mid_grid_state` sensor's source field — utility-supply health,
+        # the one non-metadata entity the MID brings. Neither adapter maps the
+        # MID at all, which is why the description is `NO_SOURCE_FIELD`.
+        "mid.grid_state": Producibility.NEITHER,
         # The EVSE's Homie node id — an addressing handle used to build the
         # sub-device identifier, not a published field.
         "evse.node_id": Producibility.NEITHER,
