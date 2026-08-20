@@ -504,6 +504,13 @@ def test_the_declared_options_are_the_enum_the_panel_declares() -> None:
     assert set(PCS_BINDING_CONSTRAINT_OPTIONS) == {value.lower() for value in declared.split(",")}
 
 
+def test_the_binding_constraint_publishes_no_attributes_of_its_own() -> None:
+    """The other half of putting the pairing on the description: one PCS sensor
+    carries thirteen attributes and the other carries none, and which is which is
+    data rather than a comparison against `key` inside the entity."""
+    assert _sensors(_configured())[BINDING_CONSTRAINT_KEY].extra_state_attributes is None
+
+
 def test_none_is_a_binding_constraint_and_not_an_absence() -> None:
     """The captured value. `NONE` means nothing is constraining import, which is
     a state the catalog defines; reporting it as unknown would lose that."""
