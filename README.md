@@ -170,12 +170,12 @@ Present only when the panel publishes them.
 
 ### Power Flow Sensors (v2 only)
 
-| Sensor        | Device Class | Unit | Notes                                                                       |
-| ------------- | ------------ | ---- | --------------------------------------------------------------------------- |
-| Grid Power    | Power        | W    | Grid power flow                                                             |
-| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                      |
-| Battery Power | Power        | W    | Battery charge/discharge (+discharge, -charge). Only when BESS commissioned |
-| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                       |
+| Sensor        | Device Class | Unit | Notes                                                                           |
+| ------------- | ------------ | ---- | ------------------------------------------------------------------------------- |
+| Grid Power    | Power        | W    | Grid power flow                                                                 |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                          |
+| Battery Power | Power        | W    | Battery charge/discharge (+charging, -discharging). Only when BESS commissioned |
+| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                           |
 
 ### PV Metadata Sensors (v2 only, on main panel device)
 
@@ -258,16 +258,18 @@ device uses manufacturer, model, serial number, and software version from batter
 
 #### BESS Sensors
 
-| Sensor             | Device Class   | Unit | Notes                                                             |
-| ------------------ | -------------- | ---- | ----------------------------------------------------------------- |
-| Battery Level      | Battery        | %    | State of energy as percentage                                     |
-| Battery Power      | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device |
-| BESS Vendor        | —              | —    | Battery system vendor (diagnostic)                                |
-| BESS Model         | —              | —    | Battery system model (diagnostic)                                 |
-| BESS Serial Number | —              | —    | Battery system serial number (diagnostic)                         |
-| BESS Firmware      | —              | —    | Battery system firmware (diagnostic)                              |
-| Nameplate Capacity | Energy Storage | kWh  | Rated battery capacity (diagnostic)                               |
-| Stored Energy      | Energy Storage | kWh  | Current stored energy (diagnostic)                                |
+| Sensor              | Device Class   | Unit | Notes                                                                                            |
+| ------------------- | -------------- | ---- | ------------------------------------------------------------------------------------------------ |
+| Battery Level       | Battery        | %    | State of energy as percentage                                                                    |
+| Battery Power       | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device                                |
+| Meter Power         | Power          | W    | The BESS's own meter (+charging, -discharging). v1.0 data model only                             |
+| Communication State | —              | —    | The BESS's report of its own link health (diagnostic, disabled by default). v1.0 data model only |
+| BESS Vendor         | —              | —    | Battery system vendor (diagnostic)                                                               |
+| BESS Model          | —              | —    | Battery system model (diagnostic)                                                                |
+| BESS Serial Number  | —              | —    | Battery system serial number (diagnostic)                                                        |
+| BESS Firmware       | —              | —    | Battery system firmware (diagnostic)                                                             |
+| Nameplate Capacity  | Energy Storage | kWh  | Rated battery capacity (diagnostic)                                                              |
+| Stored Energy       | Energy Storage | kWh  | Current stored energy (diagnostic)                                                               |
 
 #### BESS Binary Sensors
 

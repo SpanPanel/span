@@ -275,7 +275,12 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     Producibility.SCHEMA_0_ONLY: 11,
     # +2 with the shed forecast: the two live estimates, which schema_1 maps and
     # flat firmware does not publish at all.
-    Producibility.SCHEMA_1_ONLY: 3,
+    # +2 for `battery.power_w` and `battery.communication_state`, the BESS's own
+    # meter and link health behind `bess_meter_power` and
+    # `bess_communication_state`. schema_1 maps both; flat's BESS device class
+    # declares neither property, so neither can ever satisfy the both-adapters
+    # gate.
+    Producibility.SCHEMA_1_ONLY: 5,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

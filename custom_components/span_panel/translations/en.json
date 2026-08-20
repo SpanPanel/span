@@ -177,6 +177,18 @@
       "bess_model": {
         "name": "Model"
       },
+      "bess_communication_state": {
+        "name": "Communication State",
+        "state": {
+          "ok": "OK",
+          "degraded": "Degraded",
+          "lost": "Lost",
+          "unknown": "Unknown"
+        }
+      },
+      "bess_meter_power": {
+        "name": "Meter Power"
+      },
       "bess_nameplate_capacity": {
         "name": "Nameplate Capacity"
       },

@@ -57,6 +57,12 @@
       "bess_model": {
         "default": "mdi:battery-outline"
       },
+      "bess_communication_state": {
+        "default": "mdi:lan-connect"
+      },
+      "bess_meter_power": {
+        "default": "mdi:battery-charging-outline"
+      },
       "bess_nameplate_capacity": {
         "default": "mdi:battery-high"
       },

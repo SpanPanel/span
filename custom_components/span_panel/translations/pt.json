@@ -177,6 +177,18 @@
       "bess_model": {
         "name": "Modelo"
       },
+      "bess_communication_state": {
+        "name": "Estado de Comunicação",
+        "state": {
+          "ok": "Correto",
+          "degraded": "Degradado",
+          "lost": "Perdido",
+          "unknown": "Desconhecido"
+        }
+      },
+      "bess_meter_power": {
+        "name": "Potência do Medidor"
+      },
       "bess_nameplate_capacity": {
         "name": "Capacidade Nominal"
       },

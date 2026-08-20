@@ -305,6 +305,27 @@ def has_shed_forecast(snapshot: SpanPanelSnapshot) -> bool:
     )
 
 
+def has_bess_telemetry(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the BESS publishes anything about itself beyond its state of charge.
+
+    Presence of the BESS's own `meter` and `status` capability nodes, from
+    presence of the fields they fill. A BESS may be commissioned and publish
+    neither: `has_bess` reads `soc/soc`, which is a different node, and every flat
+    panel's BESS has no such properties at all.
+
+    Separate from `has_bess` rather than folded into it, because the two answer
+    different questions and the wrong one is silently wrong. `has_bess` decides
+    whether the sub-device exists; this decides whether two of its sensors can be
+    created. Merging them would either delete the metadata sensors from a BESS
+    with no meter node or invent two permanently-unknown ones on it.
+
+    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
+    version, so a BESS that gains these nodes on a firmware upgrade reaches
+    `detect_capabilities`, the coordinator reloads, and the sensors appear.
+    """
+    return snapshot.battery.power_w is not None or snapshot.battery.communication_state is not None
+
+
 def has_evse(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether an EVSE (EV charger) is commissioned."""
     return len(snapshot.evse) > 0
@@ -332,4 +353,6 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
         caps.add("mid")
     if has_shed_forecast(snapshot):
         caps.add("shed_forecast")
+    if has_bess_telemetry(snapshot):
+        caps.add("bess_telemetry")
     return frozenset(caps)

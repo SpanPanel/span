@@ -1,6 +1,4 @@
 {
-  "bess/meter/active-power": "the battery's own charge/discharge meter; SpanBatterySnapshot carries no power field, and the panel's power_flow_battery is a different property (Task 5)",
-  "bess/status/communication-state": "the publisher's self-report, deliberately distinct from the enclosure's bess_connected view; no snapshot field carries it (Task 5)",
   "circuit/breaker/poles": "reaches circuit.is_240v and stops there; the voltage attribute is derived from the tab count instead, so no entity or attribute reads the field",
   "circuit/connection/count": "microinverter/pack count; no producer publishes it, so there is no fixture value an entity could be tested against",
   "circuit/connection/feeds-device-status": "the enclosure's link-health view of a circuit-fed DER; only the lugs fed-by-* route is read today, so PV and EVSE get no connected sensor (Task 3)",

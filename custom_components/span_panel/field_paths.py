@@ -210,6 +210,21 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # and datatype validation against the panel's own `$description`.
         "panel.shed_time_to_priority_shed_min": Producibility.SCHEMA_1_ONLY,
         "panel.shed_total_time_remaining_min": Producibility.SCHEMA_1_ONLY,
+        # The BESS's own meter and its own link health, behind `bess_meter_power`
+        # and `bess_communication_state`, whose descriptions are
+        # `SCHEMA_CONDITIONAL_FIELD` for the usual reason: flat's BESS device
+        # class declares neither property, so the both-adapters gate cannot be
+        # satisfied. schema_1 carries a `_PROPERTY_FIELD_MAP` row for each, which
+        # is what makes these SCHEMA_1_ONLY rather than NEITHER and buys them unit
+        # and datatype validation against the BESS's own `$description`.
+        #
+        # `battery.power_w` is charge-positive in the snapshot -- the library
+        # negates the enclosure's meter frame -- which is the same direction
+        # `battery_power` shows after negating `panel.power_flow_battery`. The two
+        # sensors sit on one device card and must not disagree about which way is
+        # charging.
+        "battery.power_w": Producibility.SCHEMA_1_ONLY,
+        "battery.communication_state": Producibility.SCHEMA_1_ONLY,
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
         "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,

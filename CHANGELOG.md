@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Your battery's own meter and its own link health, on panels running the v1.0 data model.** **Meter Power** is what the BESS itself reports it is charging or
+  discharging at, as distinct from the panel's **Battery Power**, which is the enclosure's arbitrated figure. Both have been on the wire since firmware r202633
+  and nothing read either. Meter Power is enabled by default; **Communication State** — the BESS's own `OK` / `DEGRADED` / `LOST` / `UNKNOWN` report on its link
+  — is a diagnostic and is off by default, since it is only interesting when something is wrong.
+- **Both battery power sensors read positive when the battery is charging.** They come off the wire in opposite sign conventions and are normalised to one, so
+  the two sitting side by side on the BESS device can never point opposite ways.
+- **Communication State is not the same thing as BESS Connected.** The binary sensor is the _panel's_ view of the link, from the enclosure's connection record;
+  the new sensor is the _battery's_ view of it. A BESS can report its own link lost while the panel still claims it, and now you can see that.
+- Both sensors are created only where the BESS publishes the reading behind them — a battery on the older data model, or one whose firmware publishes only one
+  of the two, gets no entity for what it cannot report rather than one permanently unknown, and a BESS that gains the capability on a firmware upgrade picks the
+  sensors up on the reload the integration already performs.
+
+### Fixed
+
+- **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
+  was wrong. No entity changed.
+
 - **Backup planning, in minutes: two new sensors on panels running the v1.0 data model.** **Time to Priority Shed** is how long before the panel starts shedding
   circuits, and **Backup Time Remaining** is how long before the battery is spent. Your panel has been publishing both since firmware r202633 and nothing read
   them; they are the numbers you would actually set an alarm on, so they are enabled by default and sit beside the power and energy sensors rather than under

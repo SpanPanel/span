@@ -21,6 +21,7 @@ from .const import (
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     has_bess,
+    has_bess_telemetry,
     has_evse,
     has_mid,
     has_power_flows,
@@ -38,6 +39,7 @@ from .sensor_definitions import (
     BATTERY_POWER_SENSOR,
     BATTERY_SENSOR,
     BESS_METADATA_SENSORS,
+    BESS_TELEMETRY_SENSORS,
     CIRCUIT_BREAKER_RATING_SENSOR,
     CIRCUIT_CURRENT_SENSOR,
     CIRCUIT_SENSORS,
@@ -421,6 +423,23 @@ def create_battery_sensors(
         SpanBessMetadataSensor(coordinator, desc, snapshot, bess_info)
         for desc in BESS_METADATA_SENSORS
     )
+
+    # What the BESS reports about itself, gated per description because it comes
+    # from capability nodes a BESS may not have. `has_bess_telemetry` answers
+    # whether it publishes either node at all -- false on every flat panel, and
+    # the reason a reload creates these when a BESS gains them mid-life. The
+    # per-description check then asks whether *this* reading is among what it
+    # publishes: a BESS with a `meter` node and no `status` node is legal, and the
+    # half it omits must produce no entity rather than one permanently unknown.
+    #
+    # The presence test is the description's own `value_fn`, so the gate cannot
+    # drift away from the read it is gating.
+    if has_bess_telemetry(snapshot):
+        entities.extend(
+            SpanBessMetadataSensor(coordinator, desc, snapshot, bess_info)
+            for desc in BESS_TELEMETRY_SENSORS
+            if desc.value_fn(snapshot.battery) is not None
+        )
 
     return entities
 

@@ -582,6 +582,70 @@ BESS_METADATA_SENSORS: tuple[
     ),
 )
 
+BESS_TELEMETRY_SENSORS: tuple[
+    SpanBessMetadataSensorEntityDescription,
+    SpanBessMetadataSensorEntityDescription,
+] = (
+    SpanBessMetadataSensorEntityDescription(
+        key="meter_power",
+        field_path="battery.power_w",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="bess_meter_power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        suggested_display_precision=0,
+        value_fn=lambda b: b.power_w,
+    ),
+    SpanBessMetadataSensorEntityDescription(
+        key="communication_state",
+        field_path="battery.communication_state",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="bess_communication_state",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        options=["ok", "degraded", "lost", "unknown"],
+        value_fn=lambda b: None if b.communication_state is None else b.communication_state.lower(),
+    ),
+)
+"""What the BESS reports about *itself*, as opposed to what the panel reports about it.
+
+Separate from `BESS_METADATA_SENSORS` because these are created conditionally and
+those are not. Every metadata sensor exists on any commissioned BESS, filled or
+empty — `bess_part_number` sits at `None` on this fixture and has since it
+shipped. These two come from capability nodes a BESS may simply not have, so
+absence has to mean no entity rather than a permanently unknown one, and mixing
+the two rules into one tuple would mean deciding per description which applied.
+
+**Power is enabled by default and not diagnostic; communication state is
+neither.** The battery's own charge/discharge figure is a reading a user graphs
+and automates on. Its link health is a fault signal — interesting when something
+is wrong, noise on a device card the rest of the time — so it lands the way the
+other diagnostics do, off by default and available to anyone who wants it.
+
+**`bess_meter_power` is not `battery_power`, and the names say so.** The existing
+`battery_power` sensor reads `panel.power_flow_battery`, the enclosure's own
+arbitrated flow figure; this one reads the BESS's `meter/active-power`, the
+battery's own meter. On a healthy panel they agree, and where they disagree that
+is a fact worth being able to see rather than one to hide behind a single entity.
+
+**Both read charge-positive, which is what makes them agree.** The library
+negates the BESS meter into the snapshot's frame (`SpanBatterySnapshot.power_w`
+is documented charge-positive), and `BATTERY_POWER_SENSOR` negates
+`power_flow_battery`, which the capability catalog defines as
+discharge-positive. Two negations for two opposite wire conventions, landing on
+one convention in the UI: **positive means the battery is charging**. A sensor
+whose sign contradicted the one beside it would be worse than no sensor.
+
+**`derived` as well as `field_path`, by the producible rule.** The gate wants a
+path both adapters produce, and flat's BESS device class declares neither
+property — so `SCHEMA_CONDITIONAL_FIELD`, with the paths enumerated in
+`RESIDUAL_EXEMPT_PATHS` as `SCHEMA_1_ONLY`. `field_path` still names the source,
+which is what gives each sensor its Repair mention and its unavailability when
+the panel stops resolving the property.
+"""
+
 # ---------------------------------------------------------------------------
 # PV metadata sensors (on main panel device)
 # ---------------------------------------------------------------------------
@@ -925,6 +989,7 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
         *UNMAPPED_SENSORS,
         *MID_SENSORS,
         *BESS_METADATA_SENSORS,
+        *BESS_TELEMETRY_SENSORS,
         *PV_METADATA_SENSORS,
         *PANEL_POWER_SENSORS,
         *PANEL_ENERGY_SENSORS,

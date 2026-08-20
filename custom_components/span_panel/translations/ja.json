@@ -177,6 +177,18 @@
       "bess_model": {
         "name": "モデル"
       },
+      "bess_communication_state": {
+        "name": "通信状態",
+        "state": {
+          "ok": "正常",
+          "degraded": "劣化",
+          "lost": "喪失",
+          "unknown": "不明"
+        }
+      },
+      "bess_meter_power": {
+        "name": "メーター電力"
+      },
       "bess_nameplate_capacity": {
         "name": "定格容量"
       },
