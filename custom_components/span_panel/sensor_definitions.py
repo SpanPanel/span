@@ -297,32 +297,42 @@ UPSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
     )
 )
 
-DOWNSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
-    SpanPanelDataSensorEntityDescription(
-        key="downstream_l1_current",
-        field_path="panel.downstream_l1_current_a",
-        translation_key="downstream_l1_current",
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        suggested_display_precision=2,
-        value_fn=lambda s: s.downstream_l1_current_a,
-    )
+DOWNSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="downstream_l1_current",
+    field_path="panel.downstream_l1_current_a",
+    # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
+    # note says this cannot be relied on -- reports the UPSTREAM service conductors, not a downstream measurement.
+    # Disabled rather than removed because it shipped in 2.0.8, so an existing
+    # install has it with history and entities must not vanish. This changes
+    # nothing for those installs -- the default applies at first registration
+    # only -- it stops NEW installs adopting it. See the delta document.
+    entity_registry_enabled_default=False,
+    translation_key="downstream_l1_current",
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    suggested_display_precision=2,
+    value_fn=lambda s: s.downstream_l1_current_a,
 )
 
-DOWNSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
-    SpanPanelDataSensorEntityDescription(
-        key="downstream_l2_current",
-        field_path="panel.downstream_l2_current_a",
-        translation_key="downstream_l2_current",
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        suggested_display_precision=2,
-        value_fn=lambda s: s.downstream_l2_current_a,
-    )
+DOWNSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
+    key="downstream_l2_current",
+    field_path="panel.downstream_l2_current_a",
+    # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
+    # note says this cannot be relied on -- reports the UPSTREAM service conductors, not a downstream measurement.
+    # Disabled rather than removed because it shipped in 2.0.8, so an existing
+    # install has it with history and entities must not vanish. This changes
+    # nothing for those installs -- the default applies at first registration
+    # only -- it stops NEW installs adopting it. See the delta document.
+    entity_registry_enabled_default=False,
+    translation_key="downstream_l2_current",
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    suggested_display_precision=2,
+    value_fn=lambda s: s.downstream_l2_current_a,
 )
 
 # Main breaker rating sensor (v2 only, conditionally created)
@@ -799,21 +809,7 @@ BESS_METADATA_SENSORS: tuple[
     ),
 )
 
-BESS_TELEMETRY_SENSORS: tuple[
-    SpanBessMetadataSensorEntityDescription,
-    SpanBessMetadataSensorEntityDescription,
-] = (
-    SpanBessMetadataSensorEntityDescription(
-        key="meter_power",
-        field_path="battery.power_w",
-        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
-        translation_key="bess_meter_power",
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfPower.WATT,
-        suggested_display_precision=0,
-        value_fn=lambda b: b.power_w,
-    ),
+BESS_TELEMETRY_SENSORS: tuple[SpanBessMetadataSensorEntityDescription,] = (
     SpanBessMetadataSensorEntityDescription(
         key="communication_state",
         field_path="battery.communication_state",
@@ -830,35 +826,55 @@ BESS_TELEMETRY_SENSORS: tuple[
 
 Separate from `BESS_METADATA_SENSORS` because these are created conditionally and
 those are not. Every metadata sensor exists on any commissioned BESS, filled or
-empty. These two come from capability nodes a BESS may simply not have, so
+empty. This one comes from a capability node a BESS may simply not have, so
 absence has to mean no entity rather than a permanently unknown one, and mixing
 the two rules into one tuple would mean deciding per description which applied.
 
-**Power is enabled by default and not diagnostic; communication state is
-neither.** The battery's own charge/discharge figure is a reading a user graphs
-and automates on. Its link health is a fault signal — interesting when something
-is wrong, noise on a device card the rest of the time — so it lands the way the
-other diagnostics do, off by default and available to anyone who wants it.
+Communication state is diagnostic and off by default: link health is a fault
+signal, interesting when something is wrong and noise on a device card the rest
+of the time.
 
-**`bess_meter_power` is not `battery_power`, and the names say so.** The existing
-`battery_power` sensor reads `panel.power_flow_battery`, the enclosure's own
-arbitrated flow figure; this one reads the BESS's `meter/active-power`, the
-battery's own meter. On a healthy panel they agree, and where they disagree that
-is a fact worth being able to see rather than one to hide behind a single entity.
+**`bess_meter_power` was here and was withdrawn before it ever shipped.**
 
-**Both read charge-positive, which is what makes them agree.** The library
-negates the BESS meter into the snapshot's frame (`SpanBatterySnapshot.power_w`
-is documented charge-positive), and `BATTERY_POWER_SENSOR` negates
-`power_flow_battery`, which the capability catalog defines as
-discharge-positive. Two negations for two opposite wire conventions, landing on
-one convention in the UI: **positive means the battery is charging**. A sensor
-whose sign contradicted the one beside it would be worse than no sensor.
+It read `battery.power_w`, the BESS child's own `meter/active-power`, alongside
+`battery_power` reading the enclosure's `power-flows/battery` — two views of one
+quantity, so that a disagreement between them would be visible rather than
+hidden behind a single entity.
+
+The eBus maintainer's r202633 conformance note (2026-08-20) established that the
+two will disagree *systematically* on a real panel, for a firmware reason rather
+than a panel-health one. The BESS child publishes `meter/active-power`
+charge-positive where the specification requires discharge-positive, and
+`build_battery`'s `_charge_positive()` negates on the assumption that the
+specification holds — so `battery.power_w` inverts on that firmware. The note
+calls this the one divergence a consumer cannot detect on its own: both signs
+are physically plausible and the two topics are numerically identical, so
+nothing in the tree contradicts itself observably.
+
+Nothing here can catch it either. `ebus-panel-sim` 0.6.0 fixed the same
+inversion in the simulator, so on this one property the simulator is now correct
+where the panel is not, and every test in this repository runs against the
+simulator.
+
+Withdrawn rather than compensated, and rather than shipped documented, for the
+reason the timing allows: this description had never been released, so no
+install carries the entity and no history is at stake. Dropping it now is free.
+Once a release creates it, the rule that an existing install's entities cannot
+simply disappear makes the same decision expensive.
+
+**Restore it when the firmware publishes the specified frame.** The correct
+reading is already shipped and unaffected — `battery_power` reads
+`power-flows/battery`, which the note confirms is correct as published — so
+nothing is lost meanwhile except the ability to compare the two. The wire
+property stays in `tests/fixtures/unread_declarations_baseline.json` with that
+reason, which is what will fail when somebody surfaces it again without
+revisiting this.
 
 **`derived` as well as `field_path`, by the producible rule.** The gate wants a
 path both adapters produce, and flat's BESS device class declares neither
 property — so `SCHEMA_CONDITIONAL_FIELD`, with the paths enumerated in
 `RESIDUAL_EXEMPT_PATHS` as `SCHEMA_1_ONLY`. `field_path` still names the source,
-which is what gives each sensor its Repair mention and its unavailability when
+which is what gives the sensor its Repair mention and its unavailability when
 the panel stops resolving the property.
 """
 
@@ -930,6 +946,14 @@ PANEL_POWER_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
         field_path="panel.feedthrough_power_w",
+        # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
+        # note says this cannot be relied on -- inverted: positive when power leaves the enclosure, where every other
+        # enclosure terminal is positive inbound. Negate to compensate.
+        # Disabled rather than removed because it shipped in 2.0.8, so an existing
+        # install has it with history and entities must not vanish. This changes
+        # nothing for those installs -- the default applies at first registration
+        # only -- it stops NEW installs adopting it. See the delta document.
+        entity_registry_enabled_default=False,
         translation_key="feedthrough_power",
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -1019,6 +1043,14 @@ PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyProducedWh",
         field_path="panel.feedthrough_energy_produced_wh",
+        # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
+        # note says this cannot be relied on -- the difference of two unrelated counters, non-monotonic, and ~whole-panel
+        # figures where the truth is zero. No transformation recovers a real value.
+        # Disabled rather than removed because it shipped in 2.0.8, so an existing
+        # install has it with history and entities must not vanish. This changes
+        # nothing for those installs -- the default applies at first registration
+        # only -- it stops NEW installs adopting it. See the delta document.
+        entity_registry_enabled_default=False,
         translation_key="feedthrough_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
@@ -1029,6 +1061,14 @@ PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyConsumedWh",
         field_path="panel.feedthrough_energy_consumed_wh",
+        # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
+        # note says this cannot be relied on -- the difference of two unrelated counters, non-monotonic, and ~whole-panel
+        # figures where the truth is zero. No transformation recovers a real value.
+        # Disabled rather than removed because it shipped in 2.0.8, so an existing
+        # install has it with history and entities must not vanish. This changes
+        # nothing for those installs -- the default applies at first registration
+        # only -- it stops NEW installs adopting it. See the delta document.
+        entity_registry_enabled_default=False,
         translation_key="feedthrough_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,

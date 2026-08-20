@@ -200,9 +200,6 @@
           "unknown": "不明"
         }
       },
-      "bess_meter_power": {
-        "name": "メーター電力"
-      },
       "bess_nameplate_capacity": {
         "name": "定格容量"
       },

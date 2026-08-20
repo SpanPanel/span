@@ -200,9 +200,6 @@
           "unknown": "Unknown"
         }
       },
-      "bess_meter_power": {
-        "name": "Meter Power"
-      },
       "bess_nameplate_capacity": {
         "name": "Nameplate Capacity"
       },

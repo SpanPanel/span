@@ -200,9 +200,6 @@
           "unknown": "Desconocido"
         }
       },
-      "bess_meter_power": {
-        "name": "Potencia del Medidor"
-      },
       "bess_nameplate_capacity": {
         "name": "Capacidad Nominal"
       },

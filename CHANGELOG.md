@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+### Changed
+
+- **Five panel sensors are switched off for new installations, because the eBus specification's own maintainer has documented that their values cannot be relied
+  on.** A conformance note for SPAN firmware r202633 identifies three defects in what the panel publishes, all of which predate that release: the feedthrough
+  (downstream lugs) energy registers are computed from two unrelated counters and can decrease or go negative — on a panel with no feedthrough load they report
+  roughly whole-panel figures where the truth is zero — the feedthrough power reading is inverted relative to every other terminal, and the feedthrough currents
+  report the _upstream_ service conductors rather than a downstream measurement. The affected entities are **Feedthrough Produced Energy**, **Feedthrough
+  Consumed Energy**, **Feedthrough Power**, and the two **Downstream** current sensors.
+- **If you already have those five, nothing changes and they stay exactly where they are.** Home Assistant consults the enabled-by-default setting only when an
+  entity is first created, so an existing installation keeps them, keeps its history and keeps its entity IDs. This stops new installations picking them up; it
+  cannot reach back. If you use any of the five on a dashboard or in an automation, they are worth removing — but that is your decision to make, not something
+  an upgrade should do to you.
+- **Your other panel readings are unaffected.** The upstream lugs, the main panel meter and every circuit are in the correct frame. So is the power-flow group,
+  which the specification has now been corrected to describe the way the panel has always published it.
+
 - **Diagnostics now say whether an adopted device is proxied by another device rather than by the panel.** Reported as a yes/no, never as the parent's
   identifier: a device identifier can contain a serial number, and diagnostics deliberately carry no serials.
 
