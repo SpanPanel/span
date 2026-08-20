@@ -459,3 +459,37 @@ def construct_unmapped_friendly_name(
     """Construct friendly name for unmapped circuit sensors."""
     # Format: "Unmapped Tab 32 Consumed Energy"
     return f"Unmapped Tab {circuit_number} {sensor_description_name}"
+
+
+def construct_panel_scoped_entity_id(
+    snapshot: SpanPanelSnapshot,
+    platform: str,
+    translation_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Return the entity_id a sub-device entity keeps from the panel's card.
+
+    Home Assistant builds an `has_entity_name` entity's object id from the name of
+    the device it belongs to, so moving an entity to a sub-device would give a
+    *new* installation `sensor.span_panel_solar_pv_vendor` where every existing
+    one has `sensor.span_panel_pv_vendor` -- the registry never renames an entity
+    that already exists. Two shapes for the same entity, decided by install date,
+    is the long-tail bug this pins shut: an entity that was born on the panel card
+    keeps the panel-scoped id on both.
+
+    The same thing `construct_single_circuit_entity_id` already does for the
+    circuit sensors that live on an EVSE sub-device, and for the same reason.
+
+    Suggestion only. Home Assistant honours an `entity_id` an entity sets for
+    itself when it registers, and ignores it for one that is already registered --
+    which is exactly the behaviour wanted here, since an id a user has renamed is
+    theirs.
+
+    `translation_key` rather than a name, because the name comes from the
+    translations and is not loaded when an entity is constructed.
+    `test_the_pinned_ids_are_what_the_panel_card_would_have_generated` holds the
+    two to each other.
+    """
+    device_info = snapshot_to_device_info(snapshot, device_name)
+    panel_name = device_info.get("name") or "Span Panel"
+    return f"{platform}.{slugify(panel_name)}_{translation_key}"

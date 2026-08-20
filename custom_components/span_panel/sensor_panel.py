@@ -457,13 +457,23 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         description: SpanPanelDataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
         device_info_override: DeviceInfo | None = None,
+        entity_id_override: str | None = None,
     ) -> None:
-        """Initialize the enhanced panel power sensor."""
+        """Initialize the enhanced panel power sensor.
+
+        `entity_id_override` is how a power sensor that used to sit on the panel's
+        own card keeps the object id that card gave it after moving to a
+        sub-device -- see `construct_panel_scoped_entity_id`. Home Assistant
+        treats it as a suggestion and ignores it for an entity already in the
+        registry, so it only ever decides what a *new* installation gets.
+        """
         self._description_key = description.key
         super().__init__(data_coordinator, description, snapshot)
 
         if device_info_override is not None:
             self._attr_device_info = device_info_override
+        if entity_id_override is not None:
+            self.entity_id = entity_id_override
 
     def _generate_unique_id(
         self,
@@ -657,16 +667,30 @@ class SpanMidSensor(SpanSensorBase[SpanMidSensorEntityDescription, SpanMidSnapsh
 class SpanPVMetadataSensor(
     SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPanelSnapshot]
 ):
-    """PV metadata sensor entity on the main panel device."""
+    """PV metadata sensor entity on the PV sub-device.
+
+    On the panel's own card until the inverter got one of its own, which put the
+    inverter's vendor and model beside the *panel's* vendor and model on the card
+    whose job is saying which enclosure this is.
+
+    The unique_id stays the panel-scoped one `construct_panel_unique_id_for_entry`
+    has always built, because a unique_id is an identity and these are the same
+    three entities they were. Only the device they hang off changes, which is a
+    registry update Home Assistant performs itself when the entity re-registers.
+    """
 
     def __init__(
         self,
         data_coordinator: SpanPanelCoordinator,
         description: SpanPVMetadataSensorEntityDescription,
         snapshot: SpanPanelSnapshot,
+        device_info_override: DeviceInfo,
+        entity_id_override: str,
     ) -> None:
         """Initialize the PV metadata sensor."""
         super().__init__(data_coordinator, description, snapshot)
+        self._attr_device_info = device_info_override
+        self.entity_id = entity_id_override
 
     def _generate_unique_id(
         self,

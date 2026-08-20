@@ -8,6 +8,5 @@
   "lugs/connection/fed-by-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
   "lugs/connection/feeds-device-status": "feedthrough link-health; the feeds-* half of the downstream lugs record is topology to consume, and no producer publishes it",
   "lugs/connection/feeds-device-type": "redundant: the id dereferences to the device's declared $type, which is how the library already resolves classes",
-  "pv/info/firmware-version": "reaches pv.software_version and stops there; PV has no sub-device registry entry, so there is no DeviceInfo to carry a version - it lands with the PV sub-device (Task 7)",
-  "pv/info/serial-number": "not read at all: _der_identifier prefers a serial over instance_id, so valuing it would move the PV device id from <panel>-pv-1 to <panel>-<serial> - a device replacement, not an upgrade (Task 7)"
+  "pv/info/serial-number": "held, and the PV device identifier deliberately does not use it: _der_identifier prefers a serial over instance_id, so valuing it would move the PV device id from <panel>-pv-1 to <panel>-<serial> - a device replacement, not an upgrade. The Home Assistant sub-device is keyed <panel serial>_pv for the same reason, so a serial arriving on the wire moves nothing"
 }
