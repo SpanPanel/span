@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
@@ -14,6 +14,7 @@ from .const import (
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
 )
+from .schema_validation import SchemaFindings
 
 TO_REDACT = {
     CONF_ACCESS_TOKEN,
@@ -23,6 +24,73 @@ TO_REDACT = {
     "password",
     "username",
 }
+"""Config-entry keys whose values are replaced before the payload leaves.
+
+Key-based, and only over `entry.as_dict()`. It knows nothing about wire
+property names and cannot be taught them cheaply, so anything added to this
+payload from the panel has to be safe by construction rather than by redaction.
+That is the constraint `_discovery` is built to — see its docstring.
+"""
+
+
+class DiscoveredRow(TypedDict):
+    """One declared-but-unread property, as it appears in the payload."""
+
+    path: str
+    datatype: str
+    unit: str | None
+    retained: bool | None
+
+
+class DiscoveryBlock(TypedDict):
+    """The `schema_discovery` section. Typed so the shape is checked, not described.
+
+    Four keys per row and no more: a fifth would be the seam a wire value slips
+    through, and this is what makes adding one a type error rather than a review
+    comment.
+    """
+
+    available: bool
+    count: int
+    properties: list[DiscoveredRow]
+
+
+def _discovery(findings: SchemaFindings | None) -> DiscoveryBlock:
+    """Report what the panel declares that this integration reads nothing from.
+
+    Maintainer-facing, and the reason it is here rather than anywhere a user
+    looks: a diagnostics attachment on an issue is where the question "what does
+    that fleet publish that we ignore" actually gets asked, and aggregating a
+    few attachments is how the rate gets measured. Nothing is created from it —
+    no entity, no Repair, no notification.
+
+    **Declarations, never values.** Each row is the property's path, its declared
+    datatype and unit, and whether the panel has published a value for it. A
+    diagnostics payload leaves the house into issues and forum posts, and
+    `TO_REDACT` above is key-based over the config entry — it could not protect a
+    wire value put here, so no wire value is put here. `test_diagnostics` asserts
+    that against the vendored capture rather than leaving it to review.
+
+    `available` is False while the adapter has not reported metadata yet, which
+    is a real state on a reconnect. It is not the same as an empty report: an
+    empty `properties` list means the panel declares nothing this integration
+    ignores, which is a finding.
+    """
+    if findings is None:
+        return {"available": False, "count": 0, "properties": []}
+    return {
+        "available": True,
+        "count": len(findings.discovered),
+        "properties": [
+            {
+                "path": entry.path,
+                "datatype": entry.datatype,
+                "unit": entry.unit,
+                "retained": entry.retained,
+            }
+            for entry in findings.discovered
+        ],
+    }
 
 
 async def async_get_config_entry_diagnostics(
@@ -93,4 +161,5 @@ async def async_get_config_entry_diagnostics(
             "panel_offline": coordinator.panel_offline,
             "last_update_success": coordinator.last_update_success,
         },
+        "schema_discovery": _discovery(coordinator.schema_findings),
     }

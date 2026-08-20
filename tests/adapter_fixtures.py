@@ -19,6 +19,8 @@ import pathlib
 from ebus_sdk.homie import DiscoveredDevice
 from span_panel_api.models import FieldMetadata, SpanPanelSnapshot
 
+from custom_components.span_panel.schema_validation import DiscoveredProperty
+
 _FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
 SCHEMA_ONE_PANEL = "example-40t-001"
@@ -88,29 +90,79 @@ def schema_one_snapshot(tree: dict[str, dict[str, str]] | None = None) -> SpanPa
 
 
 def schema_zero_metadata() -> dict[str, FieldMetadata]:
-    """Field metadata as schema_0 builds it from the flat REST schema."""
+    """Curated field metadata as schema_0 builds it from the flat REST schema.
+
+    Partitioned like its schema_1 counterpart even though the flat adapter emits
+    no discovered rows: the fixtures state the rule, not the current contents of
+    one adapter.
+    """
     from span_panel_api_schema_0.field_metadata import build_field_metadata
 
     raw = json.loads((_FIXTURES / "schema_zero_types.json").read_text())
-    return build_field_metadata(raw["types"])
+    return _curated(build_field_metadata(raw["types"]))
+
+
+def _curated(metadata: dict[str, FieldMetadata]) -> dict[str, FieldMetadata]:
+    """The half of an adapter's map that names snapshot fields we curate.
+
+    Every fixture below hands out the curated half, through the same
+    `schema_validation.partition` the coordinator uses, so no test can be
+    perturbed by what a panel declares and nobody reads. That is not tidiness:
+    the producible gate, the exemption annotations, the derived-reason checks
+    and the unit vocabulary all treat "in an adapter's map" as "this integration
+    could read it", and a discovered path satisfies neither half of that.
+
+    `schema_one_discovery` is how a test asks for the other half, and
+    `test_schema_discovery` is where the partition itself is checked against the
+    unpartitioned map.
+    """
+    from custom_components.span_panel.schema_validation import partition
+
+    return partition(metadata)[0]
 
 
 def schema_one_metadata() -> dict[str, FieldMetadata]:
-    """Field metadata as schema_1 builds it from a full parent/child tree."""
+    """Curated field metadata as schema_1 builds it from a full parent/child tree."""
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return build_field_metadata(_devices("schema_one_tree.json"))
+    return _curated(build_field_metadata(_devices("schema_one_tree.json")))
+
+
+def schema_one_metadata_raw(name: str = "schema_one_tree.json") -> dict[str, FieldMetadata]:
+    """The adapter's map exactly as it returns it, both halves together.
+
+    The one fixture that does *not* partition, because the partition is the
+    thing under test in `test_schema_discovery`. Everywhere else, ask for a
+    partitioned half by name.
+    """
+    from span_panel_api_schema_1.field_metadata import build_field_metadata
+
+    return build_field_metadata(_devices(name))
+
+
+def schema_one_discovery() -> tuple[DiscoveredProperty, ...]:
+    """What schema_1 declares in the vendored tree that it reads nothing from.
+
+    The other half of the same map. Held apart from `schema_one_metadata` so a
+    test has to ask for it by name — a discovered path arriving unannounced in a
+    curated inventory is the failure mode the namespace exists to prevent.
+    """
+    from span_panel_api_schema_1.field_metadata import build_field_metadata
+
+    from custom_components.span_panel.schema_validation import partition
+
+    return partition(build_field_metadata(_devices("schema_one_tree.json")))[1]
 
 
 def schema_one_metadata_batteryless() -> dict[str, FieldMetadata]:
     """Build the same tree with the BESS removed — no battery hardware present."""
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return build_field_metadata(_devices("schema_one_tree_batteryless.json"))
+    return _curated(build_field_metadata(_devices("schema_one_tree_batteryless.json")))
 
 
 def schema_one_metadata_no_pv() -> dict[str, FieldMetadata]:
     """Build the same tree with the PV device removed, power-flows still present."""
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return build_field_metadata(_devices("schema_one_tree_no_pv.json"))
+    return _curated(build_field_metadata(_devices("schema_one_tree_no_pv.json")))

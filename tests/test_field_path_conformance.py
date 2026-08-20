@@ -353,11 +353,7 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # `$target` echo it renders as an attribute. Facts about a command rather
     # than readings, so no adapter carries a row for either -- the same shape as
     # the `circuit.*_target` pair.
-    # +1 for `pv.software_version`, the firmware row on the solar inverter's own
-    # device card. Flat's `pv` device class declares no firmware version, and a
-    # version string is identity rather than a reading -- the same argument as
-    # the `mid.*` and `panel.*` card reads above.
-    Producibility.NEITHER: 44,
+    Producibility.NEITHER: 43,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
@@ -368,7 +364,15 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # declaration -- `SpanPanelStatus._residual_field_paths`. Its time here as a
     # true `SCHEMA_0_ONLY` annotation is what sanctioned a flat -> v1.0
     # regression: the attribute a flat panel filled, a v1.0 panel did not.
-    Producibility.SCHEMA_0_ONLY: 10,
+    # +1 for `pv.software_version`, the firmware row on the solar inverter's own
+    # device card, which moved here from `NEITHER`. It was annotated on the
+    # claim that flat's `pv` device class declares no firmware version; flat
+    # declares `software-version` on it, and the library grew the mapping row
+    # once a producer valued the v1.0 half. schema_1 still carries no row -- a
+    # version string is identity rather than a reading, the same argument as the
+    # `mid.*` and `panel.*` card reads above -- so this stays an exemption
+    # rather than becoming a declaration.
+    Producibility.SCHEMA_0_ONLY: 11,
     # +2 with the shed forecast: the two live estimates, which schema_1 maps and
     # flat firmware does not publish at all.
     # +2 for `battery.power_w` and `battery.communication_state`, the BESS's own

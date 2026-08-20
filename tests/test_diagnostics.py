@@ -64,6 +64,10 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     coordinator.data = snapshot
     coordinator.panel_offline = False
     coordinator.last_update_success = True
+    # Explicit: a MagicMock answers `len()` and iteration happily, so leaving
+    # this unset would let the discovery block render as an empty report rather
+    # than as the "no metadata yet" state it actually is.
+    coordinator.schema_findings = None
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -155,6 +159,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     coordinator.data = snapshot
     coordinator.panel_offline = True
     coordinator.last_update_success = False
+    coordinator.schema_findings = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
     entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")

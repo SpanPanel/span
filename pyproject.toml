@@ -46,10 +46,13 @@ package = false
 
 [tool.uv.sources]
 # This branch develops against the in-progress schema-1 adapter, which lives in a
-# worktree rather than the primary checkout the symlink points at.
-span-panel-api = { path = "../../span/span-panel-api-p2", editable = true }
-span-panel-api-schema-0 = { path = "../../span/span-panel-api-p2/packages/schema-0", editable = true }
-span-panel-api-schema-1 = { path = "../../span/span-panel-api-p2/packages/schema-1", editable = true }
+# worktree rather than the primary checkout the symlink points at. `-p3` carries
+# the library half of `feat/discovery-and-catalog-validation`; the two halves are
+# one change and pointing at the wrong worktree means the branch is not being
+# tested against the library it needs.
+span-panel-api = { path = "../../span/span-panel-api-p3", editable = true }
+span-panel-api-schema-0 = { path = "../../span/span-panel-api-p3/packages/schema-0", editable = true }
+span-panel-api-schema-1 = { path = "../../span/span-panel-api-p3/packages/schema-1", editable = true }
 
 [tool.jscpd]
 path = ["custom_components/span_panel", "./*.{html,md}"]
@@ -129,7 +132,7 @@ exclude = [
 ]
 extraPaths = [
     "./custom_components",
-    "../../span/span-panel-api-p2/src",
+    "../../span/span-panel-api-p3/src",
     "../ha-synthetic-sensors/src"
 ]
 pythonPlatform = "Darwin"

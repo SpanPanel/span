@@ -194,11 +194,56 @@ declared `$type`), and properties no producer publishes (`connection/count`).
 ### What it does not cover
 
 The gate reads the **vendored fixture**, so it answers "what does our capture declare that we do not read". It cannot see a property a real panel starts
-publishing in the field. That is the purpose of the runtime discovery work on `feat/discovery-and-catalog-validation`: the same question asked of a live panel
-and surfaced in diagnostics, so a maintainer triaging an issue can see what that fleet declares that this integration ignores.
+publishing in the field. The runtime half below is what answers that.
 
 Note also that a property can be _read on one device and not another_ and the gate will not see it — it asks whether anything moved, not whether everything did.
 `snapshot.pv` keeps the first `energy.ebus.device.pv` child and discards the rest, so a second inverter is invisible while the property still counts as read.
+
+### The runtime half: what the panel in front of the user declares
+
+The schema_1 adapter asks the same question of the live tree and puts the answer in **diagnostics**, under `schema_discovery`:
+
+```json
+"schema_discovery": {
+  "available": true,
+  "count": 9,
+  "properties": [
+    { "path": "discovered.circuit/connection/count", "datatype": "integer", "unit": null, "retained": false },
+    { "path": "discovered.distribution-enclosure/status/postal-code", "datatype": "string", "unit": null, "retained": true }
+  ]
+}
+```
+
+`available: false` means the adapter has not reported metadata yet — a real state on a reconnect, and not the same as an empty report. `retained` says whether
+the panel has published a value for the property, which is the declared-but-never-valued signal; it never says what the value is.
+
+**Paths, datatypes, units and retention only — never values.** Diagnostics leave the house into issues and forum posts, and `TO_REDACT` in `diagnostics.py` is
+key-based over the config entry: it knows nothing about wire property names and could not protect a value added here. `test_schema_discovery` asserts that
+against the capture's own published values rather than leaving it to review.
+
+This is **maintainer-facing only**. Nothing creates an entity, a Repair or a notification from it. Automatic adoption is a separate, unbuilt step whose costs —
+notice aggregation, an exclusion denylist, the accumulator register — are not settled.
+
+### Why discovered rows cannot reach the curated inventories
+
+The adapter returns both kinds of row in one map, keyed by the library's `discovered.` namespace. `schema_validation.partition` splits them **before any other
+question is asked**, and everything downstream — the producible gate, the `unread` inventory, the exemption annotations, the unit vocabulary — sees the curated
+half only.
+
+That partition is load-bearing rather than tidy. Every one of those inventories reads "in an adapter's map" as "this integration could read this", which a
+discovered path is not: a discovered row in `unread` would bury ten deliberate entries under whatever a firmware release added, and would make the count depend
+on the panel in front of the user. `test_the_unread_inventory_is_deaf_to_discovery` proves it by mutation — a synthetic discovered row changes `unread`,
+`unresolved` and the unit mismatches not at all.
+
+The test fixtures follow the same rule: `adapter_fixtures.schema_one_metadata()` hands out the curated half, and a test that wants the other half asks for
+`schema_one_discovery()` by name.
+
+### Keeping the library's answer honest
+
+The adapter decides "read" from four enumerations of what it addresses — the metadata map, the lugs direction tables, the charge-limit resolution, and
+`_CONSUMED_WITHOUT_A_ROW` for the properties it reads into the snapshot without a unit surface. A stale entry there fails _silently_, by keeping a property out
+of the report. `tests/test_schema_one_discovery.py` in the library runs the same republish-and-diff experiment this gate uses and holds every entry to it in
+both directions, so the report means "nothing reads this" rather than "nobody wrote it down".
 
 ## Linting and Type Checking
 
