@@ -41,6 +41,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory, Platform
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import AdoptedDevice, AdoptedProperty, SpanPanelSnapshot
 
@@ -49,6 +50,7 @@ from .entity import SpanPanelEntity
 from .util import ADOPTED_IDENTIFIER_TOKEN
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers.device_registry import DeviceRegistry
 
     from .coordinator import SpanPanelCoordinator
@@ -227,6 +229,42 @@ def _humanised(wire_token: str) -> str:
     and which are waiting to be.
     """
     return wire_token.replace("-", " ").replace("_", " ").title()
+
+
+def async_register_adopted_devices(
+    hass: HomeAssistant,
+    entry_id: str,
+    snapshot: SpanPanelSnapshot,
+    *,
+    panel_device_id: str,
+) -> None:
+    """Create a device-registry entry for every adopted device, before any entity.
+
+    Registered explicitly rather than left to fall out of entity creation, and the
+    reason is a device that has no entities to fall out of. A vendor device that
+    publishes only an `info` node -- advertising what it is before it publishes
+    any reading -- resolves entirely to the device card by the node rule, so it
+    creates no entity, so nothing ever calls `async_get_or_create` for it. It used
+    to produce *nothing at all*: no device, no entity, and no notice. Which is the
+    silence adoption exists to end, reached by a different route.
+
+    It also fixes the identity freeze in one place. `resolve_identifier` reads the
+    registry to decide which spelling this install already uses, so running it
+    here -- once, before the platforms -- means every entity created afterwards
+    resolves against a device that already exists and cannot disagree.
+
+    Called before the platforms are forwarded, for the same reason the panel's own
+    registration is: a sub-device's `via_device_id` has to name a device that
+    exists.
+    """
+    registry = dr.async_get(hass)
+    for device in snapshot.adopted_devices:
+        identifier = resolve_identifier(registry, snapshot.serial_number, device)
+        registry.async_get_or_create(
+            config_entry_id=entry_id,
+            **adopted_device_info(identifier, device, panel_device_id=panel_device_id),
+        )
+        _LOGGER.debug("Registered adopted device %s as %s", device.device_type, identifier)
 
 
 class AdoptedEntity(SpanPanelEntity):

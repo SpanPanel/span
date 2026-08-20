@@ -6,6 +6,20 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **New entities are now announced in a notification that names them — whether or not they arrived switched on.** Previously only entities added _disabled_ were
+  mentioned, on the reasoning that an enabled one is already visible in your entity list and its history. That is only true if you are watching your entity
+  list, which nobody is: an addition that breaks nothing was indistinguishable from no addition at all. The notification names every entity that was added,
+  splits them by whether they are ready to use or still switched off, and tells you where to turn the switched-off ones on.
+- **It is a notification rather than a Repair, because an addition is not a repair.** Nothing is broken and nothing needs fixing. Any new-entity item still
+  sitting in your Repairs list from a previous version is removed on upgrade.
+- **And it can no longer be missed by a restart landing in the wrong place.** The old notice compared the entity registry before and after startup, which
+  answers correctly exactly once — on the next startup the entity is already registered and the comparison is empty. What has been announced is now recorded, so
+  the question is whether you have been told rather than whether it happened in the last few seconds. It stays quiet on a first install, and quiet once more on
+  the first startup after this change, so upgrading does not announce a release's worth of history.
+- **An adopted device now appears even when it publishes no readings at all.** A device that advertises what it is — its vendor, model and firmware — before
+  publishing any measurement resolves entirely to its device card, so it created no entities, and because devices were created as a side effect of entity
+  creation it produced nothing whatsoever: no device, no entity, no notification. It is now registered in its own right.
+
 - **A device the panel publishes that this integration has never modelled now appears, instead of appearing nowhere.** SPAN positions the panel as the hub for
   whatever plugs into it and the eBus schema is explicitly vendor-extensible, so a device type nobody modelled is an expected arrival — and until now it
   produced no device, no entity and no sign it was there. Such a device now gets a card of its own hanging off the panel, carrying whatever `info` it publishes,

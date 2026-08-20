@@ -25,17 +25,15 @@ user "0 entity/entities are affected" only teaches them to ignore the category.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping
-import hashlib
+from collections.abc import Mapping
 import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import device_registry as dr, entity_registry as er, issue_registry as ir
+from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN, EVENT_SCHEMA_ISSUE
 from .schema_validation import SchemaFindings
-from .util import ADOPTED_IDENTIFIER_TOKEN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +43,13 @@ _MAX_EXAMPLES = 3
 # new-entity notice is deliberately not among them. See `_scoped_issue_ids`.
 _DEFECT_PREFIXES = ("unresolved_", "unit_mismatch_")
 _NEW_ENTITIES_PREFIX = "new_entities_"
+"""Id prefix of the retired new-entity Repair.
+
+Nothing raises one any more -- an addition is not a repair, and it is announced
+as a notification by `additions` instead. The prefix survives so the ones already
+standing on upgraded installs get cleared: they were raised `is_persistent`, so
+without this they would outlive the mechanism that made them.
+"""
 
 
 def _unresolved_id(entry_id: str, field_path: str) -> str:
@@ -53,25 +58,6 @@ def _unresolved_id(entry_id: str, field_path: str) -> str:
 
 def _unit_id(entry_id: str, field_path: str) -> str:
     return f"unit_mismatch_{entry_id}_{field_path}"
-
-
-def _new_entities_id(entry_id: str, unique_ids: Collection[str]) -> str:
-    """One id per (entry, exact set of new entities).
-
-    Keyed on the set and not on the entry alone for the reason the two defect
-    notices are keyed per field path: `async_get_or_create`'s update branch
-    preserves `dismissed_version` while replacing the placeholders, so an entry-
-    wide id would let a user who dismissed "Part Number appeared" never be told
-    about the next addition — it would silently rewrite the notice they already
-    put away.
-
-    Truncated to 12 hex characters. The digest only has to separate one set from
-    another within a single config entry, and the id ends up in a storage file a
-    human occasionally reads.
-    """
-    joined = "\n".join(sorted(unique_ids))
-    digest = hashlib.sha256(joined.encode()).hexdigest()[:12]
-    return f"{_NEW_ENTITIES_PREFIX}{entry_id}_{digest}"
 
 
 def _affected(entity_ids_by_path: Mapping[str, list[str]], field_path: str) -> list[str]:
@@ -201,161 +187,6 @@ def async_sync_schema_issues(
 
 
 @callback
-def async_registered_unique_ids(hass: HomeAssistant, entry: ConfigEntry) -> frozenset[str]:
-    """Return the unique_ids already registered for this entry.
-
-    Taken by `async_setup_entry` immediately before the platforms are forwarded,
-    which is the last moment "already registered" still means "registered by an
-    earlier run". Unique_ids rather than entity_ids: an entity_id is the user's
-    to rename, a unique_id is the identity the registry itself keys on.
-    """
-    return frozenset(
-        registry_entry.unique_id
-        for registry_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    )
-
-
-def _label(registry_entry: er.RegistryEntry) -> str:
-    """Return what to call an entity the user has never seen.
-
-    A disabled entity has no state, so there is no friendly name to read off the
-    state machine — only what the registry recorded when the platform added it.
-    The entity_id is the last resort rather than the first choice because it is
-    the name the user will *not* see in the device's disabled-entity list.
-    """
-    return registry_entry.name or registry_entry.original_name or registry_entry.entity_id
-
-
-def _labels(hass: HomeAssistant, new_disabled: list[er.RegistryEntry]) -> list[str]:
-    """Return what to call the new entities, with adopted ones counted rather than listed.
-
-    A curated addition is a handful of entities a maintainer chose, so naming each
-    one is the notice doing its job. An adopted device is the opposite shape:
-    every property a vendor device declares becomes an entity at once, so listing
-    them would spend the whole notice on one device and teach the user that this
-    category is noise -- which would cost them the curated additions too.
-
-    So an adopted device contributes exactly one line carrying its own count, and
-    the notice reads "Backup Generator (6 entities)" beside whatever else the
-    release added.
-    """
-    devices = dr.async_get(hass)
-    adopted: dict[str, int] = {}
-    labels: list[str] = []
-    for registry_entry in new_disabled:
-        device_name = _adopted_device_name(devices, registry_entry)
-        if device_name is None:
-            labels.append(_label(registry_entry))
-        else:
-            adopted[device_name] = adopted.get(device_name, 0) + 1
-    labels.extend(f"{name} ({count} entities)" for name, count in adopted.items())
-    return sorted(labels)
-
-
-def _adopted_device_name(
-    devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry
-) -> str | None:
-    """Return the adopted device this entity belongs to, or None when it belongs to none.
-
-    Read off the device identifier rather than off the entity, because the entity
-    carries nothing that distinguishes an adopted reading from a curated one --
-    by design, since an adopted entity is meant to be indistinguishable once it
-    is enabled.
-    """
-    if registry_entry.device_id is None:
-        return None
-    device = devices.async_get(registry_entry.device_id)
-    if device is None:
-        return None
-    token = f"_{ADOPTED_IDENTIFIER_TOKEN}_"
-    if not any(token in identifier for _domain, identifier in device.identifiers):
-        return None
-    return device.name_by_user or device.name or registry_entry.entity_id
-
-
-@callback
-def async_notice_new_disabled_entities(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    known_unique_ids: Collection[str],
-) -> None:
-    """Tell the user about entities this setup added and disabled.
-
-    A release that adds a diagnostic with `entity_registry_enabled_default=False`
-    grows nobody's entity list, which is the point — and is also why the addition
-    reaches the user through nothing at all. This is the notice for that: the
-    entities exist, they are switched off, and here is what they are called.
-
-    Silent on a first install. With nothing registered beforehand every entity is
-    new, so the notice would name the entire integration and teach the user to
-    ignore it. An empty `known_unique_ids` is the probe for that:
-    `er.async_entries_for_config_entry` answers with nothing for an entry that
-    has never registered anything.
-
-    An EVENT, not a condition, and that shapes three decisions:
-
-    * `is_persistent=True`, unlike the two defect notices. Those are re-derived
-      from live state at every startup, so they can afford to reload as
-      tombstones. This one cannot be re-derived at all: on the next startup the
-      entity is in `known_unique_ids` and the diff is empty by construction. A
-      non-persistent issue would therefore vanish unread at the first restart
-      after the upgrade, which for a user who was away is the same silent add
-      the notice exists to prevent.
-    * It is never reconciled away. `async_sync_schema_issues` deletes the defect
-      ids it does not re-derive, and applying that here would delete this notice
-      on the very next startup. Its reconcile scope is `_DEFECT_PREFIXES`, which
-      deliberately does not include this one.
-    * Raising is skipped outright when the id already exists. What that buys is
-      narrow and worth stating exactly: a repeat of the same set cannot rewrite
-      the text of a notice the user has already read. Without it the repeat would
-      take `async_get_or_create`'s update branch, which replaces the placeholders
-      — so a set that came back with a renamed entity would silently restate
-      itself. It buys nothing against duplication, which the shared id already
-      rules out.
-
-    Severity is the mildest Home Assistant offers. `IssueSeverity` has no
-    informational member — it is CRITICAL, ERROR, WARNING — so WARNING is the
-    floor, the same floor `panel_upgraded_to_ebus_v1` settled on for the same
-    reason: nothing is broken and no action is required.
-    """
-    if not known_unique_ids:
-        _LOGGER.debug(
-            "Suppressed new-entity notice for %s: nothing was registered before this "
-            "setup, so this is a first install and every entity is new",
-            entry.entry_id,
-        )
-        return
-
-    new_disabled = [
-        registry_entry
-        for registry_entry in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-        if registry_entry.unique_id not in known_unique_ids
-        and registry_entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
-    ]
-    if not new_disabled:
-        return
-
-    issue_id = _new_entities_id(
-        entry.entry_id, [registry_entry.unique_id for registry_entry in new_disabled]
-    )
-    if ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None:
-        _LOGGER.debug("New-entity notice %s already raised; leaving it alone", issue_id)
-        return
-
-    labels = _labels(hass, new_disabled)
-    _LOGGER.debug("Raising new-entity notice %s for %s", issue_id, labels)
-    ir.async_create_issue(
-        hass,
-        DOMAIN,
-        issue_id,
-        is_fixable=False,
-        is_persistent=True,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key="new_entities_disabled",
-        translation_placeholders=_placeholders(labels),
-    )
-
-
 def _scoped_issue_ids(
     registry: ir.IssueRegistry, entry_id: str, prefixes: tuple[str, ...]
 ) -> set[str]:
@@ -378,6 +209,21 @@ def _scoped_issue_ids(
         for (domain, issue_id) in registry.issues
         if domain == DOMAIN and issue_id.startswith(scoped)
     }
+
+
+@callback
+def async_clear_retired_new_entity_notices(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete new-entity Repairs raised before additions became notifications.
+
+    They were raised `is_persistent=True` precisely so a restart could not sweep
+    them away, which now means an upgraded install keeps one standing in its
+    Repairs list forever with nothing left to re-derive it. Cleared at setup
+    rather than at removal, because the user is looking at it now.
+    """
+    registry = ir.async_get(hass)
+    for issue_id in _scoped_issue_ids(registry, entry.entry_id, (_NEW_ENTITIES_PREFIX,)):
+        _LOGGER.debug("Clearing retired new-entity notice %s", issue_id)
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 @callback

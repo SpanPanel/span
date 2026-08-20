@@ -28,6 +28,8 @@ from span_panel_api.mqtt.models import MqttClientConfig
 
 # Import config flow to ensure it's registered
 from . import config_flow  # noqa: F401
+from .additions import async_announce_new_entities, async_forget_announcements
+from .adoption import async_register_adopted_devices
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -52,11 +54,7 @@ from .frontend import (
 from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .options import SNAPSHOT_UPDATE_INTERVAL
-from .schema_repairs import (
-    async_clear_schema_issues,
-    async_notice_new_disabled_entities,
-    async_registered_unique_ids,
-)
+from .schema_repairs import async_clear_retired_new_entity_notices, async_clear_schema_issues
 from .services import (  # noqa: F401
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
@@ -261,10 +259,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             ),
         )
 
-        # Taken before the forward, because forwarding is what registers the
-        # entities: everything absent here and present afterwards is an entity
-        # this version of the integration added.
-        known_unique_ids = async_registered_unique_ids(hass, entry)
+        # Before the forward, because a sub-device's `via_device_id` has to name a
+        # device that already exists -- and because an adopted device whose whole
+        # declaration is an `info` node has no entity to be created by.
+        async_register_adopted_devices(
+            hass, entry.entry_id, snapshot, panel_device_id=entry.runtime_data.panel_device_id
+        )
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -276,9 +276,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
         # Also after the platforms, for the other half of the same reason: a
         # newly added entity is only in the registry once its platform has added
-        # it. An addition that arrives disabled reaches the user through nothing
-        # else at all.
-        async_notice_new_disabled_entities(hass, entry, known_unique_ids)
+        # it. Nobody watches their entity count, so an addition that breaks
+        # nothing reaches the user through this and nothing else -- whether or
+        # not it arrived switched on.
+        async_clear_retired_new_entity_notices(hass, entry)
+        await async_announce_new_entities(hass, entry)
     except Exception:
         if coordinator is not None:
             await coordinator.async_shutdown()
@@ -310,14 +312,19 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> None:
-    """Clean up the Repairs this entry raised.
+    """Clean up what this entry left outside its own runtime data.
 
     Core deletes neither issues nor their dismissals when a config entry is
-    removed, so a panel that is taken out of the system would otherwise leave
-    its schema notices behind forever. Scoped to this entry: another panel's
-    issues share the domain and must survive.
+    removed, so a panel taken out of the system would otherwise leave its schema
+    notices behind forever. Scoped to this entry: another panel's issues share the
+    domain and must survive.
+
+    The announcement record goes with them, and for a sharper reason: it outliving
+    the entry would mean re-adding the same panel announces none of the entities
+    it recreates, because every one of them is already recorded as announced.
     """
     async_clear_schema_issues(hass, entry)
+    await async_forget_announcements(hass, entry)
 
 
 async def async_remove_config_entry_device(

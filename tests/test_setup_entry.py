@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api.exceptions import SpanPanelAuthError
 
 from custom_components.span_panel import SpanPanelRuntimeData, async_setup_entry
@@ -17,18 +26,8 @@ from custom_components.span_panel.const import (
     CONF_HTTP_PORT,
     DOMAIN,
 )
-from homeassistant.config_entries import (
-    ConfigEntryAuthFailed,
-    ConfigEntryError,
-    ConfigEntryNotReady,
-)
-from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from .factories import SpanPanelSnapshotFactory
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _create_v2_entry(**data_overrides) -> MockConfigEntry:
@@ -341,15 +340,16 @@ async def test_setup_syncs_schema_repairs_after_the_platforms(
     assert order == ["forward", "sync"]
 
 
-async def test_setup_probes_the_registry_before_the_platforms_and_notices_after(
+async def test_setup_announces_additions_after_the_platforms(
     hass: HomeAssistant,
 ) -> None:
-    """The new-entity notice brackets the forward, and both halves matter.
+    """The announcement has to run after the forward, and that is the whole ordering.
 
-    The probe has to run before forwarding, because forwarding is what registers
-    the entities -- probing afterwards would find every entity already known and
-    the notice could never fire. The notice has to run after, because a newly
-    added entity is only in the registry once its platform has added it.
+    A newly added entity is only in the registry once its platform has added it,
+    so announcing before the forward would announce nothing, every time. The old
+    mechanism also needed a *probe* before the forward, because it diffed the
+    registry across it; the announcement record replaced that, which is what makes
+    the answer survive a restart landing between the two.
     """
     entry = _create_v2_entry()
     entry.add_to_hass(hass)
@@ -377,11 +377,8 @@ async def test_setup_probes_the_registry_before_the_platforms_and_notices_after(
             disabled_by=er.RegistryEntryDisabler.INTEGRATION,
         )
 
-    seen: list[frozenset[str]] = []
-
-    def _notice(_hass, _entry, known_unique_ids) -> None:
-        order.append("notice")
-        seen.append(frozenset(known_unique_ids))
+    async def _announce(_hass, _entry) -> None:
+        order.append("announce")
 
     with (
         patch("custom_components.span_panel.async_register_commands"),
@@ -399,11 +396,10 @@ async def test_setup_probes_the_registry_before_the_platforms_and_notices_after(
         ),
         patch.object(hass.config_entries, "async_update_entry"),
         patch(
-            "custom_components.span_panel.async_notice_new_disabled_entities",
-            side_effect=_notice,
+            "custom_components.span_panel.async_announce_new_entities",
+            side_effect=_announce,
         ),
     ):
         assert await async_setup_entry(hass, entry) is True
 
-    assert order == ["forward", "sync", "notice"]
-    assert seen == [frozenset({"already-there"})]
+    assert order == ["forward", "sync", "announce"]

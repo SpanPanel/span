@@ -19,6 +19,7 @@ from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import AdoptedDevice, AdoptedProperty
 
 from custom_components.span_panel.adoption import (
@@ -26,6 +27,7 @@ from custom_components.span_panel.adoption import (
     DEVICE_CLASS_BY_UNIT,
     adopted_control_count,
     adopted_identifier,
+    async_register_adopted_devices,
     classify,
     create_adopted_binary_sensors,
     create_adopted_numbers,
@@ -46,6 +48,26 @@ if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
 
 PANEL_SERIAL = "sp3-242424-001"
+
+
+@pytest.fixture
+def registered_panel(hass: HomeAssistant) -> tuple[str, str]:
+    """Return a config entry and a registered panel device, as setup would leave them.
+
+    Both are required rather than convenient: the device registry refuses to link
+    a device to an unknown config entry, and refuses a `via_device_id` naming a
+    device that does not exist. An adopted device is a sub-device of the panel, so
+    the panel has to be there first -- which is exactly why registration runs
+    after `ensure_device_registered` and before the platforms.
+    """
+    mock = MockConfigEntry(domain=DOMAIN, data={}, unique_id=PANEL_SERIAL)
+    mock.add_to_hass(hass)
+    panel = dr.async_get(hass).async_get_or_create(
+        config_entry_id=mock.entry_id,
+        identifiers={(DOMAIN, PANEL_SERIAL)},
+        name="Span Panel",
+    )
+    return str(mock.entry_id), panel.id
 
 
 def _property(
@@ -466,3 +488,72 @@ def test_a_control_is_disabled_and_diagnostic_like_every_other_adopted_entity(ha
     assert len(controls) == 3
     assert all(entity.entity_registry_enabled_default is False for entity in controls)
     assert all(entity.entity_category is EntityCategory.DIAGNOSTIC for entity in controls)
+
+
+# -- An adopted device exists even when it has no readings -------------------
+
+
+def test_a_device_whose_whole_declaration_is_info_still_gets_a_card(hass: HomeAssistant, registered_panel: tuple[str, str]) -> None:
+    """The gap explicit registration closes.
+
+    `info` resolves entirely to the device card by the node rule, so a vendor
+    device that advertises what it is before publishing any reading creates no
+    entity -- and devices are otherwise created as a side effect of entity
+    creation, so it used to produce *nothing at all*: no device, no entity, no
+    notification. Which is the silence adoption exists to end, reached by a
+    different route.
+    """
+    entry_id, panel_device_id = registered_panel
+    device = AdoptedDevice(
+        device_id="generator-1",
+        device_type="energy.ebus.device.generator",
+        name="Backup Generator",
+        model="GEN-9000",
+        vendor_name="Example Power",
+        software_version="3.2.1",
+        properties=(),
+    )
+    snapshot = _snapshot(device)
+
+    async_register_adopted_devices(hass, entry_id, snapshot, panel_device_id=panel_device_id)
+
+    registered = dr.async_get(hass).async_get_device(
+        identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1"))}
+    )
+    assert registered is not None
+    assert registered.name == "Backup Generator"
+    assert registered.model == "GEN-9000"
+    assert registered.manufacturer == "Example Power"
+    assert registered.sw_version == "3.2.1"
+
+
+def test_registration_freezes_the_anchor_before_any_entity_resolves_it(hass: HomeAssistant, registered_panel: tuple[str, str]) -> None:
+    """Registering first is what makes the freeze single-valued.
+
+    `resolve_identifier` reads the registry to decide which spelling this install
+    uses. Running it once at registration means every entity created afterwards
+    resolves against a device that already exists and cannot disagree -- including
+    on the run where a serial first arrives.
+    """
+    entry_id, panel_device_id = registered_panel
+    without_serial = _device("generator-1")
+    async_register_adopted_devices(hass, entry_id, _snapshot(without_serial), panel_device_id=panel_device_id)
+
+    with_serial = _device("generator-1", serial_number="EX-0000-0001")
+    async_register_adopted_devices(hass, entry_id, _snapshot(with_serial), panel_device_id=panel_device_id)
+
+    registry = dr.async_get(hass)
+    assert registry.async_get_device(identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1"))})
+    assert registry.async_get_device(identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "EX-0000-0001"))}) is None
+
+
+def test_a_panel_with_no_adopted_device_registers_nothing(hass: HomeAssistant, registered_panel: tuple[str, str]) -> None:
+    entry_id, panel_device_id = registered_panel
+    async_register_adopted_devices(hass, entry_id, _snapshot(), panel_device_id=panel_device_id)
+
+    adopted = [
+        device
+        for device in dr.async_get(hass).devices.values()
+        if any(ADOPTED_IDENTIFIER_TOKEN in identifier for _domain, identifier in device.identifiers)
+    ]
+    assert adopted == []

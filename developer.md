@@ -296,6 +296,15 @@ entity they chose to enable.
 `device_class` is enumerated in `DEVICE_CLASS_BY_UNIT` rather than inferred. A unit outside the map gets **no** device class — `%` is deliberately absent,
 because its uses here are a state of charge, a confidence and a duty cycle, and no single class is right for all of them.
 
+### The device exists even with no entities
+
+`async_register_adopted_devices` registers each adopted device explicitly, before the platforms are forwarded, rather than letting it fall out of entity
+creation. The reason is a device that has no entities to fall out of: a vendor device publishing only an `info` node resolves entirely to the device card by the
+node rule, creates no entity, and so had nothing to call `async_get_or_create` for it. It produced _nothing at all_ — no device, no entity, no notification.
+
+Running it before the platforms also makes the identity freeze single-valued: `resolve_identifier` runs once, at registration, so every entity created
+afterwards resolves against a device that already exists and cannot disagree.
+
 ### Identity freezes at first sighting
 
 `resolve_identifier` looks up **both** candidate spellings — `{panel serial}_adopted_{wire id}` and `{panel serial}_adopted_{serial}` — before minting either,
@@ -356,11 +365,33 @@ on whether to accept it. A `NUMBER` on an `integer` property publishes `45`, nev
 
 Diagnostics report `adopted_devices.controls` — how many adopted properties write back rather than only reporting.
 
-### The notice counts devices, not entities
+### Telling the user what was added
 
-Adopted entities are disabled, so they reach the user only through `async_notice_new_disabled_entities`. That notice lists curated additions individually and
-collapses each adopted device to one line with a count — `Backup Generator (6 entities)`. A vendor device declaring a dozen properties would otherwise spend the
-whole notice on itself and teach the user that the category is noise, which would cost them the curated additions too.
+Additions are announced by `additions.async_announce_new_entities` as a **persistent notification**, not a Repair. An addition is not a repair: nothing is
+broken and nothing needs fixing, and filing it under Repairs puts it in a category whose whole meaning is "something went wrong". The retired
+`new_entities_disabled` issue is deleted at setup by `async_clear_retired_new_entity_notices`, because it was raised `is_persistent` and would otherwise stand
+forever on an upgraded install with nothing left to re-derive it.
+
+Three things it does that the Repair did not:
+
+- **Enabled additions are announced too.** The old notice covered only `disabled_by=INTEGRATION`, reasoning that an enabled entity is already visible in the
+  entity list and its history. Nobody watches their entity count, so that reasoning made every enabled addition invisible.
+- **It names every entity**, rather than a count plus three examples. "What exactly was added" means all of it.
+- **The record is durable.** The old diff compared the registry before the platforms against the registry after, which answers correctly exactly once — on the
+  next startup the entity is already registered beforehand and the diff is empty by construction. `additions` records what it announced in a `Store`, so the
+  question is "has this been announced" rather than "was this registered in the last few seconds".
+
+It stays silent on a first install, and silent once more on the first run after this mechanism ships: an install predating the record has entities that were
+never announced but are not new either, so the first pass adopts them as known.
+
+Adopted devices are collapsed to one line with a count — `Backup Generator (6 entities)` — for the reason the whole design is device-scoped: a vendor device
+declaring a dozen properties would otherwise spend the entire notification on itself and teach the user to skip it, costing them the curated additions in the
+same message.
+
+**Translations are read from this component's own `translations/` directory**, not through `homeassistant.helpers.translation`. That helper filters to the
+categories Home Assistant defines, and a persistent notification is not one of them — a custom category loads as nothing at all, which was verified rather than
+assumed. The strings live under a `notifications` key in `strings.json` and all five locales, with English constants in `additions._FALLBACK` so an unreadable
+file costs the translation and not the notification.
 
 ### Diagnostics
 
