@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, ClassVar
+from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import UNDEFINED
@@ -340,21 +340,12 @@ class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapsh
 class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, SpanPanelSnapshot]):
     """Span Panel hardware status sensor entity."""
 
-    _residual_field_paths: ClassVar[tuple[str, ...]] = ("panel.wifi_ssid",)
-    """The SSID, read for an attribute rather than by a `value_fn`.
-
-    A plain residual and not an exemption: both adapters map the property
-    (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
-    gate covers it, and `test_no_exempt_path_is_producible_by_both` is what
-    demanded the move the moment schema_1 grew its row. Until then the path sat
-    in `RESIDUAL_EXEMPT_PATHS` annotated `SCHEMA_0_ONLY` -- true, and the reason
-    a v1.0 panel silently stopped filling an attribute a flat panel filled.
-
-    `SpanPanelWifiLinkBinarySensor` declares the same path, which is the
-    duplication `extra_state_attributes` explains. Nothing breaks: the collector
-    unions a frozenset, and the coordinator maps a path to a *set* of entity
-    ids, so the Repair names both readers.
-    """
+    # `_residual_field_paths` stays empty on purpose. `panel.wifi_ssid` was
+    # declared here while this sensor rendered the SSID; the read moved to
+    # `SpanPanelWifiLinkBinarySensor` and the declaration went with it, because
+    # the declaration exists to let a Repair name the entity that made the read.
+    # `panel.panel_size` is not declared for the older reason: no adapter
+    # produces it, so it is an entry in `RESIDUAL_EXEMPT_PATHS` instead.
 
     def __init__(
         self,
@@ -393,16 +384,22 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return additional state attributes for the software version sensor.
 
-        **`wifi_ssid` is published here and on the Wi-Fi Link binary sensor, on
-        purpose. Do not "tidy" it away from either place.** The coherent host is
-        the binary sensor — a network name on a firmware-version sensor is
-        incoherent, and it only sits here because `panel_size` was already
-        occupying this attribute block. But it has been here for as long as the
-        integration has existed, so a user's
-        `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` template
-        keeps working. One duplicated attribute string is the price of not
-        breaking those; this copy comes out at a future major version, not
-        before. `test_the_ssid_stays_on_the_software_version_sensor_too` pins it.
+        **No `wifi_ssid` here. It moved to the Wi-Fi Link binary sensor and is
+        not coming back; do not restore it "for compatibility".** A network name
+        on a firmware-version sensor was incoherent — it only ever sat here
+        because `panel_size` was already occupying this attribute block — and the
+        entity that reports whether Wi-Fi is up is the one that should report
+        which network it is up on.
+
+        The compatibility argument for keeping a copy does not hold up. At v2.0.8
+        `STATUS_SENSORS` held four descriptions, so the attribute appeared on
+        four sensors; the other three have since moved to
+        `SpanPanelPanelStatus`, which narrowed it to this one sensor without
+        anybody recording that it had happened. This is that narrowing finished
+        and written down rather than half-done and undocumented.
+        `test_the_ssid_moved_off_the_software_version_sensor` pins the absence.
+
+        `panel_size` is untouched and stays here.
         """
         if not self.coordinator.data:
             return None
@@ -411,8 +408,6 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         attributes: dict[str, Any] = {}
 
         attributes["panel_size"] = snapshot.panel_size
-        if snapshot.wifi_ssid is not None:
-            attributes["wifi_ssid"] = snapshot.wifi_ssid
 
         if self.entity_description.key == "grid_forming_entity":
             forming = _grid_forming_device_name(snapshot)

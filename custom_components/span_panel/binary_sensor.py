@@ -378,11 +378,14 @@ class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorE
     (`core/wifi-ssid` on flat, `status/wifi-ssid` on v1.0), so the producible
     gate covers it.
 
-    `SpanPanelStatus` declares the same path, and that is deliberate — see
-    `extra_state_attributes` below. `residual_field_paths()` unions a set, and
-    the coordinator's `field_path -> entity_id` map holds a set of entity ids
-    per path, so two readers of one path is the case both were built for: the
-    Repair names both entities, which is what a user needs to see.
+    The only declaration of this path in the integration. It was on
+    `SpanPanelStatus` while that sensor rendered the SSID, and it moved with the
+    read rather than being left behind: the declaration is what a Repair
+    consults to name the entity a dead field took down with it, so a stale copy
+    would name a sensor that no longer reads the field. Because this is now the
+    only declaration, `residual_field_paths()` has to import `binary_sensor` for
+    the subclass walk to see it -- the walk sees only imported modules, and this
+    path would otherwise leave the producible gate silently.
     """
 
     @property
@@ -394,10 +397,10 @@ class SpanPanelWifiLinkBinarySensor(SpanPanelBinarySensor[SpanPanelBinarySensorE
         come from the same node on the wire — `status/wifi` and
         `status/wifi-ssid` on v1.0, `core/wifi` and `core/wifi-ssid` on flat.
 
-        The same attribute is still published by the Software Version sensor,
-        which is where it has always lived. That duplication is deliberate and
-        is documented at `SpanPanelStatus.extra_state_attributes`; do not remove
-        either half without reading it.
+        The Software Version sensor used to publish it, for the historical
+        reason that `panel_size` was already occupying its attribute block. That
+        copy is gone -- see `SpanPanelStatus.extra_state_attributes` for why the
+        compatibility argument for keeping one did not hold up.
 
         Omitted rather than reported as `None` when the panel publishes no SSID:
         an attribute present and empty reads as a reading that failed, which is

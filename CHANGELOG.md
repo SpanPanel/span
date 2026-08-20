@@ -84,15 +84,18 @@ All notable changes to this project will be documented in this file.
   everything unconfigured is reporting a state, and that is the state most panels are in; entities that vanished until somebody configured a limit would be
   entities nobody could build a dashboard on.
 
-- **The Wi-Fi network name is now on the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now also tells
-  you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID. The same attribute stays on the
-  Software Version sensor, where it has always been, so existing templates reading it there keep working unchanged.
+- **The Wi-Fi network name moved to the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now also tells
+  you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID.
+- **It is no longer an attribute of the Software Version sensor.** A network name on a firmware-version sensor never made sense — it sat there because
+  `panel_size` was already in that attribute block. If you have a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')`, point it at
+  the Wi-Fi Link binary sensor instead. `panel_size` is unaffected and stays where it is.
 
 ### Fixed
 
 - **The Wi-Fi network name came back.** Panels on the older data model report the SSID they are joined to, and this integration has shown it as an attribute on
   the panel status sensor for as long as it has existed. On the v1.0 data model nothing read it, so the attribute quietly emptied when your panel upgraded — a
-  value you had, silently gone, with no error and nothing in the log. It is read again.
+  value you had, silently gone, with no error and nothing in the log. It is read again, and it is now published on the Wi-Fi Link binary sensor rather than on
+  the Software Version sensor — see above.
 - **A firmware upgrade that adds a capability now actually reloads.** The check that decides whether new hardware warrants a reload knew about four capabilities
   where the rest of the integration knew about nine. A panel that gained the shed forecast, the power control system, battery telemetry or DER link health while
   Home Assistant was running published the data, matched every rule for creating the entities, and asked for no reload — so the new entities appeared only the

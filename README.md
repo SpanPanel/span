@@ -226,10 +226,11 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 
 ### Software Version Sensor Attributes
 
-| Attribute    | Type   | Notes                                                                                                                              |
-| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `panel_size` | int    | Total breaker spaces (e.g., 32, 40)                                                                                                |
-| `wifi_ssid`  | string | Current Wi-Fi network. Also on the Wi-Fi Link binary sensor, which is where it belongs; this copy stays for template compatibility |
+| Attribute    | Type | Notes                               |
+| ------------ | ---- | ----------------------------------- |
+| `panel_size` | int  | Total breaker spaces (e.g., 32, 40) |
+
+`wifi_ssid` used to appear here. It moved to the Wi-Fi Link binary sensor below; a template reading it from this sensor should be pointed there.
 
 ### Wi-Fi Link Binary Sensor Attributes
 

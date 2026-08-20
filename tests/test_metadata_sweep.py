@@ -18,11 +18,13 @@ annotation said `SCHEMA_0_ONLY` -- which was true, and sanctioned a user losing
 an attribute on upgrade. With the library reading it, both adapters produce the
 path, so it is a declaration now and the producible gate covers it.
 
-It is published on the **Wi-Fi Link binary sensor** as well, which is the
-coherent host: the entity that reports whether Wi-Fi is up is the one that
-should say which network it is up on, and both values come off the same node on
-the wire. The Software Version copy stays, deliberately, so existing templates
-keep working -- pinned below rather than left to a reader's judgement.
+It is published on the **Wi-Fi Link binary sensor**, which is the coherent host:
+the entity that reports whether Wi-Fi is up is the one that should say which
+network it is up on, and both values come off the same node on the wire. The
+Software Version sensor no longer carries it. That narrowing had already begun
+undocumented -- at v2.0.8 four `STATUS_SENSORS` descriptions rendered the
+attribute and three have since moved elsewhere, leaving one -- and this finishes
+it and writes it down.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData, ensure_device_registered
 from custom_components.span_panel.binary_sensor import (
+    SpanPanelWifiLinkBinarySensor,
     async_setup_entry as binary_sensor_async_setup_entry,
 )
 from custom_components.span_panel.const import DOMAIN, SYSTEM_DOOR_STATE, SYSTEM_WIFI_LINK
@@ -297,32 +300,22 @@ def test_the_panel_identity_paths_are_enumerated_as_device_card_reads() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_ssid_attribute_carries_what_the_panel_publishes() -> None:
-    """The attribute a flat panel filled, filled again on v1.0.
+def test_the_ssid_moved_off_the_software_version_sensor() -> None:
+    """The old site, asserted absent — deliberately, and not coming back.
 
-    Asserted on a sensor built by the platform over a snapshot the real schema_1
-    adapter produced from the capture, so what is under test is the whole route:
-    published topic, mapper, snapshot field, attribute.
+    A network name on a firmware-version sensor was incoherent; it only ever sat
+    there because `panel_size` was already occupying the attribute block. The
+    value is not lost, it moved: `test_the_wifi_link_sensor_carries_the_network_it_is_linked_to`
+    reads it back out of this same capture on the Wi-Fi Link binary sensor.
+
+    Asserted against a snapshot that *does* publish an SSID, so restoring the
+    read fails here rather than passing on a panel that happens to carry none.
     """
     attributes = _attributes(_snapshot(), SOFTWARE_VERSION_KEY)
 
-    assert attributes["wifi_ssid"] == _published(SCHEMA_ONE_PANEL, WIFI_SSID_TOPIC)
-
-
-def test_the_ssid_attribute_follows_a_republished_ssid() -> None:
-    """A panel that joins another network says so, which a hardcoded `None` never could."""
-    attributes = _attributes(_snapshot(status__wifi_ssid="another-network"), SOFTWARE_VERSION_KEY)
-
-    assert attributes["wifi_ssid"] == "another-network"
-
-
-def test_an_unpublished_ssid_leaves_the_attribute_off_entirely() -> None:
-    """Absent, not empty. An attribute present and blank reads as a failed reading."""
-    attributes = _attributes(_snapshot(status__wifi_ssid=None), SOFTWARE_VERSION_KEY)
-
+    assert _published(SCHEMA_ONE_PANEL, WIFI_SSID_TOPIC)
     assert "wifi_ssid" not in attributes
-    # The sensor still reports its other attributes, so this is the SSID going
-    # missing rather than the attribute block collapsing.
+    # The attribute block did not collapse; only the SSID left it.
     assert "panel_size" in attributes
 
 
@@ -331,12 +324,14 @@ def test_the_ssid_is_a_declaration_now_rather_than_an_exemption() -> None:
 
     Both adapters map `wifi_ssid`, so the path satisfies the producible gate and
     `test_no_exempt_path_is_producible_by_both` refuses to let it stay exempt.
-    It is declared on the entity that reads it, which is what lets a Repair name
-    the entities a dead field takes with it.
+    It is declared on the entity that reads it -- one entity, now that the read
+    has moved -- which is what lets a Repair name the entity a dead field takes
+    with it.
     """
     assert "panel.wifi_ssid" not in RESIDUAL_EXEMPT_PATHS
     assert "panel.wifi_ssid" in declared_field_paths()
-    assert "panel.wifi_ssid" in SpanPanelStatus._residual_field_paths
+    assert "panel.wifi_ssid" in SpanPanelWifiLinkBinarySensor._residual_field_paths
+    assert "panel.wifi_ssid" not in SpanPanelStatus._residual_field_paths
 
 
 async def test_the_wifi_link_sensor_carries_the_network_it_is_linked_to(
@@ -371,27 +366,6 @@ async def test_an_unpublished_ssid_leaves_the_wifi_link_attribute_off_entirely(
     sensors = await _binary_sensors(hass, _snapshot(status__wifi_ssid=None))
 
     assert sensors[SYSTEM_WIFI_LINK].extra_state_attributes is None
-
-
-async def test_the_ssid_stays_on_the_software_version_sensor_too(
-    hass: HomeAssistant,
-) -> None:
-    """The duplication is the compatibility guarantee, not an oversight.
-
-    `wifi_ssid` has been an attribute of the Software Version sensor for as long
-    as the integration has existed, so a user's
-    `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` template
-    depends on it. Moving it to its coherent host would break those templates
-    silently -- a template that reads a missing attribute returns `None` rather
-    than erroring -- so both entities publish it and the old copy comes out at a
-    future major version. This test is what stops it being tidied away sooner.
-    """
-    snapshot = _snapshot()
-    published = _published(SCHEMA_ONE_PANEL, WIFI_SSID_TOPIC)
-    sensors = await _binary_sensors(hass, snapshot)
-
-    assert _attributes(snapshot, SOFTWARE_VERSION_KEY)["wifi_ssid"] == published
-    assert sensors[SYSTEM_WIFI_LINK].extra_state_attributes == {"wifi_ssid": published}
 
 
 async def test_only_the_wifi_link_sensor_declares_the_ssid_it_reads(

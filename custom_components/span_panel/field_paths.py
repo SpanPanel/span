@@ -469,10 +469,13 @@ def residual_field_paths() -> frozenset[str]:
     that the Repair actually consumes is the entity's.
 
     The walk sees only classes Python has imported, so the platform modules
-    that declare residuals are imported here explicitly. A residual declared in
-    a module this function does not reach would go missing silently, so
-    `test_source_residuals_match_the_subclass_walk` scans the package source
-    for `_residual_field_paths` assignments and fails on any the walk missed.
+    that declare residuals are imported here explicitly -- exactly those, no
+    more: a module listed here that declares nothing is a stale import, and one
+    that declares something and is missing would go missing silently. Both
+    directions are pinned by
+    `test_the_residual_walk_imports_exactly_the_modules_that_declare_one`, which
+    reads this list out of the source because under pytest the platform modules
+    are already imported for other reasons and an omission here would still walk.
     """
     # Deferred for the same cycle-avoidance reason as `declared_field_paths()`
     # below: every platform module imports this one for the declaration mixin.
@@ -480,7 +483,6 @@ def residual_field_paths() -> frozenset[str]:
         binary_sensor,
         select,
         sensor_circuit,
-        sensor_panel,
         switch,
     )
     from .entity import SpanPanelEntity  # pylint: disable=import-outside-toplevel

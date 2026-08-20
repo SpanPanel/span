@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import ast
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 import pathlib
 
 import pytest
@@ -105,15 +105,18 @@ def test_gate_covers_every_declaration_in_the_source() -> None:
     )
 
 
-def _source_residual_paths() -> dict[str, str]:
-    """Every `_residual_field_paths` tuple literal in the integration source, by module.
+def _iter_source_residuals() -> Iterator[tuple[str, str]]:
+    """Yield ``(field_path, module_filename)`` for every residual literal in the source.
 
     The runtime counterpart, `residual_field_paths()`, unions the class
     attribute over a `SpanPanelEntity.__subclasses__()` walk, and a walk sees
     only what has been imported. This reads the same declarations out of the
     source text, where importedness is not a factor.
+
+    A path declared by two modules yields twice, deliberately: which *paths*
+    exist and which *modules* declare one are different questions, and collapsing
+    to the first module that mentions a path answers the second wrongly.
     """
-    found: dict[str, str] = {}
     for source in sorted(_PACKAGE_ROOT.rglob("*.py")):
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
@@ -133,8 +136,20 @@ def _source_residual_paths() -> dict[str, str]:
                 continue
             for element in node.value.elts:
                 if isinstance(element, ast.Constant) and isinstance(element.value, str):
-                    found.setdefault(element.value, source.name)
+                    yield element.value, source.name
+
+
+def _source_residual_paths() -> dict[str, str]:
+    """Every residual path in the integration source, against a module declaring it."""
+    found: dict[str, str] = {}
+    for path, module in _iter_source_residuals():
+        found.setdefault(path, module)
     return found
+
+
+def _source_residual_modules() -> set[str]:
+    """Every integration module that declares at least one residual path."""
+    return {module.removesuffix(".py") for _, module in _iter_source_residuals()}
 
 
 def test_source_residuals_match_the_subclass_walk() -> None:
@@ -170,6 +185,56 @@ def test_source_residuals_match_the_subclass_walk() -> None:
         f"residual paths the source scan cannot see: {unscanned}. They are not written "
         "as string literals in a `_residual_field_paths` tuple, so this pin no longer "
         "covers them — declare them literally."
+    )
+
+
+def _walk_imported_modules() -> set[str]:
+    """Return the sibling modules `residual_field_paths()` imports for its walk.
+
+    Read out of the source rather than by calling the function, because what is
+    under test is the import list itself: a module missing from it still gets
+    walked in-process whenever some *other* importer has already pulled it in,
+    which is true of every module in the test suite and is exactly why the walk
+    test below cannot see the omission.
+    """
+    tree = ast.parse((_PACKAGE_ROOT / "field_paths.py").read_text(encoding="utf-8"))
+    function = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "residual_field_paths"
+    )
+    return {
+        alias.name
+        for node in ast.walk(function)
+        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module is None
+        for alias in node.names
+    }
+
+
+def test_the_residual_walk_imports_exactly_the_modules_that_declare_one() -> None:
+    """The walk's import list, pinned against the declarations it exists to reach.
+
+    `residual_field_paths()` walks `SpanPanelEntity.__subclasses__()`, which sees
+    only classes Python has already imported, so it imports the declaring
+    platform modules itself. Nothing held that list to the declarations: a module
+    dropped from it goes on being walked under pytest, where the platform modules
+    are imported many times over for other reasons, and fails only in production
+    where `field_paths` may be reached first. A path that leaves the walk leaves
+    the producible gate and the Repair's affected-entity count with it, silently.
+
+    Both directions. An unlisted module is the failure above; a listed module
+    that declares nothing is a stale import, which is how the list stops meaning
+    what its docstring says and starts being copied forward unread.
+    """
+    declaring = _source_residual_modules()
+    imported = _walk_imported_modules()
+
+    assert declaring, "the source scan found no residual declarations at all"
+    assert imported == declaring, (
+        f"`residual_field_paths()` imports {sorted(imported)} for its subclass walk but "
+        f"residuals are declared in {sorted(declaring)}. Unlisted modules drop out of the "
+        "producible gate in any process that reaches `field_paths` first; listed modules "
+        "that declare nothing are stale."
     )
 
 
