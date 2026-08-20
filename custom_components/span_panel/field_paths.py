@@ -209,6 +209,16 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # The EVSE's Homie node id — an addressing handle used to build the
         # sub-device identifier, not a published field.
         "evse.node_id": Producibility.NEITHER,
+        # The charge-current control's two non-readings, read by
+        # `SpanEvseNumber`: `$settable` on the limit's declaration, which is the
+        # entity-creation gate, and the Homie `$target` echo of a write the
+        # panel has accepted but not yet applied, rendered as an attribute. Both
+        # are facts about a command rather than readings, so no adapter carries
+        # a metadata row for either — the same shape as the `circuit.*_target`
+        # pair at the top of this map, and the same reason `panel.grid_islandable`
+        # sits here as a creation gate.
+        "evse.charge_current_limit_settable": Producibility.NEITHER,
+        "evse.charge_current_limit_target_a": Producibility.NEITHER,
         # The shed-forecast refinements, read for attributes on the two forecast
         # sensors (`SpanShedForecastSensor.extra_state_attributes`). schema_1
         # reads all three into the snapshot but carries a `_PROPERTY_FIELD_MAP`
@@ -299,6 +309,22 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # through a circuit was not.
         "pv.connected": Producibility.SCHEMA_1_ONLY,
         "evse.connected": Producibility.SCHEMA_1_ONLY,
+        # The EVSE charge-current pair behind the `evse_charge_current_limit`
+        # number: the settable limit the entity's value comes from — its
+        # description is `SCHEMA_CONDITIONAL_FIELD` and names it — and the
+        # commissioned ceiling the entity reads for `native_max_value`. Flat
+        # firmware's `evse` device type publishes `advertised-current` and no
+        # settable ceiling at all, so neither can ever satisfy the both-adapters
+        # gate. schema_1 carries a metadata row for each, resolved from the
+        # charger's own `$description` rather than from a table, which is what
+        # makes these SCHEMA_1_ONLY rather than NEITHER and buys the entity unit
+        # validation against the property the panel actually declares.
+        #
+        # The ceiling is deliberately not on `SpanEvseNumber._residual_field_paths`:
+        # that feeds `declared_field_paths()`, which is the both-adapters gate,
+        # and flat produces neither path.
+        "evse.charge_current_limit_a": Producibility.SCHEMA_1_ONLY,
+        "evse.charge_current_ceiling_a": Producibility.SCHEMA_1_ONLY,
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
         # The `grid_forming_entity` sensor's source field. schema_1 answers the
@@ -470,6 +496,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         GRID_ISLANDABLE_SENSOR,
         PCS_ACTIVE_SENSOR,
     )
+    from .number import EVSE_NUMBERS  # pylint: disable=import-outside-toplevel
     from .sensor_definitions import (  # pylint: disable=import-outside-toplevel
         all_sensor_descriptions,
     )
@@ -478,6 +505,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         *all_sensor_descriptions(),
         *BINARY_SENSORS,
         *EVSE_BINARY_SENSORS,
+        *EVSE_NUMBERS,
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,

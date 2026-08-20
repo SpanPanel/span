@@ -282,7 +282,13 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # algorithm and the two SoC thresholds parsed out of it -- read as
     # attributes on `dsm_state`. Flat has no `shed` node, and a JSON document
     # has no unit surface for a schema_1 row to describe.
-    Producibility.NEITHER: 41,
+    # +2 for the EVSE charge-current control's two non-readings:
+    # `charge_current_limit_settable`, the `$settable` flag `number.py` gates
+    # entity creation on, and `charge_current_limit_target_a`, the Homie
+    # `$target` echo it renders as an attribute. Facts about a command rather
+    # than readings, so no adapter carries a row for either -- the same shape as
+    # the `circuit.*_target` pair.
+    Producibility.NEITHER: 43,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
@@ -311,7 +317,13 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # circuit's `connection/feeds-device-status` — while flat publishes
     # `connected` on the BESS and on no other device class, so neither can
     # satisfy the both-adapters gate.
-    Producibility.SCHEMA_1_ONLY: 10,
+    # +2 for the EVSE charge-current pair behind the
+    # `evse_charge_current_limit` number: the settable limit its description
+    # names, and the commissioned ceiling the entity reads for
+    # `native_max_value`. schema_1 resolves both from the charger's own
+    # `$description`; flat's `evse` type declares no settable ceiling at all, so
+    # neither can satisfy the both-adapters gate.
+    Producibility.SCHEMA_1_ONLY: 12,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

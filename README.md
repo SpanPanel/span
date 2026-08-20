@@ -271,6 +271,17 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 whether it can reach the charger at all. A charger part-way through a session behind a lost link reports a plugged-in vehicle and a dead link at the same time.
 EVSE Panel Link is a diagnostic and appears only where the circuit feeding that charger publishes the link record.
 
+#### EVSE Controls (per charger, v1.0)
+
+| Control                   | Platform | Unit | Notes                                                                                   |
+| ------------------------- | -------- | ---- | --------------------------------------------------------------------------------------- |
+| EVSE Charge Current Limit | Number   | A    | The charge-current ceiling you can lower. Bounded by the installer-commissioned maximum |
+
+The maximum is read from the panel, never assumed: it is the current the charger was commissioned for, and a value above it is refused rather than clamped. The
+control is created only where the panel declares the limit settable, and reports unavailable while the panel has not published the commissioned maximum that
+bounds it. A change the panel has acknowledged but not yet applied appears as a `charge_current_limit_target` attribute while the state stays the limit the
+charger is still enforcing.
+
 #### EVSE Device Info Attributes
 
 | Attribute        | Source             |

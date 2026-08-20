@@ -163,6 +163,11 @@
         "name": "GFE Override: Grid Connected"
       }
     },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "EVSE Charge Current Limit"
+      }
+    },
     "select": {
       "circuit_priority": {
         "name": "Circuit Priority",
@@ -399,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Failed to set circuit relay state for {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "Failed to set the charge-current limit for charger {charger}: {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "This SPAN panel offers no charge-current control for charger {charger}."
     },
     "export_manifest_no_entries": {
       "message": "No SPAN panel configuration entries are loaded. Add and configure a SPAN panel before calling this service."

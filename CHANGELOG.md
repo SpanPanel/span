@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **A charge-current limit you can set, on panels running the v1.0 data model.** Each commissioned SPAN Drive gets an **EVSE Charge Current Limit** number on
+  its own device — the ceiling the charger offers your vehicle, which you can lower to charge more slowly and raise back. It is the first control this
+  integration has that changes something on a charger rather than on the panel.
+- The maximum you can ask for is the one your installer commissioned, read from the panel rather than assumed: the box will not accept a value above the
+  charger's rated current, and neither will anything else — a value beyond it is refused before it is sent, not quietly rounded down to something you did not
+  ask for. If the panel has not yet published what the charger is rated for, the control reports unavailable instead of offering an invented range.
+- The control appears only where the panel says the limit can be changed. A charger that publishes its limit as read-only gets no control, which is the same
+  distinction **Circuit Priority** already makes for a circuit commissioned never-backup.
+- While the panel is acknowledging a change it has not yet applied, the requested value shows as a `charge_current_limit_target` attribute and the state stays
+  the limit the charger is still enforcing — the same way Circuit Priority reports a priority change in flight.
+
 - **Whether your panel can reach your solar inverter and each of your chargers, on panels running the v1.0 data model.** **PV Panel Link** and **EVSE Panel
   Link** are the same fact **BESS Connected** has always shown for the battery: the panel's own report of the link to a device it feeds. The battery's version
   worked because the panel publishes it on the main lugs; the inverter's and each charger's are published by the circuit that feeds them, and nothing read that

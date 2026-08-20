@@ -163,6 +163,11 @@
         "name": "Forçage GFE : Connecté au Réseau"
       }
     },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "Limite de Courant de Charge EVSE"
+      }
+    },
     "select": {
       "circuit_priority": {
         "name": "Priorité du Circuit",
@@ -399,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Échec de la définition de l'état du relais du circuit pour {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "Échec du réglage de la limite de courant de charge pour le chargeur {charger} : {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "Ce panneau SPAN n'offre aucun contrôle du courant de charge pour le chargeur {charger}."
     },
     "export_manifest_no_entries": {
       "message": "Aucune entrée de configuration SPAN Panel n'est chargée. Ajoutez et configurez un panneau SPAN avant d'appeler ce service."

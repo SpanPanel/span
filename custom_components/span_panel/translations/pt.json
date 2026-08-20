@@ -163,6 +163,11 @@
         "name": "Substituição GFE: Conectado à Rede"
       }
     },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "Limite de Corrente de Carga EVSE"
+      }
+    },
     "select": {
       "circuit_priority": {
         "name": "Prioridade do Circuito",
@@ -399,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Falha ao definir o estado do relé do circuito para {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "Falha ao definir o limite de corrente de carga do carregador {charger}: {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "Este painel SPAN não oferece controlo da corrente de carga para o carregador {charger}."
     },
     "export_manifest_no_entries": {
       "message": "Nenhuma entrada de configuração do painel SPAN está carregada. Adicione e configure um painel SPAN antes de chamar este serviço."

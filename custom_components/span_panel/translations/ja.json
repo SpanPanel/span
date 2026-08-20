@@ -163,6 +163,11 @@
         "name": "GFEオーバーライド：系統接続"
       }
     },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "EVSE充電電流上限"
+      }
+    },
     "select": {
       "circuit_priority": {
         "name": "回路優先度",
@@ -399,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "{circuit}の回路リレー状態の設定に失敗しました。"
+    },
+    "evse_charge_limit_failed": {
+      "message": "充電器 {charger} の充電電流上限を設定できませんでした: {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "このSPANパネルは充電器 {charger} の充電電流制御に対応していません。"
     },
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"

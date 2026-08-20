@@ -48,6 +48,11 @@
         "default": "mdi:transmission-tower"
       }
     },
+    "number": {
+      "evse_charge_current_limit": {
+        "default": "mdi:ev-station"
+      }
+    },
     "select": {
       "circuit_priority": {
         "default": "mdi:priority-high"

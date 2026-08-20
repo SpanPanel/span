@@ -163,6 +163,11 @@
         "name": "Anulación GFE: Conectado a Red"
       }
     },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "Límite de Corriente de Carga EVSE"
+      }
+    },
     "select": {
       "circuit_priority": {
         "name": "Prioridad del Circuito",
@@ -399,6 +404,12 @@
     },
     "circuit_relay_failed": {
       "message": "Error al establecer el estado del relé del circuito para {circuit}."
+    },
+    "evse_charge_limit_failed": {
+      "message": "No se pudo establecer el límite de corriente de carga para el cargador {charger}: {reason}"
+    },
+    "evse_charge_limit_unsupported": {
+      "message": "Este panel SPAN no ofrece control de corriente de carga para el cargador {charger}."
     },
     "export_manifest_no_entries": {
       "message": "No hay entradas de configuración de SPAN Panel cargadas. Agregue y configure un SPAN Panel antes de llamar a este servicio."
