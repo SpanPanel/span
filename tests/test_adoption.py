@@ -27,6 +27,7 @@ from custom_components.span_panel.adoption import (
     DEVICE_CLASS_BY_UNIT,
     adopted_control_count,
     adopted_identifier,
+    adopted_unique_id,
     async_register_adopted_devices,
     classify,
     create_adopted_binary_sensors,
@@ -37,6 +38,7 @@ from custom_components.span_panel.adoption import (
     resolve_identifier,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.id_builder import build_panel_unique_id
 from custom_components.span_panel.util import (
     ADOPTED_IDENTIFIER_TOKEN,
     classify_sub_device_identifier,
@@ -557,3 +559,57 @@ def test_a_panel_with_no_adopted_device_registers_nothing(hass: HomeAssistant, r
         if any(ADOPTED_IDENTIFIER_TOKEN in identifier for _domain, identifier in device.identifiers)
     ]
     assert adopted == []
+
+
+# -- The id grammar is one grammar -------------------------------------------
+
+
+def test_an_adopted_id_follows_the_same_grammar_as_a_curated_one() -> None:
+    """`span_{serial}_{scope}_{suffix}`, with the serial spelled the same way.
+
+    An earlier version lower-cased and de-hyphenated the whole string, which
+    mangled the serial into `span_sp3_242424_001_...` where every other id in the
+    integration says `span_sp3-242424-001_...`. A reader that parses an id by
+    position -- `extract_circuit_uuid_from_unique_id` does -- must not meet a
+    second grammar.
+    """
+    declaration = _property(node_id="meter", property_id="active-power")
+    identifier = adopted_identifier(PANEL_SERIAL, "generator-1")
+
+    adopted = adopted_unique_id(identifier, declaration)
+    curated = build_panel_unique_id(PANEL_SERIAL, "panel.instant_grid_power_w")
+
+    prefix = f"span_{PANEL_SERIAL}_"
+    assert adopted.startswith(prefix)
+    assert curated.startswith(prefix)
+    assert adopted == f"{prefix}{ADOPTED_IDENTIFIER_TOKEN}_generator-1_meter_active_power"
+
+
+def test_the_wire_address_is_snake_cased_and_the_anchor_is_not() -> None:
+    """The suffix has to read like a curated suffix; the anchor is an identity.
+
+    A serial keeps its hyphens in every curated id, and an adopted anchor is the
+    same kind of thing -- a name the device is known by, not a description key.
+    """
+    declaration = _property(node_id="charge-limit", property_id="owner-limit")
+    identifier = adopted_identifier(PANEL_SERIAL, "EX-0000-0001")
+
+    assert adopted_unique_id(identifier, declaration).endswith("_EX-0000-0001_charge_limit_owner_limit".lower())
+
+
+def test_curation_changes_two_of_the_three_segments(hass: HomeAssistant) -> None:
+    """Why uniform grammar does not remove the migration promotion needs.
+
+    The serial is the same either way. The scope becomes a curated sub-device kind
+    rather than `adopted_{anchor}`, and the suffix becomes a human-chosen
+    description key rather than a wire address. Both are the change itself, not a
+    formatting difference -- so a curated description cannot reproduce the adopted
+    id and has to take it over instead.
+    """
+    declaration = _property(node_id="meter", property_id="active-power")
+    adopted = adopted_unique_id(adopted_identifier(PANEL_SERIAL, "generator-1"), declaration)
+    curated_if_modelled = build_panel_unique_id(PANEL_SERIAL, "generator.active_power")
+
+    assert adopted != curated_if_modelled
+    assert ADOPTED_IDENTIFIER_TOKEN in adopted
+    assert ADOPTED_IDENTIFIER_TOKEN not in curated_if_modelled

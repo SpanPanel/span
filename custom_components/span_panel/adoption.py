@@ -47,6 +47,7 @@ from span_panel_api import AdoptedDevice, AdoptedProperty, SpanPanelSnapshot
 
 from .const import DOMAIN
 from .entity import SpanPanelEntity
+from .id_builder import get_user_friendly_suffix
 from .util import ADOPTED_IDENTIFIER_TOKEN
 
 if TYPE_CHECKING:
@@ -192,6 +193,32 @@ def resolve_identifier(registry: DeviceRegistry, panel_serial: str, device: Adop
     return adopted_identifier(panel_serial, adopted_anchor(device))
 
 
+def adopted_unique_id(identifier: str, declaration: AdoptedProperty) -> str:
+    """Return the unique id for one adopted property, in this integration's grammar.
+
+    `span_{serial}_adopted_{anchor}_{suffix}` -- the same
+    `span_{serial}_{scope}_{suffix}` shape every curated id has, built through the
+    same suffix helper. Uniform on purpose: a reader that parses an id by
+    position, as `extract_circuit_uuid_from_unique_id` does, must not meet a
+    second grammar. An earlier version lower-cased and de-hyphenated the whole
+    string, which mangled the panel serial itself -- `span_sp3_242424_001_...`
+    where every other id in the integration says `span_sp3-242424-001_...`.
+
+    Only the node and property are de-hyphenated, because they are the segment
+    that has to end up snake_case like a curated suffix. The serial and the
+    anchor keep their hyphens, exactly as a curated id keeps the serial's.
+
+    **Uniform grammar, and still not the id curation will mint.** Two of the three
+    segments change when a device type stops being unmodelled: the scope becomes
+    that type's sub-device kind rather than `adopted_{anchor}`, and the suffix
+    becomes a human-chosen description key rather than a wire address. Those are
+    the change itself, not a formatting difference, which is why promotion needs
+    to take over the existing id rather than expecting to reproduce it.
+    """
+    wire_path = f"{declaration.node_id}.{declaration.property_id}".replace("-", "_")
+    return f"span_{identifier.lower()}_{get_user_friendly_suffix(wire_path)}"
+
+
 def adopted_device_info(
     identifier: str,
     device: AdoptedDevice,
@@ -291,9 +318,7 @@ class AdoptedEntity(SpanPanelEntity):
         super().__init__(coordinator)
         self._device_wire_id = device.device_id
         self._declaration_path = declaration.path
-        self._attr_unique_id = (
-            f"span_{identifier}_{declaration.node_id}_{declaration.property_id}".replace("-", "_")
-        )
+        self._attr_unique_id = adopted_unique_id(identifier, declaration)
         self._attr_name = _humanised(declaration.property_id)
         self._attr_device_info = adopted_device_info(
             identifier, device, panel_device_id=panel_device_id
