@@ -767,7 +767,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "Estão disponíveis novas entidades do Painel SPAN",
-      "description": "Apareceram {count} nova(s) entidade(s) no seu Painel SPAN (por exemplo: {examples}). Foram criadas **desativadas**, pelo que nada apareceu nos seus painéis nem no seu histórico sem ter sido pedido.\n\nPodem aparecer novas entidades por vários motivos: uma atualização da integração que expõe mais do que o seu painel comunica, um circuito acrescentado ao painel, ou hardware como uma bateria ou energia solar que entra em funcionamento. Não há nada avariado e não é necessária qualquer ação: este aviso existe apenas para que a novidade não passe despercebida.\n\nPara usar alguma, abra a página do dispositivo Painel SPAN, mostre as suas entidades desativadas e ative as que quiser. Dispense este aviso depois de o ter visto."
+      "description": "Entidades novas criadas **desativadas**: {count} (por exemplo: {examples}). Nada apareceu nos seus painéis nem no seu histórico sem ter sido pedido.\n\nEsta contagem inclui apenas as entidades criadas desativadas. Tudo o que é acrescentado ativado já está visível na sua lista de entidades e no seu histórico.\n\nPodem aparecer novas entidades por vários motivos: uma atualização da integração que expõe mais do que o seu painel comunica, um circuito acrescentado ao painel, ou hardware como uma bateria ou energia solar que entra em funcionamento. Não há nada avariado e não é necessária qualquer ação: este aviso existe apenas para que a novidade não passe despercebida.\n\nPara usar alguma, abra a página do dispositivo Painel SPAN, mostre as suas entidades desativadas e ative as que quiser. Dispense este aviso depois de o ter visto."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "O seu Painel SPAN comunica agora o ilhamento a partir do Dispositivo de Interligação de Microrrede",
@@ -775,11 +775,11 @@
     },
     "schema_field_unresolved": {
       "title": "Campo de dados do Painel SPAN indisponível",
-      "description": "O firmware do seu painel já não fornece `{field_path}`. Há {count} entidade(s) afetada(s) (por exemplo: {examples}). Podem ficar indisponíveis, ou comunicar dados incompletos, até que uma atualização da integração adicione suporte ao novo firmware."
+      "description": "O firmware do seu painel já não fornece `{field_path}`. Entidades afetadas: {count} (por exemplo: {examples}). Podem ficar indisponíveis, ou comunicar dados incompletos, até que uma atualização da integração adicione suporte ao novo firmware."
     },
     "schema_unit_mismatch": {
       "title": "Discrepância de unidades do Painel SPAN",
-      "description": "O seu painel comunica `{field_path}` em {schema_unit}, mas esta integração espera {ha_unit}. Há {count} entidade(s) afetada(s) (por exemplo: {examples}). As suas leituras e estatísticas de longo prazo podem estar erradas. Não foram alteradas automaticamente."
+      "description": "O seu painel comunica `{field_path}` em {schema_unit}, mas esta integração espera {ha_unit}. Entidades afetadas: {count} (por exemplo: {examples}). As suas leituras e estatísticas de longo prazo podem estar erradas. Não foram alteradas automaticamente."
     }
   }
 }

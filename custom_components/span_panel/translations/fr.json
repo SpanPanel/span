@@ -767,7 +767,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "De nouvelles entités du Panneau SPAN sont disponibles",
-      "description": "{count} nouvelle(s) entité(s) sont apparues pour votre Panneau SPAN (par exemple : {examples}). Elles ont été créées **désactivées**, afin que rien n'apparaisse dans vos tableaux de bord ni dans votre historique sans votre accord.\n\nDe nouvelles entités peuvent apparaître pour plusieurs raisons : une mise à jour de l'intégration qui expose davantage de ce que votre panneau signale, un circuit ajouté au panneau, ou du matériel tel qu'une batterie ou du solaire qui entre en service. Rien n'est cassé et aucune action n'est requise : cet avis existe uniquement pour que cet ajout ne soit pas silencieux.\n\nPour en utiliser une, ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez. Ignorez cet avis une fois que vous y avez jeté un œil."
+      "description": "Nouvelles entités créées **désactivées** : {count} (par exemple : {examples}). Rien n'est apparu dans vos tableaux de bord ni dans votre historique sans votre accord.\n\nCe décompte ne couvre que les entités créées désactivées. Tout ce qui est ajouté activé est déjà visible dans votre liste d'entités et votre historique.\n\nDe nouvelles entités peuvent apparaître pour plusieurs raisons : une mise à jour de l'intégration qui expose davantage de ce que votre panneau signale, un circuit ajouté au panneau, ou du matériel tel qu'une batterie ou du solaire qui entre en service. Rien n'est cassé et aucune action n'est requise : cet avis existe uniquement pour que cet ajout ne soit pas silencieux.\n\nPour en utiliser une, ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez. Ignorez cet avis une fois que vous y avez jeté un œil."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "Votre Panneau SPAN signale désormais l'îlotage depuis son Dispositif d'Interconnexion de Micro-réseau",
@@ -775,11 +775,11 @@
     },
     "schema_field_unresolved": {
       "title": "Champ de données du Panneau SPAN indisponible",
-      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. {count} entité(s) sont concernées (par exemple : {examples}). Elles peuvent devenir indisponibles, ou renvoyer des données incomplètes, jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
+      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. Entités concernées : {count} (par exemple : {examples}). Elles peuvent devenir indisponibles, ou renvoyer des données incomplètes, jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
     },
     "schema_unit_mismatch": {
       "title": "Incohérence d'unité du Panneau SPAN",
-      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. {count} entité(s) sont concernées (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
+      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. Entités concernées : {count} (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
     }
   }
 }

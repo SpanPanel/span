@@ -767,7 +767,7 @@
   "issues": {
     "new_entities_disabled": {
       "title": "Hay nuevas entidades del Panel SPAN disponibles",
-      "description": "Han aparecido {count} entidad(es) nueva(s) en su Panel SPAN (por ejemplo: {examples}). Se han creado **deshabilitadas**, por lo que no ha aparecido nada en sus paneles de control ni en su historial sin haberlo pedido.\n\nPueden aparecer entidades nuevas por varios motivos: una actualización de la integración que expone más de lo que informa su panel, un circuito añadido al panel, o hardware como una batería o energía solar que se pone en marcha. No hay nada averiado ni es necesaria ninguna acción: este aviso existe solo para que la novedad no pase desapercibida.\n\nPara usar alguna, abra la página del dispositivo Panel SPAN, muestre sus entidades deshabilitadas y habilite las que desee. Descarte este aviso cuando lo haya revisado."
+      "description": "Entidades nuevas creadas **deshabilitadas**: {count} (por ejemplo: {examples}). No ha aparecido nada en sus paneles de control ni en su historial sin haberlo pedido.\n\nEste recuento incluye solo las entidades que se crearon desactivadas. Todo lo que se añade habilitado ya es visible en su lista de entidades y en su historial.\n\nPueden aparecer entidades nuevas por varios motivos: una actualización de la integración que expone más de lo que informa su panel, un circuito añadido al panel, o hardware como una batería o energía solar que se pone en marcha. No hay nada averiado ni es necesaria ninguna acción: este aviso existe solo para que la novedad no pase desapercibida.\n\nPara usar alguna, abra la página del dispositivo Panel SPAN, muestre sus entidades deshabilitadas y habilite las que desee. Descarte este aviso cuando lo haya revisado."
     },
     "panel_upgraded_to_ebus_v1": {
       "title": "Su Panel SPAN ahora informa del aislamiento desde su Dispositivo de Interconexión de Microrred",
@@ -775,11 +775,11 @@
     },
     "schema_field_unresolved": {
       "title": "Campo de datos del Panel SPAN no disponible",
-      "description": "El firmware de su panel ya no proporciona `{field_path}`. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Pueden quedar no disponibles, o informar datos incompletos, hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
+      "description": "El firmware de su panel ya no proporciona `{field_path}`. Entidades afectadas: {count} (por ejemplo: {examples}). Pueden quedar no disponibles, o informar datos incompletos, hasta que una actualización de la integración añada compatibilidad con el nuevo firmware."
     },
     "schema_unit_mismatch": {
       "title": "Discrepancia de unidades del Panel SPAN",
-      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Hay {count} entidad(es) afectada(s) (por ejemplo: {examples}). Sus lecturas y estadísticas a largo plazo pueden ser incorrectas. No se han modificado automáticamente."
+      "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Entidades afectadas: {count} (por ejemplo: {examples}). Sus lecturas y estadísticas a largo plazo pueden ser incorrectas. No se han modificado automáticamente."
     }
   }
 }
