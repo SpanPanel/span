@@ -311,9 +311,9 @@ persistence.
 `classify_sub_device_identifier` returns `None` for any identifier carrying the `adopted` token, tested before its suffix rules — the anchor is vendor
 vocabulary, and a device id ending in `pv` would otherwise classify as the panel's solar sub-device.
 
-### Controls are classified but not built
+### Controls
 
-`classify` implements the full rule, including the three control platforms:
+`classify` routes a declaration to a platform:
 
 | Declaration                        | Platform        |
 | ---------------------------------- | --------------- |
@@ -324,14 +324,37 @@ vocabulary, and a device id ending in `pv` would otherwise classify as the panel
 | anything else                      | `SENSOR`        |
 
 A settable property with no `format` falls back to a reading because `format` is the value domain: a select with no option list and a number with no bounds are
-broken controls, not safe ones.
+broken controls, not safe ones. A settable `boolean` needs none — its datatype states the domain in full.
 
-The three control platforms are in `CONTROL_PLATFORMS` and are **not constructed yet**. Every write this integration performs goes through a curated,
-adapter-named topic, and a generic property write would put a new member on `SchemaAdapter` — whose required set is derived from the protocol itself, so it
-would be required of every adapter package and would invalidate built adapter wheels. That is a contract change with its own version bump.
+All five creators share `_create`, so `classify` is the only place a property's platform is decided. `test_every_property_reaches_exactly_one_platform` asserts
+that as a partition, which is what five separate predicates could not guarantee.
 
-`adopted_control_count` reports how many declared properties are waiting on it, in diagnostics under `adopted_devices.pending_controls`, so the decision is made
-on a measurement rather than a guess.
+Controls are disabled and diagnostic like every other adopted entity. There is deliberately no second, weaker gate — no read-only mode for settable properties.
+Enabling an entity is a deliberate act, commanding it is a second one, the panel authorises the write regardless of what we create, and this integration already
+ships switches that open and close breakers.
+
+### The write, and why it is not a generic one
+
+`SpanMqttClient.set_adopted_property(device_id, node_id, property_id, value)` publishes the write. **The lookup is the authorisation**: it resolves the property
+against the current snapshot's `adopted_devices` and publishes to the `set_topic` that property carries. No topic is accepted from the caller.
+
+That matters because the obvious alternative — a `set_property_topic(device, node, property)` member on `SchemaAdapter` — would put every curated control one
+argument away, and two of them do real work on the way out:
+
+- `set_dominant_power_source` translates `GRID` into the `ON_GRID` the v1.0 islanding assertion accepts.
+- `set_evse_charge_limit` **refuses** a value above the commissioned ceiling, because publishing past it is the one write with a physical consequence.
+
+A generic write reachable at modelled devices routes around both. Because `set_topic` is populated only for settable properties on devices `is_modelled`
+rejected, a modelled device produces no `AdoptedDevice` and cannot be addressed this way however the arguments are spelled.
+
+It also kept the change additive. A new `SchemaAdapter` member is required of every adapter package, so an install carrying an older adapter wheel would fail at
+**discovery** — the whole integration, not one feature.
+
+No payload translation and no bounds check on the way out, deliberately: the library knows nothing about an adopted property beyond its declaration, and
+inventing a bound would be inventing a fact about somebody's hardware. The entity constrains the value to the declared domain and the panel stays the authority
+on whether to accept it. A `NUMBER` on an `integer` property publishes `45`, never `45.0`.
+
+Diagnostics report `adopted_devices.controls` — how many adopted properties write back rather than only reporting.
 
 ### The notice counts devices, not entities
 

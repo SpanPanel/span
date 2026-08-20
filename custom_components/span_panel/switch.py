@@ -6,11 +6,12 @@ from typing import Any, ClassVar
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
+from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
@@ -335,7 +336,7 @@ async def async_setup_entry(
     # Get device name from config entry data
     _device_name = config_entry.data.get("device_name", config_entry.title)
 
-    entities: list[SpanPanelCircuitsSwitch] = []
+    entities: list[SpanPanelCircuitsSwitch | AdoptedSwitch] = []
 
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_data.is_user_controllable:
@@ -350,5 +351,17 @@ async def async_setup_entry(
         entities.append(
             SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name, _device_name)
         )
+
+    # Settable properties on devices this integration models nothing for.
+    # Disabled and diagnostic like every adopted entity: the panel authorises the
+    # write, and the user decides whether the control is one they want.
+    entities.extend(
+        create_adopted_switches(
+            coordinator,
+            coordinator.data,
+            dr.async_get(hass),
+            panel_device_id=config_entry.runtime_data.panel_device_id,
+        )
+    )
 
     async_add_entities(entities)

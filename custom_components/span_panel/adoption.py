@@ -36,7 +36,10 @@ import logging
 from typing import TYPE_CHECKING, Final
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
+from homeassistant.components.number import NumberEntity
+from homeassistant.components.select import SelectEntity
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import AdoptedDevice, AdoptedProperty, SpanPanelSnapshot
@@ -119,19 +122,19 @@ def classify(declaration: AdoptedProperty) -> Platform:
 
 
 CONTROL_PLATFORMS: Final = frozenset({Platform.SWITCH, Platform.SELECT, Platform.NUMBER})
-"""Platforms `classify` names that this integration cannot yet construct.
+"""The platforms `classify` names that write back to the panel.
 
-Not a reversal of the rule -- `classify` is the rule and it is complete. A
-control needs a write, and every write this integration performs goes through a
-curated, adapter-named topic: `set_circuit_relay`, `set_circuit_priority`,
-`set_evse_charge_limit`. There is no generic property write, and adding one would
-put a new member on `SchemaAdapter`, whose required set is derived from the
-protocol itself -- so it would be required of every adapter package and would
-invalidate built adapter wheels.
+Built, since 2026-08-20. The write goes through `set_adopted_property`, whose
+authorisation is a snapshot lookup rather than its arguments: it resolves the
+property against the current `adopted_devices` and publishes to the topic that
+property carries. A device the adapter models produces no adopted record, so it
+cannot be addressed that way however the arguments are spelled -- which is what
+keeps this from becoming a generic write around `set_circuit_relay`,
+`set_circuit_priority` and `set_evse_charge_limit`.
 
-That is a contract change and belongs in its own one, with its own version bump.
-Until then a property that classifies as a control surfaces as a reading, and
-`adopted_control_count` is what makes the gap countable rather than invisible.
+That mattered: two of those do real work on the way out. The islanding assertion
+translates its value, and the charge ceiling refuses one above what the charger
+was commissioned for.
 """
 
 
@@ -327,22 +330,187 @@ class AdoptedBinarySensor(AdoptedEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Homie spells a boolean `true`/`false`; anything else is not an answer."""
-        raw = self._published()
-        if raw is None:
+        return _boolean(self._published())
+
+
+class AdoptedControl(AdoptedEntity):
+    """Base for an adopted entity that writes back to the panel.
+
+    The write is refused by the library unless the property is still there and
+    still settable, so nothing here re-checks it: a control for a device that has
+    left the tree raises rather than publishing into a topic nothing subscribes
+    to, and that is the correct outcome to surface.
+    """
+
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        identifier: str,
+        device: AdoptedDevice,
+        declaration: AdoptedProperty,
+        *,
+        panel_device_id: str,
+    ) -> None:
+        """Remember the wire address this control publishes to."""
+        super().__init__(
+            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+        )
+        self._node_id = declaration.node_id
+        self._property_id = declaration.property_id
+
+    async def _publish(self, value: str) -> None:
+        """Write one value and refresh, or raise what the library raised.
+
+        No `hasattr` guard, unlike the curated controls. Those ask because a
+        transport may not implement an optional protocol at all; this entity only
+        exists because a v1.0 tree reported an adopted device, and that is the
+        same transport that carries the write.
+        """
+        await self.coordinator.client.set_adopted_property(
+            self._device_wire_id, self._node_id, self._property_id, value
+        )
+        await self.coordinator.async_request_refresh()
+
+
+class AdoptedSwitch(AdoptedControl, SwitchEntity):
+    """A declared `boolean` the panel accepts writes to."""
+
+    @property
+    def is_on(self) -> bool | None:
+        """Homie spells a boolean `true`/`false`; anything else is not an answer."""
+        return _boolean(self._published())
+
+    async def async_turn_on(self, **kwargs: object) -> None:
+        """Publish the vocabulary Homie defines for a boolean, not HA's."""
+        await self._publish("true")
+
+    async def async_turn_off(self, **kwargs: object) -> None:
+        """Publish the vocabulary Homie defines for a boolean, not HA's."""
+        await self._publish("false")
+
+
+class AdoptedSelect(AdoptedControl, SelectEntity):
+    """A declared `enum` the panel accepts writes to, with its declared options."""
+
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        identifier: str,
+        device: AdoptedDevice,
+        declaration: AdoptedProperty,
+        *,
+        panel_device_id: str,
+    ) -> None:
+        """Take the option list from the declaration, which is the whole domain."""
+        super().__init__(
+            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+        )
+        self._attr_options = parse_enum_format(declaration.format)
+
+    @property
+    def current_option(self) -> str | None:
+        """The published value, but only when it is one of the declared options.
+
+        A value outside the declared set is reported as unknown rather than as a
+        selection. Home Assistant rejects a `current_option` outside `options`,
+        and quietly widening the list to admit whatever arrived would hide a
+        panel disagreeing with its own declaration.
+        """
+        published = self._published()
+        return published if published in self._attr_options else None
+
+    async def async_select_option(self, option: str) -> None:
+        """Publish the option verbatim -- it came from the panel's own list."""
+        await self._publish(option)
+
+
+class AdoptedNumber(AdoptedControl, NumberEntity):
+    """A declared numeric the panel accepts writes to, with its declared bounds."""
+
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        identifier: str,
+        device: AdoptedDevice,
+        declaration: AdoptedProperty,
+        *,
+        panel_device_id: str,
+    ) -> None:
+        """Take the bounds from the declaration, which is what makes this a number."""
+        bounds = parse_number_format(declaration.format)
+        super().__init__(
+            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+        )
+        self._attr_native_min_value, self._attr_native_max_value, self._attr_native_step = bounds
+        self._attr_native_unit_of_measurement = declaration.unit
+        self._integral = declaration.datatype == "integer"
+
+    @property
+    def native_value(self) -> float | None:
+        """The published value as a number, or None when it is not one."""
+        published = self._published()
+        if published is None:
             return None
-        lowered = raw.strip().lower()
-        if lowered in ("true", "false"):
-            return lowered == "true"
+        try:
+            return float(published)
+        except ValueError:
+            _LOGGER.debug(
+                "Adopted %s published %r, which is not a number", self._declaration_path, published
+            )
+            return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Publish the value in the datatype the property declares.
+
+        An `integer` property gets an integer literal. Publishing `5.0` where the
+        declaration says `integer` is a payload outside the declared datatype,
+        and this library has no business sending one.
+        """
+        await self._publish(str(int(value)) if self._integral else str(value))
+
+
+def _boolean(published: str | None) -> bool | None:
+    """Return Homie's `true`/`false`, with anything else meaning no answer."""
+    if published is None:
         return None
+    lowered = published.strip().lower()
+    if lowered in ("true", "false"):
+        return lowered == "true"
+    return None
+
+
+def parse_enum_format(declared: str | None) -> list[str]:
+    """Return the options a Homie `enum` `$format` lists.
+
+    Comma-separated, per Homie 5. An empty result means the declaration carried
+    no usable domain, which `classify` has already used to route the property to
+    a sensor -- so this never returns empty for a property that reached a select.
+    """
+    if not declared:
+        return []
+    return [option.strip() for option in declared.split(",") if option.strip()]
+
+
+def parse_number_format(declared: str | None) -> tuple[float, float, float]:
+    """Return the `min:max:step` a Homie numeric `$format` states.
+
+    Step defaults to 1 when the declaration gives only a range, which Homie
+    permits. `classify` has already required a format, so the two bounds are
+    present by the time this is called.
+    """
+    parts = (declared or "").split(":")
+    minimum = float(parts[0]) if len(parts) > 0 and parts[0] else 0.0
+    maximum = float(parts[1]) if len(parts) > 1 and parts[1] else 100.0
+    step = float(parts[2]) if len(parts) > 2 and parts[2] else 1.0
+    return minimum, maximum, step
 
 
 def adopted_control_count(snapshot: SpanPanelSnapshot) -> int:
-    """How many declared properties would be controls if this could build them.
+    """How many adopted properties this panel exposes as controls rather than readings.
 
-    Zero on every panel that publishes no settable property on an unmodelled
-    device, which is every panel seen so far. Non-zero is the signal that the
-    generic write path `CONTROL_PLATFORMS` describes is worth its contract bump,
-    measured rather than assumed.
+    Reported in diagnostics beside the device list. A control on a device nobody
+    modelled is the highest-consequence thing adoption creates, so the count is
+    worth having in the one artefact that reaches a maintainer.
     """
     return sum(
         1
@@ -361,15 +529,17 @@ def create_adopted_sensors(
 ) -> list[AdoptedSensor]:
     """Every adopted property that is not a declared boolean.
 
-    Properties that classify as a control land here too, as readings, until the
-    write path exists -- see `CONTROL_PLATFORMS`.
+    Everything `classify` routes to `SENSOR`: every property that is not a
+    declared boolean and not a settable one with a usable value domain.
     """
-    return [
-        AdoptedSensor(coordinator, identifier, device, declaration, panel_device_id=panel_device_id)
-        for device, identifier in _adopted(snapshot, registry)
-        for declaration in device.properties
-        if classify(declaration) != Platform.BINARY_SENSOR
-    ]
+    return _create(
+        AdoptedSensor,
+        coordinator,
+        snapshot,
+        registry,
+        Platform.SENSOR,
+        panel_device_id=panel_device_id,
+    )
 
 
 def create_adopted_binary_sensors(
@@ -379,14 +549,91 @@ def create_adopted_binary_sensors(
     *,
     panel_device_id: str,
 ) -> list[AdoptedBinarySensor]:
-    """Every adopted property declared `boolean` and not settable."""
+    """Every adopted property declared `boolean` that the panel accepts no write to."""
+    return _create(
+        AdoptedBinarySensor,
+        coordinator,
+        snapshot,
+        registry,
+        Platform.BINARY_SENSOR,
+        panel_device_id=panel_device_id,
+    )
+
+
+def create_adopted_switches(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    registry: DeviceRegistry,
+    *,
+    panel_device_id: str,
+) -> list[AdoptedSwitch]:
+    """Every adopted property declared `boolean` and settable."""
+    return _create(
+        AdoptedSwitch,
+        coordinator,
+        snapshot,
+        registry,
+        Platform.SWITCH,
+        panel_device_id=panel_device_id,
+    )
+
+
+def create_adopted_selects(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    registry: DeviceRegistry,
+    *,
+    panel_device_id: str,
+) -> list[AdoptedSelect]:
+    """Every adopted `enum` that is settable and declares its option list."""
+    return _create(
+        AdoptedSelect,
+        coordinator,
+        snapshot,
+        registry,
+        Platform.SELECT,
+        panel_device_id=panel_device_id,
+    )
+
+
+def create_adopted_numbers(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    registry: DeviceRegistry,
+    *,
+    panel_device_id: str,
+) -> list[AdoptedNumber]:
+    """Every adopted numeric that is settable and declares its bounds."""
+    return _create(
+        AdoptedNumber,
+        coordinator,
+        snapshot,
+        registry,
+        Platform.NUMBER,
+        panel_device_id=panel_device_id,
+    )
+
+
+def _create[AdoptedT: AdoptedEntity](
+    entity_class: type[AdoptedT],
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    registry: DeviceRegistry,
+    platform: Platform,
+    *,
+    panel_device_id: str,
+) -> list[AdoptedT]:
+    """Build one platform's share of the adopted properties.
+
+    One partition function rather than five bodies, so `classify` stays the only
+    place a property's platform is decided. Five bodies would each restate the
+    predicate, and a property could then reach two platforms or none.
+    """
     return [
-        AdoptedBinarySensor(
-            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
-        )
+        entity_class(coordinator, identifier, device, declaration, panel_device_id=panel_device_id)
         for device, identifier in _adopted(snapshot, registry)
         for declaration in device.properties
-        if classify(declaration) == Platform.BINARY_SENSOR
+        if classify(declaration) is platform
     ]
 
 

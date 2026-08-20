@@ -41,12 +41,14 @@ from homeassistant.components.number import (
 from homeassistant.const import UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import EvseControlProtocol, SpanEvseSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
+from .adoption import AdoptedNumber, create_adopted_numbers
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
@@ -281,15 +283,27 @@ async def async_setup_entry(
     coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data
 
-    async_add_entities(
-        [
-            SpanEvseNumber(coordinator, description, evse_id)
-            for evse_id, evse in snapshot.evse.items()
-            for description in EVSE_NUMBERS
-            # The declaration is the gate, never the value: a charger that
-            # declares the property settable and has not published one yet still
-            # has the control, and a charger that publishes a value it does not
-            # declare settable does not.
-            if description.settable_fn(evse)
-        ]
+    entities: list[SpanEvseNumber | AdoptedNumber] = [
+        SpanEvseNumber(coordinator, description, evse_id)
+        for evse_id, evse in snapshot.evse.items()
+        for description in EVSE_NUMBERS
+        # The declaration is the gate, never the value: a charger that
+        # declares the property settable and has not published one yet still
+        # has the control, and a charger that publishes a value it does not
+        # declare settable does not.
+        if description.settable_fn(evse)
+    ]
+
+    # Settable numerics on devices this integration models nothing for, whose
+    # bounds come from the declaration -- which is what made them numbers rather
+    # than readings in the first place.
+    entities.extend(
+        create_adopted_numbers(
+            coordinator,
+            snapshot,
+            dr.async_get(hass),
+            panel_device_id=config_entry.runtime_data.panel_device_id,
+        )
     )
+
+    async_add_entities(entities)

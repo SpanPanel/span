@@ -30,9 +30,17 @@ All notable changes to this project will be documented in this file.
   whole notice on itself and teach you that the category is noise — which would cost you the curated additions too.
 - **Diagnostics report which device types and properties were adopted, and never their values.** The same rule the declared-but-unread report follows: a
   diagnostics attachment leaves the house, and the redaction that protects your config entry is key-based and knows nothing about wire property names.
-- **Controls are classified but not yet built.** A property the panel accepts writes to is recognised as a switch, a select or a number, and surfaces as a
-  reading until the write path exists — every write this integration performs today goes through a curated, adapter-named topic, and a generic one is a change
-  to the adapter contract with its own version bump. Diagnostics count how many properties are waiting on it, so the decision is made on a measurement.
+- **A property an adopted device accepts writes to becomes a control, not just a reading.** A declared `boolean` becomes a switch, an `enum` with its option
+  list becomes a select, and a number with its `min:max:step` becomes a number entity — all disabled and diagnostic like every other adopted entity, so a
+  control appears only if you go and enable it. A settable property that declares no value domain stays a reading: a select with no options and a number with no
+  bounds are broken controls, not safe ones.
+- **The write cannot reach a device this integration does model, by construction.** It is authorised by looking the property up in the current snapshot rather
+  than by its arguments, and a modelled device produces no adopted record to find. That matters because the curated controls do real work on the way out — the
+  islanding assertion translates its value, and the EV charge limit refuses one above what your charger was commissioned for — and a generic write would route
+  around both.
+- **Your panel stays the authority on the value.** Nothing is translated or clamped on the way out: this integration knows an adopted property's declaration and
+  nothing else, so inventing a bound would be inventing a fact about your hardware. The control constrains you to what the device declared, and the panel
+  accepts or refuses.
 
 - **Your solar inverter gets a device of its own, on panels running the v1.0 data model.** Its vendor, model and nameplate capacity used to render as diagnostic
   sensors on the _panel's_ card, beside the panel's own manufacturer and model — so the card whose job is telling you which enclosure this is read as though the

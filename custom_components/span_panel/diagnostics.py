@@ -129,14 +129,13 @@ class AdoptedPropertyRow(TypedDict):
 class AdoptionBlock(TypedDict):
     """The `adopted_devices` section.
 
-    `pending_controls` is the measurement that decides whether a generic write
-    path earns its contract bump -- how many declared properties would be
-    controls if one existed. Zero on every panel seen so far, and the number
-    stays invisible unless it is reported.
+    `controls` counts the adopted properties that write back to the panel rather
+    than only reporting. It is the highest-consequence thing adoption creates, so
+    it is worth a number in the one artefact that reaches a maintainer.
     """
 
     count: int
-    pending_controls: int
+    controls: int
     devices: list[AdoptedDeviceRow]
 
 
@@ -150,7 +149,7 @@ def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
     """
     return {
         "count": len(snapshot.adopted_devices),
-        "pending_controls": adopted_control_count(snapshot),
+        "controls": adopted_control_count(snapshot),
         "devices": [
             {
                 "device_type": device.device_type,

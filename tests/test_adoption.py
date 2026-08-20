@@ -12,7 +12,7 @@ import ast
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import EntityCategory, Platform
@@ -28,7 +28,10 @@ from custom_components.span_panel.adoption import (
     adopted_identifier,
     classify,
     create_adopted_binary_sensors,
+    create_adopted_numbers,
+    create_adopted_selects,
     create_adopted_sensors,
+    create_adopted_switches,
     resolve_identifier,
 )
 from custom_components.span_panel.const import DOMAIN
@@ -327,14 +330,8 @@ def test_a_curated_identifier_still_classifies(hass: HomeAssistant) -> None:
 # -- The pending write path is counted rather than hidden --------------------
 
 
-def test_a_settable_property_is_counted_as_a_pending_control() -> None:
-    """`classify` is the complete rule; the write path is what does not exist yet.
-
-    Every write this integration performs goes through a curated, adapter-named
-    topic, and a generic one would put a new member on `SchemaAdapter` -- required
-    of every adapter package, invalidating built wheels. That is its own change.
-    Counting the properties waiting on it is what decides whether it is worth one.
-    """
+def test_controls_are_counted_for_diagnostics() -> None:
+    """A control on a device nobody modelled is the highest-consequence thing here."""
     declarations = (
         _property(datatype="boolean", settable=True, unit=None),
         _property(node_id="generator", property_id="mode", datatype="enum", fmt="AUTO,OFF", settable=True, unit=None),
@@ -346,5 +343,126 @@ def test_a_settable_property_is_counted_as_a_pending_control() -> None:
     assert classify(declarations[0]) in CONTROL_PLATFORMS
 
 
-def test_a_panel_with_no_adopted_device_counts_no_pending_controls() -> None:
+def test_a_panel_with_no_adopted_device_counts_no_controls() -> None:
     assert adopted_control_count(_snapshot()) == 0
+
+
+# -- Controls are built, and their domain comes from the declaration ---------
+
+
+def _built(hass: HomeAssistant, *declarations: AdoptedProperty) -> dict[Platform, list[object]]:
+    """Every platform's share of one adopted device, keyed by platform."""
+    snapshot = _snapshot(_device(properties=declarations))
+    coordinator = MagicMock(data=snapshot)
+    registry = dr.async_get(hass)
+    kwargs = {"panel_device_id": "panel-device-id"}
+    return {
+        Platform.SENSOR: list(create_adopted_sensors(coordinator, snapshot, registry, **kwargs)),
+        Platform.BINARY_SENSOR: list(create_adopted_binary_sensors(coordinator, snapshot, registry, **kwargs)),
+        Platform.SWITCH: list(create_adopted_switches(coordinator, snapshot, registry, **kwargs)),
+        Platform.SELECT: list(create_adopted_selects(coordinator, snapshot, registry, **kwargs)),
+        Platform.NUMBER: list(create_adopted_numbers(coordinator, snapshot, registry, **kwargs)),
+    }
+
+
+def test_every_property_reaches_exactly_one_platform(hass: HomeAssistant) -> None:
+    """The partition `classify` defines, asserted as a partition.
+
+    Five creators sharing one predicate is what makes this hold. Five bodies each
+    restating it would let a property reach two platforms or none, and neither
+    failure shows up in a test that only counts one platform at a time.
+    """
+    declarations = (
+        _property(),
+        _property(node_id="relay", property_id="closed", datatype="boolean", unit=None),
+        _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True),
+        _property(node_id="generator", property_id="mode", datatype="enum", fmt="AUTO,OFF", settable=True, unit=None),
+        _property(node_id="generator", property_id="setpoint", datatype="integer", fmt="0:100:5", settable=True),
+    )
+    built = _built(hass, *declarations)
+
+    assert [len(entities) for entities in built.values()] == [1, 1, 1, 1, 1]
+    assert sum(len(entities) for entities in built.values()) == len(declarations)
+
+
+def test_a_select_takes_its_options_from_the_declaration(hass: HomeAssistant) -> None:
+    declaration = _property(
+        node_id="generator", property_id="mode", datatype="enum", fmt="AUTO, MANUAL ,OFF", settable=True, unit=None
+    )
+    (entity,) = _built(hass, declaration)[Platform.SELECT]
+    assert entity.options == ["AUTO", "MANUAL", "OFF"]
+
+
+def test_a_select_reports_no_option_when_the_panel_publishes_one_it_never_declared(hass: HomeAssistant) -> None:
+    """Widening the list to admit whatever arrived would hide the disagreement.
+
+    Home Assistant rejects a `current_option` outside `options`, so the choice is
+    between reporting unknown and quietly rewriting the panel's own declaration.
+    """
+    declaration = _property(
+        node_id="generator", property_id="mode", datatype="enum", fmt="AUTO,OFF", settable=True, unit=None, value="ECO"
+    )
+    (entity,) = _built(hass, declaration)[Platform.SELECT]
+    assert entity.current_option is None
+    assert entity.options == ["AUTO", "OFF"]
+
+
+def test_a_number_takes_its_bounds_from_the_declaration(hass: HomeAssistant) -> None:
+    """The bounds are what made this a number rather than a reading."""
+    declaration = _property(
+        node_id="generator", property_id="setpoint", datatype="integer", fmt="10:80:5", settable=True, unit="%"
+    )
+    (entity,) = _built(hass, declaration)[Platform.NUMBER]
+    assert (entity.native_min_value, entity.native_max_value, entity.native_step) == (10.0, 80.0, 5.0)
+
+
+async def test_a_switch_publishes_the_vocabulary_homie_defines(hass: HomeAssistant) -> None:
+    """`true` and `false`, not Home Assistant's `on` and `off`."""
+    declaration = _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True)
+    snapshot = _snapshot(_device(properties=(declaration,)))
+    coordinator = MagicMock(data=snapshot)
+    coordinator.client.set_adopted_property = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+
+    (entity,) = create_adopted_switches(
+        coordinator, snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+    await entity.async_turn_on()
+
+    coordinator.client.set_adopted_property.assert_awaited_once_with("generator-1", "relay", "enabled", "true")
+
+
+async def test_a_number_publishes_an_integer_where_the_declaration_says_integer(hass: HomeAssistant) -> None:
+    """`5`, never `5.0`: a float literal is outside the declared datatype."""
+    declaration = _property(
+        node_id="generator", property_id="setpoint", datatype="integer", fmt="0:100:5", settable=True, unit=None
+    )
+    snapshot = _snapshot(_device(properties=(declaration,)))
+    coordinator = MagicMock(data=snapshot)
+    coordinator.client.set_adopted_property = AsyncMock()
+    coordinator.async_request_refresh = AsyncMock()
+
+    (entity,) = create_adopted_numbers(coordinator, snapshot, dr.async_get(hass), panel_device_id="panel-device-id")
+    await entity.async_set_native_value(45.0)
+
+    coordinator.client.set_adopted_property.assert_awaited_once_with("generator-1", "generator", "setpoint", "45")
+
+
+def test_a_control_is_disabled_and_diagnostic_like_every_other_adopted_entity(hass: HomeAssistant) -> None:
+    """Disabled-by-default is the gate, and it is the same gate for a reading.
+
+    A second, weaker gate for controls -- surfacing them read-only -- would be
+    inconsistent and would not add safety: enabling is a deliberate act,
+    commanding is a second one, and the panel authorises the write regardless.
+    """
+    declarations = (
+        _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True),
+        _property(node_id="generator", property_id="mode", datatype="enum", fmt="AUTO,OFF", settable=True, unit=None),
+        _property(node_id="generator", property_id="setpoint", datatype="integer", fmt="0:9:1", settable=True),
+    )
+    built = _built(hass, *declarations)
+    controls = built[Platform.SWITCH] + built[Platform.SELECT] + built[Platform.NUMBER]
+
+    assert len(controls) == 3
+    assert all(entity.entity_registry_enabled_default is False for entity in controls)
+    assert all(entity.entity_category is EntityCategory.DIAGNOSTIC for entity in controls)
