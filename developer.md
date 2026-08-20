@@ -221,8 +221,8 @@ the panel has published a value for the property, which is the declared-but-neve
 key-based over the config entry: it knows nothing about wire property names and could not protect a value added here. `test_schema_discovery` asserts that
 against the capture's own published values rather than leaving it to review.
 
-This is **maintainer-facing only**. Nothing creates an entity, a Repair or a notification from it. Automatic adoption is a separate, unbuilt step whose costs —
-notice aggregation, an exclusion denylist, the accumulator register — are not settled.
+This is **maintainer-facing only**. Nothing creates an entity, a Repair or a notification from it — including for a device that _is_ adopted, whose properties
+are reported here as declarations exactly like any other. Adoption itself is the next section.
 
 ### Why discovered rows cannot reach the curated inventories
 
@@ -244,6 +244,111 @@ The adapter decides "read" from four enumerations of what it addresses — the m
 `_CONSUMED_WITHOUT_A_ROW` for the properties it reads into the snapshot without a unit surface. A stale entry there fails _silently_, by keeping a property out
 of the report. `tests/test_schema_one_discovery.py` in the library runs the same republish-and-diff experiment this gate uses and holds every entry to it in
 both directions, so the report means "nothing reads this" rather than "nobody wrote it down".
+
+## Adopting a device this integration models nothing for
+
+The section above is about properties on devices we already read. This one is about a device type nobody modelled at all — a vendor's generator, heat pump or
+second inverter, which the eBus schema explicitly permits. Such a device used to produce nothing: no device, no entity, no sign it was there.
+
+### The rule
+
+**The unit of adoption is a device, never a property.**
+
+| What arrives                                     | What happens                                                                     |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| A device type `MODELLED_TYPES` does not name     | **Adopt.** One sub-device, its properties surfaced beneath it.                   |
+| A new node or property on a device we _do_ model | **Do not adopt.** It lands in `schema_discovery`; curate it in the next release. |
+| A new property on a device already adopted       | Adopt, with its siblings.                                                        |
+
+The asymmetry is where the cost calculus actually points. An adopted entity's id is machine-derived and permanent once it registers, which is only a loss where
+curation is coming. On a type nobody modelled, no better id is coming and the alternative is silence.
+
+Extra instances of a modelled type are **not** adopted. A second BESS is a multiplicity limitation of the snapshot model, not an unmodelled device, and adopting
+it would stand a machine-named card beside the curated Battery describing the same hardware. The gap stays visible as a gap.
+
+### Inside an adopted device, the node decides the destination
+
+Keyed on the Homie node — what the eBus vocabulary defines — rather than on property names:
+
+- **`info/*` → device-card fields.** `model`, `serial-number`, `firmware-version`, `hardware-version`, `vendor-name`. The whole node, not just the five the card
+  reads: dropping only the recognised ones would surface `info/nominal-power` as a string sensor the moment a vendor declared one.
+- **`connection/*` → the device link.** Topology, which is `via_device`.
+- **Everything else → entities**, `EntityCategory.DIAGNOSTIC` and disabled by default.
+
+Why by node: the capability catalogs carry **no marker** for "this value is a device reference", so the only alternative is a hard-coded property-name list —
+and such a list goes stale silently. `ebus-sdk`'s own `topology.py` covers `feeds-device-id` and `fed-by-device-id` and omits `grid-forming-entity`, which lives
+on the `grid` capability. A node cannot go stale that way.
+
+### Nothing adopted enters long-term statistics
+
+No adopted entity carries a `state_class`. `test_no_state_class_is_set_anywhere_in_the_module` reads `adoption.py` as syntax and fails if one ever appears.
+
+Three reasons, and they are independent:
+
+1. It is not declared on the wire and is not derivable from one. This integration ships `feedthroughEnergyProducedWh` as `TOTAL` beside
+   `mainMeterEnergyProducedWh` as `TOTAL_INCREASING` — same unit, same device class, opposite classification.
+2. A wrong one writes corrupt long-term statistics, and fixing the producer afterwards does not repair them.
+3. Enrolling a property nobody asked for into long-term statistics is a permanent write to every install's recorder database.
+
+A user who wants statistics from an adopted reading wraps it in a template sensor, a Riemann-sum integration or a utility meter. That is their call, made on an
+entity they chose to enable.
+
+`device_class` is enumerated in `DEVICE_CLASS_BY_UNIT` rather than inferred. A unit outside the map gets **no** device class — `%` is deliberately absent,
+because its uses here are a state of charge, a confidence and a duty cycle, and no single class is right for all of them.
+
+### Identity freezes at first sighting
+
+`resolve_identifier` looks up **both** candidate spellings — `{panel serial}_adopted_{wire id}` and `{panel serial}_adopted_{serial}` — before minting either,
+and keeps whichever already exists. Both drift in practice:
+
+- a serial arriving _after_ adoption would move the device off its wire id, and
+- a producer that derives its wire id from a serial moves the id itself when the serial appears, which is why this repository holds PV's `info/serial-number`
+  unvalued.
+
+Either move reads to Home Assistant as a device **replacement**, taking the entities and their history. The device registry is the memory, so this needs no new
+persistence.
+
+`classify_sub_device_identifier` returns `None` for any identifier carrying the `adopted` token, tested before its suffix rules — the anchor is vendor
+vocabulary, and a device id ending in `pv` would otherwise classify as the panel's solar sub-device.
+
+### Controls are classified but not built
+
+`classify` implements the full rule, including the three control platforms:
+
+| Declaration                        | Platform        |
+| ---------------------------------- | --------------- |
+| `boolean`, settable                | `SWITCH`        |
+| `boolean`                          | `BINARY_SENSOR` |
+| `enum`, settable, with a `format`  | `SELECT`        |
+| numeric, settable, with a `format` | `NUMBER`        |
+| anything else                      | `SENSOR`        |
+
+A settable property with no `format` falls back to a reading because `format` is the value domain: a select with no option list and a number with no bounds are
+broken controls, not safe ones.
+
+The three control platforms are in `CONTROL_PLATFORMS` and are **not constructed yet**. Every write this integration performs goes through a curated,
+adapter-named topic, and a generic property write would put a new member on `SchemaAdapter` — whose required set is derived from the protocol itself, so it
+would be required of every adapter package and would invalidate built adapter wheels. That is a contract change with its own version bump.
+
+`adopted_control_count` reports how many declared properties are waiting on it, in diagnostics under `adopted_devices.pending_controls`, so the decision is made
+on a measurement rather than a guess.
+
+### The notice counts devices, not entities
+
+Adopted entities are disabled, so they reach the user only through `async_notice_new_disabled_entities`. That notice lists curated additions individually and
+collapses each adopted device to one line with a count — `Backup Generator (6 entities)`. A vendor device declaring a dozen properties would otherwise spend the
+whole notice on itself and teach the user that the category is noise, which would cost them the curated additions too.
+
+### Diagnostics
+
+`adopted_devices` in the diagnostics payload carries the device type, model, property paths, datatypes, units, `settable` flags and the platform each would
+take. **No values, no device name, no serial.** Same rule as `schema_discovery` and for the same reason: `TO_REDACT` is key-based over the config entry and
+cannot protect a wire value put there.
+
+### Adopted entities declare no field paths
+
+`snapshot.adopted_devices` is outside the curated field-path vocabulary by construction — it carries no metadata row, so the producible gate has nothing to
+check it against. `adoption.py` is therefore absent from `residual_field_paths()`'s import list, and its entity classes declare no `_residual_field_paths`.
 
 ## Linting and Type Checking
 
