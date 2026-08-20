@@ -52,6 +52,7 @@ from span_panel_api import (
     SpanEvseSnapshot,
     SpanMidSnapshot,
     SpanPanelSnapshot,
+    SpanPcsSnapshot,
     SpanPVSnapshot,
 )
 
@@ -185,10 +186,15 @@ def _perturbed(declared: _Property, current: str | None) -> str:
 
 
 _SubSnapshot = (
-    SpanCircuitSnapshot | SpanEvseSnapshot | SpanBatterySnapshot | SpanPVSnapshot | SpanMidSnapshot
+    SpanCircuitSnapshot
+    | SpanEvseSnapshot
+    | SpanBatterySnapshot
+    | SpanPVSnapshot
+    | SpanMidSnapshot
+    | SpanPcsSnapshot
 )
 
-_COLLECTIONS = frozenset({"circuits", "evse", "battery", "pv", "mid"})
+_COLLECTIONS = frozenset({"circuits", "evse", "battery", "pv", "mid", "pcs"})
 """Panel-snapshot attributes that hold sub-snapshots rather than a reading.
 
 Their fields are addressed by their own prefix — `circuit.x`, not
@@ -224,6 +230,8 @@ def _snapshot_fields(snapshot: SpanPanelSnapshot) -> dict[str, str]:
     _record(fields, "pv", snapshot.pv)
     if snapshot.mid is not None:
         _record(fields, "mid", snapshot.mid)
+    if snapshot.pcs is not None:
+        _record(fields, "pcs", snapshot.pcs)
     return fields
 
 

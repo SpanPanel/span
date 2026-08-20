@@ -24,6 +24,7 @@ from .helpers import (
     has_bess_telemetry,
     has_evse,
     has_mid,
+    has_pcs,
     has_power_flows,
     has_pv,
     has_shed_forecast,
@@ -54,6 +55,7 @@ from .sensor_definitions import (
     PANEL_DATA_STATUS_SENSORS,
     PANEL_ENERGY_SENSORS,
     PANEL_POWER_SENSORS,
+    PCS_SENSORS,
     PV_METADATA_SENSORS,
     PV_POWER_SENSOR,
     SHED_FORECAST_SENSORS,
@@ -72,6 +74,7 @@ from .sensor_panel import (
     SpanPanelPanelStatus,
     SpanPanelPowerSensor,
     SpanPanelStatus,
+    SpanPcsSensor,
     SpanPVMetadataSensor,
     SpanShedForecastSensor,
 )
@@ -90,6 +93,7 @@ __all__ = [
     "SpanPanelPanelStatus",
     "SpanPanelPowerSensor",
     "SpanPanelStatus",
+    "SpanPcsSensor",
     "SpanSensorBase",
     "SpanShedForecastSensor",
     "SpanUnmappedCircuitSensor",
@@ -398,6 +402,36 @@ def create_shed_forecast_sensors(
     ]
 
 
+def create_pcs_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanPcsSensor]:
+    """Create the Power Control System sensors, where the panel runs one.
+
+    **One gate, not two, and that is the difference from every other capability
+    here.** The shed forecast and the BESS telemetry gate a second time on each
+    description's own `value_fn`, because a property that arrives unpublished
+    would otherwise become a permanently-unknown entity. That reasoning does not
+    transfer: `pcs` publishes properties that are legally `0.0`, `false` and
+    `UNCONFIGURED`, and the reference capture is exactly that — a PCS which
+    exists and is switched off. A per-reading gate would create the entities on a
+    configured panel and delete them the moment somebody turned the PCS off,
+    which is the state a user most wants to see reported.
+
+    So presence is the node, which `has_pcs` reads off the library's `None`
+    contract, and a property the node omits degrades to unknown on an entity that
+    stays. Both results the capability marks `SHOULD`, so a panel publishing the
+    node without them is unusual firmware rather than an expected shape.
+
+    DUAL-SCHEMA: gated on what the snapshot carries, never on a version. No flat
+    panel publishes the capability, and a v1.0 panel that gains it reaches
+    `detect_capabilities` and picks the entities up on the reload.
+    """
+    if not has_pcs(snapshot):
+        return []
+
+    return [SpanPcsSensor(coordinator, description, snapshot) for description in PCS_SENSORS]
+
+
 def create_battery_sensors(
     coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
 ) -> list[SpanPanelBattery | SpanPanelPowerSensor | SpanBessMetadataSensor]:
@@ -502,6 +536,7 @@ def create_native_sensors(
     | SpanEvseSensor
     | SpanMidSensor
     | SpanShedForecastSensor
+    | SpanPcsSensor
 ]:
     """Create all native sensors for the platform."""
     entities: list[
@@ -518,6 +553,7 @@ def create_native_sensors(
         | SpanEvseSensor
         | SpanMidSensor
         | SpanShedForecastSensor
+        | SpanPcsSensor
     ] = []
 
     # Create different sensor types
@@ -528,6 +564,7 @@ def create_native_sensors(
     entities.extend(create_battery_sensors(coordinator, snapshot))
     entities.extend(create_mid_sensors(coordinator, snapshot))
     entities.extend(create_shed_forecast_sensors(coordinator, snapshot))
+    entities.extend(create_pcs_sensors(coordinator, snapshot))
     entities.extend(create_power_flow_sensors(coordinator, snapshot))
     entities.extend(create_evse_sensors(coordinator, snapshot))
 

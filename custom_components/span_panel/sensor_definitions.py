@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -34,6 +35,7 @@ from span_panel_api import (
     SpanEvseSnapshot,
     SpanMidSnapshot,
     SpanPanelSnapshot,
+    SpanPcsSnapshot,
 )
 
 from .field_paths import (
@@ -426,6 +428,221 @@ sensors of their own. They answer "what would this installation give me from a
 full battery", which moves when the hardware does and not as the battery
 drains; a separate entity would put a near-constant on a graph beside the
 countdown it qualifies.
+"""
+
+
+# ---------------------------------------------------------------------------
+# Power Control System (v1.0 `pcs`, conditionally created)
+# ---------------------------------------------------------------------------
+
+
+class PcsConstraintFamily(NamedTuple):
+    """One amps-native constraint class, and how to read its three properties.
+
+    `energy.ebus.capability.pcs` 0.3 publishes each arbitration input as an
+    identical `{<source>-import-limit, -enablement, -active}` triplet, and says
+    so as a rule: a vendor "MAY publish further amps-native limits using the
+    same triplet". So the four families are one shape repeated, and the
+    attribute builder is written once over this table rather than four times
+    over twelve field names — where a copied line would put an enablement in an
+    active flag and still read plausibly.
+
+    `attribute` is the name the limit is published under, and the enablement and
+    active flags extend it. The names mirror the wire property ids so a user
+    reading the catalog and a user reading the attribute list see the same
+    words.
+    """
+
+    attribute: str
+    limit_fn: Callable[[SpanPcsSnapshot], float | None]
+    enablement_fn: Callable[[SpanPcsSnapshot], str | None]
+    active_fn: Callable[[SpanPcsSnapshot], bool | None]
+
+
+PCS_CONSTRAINT_FAMILIES: tuple[
+    PcsConstraintFamily,
+    PcsConstraintFamily,
+    PcsConstraintFamily,
+    PcsConstraintFamily,
+] = (
+    PcsConstraintFamily(
+        attribute="feed_import_limit",
+        limit_fn=lambda p: p.feed_import_limit_a,
+        enablement_fn=lambda p: p.feed_import_limit_enablement,
+        active_fn=lambda p: p.feed_import_limit_active,
+    ),
+    PcsConstraintFamily(
+        attribute="operator_import_limit",
+        limit_fn=lambda p: p.operator_import_limit_a,
+        enablement_fn=lambda p: p.operator_import_limit_enablement,
+        active_fn=lambda p: p.operator_import_limit_active,
+    ),
+    PcsConstraintFamily(
+        attribute="off_grid_import_limit",
+        limit_fn=lambda p: p.off_grid_import_limit_a,
+        enablement_fn=lambda p: p.off_grid_import_limit_enablement,
+        active_fn=lambda p: p.off_grid_import_limit_active,
+    ),
+    PcsConstraintFamily(
+        attribute="requested_import_limit",
+        limit_fn=lambda p: p.requested_import_limit_a,
+        enablement_fn=lambda p: p.requested_import_limit_enablement,
+        active_fn=lambda p: p.requested_import_limit_active,
+    ),
+)
+"""The four constraint classes the catalog names, in the order it names them.
+
+The FSR first because it is the only standing one: `feed_import_limit` is the
+commissioned floor that "cannot be lost", and the other three are conditional —
+an operator cap set over a fleet API, an islanded cap, and a limit the owner
+asked for. A reader scanning the attributes meets the permanent one first.
+"""
+
+
+def _no_pcs_attributes(pcs: SpanPcsSnapshot) -> dict[str, float | str | bool]:
+    """Return nothing — the default for a PCS sensor with no attributes of its own."""
+    return {}
+
+
+def pcs_arbitration_attributes(pcs: SpanPcsSnapshot) -> dict[str, float | str | bool]:
+    """Return the arbitration inputs behind the effective import limit.
+
+    They belong to the sensor that shows the limit itself.
+
+    `capabilities/pcs.md` is explicit that what a PCS publishes is "the
+    **result**: the effective `import-limit` and the `binding-constraint`". That
+    is the entity; these are the working. Twelve of them, which is why they are
+    attributes: a dashboard with twelve near-constant amperages on it is not a
+    dashboard, and eleven of these move only when somebody reconfigures the
+    panel.
+
+    Each is omitted when the panel does not publish it, rather than appearing as
+    `None`. Three of the four classes are `MAY`, so an absent family is
+    conformant firmware; an attribute present and empty would read as a reading
+    the panel failed to produce.
+
+    `pcs_enabled` rides here rather than as its own entity because it is
+    subsumed: the `pcs_active` binary sensor is the fact an automation triggers
+    on, and a PCS that is not enabled cannot be active.
+    """
+    attributes: dict[str, float | str | bool] = {}
+
+    if pcs.enabled is not None:
+        attributes["pcs_enabled"] = pcs.enabled
+
+    for family in PCS_CONSTRAINT_FAMILIES:
+        limit = family.limit_fn(pcs)
+        if limit is not None:
+            attributes[family.attribute] = limit
+        enablement = family.enablement_fn(pcs)
+        if enablement is not None:
+            attributes[f"{family.attribute}_enablement"] = enablement
+        active = family.active_fn(pcs)
+        if active is not None:
+            attributes[f"{family.attribute}_active"] = active
+
+    return attributes
+
+
+@dataclass(frozen=True, kw_only=True)
+class SpanPcsRequiredKeysMixin(FieldPathDeclarationMixin):
+    """Required keys mixin for the Power Control System sensors.
+
+    Keyword-only for the reason `FieldPathDeclarationMixin` is: a mixin's fields
+    flatten ahead of `EntityDescription.key`, which has no default, so a
+    defaulted positional field here would make every description
+    unconstructable.
+
+    `attributes_fn` is carried on the description rather than decided inside the
+    entity, for the reason the shed-forecast pairing is: the alternative is a
+    comparison against `description.key` in `extra_state_attributes`, which puts
+    a string match between an entity and the data it publishes and silently
+    stops matching after a rename.
+    """
+
+    value_fn: Callable[[SpanPcsSnapshot], float | str | None]
+
+    attributes_fn: Callable[[SpanPcsSnapshot], dict[str, float | str | bool]] = _no_pcs_attributes
+    """What this sensor publishes beside its state. Empty for most."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SpanPcsSensorEntityDescription(SensorEntityDescription, SpanPcsRequiredKeysMixin):
+    """Describes a Power Control System sensor entity."""
+
+
+PCS_BINDING_CONSTRAINT_OPTIONS: tuple[str, ...] = (
+    "fsr",
+    "doe",
+    "voltage",
+    "off_grid",
+    "requested",
+    "operator",
+    "none",
+    "unknown",
+)
+"""`binding-constraint`'s enum, lowercased for Home Assistant's state keys.
+
+The catalog's eight members, in its order. Publishers MAY extend the enum
+through the property's Homie `$format`, so this is the interoperable core rather
+than a closed set — a vendor value arrives as a state Home Assistant does not
+recognise, which is a visible gap rather than a silent re-labelling.
+"""
+
+
+PCS_SENSORS: tuple[SpanPcsSensorEntityDescription, SpanPcsSensorEntityDescription] = (
+    SpanPcsSensorEntityDescription(
+        key="pcs_import_limit",
+        field_path="pcs.import_limit_a",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="pcs_import_limit",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        suggested_display_precision=1,
+        value_fn=lambda p: p.import_limit_a,
+        attributes_fn=pcs_arbitration_attributes,
+    ),
+    SpanPcsSensorEntityDescription(
+        key="pcs_binding_constraint",
+        field_path="pcs.binding_constraint",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="pcs_binding_constraint",
+        device_class=SensorDeviceClass.ENUM,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        options=list(PCS_BINDING_CONSTRAINT_OPTIONS),
+        value_fn=lambda p: None if p.binding_constraint is None else p.binding_constraint.lower(),
+    ),
+)
+"""What the enclosure's Power Control System publishes as a result.
+
+**The effective limit is the entity, and the arbitration is its attributes.**
+The capability says the PCS reconciles every active import constraint — some of
+them in watts on `doe`, some in volts on `voltage-response` — to one enforced
+current limit, and that "what `pcs` publishes is the **result**". So the result
+is what gets an entity a user can graph and alarm on. The twelve amps-native
+inputs behind it are on that entity as attributes: they explain a number rather
+than being numbers anyone watches, and eleven of them move only on
+reconfiguration.
+
+`pcs_binding_constraint` is the second half of that result and the reason the
+first is interpretable — it names which constraint class won the `min()`, which
+is the difference between "the panel is limiting me to 40 A" and "the panel is
+limiting me to 40 A *because the utility sent an envelope*". Diagnostic and
+enabled by default: it is short, it changes rarely, and it is useless filed
+where nobody finds it.
+
+**Enabled by default and not diagnostic, for the limit.** A PCS actively
+throttling import is a fact about the user's electricity supply, not about the
+integration's health.
+
+**`derived` as well as `field_path`, by the producible rule.** No flat panel
+publishes `energy.ebus.capability.pcs` at all, so the both-adapters gate cannot
+be satisfied; the paths are enumerated in `RESIDUAL_EXEMPT_PATHS` as
+`SCHEMA_1_ONLY`, which schema_1's metadata rows earn them and which buys
+`pcs_import_limit` unit validation against the panel's own `$description`.
+`field_path` still names the source, which is what gives each sensor its Repair
+mention and its unavailability when the panel stops resolving the property.
 """
 
 
@@ -990,6 +1207,7 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
         *MID_SENSORS,
         *BESS_METADATA_SENSORS,
         *BESS_TELEMETRY_SENSORS,
+        *PCS_SENSORS,
         *PV_METADATA_SENSORS,
         *PANEL_POWER_SENSORS,
         *PANEL_ENERGY_SENSORS,

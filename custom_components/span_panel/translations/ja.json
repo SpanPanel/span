@@ -147,6 +147,9 @@
       },
       "wifi_link": {
         "name": "Wi-Fiリンク"
+      },
+      "pcs_active": {
+        "name": "PCS 動作中"
       }
     },
     "button": {
@@ -360,6 +363,22 @@
         "state": {
           "connected": "接続済み",
           "unconnected": "未接続",
+          "unknown": "不明"
+        }
+      },
+      "pcs_import_limit": {
+        "name": "インポート制限"
+      },
+      "pcs_binding_constraint": {
+        "name": "拘束制約",
+        "state": {
+          "fsr": "確定サービス容量",
+          "doe": "系統エンベロープ",
+          "voltage": "電圧サポート",
+          "off_grid": "オフグリッド",
+          "requested": "要求",
+          "operator": "オペレーター",
+          "none": "なし",
           "unknown": "不明"
         }
       }

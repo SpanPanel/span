@@ -267,7 +267,12 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # `panel.dominant_power_source` below it was read by a description and
     # enumerated nowhere, so nothing held it against the adapters and
     # `evaluate_field_metadata` had no way to tell it from an unread field.
-    Producibility.NEITHER: 19,
+    # +15 with the PCS: the twelve arbitration inputs and `pcs.enabled` behind
+    # `pcs_import_limit`'s attributes, plus the two circuit participation fields
+    # read as attributes on the circuit power sensor. schema_1 reads all fifteen
+    # and maps none of them, deliberately — they explain the effective limit
+    # rather than being readings of their own.
+    Producibility.NEITHER: 34,
     # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
     # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
     # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
@@ -280,7 +285,11 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # `bess_communication_state`. schema_1 maps both; flat's BESS device class
     # declares neither property, so neither can ever satisfy the both-adapters
     # gate.
-    Producibility.SCHEMA_1_ONLY: 5,
+    # +3 for the PCS's result: `pcs.import_limit_a`, `pcs.binding_constraint`
+    # and `pcs.active`, behind the two PCS sensors and the `pcs_active` binary
+    # sensor. schema_1 maps all three; no flat panel declares the capability at
+    # all, so none can ever satisfy the both-adapters gate.
+    Producibility.SCHEMA_1_ONLY: 8,
 }
 """The exemption inventory, by reason. See `test_exempt_inventory_is_complete`."""
 

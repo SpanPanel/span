@@ -17,12 +17,6 @@ All notable changes to this project will be documented in this file.
 - Both sensors are created only where the BESS publishes the reading behind them — a battery on the older data model, or one whose firmware publishes only one
   of the two, gets no entity for what it cannot report rather than one permanently unknown, and a BESS that gains the capability on a firmware upgrade picks the
   sensors up on the reload the integration already performs.
-
-### Fixed
-
-- **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
-  was wrong. No entity changed.
-
 - **Backup planning, in minutes: two new sensors on panels running the v1.0 data model.** **Time to Priority Shed** is how long before the panel starts shedding
   circuits, and **Backup Time Remaining** is how long before the battery is spent. Your panel has been publishing both since firmware r202633 and nothing read
   them; they are the numbers you would actually set an alarm on, so they are enabled by default and sit beside the power and energy sensors rather than under
@@ -33,6 +27,24 @@ All notable changes to this project will be documented in this file.
 - Both sensors are created only where the panel publishes the estimate behind them. A panel on the older data model, or one whose firmware publishes only part
   of the forecast, gets no entity for what it cannot report rather than one permanently unknown — and a panel that gains the capability on a firmware upgrade
   picks the sensors up on the reload the integration already performs.
+- **What is limiting your import, in amps: three new entities on panels running the v1.0 data model.** **Import Limit** is the current limit your panel is
+  actually enforcing, **Binding Constraint** names which rule set it — your service rating, a utility envelope, an operator cap, a limit you asked for — and
+  **PCS Active** says whether anything is being throttled right now. Your panel has published all of this since firmware r202633 and nothing read it.
+- **Import Limit carries the whole arbitration as attributes**: the four constraint limits the panel reconciled (`feed_import_limit`, `operator_import_limit`,
+  `off_grid_import_limit`, `requested_import_limit`), each one's `_enablement` and `_active` flag, and `pcs_enabled`. They explain the enforced number rather
+  than being numbers to watch, and most of them change only when somebody reconfigures the panel — so they refine an entity you already have instead of adding
+  twelve to your entity list.
+- **Every circuit's power sensor gains `pcs_managed` and `pcs_priority`** where the circuit reports them: whether the Power Control System manages that circuit,
+  and where it sits in the shed order when an import limit binds. `pcs_priority` is a different thing from the existing `shed_priority`, which is the backup
+  tier — a circuit may take part in one policy, both, or neither.
+- All three entities are created wherever the panel publishes the capability, **including when the PCS is switched off**. A panel reporting a 0 A limit with
+  everything unconfigured is reporting a state, and that is the state most panels are in; entities that vanished until somebody configured a limit would be
+  entities nobody could build a dashboard on.
+
+### Fixed
+
+- **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
+  was wrong. No entity changed.
 
 ## [2.1.0] - 8/2026
 

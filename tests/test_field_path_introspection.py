@@ -15,6 +15,7 @@ from span_panel_api import (
     SpanEvseSnapshot,
     SpanMidSnapshot,
     SpanPanelSnapshot,
+    SpanPcsSnapshot,
 )
 
 from custom_components.span_panel.field_paths import (
@@ -27,7 +28,7 @@ from tests.adapter_fixtures import schema_one_metadata, schema_zero_metadata
 
 # Attributes of the panel snapshot that are themselves sub-snapshots. Their
 # fields are addressed as "battery.x", not "panel.battery.x".
-_SUB_SNAPSHOTS = {"battery", "pv", "evse", "mid"}
+_SUB_SNAPSHOTS = {"battery", "pv", "evse", "mid", "pcs"}
 
 
 class _Recorder:
@@ -122,6 +123,7 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         BINARY_SENSORS,
         EVSE_BINARY_SENSORS,
         GRID_ISLANDABLE_SENSOR,
+        PCS_ACTIVE_SENSOR,
     )
 
     for description in (
@@ -130,6 +132,7 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         *EVSE_BINARY_SENSORS,
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
+        PCS_ACTIVE_SENSOR,
     ):
         if not isinstance(description, _DeclaringDescription):
             raise TypeError(
@@ -154,6 +157,7 @@ _SNAPSHOT_PREFIX: Mapping[type, str] = {
     SpanBatterySnapshot: "battery",
     SpanEvseSnapshot: "evse",
     SpanMidSnapshot: "mid",
+    SpanPcsSnapshot: "pcs",
 }
 
 

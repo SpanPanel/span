@@ -168,6 +168,30 @@ Present only when the panel publishes them.
 | `full_charge_total_time_remaining`  | int    | Backup Time Remaining | The same estimate assuming the battery starts full     |
 | `forecast_confidence`               | string | both                  | The panel's own assessment: `LOW`, `MEDIUM`, or `HIGH` |
 
+### Power Control System Sensors (v1.0 data model only)
+
+Created only when your panel publishes the `pcs` capability, and created whether or not the PCS is switched on — a PCS reporting a limit of 0 A is reporting a
+state, not an absence.
+
+| Sensor             | Device Class | Unit | Notes                                                                                                                      |
+| ------------------ | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| Import Limit       | Current      | A    | The limit actually being enforced: the most restrictive of every active constraint                                         |
+| Binding Constraint | Enum         | —    | Which constraint sets that limit: Firm Service Rating, Grid Envelope, Voltage Support, Off-Grid, Requested, Operator, None |
+
+#### Power Control System Sensor Attributes
+
+On **Import Limit**, and present only when the panel publishes them. These are the inputs the panel reconciled to produce the enforced limit above.
+
+| Attribute                | Type   | Notes                                                           |
+| ------------------------ | ------ | --------------------------------------------------------------- |
+| `pcs_enabled`            | bool   | Whether the panel's PCS is enabled at all                       |
+| `feed_import_limit`      | float  | The Firm Service Rating: the commissioned, always-on floor (A)  |
+| `operator_import_limit`  | float  | A cap imposed by a fleet or aggregator operator (A)             |
+| `off_grid_import_limit`  | float  | The import cap while islanded (A)                               |
+| `requested_import_limit` | float  | A voluntary limit requested by the owner or installer (A)       |
+| `<name>_enablement`      | string | Per limit: `UNSPECIFIED`, `UNCONFIGURED`, `DISABLED`, `ENABLED` |
+| `<name>_active`          | bool   | Per limit: whether that constraint is currently enforcing       |
+
 ### Power Flow Sensors (v2 only)
 
 | Sensor        | Device Class | Unit | Notes                                                                           |
@@ -298,15 +322,17 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Circuit Power Sensor Attributes
 
-| Attribute         | Type   | Notes                                                 |
-| ----------------- | ------ | ----------------------------------------------------- |
-| `tabs`            | string | Breaker slot position(s)                              |
-| `voltage`         | string | 120 or 240 (derived from tab count)                   |
-| `always_on`       | bool   | Whether circuit is always-on                          |
-| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                               |
-| `relay_requester` | string | Who requested relay state                             |
-| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN |
-| `is_sheddable`    | bool   | Whether circuit can be shed                           |
+| Attribute         | Type   | Notes                                                                                                                   |
+| ----------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `tabs`            | string | Breaker slot position(s)                                                                                                |
+| `voltage`         | string | 120 or 240 (derived from tab count)                                                                                     |
+| `always_on`       | bool   | Whether circuit is always-on                                                                                            |
+| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                                                                                                 |
+| `relay_requester` | string | Who requested relay state                                                                                               |
+| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                                   |
+| `is_sheddable`    | bool   | Whether circuit can be shed                                                                                             |
+| `pcs_managed`     | bool   | (v1.0) Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it          |
+| `pcs_priority`    | int    | (v1.0) This circuit's shed order under an active import limit — distinct from `shed_priority`, which is the backup tier |
 
 ### Circuit Energy Sensor Attributes
 
@@ -317,13 +343,14 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Binary Sensors
 
-| Sensor          | Device Class | Notes                                                               |
-| --------------- | ------------ | ------------------------------------------------------------------- |
-| Door State      | Tamper       | Panel door open/closed                                              |
-| Ethernet Link   | Connectivity | Wired network status                                                |
-| Wi-Fi Link      | Connectivity | Wireless network status                                             |
-| Panel Status    | Connectivity | Overall panel online/offline                                        |
-| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported |
+| Sensor          | Device Class | Notes                                                                                              |
+| --------------- | ------------ | -------------------------------------------------------------------------------------------------- |
+| Door State      | Tamper       | Panel door open/closed                                                                             |
+| Ethernet Link   | Connectivity | Wired network status                                                                               |
+| Wi-Fi Link      | Connectivity | Wireless network status                                                                            |
+| Panel Status    | Connectivity | Overall panel online/offline                                                                       |
+| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported                                |
+| PCS Active      | Running      | (v1.0) Whether the Power Control System is limiting import right now. Only when the panel runs one |
 
 **Removed from binary sensors:**
 

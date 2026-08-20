@@ -147,6 +147,9 @@
       },
       "wifi_link": {
         "name": "Ligação Wi-Fi"
+      },
+      "pcs_active": {
+        "name": "PCS Ativo"
       }
     },
     "button": {
@@ -360,6 +363,22 @@
         "state": {
           "connected": "Conectado",
           "unconnected": "Desconectado",
+          "unknown": "Desconhecido"
+        }
+      },
+      "pcs_import_limit": {
+        "name": "Limite de Importação"
+      },
+      "pcs_binding_constraint": {
+        "name": "Restrição Vinculativa",
+        "state": {
+          "fsr": "Capacidade Firme do Serviço",
+          "doe": "Envelope da Rede",
+          "voltage": "Suporte de Tensão",
+          "off_grid": "Fora da Rede",
+          "requested": "Solicitado",
+          "operator": "Operador",
+          "none": "Nenhum",
           "unknown": "Desconhecido"
         }
       }

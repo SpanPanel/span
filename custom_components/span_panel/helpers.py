@@ -326,6 +326,31 @@ def has_bess_telemetry(snapshot: SpanPanelSnapshot) -> bool:
     return snapshot.battery.power_w is not None or snapshot.battery.communication_state is not None
 
 
+def has_pcs(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the panel runs a Power Control System.
+
+    The one capability gate here that cannot be a value test, and the library is
+    where that is enforced: `SpanPanelSnapshot.pcs` is `None` exactly when the
+    enclosure declares no `pcs` node, per the capability's own rule that
+    "absence of the `pcs` node means the device does not run (or participate in)
+    a Power Control System".
+
+    A value test would be wrong rather than merely awkward. Every property this
+    capability publishes is legally zero — the reference capture is a PCS that
+    exists and is switched off, reporting `0.0` on every limit — so reading the
+    values would delete the entities of every panel whose PCS is unconfigured,
+    which is the state most panels are in and the state a user most wants to
+    see.
+
+    Always false on flat firmware, which publishes no such node at all.
+
+    DUAL-SCHEMA: gated on what the snapshot carries rather than on a schema
+    version, so a panel that gains the node reaches `detect_capabilities`, the
+    coordinator reloads, and the entities appear.
+    """
+    return snapshot.pcs is not None
+
+
 def has_evse(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether an EVSE (EV charger) is commissioned."""
     return len(snapshot.evse) > 0
@@ -355,4 +380,6 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
         caps.add("shed_forecast")
     if has_bess_telemetry(snapshot):
         caps.add("bess_telemetry")
+    if has_pcs(snapshot):
+        caps.add("pcs")
     return frozenset(caps)

@@ -36,6 +36,7 @@ from .helpers import (
     build_evse_unique_id_for_entry,
     has_bess,
     has_mid,
+    has_pcs,
     resolve_evse_display_suffix,
 )
 from .util import bess_device_info, evse_device_info
@@ -158,6 +159,40 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     entity_category=EntityCategory.DIAGNOSTIC,
     value_fn=lambda s: s.battery.connected,
 )
+
+
+PCS_ACTIVE_SENSOR = SpanPanelBinarySensorEntityDescription(
+    key="pcs_active",
+    field_path="pcs.active",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key="pcs_active",
+    device_class=BinarySensorDeviceClass.RUNNING,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda s: None if s.pcs is None else s.pcs.active,
+)
+"""Is the Power Control System limiting import right now?
+
+The one property of this capability that changes on its own, and therefore the
+one an automation triggers on: `pcs/enabled` is a commissioning fact and the four
+constraint limits move only on reconfiguration, but `active` flips when the panel
+starts throttling. A binary sensor rather than a third enum, because the question
+is binary and `pcs_binding_constraint` already answers "which limit" for anyone
+who needs it.
+
+Diagnostic, and enabled by default. It reports the panel constraining the user's
+supply, which is worth seeing, but it belongs beside the other panel-state
+sensors rather than among the power readings.
+
+`None` when the panel runs no PCS, which is what a flat panel and any v1.0
+firmware without the node report — but the entity is not created there at all, so
+the branch is reached only if the node disappears mid-session, where unknown is
+the right answer.
+
+`SCHEMA_CONDITIONAL_FIELD` *and* `field_path`, by the producible rule: flat
+declares no `pcs` capability, so the both-adapters gate cannot be satisfied,
+while the entity still needs its Repair mention and its unavailability when the
+panel stops resolving the property.
+"""
 
 
 class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
@@ -438,6 +473,13 @@ async def async_setup_entry(
                 coordinator, BESS_CONNECTED_SENSOR, device_info_override=bess_info
             )
         )
+
+    # Add the PCS activity sensor where the panel runs a Power Control System.
+    # Gated on the node, not on a value: every property this capability publishes
+    # is legally zero or false, so a value gate would delete the entity of every
+    # panel whose PCS is merely switched off — see `has_pcs`.
+    if has_pcs(snapshot):
+        entities.append(SpanPanelBinarySensor(coordinator, PCS_ACTIVE_SENSOR))
 
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:

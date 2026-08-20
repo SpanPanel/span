@@ -10,7 +10,7 @@ hand-maintained parallel dict that had already drifted once (it pointed at
 fields to `battery.model` / `pv.model`).
 
 Field path convention: ``{snapshot_type}.{field_name}`` — ``panel``,
-``circuit``, ``battery``, ``pv``, ``evse`` and ``mid``.
+``circuit``, ``battery``, ``pv``, ``evse``, ``mid`` and ``pcs``.
 """
 
 from __future__ import annotations
@@ -199,6 +199,36 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "panel.shed_full_charge_time_to_priority_shed_min": Producibility.NEITHER,
         "panel.shed_full_charge_total_time_remaining_min": Producibility.NEITHER,
         "panel.shed_forecast_confidence": Producibility.NEITHER,
+        # The PCS arbitration's *inputs*, read for the twelve attributes on
+        # `pcs_import_limit` plus its `pcs_enabled` (`pcs_arbitration_attributes`
+        # in sensor_definitions). schema_1 reads all thirteen into the snapshot
+        # and carries a `_PROPERTY_FIELD_MAP` row for none of them, deliberately:
+        # the capability calls `import-limit` and `binding-constraint` "the
+        # result", and these explain that result rather than being readings of
+        # their own, so there is no unit surface for a row to describe. Same
+        # shape as the shed-forecast refinements above.
+        "pcs.enabled": Producibility.NEITHER,
+        "pcs.feed_import_limit_a": Producibility.NEITHER,
+        "pcs.feed_import_limit_enablement": Producibility.NEITHER,
+        "pcs.feed_import_limit_active": Producibility.NEITHER,
+        "pcs.operator_import_limit_a": Producibility.NEITHER,
+        "pcs.operator_import_limit_enablement": Producibility.NEITHER,
+        "pcs.operator_import_limit_active": Producibility.NEITHER,
+        "pcs.off_grid_import_limit_a": Producibility.NEITHER,
+        "pcs.off_grid_import_limit_enablement": Producibility.NEITHER,
+        "pcs.off_grid_import_limit_active": Producibility.NEITHER,
+        "pcs.requested_import_limit_a": Producibility.NEITHER,
+        "pcs.requested_import_limit_enablement": Producibility.NEITHER,
+        "pcs.requested_import_limit_active": Producibility.NEITHER,
+        # A circuit's *participation* in that PCS — `managed` and `priority`,
+        # read as attributes on its power sensor (`sensor_circuit.py`). Not
+        # `_residual_field_paths` on the entity: that feeds
+        # `declared_field_paths()`, and no flat circuit declares a `pcs` node at
+        # all, so the producible gate would reject both. schema_1 maps neither
+        # for the reason above — they qualify a circuit's reading rather than
+        # being one.
+        "circuit.pcs_managed": Producibility.NEITHER,
+        "circuit.pcs_priority": Producibility.NEITHER,
         "circuit.is_user_controllable": Producibility.SCHEMA_1_ONLY,
         # The two backup-planning estimates behind `time_to_priority_shed` and
         # `shed_total_time_remaining`, whose descriptions are
@@ -225,6 +255,17 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # charging.
         "battery.power_w": Producibility.SCHEMA_1_ONLY,
         "battery.communication_state": Producibility.SCHEMA_1_ONLY,
+        # The Power Control System's result, behind `pcs_import_limit`,
+        # `pcs_binding_constraint` and the `pcs_active` binary sensor. Their
+        # descriptions are `SCHEMA_CONDITIONAL_FIELD` for the usual reason: no
+        # flat panel declares `energy.ebus.capability.pcs`, so the both-adapters
+        # gate cannot be satisfied. schema_1 carries a `_PROPERTY_FIELD_MAP` row
+        # for each of these three, which is what makes them SCHEMA_1_ONLY rather
+        # than NEITHER and buys `pcs.import_limit_a` unit validation against the
+        # panel's own `$description`.
+        "pcs.import_limit_a": Producibility.SCHEMA_1_ONLY,
+        "pcs.binding_constraint": Producibility.SCHEMA_1_ONLY,
+        "pcs.active": Producibility.SCHEMA_1_ONLY,
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
         "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,
@@ -394,6 +435,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         BINARY_SENSORS,
         EVSE_BINARY_SENSORS,
         GRID_ISLANDABLE_SENSOR,
+        PCS_ACTIVE_SENSOR,
     )
     from .sensor_definitions import (  # pylint: disable=import-outside-toplevel
         all_sensor_descriptions,
@@ -405,6 +447,7 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
         *EVSE_BINARY_SENSORS,
         GRID_ISLANDABLE_SENSOR,
         BESS_CONNECTED_SENSOR,
+        PCS_ACTIVE_SENSOR,
     )
 
 

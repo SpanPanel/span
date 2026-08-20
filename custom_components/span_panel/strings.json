@@ -147,6 +147,9 @@
       },
       "wifi_link": {
         "name": "Wi-Fi Link"
+      },
+      "pcs_active": {
+        "name": "PCS Active"
       }
     },
     "button": {
@@ -360,6 +363,22 @@
         "state": {
           "connected": "Connected",
           "unconnected": "Disconnected",
+          "unknown": "Unknown"
+        }
+      },
+      "pcs_import_limit": {
+        "name": "Import Limit"
+      },
+      "pcs_binding_constraint": {
+        "name": "Binding Constraint",
+        "state": {
+          "fsr": "Firm Service Rating",
+          "doe": "Grid Envelope",
+          "voltage": "Voltage Support",
+          "off_grid": "Off-Grid",
+          "requested": "Requested",
+          "operator": "Operator",
+          "none": "None",
           "unknown": "Unknown"
         }
       }

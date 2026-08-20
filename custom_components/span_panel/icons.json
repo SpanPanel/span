@@ -32,6 +32,9 @@
       },
       "wifi_link": {
         "default": "mdi:wifi"
+      },
+      "pcs_active": {
+        "default": "mdi:speedometer"
       }
     },
     "button": {
@@ -210,6 +213,12 @@
           "connected": "mdi:cloud-check",
           "unconnected": "mdi:cloud-off-outline"
         }
+      },
+      "pcs_import_limit": {
+        "default": "mdi:transmission-tower-import"
+      },
+      "pcs_binding_constraint": {
+        "default": "mdi:scale-balance"
       }
     }
   },

@@ -7,7 +7,12 @@ from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import UNDEFINED
-from span_panel_api import SpanBatterySnapshot, SpanMidSnapshot, SpanPanelSnapshot
+from span_panel_api import (
+    SpanBatterySnapshot,
+    SpanMidSnapshot,
+    SpanPanelSnapshot,
+    SpanPcsSnapshot,
+)
 
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
@@ -24,6 +29,7 @@ from .sensor_definitions import (
     SpanPanelBatterySensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
     SpanPanelStatusSensorEntityDescription,
+    SpanPcsSensorEntityDescription,
     SpanPVMetadataSensorEntityDescription,
     SpanShedForecastSensorEntityDescription,
 )
@@ -182,6 +188,92 @@ class SpanShedForecastSensor(
             attributes["forecast_confidence"] = confidence
 
         return attributes or None
+
+
+class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapshot]):
+    """A reading from the enclosure's Power Control System.
+
+    Created only where the panel declares a `pcs` node, so a panel that runs no
+    PCS — every flat panel, and any v1.0 firmware without the capability — gets
+    no entity rather than one stuck at unknown. See `create_pcs_sensors`.
+    """
+
+    # `_residual_field_paths` stays empty on purpose. The thirteen fields
+    # `pcs_arbitration_attributes` reads are not declarable here: no adapter
+    # carries a metadata row for them, so declaring them would put them in
+    # `declared_field_paths()` where the producible gate rejects anything one
+    # adapter cannot emit. They are enumerated in `RESIDUAL_EXEMPT_PATHS` as
+    # `Producibility.NEITHER` instead, beside the shed-forecast refinements and
+    # the `mid.*` attribute reads, which are outside the gate for the same
+    # reason.
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPcsSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+    ) -> None:
+        """Initialize a PCS sensor, keeping a typed handle on its description.
+
+        `SensorEntity.entity_description` is annotated as the base
+        `SensorEntityDescription`, so reading `attributes_fn` off it would need a
+        narrowing override mypy rejects, or a `getattr` that removes the check.
+        The same move `SpanShedForecastSensor` makes for its twin readers.
+        """
+        super().__init__(data_coordinator, description, snapshot)
+        self._pcs = description
+
+    def _generate_unique_id(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPcsSensorEntityDescription,
+    ) -> str:
+        """Generate unique ID for a PCS sensor."""
+        return construct_panel_unique_id_for_entry(
+            self.coordinator, snapshot, description.key, self._device_name
+        )
+
+    def _generate_friendly_name(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPcsSensorEntityDescription,
+    ) -> str:
+        """Generate friendly name for a PCS sensor."""
+        if description.name is not None and description.name is not UNDEFINED:
+            return str(description.name)
+        return "Power Control System"
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPcsSnapshot:
+        """Get the data source for the PCS sensor.
+
+        The PCS is optional, so a snapshot without one has no data source.
+        Entities are created only when `has_pcs` is true, and a panel that stops
+        publishing the node makes them unknown rather than reaching this — the
+        same contract `SpanMidSensor` has.
+        """
+        pcs = snapshot.pcs
+        if pcs is None:
+            raise ValueError("PCS sensor asked for a data source on a snapshot with no PCS")
+        return pcs
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """The arbitration inputs behind this sensor's reading, where it has any.
+
+        Which attributes belong to which sensor comes from the description, not
+        from a comparison against `key`: `pcs_binding_constraint` publishes none
+        and `pcs_import_limit` publishes twelve, and stating that as data is what
+        keeps a rename from silently moving them.
+
+        Individually omitted when the panel does not publish them — three of the
+        four constraint classes are `MAY`, so an absent family is conformant
+        firmware rather than a reading that failed.
+        """
+        snapshot = self.coordinator.data
+        if snapshot is None or snapshot.pcs is None:
+            return None
+
+        return self._pcs.attributes_fn(snapshot.pcs) or None
 
 
 class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, SpanPanelSnapshot]):
