@@ -201,19 +201,55 @@ async def test_panel_status_binary_sensor_is_never_probed(hass: HomeAssistant) -
     assert entity.available is True
 
 
-async def test_derived_entity_is_never_probed(hass: HomeAssistant) -> None:
-    """A derived entity declares no source field, so nothing can unresolve it.
+async def test_schema_conditional_entity_goes_unavailable(hass: HomeAssistant) -> None:
+    """A schema-conditional entity is probed like any other.
 
-    `bess_connected` reads `battery.connected`, which only one adapter
-    publishes -- exactly why the description is `derived`. Probing a derived
-    description would make availability depend on a path it never declared.
+    `bess_connected` reads exactly one field, `battery.connected`, which only
+    the schema_0 adapter publishes -- that, and only that, is what `derived`
+    says here. The adapter that does publish it still reports whether the panel
+    resolved it, and an unresolved field reaches this entity as a default it
+    would present as a reading.
+
+    Excluding these from the probe was the `evse_ev_connected` failure reached
+    by a second route: an entity exempt from the producible gate silently
+    exempt from degradation too.
     """
     coordinator = _make_coordinator(hass)
     coordinator._findings = SchemaFindings(frozenset({"battery.connected"}), (), frozenset())
     assert BESS_CONNECTED_SENSOR.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
+    assert BESS_CONNECTED_SENSOR.field_path == "battery.connected"
 
     entity = SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR)
 
+    assert entity.available is False
+
+
+async def test_schema_conditional_entity_stays_available_when_resolved(
+    hass: HomeAssistant,
+) -> None:
+    """The probe must key on the entity's own field, not on being conditional."""
+    coordinator = _make_coordinator(hass)
+    coordinator._findings = SchemaFindings(frozenset({_ETHERNET_LINK_PATH}), (), frozenset())
+
+    entity = SpanPanelBinarySensor(coordinator, BESS_CONNECTED_SENSOR)
+
+    assert entity.available is True
+
+
+async def test_residual_reads_still_do_not_probe(hass: HomeAssistant) -> None:
+    """`circuit.name` and `circuit.tabs` decorate a reading; they are not it.
+
+    The deliberate exclusion the schema-conditional change must not regress: a
+    circuit power sensor reads its name and tabs for naming and attributes, and
+    its power reading is still true when those are gone.
+    """
+    coordinator = _make_coordinator(hass)
+    coordinator._findings = SchemaFindings(frozenset({"circuit.name"}), (), frozenset())
+
+    entity = _circuit_power_entity(coordinator)
+
+    assert "circuit.name" in type(entity)._residual_field_paths
+    assert "circuit.name" in entity._declared_field_paths()
     assert entity.available is True
 
 

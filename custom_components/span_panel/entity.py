@@ -60,22 +60,36 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
             self.coordinator.async_unregister_field_path_entity(field_path, self.entity_id)
         await super().async_will_remove_from_hass()
 
+    def _source_field_path(self) -> str | None:
+        """Return the snapshot field this entity's value comes from, if any.
+
+        The description's `field_path`, regardless of `derived`. A
+        `SCHEMA_CONDITIONAL_FIELD` description is exempt from the *producible*
+        gate, which is a statement about the other adapter, not about this
+        entity: the adapter that does produce the field publishes a metadata
+        row for it, that row can come back unresolved, and when it does this
+        entity's reading is a default rather than a measurement — exactly as
+        for a plain declaration.
+
+        `None` for `MULTIPLE_FIELDS` and `NO_SOURCE_FIELD` descriptions, which
+        have no single field to blame, and for the circuit switch, which has no
+        entity description at all.
+        """
+        description: object = getattr(self, "entity_description", None)
+        if isinstance(description, FieldPathDeclarationMixin):
+            return description.field_path
+        return None
+
     def _declared_field_paths(self) -> tuple[str, ...]:
         """Return every snapshot field this entity reads.
 
-        The description's `field_path` when it declares one, plus any residual
-        reads. A description that declares nothing (`derived` entities, whose
-        `DerivedReason` says why no single field is theirs) contributes nothing,
-        and a platform with no entity description at all — the circuit switch —
-        contributes only its residual reads.
+        Its source field when it has one, plus any residual reads. A platform
+        with no entity description at all — the circuit switch — contributes
+        only its residual reads.
         """
-        description: object = getattr(self, "entity_description", None)
-        if (
-            isinstance(description, FieldPathDeclarationMixin)
-            and not description.derived
-            and description.field_path is not None
-        ):
-            return (description.field_path, *self._residual_field_paths)
+        source = self._source_field_path()
+        if source is not None:
+            return (source, *self._residual_field_paths)
         return self._residual_field_paths
 
     @property
@@ -91,15 +105,16 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         is still true when they are gone. The switch and select read their state
         through residual paths and so are not covered here; the Repair still
         names them.
+
+        `derived` is deliberately not consulted. It says why a path is outside
+        the both-adapters producible gate, which is a fact about the *other*
+        adapter; the adapter running here still resolves the field or fails to.
+        Excluding schema-conditional entities from this probe left them with a
+        default they present as a reading -- the `evse_ev_connected` failure
+        mode, reached by a different route.
         """
-        description: object = getattr(self, "entity_description", None)
-        if (
-            isinstance(description, FieldPathDeclarationMixin)
-            and not description.derived
-            and description.field_path is not None
-        ):
-            return description.field_path in self.coordinator.unresolved_paths
-        return False
+        source = self._source_field_path()
+        return source is not None and source in self.coordinator.unresolved_paths
 
     @property
     def available(self) -> bool:

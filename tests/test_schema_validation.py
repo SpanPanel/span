@@ -8,7 +8,10 @@ from span_panel_api.models import FieldMetadata
 from custom_components.span_panel import sensor_definitions
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
+    DerivedReason,
     FieldPathDeclarationMixin,
+    Producibility,
+    conditional_field_paths,
     declared_field_paths,
 )
 from custom_components.span_panel.schema_validation import (
@@ -148,11 +151,14 @@ def test_every_declared_field_path_keys_a_sensor_or_a_residual_reader() -> None:
     dict keyed on `description.key` would silently collapse them.
     """
     by_path = sensor_descriptions_by_field_path()
-    assert by_path.keys() <= declared_field_paths()
+    assert by_path.keys() <= declared_field_paths() | conditional_field_paths()
     assert {"battery.model", "pv.model"} <= by_path.keys()
     for field_path, description in by_path.items():
         assert description.field_path == field_path
-        assert not description.derived
+        # A schema-conditional description is included: its unit is as
+        # checkable as any other's. What it must never be is a description
+        # that names no field at all.
+        assert description.derived in (None, DerivedReason.SCHEMA_CONDITIONAL_FIELD)
 
 
 def test_resolved_unitless_sensor_yields_no_mismatch() -> None:
@@ -205,6 +211,51 @@ def test_real_adapter_metadata_produces_no_findings(metadata_fn: MetadataFn) -> 
     findings = evaluate_field_metadata(metadata_fn(), sensor_descriptions_by_field_path())
     assert findings.unresolved == frozenset()
     assert findings.unit_mismatches == ()
+
+
+def test_a_schema_conditional_field_can_be_unresolved() -> None:
+    """The evaluator must ask about the paths the producible gate cannot.
+
+    A `SCHEMA_CONDITIONAL_FIELD` entity reads a field that only one adapter
+    publishes a metadata row for. That row still carries the adapter's
+    three-way answer, so it can come back `resolved=False` -- the panel
+    declares the node and omits the property. Iterating `declared_field_paths()`
+    alone never asked, so such an entity got no Repair and no unavailability,
+    however dead its field was.
+    """
+    path = "panel.shed_time_to_priority_shed_min"
+    assert path in conditional_field_paths()
+    assert path not in declared_field_paths()
+
+    findings = evaluate_field_metadata({path: FieldMetadata(None, "unknown", resolved=False)})
+
+    assert findings.unresolved == frozenset({path})
+
+
+def test_a_schema_conditional_unit_is_still_compared() -> None:
+    """Being one adapter short of the gate does not excuse a wrong unit."""
+    findings = evaluate_field_metadata(
+        {"panel.shed_total_time_remaining_min": FieldMetadata("h", "integer")},
+        sensor_descriptions_by_field_path(),
+    )
+    assert [m.field_path for m in findings.unit_mismatches] == [
+        "panel.shed_total_time_remaining_min"
+    ]
+
+
+def test_a_decorating_exempt_path_is_not_probed() -> None:
+    """Exempt is not the same as read-as-a-value.
+
+    `evse.vendor_name` builds a DeviceInfo and `circuit.always_on` is an
+    attribute; neither is any entity's reading, so neither belongs in the
+    unresolved set. Widening the evaluator to every non-`NEITHER` exemption
+    would have swept both in.
+    """
+    for path in ("evse.vendor_name", "circuit.always_on"):
+        assert RESIDUAL_EXEMPT_PATHS[path] is not Producibility.NEITHER
+        assert path not in conditional_field_paths()
+        findings = evaluate_field_metadata({path: FieldMetadata(None, "unknown", resolved=False)})
+        assert findings.unresolved == frozenset()
 
 
 def test_known_bad_schema_unit_exception_is_narrow() -> None:

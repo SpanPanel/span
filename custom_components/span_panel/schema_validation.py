@@ -19,7 +19,7 @@ import logging
 from homeassistant.components.sensor import SensorEntityDescription
 from span_panel_api.models import FieldMetadata
 
-from .field_paths import RESIDUAL_EXEMPT_PATHS, declared_field_paths
+from .field_paths import RESIDUAL_EXEMPT_PATHS, conditional_field_paths, declared_field_paths
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,12 +77,20 @@ def evaluate_field_metadata(
     `SpanPanelCoordinator._run_schema_validation`.
     """
     declared = declared_field_paths()
+    # Schema-conditional entities read a real field off a real metadata row;
+    # what they cannot do is satisfy a gate that demands *both* adapters
+    # produce it. Resolution is a property of the adapter that is running, so
+    # asking about these paths alongside the declared ones is what gives such
+    # an entity its unavailability and its Repair — the apparatus every other
+    # entity already has. Leaving them out is how `panel.wifi_ssid` stayed
+    # invisible: exempt from the gate read as exempt from everything.
+    resolvable = declared | conditional_field_paths()
     sensor_defs = sensor_defs or {}
 
     unresolved: set[str] = set()
     mismatches: list[UnitMismatch] = []
 
-    for field_path in declared:
+    for field_path in resolvable:
         entry = field_metadata.get(field_path)
         if entry is None:
             # Hardware not present. Not a defect, and deliberately silent.

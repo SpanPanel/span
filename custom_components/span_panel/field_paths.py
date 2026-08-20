@@ -65,9 +65,20 @@ class DerivedReason(Enum):
     """Reads exactly one field, which only one adapter produces.
 
     Keeps the producible gate satisfiable: the gate requires a path both
-    adapters emit, so a schema-conditional field cannot be declared. If the
+    adapters emit, so a schema-conditional field cannot satisfy it. If the
     other adapter ever grows the field, this stops being true and the
-    verification fails, demanding promotion to a `field_path` declaration.
+    verification fails, demanding promotion to a plain `field_path` declaration.
+
+    Alone among the reasons, this one still names its source: the description
+    sets `field_path` **as well as** `derived`, and
+    `test_schema_conditional_descriptions_name_their_field` holds it to that.
+    The two attributes answer different questions -- "what does this entity's
+    value come from" and "why is that path outside the both-adapters gate" --
+    and only the first is what a Repair and the availability probe need. Leaving
+    it unset excused schema-conditional entities from both, which is the
+    `evse_ev_connected` failure mode one level along: an entity whose field the
+    panel stopped resolving would keep publishing a default, and the Repair
+    naming that field would say "0 entities affected".
     """
 
 
@@ -111,20 +122,30 @@ class FieldPathDeclarationMixin:
     """
 
     field_path: str | None = None
-    """Snapshot field this entity reads, e.g. "circuit.instant_power_w".
+    """Snapshot field this entity's value comes from, e.g. "circuit.instant_power_w".
 
     Declared here rather than in a parallel map so the declaration and the
     reader are the same object. Verified against `value_fn` by the proxy test
     in tests/test_field_path_introspection.py.
+
+    Set whenever the entity *has* a single source field — including when that
+    field is schema-conditional and so cannot enter the producible gate. What
+    keeps a schema-conditional path out of the gate is `derived`, not the
+    absence of this. Consumers that ask "which field is this entity's value"
+    (`SpanPanelEntity._declared_field_paths`, `_reads_an_unresolved_field`)
+    therefore read this alone; the gate additionally consults `derived`.
     """
 
     derived: DerivedReason | None = None
-    """Why this entity has no single source field to declare, or `None`.
+    """Why this entity's source field is outside the producible gate, or `None`.
 
-    Set only when `field_path` is not: the two are alternatives, pinned by
-    `test_every_description_declares_exactly_one`. Which reason applies is not
-    a matter of opinion — see `DerivedReason`, whose members are each asserted
-    against what the `value_fn` actually reads.
+    Which reason applies is not a matter of opinion — see `DerivedReason`, whose
+    members are each asserted against what the `value_fn` actually reads.
+
+    Its relationship to `field_path` is per reason, pinned by
+    `test_every_description_declares_exactly_one`: `NO_SOURCE_FIELD` and
+    `MULTIPLE_FIELDS` have no single field to name, so `field_path` stays
+    `None`; `SCHEMA_CONDITIONAL_FIELD` has exactly one and must name it.
 
     A reason rather than a flag because `bool` conflated four situations, and
     that conflation is how `evse_ev_connected` — one producible field, marked
@@ -188,6 +209,11 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "circuit.always_on": Producibility.SCHEMA_0_ONLY,
         "circuit.is_sheddable": Producibility.SCHEMA_0_ONLY,
         "panel.wifi_ssid": Producibility.SCHEMA_0_ONLY,
+        # The `grid_forming_entity` sensor's source field. schema_1 answers the
+        # same question through `resolve_dominant_power_source` over the MID's
+        # `grid/grid-forming-entity` instead of publishing a row of its own,
+        # which is what makes the sensor `SCHEMA_CONDITIONAL_FIELD`.
+        "panel.dominant_power_source": Producibility.SCHEMA_0_ONLY,
         # util.py builds the EVSE DeviceInfo from these; entity_resolver.py and
         # sensor.py resolve the fed circuit through `feed_circuit_id`.
         "evse.vendor_name": Producibility.SCHEMA_0_ONLY,
@@ -227,29 +253,62 @@ reads are still enumerated somewhere rather than being invisible.
 """
 
 
-def iter_field_path_declarations[DescriptionT: EntityDescription](
+def _iter_declared[DescriptionT: EntityDescription](
     descriptions: Iterable[DescriptionT],
-) -> Iterator[tuple[str, DescriptionT]]:
-    """Yield ``(field_path, description)`` for each description that declares one.
+) -> Iterator[tuple[str, FieldPathDeclarationMixin, DescriptionT]]:
+    """Yield ``(field_path, declaration, description)`` for each named source field.
 
-    The single copy of the traversal rule — which descriptions declare a field,
-    and which are exempt — so a caller that only wants the paths and a caller
-    that wants the descriptions cannot drift apart on it.
+    The single copy of the traversal rule — which descriptions carry a
+    declaration at all — so no caller can drift from another on it.
 
     Raises `TypeError` for a description that carries no
-    `FieldPathDeclarationMixin` at all: such a description would be dropped
-    silently, which is the drift this module exists to prevent. Descriptions
-    that carry the mixin but declare nothing (`derived`, or `field_path is
-    None`) are skipped, which is the declared-exempt case rather than drift.
+    `FieldPathDeclarationMixin`: such a description would be dropped silently,
+    which is the drift this module exists to prevent. A description that carries
+    the mixin and names no field is skipped, which is the declared-derived case
+    rather than drift.
+
+    `declaration` and `description` are the same object; they are yielded twice
+    because a type variable bounded on `EntityDescription` cannot also be known
+    to carry the mixin, and the alternative is a `cast` at every call site.
     """
     for description in descriptions:
         if not isinstance(description, FieldPathDeclarationMixin):
             raise TypeError(
                 f"entity description '{description.key}' carries no field-path declaration"
             )
-        if description.derived or description.field_path is None:
+        if description.field_path is None:
             continue
-        yield description.field_path, description
+        yield description.field_path, description, description
+
+
+def iter_source_field_declarations[DescriptionT: EntityDescription](
+    descriptions: Iterable[DescriptionT],
+) -> Iterator[tuple[str, DescriptionT]]:
+    """Yield ``(field_path, description)`` for each description that names one.
+
+    Every entity that has a single source field, whatever `derived` says about
+    which adapters produce it.
+    """
+    for field_path, _, description in _iter_declared(descriptions):
+        yield field_path, description
+
+
+def iter_field_path_declarations[DescriptionT: EntityDescription](
+    descriptions: Iterable[DescriptionT],
+) -> Iterator[tuple[str, DescriptionT]]:
+    """Yield only the declarations the producible gate covers.
+
+    `derived` descriptions are skipped whether or not they name a field. That
+    is the whole content of the exemption: a `SCHEMA_CONDITIONAL_FIELD`
+    description does name its source field, and naming it is what gives the
+    entity its Repair mention and its unavailability — but the path is still
+    one adapter short of the both-adapters gate this function feeds, and
+    `RESIDUAL_EXEMPT_PATHS` is where it is enumerated instead.
+    """
+    for field_path, declaration, description in _iter_declared(descriptions):
+        if declaration.derived:
+            continue
+        yield field_path, description
 
 
 def _walk_subclasses[EntityT](root: type[EntityT]) -> Iterator[type[EntityT]]:
@@ -300,12 +359,13 @@ def residual_field_paths() -> frozenset[str]:
     )
 
 
-def declared_field_paths() -> frozenset[str]:
-    """Field paths the integration reads that must be producible by an adapter.
+def platform_descriptions() -> tuple[EntityDescription, ...]:
+    """Every entity description this integration builds entities from.
 
-    Derived entities are excluded: they have no single source field, so there is
-    nothing for an adapter to produce. Residual readers that no adapter (or only
-    one) produces are excluded too, and are listed in `RESIDUAL_EXEMPT_PATHS`.
+    One copy of the collection list. `declared_field_paths` and
+    `conditional_field_paths` ask different questions of the same descriptions,
+    and a second copy of the list is how a platform ends up answering one and
+    not the other.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
     # here, and `binary_sensor` reaches the package root for its config-entry
@@ -320,17 +380,50 @@ def declared_field_paths() -> frozenset[str]:
         all_sensor_descriptions,
     )
 
+    return (
+        *all_sensor_descriptions(),
+        *BINARY_SENSORS,
+        *EVSE_BINARY_SENSORS,
+        GRID_ISLANDABLE_SENSOR,
+        BESS_CONNECTED_SENSOR,
+    )
+
+
+def declared_field_paths() -> frozenset[str]:
+    """Field paths the integration reads that must be producible by an adapter.
+
+    Derived entities are excluded: they have no single source field, or the one
+    they have is not on both schemas, so there is nothing for both adapters to
+    produce. Residual readers that no adapter (or only one) produces are
+    excluded too, and are listed in `RESIDUAL_EXEMPT_PATHS`.
+    """
     paths: set[str] = set(residual_field_paths())
     paths.update(
-        field_path
-        for field_path, _ in iter_field_path_declarations(
-            (
-                *all_sensor_descriptions(),
-                *BINARY_SENSORS,
-                *EVSE_BINARY_SENSORS,
-                GRID_ISLANDABLE_SENSOR,
-                BESS_CONNECTED_SENSOR,
-            )
-        )
+        field_path for field_path, _ in iter_field_path_declarations(platform_descriptions())
     )
     return frozenset(paths)
+
+
+def conditional_field_paths() -> frozenset[str]:
+    """Source fields of entities only one adapter produces the field for.
+
+    The producible gate cannot cover these -- that is what
+    `DerivedReason.SCHEMA_CONDITIONAL_FIELD` says -- but the adapter that *does*
+    produce the field still publishes a metadata row for it, and that row can
+    come back `resolved=False` when the panel drops the property. So the
+    degradation half of the apparatus applies to them exactly as it does to a
+    plain declaration, and `schema_validation.evaluate_field_metadata` asks
+    about these paths alongside `declared_field_paths()`.
+
+    Read off the descriptions rather than filtered out of
+    `RESIDUAL_EXEMPT_PATHS`: most of that map is decoration -- device_info
+    fields, circuit attributes, entity-creation gates -- whose loss does not
+    make an entity's *reading* wrong, and which is deliberately excluded from
+    the availability probe. What belongs here is the narrower thing the
+    description states: the field this entity's value comes from.
+    """
+    return frozenset(
+        field_path
+        for field_path, declaration, _ in _iter_declared(platform_descriptions())
+        if declaration.derived is DerivedReason.SCHEMA_CONDITIONAL_FIELD
+    )

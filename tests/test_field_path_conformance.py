@@ -87,8 +87,15 @@ def test_gate_covers_every_declaration_in_the_source() -> None:
     when a collection is emptied rather than unreferenced.
     """
     declared = declared_field_paths()
+    # A `SCHEMA_CONDITIONAL_FIELD` description names its source field too, and
+    # that path is by definition one adapter short of this gate. It is covered
+    # instead by `RESIDUAL_EXEMPT_PATHS`, whose annotation is checked against
+    # both adapters below — so being enumerated there is the alternative to
+    # being in `declared`, not an escape from being checked.
     uncovered = sorted(
-        (path, module) for path, module in _source_declared_paths().items() if path not in declared
+        (path, module)
+        for path, module in _source_declared_paths().items()
+        if path not in declared and path not in RESIDUAL_EXEMPT_PATHS
     )
     assert not uncovered, (
         "declared_field_paths() does not cover field paths declared in the source: "
@@ -257,7 +264,11 @@ _EXPECTED_EXEMPT_COUNTS: dict[Producibility, int] = {
     # confidence enum, read as attributes on the two forecast sensors and
     # carried by no adapter's metadata map.
     Producibility.NEITHER: 18,
-    Producibility.SCHEMA_0_ONLY: 10,
+    # +1 for `panel.dominant_power_source`, the `grid_forming_entity` sensor's
+    # source field. It was read by a `SCHEMA_CONDITIONAL_FIELD` description and
+    # enumerated nowhere, so `evaluate_field_metadata` counted it as produced-
+    # but-unread while an entity was reading it.
+    Producibility.SCHEMA_0_ONLY: 11,
     # +2 with the shed forecast: the two live estimates, which schema_1 maps and
     # flat firmware does not publish at all.
     Producibility.SCHEMA_1_ONLY: 3,

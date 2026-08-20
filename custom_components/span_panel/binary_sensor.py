@@ -141,6 +141,7 @@ def _grid_islandable(snapshot: SpanPanelSnapshot) -> bool | None:
 
 GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="grid_islandable",
+    field_path="panel.grid_islandable",
     derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="grid_islandable",
     device_class=BinarySensorDeviceClass.POWER,
@@ -150,6 +151,7 @@ GRID_ISLANDABLE_SENSOR = SpanPanelBinarySensorEntityDescription(
 
 BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
     key="bess_connected",
+    field_path="battery.connected",
     derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="bess_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,

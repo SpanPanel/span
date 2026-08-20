@@ -39,7 +39,7 @@ from span_panel_api import (
 from .field_paths import (
     DerivedReason,
     FieldPathDeclarationMixin,
-    iter_field_path_declarations,
+    iter_source_field_declarations,
 )
 
 
@@ -145,6 +145,7 @@ PANEL_DATA_STATUS_SENSORS: tuple[
     ),
     SpanPanelDataSensorEntityDescription(
         key="grid_forming_entity",
+        field_path="panel.dominant_power_source",
         derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="grid_forming_entity",
         device_class=SensorDeviceClass.ENUM,
@@ -379,6 +380,7 @@ SHED_FORECAST_SENSORS: tuple[
 ] = (
     SpanShedForecastSensorEntityDescription(
         key="time_to_priority_shed",
+        field_path="panel.shed_time_to_priority_shed_min",
         derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="time_to_priority_shed",
         device_class=SensorDeviceClass.DURATION,
@@ -391,6 +393,7 @@ SHED_FORECAST_SENSORS: tuple[
     ),
     SpanShedForecastSensorEntityDescription(
         key="shed_total_time_remaining",
+        field_path="panel.shed_total_time_remaining_min",
         derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
         translation_key="shed_total_time_remaining",
         device_class=SensorDeviceClass.DURATION,
@@ -946,12 +949,18 @@ def all_sensor_descriptions() -> tuple[SensorEntityDescription, ...]:
 
 
 def sensor_descriptions_by_field_path() -> dict[str, SensorEntityDescription]:
-    """Every non-derived sensor description, keyed by the field path it reads.
+    """Every sensor description with a source field, keyed by that field path.
 
     Keyed by field path because that is how the adapter keys its metadata;
-    `description.key` is a different namespace and would not line up. Derived
-    descriptions are excluded — they read several fields, or none, so no single
-    path identifies them.
+    `description.key` is a different namespace and would not line up.
+    Descriptions that name no field are excluded — they read several fields, or
+    none, so no single path identifies them.
+
+    A `SCHEMA_CONDITIONAL_FIELD` description does name one and is included. Its
+    exemption is from the *producible* gate, and the unit its schema declares
+    for the field is checkable exactly as any other's: the adapter that
+    produces the row publishes a unit, and this integration's sensor declares
+    one, and they can disagree.
 
     A few field paths are read by two descriptions (an unmapped-circuit raw key
     and its named-circuit twin), and only the first is kept. That is safe only
@@ -960,10 +969,10 @@ def sensor_descriptions_by_field_path() -> dict[str, SensorEntityDescription]:
     pins that rather than leaving it to chance.
 
     Lives here rather than at the call site so no consumer has to know how a
-    description declares its field; `field_paths.iter_field_path_declarations`
+    description declares its field; `field_paths.iter_source_field_declarations`
     holds that rule.
     """
     by_field_path: dict[str, SensorEntityDescription] = {}
-    for field_path, description in iter_field_path_declarations(all_sensor_descriptions()):
+    for field_path, description in iter_source_field_declarations(all_sensor_descriptions()):
         by_field_path.setdefault(field_path, description)
     return by_field_path

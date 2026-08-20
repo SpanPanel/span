@@ -674,12 +674,48 @@ async def test_removing_an_entity_drops_it_from_the_map(hass) -> None:
         await _stop_scheduling(coordinator)
 
 
-async def test_derived_entities_are_not_tracked(hass) -> None:
-    """A derived entity must not be blamed for one of the fields it combines.
+async def test_entities_with_no_source_field_are_not_tracked(hass) -> None:
+    """An entity must not be blamed for one of the fields it combines.
 
-    Derived entities compute from several fields or none, so no single field's
-    loss can be said to have taken them down. They declare no `field_path` and
-    no residual reads, and must therefore land in no bucket at all.
+    A `MULTIPLE_FIELDS` or `NO_SOURCE_FIELD` description computes from several
+    fields or none, so no single field's loss can be said to have taken it
+    down. It names no `field_path` and carries no residual reads, and must
+    therefore land in no bucket at all.
+    """
+    from unittest.mock import MagicMock
+
+    from custom_components.span_panel.binary_sensor import async_setup_entry as binary_setup
+    from custom_components.span_panel.const import PANEL_STATUS
+    from custom_components.span_panel.field_paths import DerivedReason
+
+    coordinator, config_entry, _ = await _entities_by_declared_path(hass)
+    try:
+        added = MagicMock()
+        await binary_setup(hass, config_entry, added)
+        sourceless = [
+            entity
+            for entity in added.call_args.args[0]
+            if getattr(getattr(entity, "entity_description", None), "key", None) == PANEL_STATUS
+        ]
+        assert sourceless
+        assert sourceless[0].entity_description.derived is DerivedReason.NO_SOURCE_FIELD
+        assert sourceless[0].entity_description.field_path is None
+
+        await _add_to_platform(hass, config_entry, sourceless, "binary_sensor")
+
+        assert coordinator.entity_ids_by_field_path == {}
+    finally:
+        await _stop_scheduling(coordinator)
+
+
+async def test_schema_conditional_entities_are_tracked(hass) -> None:
+    """A schema-conditional entity must be nameable by its field's Repair.
+
+    `bess_connected` reads exactly one field. That the *other* adapter does not
+    publish it is why the description is `derived`, and is no reason for the
+    Repair against a dead `battery.connected` to report "0 entities affected" --
+    the suppression rule then throws the finding away entirely, so the user is
+    told nothing at all about a sensor that has gone to a default.
     """
     from unittest.mock import MagicMock
 
@@ -690,20 +726,20 @@ async def test_derived_entities_are_not_tracked(hass) -> None:
 
     coordinator, config_entry, _ = await _entities_by_declared_path(hass)
     try:
-        assert BESS_CONNECTED_SENSOR.derived, "fixture assumes a derived description"
+        assert BESS_CONNECTED_SENSOR.field_path == "battery.connected"
 
         added = MagicMock()
         await binary_setup(hass, config_entry, added)
-        derived = [
+        conditional = [
             entity
             for entity in added.call_args.args[0]
             if getattr(entity, "entity_description", None) is BESS_CONNECTED_SENSOR
         ]
-        assert derived
+        assert conditional
 
-        await _add_to_platform(hass, config_entry, derived, "binary_sensor")
+        await _add_to_platform(hass, config_entry, conditional, "binary_sensor")
 
-        assert coordinator.entity_ids_by_field_path == {}
+        assert coordinator.entity_ids_by_field_path["battery.connected"]
     finally:
         await _stop_scheduling(coordinator)
 

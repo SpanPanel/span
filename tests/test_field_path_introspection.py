@@ -217,10 +217,16 @@ def _record_reads(description: _DeclaringDescription) -> set[str]:
 
 
 def test_declared_paths_match_what_value_fns_read() -> None:
+    """Every named source field must be one the `value_fn` actually reads.
+
+    `derived` is not consulted: a `SCHEMA_CONDITIONAL_FIELD` description names
+    its source field too, and that name is what the Repair and the availability
+    probe act on. An unverified one would send both at the wrong path.
+    """
     mismatches: list[str] = []
 
     for description in _declaring_descriptions():
-        if description.derived or description.field_path is None:
+        if description.field_path is None:
             continue
         try:
             sink = _record_reads(description)
@@ -340,13 +346,20 @@ def test_derived_reasons_match_what_value_fns_read() -> None:
                 f"{description.key}: claims MULTIPLE_FIELDS but reads {read} — "
                 "one field or none is a different reason"
             )
-        elif reason is DerivedReason.SCHEMA_CONDITIONAL_FIELD and (
-            len(read) != 1 or read[0] in schema_0 & schema_1
-        ):
-            offenders.append(
-                f"{description.key}: claims SCHEMA_CONDITIONAL_FIELD but reads {read}, "
-                f"of which {sorted(set(read) & schema_0 & schema_1)} are produced by both "
-                "adapters"
-            )
+        elif reason is DerivedReason.SCHEMA_CONDITIONAL_FIELD:
+            if len(read) != 1 or read[0] in schema_0 & schema_1:
+                offenders.append(
+                    f"{description.key}: claims SCHEMA_CONDITIONAL_FIELD but reads {read}, "
+                    f"of which {sorted(set(read) & schema_0 & schema_1)} are produced by both "
+                    "adapters"
+                )
+            elif description.field_path != read[0]:
+                # The one reason that still names a field names the right one.
+                # That name is what the Repair and the availability probe act
+                # on, so a stale one degrades the wrong entity or none.
+                offenders.append(
+                    f"{description.key}: declares field_path={description.field_path!r} "
+                    f"but reads {read[0]!r}"
+                )
 
     assert not offenders, "Derived reasons disagree with readers:\n" + "\n".join(offenders)
