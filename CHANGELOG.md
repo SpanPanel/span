@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Your solar inverter gets a device of its own, on panels running the v1.0 data model.** Its vendor, model and nameplate capacity used to render as diagnostic
+  sensors on the _panel's_ card, beside the panel's own manufacturer and model — so the card whose job is telling you which enclosure this is read as though the
+  enclosure were an Enphase inverter. It now has a card like the battery and the chargers already do, carrying the firmware version the panel has been
+  publishing all along.
+- **Nothing about the move changes an entity.** The five sensors that relocate keep the entity ids and unique ids they already have, so dashboards, automations
+  and history follow them across. A freshly installed system and an upgraded one end up with identical entity ids — they would otherwise have diverged, because
+  Home Assistant derives a new entity's id from the name of the device it sits on.
+
+- **Your panel's own card now shows what the panel says it is** — manufacturer, model and hardware revision, read from the enclosure rather than assumed. A
+  panel on the older data model publishes none of the three and keeps exactly the card it has today; the hardware revision row is left off rather than shown
+  blank where no revision is published.
+- **Every SPAN Drive gets a Part Number** diagnostic sensor, matching the one the battery already has. Off by default.
+- **Circuit Priority's shed policy is readable.** The `dsm_state` sensor gains `shed_algorithm` and the two state-of-charge thresholds that decide when circuits
+  shed and when they come back — the numbers that make the panel's shed behaviour predictable rather than surprising. A policy this integration does not
+  recognise keeps its name and carries the panel's raw document beside it, so you can read what a parser could not.
+
 - **A charge-current limit you can set, on panels running the v1.0 data model.** Each commissioned SPAN Drive gets an **EVSE Charge Current Limit** number on
   its own device — the ceiling the charger offers your vehicle, which you can lower to charge more slowly and raise back. It is the first control this
   integration has that changes something on a charger rather than on the panel.
@@ -64,6 +80,14 @@ All notable changes to this project will be documented in this file.
   entities nobody could build a dashboard on.
 
 ### Fixed
+
+- **The Wi-Fi network name came back.** Panels on the older data model report the SSID they are joined to, and this integration has shown it as an attribute on
+  the panel status sensor for as long as it has existed. On the v1.0 data model nothing read it, so the attribute quietly emptied when your panel upgraded — a
+  value you had, silently gone, with no error and nothing in the log. It is read again.
+- **A firmware upgrade that adds a capability now actually reloads.** The check that decides whether new hardware warrants a reload knew about four capabilities
+  where the rest of the integration knew about nine. A panel that gained the shed forecast, the power control system, battery telemetry or DER link health while
+  Home Assistant was running published the data, matched every rule for creating the entities, and asked for no reload — so the new entities appeared only the
+  next time you restarted. This affected the Microgrid Interconnect Device before this release too.
 
 - **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
   was wrong. No entity changed.
