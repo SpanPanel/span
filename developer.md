@@ -245,6 +245,24 @@ The adapter decides "read" from four enumerations of what it addresses — the m
 of the report. `tests/test_schema_one_discovery.py` in the library runs the same republish-and-diff experiment this gate uses and holds every entry to it in
 both directions, so the report means "nothing reads this" rather than "nobody wrote it down".
 
+## The suffix mappings are closed
+
+`get_user_friendly_suffix` and `get_panel_entity_suffix` translate legacy camelCase description keys (`instantPowerW`, `instantGridPowerW`, `doorState`) into
+the suffixes their entities have carried since before 2.0.8. **Do not add entries.** A new description key needs none: it resolves to itself, which is what the
+sub-device builders (`build_bess_unique_id`, `build_mid_unique_id`, `build_evse_unique_id`) have always done, since their keys were written snake_case.
+
+The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (`sensor_circuit.py:213`, and
+`get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id` costs the long-term statistics, and the
+`entity_id` breaks whatever templates and automations a user wrote against it.
+
+`tests/test_suffix_mappings_are_closed.py` holds all three dictionaries to their exact contents and fails on an added key, a removed key or a changed value —
+verified by mutation, not by inspection.
+
+This closes the question of whether to go verbatim everywhere. The migration mechanism exists and would not cost statistics, since those key on `statistic_id`
+(the entity_id), which a `unique_id`-only migration preserves. But because the suffix is shared, verbatim-across-the-board would force either verbatim
+`entity_id`s — `sensor.span_panel_kitchen_instantPowerW`, breaking every user reference — or a decoupling of the two, which throws away the consistency the
+helper exists to provide. Closing the mapping gets the whole benefit for none of that.
+
 ## Adopting a device this integration models nothing for
 
 The section above is about properties on devices we already read. This one is about a device type nobody modelled at all — a vendor's generator, heat pump or

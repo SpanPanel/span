@@ -31,6 +31,24 @@ CIRCUIT_SUFFIX_MAPPING = {
     "current": "current",
     "breaker_rating": "breaker_rating",
 }
+"""**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
+
+Every entry here translates a legacy camelCase description key into the suffix
+its entities have carried since before 2.0.8 -- and that suffix is shared by the
+`unique_id` *and* the `entity_id`, so a changed entry moves both on every
+installed panel. A moved `unique_id` costs the statistics; a moved `entity_id`
+breaks the templates and automations a user wrote.
+
+So the rule for anything new is **verbatim**: a description key added from here on
+resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
+`build_mid_unique_id`, `build_evse_unique_id`) have always done. Their keys were
+written snake_case and never needed translating.
+
+`tests/test_suffix_mappings_are_closed.py` holds these dictionaries to their
+exact contents. It fails on an added key, a removed key and a changed value,
+because all three move a live id.
+"""
+
 
 # Panel sensor API field mappings (used by get_user_friendly_suffix)
 # Includes main meter/feedthrough produced, consumed, and net energy
@@ -49,6 +67,24 @@ PANEL_SUFFIX_MAPPING = {
     "feedthroughNetEnergyWh": "feed_through_energy_net",  # Consistent naming
     "batteryPercentage": "battery_percentage",
 }
+"""**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
+
+Every entry here translates a legacy camelCase description key into the suffix
+its entities have carried since before 2.0.8 -- and that suffix is shared by the
+`unique_id` *and* the `entity_id`, so a changed entry moves both on every
+installed panel. A moved `unique_id` costs the statistics; a moved `entity_id`
+breaks the templates and automations a user wrote.
+
+So the rule for anything new is **verbatim**: a description key added from here on
+resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
+`build_mid_unique_id`, `build_evse_unique_id`) have always done. Their keys were
+written snake_case and never needed translating.
+
+`tests/test_suffix_mappings_are_closed.py` holds these dictionaries to their
+exact contents. It fails on an added key, a removed key and a changed value,
+because all three move a live id.
+"""
+
 
 # Panel entity suffix mappings (used by get_panel_entity_suffix)
 # These are the actual entity_id/unique_id suffixes used for panel sensors
@@ -68,6 +104,24 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
     "feedthroughNetEnergyWh": "feed_through_net_energy",
     "batteryPercentage": "battery_level",
 }
+"""**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
+
+Every entry here translates a legacy camelCase description key into the suffix
+its entities have carried since before 2.0.8 -- and that suffix is shared by the
+`unique_id` *and* the `entity_id`, so a changed entry moves both on every
+installed panel. A moved `unique_id` costs the statistics; a moved `entity_id`
+breaks the templates and automations a user wrote.
+
+So the rule for anything new is **verbatim**: a description key added from here on
+resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
+`build_mid_unique_id`, `build_evse_unique_id`) have always done. Their keys were
+written snake_case and never needed translating.
+
+`tests/test_suffix_mappings_are_closed.py` holds these dictionaries to their
+exact contents. It fails on an added key, a removed key and a changed value,
+because all three move a live id.
+"""
+
 
 # Combined mapping for general suffix lookup
 ALL_SUFFIX_MAPPINGS = {**CIRCUIT_SUFFIX_MAPPING, **PANEL_SUFFIX_MAPPING}
