@@ -2550,7 +2550,7 @@ dev = [
 
 [[package]]
 name = "span-panel-api"
-version = "3.0.0b8"
+version = "3.0.0b9"
 source = { editable = "../../span/span-panel-api-p3" }
 dependencies = [
     { name = "httpx" },
