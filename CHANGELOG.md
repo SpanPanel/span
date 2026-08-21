@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0b5] - 8/2026
+
+### Fixed
+
+Two diagnostic entities went blank on a battery-less panel after the firmware upgrade, both because v1.0 retired the property they were reading and the
+integration treated the absence as ignorance rather than as an answer. Nothing about either site changed; the panel simply stopped publishing a value it now
+expresses another way.
+
+- **Grid Forming Entity reads `Grid` again instead of `Unknown`.** Flat published a source class outright; v1.0 names the forming **device**, and it names it on
+  the Microgrid Interconnect Device — which a panel without a battery does not have. But the answer is settled by what cannot be there: a battery needs a MID, a
+  solar inverter cannot form a grid on its own, and a panel supplying nothing is not publishing. What remains is a generator, and SPAN with no generator
+  interface treats one as the grid. So on a panel with no MID the grid is what is forming, which is exactly what flat had been reporting all along.
+- **Grid Islandable reads `Off` again instead of going unavailable.** v1.0 publishes no islandable property at all — the specification makes it structural
+  instead, where the presence of a MID is what says a panel can island. Having no MID is therefore the answer rather than the absence of one, and the entity was
+  being withheld precisely when it would have said "no".
+- **Neither changes anything on a panel still running the older firmware.** Both keep reading the published property exactly as before, and both still go
+  unavailable if a panel that should publish one stops — which is a real fault worth surfacing, as distinct from a property the newer firmware never had.
+
 ## [2.1.0b4] - 8/2026
 
 ### Fixed

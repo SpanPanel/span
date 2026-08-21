@@ -279,6 +279,10 @@ device of its own, linked to the panel. It appears automatically where the panel
 This is genuinely new information — the previous firmware did not report the state of the utility supply at all. It is not the same thing as **DSM Grid State**,
 which is whether **your home** is islanded. The grid can be down while your home runs happily off the battery.
 
+**A panel with no battery has no MID, and that is itself an answer.** The specification makes backup capability structural rather than a property — the presence
+of a MID is what says a panel can island — so **Grid Islandable** reads `Off` on such a panel rather than going unavailable, and **Grid Forming Entity** reads
+`Grid`. Neither is a default standing in for a missing reading; both are what the absence of islanding hardware means.
+
 `DSM Grid State` also becomes more trustworthy on this data model. It keeps its entity id and its history, but where it used to be inferred — from the battery
 when one was fitted, otherwise from the dominant power source — it now reads the islanding state the MID actually senses.
 
@@ -468,7 +472,7 @@ Applies to Main Meter and Feed Through energy sensors.
 | Ethernet Link   | Connectivity | Wired network status                                                                               |
 | Wi-Fi Link      | Connectivity | Wireless network status                                                                            |
 | Panel Status    | Connectivity | Overall panel online/offline                                                                       |
-| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Only when reported                                |
+| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Off on a panel with no MID — see below           |
 | PCS Active      | Running      | (v1.0) Whether the Power Control System is limiting import right now. Only when the panel runs one |
 | PV Panel Link   | Connectivity | (v1.0) Whether the panel can reach the solar inverter. Only when the feeding circuit reports it    |
 
@@ -514,6 +518,12 @@ the battery inverter is the reference and circuits are shed based on each circui
 When a BESS is installed, the panel relies on the BESS to determine whether the grid is online and to set the GFE accordingly. If BESS communication is lost
 while the panel is islanded, the GFE value becomes stale — it may show Battery when the grid has actually been restored, causing unnecessary shedding to
 continue.
+
+**On a panel with no battery, GFE is Grid, on both firmware generations.** The newer firmware moves this value onto the Microgrid Interconnect Device, which is
+part of a battery system — so a panel without one has nothing publishing it. The answer is still settled, by what cannot be there: Battery needs a BESS (which
+brings a MID), PV cannot form a grid on its own (anything that can is a grid-forming inverter, which is a MID), and None describes a panel supplying nothing,
+which is a panel that is not reporting at all. What remains is a generator, and SPAN with no generator interface treats one as the grid. So Grid is what a
+battery-less panel reports, which is what the older firmware reported too.
 
 #### What the Panel Can Detect
 
