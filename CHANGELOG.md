@@ -2,11 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.1.0b2] - 8/2026
+
+Support for the eBus v1.0 (parent/child) data model your panel moves to on firmware r202633 and later, and a clean transition when it does.
+
+### Requires Home Assistant 2026.8.0 or newer
+
+This release raises the minimum from 2026.5.4. Home Assistant 2026.8 replaced the two device-registry calls this integration relies on — the old forms stop
+working entirely in 2027.8 — and their replacements do not exist in 2026.5 through 2026.7, so there is no version of this release that runs on both. If you are
+on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not offer you this release.
 
 ### Added
 
+- **Your panel's Microgrid Interconnect Device appears as its own device** on the new data model, carrying **Grid State** — the health of the utility supply
+  itself, which the previous firmware never reported. Everything about it is additive; no existing entity moves or changes id.
+- **The integration notices a firmware upgrade and reloads itself.** A panel that becomes v1.0 while Home Assistant is running used to keep reading the tree
+  with the old parser, reporting every circuit as missing until you reloaded by hand. It now detects the change, reloads, writes a log line, and raises a
+  one-time notice explaining what changed.
+- **Grid-forming device name** as an attribute on the GFE sensor.
+- **Grid Power now says whether it is really measuring the grid**, through a new `at_service_entrance` attribute. That sensor reads your panel's upstream lugs,
+  which is grid flow only when those lugs are where the utility actually connects. Put a battery between the utility and your main lugs, or feed the panel from
+  another panel, and the same reading becomes that panel's own supply while **Grid Power Flow** stays the whole-site figure — so the two legitimately disagree,
+  and until now there was no way to tell that apart from a fault. The eBus specification was corrected on 2026-08-20 to say exactly this, after this project
+  supplied the capture that prompted it. Both readings were always correct; only the label was ever conditional.
+- **Diagnostics now include your entity registry.** Every entity this integration owns, with its unique id and — the part you cannot get anywhere else — what
+  disabled it, if anything. Home Assistant tells you an entity is disabled without telling you by what, and reading that yourself needs shell access to
+  `.storage` that a Home Assistant OS install does not give you. Four causes look identical on screen and need four different answers.
+
 ### Changed
+
+- **`DSM Grid State` is now more trustworthy on the new data model.** It keeps its entity id and all of its history. Previously it was _inferred_ — from the
+  battery if one was fitted, otherwise from the dominant power source and whether power was crossing the grid connection. It now reads the islanding state the
+  Microgrid Interconnect Device actually senses.
+- **`Grid Islandable` keeps working** across the upgrade. v1.0 publishes no panel-level islandable property, so the entity now reflects whether a Microgrid
+  Interconnect Device is present, which is how v1.0 says backup capability is detected.
+- **Battery model** may read differently after upgrading: the new data model separates the human-readable designation from the SKU, and this entity now shows
+  the designation. This is a library-level normalisation applied to both data models, so it happens once, at this release, rather than unpredictably during a
+  firmware update.
 
 - **Five panel sensors are switched off for new installations, because the eBus specification's own maintainer has documented that their values cannot be relied
   on.** A conformance note for SPAN firmware r202633 identifies three defects in what the panel publishes, all of which predate that release: the feedthrough
@@ -84,8 +116,11 @@ All notable changes to this project will be documented in this file.
   enclosure were an Enphase inverter. It now has a card like the battery and the chargers already do, carrying the firmware version the panel has been
   publishing all along.
 - **If you already have these sensors, nothing about them changes.** The five entities that move to the new card — PV Power, PV Vendor, PV Product, PV Nameplate
-  Capacity and PV Panel Link — keep the entity ids and unique ids they have today, so dashboards, automations and history follow them across untouched. Only the
-  card they appear on changes.
+  Capacity and PV Panel Link — keep the entity ids and unique ids they have today, so dashboards, automations and history follow them across untouched.
+- **They do lose the panel's area, though, and nothing warns you.** An entity takes its area from the device it sits on unless you set one, and the new solar
+  device starts with no area. So if your panel is assigned to an area, these entities were in it yesterday and are in no area today — which quietly stops them
+  matching area-scoped dashboards, area-scoped automations and scripts, and voice commands that target a room. Assign the new **Solar** device to an area and
+  they behave as before. Worth doing before you go looking for what broke.
 - **New installations get different entity ids for these five, and that is intended.** Home Assistant derives a new entity's id from the name of the device it
   sits on, so a system installed from now on gets `sensor.span_panel_solar_pv_vendor` where a system installed before this release keeps
   `sensor.span_panel_pv_vendor`. Both are correct and neither will change again: an existing system must never have an id renamed under it, and a new one gets
@@ -165,6 +200,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
+  "Possible states: Unknown". The lists are now derived from the translations and checked against them by a test.
+- **The GFE override button reads the right signal** for deciding when it applies, so it is no longer permanently enabled on the new data model.
+- **Sub-devices link to the panel by registry id**, replacing a form Home Assistant deprecated in 2026.8. No user-visible effect; required for the version bump
+  above.
+
 - **The Wi-Fi network name came back.** Panels on the older data model report the SSID they are joined to, and this integration has shown it as an attribute on
   the panel status sensor for as long as it has existed. On the v1.0 data model nothing read it, so the attribute quietly emptied when your panel upgraded — a
   value you had, silently gone, with no error and nothing in the log. It is read again, and it is now published on the Wi-Fi Link binary sensor rather than on
@@ -176,44 +217,6 @@ All notable changes to this project will be documented in this file.
 
 - **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
   was wrong. No entity changed.
-
-## [2.1.0] - 8/2026
-
-Support for the eBus v1.0 (parent/child) data model your panel moves to on firmware r202633 and later, and a clean transition when it does.
-
-### Requires Home Assistant 2026.8.0 or newer
-
-This release raises the minimum from 2026.5.4. Home Assistant 2026.8 replaced the two device-registry calls this integration relies on — the old forms stop
-working entirely in 2027.8 — and their replacements do not exist in 2026.5 through 2026.7, so there is no version of this release that runs on both. If you are
-on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not offer you this release.
-
-### Added
-
-- **Your panel's Microgrid Interconnect Device appears as its own device** on the new data model, carrying **Grid State** — the health of the utility supply
-  itself, which the previous firmware never reported. Everything about it is additive; no existing entity moves or changes id.
-- **The integration notices a firmware upgrade and reloads itself.** A panel that becomes v1.0 while Home Assistant is running used to keep reading the tree
-  with the old parser, reporting every circuit as missing until you reloaded by hand. It now detects the change, reloads, writes a log line, and raises a
-  one-time notice explaining what changed.
-- **Grid-forming device name** as an attribute on the GFE sensor.
-
-### Changed
-
-- **`DSM Grid State` is now more trustworthy on the new data model.** It keeps its entity id and all of its history. Previously it was _inferred_ — from the
-  battery if one was fitted, otherwise from the dominant power source and whether power was crossing the grid connection. It now reads the islanding state the
-  Microgrid Interconnect Device actually senses.
-- **`Grid Islandable` keeps working** across the upgrade. v1.0 publishes no panel-level islandable property, so the entity now reflects whether a Microgrid
-  Interconnect Device is present, which is how v1.0 says backup capability is detected.
-- **Battery model** may read differently after upgrading: the new data model separates the human-readable designation from the SKU, and this entity now shows
-  the designation. This is a library-level normalisation applied to both data models, so it happens once, at this release, rather than unpredictably during a
-  firmware update.
-
-### Fixed
-
-- **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
-  "Possible states: Unknown". The lists are now derived from the translations and checked against them by a test.
-- **The GFE override button reads the right signal** for deciding when it applies, so it is no longer permanently enabled on the new data model.
-- **Sub-devices link to the panel by registry id**, replacing a form Home Assistant deprecated in 2026.8. No user-visible effect; required for the version bump
-  above.
 
 ## [2.0.8] - 5/2026
 
