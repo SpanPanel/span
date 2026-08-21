@@ -861,14 +861,19 @@ entities land on one convention whatever that convention is. A sensor whose sign
 contradicted the one beside it would be worse than no sensor, and the agreement
 is structural rather than lucky.
 
-**Which direction that shared convention runs is not settled, and this docstring
-used to claim it was.** It said charge-positive. Working it through against
-`ebus-panel-sim` 0.6.0 -- where the four power-flow terms sum to zero and the
-identity forces the battery to be *discharging* at 3500 W -- both sensors read
-`+3500`, which is discharge-positive. The claim is withdrawn rather than
-replaced, because the sample that would settle it does not exist yet: the only
-live capture has the battery idle at 100 percent SoC with both properties
-exactly zero.
+**The shared convention is discharge-positive, and that was measured.** This
+docstring used to claim charge-positive. Driving the producer into
+self-consumption with the grid at zero forces the direction -- PV 4181 W plus
+battery 1917 W meeting a 6099 W load, so the battery is discharging -- and both
+sensors read `+1917.49`. Positive means the battery is *discharging*.
+
+That is the same convention the other three power-flow sensors follow, which is
+why it is right rather than merely consistent: `pv_power` is positive while
+producing, `grid_power_flow` positive while importing, `battery_power` positive
+while discharging. Every one is "positive means power flowing toward the house",
+and each is reached by the same single negation of a wire value in the opposite
+frame. The library's helper was renamed `_charge_positive` -> `_discharge_positive`
+for the same reason.
 
 **What is settled is that nothing here regressed.** `BATTERY_POWER_SENSOR` is
 behaviourally identical to the one released in 2.0.8 -- same source, same single
