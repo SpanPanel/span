@@ -2560,10 +2560,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx", specifier = ">=0.28.1,<1.0" },
     { name = "paho-mqtt", specifier = ">=2.0.0,<3.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "span-panel-api-schema-0", marker = "extra == 'schema-0'", editable = "../../span/span-panel-api-p3/packages/schema-0" },
+    { name = "span-panel-api-schema-1", marker = "extra == 'schema-1'", editable = "../../span/span-panel-api-p3/packages/schema-1" },
 ]
+provides-extras = ["schema-0", "schema-1"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2607,7 +2610,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ebus-sdk", specifier = ">=0.19.0,<1.0" },
+    { name = "ebus-sdk", specifier = ">=0.19.0,<0.23" },
     { name = "span-panel-api", editable = "../../span/span-panel-api-p3" },
 ]
 

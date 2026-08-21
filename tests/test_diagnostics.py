@@ -93,6 +93,9 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         "serial_number": "sp3-diag-001",
         "firmware_version": "spanos2/r202603/05",
         "panel_size": 32,
+        "lugs_at_service_entrance": True,
+        "instant_grid_power_w": 2500.75,
+        "power_flow_grid": None,
         "wifi_ssid": "Span WiFi",
         "eth0_link": True,
         "wlan_link": False,
@@ -155,6 +158,9 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         evse={},
         battery=None,
         adopted_devices=(),
+        lugs_at_service_entrance=True,
+        instant_grid_power_w=0.0,
+        power_flow_grid=None,
     )
     coordinator = MagicMock()
     coordinator.data = snapshot
@@ -171,6 +177,9 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "serial_number": "sp3-diag-002",
         "firmware_version": "spanos2/r202603/06",
         "panel_size": None,
+        "lugs_at_service_entrance": True,
+        "instant_grid_power_w": 0.0,
+        "power_flow_grid": None,
     }
     assert result["circuits"]["uuid_minimal"] == {
         "name": None,

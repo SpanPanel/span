@@ -193,6 +193,13 @@ async def async_get_config_entry_diagnostics(
         "serial_number": snapshot.serial_number,
         "firmware_version": snapshot.firmware_version,
         "panel_size": snapshot.panel_size,
+        # Whether the upstream lugs are the utility connection point. First thing
+        # worth knowing on a "my grid sensor reads wrong" report: where this is
+        # False, `instant_grid_power_w` is this panel's feed rather than the
+        # site's grid, and the two grid figures differ legitimately.
+        "lugs_at_service_entrance": snapshot.lugs_at_service_entrance,
+        "instant_grid_power_w": snapshot.instant_grid_power_w,
+        "power_flow_grid": snapshot.power_flow_grid,
     }
 
     if snapshot.wifi_ssid is not None:

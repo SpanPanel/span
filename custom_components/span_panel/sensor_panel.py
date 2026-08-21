@@ -460,8 +460,38 @@ class SpanPanelBattery(
         return snapshot.battery
 
 
+_GRID_POWER_KEY = "instantGridPowerW"
+"""The one power sensor whose name is conditional on topology.
+
+This class backs four sensors -- grid, feedthrough, battery and PV -- and only
+the grid one reads a meter whose meaning depends on where the panel sits.
+"""
+
+
 class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
-    """Panel power sensor with calculated amperage attribute."""
+    """Panel power sensor with calculated amperage attribute.
+
+    **The grid sensor carries `at_service_entrance`.** It reads the upstream lugs'
+    meter, which is grid flow only where those lugs are the utility connection
+    point. A BESS wired ahead of the main lugs, or a panel fed by another panel,
+    leaves it metering that panel's own feed instead, and `power_flow_grid` --
+    the `Grid Power Flow` sensor -- is then the site-level figure. Both readings
+    are correct; they simply stop being the same number.
+
+    That disagreement is what this attribute exists for. Someone whose two grid
+    figures differ has no way to tell a topology from a fault, and the answer now
+    sits on the sensor they are already looking at.
+
+    An attribute rather than an entity, deliberately. Topology is static -- a
+    panel's position in a chain does not change without an electrician -- so a
+    binary sensor would be a permanent row recording one unchanging boolean into
+    the database forever. It is also additive on an entity that already exists,
+    so it reaches an upgraded install without touching the registry: no
+    `entity_id`, no `unique_id`, no `state_class`, no statistics.
+
+    Not a Repair, for the reason the Repairs list means something: nothing is
+    broken and there is nothing to act on. The panel is wired the way it is wired.
+    """
 
     def __init__(
         self,
@@ -522,6 +552,9 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
                 attributes["amperage"] = 0.0
         else:
             attributes["amperage"] = 0.0
+
+        if self._description_key == _GRID_POWER_KEY:
+            attributes["at_service_entrance"] = self.coordinator.data.lugs_at_service_entrance
 
         return attributes
 

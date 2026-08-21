@@ -110,7 +110,11 @@ def test_panel_power_sensor_extra_state_attributes_include_amperage() -> None:
     sensor._update_native_value()
 
     assert sensor.native_value == 480.0
-    assert sensor.extra_state_attributes == {"voltage": 240, "amperage": 2.0}
+    assert sensor.extra_state_attributes == {
+        "voltage": 240,
+        "amperage": 2.0,
+        "at_service_entrance": True,
+    }
 
 
 def test_panel_power_sensor_defaults_amperage_when_value_not_numeric() -> None:
@@ -123,7 +127,52 @@ def test_panel_power_sensor_defaults_amperage_when_value_not_numeric() -> None:
 
     sensor._attr_native_value = STATE_UNKNOWN
 
-    assert sensor.extra_state_attributes == {"voltage": 240, "amperage": 0.0}
+    assert sensor.extra_state_attributes == {
+        "voltage": 240,
+        "amperage": 0.0,
+        "at_service_entrance": True,
+    }
+
+
+def test_grid_power_says_when_the_lugs_are_not_the_utility_connection() -> None:
+    """The attribute exists for the case where the two grid figures disagree.
+
+    A BESS ahead of the main lugs, or a panel fed by another panel, leaves this
+    sensor metering that panel's own feed while `power_flow_grid` stays
+    site-level. Both readings are right and they stop being the same number, and
+    without this the user cannot tell that from a fault.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        instant_grid_power_w=480.0, lugs_at_service_entrance=False
+    )
+    coordinator = _make_coordinator(snapshot)
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
+
+    sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
+    sensor._update_native_value()
+
+    assert sensor.extra_state_attributes["at_service_entrance"] is False
+    # The label is conditional; the measurement is not.
+    assert sensor.native_value == 480.0
+
+
+def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
+    """The same class backs four sensors and only one reads a topology-dependent meter.
+
+    Feedthrough, battery and PV are what they say they are wherever the panel
+    sits, so an attribute qualifying the grid label would be noise on them --
+    and worse, would read as qualifying *their* value.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        instant_grid_power_w=480.0, feedthrough_power_w=120.0, lugs_at_service_entrance=False
+    )
+    coordinator = _make_coordinator(snapshot)
+    description = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "feedthroughPowerW")
+
+    sensor = SpanPanelPowerSensor(coordinator, description, snapshot)
+    sensor._update_native_value()
+
+    assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
 def test_panel_sensor_default_friendly_names_cover_fallback_branches() -> None:

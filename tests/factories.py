@@ -243,6 +243,11 @@ class SpanPanelSnapshotFactory:
         downstream_l2_current_a: float | None = None,
         pv: SpanPVSnapshot | None = None,
         evse: dict[str, SpanEvseSnapshot] | None = None,
+        # Defaults True for the same reason the library field does: a panel at the
+        # service entrance is the ordinary case, and flat firmware cannot be
+        # anything else. A fixture opts out to model a chained panel or one behind
+        # an upstream DER.
+        lugs_at_service_entrance: bool = True,
     ) -> SpanPanelSnapshot:
         """Create a SpanPanelSnapshot with reasonable defaults."""
         if circuits is None:
@@ -287,6 +292,7 @@ class SpanPanelSnapshotFactory:
             panel_size=panel_size,
             power_flow_pv=power_flow_pv,
             power_flow_grid=power_flow_grid,
+            lugs_at_service_entrance=lugs_at_service_entrance,
             upstream_l1_current_a=upstream_l1_current_a,
             upstream_l2_current_a=upstream_l2_current_a,
             downstream_l1_current_a=downstream_l1_current_a,
