@@ -430,22 +430,25 @@ async def test_clearing_removes_only_this_entry(hass) -> None:
     assert registry.async_get_issue(DOMAIN, _issue_id(kept))
 
 
-async def test_reconciliation_leaves_other_domain_issues_alone(hass, entry) -> None:
-    """The upgrade repair shares our domain and must survive a reconcile pass."""
+async def test_reconciliation_leaves_our_other_issues_alone(hass, entry) -> None:
+    """The reconcile pass deletes every id it did not re-derive, within its own scope.
+
+    Anything else this integration raises under the same domain -- a one-shot
+    notice, a condition derived somewhere other than this pass -- has to survive
+    it, or the pass silently owns issues it has no way to recreate.
+    """
     ir.async_create_issue(
         hass,
         DOMAIN,
-        f"panel_upgraded_to_ebus_v1_{entry.entry_id}",
+        f"something_else_{entry.entry_id}",
         is_fixable=False,
         severity=ir.IssueSeverity.WARNING,
-        translation_key="panel_upgraded_to_ebus_v1",
+        translation_key="something_else",
     )
 
     async_sync_schema_issues(hass, entry, SchemaFindings(frozenset(), (), frozenset()), {})
-    async_clear_schema_issues(hass, entry)
 
-    registry = ir.async_get(hass)
-    assert registry.async_get_issue(DOMAIN, f"panel_upgraded_to_ebus_v1_{entry.entry_id}")
+    assert ir.async_get(hass).async_get_issue(DOMAIN, f"something_else_{entry.entry_id}")
 
 
 async def test_remove_entry_clears_this_entry_issues(hass, entry) -> None:

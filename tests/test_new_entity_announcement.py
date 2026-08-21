@@ -25,11 +25,12 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.additions import (
-    _read_translations,
+    _SECTION,
     async_announce_new_entities,
     async_forget_announcements,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.notices import read_translations
 
 _PART_NUMBER = "sp3-001_bess_part_number"
 
@@ -230,7 +231,7 @@ def test_every_shipped_locale_carries_the_notification_strings(language: str) ->
     component's own files. That is precisely why a missing key would fail silently
     into English rather than being caught by the platform.
     """
-    text = _read_translations(language)
+    text = read_translations(language, _SECTION)
     assert set(text) >= {
         "title",
         "intro_one",
@@ -243,12 +244,15 @@ def test_every_shipped_locale_carries_the_notification_strings(language: str) ->
 
 
 def test_an_unknown_language_falls_back_to_english_rather_than_to_nothing() -> None:
-    assert _read_translations("xx")["title"] == _read_translations("en")["title"]
+    assert (
+        read_translations("xx", _SECTION)["title"]
+        == read_translations("en", _SECTION)["title"]
+    )
 
 
 def test_a_regional_language_resolves_to_its_base(hass: HomeAssistant) -> None:
     """`pt-BR` is not shipped; `pt` is, and is a better answer than English."""
-    assert _read_translations("pt-BR") == _read_translations("pt")
+    assert read_translations("pt-BR", _SECTION) == read_translations("pt", _SECTION)
 
 
 # -- Removal -----------------------------------------------------------------

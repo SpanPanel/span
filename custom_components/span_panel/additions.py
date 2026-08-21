@@ -27,16 +27,14 @@ place.
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-from homeassistant.components.persistent_notification import async_create
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
+from .notices import async_raise, read_translations
 from .util import ADOPTED_IDENTIFIER_TOKEN
 
 if TYPE_CHECKING:
@@ -47,6 +45,11 @@ _LOGGER = logging.getLogger(__name__)
 
 _STORE_VERSION: Final = 1
 _ANNOUNCED: Final = "announced_unique_ids"
+
+_SECTION: Final = "new_entities"
+"""Names both the translation section and the notice id. They describe the same
+thing, and keeping them one symbol means a rename cannot leave a standing notice
+orphaned from the strings that render it."""
 
 _FALLBACK: Final[dict[str, str]] = {
     "title": "SPAN Panel added new entities",
@@ -76,34 +79,6 @@ def _store(hass: HomeAssistant, entry: ConfigEntry) -> Store[dict[str, Any]]:
     a shared record would let one panel's announcement suppress the other's.
     """
     return Store(hass, _STORE_VERSION, f"{DOMAIN}.announced.{entry.entry_id}")
-
-
-def _read_translations(language: str) -> dict[str, str]:
-    """Our own notification strings for one language, or an empty mapping.
-
-    Read from this component's `translations/` directory rather than through
-    `homeassistant.helpers.translation`, because that helper filters to the
-    categories Home Assistant defines and a persistent notification is not one of
-    them -- a custom category loads as nothing at all. These are this
-    integration's own package files, so reading them is not reaching into
-    somebody else's layout.
-
-    Blocking file I/O. Callers run it in an executor.
-    """
-    directory = Path(__file__).parent / "translations"
-    for candidate in (f"{language}.json", f"{language.split('-')[0]}.json", "en.json"):
-        path = directory / candidate
-        if not path.is_file():
-            continue
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            _LOGGER.debug("Could not read notification strings from %s", path, exc_info=True)
-            continue
-        section = loaded.get("notifications", {}).get("new_entities", {})
-        if section:
-            return {str(key): str(value) for key, value in section.items()}
-    return {}
 
 
 async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -141,12 +116,13 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
     if not added:
         return
 
-    text = await hass.async_add_executor_job(_read_translations, hass.config.language)
-    async_create(
+    text = await hass.async_add_executor_job(read_translations, hass.config.language, _SECTION)
+    async_raise(
         hass,
-        message=_message(hass, added, text),
+        entry,
+        _SECTION,
         title=_text(text, "title"),
-        notification_id=f"{DOMAIN}_new_entities_{entry.entry_id}",
+        message=_message(hass, added, text),
     )
     await store.async_save({_ANNOUNCED: sorted(announced | registered)})
     _LOGGER.debug("Announced %d new entities for %s", len(added), entry.entry_id)

@@ -52,6 +52,19 @@ without this they would outlive the mechanism that made them.
 """
 
 
+_RETIRED_UPGRADE_ID = "panel_upgraded_to_ebus_v1"
+"""Id stem of the retired firmware-upgrade Repair.
+
+Nothing raises one any more. An upgrade that took nothing away is not a defect,
+and the Repairs list stamped it with a severity and offered to ignore it, which
+told the user their panel was broken; `notices` carries it as a notification that
+survives a restart, which is the only property being a Repair was buying.
+
+Unlike the other ids here this one is a whole id rather than a prefix -- it was
+raised as `{stem}_{entry_id}` with nothing after -- so it is cleared by name.
+"""
+
+
 def _unresolved_id(entry_id: str, field_path: str) -> str:
     return f"unresolved_{entry_id}_{field_path}"
 
@@ -227,6 +240,20 @@ def async_clear_retired_new_entity_notices(hass: HomeAssistant, entry: ConfigEnt
 
 
 @callback
+def async_clear_retired_upgrade_notice(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the firmware-upgrade Repair raised before it became a notification.
+
+    Cleared at setup rather than left to expire: it was raised non-persistent, so
+    a restart would sweep it away on its own, but the user is looking at it now
+    and has no reason to restart. The dismissal tombstone goes with it, which
+    costs nothing -- there is no longer an issue for it to suppress.
+    """
+    if ir.async_get(hass).async_get_issue(DOMAIN, f"{_RETIRED_UPGRADE_ID}_{entry.entry_id}"):
+        _LOGGER.debug("Clearing retired upgrade notice for %s", entry.entry_id)
+        ir.async_delete_issue(hass, DOMAIN, f"{_RETIRED_UPGRADE_ID}_{entry.entry_id}")
+
+
+@callback
 def async_clear_schema_issues(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove one entry's issues. Core does not do this on entry removal.
 
@@ -239,3 +266,6 @@ def async_clear_schema_issues(hass: HomeAssistant, entry: ConfigEntry) -> None:
     every_prefix = (*_DEFECT_PREFIXES, _NEW_ENTITIES_PREFIX)
     for issue_id in _scoped_issue_ids(registry, entry.entry_id, every_prefix):
         ir.async_delete_issue(hass, DOMAIN, issue_id)
+    # Setup normally clears this one, but an entry removed before it ever set up
+    # successfully never got there.
+    async_clear_retired_upgrade_notice(hass, entry)

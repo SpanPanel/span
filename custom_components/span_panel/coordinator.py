@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 if TYPE_CHECKING:
     from . import SpanPanelConfigEntry
@@ -21,7 +21,6 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.issue_registry import IssueSeverity, async_create_issue
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
@@ -29,6 +28,7 @@ from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataErro
 from .const import DOMAIN
 from .helpers import detect_capabilities
 from .id_builder import build_circuit_unique_id
+from .notices import async_raise, read_translations
 from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
 from .sensor_definitions import sensor_descriptions_by_field_path
@@ -44,6 +44,35 @@ class SpanCircuitEnergySensorProtocol(Protocol):
 
 
 _LOGGER = logging.getLogger(__name__)
+
+_UPGRADE_NOTICE: Final = "panel_upgraded"
+"""Names both the notice id and its translation section.
+
+One symbol for both because they are the same notice: a rename that moved only
+one of them would leave a standing notice pointing at strings that no longer
+exist, and the notice cannot be re-derived once the upgrade is over.
+"""
+
+_UPGRADE_FALLBACK: Final[dict[str, str]] = {
+    "title": "SPAN Panel firmware upgraded",
+    "body": (
+        "Your SPAN Panel reported a new eBus data model (**{previous} \u2192 {current}**), "
+        "which happens after a firmware upgrade. The integration reloaded so its devices "
+        "and entities match what the panel now publishes.\n\n"
+        "Nothing you rely on has gone away, and no automation changes are required.\n\n"
+        "**DSM Grid State** keeps its entity ID and its history, and now reads the "
+        "islanding state the Microgrid Interconnect Device (MID) senses rather than "
+        "inferring it. **Grid Islandable** now reflects whether a MID is present.\n\n"
+        "Entities that were renamed or replaced by the upgrade may need to be removed "
+        "manually if they remain unavailable."
+    ),
+}
+"""English text, used when no translation file can be read.
+
+Shorter than the translated body on purpose: this is the copy nobody proofreads,
+and the paragraphs it drops are elaboration rather than the facts a user needs.
+"""
+
 
 # Suppress the noisy "Manually updated span_panel data" DEBUG message that
 # HA's DataUpdateCoordinator emits on every async_set_updated_data() call.
@@ -266,26 +295,13 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             previous or "absent (flat)",
             current or "absent (flat)",
         )
-        async_create(
-            self.hass,
-            (
-                f"Your SPAN Panel reported a new eBus data model "
-                f"(**{previous or 'flat'} → {current or 'flat'}**), which happens after a "
-                "firmware upgrade.\n\n"
-                "The integration is reloading so its devices and entities match what the "
-                "panel now publishes. New devices — such as the Microgrid Interconnect "
-                "Device — appear once that finishes.\n\n"
-                "Entities that were renamed or replaced by the upgrade may need to be "
-                "removed manually if they remain unavailable."
-            ),
-            title="SPAN Panel firmware upgraded",
-            notification_id=f"span_schema_upgrade_{self.config_entry.entry_id}",
+        self.hass.async_create_task(
+            self._explain_the_upgrade(previous, current), "span_panel_upgrade_notice"
         )
-        self._explain_the_upgrade(current)
         self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
 
-    def _explain_the_upgrade(self, current: str | None) -> None:
-        """Raise a repair describing what the new schema changed for the user.
+    async def _explain_the_upgrade(self, previous: str | None, current: str | None) -> None:
+        """Tell the user what the new schema changed for them, once and durably.
 
         Nothing they depend on goes away, which is worth saying plainly because a
         firmware upgrade invites the opposite assumption.
@@ -306,10 +322,24 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         What is genuinely new is the MID device itself and its `grid-state`, the health
         of the utility supply, which flat did not report at all.
 
-        A repair rather than only a notification because notifications are dismissed
-        and gone: a user who was away when the panel upgraded should still find out
-        that a device appeared and why a sensor changed provenance. It asks for no
-        action, which is why it is the mildest severity available.
+        **One notice, not two.** This used to be a hardcoded English notification
+        about the reload followed immediately by a translated Repair about the
+        consequences -- two rows in two different places for one event, which is
+        the same duplication that makes people stop reading either. They are now
+        one message, and it is translated.
+
+        **A notification, not a Repair.** The Repairs list is where defects go: it
+        stamped this with a severity and offered to ignore it, so an upgrade that
+        took nothing away arrived looking like a fault. The reason it was a Repair
+        was durability -- a plain notification dies with the process, and somebody
+        away when their panel upgraded would never have learned a device appeared.
+        `notices` supplies that durability directly, so the classification no
+        longer has to be paid for with a lie about severity.
+
+        Scheduled as a task because reading the translations is blocking file I/O
+        and the caller is the client's own synchronous callback fan-out. It races
+        the reload scheduled alongside it and is written to lose safely either
+        way; see `notices.async_restore`.
         """
         # Absent means flat, present means parent/child -- the migration guide's own
         # detection rule.
@@ -317,17 +347,21 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Guarding on the direction even though panel firmware does not roll back:
         # once a panel is on v1.0 it stays there, so in the field this only ever fires
         # one way. The reverse happens solely in the upgrade rehearsal, where the two
-        # simulators are swapped under a live client, and raising a retirement repair
+        # simulators are swapped under a live client, and announcing a retirement
         # there would be noise about a transition no user experiences.
         if current is None:
             return
-        async_create_issue(
+        text = await self.hass.async_add_executor_job(
+            read_translations, self.hass.config.language, _UPGRADE_NOTICE
+        )
+        async_raise(
             self.hass,
-            DOMAIN,
-            f"panel_upgraded_to_ebus_v1_{self.config_entry.entry_id}",
-            is_fixable=False,
-            severity=IssueSeverity.WARNING,
-            translation_key="panel_upgraded_to_ebus_v1",
+            self.config_entry,
+            _UPGRADE_NOTICE,
+            title=text.get("title") or _UPGRADE_FALLBACK["title"],
+            message=(text.get("body") or _UPGRADE_FALLBACK["body"]).format(
+                previous=previous or "flat", current=current
+            ),
         )
 
     def _on_connection_change(self, connected: bool) -> None:

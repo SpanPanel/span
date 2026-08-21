@@ -53,8 +53,13 @@ from .frontend import (
 )
 from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
+from .notices import async_forget, async_restore
 from .options import SNAPSHOT_UPDATE_INTERVAL
-from .schema_repairs import async_clear_retired_new_entity_notices, async_clear_schema_issues
+from .schema_repairs import (
+    async_clear_retired_new_entity_notices,
+    async_clear_retired_upgrade_notice,
+    async_clear_schema_issues,
+)
 from .services import (  # noqa: F401
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
@@ -134,6 +139,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             "This panel requires reauthentication. "
             "Please reauthenticate with your panel passphrase or proximity."
         )
+
+    # Before the coordinator, because the coordinator can raise a notice as soon
+    # as it starts streaming -- a panel that upgraded its firmware while Home
+    # Assistant was down announces itself on the first snapshot. Restoring after
+    # that would overwrite the record with a view that never saw it.
+    await async_restore(hass, entry)
 
     coordinator: SpanPanelCoordinator | None = None
 
@@ -280,6 +291,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # nothing reaches the user through this and nothing else -- whether or
         # not it arrived switched on.
         async_clear_retired_new_entity_notices(hass, entry)
+        async_clear_retired_upgrade_notice(hass, entry)
         await async_announce_new_entities(hass, entry)
     except Exception:
         if coordinator is not None:
@@ -325,6 +337,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     """
     async_clear_schema_issues(hass, entry)
     await async_forget_announcements(hass, entry)
+    await async_forget(hass, entry)
 
 
 async def async_remove_config_entry_device(
