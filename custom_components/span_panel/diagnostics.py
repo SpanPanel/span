@@ -7,6 +7,7 @@ from typing import Any, TypedDict
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from span_panel_api import SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
@@ -33,6 +34,55 @@ property names and cannot be taught them cheaply, so anything added to this
 payload from the panel has to be safe by construction rather than by redaction.
 That is the constraint `_discovery` is built to — see its docstring.
 """
+
+
+class EntityRow(TypedDict):
+    """One registry entry, as it appears in the payload."""
+
+    entity_id: str
+    unique_id: str
+    disabled_by: str | None
+    hidden_by: str | None
+    device_id: str | None
+
+
+def _entity_registry_rows(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> list[EntityRow]:
+    """Every registry entry this config entry owns, with the fields that explain it.
+
+    The registry is where an upgrade complaint is actually settled, and none of it
+    is reachable from the UI: Home Assistant shows "This entity is disabled" and
+    not *by what*, and a user without shell access to `.storage` has no way to
+    read it. Diagnosing a sensor that came back disabled after an upgrade meant
+    guessing between four causes that look identical on screen.
+
+    `disabled_by` names which of them it was -- `integration` is the registration
+    default having been applied, which only happens to an entity the registry
+    considers new; `user`, `config_entry` and `device` are three different things
+    and three different fixes. `unique_id` answers the question underneath it,
+    because an entity whose id changed is a new entity no matter how familiar its
+    name looks, and that is the one answer that would make an upgrade a defect
+    rather than a surprise.
+
+    Safe by construction rather than by redaction, which is the rule this payload
+    is built to: every field is registry bookkeeping. `unique_id` embeds the panel
+    serial, which `panel.serial_number` already carries.
+    """
+    registry = er.async_get(hass)
+    return sorted(
+        (
+            EntityRow(
+                entity_id=registry_entry.entity_id,
+                unique_id=registry_entry.unique_id,
+                disabled_by=registry_entry.disabled_by.value
+                if registry_entry.disabled_by
+                else None,
+                hidden_by=registry_entry.hidden_by.value if registry_entry.hidden_by else None,
+                device_id=registry_entry.device_id,
+            )
+            for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+        ),
+        key=lambda row: row["entity_id"],
+    )
 
 
 class DiscoveredRow(TypedDict):
@@ -248,6 +298,7 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "config_entry": async_redact_data(entry.as_dict(), TO_REDACT),
+        "entities": _entity_registry_rows(hass, entry),
         "panel": panel_data,
         "circuits": circuit_data,
         "evse": evse_data,

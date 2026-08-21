@@ -18,6 +18,7 @@ from custom_components.span_panel.diagnostics import (
 )
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -198,3 +199,43 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "panel_offline": True,
         "last_update_success": False,
     }
+
+
+async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> None:
+    """The registry is where an upgrade complaint is settled, and the UI hides it.
+
+    Home Assistant says "This entity is disabled" without saying by what, and a
+    user without shell access to `.storage` cannot read `disabled_by` at all. Four
+    causes look identical on screen and need four different fixes, so the field
+    that distinguishes them has to leave the machine somehow.
+
+    `unique_id` rides along because it answers the question underneath: an entity
+    whose id changed is a new entity however familiar its name, and that is the
+    difference between an upgrade defect and a surprise.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "span_sp3_diag_003_l1_voltage",
+        config_entry=entry,
+        suggested_object_id="span_panel_l1_voltage",
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+
+    coordinator = MagicMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
+    coordinator.panel_offline = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry.runtime_data = SimpleNamespace(coordinator=coordinator)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    rows = {row["entity_id"]: row for row in result["entities"]}
+    assert "sensor.span_panel_l1_voltage" in rows
+    row = rows["sensor.span_panel_l1_voltage"]
+    assert row["disabled_by"] == "integration"
+    assert row["unique_id"] == "span_sp3_diag_003_l1_voltage"
