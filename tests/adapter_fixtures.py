@@ -18,13 +18,14 @@ import pathlib
 
 from ebus_sdk.homie import DiscoveredDevice
 from span_panel_api.models import FieldMetadata, SpanPanelSnapshot
+from span_panel_api_schema_1.reference_payloads import parent_child_tree
 
 from custom_components.span_panel.schema_validation import DiscoveredProperty
 
 _FIXTURES = pathlib.Path(__file__).parent / "fixtures"
 
 SCHEMA_ONE_PANEL = "example-40t-001"
-"""Device id of the enclosure in `schema_one_tree.json`.
+"""Device id of the enclosure in the adapter's published capture.
 
 Named rather than inlined because a test that mutates one of the panel's
 published topics has to address the panel, and every such test would otherwise
@@ -51,21 +52,37 @@ def _device(device_id: str, topics: dict[str, str]) -> DiscoveredDevice:
     return device
 
 
-def _devices(name: str) -> list[DiscoveredDevice]:
-    """Rebuild discovered devices from a named retained-topic capture."""
-    tree = json.loads((_FIXTURES / name).read_text())
+def _devices_from(tree: dict[str, dict[str, str]]) -> list[DiscoveredDevice]:
+    """Rebuild discovered devices from a retained-topic capture."""
     return [_device(device_id, topics) for device_id, topics in tree.items()]
 
 
-def schema_one_tree() -> dict[str, dict[str, str]]:
+def schema_one_tree(without: str | None = None) -> dict[str, dict[str, str]]:
     """A mutable copy of the parent/child capture, ready to be rewritten.
 
-    Copied per call, and one level deep, which is as deep as a topic goes: a
-    test proves a reading came off the wire by republishing it and asserting the
-    entity followed, and that is impossible against a shared immutable capture.
+    **Read from the library's package data, not vendored here.** The adapter ships
+    `parent_child_tree.json` precisely so a consumer can read it -- its own README
+    says "never by path", and that a consumer pinning a version gets the bytes
+    that version's parser was written against. This repository used to keep a
+    byte-identical copy under `tests/fixtures/`, which is one more artifact to go
+    stale and nothing checked the two still agreed. Reading the published one
+    means the capture moves when the pinned adapter moves, and the library's own
+    peer-conformance check against the producer covers it transitively.
+
+    Copied per call, and one level deep, which is as deep as a topic goes: a test
+    proves a reading came off the wire by republishing it and asserting the entity
+    followed, and that is impossible against a shared immutable capture.
+
+    `without` drops one device, which is how the batteryless and PV-less variants
+    are made. They were separate files and are now derived, so they cannot drift
+    from the base by construction -- the only difference each ever had was the one
+    missing device.
     """
-    tree = json.loads((_FIXTURES / "schema_one_tree.json").read_text())
-    return {device_id: dict(topics) for device_id, topics in tree.items()}
+    tree = {device_id: dict(topics) for device_id, topics in parent_child_tree().items()}
+    if without is not None:
+        assert without in tree, f"{without!r} is not in the capture; nothing to drop"
+        del tree[without]
+    return tree
 
 
 def schema_one_snapshot(tree: dict[str, dict[str, str]] | None = None) -> SpanPanelSnapshot:
@@ -125,10 +142,10 @@ def schema_one_metadata() -> dict[str, FieldMetadata]:
     """Curated field metadata as schema_1 builds it from a full parent/child tree."""
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return _curated(build_field_metadata(_devices("schema_one_tree.json")))
+    return _curated(build_field_metadata(_devices_from(schema_one_tree())))
 
 
-def schema_one_metadata_raw(name: str = "schema_one_tree.json") -> dict[str, FieldMetadata]:
+def schema_one_metadata_raw() -> dict[str, FieldMetadata]:
     """The adapter's map exactly as it returns it, both halves together.
 
     The one fixture that does *not* partition, because the partition is the
@@ -137,7 +154,7 @@ def schema_one_metadata_raw(name: str = "schema_one_tree.json") -> dict[str, Fie
     """
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return build_field_metadata(_devices(name))
+    return build_field_metadata(_devices_from(schema_one_tree()))
 
 
 def schema_one_discovery() -> tuple[DiscoveredProperty, ...]:
@@ -151,18 +168,18 @@ def schema_one_discovery() -> tuple[DiscoveredProperty, ...]:
 
     from custom_components.span_panel.schema_validation import partition
 
-    return partition(build_field_metadata(_devices("schema_one_tree.json")))[1]
+    return partition(build_field_metadata(_devices_from(schema_one_tree())))[1]
 
 
 def schema_one_metadata_batteryless() -> dict[str, FieldMetadata]:
     """Build the same tree with the BESS removed — no battery hardware present."""
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return _curated(build_field_metadata(_devices("schema_one_tree_batteryless.json")))
+    return _curated(build_field_metadata(_devices_from(schema_one_tree(without="bess"))))
 
 
 def schema_one_metadata_no_pv() -> dict[str, FieldMetadata]:
     """Build the same tree with the PV device removed, power-flows still present."""
     from span_panel_api_schema_1.field_metadata import build_field_metadata
 
-    return _curated(build_field_metadata(_devices("schema_one_tree_no_pv.json")))
+    return _curated(build_field_metadata(_devices_from(schema_one_tree(without="pv"))))
