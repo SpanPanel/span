@@ -227,6 +227,9 @@
       },
       "pcs_binding_constraint": {
         "default": "mdi:scale-balance"
+      },
+      "bess_meter_power": {
+        "default": "mdi:battery-charging-outline"
       }
     }
   },

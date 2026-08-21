@@ -294,12 +294,12 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         # is what makes these SCHEMA_1_ONLY rather than NEITHER and buys them unit
         # and datatype validation against the BESS's own `$description`.
         #
-        # `battery.power_w` has no entity of its own since `bess_meter_power` was
-        # withdrawn -- see `BESS_TELEMETRY_SENSORS` for why and for the condition
-        # to restore it. The path stays exempt and annotated because `has_bess`
-        # still reads the field to decide whether a battery is commissioned, and
-        # the annotation is a fact about which adapter produces it rather than
-        # about who consumes it.
+        # `battery.power_w` carries `bess_meter_power`, and `has_bess` reads it to
+        # decide whether a battery is commissioned. It agrees with `battery_power`
+        # by construction: the two wire properties behind them carry the same sign
+        # as each other on both the panel and the emitter, and each path negates
+        # once. See `BESS_TELEMETRY_SENSORS` for which direction that shared
+        # convention runs, which a live capture has not settled.
         "battery.power_w": Producibility.SCHEMA_1_ONLY,
         "battery.communication_state": Producibility.SCHEMA_1_ONLY,
         # The Power Control System's result, behind `pcs_import_limit`,

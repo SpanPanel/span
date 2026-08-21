@@ -18,6 +18,11 @@ All notable changes to this project will be documented in this file.
   entity is first created, so an existing installation keeps them, keeps its history and keeps its entity IDs. This stops new installations picking them up; it
   cannot reach back. If you use any of the five on a dashboard or in an automation, they are worth removing — but that is your decision to make, not something
   an upgrade should do to you.
+- **A new BESS Meter Power sensor, reading the battery's own meter alongside the existing Battery Power.** The two answer slightly different questions — one is
+  the battery's own view, the other the panel's arbitrated figure — and they agree by construction, so where they ever differ that is worth being able to see.
+- **Your battery power readings are unchanged, and that is now checked against a real panel rather than assumed.** A capture from a live upgraded panel arrived
+  alongside the conformance note. The panel's four power-flow values sum to zero exactly, in the frame the specification now describes, and the battery power
+  sensor's definition is byte-for-byte what 2.0.8 shipped — same source, same conversion. Nothing about what you see has moved.
 - **Your other panel readings are unaffected.** The upstream lugs, the main panel meter and every circuit are in the correct frame. So is the power-flow group,
   which the specification has now been corrected to describe the way the panel has always published it.
 

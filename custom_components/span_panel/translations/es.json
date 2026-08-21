@@ -392,6 +392,9 @@
           "none": "Ninguno",
           "unknown": "Desconocido"
         }
+      },
+      "bess_meter_power": {
+        "name": "Potencia del Medidor"
       }
     }
   },

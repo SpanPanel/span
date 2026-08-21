@@ -809,7 +809,21 @@ BESS_METADATA_SENSORS: tuple[
     ),
 )
 
-BESS_TELEMETRY_SENSORS: tuple[SpanBessMetadataSensorEntityDescription,] = (
+BESS_TELEMETRY_SENSORS: tuple[
+    SpanBessMetadataSensorEntityDescription,
+    SpanBessMetadataSensorEntityDescription,
+] = (
+    SpanBessMetadataSensorEntityDescription(
+        key="meter_power",
+        field_path="battery.power_w",
+        derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+        translation_key="bess_meter_power",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        suggested_display_precision=0,
+        value_fn=lambda b: b.power_w,
+    ),
     SpanBessMetadataSensorEntityDescription(
         key="communication_state",
         field_path="battery.communication_state",
@@ -826,55 +840,58 @@ BESS_TELEMETRY_SENSORS: tuple[SpanBessMetadataSensorEntityDescription,] = (
 
 Separate from `BESS_METADATA_SENSORS` because these are created conditionally and
 those are not. Every metadata sensor exists on any commissioned BESS, filled or
-empty. This one comes from a capability node a BESS may simply not have, so
+empty. These two come from capability nodes a BESS may simply not have, so
 absence has to mean no entity rather than a permanently unknown one, and mixing
 the two rules into one tuple would mean deciding per description which applied.
 
-Communication state is diagnostic and off by default: link health is a fault
-signal, interesting when something is wrong and noise on a device card the rest
-of the time.
+**Power is enabled by default and not diagnostic; communication state is
+neither.** The battery's own charge/discharge figure is a reading a user graphs
+and automates on. Its link health is a fault signal, so it lands the way the
+other diagnostics do, off by default.
 
-**`bess_meter_power` was here and was withdrawn before it ever shipped.**
+**`bess_meter_power` is not `battery_power`, and the names say so.** The existing
+`battery_power` sensor reads `panel.power_flow_battery`, the enclosure's own
+arbitrated flow figure; this one reads the BESS's `meter/active-power`, the
+battery's own meter.
 
-It read `battery.power_w`, the BESS child's own `meter/active-power`, alongside
-`battery_power` reading the enclosure's `power-flows/battery` — two views of one
-quantity, so that a disagreement between them would be visible rather than
-hidden behind a single entity.
+**They agree, and this is why.** Both wire properties carry the *same* sign as
+each other -- a live panel capture and `ebus-panel-sim` 0.6.0 both publish
+`-3500.0` for the pair -- and each path applies exactly one negation, so the two
+entities land on one convention whatever that convention is. A sensor whose sign
+contradicted the one beside it would be worse than no sensor, and the agreement
+is structural rather than lucky.
 
-The eBus maintainer's r202633 conformance note (2026-08-20) established that the
-two will disagree *systematically* on a real panel, for a firmware reason rather
-than a panel-health one. The BESS child publishes `meter/active-power`
-charge-positive where the specification requires discharge-positive, and
-`build_battery`'s `_charge_positive()` negates on the assumption that the
-specification holds — so `battery.power_w` inverts on that firmware. The note
-calls this the one divergence a consumer cannot detect on its own: both signs
-are physically plausible and the two topics are numerically identical, so
-nothing in the tree contradicts itself observably.
+**Which direction that shared convention runs is not settled, and this docstring
+used to claim it was.** It said charge-positive. Working it through against
+`ebus-panel-sim` 0.6.0 -- where the four power-flow terms sum to zero and the
+identity forces the battery to be *discharging* at 3500 W -- both sensors read
+`+3500`, which is discharge-positive. The claim is withdrawn rather than
+replaced, because the sample that would settle it does not exist yet: the only
+live capture has the battery idle at 100 percent SoC with both properties
+exactly zero.
 
-Nothing here can catch it either. `ebus-panel-sim` 0.6.0 fixed the same
-inversion in the simulator, so on this one property the simulator is now correct
-where the panel is not, and every test in this repository runs against the
-simulator.
+**What is settled is that nothing here regressed.** `BATTERY_POWER_SENSOR` is
+behaviourally identical to the one released in 2.0.8 -- same source, same single
+negation, same device and state class -- and both adapters pass
+`power_flow_battery` through untouched. Whatever a live panel showed then, it
+shows now. `bess_meter_power` was briefly withdrawn on the belief that it would
+disagree with its neighbour on real firmware; the capture showed the two wire
+properties aligned on the panel *and* on the emitter, so it cannot, and it is
+restored.
 
-Withdrawn rather than compensated, and rather than shipped documented, for the
-reason the timing allows: this description had never been released, so no
-install carries the entity and no history is at stake. Dropping it now is free.
-Once a release creates it, the rule that an existing install's entities cannot
-simply disappear makes the same decision expensive.
-
-**Restore it when the firmware publishes the specified frame.** The correct
-reading is already shipped and unaffected — `battery_power` reads
-`power-flows/battery`, which the note confirms is correct as published — so
-nothing is lost meanwhile except the ability to compare the two. The wire
-property stays in `tests/fixtures/unread_declarations_baseline.json` with that
-reason, which is what will fail when somebody surfaces it again without
-revisiting this.
+**The one thing still worth building** is a discriminator, because the alignment
+above is the eBus specification's *violation* rather than its rule: the spec
+defines `power-flows/battery` as the negation of the BESS meter. Comparing the
+two properties therefore tells a consumer which firmware it is talking to --
+identical means today's, opposed means a future conformant one -- which is what
+would let `battery.power_w` stay correct across that change without a release.
+Undecidable while the battery is idle and both read zero.
 
 **`derived` as well as `field_path`, by the producible rule.** The gate wants a
 path both adapters produce, and flat's BESS device class declares neither
-property — so `SCHEMA_CONDITIONAL_FIELD`, with the paths enumerated in
+property -- so `SCHEMA_CONDITIONAL_FIELD`, with the paths enumerated in
 `RESIDUAL_EXEMPT_PATHS` as `SCHEMA_1_ONLY`. `field_path` still names the source,
-which is what gives the sensor its Repair mention and its unavailability when
+which is what gives each sensor its Repair mention and its unavailability when
 the panel stops resolving the property.
 """
 
