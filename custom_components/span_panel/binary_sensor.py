@@ -582,13 +582,32 @@ async def async_setup_entry(
         for description in BINARY_SENSORS
     ]
 
-    # Add grid islandable binary sensor when v2 data is available
     snapshot: SpanPanelSnapshot = coordinator.data
-    # Created on either generation. Gating on the flat property alone is what left this
-    # entity `unavailable` after a v1.0 upgrade -- the panel had not lost the
-    # capability, only the property that used to report it.
-    if snapshot.grid_islandable is not None or has_mid(snapshot):
-        entities.append(SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR))
+
+    # Created unconditionally, because on both generations the answer is knowable.
+    #
+    # This gate has been narrowed twice for the same symptom. Gating on the flat
+    # property alone left the entity `unavailable` after a v1.0 upgrade -- the
+    # panel had not lost the capability, only the property that used to report
+    # it. Adding `has_mid` rescued panels that have a battery and left every
+    # battery-less one exactly where it was, because it admitted the entity only
+    # when the answer was going to be `True`. For a boolean whose `False` is
+    # informative that is backwards: no MID is not missing information, it is the
+    # information. `devices/bess.md` makes the signal structural -- "a MID `grid`
+    # child means premises-segment backup ... neither means no backup" -- so a
+    # panel without one does not island, and saying so is the answer rather than
+    # the absence of one.
+    #
+    # Nothing about flat changes. Its property is published, so `_grid_islandable`
+    # returns it exactly as before; and a flat panel that stops publishing it has
+    # a metadata row that fails to resolve, which is what makes the entity
+    # unavailable and raises the Repair. That path is untouched, and it is the one
+    # that must not become a default presented as a reading.
+    #
+    # DUAL-SCHEMA: nothing to remove here when the flat path retires -- an
+    # unconditional append is already the end state. The branch that goes is the
+    # first one in `_grid_islandable`, which is where the flat property is read.
+    entities.append(SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR))
 
     # Add BESS connected sensor on the BESS sub-device when battery is commissioned
     if has_bess(snapshot):

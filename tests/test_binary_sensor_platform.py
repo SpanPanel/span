@@ -102,6 +102,45 @@ def test_evse_binary_sensor_reports_unknown_when_panel_offline() -> None:
     assert entity.is_on is None
 
 
+def test_grid_islandable_is_created_on_a_v1_panel_with_no_battery() -> None:
+    """No MID is the answer, not the absence of one.
+
+    Observed on a live upgrade: this entity read `Off` on flat and went
+    `Unavailable` the moment the panel took v1.0, on an install with no battery.
+    Nothing about the site changed — v1.0 simply retired the property, and the
+    gate admitted the entity only when the answer was going to be `True`.
+
+    `devices/bess.md` makes the signal structural: "a MID `grid` child means
+    premises-segment backup ... neither means no backup". So a panel without one
+    does not island, and `False` is a reading rather than a default.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(grid_islandable=None, mid=None)
+    coordinator = _make_coordinator(snapshot)
+    entity = SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR)
+    entity.async_write_ha_state = MagicMock()
+
+    entity._handle_coordinator_update()
+
+    assert entity.is_on is False, "no MID means it cannot island, which is an answer"
+    assert entity.available is True, "and the entity must exist to give it"
+
+
+def test_grid_islandable_reads_the_flat_property_when_the_panel_publishes_one() -> None:
+    """Flat is unchanged, which is the constraint that matters until the fleet moves.
+
+    A flat panel publishes `core/grid-islandable`, so the value comes from the
+    panel exactly as it always has, and MID presence is never consulted.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(grid_islandable=True, mid=None)
+    coordinator = _make_coordinator(snapshot)
+    entity = SpanPanelBinarySensor(coordinator, GRID_ISLANDABLE_SENSOR)
+    entity.async_write_ha_state = MagicMock()
+
+    entity._handle_coordinator_update()
+
+    assert entity.is_on is True, "the published value wins over the structural fallback"
+
+
 def test_grid_islandable_sensor_uses_online_status_value() -> None:
     """Non-status binary sensors should mirror their live boolean value when online."""
     snapshot = SpanPanelSnapshotFactory.create(grid_islandable=False)
