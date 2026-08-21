@@ -609,6 +609,24 @@ PCS_SENSORS: tuple[SpanPcsSensorEntityDescription, SpanPcsSensorEntityDescriptio
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        # Diagnostic, which is where this integration files a panel-level
+        # electrical characteristic. The line is not "amps are diagnostic" --
+        # `circuit_current` and `evse_advertised_current` are amps and are
+        # correctly primary, because they are what a circuit or a charger is doing
+        # right now. It is that the panel's own voltages, lug currents, breaker
+        # ratings and limits describe the installation rather than its activity,
+        # and all of those are diagnostic. `main_breaker_rating` is the closest
+        # analogue -- also an ampere ceiling on the panel -- and so are both of
+        # this sensor's own PCS siblings, which left this the only member of its
+        # group on the primary card.
+        #
+        # It is a ceiling the panel arbitrated, not a measurement of what is
+        # flowing, and it carries the four constraint limits it was arbitrated
+        # from as attributes -- which is what a diagnostic looks like. The
+        # category costs nothing operationally: it groups the entity on the device
+        # page and keeps it out of auto-generated dashboards, and automations,
+        # templates and long-term statistics are unaffected.
+        entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=1,
         value_fn=lambda p: p.import_limit_a,
         attributes_fn=pcs_arbitration_attributes,

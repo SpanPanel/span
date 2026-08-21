@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.0b5] - 8/2026
 
+### Changed
+
+- **Import Limit moves to the Diagnostic section of the device page.** It sits with the panel's other electrical characteristics — voltages, lug currents,
+  breaker ratings — rather than beside the power readings, which is where the rest of the integration files a limit the panel arbitrated as opposed to a
+  measurement of what is flowing. Both of its Power Control System siblings were already there. Nothing else changes: the entity id, its history and its
+  long-term statistics are untouched, and automations and templates referring to it are unaffected. Moved now because the entity is days old and has appeared in
+  one release, so no dashboard depends on where it sits.
+
 ### Fixed
 
 Two diagnostic entities went blank on a battery-less panel after the firmware upgrade, both because v1.0 retired the property they were reading and the

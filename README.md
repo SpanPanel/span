@@ -220,7 +220,7 @@ state, not an absence.
 
 | Sensor             | Device Class | Unit | Notes                                                                                                                      |
 | ------------------ | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
-| Import Limit       | Current      | A    | The limit actually being enforced: the most restrictive of every active constraint                                         |
+| Import Limit       | Current      | A    | The limit actually being enforced: the most restrictive active constraint (diagnostic)                                         |
 | Binding Constraint | Enum         | —    | Which constraint sets that limit: Firm Service Rating, Grid Envelope, Voltage Support, Off-Grid, Requested, Operator, None |
 
 #### Power Control System Sensor Attributes

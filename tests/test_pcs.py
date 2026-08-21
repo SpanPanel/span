@@ -733,16 +733,40 @@ def test_a_flat_circuit_shows_neither_attribute() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_import_limit_is_an_ampere_measurement_enabled_by_default() -> None:
-    """A PCS throttling import is a fact about the user's electricity supply,
-    not about the integration's health, so it is not filed as a diagnostic."""
+def test_the_import_limit_is_an_ampere_measurement_filed_as_a_diagnostic() -> None:
+    """Filed where every other ampere value in this integration is filed.
+
+    This reverses an earlier decision, which read `DIAGNOSTIC` as "about the
+    integration's health" and reasoned that a PCS throttling import is a fact
+    about the user's electricity supply instead. Home Assistant's category is
+    about the *device* — "a configuration parameter or diagnostics of a device" —
+    and by that earlier standard `l1_voltage` and `main_breaker_rating` are facts
+    about the user's supply too, and both are diagnostic.
+
+    The line this codebase actually draws is not "amps are diagnostic":
+    `circuit_current` and `evse_advertised_current` are amps and are correctly
+    primary, because they are what a circuit or a charger is doing right now. It
+    is that the panel's own voltages, lug currents, breaker ratings and limits
+    describe the installation rather than its activity. Import Limit is one of
+    those, and was the only entity outside the rule — and the only member of its
+    own PCS group on the primary card.
+
+    It is a ceiling the panel arbitrated rather than a measurement of what is
+    flowing, and it carries the four limits it was arbitrated from as attributes.
+    Changed while the entity was days old and had appeared in exactly one
+    release's addition notice, so no installation has a dashboard or history
+    depending on where it sits.
+
+    The category is presentational: automations, templates and long-term
+    statistics are unaffected, which is why `state_class` stays.
+    """
     description = next(d for d in PCS_SENSORS if d.key == IMPORT_LIMIT_KEY)
 
     assert description.device_class is SensorDeviceClass.CURRENT
     assert description.state_class is SensorStateClass.MEASUREMENT
     assert description.native_unit_of_measurement == UnitOfElectricCurrent.AMPERE
     assert description.entity_registry_enabled_default is True
-    assert description.entity_category is not EntityCategory.DIAGNOSTIC
+    assert description.entity_category is EntityCategory.DIAGNOSTIC
 
 
 def test_the_binding_constraint_is_an_enum_diagnostic_enabled_by_default() -> None:
