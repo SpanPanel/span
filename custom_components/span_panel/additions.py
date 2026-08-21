@@ -189,7 +189,7 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
             if registry_entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
             else enabled
         )
-        target.append(_label(registry_entry))
+        target.append(_label(devices, registry_entry))
 
     # Two keys rather than one with a plural placeholder: a plural rule the caller
     # picks a *word* for is an English rule, and the five languages here do not
@@ -234,15 +234,47 @@ def _adopted_device_name(
     return device.name_by_user or device.name or registry_entry.entity_id
 
 
-def _label(registry_entry: er.RegistryEntry) -> str:
+def _label(devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry) -> str:
     """Return what to call an entity the user has never seen.
 
     A disabled entity has no state, so there is no friendly name on the state
     machine -- only what the registry recorded when the platform added it. The
     entity_id is the last resort rather than the first choice, because it is the
     name the user will *not* see in the device's entity list.
+
+    **Sub-device entities carry their device's name.** Every platform here sets
+    `_attr_has_entity_name`, so the registry stores only the entity half and Home
+    Assistant prepends the device in its own UI. A flat list does not, and the
+    result was two chargers contributing "EVSE Charge Current Limit" twice with
+    nothing to tell them apart, and the battery's meter reading as a bare "Meter
+    Power". Two identical rows is what teaches somebody to skip the category.
+
+    The panel's own entities are left bare. Prefixing them would put the panel
+    name on every line of a notification that already says which panel it is
+    about, which is noise rather than disambiguation -- so the prefix is added
+    only where the device is a sub-device, which is exactly where the collision
+    happens.
     """
-    return registry_entry.name or registry_entry.original_name or registry_entry.entity_id
+    name = registry_entry.name or registry_entry.original_name
+    if name is None:
+        return registry_entry.entity_id
+    device_name = _sub_device_name(devices, registry_entry)
+    return f"{device_name} {name}" if device_name else name
+
+
+def _sub_device_name(devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry) -> str | None:
+    """Return the sub-device this entity sits on, or None for the panel itself.
+
+    A sub-device is one that hangs off another with `via_device_id` -- the
+    battery, the MID, each charger, the solar inverter. The panel is the one
+    device with no parent, and its entities need no prefix.
+    """
+    if registry_entry.device_id is None:
+        return None
+    device = devices.async_get(registry_entry.device_id)
+    if device is None or device.via_device_id is None:
+        return None
+    return device.name_by_user or device.name
 
 
 async def async_forget_announcements(hass: HomeAssistant, entry: ConfigEntry) -> None:

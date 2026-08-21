@@ -266,3 +266,69 @@ async def test_removing_the_entry_forgets_what_was_announced(
     await async_announce_new_entities(hass, entry)
 
     assert _announcement(hass, entry) is None
+
+
+# -- Sub-device entities are told apart --------------------------------------
+
+
+def _sub_device(hass: HomeAssistant, entry: MockConfigEntry, name: str, ident: str) -> str:
+    """A device hanging off the panel, the way every SPAN sub-device does."""
+    devices = dr.async_get(hass)
+    panel = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, "sp3-001")}, name="SPAN Panel"
+    )
+    child = devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, ident)},
+        name=name,
+        via_device_id=panel.id,
+    )
+    return str(child.id)
+
+
+async def test_two_sub_devices_with_one_entity_name_are_told_apart(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The defect this fixes, in the shape it actually shipped in.
+
+    Two commissioned chargers each gain a charge-current limit. Every platform
+    sets `_attr_has_entity_name`, so the registry stores only "Charge Current
+    Limit" for both and Home Assistant prepends the device in its own UI. A flat
+    list does not, so the notification showed the same row twice with nothing to
+    tell them apart -- which is what teaches somebody to skip the category.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    first = _sub_device(hass, entry, "SPAN Drive 1", "sp3-001_evse_1")
+    second = _sub_device(hass, entry, "SPAN Drive 2", "sp3-001_evse_2")
+    _register(hass, entry, "sp3-001_evse_1_limit", name="Charge Current Limit", device_id=first)
+    _register(hass, entry, "sp3-001_evse_2_limit", name="Charge Current Limit", device_id=second)
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "SPAN Drive 1 Charge Current Limit" in message
+    assert "SPAN Drive 2 Charge Current Limit" in message
+    assert message.count("Charge Current Limit") == 2
+
+
+async def test_a_panel_entity_is_not_prefixed(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """The panel needs no prefix, and adding one would be noise.
+
+    A notification that already says which panel it is about does not need the
+    panel's name on every line. The prefix exists to break collisions, and the
+    panel is the one device that cannot collide with a sibling.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    devices = dr.async_get(hass)
+    panel = devices.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, "sp3-001")}, name="SPAN Panel"
+    )
+    _register(hass, entry, "sp3-001_dsm", name="DSM State", device_id=panel.id)
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "DSM State" in message
+    assert "SPAN Panel DSM State" not in message
