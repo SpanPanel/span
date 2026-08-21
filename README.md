@@ -267,6 +267,21 @@ until you assign the Solar device to an area. New installations get ids derived 
 | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | DSM Grid State | Deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version |
 
+### Microgrid Interconnect Device (v1.0 data model only)
+
+Panels on the v1.0 data model publish their Microgrid Interconnect Device — the switch that disconnects your home from the utility during an outage — as a
+device of its own, linked to the panel. It appears automatically where the panel reports one; nothing existing moves onto it.
+
+| Sensor     | Device Class | Unit | Notes                                                                       |
+| ---------- | ------------ | ---- | --------------------------------------------------------------------------- |
+| Grid State | Enum         | —    | Health of the utility supply itself: `up`, `down`, `degraded` or `unknown` |
+
+This is genuinely new information — the previous firmware did not report the state of the utility supply at all. It is not the same thing as **DSM Grid State**,
+which is whether **your home** is islanded. The grid can be down while your home runs happily off the battery.
+
+`DSM Grid State` also becomes more trustworthy on this data model. It keeps its entity id and its history, but where it used to be inferred — from the battery
+when one was fitted, otherwise from the dominant power source — it now reads the islanding state the MID actually senses.
+
 ### Adopted Devices (v1.0 data model only)
 
 The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modelled. Rather than ignoring it, the integration
@@ -344,6 +359,7 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 | Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
 | Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
 | Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
+| Part Number        | —            | —    | Charger part number (diagnostic, **off by default**). v1.0 data model only       |
 
 #### EVSE Binary Sensors (per charger)
 
@@ -392,9 +408,10 @@ device uses manufacturer, model, serial number, and software version from batter
 | Communication State | —              | —    | The BESS's report of its own link health (diagnostic, disabled by default). v1.0 data model only |
 | BESS Vendor         | —              | —    | Battery system vendor (diagnostic)                                                               |
 | BESS Model          | —              | —    | Battery system model (diagnostic)                                                                |
+| BESS Part Number    | —              | —    | Battery system part number (diagnostic, **off by default**). v1.0 data model only                |
 | BESS Serial Number  | —              | —    | Battery system serial number (diagnostic)                                                        |
 | BESS Firmware       | —              | —    | Battery system firmware (diagnostic)                                                             |
-| Nameplate Capacity  | Energy Storage | kWh  | Rated battery capacity (diagnostic)                                                              |
+| Nameplate Capacity  | Energy Storage | kWh  | Rated battery capacity (diagnostic, **off by default**)                                          |
 | Stored Energy       | Energy Storage | kWh  | Current stored energy (diagnostic)                                                               |
 
 #### BESS Binary Sensors
@@ -466,7 +483,7 @@ Applies to Main Meter and Feed Through energy sensors.
 | Entity                | Type   | Notes                                                                      |
 | --------------------- | ------ | -------------------------------------------------------------------------- |
 | Breaker               | Switch | On/off relay control                                                       |
-| Circuit Shed Priority | Select | (v2) Controls when circuit is shed during off-grid (translated, see below) |
+| Circuit Priority      | Select | (v2) Controls when the circuit is shed during off-grid (translated, see below) |
 
 ### Panel Controls
 

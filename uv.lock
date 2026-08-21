@@ -2601,7 +2601,7 @@ requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-ap
 
 [[package]]
 name = "span-panel-api-schema-1"
-version = "0.1.0b6"
+version = "0.1.0b7"
 source = { editable = "../../span/span-panel-api-p3/packages/schema-1" }
 dependencies = [
     { name = "ebus-sdk" },
@@ -2610,7 +2610,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "ebus-sdk", specifier = ">=0.19.0,<0.23" },
+    { name = "ebus-sdk", specifier = ">=0.19.0,<0.24" },
     { name = "span-panel-api", editable = "../../span/span-panel-api-p3" },
 ]
 
