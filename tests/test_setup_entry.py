@@ -11,6 +11,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
+from span_panel_api.exceptions import SpanPanelServerError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.httpx_client import get_async_client
 import pytest
@@ -144,6 +145,39 @@ async def test_the_panel_client_is_given_home_assistants_shared_http_client(
         assert await async_setup_entry(hass, entry) is True
 
     assert mock_client_cls.call_args.kwargs["httpx_client"] is get_async_client(hass)
+
+
+async def test_a_panel_that_is_not_ready_yet_retries_rather_than_dying(
+    hass: HomeAssistant,
+) -> None:
+    """A rebooting panel answers rather than refusing, and that is not a broken install.
+
+    5xx from its front end while the application behind it starts, or a 200 with
+    nothing usable in it, both arrive as `SpanPanelServerError`. Uncaught they
+    produced SETUP_ERROR with a traceback and no automatic retry — a human needed,
+    for a condition that clears itself in minutes.
+
+    The two conditions correlate more than they look: one power event takes out
+    the house's electrical panel and the Home Assistant host watching it, and they
+    race each other back up. `ConfigEntryNotReady` is what makes the race
+    survivable.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock(
+        side_effect=SpanPanelServerError("Panel not ready: HTTP 502", 502)
+    )
+    client.close = AsyncMock()
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        pytest.raises(ConfigEntryNotReady),
+    ):
+        await async_setup_entry(hass, entry)
+
+    client.close.assert_awaited_once()
 
 
 async def test_async_setup_entry_v2_missing_mqtt_credentials_raises_auth_failed(

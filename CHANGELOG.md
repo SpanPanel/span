@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0b4] - 8/2026
+
+### Fixed
+
+- **A panel that is still booting no longer needs a manual reload, however long it takes.** b3 taught the integration to keep waiting when a rebooting panel
+  answers with an error instead of refusing outright, but it still gave up after a few minutes — and giving up was worse than it sounds, because nothing starts
+  it again. A panel that finished booting after that point stayed unread until you reloaded by hand. It now waits for as long as your panel takes, checking
+  every thirty seconds once it settles, so a slow reboot is just a slow reboot.
+- **Your energy history is unaffected by that wait.** Energy sensors already hold their last reading through an outage for the grace period you configure
+  (fifteen minutes by default), which is what stops a gap becoming an `unknown` and a spike in your statistics. Waiting longer for the panel does not change
+  that.
+- **Several other ways a booting panel answers are now recognised as "still starting" rather than as a fault** — a connection reset mid-request, a gateway that
+  closes without replying, and a reply that arrives truncated. Each of those previously stopped the integration following the upgrade, the same way the original
+  error did.
+- **A panel that is not ready when Home Assistant starts now retries instead of failing setup.** Previously that left the integration in an error state needing
+  a human, which matters because the two events correlate: one power interruption takes out both your panel and the machine watching it, and they come back at
+  their own pace.
+
 ## [2.1.0b3] - 8/2026
 
 ### Fixed

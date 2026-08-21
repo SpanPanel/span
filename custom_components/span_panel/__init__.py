@@ -23,6 +23,7 @@ from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelConnectionError,
+    SpanPanelServerError,
     SpanPanelTimeoutError,
 )
 from span_panel_api.mqtt.models import MqttClientConfig
@@ -222,9 +223,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             except SpanPanelAuthError as err:
                 await client.close()
                 raise ConfigEntryAuthFailed(f"MQTT authentication failed: {err}") from err
-            except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:
+            except (
+                SpanPanelConnectionError,
+                SpanPanelTimeoutError,
+                # A panel part-way through a reboot answers rather than refusing:
+                # 5xx from the front end while the application behind it starts,
+                # or a 200 with nothing usable in it. That is not a broken
+                # install, it is a panel that is not up yet, and the two arrive
+                # together more often than they look -- one power event takes out
+                # the house's panel and the Home Assistant host that watches it,
+                # and they race each other back. Uncaught it produced a dead entry
+                # needing a human, for a condition that clears itself in minutes.
+                SpanPanelServerError,
+            ) as err:
                 await client.close()
-                raise ConfigEntryNotReady(f"Failed to connect to SPAN panel: {err}") from err
+                raise ConfigEntryNotReady(f"SPAN panel is not ready yet: {err}") from err
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
             await coordinator.async_config_entry_first_refresh()
