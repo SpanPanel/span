@@ -12,6 +12,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.httpx_client import get_async_client
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api.exceptions import SpanPanelAuthError
@@ -100,6 +101,49 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     mock_ensure_device.assert_awaited_once_with(hass, entry, snapshot, "SPAN Panel")
     mock_forward.assert_awaited_once()
     mock_update_entry.assert_called_once_with(entry, title="SPAN Panel")
+
+
+async def test_the_panel_client_is_given_home_assistants_shared_http_client(
+    hass: HomeAssistant,
+) -> None:
+    """Not a client of its own, and not a copy: the one instance HA hands out.
+
+    Without this the library builds a throwaway client per schema read -- once at
+    connect, and once per retry while a panel finishes rebooting after a firmware
+    upgrade. `quality_scale.yaml` declares `inject-websession: done`, and that was
+    true of the config flow and of nothing that ran afterwards.
+
+    Asserted by identity rather than by type. A test that only checked something
+    was passed would pass just as well for a fresh client built here, which is
+    the thing being removed -- HA owns this one and closes it at shutdown.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch(
+            "custom_components.span_panel.SpanMqttClient", return_value=client
+        ) as mock_client_cls,
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert mock_client_cls.call_args.kwargs["httpx_client"] is get_async_client(hass)
 
 
 async def test_async_setup_entry_v2_missing_mqtt_credentials_raises_auth_failed(

@@ -17,6 +17,7 @@ from homeassistant.exceptions import (
     ConfigEntryNotReady,
 )
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import (
@@ -202,6 +203,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 broker_config,
                 snapshot_interval=snapshot_interval,
                 panel_http_port=panel_http_port,
+                # Home Assistant's shared client, which it owns and closes at
+                # shutdown. Without this the library built one per schema read --
+                # once at connect, and once per retry while a panel finishes
+                # rebooting after a firmware upgrade. `quality_scale.yaml` claims
+                # `inject-websession: done`, and until now that was true of the
+                # config flow and of nothing that ran afterwards.
+                #
+                # Verification is not the reason for the default client rather
+                # than the config flow's `verify_ssl=False` one: the library's
+                # bootstrap URLs are plain `http://`, so TLS never happens on
+                # this path either way. It is the default client because that is
+                # the one every other integration already shares.
+                httpx_client=get_async_client(hass),
             )
             try:
                 await client.connect()
