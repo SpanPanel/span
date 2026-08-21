@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0b3] - 8/2026
+
+### Fixed
+
+- **The integration now reloads itself after the firmware upgrade in the case that actually happens.** This is the whole promise of the release, and a live
+  upgrade found the one path where it did not hold. When a panel takes the new firmware it drops its MQTT connection, comes back a few minutes later, and
+  starts serving HTTP a little after that — and while it is still starting, it answers with `502` rather than refusing the connection, because a booting device
+  brings its network front end up before the application behind it. The integration retried a refused connection and a timeout, but treated an answered-with-502
+  as a hard failure and gave up on the first try, leaving the old reader in place. It was caught on two Home Assistant instances watching one panel through the
+  same upgrade: both went quiet and neither recovered until reloaded by hand. A `502` is now understood as **not ready yet** and waited out, for as long as a real
+  reboot takes.
+- **If following the upgrade ever fails for some other reason, you are now told what to do about it.** Previously that surfaced as a bare error in the log with
+  no indication that anything needed doing, while the integration carried on reading the panel with the wrong reader. It now says plainly that a reload is
+  needed once the panel is back up.
+
+### Added
+
+- **Diagnostics include your entity registry.** Every entity this integration owns, with its unique id and — the part you cannot get anywhere else — what
+  disabled it, if anything. Home Assistant tells you an entity is disabled without telling you by what, and reading that yourself needs shell access that a
+  Home Assistant OS install does not give you.
+
+### Changed
+
+- **The README now leads with the upgrade warning**, and documents the Microgrid Interconnect Device, adopted devices, the `at_service_entrance` attribute on
+  Grid Power, and which sensors arrive switched off.
+- **The battery power sign was documented backwards in both the README and this file, and is corrected.** Positive means **discharging**, which is what release
+  2.0.5 established and what a measured panel confirms. No entity changed and no reading moved; only the documentation was wrong.
+
 ## [2.1.0b2] - 8/2026
 
 ### You will need this release when SPAN updates your panel
