@@ -149,6 +149,16 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
     needs nothing; a disabled one records nothing at all until the user turns it
     on, and saying so is the difference between a notice they can act on and one
     they can only acknowledge.
+
+    **Adopted devices belong on the switched-off side of that split**, because
+    every adopted entity registers disabled -- `AdoptedEntity` sets
+    `_attr_entity_registry_enabled_default = False` for all of them. Listing them
+    anywhere else said the opposite of the truth twice over: under the
+    ready-to-use heading they read as already recording, and being counted apart
+    from `disabled` meant a release whose only additions were adopted rendered no
+    heading and, worse, suppressed `how_to_enable` -- the one actionable string in
+    the message. A vendor device appearing is the case adoption exists for, and it
+    was the case that told the user least.
     """
     devices = dr.async_get(hass)
     enabled: list[str] = []
@@ -178,12 +188,10 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
         lines += [f"**{_text(text, 'enabled_heading')}**", ""]
         lines += [f"- {label}" for label in sorted(enabled)]
         lines.append("")
-    if adopted:
-        lines += [f"- {name} ({count} entities)" for name, count in sorted(adopted.items())]
-        lines.append("")
-    if disabled:
+    if disabled or adopted:
         lines += [f"**{_text(text, 'disabled_heading')}**", ""]
         lines += [f"- {label}" for label in sorted(disabled)]
+        lines += [f"- {name} ({count} entities)" for name, count in sorted(adopted.items())]
         lines += ["", _text(text, "how_to_enable"), ""]
     lines.append(_text(text, "nothing_broken"))
     return "\n".join(lines)

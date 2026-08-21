@@ -362,7 +362,6 @@ class AdoptedSensor(AdoptedEntity, SensorEntity):
             device_class=DEVICE_CLASS_BY_UNIT.get(declaration.unit or ""),
             native_unit_of_measurement=declaration.unit,
         )
-        self._attr_name = _humanised(declaration.property_id)
 
     @property
     def native_value(self) -> str | float | None:

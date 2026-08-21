@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.components.persistent_notification import async_dismiss
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
@@ -219,6 +220,83 @@ async def test_an_adopted_device_contributes_one_line_with_a_count(
     assert "Curated Addition" in message
 
 
+async def test_an_adopted_device_is_listed_as_switched_off(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Every adopted entity registers disabled, so it must not read as ready to use.
+
+    `AdoptedEntity` sets `_attr_entity_registry_enabled_default = False` for all of
+    them. Listing them beside the enabled additions said the opposite of the truth.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "sp3-001_adopted_generator-1")},
+        name="Backup Generator",
+    )
+    _register(hass, entry, "sp3-001_adopted_0", name="Adopted 0", device_id=device.id)
+    _register(hass, entry, "sp3-001_ready", name="Ready Sensor", disabled=False)
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    enabled_at = message.index("Added and ready to use")
+    disabled_at = message.index("Added but switched off")
+    assert enabled_at < message.index("Ready Sensor") < disabled_at
+    assert disabled_at < message.index("Backup Generator (1 entities)")
+
+
+async def test_an_adopted_only_release_still_says_how_to_switch_them_on(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The case adoption exists for was the case that told the user least.
+
+    A vendor device appearing is often the *only* addition in a release. Counting
+    adopted entities apart from the disabled ones meant no heading rendered and,
+    worse, `how_to_enable` was suppressed -- the one string in the message with an
+    action attached.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "sp3-001_adopted_generator-1")},
+        name="Backup Generator",
+    )
+    _register(hass, entry, "sp3-001_adopted_0", name="Adopted 0", device_id=device.id)
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "Added but switched off" in message
+    assert "show its disabled entities" in message
+    assert "Added and ready to use" not in message
+
+
+async def test_an_announced_entity_is_not_announced_again_after_a_restart(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The record must grow by what was registered, not be replaced by what it held.
+
+    Recording only the previously-announced set would leave every entity announced
+    in this pass still absent from the record, so the next startup would find them
+    new again -- and every startup after that, forever. The nothing-added path
+    returns before the record is written, so it cannot catch this.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    _register(hass, entry, _PART_NUMBER, name="Part Number")
+    await async_announce_new_entities(hass, entry)
+    assert _announcement(hass, entry) is not None
+
+    async_dismiss(hass, f"{DOMAIN}_new_entities_{entry.entry_id}")
+    await async_announce_new_entities(hass, entry)
+
+    assert _announcement(hass, entry) is None
+
+
 # -- Translations ------------------------------------------------------------
 
 
@@ -276,7 +354,7 @@ async def test_removing_the_entry_forgets_what_was_announced(
 
 
 def _sub_device(hass: HomeAssistant, entry: MockConfigEntry, name: str, ident: str) -> str:
-    """A device hanging off the panel, the way every SPAN sub-device does."""
+    """Return a device hanging off the panel, the way every SPAN sub-device does."""
     devices = dr.async_get(hass)
     panel = devices.async_get_or_create(
         config_entry_id=entry.entry_id, identifiers={(DOMAIN, "sp3-001")}, name="SPAN Panel"

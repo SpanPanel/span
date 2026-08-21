@@ -137,9 +137,7 @@ async def async_restore(hass: HomeAssistant, entry: ConfigEntry) -> None:
         store: Store[StoredNotices] = Store(
             hass, _STORE_VERSION, f"{DOMAIN}.notices.{entry.entry_id}"
         )
-        stored = await store.async_load()
-        standing = dict(stored.get("standing", {})) if stored else {}
-        notices = _Notices(store=store, standing=standing)
+        notices = _Notices(store=store, standing=_load(await store.async_load(), entry))
         known[entry.entry_id] = notices
 
     for notice_id, notice in notices.standing.items():
@@ -152,6 +150,54 @@ async def async_restore(hass: HomeAssistant, entry: ConfigEntry) -> None:
         )
 
     entry.async_on_unload(async_register_callback(hass, partial(_on_change, hass, entry)))
+
+
+def _load(stored: object, entry: ConfigEntry) -> dict[str, StandingNotice]:
+    """Read the standing set off disk, tolerating a file that is not what we wrote.
+
+    `StoredNotices` and `StandingNotice` are compile-time only. On-disk data
+    violates them freely -- a hand edit, a partially restored backup, a file
+    written by a later version and read after a rollback -- and every such shape
+    used to raise straight out of setup. Home Assistant already handles
+    *undecodable* JSON by renaming the file and raising a core repair; the gap is
+    valid JSON of the wrong shape, which it hands back intact.
+
+    Failing there is the wrong trade by a wide margin. This module exists to tell
+    the user about something that already happened; a panel that will not load
+    because its *notification bookkeeping* is malformed has turned a cosmetic
+    record into a dead integration, and one that stays dead, because setup is not
+    retried on a bad shape. Falling back to empty loses only the memory of which
+    notices were standing, and the next raise overwrites the file with a valid
+    one -- so it self-heals rather than needing the user to find and delete it.
+    """
+    if stored is None:
+        return {}
+    standing = stored.get("standing") if isinstance(stored, dict) else None
+    if not isinstance(standing, dict):
+        _LOGGER.warning(
+            "Ignoring the notice record for %s: expected an object with a 'standing' "
+            "mapping, found %s. Any notice already dismissed stays dismissed; one still "
+            "standing may be shown again.",
+            entry.entry_id,
+            type(standing if isinstance(stored, dict) else stored).__name__,
+        )
+        return {}
+    kept: dict[str, StandingNotice] = {}
+    for notice_id, notice in standing.items():
+        if (
+            isinstance(notice, dict)
+            and isinstance(notice.get("title"), str)
+            and isinstance(notice.get("message"), str)
+        ):
+            kept[str(notice_id)] = StandingNotice(title=notice["title"], message=notice["message"])
+        else:
+            _LOGGER.warning(
+                "Dropping malformed notice %s for %s: a notice needs a title and a "
+                "message, both strings",
+                notice_id,
+                entry.entry_id,
+            )
+    return kept
 
 
 @callback
@@ -224,9 +270,18 @@ def _on_change(
 def _persist(notices: _Notices) -> None:
     """Queue a write of the current standing set.
 
-    The snapshot is taken now rather than in the callback: `async_delay_save`
-    calls its argument when the write fires, and by then the live dict may have
-    moved on -- so the deferred write would record a state nobody was ever shown.
+    The snapshot is taken now rather than read through in the callback, because
+    `async_delay_save` calls its argument when the write fires rather than when it
+    is queued. Defensive rather than load-bearing, and worth being precise about:
+    a `Store` keeps only one pending write, so the newest queued function is the
+    one that runs, and every site that mutates the standing set calls this
+    immediately afterwards. There is therefore no reachable state today in which
+    the live dict has moved on and no newer write has superseded this one -- a
+    mutation test confirms the difference is unobservable through the store.
+
+    It stays a snapshot anyway. The cost is one shallow dict copy, and the
+    property it buys -- what is queued is what was true when it was queued -- does
+    not then depend on every future mutation site remembering to re-persist.
     """
     written = StoredNotices(standing=dict(notices.standing))
     notices.store.async_delay_save(lambda: written, _SAVE_DELAY)
@@ -274,7 +329,9 @@ def read_translations(language: str, section: str) -> dict[str, str]:
         except (OSError, ValueError):
             _LOGGER.debug("Could not read notification strings from %s", path, exc_info=True)
             continue
+        if not isinstance(loaded, dict):
+            continue
         strings = loaded.get("notifications", {}).get(section, {})
-        if strings:
+        if isinstance(strings, dict) and strings:
             return {str(key): str(value) for key, value in strings.items()}
     return {}

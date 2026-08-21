@@ -20,9 +20,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.notices import (
     _DATA,
+    _STORE_VERSION,
     async_forget,
     async_raise,
     async_restore,
+    read_translations,
 )
 
 _NOTICE = "panel_upgraded"
@@ -257,3 +259,139 @@ async def test_raising_against_an_untracked_entry_still_reaches_the_user(
 
     assert _standing(hass)[_id(entry)]["message"] == "Body"
     assert entry.entry_id not in hass.data.get(_DATA, {})
+
+
+# -- A store file that is not what we wrote -------------------------------------
+#
+# `StoredNotices` and `StandingNotice` are compile-time only, so the disk can hold
+# anything. Every shape below used to raise straight out of `async_setup_entry` --
+# and out of the part of it above the `try`, so the entry went to SETUP_ERROR with
+# no retry and stayed dead until somebody found and deleted the file by hand.
+# Bookkeeping for a notification is not worth an integration that will not load.
+
+
+def _seed(hass_storage: dict[str, Any], entry: MockConfigEntry, data: object) -> None:
+    key = f"{DOMAIN}.notices.{entry.entry_id}"
+    hass_storage[key] = {"version": _STORE_VERSION, "key": key, "data": data}
+
+
+@pytest.mark.parametrize(
+    ("shape", "description"),
+    [
+        ({"standing": ["panel_upgraded"]}, "a list where the mapping should be"),
+        ({"standing": {"panel_upgraded": "oops"}}, "a string where the notice should be"),
+        ({"standing": {"panel_upgraded": {"title": "T"}}}, "a notice with no message"),
+        ({"standing": {"panel_upgraded": {"title": 1, "message": 2}}}, "non-string text"),
+        (["standing"], "a list at the top level"),
+        ({}, "an object with no standing key"),
+        ("nonsense", "a bare string"),
+    ],
+)
+async def test_a_malformed_store_does_not_take_the_integration_down(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    entry: MockConfigEntry,
+    shape: object,
+    description: str,
+) -> None:
+    """Setup must survive every one of these; the record is recoverable, the entry is not."""
+    _seed(hass_storage, entry, shape)
+
+    await async_restore(hass, entry)
+
+    assert hass.data[_DATA][entry.entry_id].standing == {}
+
+
+async def test_a_malformed_store_is_overwritten_by_the_next_notice(
+    hass: HomeAssistant, hass_storage: dict[str, Any], entry: MockConfigEntry
+) -> None:
+    """Self-healing is what makes falling back to empty the right trade.
+
+    The user never has to find the file, because the next raise replaces it.
+    """
+    _seed(hass_storage, entry, {"standing": "nonsense"})
+    await async_restore(hass, entry)
+
+    async_raise(hass, entry, _NOTICE, title="Upgraded", message="Body")
+    await _restart(hass, entry)
+
+    assert _standing(hass)[_id(entry)]["message"] == "Body"
+
+
+async def test_one_malformed_notice_does_not_discard_its_healthy_neighbours(
+    hass: HomeAssistant, hass_storage: dict[str, Any], entry: MockConfigEntry
+) -> None:
+    """Dropping the whole file for one bad row would lose notices that are still valid."""
+    _seed(
+        hass_storage,
+        entry,
+        {
+            "standing": {
+                "panel_upgraded": {"title": "Upgraded", "message": "Body"},
+                "broken": {"title": "no message"},
+            }
+        },
+    )
+
+    await async_restore(hass, entry)
+
+    assert _standing(hass)[_id(entry)]["message"] == "Body"
+    assert "broken" not in hass.data[_DATA][entry.entry_id].standing
+
+
+# -- The dismissal watch is unregistered on unload ------------------------------
+
+
+async def test_unloading_stops_the_dismissal_watch(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Every setup registers a dispatcher handler, and the dispatcher fans out to all of them.
+
+    Without `entry.async_on_unload` a reload leaves the previous handler behind,
+    bound to an entry that is gone, and the leak grows by one per reload.
+
+    Asserted through what a leaked handler would *do* rather than by counting
+    subscribers: after unload nothing of ours is listening, so a dismissal reaches
+    no one and the standing set is untouched.
+    """
+    await async_restore(hass, entry)
+    async_raise(hass, entry, _NOTICE, title="Upgraded", message="Body")
+
+    await entry._async_process_on_unload(hass)
+    async_dismiss(hass, _id(entry))
+    await hass.async_block_till_done()
+
+    assert _NOTICE in hass.data[_DATA][entry.entry_id].standing
+
+
+# -- A queued write records what was shown, not what came after -----------------
+
+
+async def test_a_queued_write_records_the_set_as_it_was_when_raised(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """`async_delay_save` calls its argument when the write fires, not when it is queued.
+
+    Closing over the live dict would record whatever the set had become by then --
+    a state nobody was ever shown.
+    """
+    await async_restore(hass, entry)
+    async_raise(hass, entry, _NOTICE, title="Upgraded", message="Body")
+
+    # A second notice queues its own write; the first write must still be able to
+    # produce the snapshot it was given rather than reading through to this one.
+    async_raise(hass, entry, "second", title="Second", message="Also")
+    await _flush(hass)
+    hass.data[_DATA].pop(entry.entry_id)
+    await async_restore(hass, entry)
+
+    assert _standing(hass)[_id(entry)]["message"] == "Body"
+    assert _standing(hass)[_id(entry, "second")]["message"] == "Also"
+
+
+# -- Translations off disk ------------------------------------------------------
+
+
+def test_a_translation_file_of_the_wrong_shape_falls_through_to_english() -> None:
+    """Same class as the store: our own files are fine, and the disk is not ours."""
+    assert read_translations("xx", "panel_upgraded")["title"]
