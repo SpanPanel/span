@@ -44,6 +44,40 @@ This integration communicates with the SPAN Panel over your local network using 
 infrastructure. eBus uses the [Homie Convention](https://homieiot.github.io/) for MQTT topics and messages, with the panel's built-in MQTT broker delivering
 real-time state updates without polling.
 
+## ⚠️ Upgrade to 2.1.x before your panel's firmware updates, or the integration will stop working
+
+**SPAN firmware `r202633` breaks every integration release up to and including 2.0.8.** When your panel takes that update, 2.0.8 stops being able to read it.
+The integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go
+blank. It does not fail loudly. It goes quiet.
+
+**Nobody outside SPAN knows when your panel will update, and you cannot defer it from Home Assistant.** Panels update on SPAN's timing. There is no schedule to
+plan around, which is why the safe move is to be on 2.1.x already rather than to wait for a signal that never comes.
+
+**Upgrading first costs you nothing.** On your current firmware, 2.1.x reads your panel exactly as 2.0.8 does — same entities, same ids, same history. It simply
+also knows how to read the new format when it arrives.
+
+**And then the changeover is seamless.** The integration detects the new format on the wire, reloads itself, and carries on:
+
+- No reconfiguration, no re-pairing, no re-authentication.
+- Entity ids, unique ids and long-term statistics all survive. Dashboards, automations and history follow.
+- New entities appear because the new firmware genuinely publishes more. Nothing you already had is removed.
+
+Upgrade afterwards instead and you reach the same place — after however long it takes you to notice, and to work out that a firmware update you were never told
+about is the reason your panel went silent.
+
+<details>
+<summary>What actually changes in the firmware</summary>
+
+`r202633` rewrites how the panel publishes everything, rather than adding to it. The MQTT topic structure changes, and the panel stops presenting itself as a
+single flat device with a long list of properties. It presents a tree instead: the enclosure, with its lugs, circuits, battery, chargers and Microgrid
+Interconnect Device as separate devices beneath it. Every topic an integration reads moves. The old format is retired in the same update that introduces the new
+one — there is no overlap and no setting to keep the old behaviour.
+
+This has happened before, in exactly this shape. Firmware `spanos2/r202603/05` removed the v1 REST API this integration was originally built on, which is what
+the 2.0.x breaking-change notice below is about. `r202633` does the same thing to the flat MQTT format that replaced it.
+
+</details>
+
 ## 1.1.x Integration Sunset (v1)
 
 Users MUST upgrade by the end of 2026 to avoid disruption. Upgrade to the latest 1.1.x version BEFORE upgrading to 2.0.x.
@@ -145,9 +179,20 @@ The following terms appear throughout this document and in the integration's sen
 | L2 Voltage            | Voltage      | V    | L2 leg actual voltage      |
 | Upstream L1 Current   | Current      | A    | Upstream lugs L1 current   |
 | Upstream L2 Current   | Current      | A    | Upstream lugs L2 current   |
-| Downstream L1 Current | Current      | A    | Downstream lugs L1 current |
-| Downstream L2 Current | Current      | A    | Downstream lugs L2 current |
-| Main Breaker Rating   | Current      | A    | Main breaker amperage      |
+| Downstream L1 Current | Current      | A    | Downstream lugs L1 current. Off by default from 2.1.x — see below |
+| Downstream L2 Current | Current      | A    | Downstream lugs L2 current. Off by default from 2.1.x — see below |
+| Main Breaker Rating   | Current      | A    | Main breaker amperage. Off by default      |
+
+L1/L2 Voltage and Main Breaker Rating have always been off by default; enable them from the panel's device page if you want them.
+
+**The two Downstream current sensors are off by default from 2.1.x, and so are the three Feedthrough sensors.** The eBus specification's maintainer has
+documented that the panel's feedthrough (downstream lugs) figures cannot be relied on: the energy registers are computed from unrelated counters and can
+decrease or go negative, the power reading is inverted relative to every other terminal, and the downstream currents report the **upstream** service conductors
+rather than a downstream measurement. These defects predate `r202633` and are not introduced by it.
+
+If you already have any of those five they stay exactly where they are, with their history and their entity ids — Home Assistant applies the off-by-default
+setting only when an entity is first created, so this reaches new installations only. If you use them on a dashboard or in an automation they are worth
+removing, but that is your call, not something an upgrade should do to you.
 
 ### Shed Forecast Sensors (v1.0 data model only)
 
@@ -198,22 +243,46 @@ On **Import Limit**, and present only when the panel publishes them. These are t
 | ------------- | ------------ | ---- | ------------------------------------------------------------------------------- |
 | Grid Power    | Power        | W    | Grid power flow                                                                 |
 | Site Power    | Power        | W    | Total site power (grid + PV + battery)                                          |
-| Battery Power | Power        | W    | Battery charge/discharge (+charging, -discharging). Only when BESS commissioned |
+| Battery Power | Power        | W    | Battery charge/discharge (**+discharging, −charging**). Only when BESS commissioned |
 | PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                           |
 
-### PV Metadata Sensors (v2 only, on main panel device)
+### PV Metadata Sensors (v2 only, on the Solar sub-device)
+
+From 2.1.x these live on a **Solar** device of their own rather than on the panel's card, alongside PV Power and PV Panel Link.
 
 | Sensor             | Device Class | Unit | Notes                                         |
 | ------------------ | ------------ | ---- | --------------------------------------------- |
 | PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other") |
 | PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")            |
-| Nameplate Capacity | Power        | kW   | Rated inverter capacity                       |
+| Nameplate Capacity | Power        | kW   | Rated inverter capacity. Off by default        |
+
+If you upgraded, these keep their entity ids, unique ids and history — only the card changes. **They do not keep the panel's area.** An entity takes its area
+from its device, and the new Solar device starts without one, so anything area-scoped (dashboards, automations, voice targeting a room) stops matching them
+until you assign the Solar device to an area. New installations get ids derived from the new device name, so a system installed from 2.1.x onward has
+`sensor.span_panel_solar_pv_vendor` where an upgraded one keeps `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
 
 **Deprecated:**
 
 | Sensor         | Reason                                                                                                                    |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | DSM Grid State | Deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version |
+
+### Adopted Devices (v1.0 data model only)
+
+The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modelled. Rather than ignoring it, the integration
+gives it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
+
+Everything adopted arrives **disabled and diagnostic**, so nothing reaches a dashboard uninvited, and the new-entity notification names the device so you can
+find it. A property the device accepts writes to becomes a control rather than a reading — a `boolean` becomes a switch, an enumeration becomes a select, a
+number becomes a number entity — and those arrive switched off too.
+
+Two things worth knowing before you build on one:
+
+- **Nothing adopted enters long-term statistics.** No adopted entity carries a `state_class`, because the correct one is not published on the wire and guessing
+  wrong writes corrupt statistics that fixing the panel afterwards does not repair. If you want statistics from an adopted reading, wrap it in a template
+  sensor, a Riemann-sum integration or a utility meter — a deliberate choice on an entity you enabled.
+- **Devices this integration already models are never adopted.** A new property on a circuit, the battery, a charger or the panel is curated in a release
+  instead, because that is where the judgement lives about whether it should be an entity, an attribute or a line on a device card.
 
 ### Power Sensor Attributes
 
@@ -223,6 +292,16 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 | ---------- | ------ | ------------------------------------ |
 | `voltage`  | string | Nominal panel voltage ("240")        |
 | `amperage` | string | Calculated current (power / voltage) |
+
+**Grid Power** carries one more, because its name is only true in some wiring:
+
+| Attribute              | Type    | Notes                                                                       |
+| ---------------------- | ------- | --------------------------------------------------------------------------- |
+| `at_service_entrance`  | boolean | Whether this panel's upstream lugs are where the utility actually connects |
+
+Grid Power reads the upstream lugs. That is grid flow when those lugs are the utility connection point, which is the ordinary case. Put a battery between the
+utility and your main lugs, or feed this panel from another panel, and the same reading becomes **this panel's** supply while **Grid Power Flow** stays the
+whole-site figure — so the two legitimately disagree. When `at_service_entrance` is `false`, use Grid Power Flow for site-level grid import and export.
 
 ### Software Version Sensor Attributes
 
@@ -309,7 +388,7 @@ device uses manufacturer, model, serial number, and software version from batter
 | ------------------- | -------------- | ---- | ------------------------------------------------------------------------------------------------ |
 | Battery Level       | Battery        | %    | State of energy as percentage                                                                    |
 | Battery Power       | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device                                |
-| Meter Power         | Power          | W    | The BESS's own meter (+charging, -discharging). v1.0 data model only                             |
+| Meter Power         | Power          | W    | The BESS's own meter (**+discharging, −charging**), agreeing with Battery Power. v1.0 data model only |
 | Communication State | —              | —    | The BESS's report of its own link health (diagnostic, disabled by default). v1.0 data model only |
 | BESS Vendor         | —              | —    | Battery system vendor (diagnostic)                                                               |
 | BESS Model          | —              | —    | Battery system model (diagnostic)                                                                |

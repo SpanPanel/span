@@ -4,7 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.0b2] - 8/2026
 
-Support for the eBus v1.0 (parent/child) data model your panel moves to on firmware r202633 and later, and a clean transition when it does.
+### You will need this release when SPAN updates your panel
+
+SPAN firmware `r202633` replaces the way the panel publishes its data — the flat model every release up to 2.0.8 reads is retired in the same update that
+introduces the new one. There is no overlap and no setting to keep the old behaviour. **2.0.8 cannot read a panel on `r202633`**: it stays connected, reports
+every circuit as missing, and shows nothing useful.
+
+We do not control when that update reaches you, and nobody has published a schedule. Panels update on SPAN's timing, not on yours or ours. So the safe order is
+to be on this release **before** your panel changes rather than after, because afterwards you are looking at a blank integration while you work out why.
+
+**The transition itself is seamless, and that is the point of this release.** Install it and it keeps reading your panel exactly as before, on either firmware.
+When your panel does change over, the integration notices on the wire, reloads itself, and carries on — no reconfiguration, no re-pairing, no lost history. Your
+entities keep their entity ids, their unique ids and their statistics across the change. New things appear because the new firmware genuinely publishes more;
+nothing you already had goes away.
 
 ### Requires Home Assistant 2026.8.0 or newer
 
@@ -58,22 +70,12 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
 - **Your other panel readings are unaffected.** The upstream lugs, the main panel meter and every circuit are in the correct frame. So is the power-flow group,
   which the specification has now been corrected to describe the way the panel has always published it.
 
-- **Diagnostics now say whether an adopted device is proxied by another device rather than by the panel.** Reported as a yes/no, never as the parent's
-  identifier: a device identifier can contain a serial number, and diagnostics deliberately carry no serials.
-
 - **New entities are now announced in a notification that names them — whether or not they arrived switched on.** Previously only entities added _disabled_ were
   mentioned, on the reasoning that an enabled one is already visible in your entity list and its history. That is only true if you are watching your entity
   list, which nobody is: an addition that breaks nothing was indistinguishable from no addition at all. The notification names every entity that was added,
   splits them by whether they are ready to use or still switched off, and tells you where to turn the switched-off ones on.
 - **It is a notification rather than a Repair, because an addition is not a repair.** Nothing is broken and nothing needs fixing. Any new-entity item still
   sitting in your Repairs list from a previous version is removed on upgrade.
-- **And it can no longer be missed by a restart landing in the wrong place.** The old notice compared the entity registry before and after startup, which
-  answers correctly exactly once — on the next startup the entity is already registered and the comparison is empty. What has been announced is now recorded, so
-  the question is whether you have been told rather than whether it happened in the last few seconds. It stays quiet on a first install, and quiet once more on
-  the first startup after this change, so upgrading does not announce a release's worth of history.
-- **An adopted device now appears even when it publishes no readings at all.** A device that advertises what it is — its vendor, model and firmware — before
-  publishing any measurement resolves entirely to its device card, so it created no entities, and because devices were created as a side effect of entity
-  creation it produced nothing whatsoever: no device, no entity, no notification. It is now registered in its own right.
 
 - **A device the panel publishes that this integration has never modelled now appears, instead of appearing nowhere.** SPAN positions the panel as the hub for
   whatever plugs into it and the eBus schema is explicitly vendor-extensible, so a device type nobody modelled is an expected arrival — and until now it
@@ -89,24 +91,10 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
   `TOTAL_INCREASING`, same unit and same device class — and a wrong one writes corrupt statistics that fixing the panel afterwards does not repair. Enrolling a
   property nobody asked for into long-term statistics is also a permanent write to your recorder database. If you want statistics from an adopted reading, wrap
   it in a template sensor, a Riemann-sum integration or a utility meter: that is your call, made on an entity you chose to enable.
-- **`info` becomes the device card and `connection` becomes the device link — neither becomes entities.** A panel publishing its own build metadata and its own
-  wiring topology should not arrive as a handful of sensors holding version strings and opaque device ids. The split is keyed on the Homie node rather than on
-  property names, because the capability catalogs carry no marker for "this value is a device reference" and a hard-coded name list goes stale silently.
-- **An adopted device keeps the identity it was first seen under.** A serial number arriving after the device was adopted is recorded on its card and moves
-  nothing, and a device adopted under its serial survives its wire id changing. Either move would read to Home Assistant as a device _replacement_ and would
-  take the device's entities and their history with it.
-- **The new-entity notice counts an adopted device rather than listing its entities.** A vendor device declaring a dozen properties would otherwise spend the
-  whole notice on itself and teach you that the category is noise — which would cost you the curated additions too.
-- **Diagnostics report which device types and properties were adopted, and never their values.** The same rule the declared-but-unread report follows: a
-  diagnostics attachment leaves the house, and the redaction that protects your config entry is key-based and knows nothing about wire property names.
 - **A property an adopted device accepts writes to becomes a control, not just a reading.** A declared `boolean` becomes a switch, an `enum` with its option
   list becomes a select, and a number with its `min:max:step` becomes a number entity — all disabled and diagnostic like every other adopted entity, so a
   control appears only if you go and enable it. A settable property that declares no value domain stays a reading: a select with no options and a number with no
   bounds are broken controls, not safe ones.
-- **The write cannot reach a device this integration does model, by construction.** It is authorised by looking the property up in the current snapshot rather
-  than by its arguments, and a modelled device produces no adopted record to find. That matters because the curated controls do real work on the way out — the
-  islanding assertion translates its value, and the EV charge limit refuses one above what your charger was commissioned for — and a generic write would route
-  around both.
 - **Your panel stays the authority on the value.** Nothing is translated or clamped on the way out: this integration knows an adopted property's declaration and
   nothing else, so inventing a bound would be inventing a fact about your hardware. The control constrains you to what the device declared, and the panel
   accepts or refuses.
@@ -161,8 +149,11 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
   discharging at, as distinct from the panel's **Battery Power**, which is the enclosure's arbitrated figure. Both have been on the wire since firmware r202633
   and nothing read either. Meter Power is enabled by default; **Communication State** — the BESS's own `OK` / `DEGRADED` / `LOST` / `UNKNOWN` report on its link
   — is a diagnostic and is off by default, since it is only interesting when something is wrong.
-- **Both battery power sensors read positive when the battery is charging.** They come off the wire in opposite sign conventions and are normalised to one, so
-  the two sitting side by side on the BESS device can never point opposite ways.
+- **Both battery power sensors read positive when the battery is _discharging_**, and that direction was settled by measurement rather than by reading. With the
+  battery driven into self-consumption and the grid at exactly zero — PV 4181 W plus battery 1917 W meeting a 6099 W load, so the battery can only be supplying
+  — both sensors read `+1917.49`. The two values arrive from the panel in opposite sign conventions and are normalised to this one, so they agree with each
+  other and with the sensors beside them: PV Power is positive while producing, Grid Power Flow positive while importing, Battery Power positive while
+  discharging. Every one is "positive means power flowing toward the house".
 - **Communication State is not the same thing as BESS Connected.** The binary sensor is the _panel's_ view of the link, from the enclosure's connection record;
   the new sensor is the _battery's_ view of it. A BESS can report its own link lost while the panel still claims it, and now you can see that.
 - Both sensors are created only where the BESS publishes the reading behind them — a battery on the older data model, or one whose firmware publishes only one
@@ -203,8 +194,6 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
 - **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
   "Possible states: Unknown". The lists are now derived from the translations and checked against them by a test.
 - **The GFE override button reads the right signal** for deciding when it applies, so it is no longer permanently enabled on the new data model.
-- **Sub-devices link to the panel by registry id**, replacing a form Home Assistant deprecated in 2026.8. No user-visible effect; required for the version bump
-  above.
 
 - **The Wi-Fi network name came back.** Panels on the older data model report the SSID they are joined to, and this integration has shown it as an attribute on
   the panel status sensor for as long as it has existed. On the v1.0 data model nothing read it, so the attribute quietly emptied when your panel upgraded — a
@@ -215,8 +204,10 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
   Home Assistant was running published the data, matched every rule for creating the entities, and asked for no reload — so the new entities appeared only the
   next time you restarted. This affected the Microgrid Interconnect Device before this release too.
 
-- **The README described Battery Power's sign backwards** (`+discharge, -charge`). The sensor has always reported charging as positive; only the documentation
-  was wrong. No entity changed.
+- **The README described Battery Power's sign backwards, and an earlier entry in this file "corrected" it the wrong way.** The sensor reports **discharging** as
+  positive and always has — that is what release 2.0.5 established (#184) and what a measured panel confirms. A later note claimed the opposite and the README
+  was edited to match it, so both documents told you to expect the wrong sign. Both are now right. **No entity changed and no reading moved**; only the
+  documentation was ever wrong, in both directions.
 
 ## [2.0.8] - 5/2026
 
