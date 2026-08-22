@@ -27,6 +27,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.additions import (
     _SECTION,
+    COLLAPSE_ABOVE,
     async_announce_new_entities,
     async_forget_announcements,
 )
@@ -82,7 +83,9 @@ def _text(notification: Any) -> str:
 # -- Silence where silence is right ------------------------------------------
 
 
-async def test_a_first_install_announces_nothing(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+async def test_a_first_install_announces_nothing(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
     """Every entity is new on a first install, so the notice would name them all.
 
     Which would teach the user that this category is noise, and cost them the
@@ -112,7 +115,9 @@ async def test_an_install_that_predates_the_record_announces_nothing_once(
     assert _announcement(hass, entry) is None
 
 
-async def test_a_restart_that_adds_nothing_announces_nothing(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+async def test_a_restart_that_adds_nothing_announces_nothing(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
     """The failure that would make the whole thing worse than useless."""
     _register(hass, entry, _PART_NUMBER, name="Part Number")
     await async_announce_new_entities(hass, entry)
@@ -141,7 +146,9 @@ async def test_a_disabled_addition_is_announced_and_says_it_needs_enabling(
     assert "enable the ones you want" in message
 
 
-async def test_an_enabled_addition_is_announced_too(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+async def test_an_enabled_addition_is_announced_too(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
     """The gap this replaced the Repair to close.
 
     An enabled entity is visible in the entity list and starts recording, which is
@@ -158,7 +165,9 @@ async def test_an_enabled_addition_is_announced_too(hass: HomeAssistant, entry: 
     assert "Added and ready to use" in message
 
 
-async def test_both_kinds_are_split_rather_than_pooled(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+async def test_both_kinds_are_split_rather_than_pooled(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
     """The split is the actionable part: one kind needs an action, the other does not."""
     _register(hass, entry, "sp3-001_existing", name="Existing")
     await async_announce_new_entities(hass, entry)
@@ -172,8 +181,10 @@ async def test_both_kinds_are_split_rather_than_pooled(hass: HomeAssistant, entr
     assert message.index("Added but switched off") < message.index("Switched Off")
 
 
-async def test_every_added_entity_is_named_rather_than_sampled(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """"What exactly was added" means all of it.
+async def test_every_added_entity_is_named_rather_than_sampled(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Naming what was added means naming all of it.
 
     The Repair this replaced showed a count plus three examples, which tells a
     user that something happened and not what.
@@ -210,7 +221,9 @@ async def test_an_adopted_device_contributes_one_line_with_a_count(
         name="Backup Generator",
     )
     for index in range(6):
-        _register(hass, entry, f"sp3-001_adopted_{index}", name=f"Adopted {index}", device_id=device.id)
+        _register(
+            hass, entry, f"sp3-001_adopted_{index}", name=f"Adopted {index}", device_id=device.id
+        )
     _register(hass, entry, "sp3-001_curated", name="Curated Addition")
     await async_announce_new_entities(hass, entry)
 
@@ -322,10 +335,7 @@ def test_every_shipped_locale_carries_the_notification_strings(language: str) ->
 
 
 def test_an_unknown_language_falls_back_to_english_rather_than_to_nothing() -> None:
-    assert (
-        read_translations("xx", _SECTION)["title"]
-        == read_translations("en", _SECTION)["title"]
-    )
+    assert read_translations("xx", _SECTION)["title"] == read_translations("en", _SECTION)["title"]
 
 
 def test_a_regional_language_resolves_to_its_base(hass: HomeAssistant) -> None:
@@ -450,3 +460,100 @@ async def test_vendor_extensions_on_a_curated_device_collapse_to_one_line(
     assert "Span Panel Battery (15 entities)" in message
     assert "Battery 2 Reading 0" not in message
     assert "Meter Power" in message
+
+
+async def test_a_few_vendor_extensions_are_named_rather_than_collapsed(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Collapsing two tells the reader less than naming them.
+
+    The collapse exists for a firmware update adding fifteen properties at once.
+    An adopted *device*'s line at least names a device that did not exist
+    before; a curated card is one the user already has, so its name alone says
+    nothing about what appeared on it -- which is what a live install showed,
+    reading "Span Panel (2 entities)" for a postal code and a time zone.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    panel = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "sp3-001")},
+        name="Span Panel",
+    )
+    for wire_property, label in (
+        ("postal-code", "Status Postal Code"),
+        ("time-zone", "Status Time Zone"),
+    ):
+        _register(
+            hass,
+            entry,
+            f"span_sp3-001_adopted_panel/status/{wire_property}",
+            name=label,
+            device_id=panel.id,
+        )
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "Status Postal Code" in message
+    assert "Status Time Zone" in message
+    assert "(2 entities)" not in message
+
+
+async def test_at_the_threshold_they_are_still_named(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Exactly the threshold is named, so the boundary is asserted from both sides."""
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    panel = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "sp3-001")},
+        name="Span Panel",
+    )
+    for index in range(COLLAPSE_ABOVE):
+        _register(
+            hass,
+            entry,
+            f"span_sp3-001_adopted_panel/acme/reading-{index}",
+            name=f"Acme Reading {index}",
+            device_id=panel.id,
+        )
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "Acme Reading 0" in message
+    assert "entities)" not in message
+
+
+async def test_one_past_the_threshold_collapses(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """One more than the threshold, in the same update, and the names give way to a count.
+
+    Counted per notification rather than per device lifetime, because the
+    message describes this update: five readings announced last month and one
+    today is a one-line update, not a flood.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    panel = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "sp3-001")},
+        name="Span Panel",
+    )
+    for index in range(COLLAPSE_ABOVE + 1):
+        _register(
+            hass,
+            entry,
+            f"span_sp3-001_adopted_panel/acme/reading-{index}",
+            name=f"Acme Reading {index}",
+            device_id=panel.id,
+        )
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert f"Span Panel ({COLLAPSE_ABOVE + 1} entities)" in message
+    assert "Acme Reading 0" not in message

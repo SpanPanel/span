@@ -47,6 +47,20 @@ _LOGGER = logging.getLogger(__name__)
 _STORE_VERSION: Final = 1
 _ANNOUNCED: Final = "announced_unique_ids"
 
+COLLAPSE_ABOVE: Final = 5
+"""How many vendor readings one curated device may add before they are collapsed.
+
+Above this, the device gets one line with a count; at or below it, each entity is
+named. The flood this guards against is a firmware update adding fifteen
+properties at once, which would spend the whole notification on one device and
+cost the reader the curated additions in the same message. Two or three is not
+that, and naming them is what tells the reader anything at all -- the card is one
+they already have, so its name alone says nothing new.
+
+Adopted *devices* are collapsed regardless of count, because their line names a
+device that did not exist before, which is itself the news.
+"""
+
 _SECTION: Final = "new_entities"
 """Names both the translation section and the notice id. They describe the same
 thing, and keeping them one symbol means a rename cannot leave a standing notice
@@ -164,17 +178,21 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
     devices = dr.async_get(hass)
     enabled: list[str] = []
     disabled: list[str] = []
-    adopted: dict[str, int] = {}
+    collapsed: dict[str, int] = {}
+    extensions: dict[str, list[str]] = {}
 
     for registry_entry in added:
         device_name = _adopted_device_name(devices, registry_entry)
-        if device_name is None:
-            # Vendor extensions collapse the same way, and need their own
-            # detector: they live on *curated* devices, so the identifier test
-            # above cannot see them. Their unique_id is what says what they are.
-            device_name = _extension_device_name(devices, registry_entry)
         if device_name is not None:
-            adopted[device_name] = adopted.get(device_name, 0) + 1
+            collapsed[device_name] = collapsed.get(device_name, 0) + 1
+            continue
+        # Vendor extensions need their own detector: they live on *curated*
+        # devices, so the identifier test above cannot see them. Their unique_id
+        # is what says what they are. Held as labels rather than counted,
+        # because whether they collapse depends on how many there turn out to be.
+        extension_device = _extension_device_name(devices, registry_entry)
+        if extension_device is not None:
+            extensions.setdefault(extension_device, []).append(_label(devices, registry_entry))
             continue
         target = (
             disabled
@@ -182,6 +200,19 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
             else enabled
         )
         target.append(_label(devices, registry_entry))
+
+    # Collapse a vendor's additions only once there are enough of them to crowd
+    # the message out. Below the threshold the names are the useful part: an
+    # adopted *device*'s line at least names a new device the user can go find,
+    # while a curated card is one they already have, so "Span Panel (2 entities)"
+    # tells them strictly less than naming the two would. Extension entities are
+    # always disabled -- that is their arrival state -- so the uncollapsed ones
+    # join that list rather than being sorted again.
+    for device_name, labels in extensions.items():
+        if len(labels) > COLLAPSE_ABOVE:
+            collapsed[device_name] = collapsed.get(device_name, 0) + len(labels)
+        else:
+            disabled.extend(labels)
 
     # Two keys rather than one with a plural placeholder: a plural rule the caller
     # picks a *word* for is an English rule, and the five languages here do not
@@ -194,10 +225,10 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
         lines += [f"**{_text(text, 'enabled_heading')}**", ""]
         lines += [f"- {label}" for label in sorted(enabled)]
         lines.append("")
-    if disabled or adopted:
+    if disabled or collapsed:
         lines += [f"**{_text(text, 'disabled_heading')}**", ""]
         lines += [f"- {label}" for label in sorted(disabled)]
-        lines += [f"- {name} ({count} entities)" for name, count in sorted(adopted.items())]
+        lines += [f"- {name} ({count} entities)" for name, count in sorted(collapsed.items())]
         lines += ["", _text(text, "how_to_enable"), ""]
     lines.append(_text(text, "nothing_broken"))
     return "\n".join(lines)
