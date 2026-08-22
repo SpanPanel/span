@@ -87,8 +87,14 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
   to what the device declared and nothing invented.
 - **Nothing adopted enters long-term statistics** — `state_class` is not declared on the wire and a wrong guess writes corrupt statistics; wrap an adopted
   reading in a template sensor or utility meter if you want them.
-- Devices this integration does model are deliberately not adopted: a new property on a circuit, the battery, a charger or the panel stays curated in a release,
-  where the judgement about it lives.
+- **A new reading a vendor adds to a device you already have now appears too**, on that device's own card — the battery, a charger, the solar inverter, a
+  circuit or the panel. Previously only whole new _devices_ were picked up, so a battery vendor adding a field reached you nowhere.
+- These arrive switched off and filed as diagnostics, like everything else adopted, and they are readings only — never switches or number boxes, because a
+  control here would sit beside the curated ones without their limits and translations.
+- **They keep the panel's own wording** (`Battery 2 Cell Temperature`), which is deliberately plainer than a curated entity's name so you can tell at a glance
+  which is which.
+- **Deleting one hides it until the next reload while your panel is still publishing it, and removes it for good once your panel stops.** There is no setting to
+  suppress one, because the delete button already does both jobs, decided by what your panel is actually sending.
 
 - **Your panel's own card shows what the panel says it is** — manufacturer, model and hardware revision read from the enclosure rather than assumed, once your
   panel publishes them.
