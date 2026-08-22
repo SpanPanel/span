@@ -32,8 +32,10 @@ from custom_components.span_panel.extension import (
     create_extension_binary_sensors,
     create_extension_sensors,
     extension_device_identifier,
+    extension_unique_id,
     prominence_hint,
     resolve_platform,
+    subject_key,
 )
 from custom_components.span_panel.util import SUB_DEVICE_BESS
 
@@ -181,14 +183,14 @@ def test_a_row_whose_card_is_not_registered_yet_is_deferred(
 ) -> None:
     """A capability race defers the entity to the next reload rather than minting a card."""
     snapshot = _snapshot(_row(kind="pv"))
-    assert adoptable(snapshot, dr.async_get(hass)) == []
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass)) == []
 
 
 def test_a_row_on_a_registered_card_is_adoptable(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
     snapshot = _snapshot(_row())
-    adoptable_rows = adoptable(snapshot, dr.async_get(hass))
+    adoptable_rows = adoptable(snapshot, dr.async_get(hass), er.async_get(hass))
     assert len(adoptable_rows) == 1
     row, unique_id, identifier = adoptable_rows[0]
     assert identifier == BESS_IDENTIFIER
@@ -200,7 +202,7 @@ def test_an_off_charset_address_is_declined_rather_than_sanitised(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
     snapshot = _snapshot(_row(property_id="Cell_Temperature"))
-    assert adoptable(snapshot, dr.async_get(hass)) == []
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass)) == []
 
 
 # --- the cap ----------------------------------------------------------------
@@ -211,20 +213,83 @@ def test_a_vendor_flooding_one_device_is_capped(
 ) -> None:
     """Registry rows are permanent and nothing removes them, so the flood is bounded."""
     rows = tuple(_row(property_id=f"reading-{index}") for index in range(MAX_PER_DEVICE + 25))
-    adopted = adoptable(_snapshot(*rows), dr.async_get(hass))
+    adopted = adoptable(_snapshot(*rows), dr.async_get(hass), er.async_get(hass))
     assert len(adopted) == MAX_PER_DEVICE
 
 
-def test_the_cap_is_per_device_not_per_panel(
+def test_the_cap_is_per_wire_device_not_per_card(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
-    """One noisy vendor device must not crowd out a quiet one on another card."""
-    battery_rows = tuple(
-        _row(property_id=f"reading-{index}") for index in range(MAX_PER_DEVICE + 5)
+    """One noisy device must not crowd out a quiet one that shares its card.
+
+    The panel, every circuit and both lugs render on the panel's card. Counting
+    per card would pool thirty-five wire devices against one allowance, so two
+    vendor properties on each circuit of a 32-circuit panel would truncate with
+    no misbehaving publisher anywhere. The cap counts the wire device.
+    """
+    noisy = tuple(
+        _row(kind="circuit", instance_key="circuit-a", node_id="acme", property_id=f"reading-{index}")
+        for index in range(MAX_PER_DEVICE + 5)
     )
-    panel_row = _row(kind="panel", node_id="acme", property_id="site-reading")
-    adopted = adoptable(_snapshot(*battery_rows, panel_row), dr.async_get(hass))
-    assert sum(1 for _row_, _uid, identifier in adopted if identifier == PANEL_SERIAL) == 1
+    quiet = (
+        _row(kind="circuit", instance_key="circuit-b", node_id="acme", property_id="reading-0"),
+        _row(kind="panel", node_id="acme", property_id="site-reading"),
+        _row(kind="lugs", instance_key="upstream", node_id="acme", property_id="phase-balance"),
+    )
+    adopted = adoptable(_snapshot(*noisy, *quiet), dr.async_get(hass), er.async_get(hass))
+
+    # Every quiet device keeps its readings, though all four share the panel card.
+    adopted_keys = [subject_key(row.subject) for row, _uid, _identifier in adopted]
+    assert adopted_keys.count("circuit:circuit-a") == MAX_PER_DEVICE
+    assert adopted_keys.count("circuit:circuit-b") == 1
+    assert adopted_keys.count("panel") == 1
+    assert adopted_keys.count("lugs:upstream") == 1
+    assert {identifier for _row_, _uid, identifier in adopted} == {PANEL_SERIAL}
+
+
+def test_two_lugs_publishing_the_same_property_get_two_identities(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The collision that folding lugs into `panel` produced.
+
+    Both lugs devices run the same firmware, so a vendor extension on one is the
+    expected case of the same extension on both. One subject for the pair minted
+    one unique_id for two readings: Home Assistant drops the second, and the
+    survivor shows whichever device sorted first.
+    """
+    upstream = _row(kind="lugs", instance_key="upstream", node_id="acme", property_id="phase-balance", value="1.5")
+    downstream = _row(kind="lugs", instance_key="downstream", node_id="acme", property_id="phase-balance", value="99.9")
+    adopted = adoptable(_snapshot(upstream, downstream), dr.async_get(hass), er.async_get(hass))
+
+    ids = [unique_id for _row_, unique_id, _identifier in adopted]
+    assert len(ids) == len(set(ids)) == 2
+    # Both still render on the panel's card: identity distinguishes, placement merges.
+    assert {identifier for _row_, _uid, identifier in adopted} == {PANEL_SERIAL}
+
+
+def test_a_registered_entity_is_never_displaced_by_the_cap(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A standing entity outranks a new arrival, whatever order the wire sends them in.
+
+    The row order tracks the wire, so a firmware update declaring a property
+    earlier shifts everything after it. Capping on arrival order alone would let
+    a new property evict a standing entity whose registry row is permanent and
+    for which nothing would ever build an entity again -- unavailable forever,
+    with no migration path by design.
+    """
+    registry = er.async_get(hass)
+    standing = _row(property_id="long-standing")
+    standing_id = extension_unique_id(PANEL_SERIAL, standing.subject, standing.node_id, standing.property_id)
+    assert standing_id is not None
+    registry.async_get_or_create(Platform.SENSOR.value, DOMAIN, standing_id)
+
+    # The standing property now arrives *last*, behind a full cap of new ones.
+    newcomers = tuple(_row(property_id=f"new-{index}") for index in range(MAX_PER_DEVICE))
+    adopted = adoptable(_snapshot(*newcomers, standing), dr.async_get(hass), registry)
+
+    assert standing_id in {unique_id for _row_, unique_id, _identifier in adopted}
+    assert len(adopted) == MAX_PER_DEVICE
 
 
 # --- the entities themselves ------------------------------------------------

@@ -22,11 +22,11 @@
   ],
   "quality_scale": "gold",
   "requirements": [
-    "span-panel-api==3.0.0b12",
+    "span-panel-api==3.0.0b13",
     "span-panel-api-schema-0==1.0.0b5",
-    "span-panel-api-schema-1==0.1.0b9"
+    "span-panel-api-schema-1==0.1.0b10"
   ],
-  "version": "2.1.0b8",
+  "version": "2.1.0b9",
   "zeroconf": [
     {
       "type": "_span._tcp.local."

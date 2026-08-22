@@ -787,6 +787,10 @@
       "disabled_heading": "Added but switched off",
       "how_to_enable": "Switched-off entities record nothing until you turn them on. Open the SPAN Panel device page, show its disabled entities, and enable the ones you want.",
       "nothing_broken": "Nothing is broken and no action is required. Entities appear for several reasons: an update that surfaces more of what your panel reports, a circuit added to the panel, or hardware such as a battery, solar or a charger coming online."
+    },
+    "extension_overflow": {
+      "title": "SPAN Panel: some vendor readings were not added",
+      "body": "A device on your panel declares more vendor readings than this integration will add for one device ({limit}). The rest were left out: {devices}.\n\nNothing you already have is affected, and nothing is broken. The readings that were left out are still listed in this integration's diagnostics download, which is what to attach if you want them surfaced."
     }
   }
 }

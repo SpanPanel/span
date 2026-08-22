@@ -30,7 +30,9 @@ from typing import Final
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, Platform
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo, DeviceRegistry
 from homeassistant.helpers.entity_registry import EntityRegistry
 from span_panel_api import ExtensionProperty, ExtensionSubject, SpanPanelSnapshot
@@ -39,6 +41,7 @@ from .adoption import BOOLEAN_DATATYPE, DEVICE_CLASS_BY_UNIT, homie_boolean, hum
 from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
+from .notices import async_raise, read_translations
 from .util import (
     ADOPTED_IDENTIFIER_TOKEN,
     SUB_DEVICE_BESS,
@@ -50,6 +53,9 @@ from .util import (
 _LOGGER = logging.getLogger(__name__)
 
 SCOPE_PANEL: Final = "panel"
+
+MAX_STATE_LENGTH: Final = 255
+"""Home Assistant's hard limit on a state string; a longer one raises on write."""
 
 HINT_READING: Final = "reading"
 HINT_DETAIL: Final = "detail"
@@ -83,8 +89,23 @@ _SCOPE_BY_KIND: Final[dict[str, str]] = {
 }
 """Library subject kind → the scope segment this integration's ids already use.
 
-The singletons only. `evse` and `circuit` carry an instance key and are built
-below, because their segment is `{kind}_{key}` rather than a constant.
+The singletons only. The kinds below carry an instance key, so their segment is
+`{prefix}_{key}` rather than a constant.
+"""
+
+_SCOPE_PREFIX_BY_KIND: Final[dict[str, str]] = {
+    "evse": SUB_DEVICE_EVSE,
+    "circuit": "circuit",
+    "lugs": "lugs",
+}
+"""Multi-instance subject kinds, and the prefix their scope segment takes.
+
+`lugs` is here rather than folded into `panel` even though a lugs device's
+curated fields land on the panel: the two lugs devices run identical firmware,
+so a vendor extension on one is the expected case of the same extension on
+both, and one scope for both would mint one id for two readings. They still
+*render* on the panel's card -- see `extension_device_identifier`, where the
+divergence between identity and placement is deliberate.
 """
 
 
@@ -99,10 +120,8 @@ def extension_scope(subject: ExtensionSubject) -> str | None:
         return _SCOPE_BY_KIND[subject.kind]
     if subject.instance_key is None:
         return None
-    if subject.kind == "evse":
-        return f"{SUB_DEVICE_EVSE}_{subject.instance_key}"
-    if subject.kind == "circuit":
-        return f"circuit_{subject.instance_key}"
+    if subject.kind in _SCOPE_PREFIX_BY_KIND:
+        return f"{_SCOPE_PREFIX_BY_KIND[subject.kind]}_{subject.instance_key}"
     return None
 
 
@@ -180,9 +199,11 @@ def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject
 
     A circuit's entities live on the panel's own card in this integration, so a
     circuit subject resolves there too -- the entity's *name* is what says which
-    circuit it came from.
+    circuit it came from. Lugs are the same: two devices for identity, one card
+    for rendering, which is why this mapping and `extension_scope` are separate
+    functions rather than one. Identity must distinguish what placement merges.
     """
-    if subject.kind in ("panel", "circuit"):
+    if subject.kind in ("panel", "circuit", "lugs"):
         return panel_identifier
     if subject.kind == "battery":
         return f"{panel_identifier}_{SUB_DEVICE_BESS}"
@@ -385,6 +406,18 @@ class ExtensionSensor(ExtensionEntity, SensorEntity):
         if raw is None:
             return None
         if self.entity_description.native_unit_of_measurement is None:
+            # Truncated rather than passed through: Home Assistant refuses a
+            # state over 255 characters, and a vendor string is unbounded on the
+            # wire. Raising once per update for a value nobody chose is worse
+            # than showing the first 255 characters of it.
+            if len(raw) > MAX_STATE_LENGTH:
+                _LOGGER.debug(
+                    "Extension %s published %d characters; truncated to %d",
+                    self._declaration_path,
+                    len(raw),
+                    MAX_STATE_LENGTH,
+                )
+                return raw[:MAX_STATE_LENGTH]
             return raw
         try:
             return float(raw)
@@ -449,15 +482,30 @@ def _create[ExtensionT: ExtensionEntity](
     neither.
     """
     built: list[ExtensionT] = []
-    for row, unique_id, device_identifier in adoptable(snapshot, device_registry):
+    for row, unique_id, device_identifier in adoptable(snapshot, device_registry, entity_registry):
         if resolve_platform(entity_registry, unique_id, row.datatype) is not platform:
             continue
         built.append(entity_class(coordinator, unique_id, row, device_identifier=device_identifier))
     return built
 
 
+def subject_key(subject: ExtensionSubject) -> str:
+    """Return the wire device a subject names, as one string.
+
+    What the cap counts. Not the device *card*: `panel`, every circuit and both
+    lugs render on the panel's card, so counting per card would pool thirty-five
+    wire devices against one allowance -- two vendor properties on each circuit
+    of a 32-circuit panel would truncate with no misbehaving publisher anywhere.
+    """
+    return (
+        subject.kind if subject.instance_key is None else f"{subject.kind}:{subject.instance_key}"
+    )
+
+
 def adoptable(
-    snapshot: SpanPanelSnapshot, device_registry: DeviceRegistry
+    snapshot: SpanPanelSnapshot,
+    device_registry: DeviceRegistry,
+    entity_registry: EntityRegistry,
 ) -> list[tuple[ExtensionProperty, str, str]]:
     """Every extension property that can become an entity, with its id and card.
 
@@ -466,10 +514,44 @@ def adoptable(
     registry yet, or its address is outside the Homie charset. The first two are
     ordinary states on a setup that raced a capability -- the entity appears on
     the next reload, as capability-gated platforms already do.
+
+    **An id the registry already holds is never displaced by the cap.** The cap
+    admits rows in the order the adapter emitted them, and that order tracks the
+    wire: a firmware update declaring a new property earlier in a description
+    shifts everything after it. Capping on arrival order alone would therefore
+    let a *new* property evict a standing entity -- whose registry row is
+    permanent, and for which nothing here would ever build an entity again, so
+    it would read unavailable forever while a stranger took its slot. Nothing
+    migrates in this design, so there would be no recovery. Two passes instead:
+    everything already registered is admitted first, and the cap applies only to
+    what is new.
     """
-    per_device: dict[str, int] = {}
-    declined: dict[str, int] = {}
-    adoptable_rows: list[tuple[ExtensionProperty, str, str]] = []
+    return _partition(snapshot, device_registry, entity_registry)[0]
+
+
+def declined_extensions(
+    snapshot: SpanPanelSnapshot,
+    device_registry: DeviceRegistry,
+    entity_registry: EntityRegistry,
+) -> dict[str, int]:
+    """How many properties each wire device declared beyond the cap.
+
+    Separate from `adoptable` so the overflow is reported once at setup rather
+    than once per platform: both platforms build their share from the same
+    partition, and a warning per platform would double-count in the log while
+    saying nothing new.
+    """
+    return _partition(snapshot, device_registry, entity_registry)[1]
+
+
+def _partition(
+    snapshot: SpanPanelSnapshot,
+    device_registry: DeviceRegistry,
+    entity_registry: EntityRegistry,
+) -> tuple[list[tuple[ExtensionProperty, str, str]], dict[str, int]]:
+    """Split the declared properties into what is adopted and what the cap declined."""
+    known: list[tuple[ExtensionProperty, str, str]] = []
+    fresh: list[tuple[ExtensionProperty, str, str]] = []
     for row in snapshot.extension_properties:
         identifier = extension_device_identifier(snapshot.serial_number, row.subject)
         if identifier is None:
@@ -486,17 +568,81 @@ def adoptable(
         )
         if unique_id is None:
             continue
-        if per_device.get(identifier, 0) >= MAX_PER_DEVICE:
-            declined[identifier] = declined.get(identifier, 0) + 1
-            continue
-        per_device[identifier] = per_device.get(identifier, 0) + 1
-        adoptable_rows.append((row, unique_id, identifier))
-    for identifier, count in declined.items():
-        _LOGGER.warning(
-            "Device %s declares more than %d vendor properties; %d were not adopted. "
-            "They remain visible in this integration's diagnostics",
-            identifier,
-            MAX_PER_DEVICE,
-            count,
+        registered = any(
+            entity_registry.async_get_entity_id(platform.value, DOMAIN, unique_id) is not None
+            for platform in (Platform.SENSOR, Platform.BINARY_SENSOR)
         )
-    return adoptable_rows
+        (known if registered else fresh).append((row, unique_id, identifier))
+
+    per_subject: dict[str, int] = {}
+    for row, _unique_id, _identifier in known:
+        key = subject_key(row.subject)
+        per_subject[key] = per_subject.get(key, 0) + 1
+
+    adoptable_rows = list(known)
+    declined: dict[str, int] = {}
+    for row, unique_id, identifier in fresh:
+        key = subject_key(row.subject)
+        if per_subject.get(key, 0) >= MAX_PER_DEVICE:
+            declined[key] = declined.get(key, 0) + 1
+            continue
+        per_subject[key] = per_subject.get(key, 0) + 1
+        adoptable_rows.append((row, unique_id, identifier))
+    return adoptable_rows, declined
+
+
+_OVERFLOW_NOTICE: Final = "extension_overflow"
+
+_OVERFLOW_FALLBACK: Final[dict[str, str]] = {
+    "title": "SPAN Panel: some vendor readings were not added",
+    "body": (
+        "A device on your panel declares more vendor readings than this integration will add "
+        "for one device ({limit}). The rest were left out: {devices}.\n\n"
+        "Nothing you already have is affected, and nothing is broken. The readings that were "
+        "left out are still listed in this integration's diagnostics download, which is what "
+        "to attach if you want them surfaced."
+    ),
+}
+"""English text for the overflow notice, used when a translation cannot be read.
+
+Carried here rather than only in `strings.json` for the reason `additions`
+documents: an unreadable file should cost the translation, never the notice --
+and a silently truncated surface is exactly the thing that must not be silent.
+"""
+
+
+async def async_notice_declined_extensions(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    snapshot: SpanPanelSnapshot,
+    device_registry: DeviceRegistry,
+    entity_registry: EntityRegistry,
+) -> None:
+    """Tell the user when the cap left vendor readings out, or say nothing.
+
+    A durable notice rather than a log line, because the alternative is a
+    truncation the user cannot see: an entity list showing sixty of a device's
+    eighty readings looks exactly like a device with sixty readings. Raised once
+    at setup rather than from `adoptable`, which both platforms call.
+    """
+    declined = declined_extensions(snapshot, device_registry, entity_registry)
+    if not declined:
+        return
+    rendered = ", ".join(f"{key} ({count})" for key, count in sorted(declined.items()))
+    _LOGGER.warning(
+        "Vendor readings beyond the per-device limit of %d were not adopted: %s",
+        MAX_PER_DEVICE,
+        rendered,
+    )
+    text = await hass.async_add_executor_job(
+        read_translations, hass.config.language, _OVERFLOW_NOTICE
+    )
+    async_raise(
+        hass,
+        entry,
+        _OVERFLOW_NOTICE,
+        title=text.get("title") or _OVERFLOW_FALLBACK["title"],
+        message=(text.get("body") or _OVERFLOW_FALLBACK["body"]).format(
+            limit=MAX_PER_DEVICE, devices=rendered
+        ),
+    )

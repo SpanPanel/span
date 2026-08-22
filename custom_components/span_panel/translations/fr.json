@@ -787,6 +787,10 @@
       "disabled_heading": "Ajoutées mais désactivées",
       "how_to_enable": "Les entités désactivées n'enregistrent rien tant que vous ne les activez pas. Ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez.",
       "nothing_broken": "Rien n'est cassé et aucune action n'est requise. Des entités apparaissent pour plusieurs raisons : une mise à jour qui expose davantage de ce que votre panneau rapporte, un circuit ajouté au panneau, ou du matériel tel qu'une batterie, du solaire ou un chargeur qui se met en ligne."
+    },
+    "extension_overflow": {
+      "title": "Panneau SPAN : certaines mesures du fabricant n'ont pas été ajoutées",
+      "body": "Un appareil de votre panneau déclare plus de mesures du fabricant que cette intégration n'en ajoute pour un seul appareil ({limit}). Les autres ont été laissées de côté : {devices}.\n\nRien de ce que vous avez déjà n'est affecté et rien n'est cassé. Les mesures laissées de côté figurent toujours dans le téléchargement des diagnostics de cette intégration, qu'il convient de joindre si vous souhaitez les voir apparaître."
     }
   }
 }

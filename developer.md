@@ -187,9 +187,16 @@ When you surface a property, delete its baseline line in the same change. The te
 line you left.
 
 When you decide a property should _stay_ unread, add a line with an honest reason. The reasons are load-bearing — they are what stops the file becoming a list
-of things nobody remembers deciding. The current entries are all permanent: deliberate skips (`status/postal-code` copies location into recorder history; Home
-Assistant owns `status/time-zone`), values held for identity reasons (`pv/info/serial-number`), redundant echoes (`connection/*-device-type` dereferences to a
+of things nobody remembers deciding. The current entries are all permanent: deliberate skips (`status/postal-code` and `status/time-zone`, which Home Assistant
+already owns or has no use for), values held for identity reasons (`pv/info/serial-number`), redundant echoes (`connection/*-device-type` dereferences to a
 declared `$type`), and properties no producer publishes (`connection/count`).
+
+**"Unread" here means "no curated entity", not "invisible".** Since 2.1.0b7 an unread property on a _modelled_ device also surfaces through
+[extension adoption](#extension-properties) as a disabled diagnostic entity, so a baseline line records a decision not to **curate** something — to give it a
+designed name, a category and a place — rather than a decision to withhold it. The two skips above were written before that distinction existed and read as
+though a baseline line hid a property; it does not, and the entries were reworded rather than left to mislead. A reason that turns on the cost of a _default-on_
+entity is worth re-reading in that light: `postal-code`'s original reason was that surfacing it copies the user's location into recorder history, which an
+opt-in disabled entity does only if the user asks for it.
 
 ### What it does not cover
 
@@ -221,8 +228,12 @@ the panel has published a value for the property, which is the declared-but-neve
 key-based over the config entry: it knows nothing about wire property names and could not protect a value added here. `test_schema_discovery` asserts that
 against the capture's own published values rather than leaving it to review.
 
-This is **maintainer-facing only**. Nothing creates an entity, a Repair or a notification from it — including for a device that _is_ adopted, whose properties
-are reported here as declarations exactly like any other. Adoption itself is the next section.
+This block is **maintainer-facing only**: nothing creates an entity, a Repair or a notification from a `schema_discovery` row — including for a device that _is_
+adopted, whose properties are reported here as declarations exactly like any other.
+
+That is a statement about this block, not about the properties in it. The same properties on a _modelled_ device also arrive as `snapshot.extension_properties`,
+which does carry values and does become entities — see [Extension properties](#extension-properties). Two artefacts describing one property, joined by its
+`{node}/{property}` path, with opposite audiences and opposite rules about values. Adoption itself is the next section.
 
 ### Why discovered rows cannot reach the curated inventories
 
@@ -270,16 +281,19 @@ second inverter, which the eBus schema explicitly permits. Such a device used to
 
 ### The rule
 
-**The unit of adoption is a device, never a property.**
+Both halves of vendor extensibility are adopted, and **the half decides the shape**: a device nobody modelled becomes a device, a property on a device we do
+model becomes a reading on that device's existing card.
 
-| What arrives                                     | What happens                                                                     |
-| ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| A device type `MODELLED_TYPES` does not name     | **Adopt.** One sub-device, its properties surfaced beneath it.                   |
-| A new node or property on a device we _do_ model | **Do not adopt.** It lands in `schema_discovery`; curate it in the next release. |
-| A new property on a device already adopted       | Adopt, with its siblings.                                                        |
+| What arrives                                     | What happens                                                                                       |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| A device type `MODELLED_TYPES` does not name     | **Adopt as a device.** One sub-device, its properties surfaced beneath it. This section.           |
+| A new node or property on a device we _do_ model | **Adopt as a reading** on that device's card — never a new device. [Below](#extension-properties). |
+| A new property on a device already adopted       | Adopt, with its siblings.                                                                          |
+| A second instance of a modelled type             | **Not adopted.** See below.                                                                        |
 
-The asymmetry is where the cost calculus actually points. An adopted entity's id is machine-derived and permanent once it registers, which is only a loss where
-curation is coming. On a type nobody modelled, no better id is coming and the alternative is silence.
+The two differ in what they can promise. An adopted _device_ is a card nothing else was ever going to describe. An adopted _property_ sits beside curated
+entities on a card this integration designed, so it is deliberately the plainer thing: read-only, wire-named, and carrying no expectation that curation will one
+day rename it into something better.
 
 Extra instances of a modelled type are **not** adopted. A second BESS is a multiplicity limitation of the snapshot model, not an unmodelled device, and adopting
 it would stand a machine-named card beside the curated Battery describing the same hardware. The gap stays visible as a gap.
@@ -426,9 +440,14 @@ Three things it does that the Repair did not:
 It stays silent on a first install, and silent once more on the first run after this mechanism ships: an install predating the record has entities that were
 never announced but are not new either, so the first pass adopts them as known.
 
-Adopted devices are collapsed to one line with a count — `Backup Generator (6 entities)` — for the reason the whole design is device-scoped: a vendor device
-declaring a dozen properties would otherwise spend the entire notification on itself and teach the user to skip it, costing them the curated additions in the
-same message.
+Adopted devices are collapsed to one line with a count — `Backup Generator (6 entities)` — because a vendor device declaring a dozen properties would otherwise
+spend the entire notification on itself and teach the user to skip it, costing them the curated additions in the same message.
+
+**Extension properties collapse only above `additions.COLLAPSE_ABOVE` (five), and the asymmetry is the point.** An adopted device's line names a device that did
+not exist before, which is itself the news at any count. An extension property sits on a card the user already has, so `Span Panel (2 entities)` tells them
+strictly less than the two names would — which is exactly what a live b7 install produced for a postal code and a time zone. Counted per notification rather
+than per device lifetime: five readings announced last month and one today is a one-line update, not a flood. The detector is `_extension_device_name`, which
+tests the **unique_id** rather than the device identifier, because these live on curated cards and the card says nothing about them.
 
 **Translations are read from this component's own `translations/` directory**, not through `homeassistant.helpers.translation`. That helper filters to the
 categories Home Assistant defines, and a persistent notification is not one of them — a custom category loads as nothing at all, which was verified rather than
@@ -444,7 +463,119 @@ cannot protect a wire value put there.
 ### Adopted entities declare no field paths
 
 `snapshot.adopted_devices` is outside the curated field-path vocabulary by construction — it carries no metadata row, so the producible gate has nothing to
-check it against. `adoption.py` is therefore absent from `residual_field_paths()`'s import list, and its entity classes declare no `_residual_field_paths`.
+check it against. `adoption.py` is therefore absent from `residual_field_paths()`'s import list, and its entity classes declare no `_residual_field_paths`. The
+same holds for `extension.py` and `snapshot.extension_properties`, for the same reason.
+
+## Extension properties
+
+A property on a device this integration **does** model — `battery-2/cell-temperature` hung off the BESS by a battery vendor. Until 2.1.0b7 it reached the user
+nowhere: it became a `DiscoveredMetadata` row and stopped at the diagnostics download. `extension.py` turns it into an entity on that device's existing card.
+
+### Where the value comes from
+
+The library carries it, in a type built for the purpose:
+
+| Type                                         | Carries                       | Audience                    |
+| -------------------------------------------- | ----------------------------- | --------------------------- |
+| `DiscoveredMetadata` (`discovered.*` paths)  | Declaration only, never value | Maintainer, via diagnostics |
+| `ExtensionProperty` (`extension_properties`) | Declaration **and** value     | User, via entities          |
+
+The same wire property appears in both, joined by its `{node}/{property}` path. **`ExtensionProperty` is deliberately not a `FieldMetadata`**: `partition()`
+walks `build_field_metadata()`, so a type that cannot enter that map has no path into a payload that leaves the machine. That is the diagnostics guarantee as a
+shape rather than as a rule somebody has to remember, and `test_extension_property_is_not_field_metadata` asserts it.
+
+`schema-1`'s `addressed_rows()` is shared by `build_discovery` and `build_extension_properties` so the two cannot disagree about what "unaddressed" means. A
+property counted as addressed by one and not the other would appear as an entity the diagnostics claim is ignored, or the reverse.
+
+### The identity, which is the irreversible part
+
+```text
+span_{serial}_adopted_{scope}/{node}/{property}
+```
+
+- **Anchored on what is stable and ours** — the panel serial and the curated scope (`bess`, `mid`, `pv`, `panel`, `evse_{node}`, `circuit_{id}`).
+- **Addressed by the wire path verbatim**, which is upstream's own capability-catalog spelling (`AdoptedProperty.path`, `discovery_path()`). Verbatim is what
+  makes it injective: the id _is_ the address. Normalising hyphens would collapse `battery-2` + `cell-temperature` and `battery` + `2-cell-temperature` into one
+  id, which `test_the_pairs_a_normalising_grammar_would_collapse_stay_distinct` pins.
+- **Never through `get_user_friendly_suffix`**, which de-_dots_ rather than de-hyphens and substitutes a curated suffix on a mapping hit.
+- **Not the eBus proxy composition.** `{proxier-id}-{proxied-id}` is upstream's device-handle spelling, and upstream states those handles are not identities:
+  they differ across enclosures and are unstable across the proxy-to-native transition. An id anchored on one would rename itself when a device stopped being
+  proxied, and nothing here migrates, so there would be no recovery.
+- An address outside the Homie charset (`[a-z0-9-]`) is **refused, not sanitised** — sanitising is what would make the slash-split ambiguous. It stays visible
+  in diagnostics.
+
+The slash distinguishes the two adoption grammars: device-level ids contain none.
+
+### Terminal identity
+
+An adopted extension is never promoted, re-sourced, re-homed or migrated. It changes only on an **external** trigger — the publisher stops publishing it, or
+better metadata arrives. Three consequences worth knowing before changing any of this:
+
+- **Curation is never blocked by one existing.** If a property is later curated, the curated entity is a _new_ entity with its own id and history; the adopted
+  one is not renamed into it. Ids are permanent, identity is not, and an earlier draft of this design built a registry take-over path to avoid that — it was
+  cut, because it rested on the library ceasing to emit the row in lockstep with curation, a two-repo promise whose conformance test cannot distinguish
+  "curation mapped it" from "the capture was regenerated without it".
+- **Nothing is ever removed by this integration**, and there is no engagement test anywhere. A row the user deletes is recreated — disabled — at the next setup
+  while the property is still published, so deletion is not suppression. It sticks exactly when publishing has stopped, because then nothing exists to recreate
+  it from. That is why no suppression feature exists: the delete button already means "hide until next reload" for a live reading and "clear it out" for a dead
+  one, decided by the wire.
+- **A property that stops being published reads unknown rather than disappearing.** Silence does not distinguish gone from not-yet-arrived.
+
+### What metadata may reshape, and what it may not
+
+| Attribute                                   | Revisable later?                              |
+| ------------------------------------------- | --------------------------------------------- |
+| `entity_category`, device class, unit, name | **Yes**, freely — no id change, no statistics |
+| Platform (`sensor` vs `binary_sensor`)      | **No.** The domain is baked into `entity_id`  |
+| `state_class`                               | Never set at all                              |
+
+The free half is free _because_ of the never half: these entities carry no `state_class`, so they write no long-term statistics, so a later unit or device-class
+change has nothing to reinterpret. Contrast a curated entity, where changing a unit under a `state_class` is the unrepairable case.
+
+The platform is enforced in `resolve_platform`, not remembered: whatever domain the id is already registered under wins, however the declaration later changes.
+`async_update_entity` raises `ValueError("New entity ID should be same domain")`, so re-deriving the platform from better metadata would not move a row — it
+would strand it and mint a second entity beside it. `test_the_platform_a_row_is_born_under_is_the_one_it_keeps` is the guard.
+
+### Read-only, and why disabled-by-default does not gate it
+
+No switches, selects or number boxes, even where the panel declares the property settable — `classify_extension` is `adoption.classify` with its three control
+rows deleted. The worked bypass: a vendor publishes `acme/charge-limit` beside the curated EVSE limit. The curated number goes through
+`evse_charge_limit_payload()`, which **refuses** a value above the commissioned ceiling. An auto-generated number on the same device, fed by a generic set
+topic, publishes whatever the user types on the same wire. The islanding assertion is the same shape — schema_1 translates `GRID` into `ON_GRID`.
+
+"Disabled-by-default gates the control", which `classify` argues for unmodelled devices, does not transfer: there the hazard is user intent, here it is semantic
+interaction with curated logic the user cannot see. The library enforces it structurally — `ExtensionProperty` has no set-topic member to populate, and
+`set_adopted_property` still resolves only against `adopted_devices`.
+
+### The cap
+
+`MAX_PER_DEVICE` (60) bounds what one **wire device** may mint — counted on `subject_key`, not on the card. The panel, every circuit and both lugs render on the
+panel's card, so counting per card would pool thirty-five devices against one allowance and truncate a 32-circuit panel at two vendor properties each, with no
+misbehaving publisher anywhere. Overflow raises a durable notice (`async_notice_declined_extensions`, once at setup rather than once per platform), because a
+truncation the user cannot see is the one thing worse than the truncation: sixty of a device's eighty readings looks exactly like a device with sixty.
+
+**An id the registry already holds is never displaced.** The cap admits in adapter emission order, which tracks the wire, so a firmware update declaring a new
+property earlier shifts everything after it. Capping on arrival order alone would let a new property evict a standing entity — whose registry row is permanent,
+and for which nothing would ever build an entity again, leaving it unavailable forever with a stranger in its slot and no migration path by design. `adoptable`
+therefore partitions registered from new, admits every registered row, and applies the cap only to the rest. Registry rows are permanent here and nothing
+removes them, so a vendor node declaring hundreds of properties would otherwise put hundreds of rows in every entity picker on every install that met it, with
+no later release able to take them back. Deliberately far above any real device — the sixteen `pcs` properties are the largest curated example — so it is a
+backstop against a misbehaving publisher rather than a policy on normal ones.
+
+### The prominence hint
+
+`prominence_hint()` is advisory only: everything arrives `DIAGNOSTIC` regardless, and the hint rides along as an entity attribute for curation triage. Ranked by
+confidence, and the ranking is the argument:
+
+1. **Identity-family naming → detail.** Highest confidence because it is purely _negative_ — a property named for a vendor, model, serial, part number or
+   firmware build is device description.
+2. **A unit in `DEVICE_CLASS_BY_UNIT` → reading.** Moderate, and it may promote but never demote, because it fails systematically in one direction: the most
+   headline-worthy number a battery publishes is a `%` state of charge, and `%` is absent from that map on purpose, being equally a confidence or a duty cycle.
+3. **Everything else → detail**, with `node_has_curated_siblings` recorded as corroboration rather than as a decision. Homie nodes are organisational, not
+   editorial.
+
+The real fix is upstream: a declared `role` on the property, proposed in `SpanPanel_Docs/span/docs/dev/ebus-property-role-proposal.md`. Until then the ranking
+is the shipping plan, and `entity_category` being free to revise is what makes a conservative default cheap.
 
 ## Linting and Type Checking
 

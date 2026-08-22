@@ -16,7 +16,11 @@ from homeassistant.exceptions import (
     ConfigEntryError,
     ConfigEntryNotReady,
 )
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
@@ -45,6 +49,7 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .current_monitor import CurrentMonitor
+from .extension import async_notice_declined_extensions
 from .frontend import (
     PANEL_FRONTEND_DIR as PANEL_FRONTEND_DIR,
     PANEL_URL as PANEL_URL,
@@ -305,6 +310,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         )
 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+        # After the forward, because it reports on what the platforms just built
+        # -- and once, rather than from each platform's own call to `adoptable`.
+        await async_notice_declined_extensions(
+            hass, entry, snapshot, dr.async_get(hass), er.async_get(hass)
+        )
 
         # After the platforms, not before: schema validation runs on the first
         # refresh, which is awaited above, but the Repairs it raises name the

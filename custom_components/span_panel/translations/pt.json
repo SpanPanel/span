@@ -787,6 +787,10 @@
       "disabled_heading": "Adicionadas mas desativadas",
       "how_to_enable": "As entidades desativadas não registam nada até as ativar. Abra a página do dispositivo Painel SPAN, mostre as suas entidades desativadas e ative as que quiser.",
       "nothing_broken": "Nada está avariado e não é necessária qualquer ação. As entidades aparecem por vários motivos: uma atualização que expõe mais do que o seu painel reporta, um circuito adicionado ao painel, ou hardware como uma bateria, solar ou um carregador a ficar online."
+    },
+    "extension_overflow": {
+      "title": "Painel SPAN: algumas leituras do fabricante não foram adicionadas",
+      "body": "Um dispositivo do seu painel declara mais leituras do fabricante do que esta integração adiciona para um único dispositivo ({limit}). As restantes ficaram de fora: {devices}.\n\nNada do que já tem é afetado e nada está avariado. As leituras que ficaram de fora continuam listadas na transferência de diagnósticos desta integração, que é o que deve anexar se quiser que sejam apresentadas."
     }
   }
 }

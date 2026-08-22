@@ -787,6 +787,10 @@
       "disabled_heading": "Añadidas pero desactivadas",
       "how_to_enable": "Las entidades desactivadas no registran nada hasta que las actives. Abre la página del dispositivo Panel SPAN, muestra sus entidades desactivadas y activa las que quieras.",
       "nothing_broken": "No hay ningún problema y no se requiere ninguna acción. Las entidades aparecen por varios motivos: una actualización que expone más de lo que informa tu panel, un circuito añadido al panel, o hardware como una batería, paneles solares o un cargador que se pone en línea."
+    },
+    "extension_overflow": {
+      "title": "Panel SPAN: algunas lecturas del fabricante no se añadieron",
+      "body": "Un dispositivo de tu panel declara más lecturas del fabricante de las que esta integración añade para un solo dispositivo ({limit}). El resto quedó fuera: {devices}.\n\nNada de lo que ya tienes se ve afectado y nada está roto. Las lecturas que quedaron fuera siguen apareciendo en la descarga de diagnósticos de esta integración, que es lo que conviene adjuntar si quieres que se muestren."
     }
   }
 }
