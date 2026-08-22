@@ -244,8 +244,9 @@ class SpanCircuitPowerSensor(
             attributes["tabs"] = tabs_result
 
         # Voltage derived from tab count
-        voltage = construct_voltage_attribute(circuit) or 240
-        attributes["voltage"] = voltage
+        voltage = construct_voltage_attribute(circuit)
+        if voltage is not None:
+            attributes["voltage"] = voltage
 
         attributes["always_on"] = circuit.always_on
         attributes["relay_state"] = circuit.relay_state
@@ -452,8 +453,9 @@ class SpanCircuitEnergySensor(
                 if tabs is not None:
                     attributes["tabs"] = tabs
 
-                voltage = construct_voltage_attribute(circuit) or 240
-                attributes["voltage"] = voltage
+                voltage = construct_voltage_attribute(circuit)
+                if voltage is not None:
+                    attributes["voltage"] = voltage
 
         return attributes or None
 

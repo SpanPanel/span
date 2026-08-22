@@ -11,7 +11,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 import voluptuous as vol
 
 from .const import DOMAIN
-from .helpers import build_panel_unique_id
+from .helpers import build_panel_unique_id, construct_voltage_attribute
 from .id_builder import build_binary_sensor_unique_id
 from .util import classify_sub_device_identifier
 
@@ -157,7 +157,11 @@ async def handle_panel_topology(
         circuits[circuit_id] = {
             "tabs": tabs,
             "name": circuit.name or None,
-            "voltage": 240 if len(tabs) == 2 else 120,
+            # Same inference as the entity attribute, from the same helper: a
+            # pole count answers this for one and two poles and not beyond, and
+            # null says so rather than the previous 120, which this branch
+            # returned for every circuit that was not exactly two-pole.
+            "voltage": construct_voltage_attribute(circuit),
             "device_type": circuit.device_type,
             "relay_state": circuit.relay_state,
             "relay_state_target": circuit.relay_state_target,

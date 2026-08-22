@@ -149,75 +149,92 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
     Used as a fallback when a circuit has no panel-assigned name.
 
     Args:
-        tabs: List of tab numbers (1 for 120V, 2 for 240V dipole)
+        tabs: Every panel position the breaker occupies
         circuit_id: Fallback identifier when tabs are unavailable
 
     Returns:
-        String like "Circuit 30 32" for 240V or "Circuit 15" for 120V
+        String like "Circuit 30 32" for a two-pole breaker or "Circuit 15" for a
+        single-pole one, naming every position however many there are
 
     """
-    if tabs and len(tabs) == 2:
-        sorted_tabs = sorted(tabs)
-        return f"Circuit {sorted_tabs[0]} {sorted_tabs[1]}"
-    if tabs and len(tabs) == 1:
-        return f"Circuit {tabs[0]}"
+    if tabs:
+        return "Circuit " + " ".join(str(tab) for tab in sorted(tabs))
     return f"Circuit {circuit_id}"
 
 
 def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:
     """Construct tabs attribute string from circuit data.
 
-    For US electrical systems, circuits can only have 1 tab (120V) or 2 tabs (240V).
+    Names every position the breaker occupies, however many that is. v1.0
+    publishes them literally in ``info/spaces``; the flat schema published one
+    space plus a ``dipole`` flag and its adapter recovers the pair from that. So
+    this sees at most two positions on flat, and on v1.0 exactly what the panel
+    reported.
+
+    **Accepting more than two is defensive, not a fix for observed hardware.**
+    SPAN has stated that its panels "are split-phase and publish only 1- or
+    2-pole breakers", and no circuit on any panel captured so far occupies more
+    than two positions. The ``1:4:1`` range on ``breaker/poles`` is the generic
+    eBus catalog, which covers load centres that are not SPAN. What this
+    replaces is a hard failure: three positions used to drop the attribute
+    entirely and log that the hardware was "not valid for US electrical
+    system", which is a poor way to meet input we merely have not seen.
 
     Args:
         circuit: SpanCircuitSnapshot object with tabs information
 
     Returns:
-        Tabs attribute string like "tabs [30:32]" for 240V or "tabs [28]" for 120V,
-        or None if no tabs information is available
+        Tabs attribute string like "tabs [30:32]", or None if no tabs
+        information is available
 
     Examples:
-        Single tab (120V): "tabs [28]"
-        Two tabs (240V): "tabs [30:32]"
+        Single tab: "tabs [28]"
+        Two tabs: "tabs [30:32]"
+        Three tabs: "tabs [17:19:21]"
         No tabs: None
 
     """
     if not circuit.tabs:
         return None
 
-    # Sort tabs for consistent ordering
-    sorted_tabs = sorted(circuit.tabs)
-
-    if len(sorted_tabs) == 1:
-        # Single tab (120V)
-        return f"tabs [{sorted_tabs[0]}]"
-    if len(sorted_tabs) == 2:
-        # Two tabs (240V) - format as range
-        return f"tabs [{sorted_tabs[0]}:{sorted_tabs[1]}]"
-    # More than 2 tabs is not valid for US electrical system
-    _LOGGER.warning(
-        "Circuit %s has %d tabs, which is not valid for US electrical system (expected 1 or 2)",
-        circuit.circuit_id,
-        len(sorted_tabs),
-    )
-    return None
+    return f"tabs [{':'.join(str(tab) for tab in sorted(circuit.tabs))}]"
 
 
 def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
-    """Construct voltage attribute for a circuit based on tab count.
+    """Return the nominal voltage for a circuit, inferred from its pole count.
 
-    For US electrical systems, circuits can only have 1 tab (120V) or 2 tabs (240V).
+    **Nominal, not measured, and there is nothing better to read.** The eBus
+    circuit ``meter`` capability publishes current, active power and energy
+    only; voltage is a panel-level quantity, published as the enclosure's
+    ``meter/voltage-a`` / ``voltage-b``. No per-circuit voltage exists on the
+    wire.
+
+    **It is derived from the pole count, not from the positions.** Those are
+    different claims and only the second would be unsound: the specification
+    defines ``spaces`` as identifying every occupied slot "without assuming a
+    numbering convention", so reading a leg out of a position *number* is
+    exactly what the property exists to make unnecessary. The count comes from
+    ``breaker/poles``, published outright. Given the count, SPAN supplies the
+    rest -- it has stated that its panels "are split-phase and publish only 1-
+    or 2-pole breakers" -- and on a split-phase service a two-pole breaker is
+    line-to-line across both legs. So 240 rests on a vendor statement about
+    service type, not on a layout convention.
+
+    **Which is also why it stops at two poles.** Three or more is not a
+    split-phase circuit at all -- 208V line-to-line on a three-phase wye
+    service, 240V on a high-leg delta -- and nothing published distinguishes
+    them. Deriving it from ``P / I`` does not rescue it either: that yields
+    ``V * pf`` through a 0.1A quantiser, which on real circuits lands within 1%
+    once in 27 and reads 0V for any circuit drawing standby current at zero
+    real power. None means we do not know, and callers omit the attribute
+    rather than publish a guess.
 
     Args:
         circuit: SpanCircuitSnapshot object with tabs information
 
     Returns:
-        Voltage in volts (120 for single tab, 240 for double tab), or None if no tabs information
-
-    Examples:
-        Single tab (120V): 120
-        Two tabs (240V): 240
-        No tabs: None
+        120 for a single-pole circuit, 240 for a two-pole one, or None when
+        there is no tab information or the pole count does not determine it
 
     """
     if not circuit.tabs:
@@ -227,12 +244,6 @@ def construct_voltage_attribute(circuit: SpanCircuitSnapshot) -> int | None:
         return 120
     if len(circuit.tabs) == 2:
         return 240
-    # More than 2 tabs is not valid for US electrical system
-    _LOGGER.warning(
-        "Circuit %s has %d tabs, which is not valid for US electrical system (expected 1 or 2)",
-        circuit.circuit_id,
-        len(circuit.tabs),
-    )
     return None
 
 

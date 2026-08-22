@@ -274,8 +274,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         if tabs_result is not None:
             attributes["tabs"] = tabs_result
 
-        voltage = construct_voltage_attribute(circuit) or 240
-        attributes["voltage"] = voltage
+        voltage = construct_voltage_attribute(circuit)
+        if voltage is not None:
+            attributes["voltage"] = voltage
 
         if circuit.priority_target is not None:
             attributes["priority_target"] = circuit.priority_target

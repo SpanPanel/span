@@ -330,14 +330,18 @@ def construct_single_circuit_entity_id(
     use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
     if use_circuit_numbers:
-        # Check if this is a 240V circuit (2 tabs) or 120V circuit (1 tab)
-        if circuit_data.tabs and len(circuit_data.tabs) == 2:
-            # 240V circuit - use both tab numbers
+        # Every position the breaker occupies, joined in order: `circuit_30_32`
+        # for a two-pole breaker, `circuit_28` for a single-pole. Naming the
+        # positions rather than branching on how many there are keeps this
+        # consistent with `construct_tabs_attribute`, which formats the same
+        # list. A breaker occupying three or more is not something SPAN
+        # publishes -- it has stated its panels "are split-phase and publish
+        # only 1- or 2-pole breakers" -- so the wider form is unreachable on
+        # SPAN hardware and exists so unexpected input degrades into a readable
+        # id instead of falling through to the circuit UUID.
+        if circuit_data.tabs:
             sorted_tabs = sorted(circuit_data.tabs)
-            circuit_part = f"circuit_{sorted_tabs[0]}_{sorted_tabs[1]}"
-        elif circuit_data.tabs and len(circuit_data.tabs) == 1:
-            # 120V circuit - use single tab number
-            circuit_part = f"circuit_{circuit_data.tabs[0]}"
+            circuit_part = "circuit_" + "_".join(str(tab) for tab in sorted_tabs)
         else:
             # No tabs available — use the API circuit_id as fallback
             circuit_part = (
