@@ -6,7 +6,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanPanelSnapshot
@@ -21,6 +21,7 @@ from .const import (
     USE_CIRCUIT_NUMBERS,
 )
 from .coordinator import SpanPanelCoordinator
+from .extension import create_extension_sensors
 from .helpers import (
     has_bess,
     has_bess_telemetry,
@@ -130,8 +131,17 @@ async def async_setup_entry(
             panel_device_id=config_entry.runtime_data.panel_device_id,
         )
 
+        # Vendor extensions on devices this integration *does* model, which
+        # adoption deliberately leaves alone -- see `extension`.
+        extensions = create_extension_sensors(
+            coordinator,
+            snapshot,
+            dr.async_get(hass),
+            er.async_get(hass),
+        )
+
         # Add all native sensor entities
-        async_add_entities([*entities, *adopted])
+        async_add_entities([*entities, *adopted, *extensions])
 
         # Force immediate coordinator refresh to ensure all sensors update right away
         await coordinator.async_request_refresh()

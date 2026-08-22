@@ -14,7 +14,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -34,6 +34,7 @@ from .const import (
 )
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
+from .extension import create_extension_binary_sensors
 from .field_paths import DerivedReason, FieldPathDeclarationMixin
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
@@ -681,6 +682,16 @@ async def async_setup_entry(
                 snapshot,
                 dr.async_get(hass),
                 panel_device_id=config_entry.runtime_data.panel_device_id,
+            ),
+            # Vendor extensions on devices this integration *does* model. A
+            # separate inventory from adoption's for the same reason adoption is
+            # separate from the curated descriptions: different question, and
+            # `extension` owns the answer.
+            *create_extension_binary_sensors(
+                coordinator,
+                snapshot,
+                dr.async_get(hass),
+                er.async_get(hass),
             ),
         ]
     )

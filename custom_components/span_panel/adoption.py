@@ -238,9 +238,9 @@ def adopted_device_info(
     """
     return DeviceInfo(
         identifiers={(DOMAIN, identifier)},
-        name=device.name or _humanised(device.device_type.rsplit(".", 1)[-1]),
+        name=device.name or humanised(device.device_type.rsplit(".", 1)[-1]),
         manufacturer=device.vendor_name or "Unknown",
-        model=device.model or _humanised(device.device_type.rsplit(".", 1)[-1]),
+        model=device.model or humanised(device.device_type.rsplit(".", 1)[-1]),
         serial_number=device.serial_number,
         sw_version=device.software_version,
         hw_version=device.hardware_version,
@@ -248,7 +248,7 @@ def adopted_device_info(
     )
 
 
-def _humanised(wire_token: str) -> str:
+def humanised(wire_token: str) -> str:
     """`backup-generator` -> `Backup Generator`, for a name with no translation.
 
     Deliberately plain. An adopted entity renders from wire vocabulary until it
@@ -319,7 +319,7 @@ class AdoptedEntity(SpanPanelEntity):
         self._device_wire_id = device.device_id
         self._declaration_path = declaration.path
         self._attr_unique_id = adopted_unique_id(identifier, declaration)
-        self._attr_name = _humanised(declaration.property_id)
+        self._attr_name = humanised(declaration.property_id)
         self._attr_device_info = adopted_device_info(
             identifier, device, panel_device_id=panel_device_id
         )
@@ -392,7 +392,7 @@ class AdoptedBinarySensor(AdoptedEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Homie spells a boolean `true`/`false`; anything else is not an answer."""
-        return _boolean(self._published())
+        return homie_boolean(self._published())
 
 
 class AdoptedControl(AdoptedEntity):
@@ -440,7 +440,7 @@ class AdoptedSwitch(AdoptedControl, SwitchEntity):
     @property
     def is_on(self) -> bool | None:
         """Homie spells a boolean `true`/`false`; anything else is not an answer."""
-        return _boolean(self._published())
+        return homie_boolean(self._published())
 
     async def async_turn_on(self, **kwargs: object) -> None:
         """Publish the vocabulary Homie defines for a boolean, not HA's."""
@@ -531,7 +531,7 @@ class AdoptedNumber(AdoptedControl, NumberEntity):
         await self._publish(str(int(value)) if self._integral else str(value))
 
 
-def _boolean(published: str | None) -> bool | None:
+def homie_boolean(published: str | None) -> bool | None:
     """Return Homie's `true`/`false`, with anything else meaning no answer."""
     if published is None:
         return None

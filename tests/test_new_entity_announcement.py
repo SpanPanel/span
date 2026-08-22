@@ -414,3 +414,39 @@ async def test_a_panel_entity_is_not_prefixed(hass: HomeAssistant, entry: MockCo
     message = _text(_announcement(hass, entry))
     assert "DSM State" in message
     assert "SPAN Panel DSM State" not in message
+
+
+async def test_vendor_extensions_on_a_curated_device_collapse_to_one_line(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Fifteen new vendor properties are one line, not fifteen.
+
+    These sit on a *curated* card, so the adopted-device detector cannot see
+    them: the card is the battery's, shared with curated entities that must
+    still be listed individually. Their unique_id is what says what they are.
+    """
+    _register(hass, entry, "sp3-001_existing", name="Existing")
+    await async_announce_new_entities(hass, entry)
+
+    battery = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "sp3-001_bess")},
+        name="Span Panel Battery",
+    )
+    for index in range(15):
+        _register(
+            hass,
+            entry,
+            f"span_sp3-001_adopted_bess/battery-2/reading-{index}",
+            name=f"Battery 2 Reading {index}",
+            device_id=battery.id,
+        )
+    # A curated entity added to the same device in the same release is still
+    # named: collapsing is for the vendor surface, not for the card.
+    _register(hass, entry, "sp3-001_bess_meter_power", name="Meter Power", device_id=battery.id)
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "Span Panel Battery (15 entities)" in message
+    assert "Battery 2 Reading 0" not in message
+    assert "Meter Power" in message

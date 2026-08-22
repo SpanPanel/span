@@ -34,6 +34,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
+from .extension import is_extension_unique_id
 from .notices import async_raise, read_translations
 from .util import ADOPTED_IDENTIFIER_TOKEN
 
@@ -167,6 +168,11 @@ def _message(hass: HomeAssistant, added: list[er.RegistryEntry], text: dict[str,
 
     for registry_entry in added:
         device_name = _adopted_device_name(devices, registry_entry)
+        if device_name is None:
+            # Vendor extensions collapse the same way, and need their own
+            # detector: they live on *curated* devices, so the identifier test
+            # above cannot see them. Their unique_id is what says what they are.
+            device_name = _extension_device_name(devices, registry_entry)
         if device_name is not None:
             adopted[device_name] = adopted.get(device_name, 0) + 1
             continue
@@ -214,6 +220,30 @@ def _adopted_device_name(
         return None
     token = f"_{ADOPTED_IDENTIFIER_TOKEN}_"
     if not any(token in identifier for _domain, identifier in device.identifiers):
+        return None
+    return device.name_by_user or device.name or registry_entry.entity_id
+
+
+def _extension_device_name(
+    devices: dr.DeviceRegistry, registry_entry: er.RegistryEntry
+) -> str | None:
+    """Return the curated device a vendor extension belongs to, or None for anything else.
+
+    Detected by unique_id rather than by device identifier, because that is the
+    only thing that distinguishes these: an extension entity sits on a *curated*
+    card beside curated entities, so the card says nothing about it.
+
+    Collapsed for the same reason adopted devices are, and the arithmetic is
+    worse here: a firmware update adding fifteen vendor properties to the battery
+    would spend the entire notification on them and teach the user to skip it,
+    costing them the curated additions in the same message.
+    """
+    if registry_entry.device_id is None or not registry_entry.unique_id:
+        return None
+    if not is_extension_unique_id(registry_entry.unique_id):
+        return None
+    device = devices.async_get(registry_entry.device_id)
+    if device is None:
         return None
     return device.name_by_user or device.name or registry_entry.entity_id
 
