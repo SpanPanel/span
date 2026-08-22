@@ -301,8 +301,9 @@ entity on that device's own card. The wire already says which device and node it
 
 They behave like adopted devices in the ways that matter, and differ in two:
 
-- **They arrive switched off and filed as diagnostics**, so nothing lands on a dashboard uninvited, and the new-entity notification names the device with a
-  count rather than listing each one — fifteen new vendor readings would otherwise cost you the curated additions in the same message.
+- **They arrive switched off and filed as diagnostics**, so nothing lands on a dashboard uninvited. The new-entity notification names each one, up to five per
+  device; beyond that it gives the device and a count instead, because fifteen new vendor readings at once would otherwise cost you the curated additions in the
+  same message.
 - **They are readings only — never switches, selects or number boxes**, even where the panel says the property accepts writes. These sit beside curated controls
   that do real work, such as the charge limit that refuses a value above what your charger was commissioned for, and a generic control would sit there with none
   of that. If a control is worth having, it arrives curated in a release.
