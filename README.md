@@ -44,47 +44,41 @@ This integration communicates with the SPAN Panel over your local network using 
 infrastructure. eBus uses the [Homie Convention](https://homieiot.github.io/) for MQTT topics and messages, with the panel's built-in MQTT broker delivering
 real-time state updates without polling.
 
-## ⚠️ Upgrade to 2.1.x before your panel's firmware updates, or the integration will stop working
+## ⚠️ Backup and Upgrade to 2.1.x before your panel's firmware updates, or the integration will stop working (upgrade only from v2.0.8!)
 
-**SPAN firmware `r202633` breaks every integration release up to and including 2.0.8.** When your panel takes that update, 2.0.8 stops being able to read it.
-The integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go
+**SPAN firmware `r202633` changes the API in a non-compatible way after the firmware hits** When your panel takes that update, 2.0.8 stops being able to read
+it. The integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go
 blank. It does not fail loudly. It goes quiet.
 
 **Nobody outside SPAN knows when your panel will update, and you cannot defer it from Home Assistant.** Panels update on SPAN's timing. There is no schedule to
-plan around, which is why the safe move is to be on 2.1.x already rather than to wait for a signal that never comes.
+plan around, which is why the safe move is to be on 2.1.x already rather than to wait for a signal that is less appealing.
 
-**Upgrading first costs you nothing.** On your current firmware, 2.1.x reads your panel exactly as 2.0.8 does — same entities, same ids, same history. It simply
-also knows how to read the new format when it arrives.
+**Upgrading first costs you nothing.** On your current firmware, 2.1.x reads your panel exactly as 2.0.8 does.
 
-**And then the changeover is seamless.** The integration detects the new format on the wire, reloads itself, and carries on:
+The changeover is designed to be seamless.** The integration detects the new format on the wire, reloads itself, and carries on:
 
-- No reconfiguration, no re-pairing, no re-authentication.
-- Entity ids, unique ids and long-term statistics all survive. Dashboards, automations and history follow.
+- no re-pairing, no re-authentication.
+- Entity ids, unique ids and long-term statistics survive. Dashboards, automations and history follow.
 - New entities appear because the new firmware genuinely publishes more. Nothing you already had is removed.
 
-Upgrade afterwards instead and you reach the same place — after however long it takes you to notice, and to work out that a firmware update you were never told
-about is the reason your panel went silent.
+Upgrade afterwards instead and you reach the same place — after however long it takes you to notice, and to work out that a firmware update is the reason your
+panel went silent. Worst case should be a reload.
+
+Take another backup after the upgrade.
 
 <details>
-<summary>What actually changes in the firmware</summary>
+<summary>What changes in the firmware</summary>
 
-`r202633` rewrites how the panel publishes everything, rather than adding to it. The MQTT topic structure changes, and the panel stops presenting itself as a
-single flat device with a long list of properties. It presents a tree instead: the enclosure, with its lugs, circuits, battery, chargers and Microgrid
-Interconnect Device as separate devices beneath it. Every topic an integration reads moves. The old format is retired in the same update that introduces the new
-one — there is no overlap and no setting to keep the old behaviour.
+The firmware upgrade `r202633` rewrites _how_ the panel publishes its self-describing BOM. The MQTT topic structure changes, and the panel stops presenting
+itself as a long list of properties. It presents a tree that can proxy other devices instead. Every topic moves.
 
-This has happened before, in exactly this shape. Firmware `spanos2/r202603/05` removed the v1 REST API this integration was originally built on, which is what
-the 2.0.x breaking-change notice below is about. `r202633` does the same thing to the flat MQTT format that replaced it.
+The old format is retired in the same update that introduces the new one — there is no overlap and no setting to keep the old behaviour.
 
 </details>
 
-## 1.1.x Integration Sunset (v1)
-
-Users MUST upgrade by the end of 2026 to avoid disruption. Upgrade to the latest 1.1.x version BEFORE upgrading to 2.0.x.
-
 ## 2.0.x Breaking Changes (v2)
 
-**Do NOT upgrade unless your panel is running firmware `spanos2/r202603/05` or later.**
+**Do NOT upgrade unless your panel is running firmware `spanos2/r202603/05` or later and you are on 2.0.8 of the integration.**
 
 **What you need:**
 
@@ -166,35 +160,33 @@ The following terms appear throughout this document and in the integration's sen
 | Feed Through Net Energy      | Energy       | Wh   | Feedthrough net energy                                                                                                 |
 | DSM State                    | —            | —    | dsm_on_grid (grid connected), dsm_off_grid (islanded), unknown. Derived from multiple eBus signals                     |
 | Current Run Config           | —            | —    | panel_on_grid (grid connected), panel_off_grid (islanded on PV/generator), panel_backup (islanded on battery), unknown |
-| Grid Forming Entity          | —            | —    | (v2) GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See [Grid Forming Entity](#grid-forming-entity)                      |
+| Grid Forming Entity          | —            | —    | GRID, BATTERY, PV, GENERATOR, NONE, UNKNOWN. See[Grid Forming Entity](#grid-forming-entity)                            |
 | Main Relay State             | —            | —    | closed (power flowing), open (disconnected), unknown                                                                   |
-| Vendor Cloud                 | —            | —    | (v2) CONNECTED, UNCONNECTED, UNKNOWN                                                                                   |
+| Vendor Cloud                 | —            | —    | CONNECTED, UNCONNECTED, UNKNOWN                                                                                        |
 | Software Version             | —            | —    | Firmware version string                                                                                                |
 
-### Panel Diagnostic Sensors (v2 only)
+### Panel Diagnostic Sensors
 
-| Sensor                | Device Class | Unit | Notes                      |
-| --------------------- | ------------ | ---- | -------------------------- |
-| L1 Voltage            | Voltage      | V    | L1 leg actual voltage      |
-| L2 Voltage            | Voltage      | V    | L2 leg actual voltage      |
-| Upstream L1 Current   | Current      | A    | Upstream lugs L1 current   |
-| Upstream L2 Current   | Current      | A    | Upstream lugs L2 current   |
+| Sensor                | Device Class | Unit | Notes                                                             |
+| --------------------- | ------------ | ---- | ----------------------------------------------------------------- |
+| L1 Voltage            | Voltage      | V    | L1 leg actual voltage                                             |
+| L2 Voltage            | Voltage      | V    | L2 leg actual voltage                                             |
+| Upstream L1 Current   | Current      | A    | Upstream lugs L1 current                                          |
+| Upstream L2 Current   | Current      | A    | Upstream lugs L2 current                                          |
 | Downstream L1 Current | Current      | A    | Downstream lugs L1 current. Off by default from 2.1.x — see below |
 | Downstream L2 Current | Current      | A    | Downstream lugs L2 current. Off by default from 2.1.x — see below |
-| Main Breaker Rating   | Current      | A    | Main breaker amperage. Off by default      |
+| Main Breaker Rating   | Current      | A    | Main breaker amperage. Off by default                             |
 
 L1/L2 Voltage and Main Breaker Rating have always been off by default; enable them from the panel's device page if you want them.
 
-**The two Downstream current sensors are off by default from 2.1.x, and so are the three Feedthrough sensors.** The eBus specification's maintainer has
-documented that the panel's feedthrough (downstream lugs) figures cannot be relied on: the energy registers are computed from unrelated counters and can
-decrease or go negative, the power reading is inverted relative to every other terminal, and the downstream currents report the **upstream** service conductors
-rather than a downstream measurement. These defects predate `r202633` and are not introduced by it.
+**The three Feedthrough sensors and the two Downstream current sensors are off by default from 2.1.x.** The eBus specification's maintainer has documented that
+the panel's feedthrough (downstream lugs) figures cannot be relied on: the energy registers can decrease or go negative, the power reading is inverted relative
+to every other terminal, and the downstream currents report the **upstream** service conductors. The defects predate `r202633`.
 
-If you already have any of those five they stay exactly where they are, with their history and their entity ids — Home Assistant applies the off-by-default
-setting only when an entity is first created, so this reaches new installations only. If you use them on a dashboard or in an automation they are worth
-removing, but that is your call, not something an upgrade should do to you.
+Existing installations keep all five, with their history and entity ids — Home Assistant applies the setting only when an entity is first created. If you use
+them somewhere, removing them is worth considering, but that is your call.
 
-### Shed Forecast Sensors (v1.0 data model only)
+### Shed Forecast Sensors
 
 Created only when your panel publishes the `shed-forecast` capability, and only for the estimates it actually publishes.
 
@@ -207,46 +199,46 @@ Created only when your panel publishes the `shed-forecast` capability, and only 
 
 Present only when the panel publishes them.
 
-| Attribute                           | Type   | On                    | Notes                                                  |
-| ----------------------------------- | ------ | --------------------- | ------------------------------------------------------ |
-| `full_charge_time_to_priority_shed` | int    | Time to Priority Shed | The same estimate assuming the battery starts full     |
-| `full_charge_total_time_remaining`  | int    | Backup Time Remaining | The same estimate assuming the battery starts full     |
-| `forecast_confidence`               | string | both                  | The panel's own assessment: `LOW`, `MEDIUM`, or `HIGH` |
+| Attribute                           | Type   | On                    | Notes                                                 |
+| ----------------------------------- | ------ | --------------------- | ----------------------------------------------------- |
+| `full_charge_time_to_priority_shed` | int    | Time to Priority Shed | The same estimate assuming the battery starts full    |
+| `full_charge_total_time_remaining`  | int    | Backup Time Remaining | The same estimate assuming the battery starts full    |
+| `forecast_confidence`               | string | both                  | The panel's own assessment:`LOW`, `MEDIUM`, or `HIGH` |
 
-### Power Control System Sensors (v1.0 data model only)
+### Power Control System Sensors
 
 Created only when your panel publishes the `pcs` capability, and created whether or not the PCS is switched on — a PCS reporting a limit of 0 A is reporting a
 state, not an absence.
 
 | Sensor             | Device Class | Unit | Notes                                                                                                                      |
 | ------------------ | ------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
-| Import Limit       | Current      | A    | The limit actually being enforced: the most restrictive active constraint (diagnostic)                                         |
+| Import Limit       | Current      | A    | The limit actually being enforced: the most restrictive active constraint (diagnostic)                                     |
 | Binding Constraint | Enum         | —    | Which constraint sets that limit: Firm Service Rating, Grid Envelope, Voltage Support, Off-Grid, Requested, Operator, None |
 
 #### Power Control System Sensor Attributes
 
 On **Import Limit**, and present only when the panel publishes them. These are the inputs the panel reconciled to produce the enforced limit above.
 
-| Attribute                | Type   | Notes                                                           |
-| ------------------------ | ------ | --------------------------------------------------------------- |
-| `pcs_enabled`            | bool   | Whether the panel's PCS is enabled at all                       |
-| `feed_import_limit`      | float  | The Firm Service Rating: the commissioned, always-on floor (A)  |
-| `operator_import_limit`  | float  | A cap imposed by a fleet or aggregator operator (A)             |
-| `off_grid_import_limit`  | float  | The import cap while islanded (A)                               |
-| `requested_import_limit` | float  | A voluntary limit requested by the owner or installer (A)       |
-| `<name>_enablement`      | string | Per limit: `UNSPECIFIED`, `UNCONFIGURED`, `DISABLED`, `ENABLED` |
-| `<name>_active`          | bool   | Per limit: whether that constraint is currently enforcing       |
+| Attribute                | Type   | Notes                                                          |
+| ------------------------ | ------ | -------------------------------------------------------------- |
+| `pcs_enabled`            | bool   | Whether the panel's PCS is enabled at all                      |
+| `feed_import_limit`      | float  | The Firm Service Rating: the commissioned, always-on floor (A) |
+| `operator_import_limit`  | float  | A cap imposed by a fleet or aggregator operator (A)            |
+| `off_grid_import_limit`  | float  | The import cap while islanded (A)                              |
+| `requested_import_limit` | float  | A voluntary limit requested by the owner or installer (A)      |
+| `<name>_enablement`      | string | Per limit:`UNSPECIFIED`, `UNCONFIGURED`, `DISABLED`, `ENABLED` |
+| `<name>_active`          | bool   | Per limit: whether that constraint is currently enforcing      |
 
-### Power Flow Sensors (v2 only)
+### Power Flow Sensors
 
-| Sensor        | Device Class | Unit | Notes                                                                           |
-| ------------- | ------------ | ---- | ------------------------------------------------------------------------------- |
-| Grid Power    | Power        | W    | Grid power flow                                                                 |
-| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                          |
+| Sensor        | Device Class | Unit | Notes                                                                               |
+| ------------- | ------------ | ---- | ----------------------------------------------------------------------------------- |
+| Grid Power    | Power        | W    | Grid power flow                                                                     |
+| Site Power    | Power        | W    | Total site power (grid + PV + battery)                                              |
 | Battery Power | Power        | W    | Battery charge/discharge (**+discharging, −charging**). Only when BESS commissioned |
-| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                           |
+| PV Power      | Power        | W    | PV generation (+producing). Only when PV commissioned                               |
 
-### PV Metadata Sensors (v2 only, on the Solar sub-device)
+### PV Metadata Sensors (on the Solar sub-device)
 
 From 2.1.x these live on a **Solar** device of their own rather than on the panel's card, alongside PV Power and PV Panel Link.
 
@@ -254,39 +246,37 @@ From 2.1.x these live on a **Solar** device of their own rather than on the pane
 | ------------------ | ------------ | ---- | --------------------------------------------- |
 | PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other") |
 | PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")            |
-| Nameplate Capacity | Power        | kW   | Rated inverter capacity. Off by default        |
+| Nameplate Capacity | Power        | kW   | Rated inverter capacity. Off by default       |
 
-If you upgraded, these keep their entity ids, unique ids and history — only the card changes. **They do not keep the panel's area.** An entity takes its area
-from its device, and the new Solar device starts without one, so anything area-scoped (dashboards, automations, voice targeting a room) stops matching them
-until you assign the Solar device to an area. New installations get ids derived from the new device name, so a system installed from 2.1.x onward has
-`sensor.span_panel_solar_pv_vendor` where an upgraded one keeps `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
+If you upgraded, these keep their entity ids, unique ids and history — but not the panel's area, since an entity takes its area from its device and the Solar
+device starts without one. Assign it an area, or anything area-scoped (dashboards, automations, voice targeting a room) stops matching them. New installations
+get ids from the new device name — `sensor.span_panel_solar_pv_vendor` rather than `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
 
 **Deprecated:**
 
-| Sensor         | Reason                                                                                                                    |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| DSM Grid State | Deprecated — still available, but users should rely on `DSM State` as `DSM Grid State` may be removed in a future version |
+| Sensor         | Reason                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| DSM Grid State | Deprecated — still available, but users should rely on`DSM State` as `DSM Grid State` may be removed in a future version |
 
-### Microgrid Interconnect Device (v1.0 data model only)
+### Microgrid Interconnect Device
 
-Panels on the v1.0 data model publish their Microgrid Interconnect Device — the switch that disconnects your home from the utility during an outage — as a
-device of its own, linked to the panel. It appears automatically where the panel reports one; nothing existing moves onto it.
+Your panel publishes its Microgrid Interconnect Device — the switch that disconnects your home from the utility during an outage — as a device of its own,
+linked to the panel. It appears automatically where the panel reports one; nothing existing moves onto it.
 
-| Sensor     | Device Class | Unit | Notes                                                                       |
-| ---------- | ------------ | ---- | --------------------------------------------------------------------------- |
-| Grid State | Enum         | —    | Health of the utility supply itself: `up`, `down`, `degraded` or `unknown` |
+| Sensor     | Device Class | Unit | Notes                                                                     |
+| ---------- | ------------ | ---- | ------------------------------------------------------------------------- |
+| Grid State | Enum         | —    | Health of the utility supply itself:`up`, `down`, `degraded` or `unknown` |
 
-This is genuinely new information — the previous firmware did not report the state of the utility supply at all. It is not the same thing as **DSM Grid State**,
-which is whether **your home** is islanded. The grid can be down while your home runs happily off the battery.
+This is new information — the previous firmware did not report the utility supply at all. It is not **DSM Grid State**, which is whether **your home** is
+islanded: the grid can be down while your home runs happily off the battery.
 
-**A panel with no battery has no MID, and that is itself an answer.** The specification makes backup capability structural rather than a property — the presence
-of a MID is what says a panel can island — so **Grid Islandable** reads `Off` on such a panel rather than going unavailable, and **Grid Forming Entity** reads
-`Grid`. Neither is a default standing in for a missing reading; both are what the absence of islanding hardware means.
+**A panel with no battery has no MID, and that is itself an answer.** The specification makes backup capability structural — having a MID is what says a panel
+can island — so **Grid Islandable** reads `Off` and **Grid Forming Entity** reads `Grid` rather than either going unavailable.
 
-`DSM Grid State` also becomes more trustworthy on this data model. It keeps its entity id and its history, but where it used to be inferred — from the battery
-when one was fitted, otherwise from the dominant power source — it now reads the islanding state the MID actually senses.
+`DSM Grid State` keeps its entity id and history but is no longer inferred from the battery or the dominant power source; it now reads the islanding state the
+MID actually senses.
 
-### Adopted Devices (v1.0 data model only)
+### Adopted Devices
 
 The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modelled. Rather than ignoring it, the integration
 gives it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
@@ -314,9 +304,9 @@ Applies to Current Power, Feed Through Power, Battery Power, PV Power, Grid Powe
 
 **Grid Power** carries one more, because its name is only true in some wiring:
 
-| Attribute              | Type    | Notes                                                                       |
-| ---------------------- | ------- | --------------------------------------------------------------------------- |
-| `at_service_entrance`  | boolean | Whether this panel's upstream lugs are where the utility actually connects |
+| Attribute             | Type    | Notes                                                                      |
+| --------------------- | ------- | -------------------------------------------------------------------------- |
+| `at_service_entrance` | boolean | Whether this panel's upstream lugs are where the utility actually connects |
 
 Grid Power reads the upstream lugs. That is grid flow when those lugs are the utility connection point, which is the ordinary case. Put a battery between the
 utility and your main lugs, or feed this panel from another panel, and the same reading becomes **this panel's** supply while **Grid Power Flow** stays the
@@ -363,21 +353,21 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 | Charger Status     | Enum         | —    | OCPP-based states: AVAILABLE, PREPARING, CHARGING, SUSPENDED_EV, etc. Translated |
 | Advertised Current | Current      | A    | Amps offered to the vehicle                                                      |
 | Lock State         | Enum         | —    | LOCKED, UNLOCKED, UNKNOWN. Translated                                            |
-| Part Number        | —            | —    | Charger part number (diagnostic, **off by default**). v1.0 data model only       |
+| Part Number        | —            | —    | Charger part number (diagnostic,**off by default**)                              |
 
 #### EVSE Binary Sensors (per charger)
 
-| Sensor          | Device Class     | Notes                                                                                                   |
-| --------------- | ---------------- | ------------------------------------------------------------------------------------------------------- |
-| Charging        | Battery Charging | ON when status is CHARGING                                                                              |
-| EV Connected    | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING — a vehicle is plugged in            |
-| EVSE Panel Link | Connectivity     | (v1.0) Whether the panel can reach the charger. A different fact from EV Connected, and it can disagree |
+| Sensor          | Device Class     | Notes                                                                                            |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
+| Charging        | Battery Charging | ON when status is CHARGING                                                                       |
+| EV Connected    | Plug             | ON when status is PREPARING, CHARGING, SUSPENDED\_\*, or FINISHING — a vehicle is plugged in     |
+| EVSE Panel Link | Connectivity     | Whether the panel can reach the charger. A different fact from EV Connected, and it can disagree |
 
 **EVSE Panel Link is not EV Connected.** EV Connected is what the charger says about the cable in front of it; EVSE Panel Link is what the panel says about
 whether it can reach the charger at all. A charger part-way through a session behind a lost link reports a plugged-in vehicle and a dead link at the same time.
 EVSE Panel Link is a diagnostic and appears only where the circuit feeding that charger publishes the link record.
 
-#### EVSE Controls (per charger, v1.0)
+#### EVSE Controls (per charger)
 
 | Control                   | Platform | Unit | Notes                                                                                   |
 | ------------------------- | -------- | ---- | --------------------------------------------------------------------------------------- |
@@ -397,26 +387,26 @@ charger is still enforcing.
 | Serial Number    | `serial-number`    |
 | Software Version | `software-version` |
 
-### BESS Sub-Device (v2 only, conditional)
+### BESS Sub-Device (conditional)
 
 When a Battery Energy Storage System (BESS) is commissioned, the integration creates a separate BESS sub-device linked to the panel via `via_device`. The BESS
 device uses manufacturer, model, serial number, and software version from battery metadata as device info attributes.
 
 #### BESS Sensors
 
-| Sensor              | Device Class   | Unit | Notes                                                                                            |
-| ------------------- | -------------- | ---- | ------------------------------------------------------------------------------------------------ |
-| Battery Level       | Battery        | %    | State of energy as percentage                                                                    |
-| Battery Power       | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device                                |
-| Meter Power         | Power          | W    | The BESS's own meter (**+discharging, −charging**), agreeing with Battery Power. v1.0 data model only |
-| Communication State | —              | —    | The BESS's report of its own link health (diagnostic, disabled by default). v1.0 data model only |
-| BESS Vendor         | —              | —    | Battery system vendor (diagnostic)                                                               |
-| BESS Model          | —              | —    | Battery system model (diagnostic)                                                                |
-| BESS Part Number    | —              | —    | Battery system part number (diagnostic, **off by default**). v1.0 data model only                |
-| BESS Serial Number  | —              | —    | Battery system serial number (diagnostic)                                                        |
-| BESS Firmware       | —              | —    | Battery system firmware (diagnostic)                                                             |
-| Nameplate Capacity  | Energy Storage | kWh  | Rated battery capacity (diagnostic, **off by default**)                                          |
-| Stored Energy       | Energy Storage | kWh  | Current stored energy (diagnostic)                                                               |
+| Sensor              | Device Class   | Unit | Notes                                                                           |
+| ------------------- | -------------- | ---- | ------------------------------------------------------------------------------- |
+| Battery Level       | Battery        | %    | State of energy as percentage                                                   |
+| Battery Power       | Power          | W    | Same entity as Power Flow Battery Power, shown on BESS sub-device               |
+| Meter Power         | Power          | W    | The BESS's own meter (**+discharging, −charging**), agreeing with Battery Power |
+| Communication State | —              | —    | The BESS's report of its own link health (diagnostic, disabled by default)      |
+| BESS Vendor         | —              | —    | Battery system vendor (diagnostic)                                              |
+| BESS Model          | —              | —    | Battery system model (diagnostic)                                               |
+| BESS Part Number    | —              | —    | Battery system part number (diagnostic,**off by default**)                      |
+| BESS Serial Number  | —              | —    | Battery system serial number (diagnostic)                                       |
+| BESS Firmware       | —              | —    | Battery system firmware (diagnostic)                                            |
+| Nameplate Capacity  | Energy Storage | kWh  | Rated battery capacity (diagnostic,**off by default**)                          |
+| Stored Energy       | Energy Storage | kWh  | Current stored energy (diagnostic)                                              |
 
 #### BESS Binary Sensors
 
@@ -440,22 +430,22 @@ Applies to Main Meter and Feed Through energy sensors.
 | Produced Energy | Energy       | Wh   | Cumulative energy produced                                            |
 | Consumed Energy | Energy       | Wh   | Cumulative energy consumed                                            |
 | Net Energy      | Energy       | Wh   | Net energy (sign depends on device type — PV circuits invert)         |
-| Current         | Current      | A    | (v2) Measured circuit current. Only when panel reports `current_a`    |
-| Breaker Rating  | Current      | A    | (v2) Circuit breaker amperage (diagnostic). Only when reported        |
+| Current         | Current      | A    | Measured circuit current. Only when panel reports`current_a`          |
+| Breaker Rating  | Current      | A    | Circuit breaker amperage (diagnostic). Only when reported             |
 
 ### Circuit Power Sensor Attributes
 
-| Attribute         | Type   | Notes                                                                                                                   |
-| ----------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `tabs`            | string | Breaker slot position(s)                                                                                                |
-| `voltage`         | string | 120 or 240 (derived from tab count)                                                                                     |
-| `always_on`       | bool   | Whether circuit is always-on                                                                                            |
-| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                                                                                                 |
-| `relay_requester` | string | Who requested relay state                                                                                               |
-| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                                   |
-| `is_sheddable`    | bool   | Whether circuit can be shed                                                                                             |
-| `pcs_managed`     | bool   | (v1.0) Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it          |
-| `pcs_priority`    | int    | (v1.0) This circuit's shed order under an active import limit — distinct from `shed_priority`, which is the backup tier |
+| Attribute         | Type   | Notes                                                                                                           |
+| ----------------- | ------ | --------------------------------------------------------------------------------------------------------------- |
+| `tabs`            | string | Breaker slot position(s)                                                                                        |
+| `voltage`         | string | 120 or 240 (derived from tab count)                                                                             |
+| `always_on`       | bool   | Whether circuit is always-on                                                                                    |
+| `relay_state`     | string | OPEN / CLOSED / UNKNOWN                                                                                         |
+| `relay_requester` | string | Who requested relay state                                                                                       |
+| `shed_priority`   | string | API value: NEVER / SOC_THRESHOLD / OFF_GRID / UNKNOWN                                                           |
+| `is_sheddable`    | bool   | Whether circuit can be shed                                                                                     |
+| `pcs_managed`     | bool   | Whether the panel's Power Control System manages this circuit. Present only when the circuit reports it         |
+| `pcs_priority`    | int    | This circuit's shed order under an active import limit — distinct from`shed_priority`, which is the backup tier |
 
 ### Circuit Energy Sensor Attributes
 
@@ -466,34 +456,34 @@ Applies to Main Meter and Feed Through energy sensors.
 
 ### Binary Sensors
 
-| Sensor          | Device Class | Notes                                                                                              |
-| --------------- | ------------ | -------------------------------------------------------------------------------------------------- |
-| Door State      | Tamper       | Panel door open/closed                                                                             |
-| Ethernet Link   | Connectivity | Wired network status                                                                               |
-| Wi-Fi Link      | Connectivity | Wireless network status                                                                            |
-| Panel Status    | Connectivity | Overall panel online/offline                                                                       |
-| Grid Islandable | —            | (v2) Whether the panel can island from the grid. Off on a panel with no MID — see below           |
-| PCS Active      | Running      | (v1.0) Whether the Power Control System is limiting import right now. Only when the panel runs one |
-| PV Panel Link   | Connectivity | (v1.0) Whether the panel can reach the solar inverter. Only when the feeding circuit reports it    |
+| Sensor          | Device Class | Notes                                                                                       |
+| --------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| Door State      | Tamper       | Panel door open/closed                                                                      |
+| Ethernet Link   | Connectivity | Wired network status                                                                        |
+| Wi-Fi Link      | Connectivity | Wireless network status                                                                     |
+| Panel Status    | Connectivity | Overall panel online/offline                                                                |
+| Grid Islandable | —            | Whether the panel can island from the grid. Off on a panel with no MID — see below          |
+| PCS Active      | Running      | Whether the Power Control System is limiting import right now. Only when the panel runs one |
+| PV Panel Link   | Connectivity | Whether the panel can reach the solar inverter. Only when the feeding circuit reports it    |
 
 **Removed from binary sensors:**
 
-| Sensor          | Reason                                                 |
-| --------------- | ------------------------------------------------------ |
-| Cellular (wwan) | Replaced by `Vendor Cloud` sensor (cloud connectivity) |
+| Sensor          | Reason                                                |
+| --------------- | ----------------------------------------------------- |
+| Cellular (wwan) | Replaced by`Vendor Cloud` sensor (cloud connectivity) |
 
 ### Circuit Controls (per user-controllable circuit)
 
-| Entity                | Type   | Notes                                                                      |
-| --------------------- | ------ | -------------------------------------------------------------------------- |
-| Breaker               | Switch | On/off relay control                                                       |
-| Circuit Priority      | Select | (v2) Controls when the circuit is shed during off-grid (translated, see below) |
+| Entity           | Type   | Notes                                                                     |
+| ---------------- | ------ | ------------------------------------------------------------------------- |
+| Breaker          | Switch | On/off relay control                                                      |
+| Circuit Priority | Select | Controls when the circuit is shed during off-grid (translated, see below) |
 
 ### Panel Controls
 
-| Entity                       | Type   | Notes                                                                  |
-| ---------------------------- | ------ | ---------------------------------------------------------------------- |
-| GFE Override: Grid Connected | Button | (v2) Tell the panel the grid is up when BESS communication interrupted |
+| Entity                       | Type   | Notes                                                             |
+| ---------------------------- | ------ | ----------------------------------------------------------------- |
+| GFE Override: Grid Connected | Button | Tell the panel the grid is up when BESS communication interrupted |
 
 ### BESS & Grid Management
 
@@ -582,12 +572,14 @@ Configure via `Settings` > `Devices & Services` > `SPAN Panel` > `Configure` > `
 The integration provides flexible entity naming patterns, configured during initial setup:
 
 1. **Friendly Names** (Recommended for new installations)
+
    - Entity IDs use descriptive circuit names from your SPAN panel
    - Example: `sensor.span_panel_kitchen_outlets_power`
    - Automatically updates when you rename circuits in the SPAN panel
    - More intuitive for automations and scripts
 
 2. **Circuit Numbers** (Stable entity IDs)
+
    - Entity IDs use generic circuit numbers
    - Example: `sensor.span_panel_circuit_15_power`
    - Entity IDs remain stable even when circuits are renamed
@@ -636,9 +628,9 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 
 | Issue                                               | Symptoms                                                                                                                                                                                                                                                                                                                                                                                                                            | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Energy Dashboard spikes after firmware updates**  | Huge energy-consumption spikes after panel firmware updates; charts showing untracked values that dwarf normal usage; negative energy values in statistics. Caused by the panel reporting decreased values on otherwise `TOTAL_INCREASING` sensors.                                                                                                                                                                                 | **Prevention:** enable [Energy Dip Compensation](#energy-dip-compensation) in General Options (on by default for new installs). **Fix existing spikes:** in **Developer Tools → Statistics**, search for the affected sensor (e.g. `sensor.span_panel_main_meter_consumed_energy`) and use **Adjust sum** to correct the errant entry. The integration also notifies when a decrease in the main meter consumed sensor is detected. |
-| **High CPU usage**                                  | Elevated CPU on low-power hardware (e.g. Raspberry Pi). The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default 1 s).                                                                                                                                                                                                                                                                 | Increase **Snapshot Update Interval** in **General Options**. 10–15 s is recommended for resource-constrained systems. Setting it to 0 disables debouncing and rebuilds on every MQTT message — not recommended.                                                                                                                                                                                                                    |
-| **Replaced sub-device shows the old serial number** | After replacing a SPAN sub-device (Drive / EVSE, BESS, PV inverter), the device entry in Home Assistant keeps showing the previous hardware's serial number. The integration keys entities off the panel-assigned node identity, which is intentionally stable across hardware swaps so long-term history (e.g. lifetime charging kWh for a Drive) is preserved. The device-registry serial number, however, does not auto-refresh. | In **Settings → Devices & Services → Span Panel**, open the affected sub-device and delete it, then reload the integration (or restart Home Assistant). The device re-registers with the new serial number. Entity IDs and their recorded history are preserved.                                                                                                                                                                    |
+| **Energy Dashboard spikes after firmware updates**  | Huge energy-consumption spikes after panel firmware updates; charts showing untracked values that dwarf normal usage; negative energy values in statistics. Caused by the panel reporting decreased values on otherwise`TOTAL_INCREASING` sensors.                                                                                                                                                                                  | **Prevention:** enable [Energy Dip Compensation](#energy-dip-compensation) in General Options (on by default for new installs). **Fix existing spikes:** in **Developer Tools → Statistics**, search for the affected sensor (e.g. `sensor.span_panel_main_meter_consumed_energy`) and use **Adjust sum** to correct the errant entry. The integration also notifies when a decrease in the main meter consumed sensor is detected. |
+| **High CPU usage**                                  | Elevated CPU on low-power hardware (e.g. Raspberry Pi). The integration rebuilds a full panel snapshot from MQTT messages at a configurable interval (default 1 s).                                                                                                                                                                                                                                                                 | Increase**Snapshot Update Interval** in **General Options**. 10–15 s is recommended for resource-constrained systems. Setting it to 0 disables debouncing and rebuilds on every MQTT message — not recommended.                                                                                                                                                                                                                     |
+| **Replaced sub-device shows the old serial number** | After replacing a SPAN sub-device (Drive / EVSE, BESS, PV inverter), the device entry in Home Assistant keeps showing the previous hardware's serial number. The integration keys entities off the panel-assigned node identity, which is intentionally stable across hardware swaps so long-term history (e.g. lifetime charging kWh for a Drive) is preserved. The device-registry serial number, however, does not auto-refresh. | In**Settings → Devices & Services → Span Panel**, open the affected sub-device and delete it, then reload the integration (or restart Home Assistant). The device re-registers with the new serial number. Entity IDs and their recorded history are preserved.                                                                                                                                                                     |
 | **Door sensor unavailable**                         | The SPAN API returns UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API.                                                                                                                                                                                                                                                                                                                  | The integration reports the sensor as unavailable until a proper value arrives. Opening or closing the door publishes the correct state. The door is classified as a tamper sensor (`Detected` / `Clear`) to differentiate it from a normal entry door.                                                                                                                                                                             |
 | **No switch on a circuit**                          | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The circuit is configured in the SPAN App as one of the "Always on Circuits". The API does not permit user control of those circuits, so no switch is created.                                                                                                                                                                                                                                                                      |
 
