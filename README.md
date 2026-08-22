@@ -290,8 +290,41 @@ Two things worth knowing before you build on one:
 - **Nothing adopted enters long-term statistics.** No adopted entity carries a `state_class`, because the correct one is not published on the wire and guessing
   wrong writes corrupt statistics that fixing the panel afterwards does not repair. If you want statistics from an adopted reading, wrap it in a template
   sensor, a Riemann-sum integration or a utility meter — a deliberate choice on an entity you enabled.
-- **Devices this integration already models are never adopted.** A new property on a circuit, the battery, a charger or the panel is curated in a release
-  instead, because that is where the judgement lives about whether it should be an entity, an attribute or a line on a device card.
+- **A new property on a device this integration already models is adopted too**, but as a reading on that device's existing card rather than as a device of its
+  own. See [Adopted Vendor Readings](#adopted-vendor-readings) below.
+
+### Adopted Vendor Readings
+
+The other half of vendor extensibility. A publisher can add a property to a device this integration already models — the battery, a charger, the solar inverter,
+a circuit or the panel itself — and until 2.1.x that reading went nowhere: it appeared in the diagnostics download and in no entity list. It now becomes an
+entity on that device's own card. The wire already says which device and node it belongs to, so it has a home; what it does not say is how important it is.
+
+They behave like adopted devices in the ways that matter, and differ in two:
+
+- **They arrive switched off and filed as diagnostics**, so nothing lands on a dashboard uninvited, and the new-entity notification names the device with a
+  count rather than listing each one — fifteen new vendor readings would otherwise cost you the curated additions in the same message.
+- **They are readings only — never switches, selects or number boxes**, even where the panel says the property accepts writes. These sit beside curated controls
+  that do real work, such as the charge limit that refuses a value above what your charger was commissioned for, and a generic control would sit there with none
+  of that. If a control is worth having, it arrives curated in a release.
+- **They keep the panel's own wording**, so a vendor property on the battery reads `Battery 2 Cell Temperature` rather than something tidied up. Deliberately
+  plainer than a curated entity's name: it is how you tell at a glance which entities this integration designed and which it is passing through.
+- **Nothing adopted enters long-term statistics**, exactly as for adopted devices, and here it buys something extra: with no statistics behind them, a later
+  release can correct one of these entities' units, device class or category with nothing to repair.
+
+**What the delete button does**, since it is not quite what you would expect:
+
+- Delete one while your panel is still publishing that property and it comes back — switched off — at the next reload. There is no setting to suppress it,
+  because leaving it switched off is already that.
+- Delete one after your panel has stopped publishing it and it stays gone, because nothing exists to recreate it from.
+
+So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which. A property your panel stops
+publishing is left in place reading unknown rather than removed: silence on the wire does not distinguish a property that is gone from one that has not arrived
+yet, and deleting your entity on a guess is not something an upgrade should do.
+
+**These entities are permanent in id, not in identity.** If one of these readings is later curated properly, the curated entity is a new entity with its own id
+and its own history — the adopted one is not renamed into it. That is the trade for surfacing a reading the moment it appears rather than waiting for a release
+to model it, and it is why a vendor reading you have come to depend on is worth mentioning in an issue: curation is what turns it into something with a real
+name, a proper category and statistics.
 
 ### Power Sensor Attributes
 
