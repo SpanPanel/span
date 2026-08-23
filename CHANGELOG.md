@@ -4,39 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.0] - 8/2026
 
-### You will need this release when SPAN updates your panel
+### You will need this release before SPAN updates your panel
 
 SPAN firmware `r202633` replaces the way the panel publishes its data — the wire model every release up to 2.0.8 is retired in the same update that introduces
 the new one. There is no wire overlap and no setting to keep the old behaviour. **2.0.8 cannot read a panel on `r202633`**: it stays connected, reports every
 circuit as missing, and shows nothing useful.
 
-We do not control when that update reaches you, and the schedule belongs exclusively to SPAN. Panels update on SPAN's timing, not on yours or ours. A mandatory
-upgrade that keeps working therefore demands a release that can adapt on connection, and adapt again as necessary. If uninterrupted integration matters to you,
-be on this release **before** your panel changes — afterwards you are looking at a blank integration while you work out why.
+We do not control when that update reaches you, and the schedule belongs exclusively to SPAN. Panels update on SPAN's timing, not on yours or ours. If
+uninterrupted integration matters to you, install this release **before** your panel changes — afterwards you are looking at a blank integration while you work
+out why.
 
-**The transition itself is seamless.** Install 2.1.0 early and your only outage is the firmware update itself. When your panel changes over, the integration
-notices on the wire, reloads itself, notifies you, and carries on — no reconfiguration, no re-pairing, no lost history. Your entities keep their entity ids,
-their unique ids and their statistics across the change. New things appear because the new firmware publishes a bit more and because devices appropriate to your
-install are added; nothing you already had goes away. A log line and a one-time notification tell you exactly what happened, so take a screenshot. If you
-experience an extended delay, reload the integration.
+**The transition itself is seamless.** Install 2.1.0 early and your only outage is the firmware update itself. A log line and a one-time notification tell you
+exactly what happened, so take a screenshot.
 
 **A panel that is still rebooting is waited out, for as long as your panel takes.** Taking the firmware upgrade drops the panel's connection for several minutes
-— four or more is not uncommon once the panel receives its upgrade file. The integration keeps checking until the panel answers properly.
-
-**Your energy history is unaffected by that wait.** Energy sensors hold their last reading through an outage for the grace period you configure (fifteen minutes
-by default), which is what stops a gap becoming an `unknown` and a spike in your statistics.
-
-**A firmware upgrade that adds a capability reloads as well**, so hardware your panel starts reporting — the Microgrid Interconnect Device, the shed forecast,
-the power control system, battery telemetry, DER link health — turns into entities when it appears rather than at your next restart.
-
-**If following the upgrade ever fails for some other reason, you are told what to do about it**: plainly, that a reload is needed once the panel is back up,
-rather than a bare error in the log while the integration carries on reading the panel with the wrong reader.
+— four or more is not uncommon once the panel receives its upgrade file. If you experience an extended delay (over 5 minutes), reload the integration (reload is
+a menu item, not a reinstallation).
 
 ### Requires Home Assistant 2026.8.0 or newer
 
 This release raises the minimum from 2026.5.4. Home Assistant 2026.8 replaced the two device-registry calls this integration relies on — the old forms stop
-working entirely in 2027.8 — and their replacements do not exist in 2026.5 through 2026.7, so there is no version of this release that runs on both. If you are
-on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not offer you this release.
+working entirely in 2027.8.
 
 ### Added
 
@@ -74,23 +62,20 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
 - Each forecast carries its full-charge equivalent and the panel's own `forecast_confidence` as attributes, rather than as two more near-constant entities.
 
 - **Import Limit, Binding Constraint and PCS Active** — the current limit your panel enforces, which rule set it, and whether anything is being throttled right
-  now. Filed under Diagnostics with the panel's other electrical characteristics.
-- **Import Limit carries the whole arbitration as attributes**: the four constraint limits the panel reconciled, each one's `_enablement` and `_active` flag,
-  and `pcs_enabled`.
+  now. Filed under Diagnostics with the panel's other electrical characteristics. Import Limit carries the whole arbitration as attributes.
 - **Every circuit's power sensor gains `pcs_managed` and `pcs_priority`** where the circuit reports them — the shed order when an import limit binds, which is
   not the backup tier the existing `shed_priority` names.
-- All three entities appear even when the PCS is switched off, because that is a state, and the state most panels are in.
-
 - **New kinds of device your panel gains no longer wait for a release.** SPAN's data model is vendor-extensible, so a device type nobody has modelled can turn
   up at any time; one now gets a card of its own hanging off the panel, with whatever it publishes as entities beneath it, all disabled and diagnostic.
-- **A property such a device accepts writes to becomes a control**: a boolean becomes a switch, an enum a select, a bounded number a number entity, constrained
-  to what the device declared and nothing invented.
+- **A property an adopted device accepts writes to becomes a control**: a boolean becomes a switch, an enum a select, a bounded number a number entity,
+  constrained to what the device declared and nothing invented.
 - **Nothing adopted enters long-term statistics** — `state_class` is not declared on the wire and a wrong guess writes corrupt statistics; wrap an adopted
   reading in a template sensor or utility meter if you want them.
-- **A new reading a vendor adds to a device you already have now appears too**, on that device's own card — the battery, a charger, the solar inverter, a
-  circuit or the panel. Previously only whole new _devices_ were picked up, so a battery vendor adding a field reached you nowhere.
-- These arrive switched off and filed as diagnostics, like everything else adopted, and they are readings only — never switches or number boxes, because a
-  control here would sit beside the curated ones without their limits and translations.
+- **A new reading a vendor adds to a device you already have now appears too**, on the card that device already has — the battery, the Microgrid Interconnect
+  Device, a SPAN Drive or the solar inverter, with circuit and lugs readings landing on the panel's own card. Previously only whole new _devices_ were picked
+  up, so a battery vendor adding a field reached you nowhere.
+- These new readings arrive switched off and filed as diagnostics, like everything else adopted, and they are readings only — never switches or number boxes,
+  because a control here would sit beside the curated ones without their limits and translations.
 - **They keep the panel's own wording** (`Battery 2 Cell Temperature`), which is deliberately plainer than a curated entity's name so you can tell at a glance
   which is which.
 - **Deleting one hides it until the next reload while your panel is still publishing it, and removes it for good once your panel stops.** There is no setting to
@@ -107,75 +92,45 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
 
 ### Changed
 
-- **`DSM Grid State` is now more trustworthy.** It keeps its entity id and all of its history. Previously it was _inferred_ — from the battery if one was
-  fitted, otherwise from the dominant power source and whether power was crossing the grid connection. It now reads the islanding state the Microgrid
-  Interconnect Device actually senses.
-- **`Grid Islandable` keeps working** across the upgrade. The new firmware publishes no panel-level islandable property — it makes the question structural
-  instead, where the presence of a Microgrid Interconnect Device is what says a panel can island — so the entity now reflects whether that device is present. A
-  panel without one reads `Off`, which is an answer, rather than going unavailable.
-- **`Grid Forming Entity` keeps working** across the upgrade too. Your panel used to publish a source class outright; the new firmware names the forming
-  _device_, and it names it on the Microgrid Interconnect Device, which a panel without a battery does not have. On such a panel the answer is settled by what
-  cannot be there — a battery needs that device, a solar inverter cannot form a grid on its own, and a panel supplying nothing is not publishing — so the entity
-  reads `Grid`, which is exactly what your panel reported before.
+- **`DSM Grid State` is now more trustworthy**, reading the islanding state the Microgrid Interconnect Device actually senses rather than inferring it from the
+  battery, the dominant power source and which way power was crossing the grid connection. It keeps its entity id and all of its history.
+- **`Grid Islandable` keeps working** across the upgrade: the new firmware publishes no panel-level islandable property and makes the question structural
+  instead, so the entity now reflects whether a Microgrid Interconnect Device is present. A panel without one reads `Off`, which is an answer, rather than going
+  unavailable.
 - **Battery model** may read differently after upgrading: the new firmware separates the human-readable designation from the SKU, and this entity now shows the
   designation. The normalisation happens in the library on both sides of the upgrade, so it lands once, at this release, rather than unpredictably when your
   panel changes over.
 
-- **Five panel sensors are switched off for new installations, because the eBus specification's own maintainer has documented that their values cannot be relied
-  on.** A conformance note for SPAN firmware r202633 identifies three defects in what the panel publishes, all of which predate that release: the feedthrough
-  (downstream lugs) energy registers are computed from two unrelated counters and can decrease or go negative — on a panel with no feedthrough load they report
-  roughly whole-panel figures where the truth is zero — the feedthrough power reading is inverted relative to every other terminal, and the feedthrough currents
-  report the _upstream_ service conductors rather than a downstream measurement. The affected entities are **Feedthrough Produced Energy**, **Feedthrough
-  Consumed Energy**, **Feedthrough Power**, and the two **Downstream** current sensors.
-- **If you already have those five, nothing changes and they stay exactly where they are.** Home Assistant consults the enabled-by-default setting only when an
-  entity is first created, so an existing installation keeps them, keeps its history and keeps its entity IDs. This stops new installations picking them up; it
-  cannot reach back. If you use any of the five on a dashboard or in an automation, they are worth removing — but that is your decision to make, not something
-  an upgrade should do to you.
-- **Your other panel readings are unaffected, and that is now checked against a real panel rather than assumed.** A capture from a live upgraded panel arrived
-  alongside the conformance note: the panel's four power-flow values sum to zero exactly, and the battery power sensor's definition is byte-for-byte what 2.0.8
-  shipped. The upstream lugs, the main panel meter and every circuit are in the correct frame, as is the power-flow group, which the specification has now been
-  corrected to describe the way the panel has always published it.
+- **Five panel sensors are switched off for new installations** (#234), because the SPAN API documented three defects that predate SPAN firmware r202633: the
+  feedthrough energy registers can decrease or go negative, the feedthrough power reading is inverted relative to every other terminal, and the feedthrough
+  currents report the _upstream_ service conductors. The affected entities are **Feedthrough Produced Energy**, **Feedthrough Consumed Energy**, **Feedthrough
+  Power**, and the two **Downstream** current sensors.
+- **If you already have those five, nothing changes and they stay exactly where they are**, because Home Assistant consults the enabled-by-default setting only
+  when an entity is first created — so an existing installation keeps them, keeps its history and keeps its entity IDs. If you use any of the five on a
+  dashboard or in an automation they are worth removing, but that is your decision to make, not something an upgrade should do to you.
+- **Your other panel readings are unaffected, and that is now checked against a real panel rather than assumed.** A capture from a live upgraded panel shows the
+  four power-flow values summing to zero exactly and the battery power definition byte-for-byte what 2.0.8 shipped, with the upstream lugs, the main panel meter
+  and every circuit in the correct frame.
 
-- **New entities are now announced in a notification that names them — whether or not they arrived switched on.** Previously only entities added _disabled_ were
-  mentioned, on the reasoning that an enabled one is already visible in your entity list and its history. That is only true if you are watching your entity
-  list, which nobody is: an addition that breaks nothing was indistinguishable from no addition at all. The notification names every entity that was added,
-  splits them by whether they are ready to use or still switched off, and tells you where to turn the switched-off ones on.
-- **It is a notification rather than a Repair, because an addition is not a repair.** Nothing is broken and nothing needs fixing. Any new-entity item still
-  sitting in your Repairs list from a previous version is removed on upgrade.
+- **New entities are now announced in a notification, whether or not they arrived switched on.** The notification now splits what arrived into ready to use and
+  switched off and names each entity.
 
-- **The Wi-Fi network name moved to the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now also tells
-  you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID.
-- **It is no longer an attribute of the Software Version sensor.** A network name on a firmware-version sensor never made sense — it sat there because
-  `panel_size` was already in that attribute block. If you have a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')`, point it at
-  the Wi-Fi Link binary sensor instead. `panel_size` is unaffected and stays where it is.
+- **The Wi-Fi network name attribute moved to the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now
+  also tells you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID.
+- **It is no longer an attribute of the Software Version sensor**, where a network name never made sense attribute block. If you have a template reading
+  `state_attr('sensor.span_panel_software_version', 'wifi_ssid')`, point it at the Wi-Fi Link binary sensor instead.
 
-- **The three circuit energy sensors are renamed to match the ids they are given.** "Produced Energy", "Consumed Energy" and "Net Energy" become **Energy
-  Produced**, **Energy Consumed** and **Energy Net**, the order used by the `energy_produced`, `energy_consumed` and `energy_net` suffixes that these sensors'
-  unique ids carry and that new entities are given. **Entity ids, unique ids and history are unchanged**; only the name shown in the UI reorders.
+- **The three circuit energy sensors are renamed to match the ids they are given**: "Produced Energy", "Consumed Energy" and "Net Energy" become **Energy
+  Produced**, **Energy Consumed** and **Energy Net**, the order the `energy_produced`, `energy_consumed` and `energy_net` suffixes already use. **Entity ids,
+  unique ids and history are unchanged**; only the name shown in the UI reorders.
 
 ### Fixed
 
-- **Recreate entity IDs proposes the ids your panel would produce now.** Renaming a circuit in the SPAN app used to leave the button offering each entity the id
-  it already had, so it looked like it did nothing (#252). The proposal was frozen at whatever the circuit was called when the entity was first created; it now
-  follows the panel. **It is still an offer you accept** — a rename in the SPAN app never moves a live entity id by itself, and unique ids and statistics are
-  untouched. Circuit-numbers installations are unchanged: there the display name written by name sync is also what Home Assistant builds the proposal from, so
-  the button behaves exactly as it did.
-- **Recreate entity IDs no longer offers to convert a tab-named panel to friendly names.** In Tab Based Names mode the button used to propose
-  `sensor.span_panel_air_conditioner_power` for a live `sensor.span_panel_circuit_15_power` — accepting it undid, for every circuit at once, the one thing that
-  mode exists to provide. It now proposes the tab-based ID the entity already has, so Recreate is a no-op unless a breaker actually moved.
-- **Names still follow your panel in that mode**, and still stop at a name you set yourself. What changed is where the name is kept: in a field that describes
-  the entity rather than the one Home Assistant reads when it builds an entity ID. A name written by an earlier release is handed back the first time each
-  entity loads — nothing to run, nothing to confirm. **One consequence:** a circuit renamed in the SPAN app now updates the display after the integration
-  reloads, a few seconds rather than immediately, which is what Circuit Friendly Names mode has always done.
-
-- **Only circuits you actually renamed are offered.** Installations old enough to predate the current suffixes carry entity ids ending `_consumed_energy`,
-  `_produced_energy`, `_net_energy` or `_current_power`, where an entity created today would end `_energy_consumed`, `_energy_produced`, `_energy_net` or
-  `_power`. Those ids keep the suffix they have. Renormalising them would have offered a rename for **every circuit on the panel** — seventy-four on one we
-  measured — burying the one circuit that had actually been renamed and breaking the dashboards and automations of anyone who accepted.
+- **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style; unique ids and statistics are untouched.
 - **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
   "Possible states: Unknown".
-- **The README described Battery Power's sign backwards.** The sensor reports **discharging** as positive and always has — that is what release 2.0.5
-  established (#184) and what a measured panel confirms. **No entity changed and no reading moved**; only the documentation was ever wrong.
+- **The README described Battery Power's sign backwards.** The sensor reports **discharging** as positive and always has, as release 2.0.5 established (#184)
+  and a measured panel confirms — **no entity changed and no reading moved**, only the documentation was ever wrong.
 
 ## [2.0.8] - 5/2026
 

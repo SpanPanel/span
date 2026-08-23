@@ -5,12 +5,14 @@ vendor-extensible. A device type this integration has never modelled therefore
 arrives as an expected event rather than a hypothetical one -- and until now it
 arrived as nothing at all: no device, no entity, no sign it was there.
 
-**The unit of adoption is a device, never a property.** A new property on a device
-this integration already models is a curation task with a short turnaround, and
-minting an entity for it automatically would spend an `entity_id` permanently on
-a shape a human would likely have chosen differently. That cost only bites where
-curation is coming. On a device type nobody has modelled, no better identity is
-coming, so a disabled diagnostic entity is strictly better than the silence.
+**This module's unit is a device. A property on a device already modelled is
+`extension.py`'s**, and the split is where the two costs differ. On a device type
+nobody has modelled, no better identity is coming, so a disabled diagnostic
+entity is strictly better than the silence -- and a settable property becomes a
+real control, because there is no curated control beside it for a generic write
+path to undercut. On a curated device, curation is plausibly coming and its
+controls do real work, so `extension.py` mints a terminal identity in plain wire
+vocabulary and surfaces even a settable property as a reading.
 
 **Nothing adopted enters long-term statistics.** No adopted entity carries a
 `state_class`, ever. Three reasons, and the third is the one that shapes the

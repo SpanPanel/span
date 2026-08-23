@@ -7,6 +7,11 @@ This file contains sensor definitions for all native integration sensors:
 - Circuit power and energy sensors
 - Unmapped circuit sensors (invisible backing data)
 - Battery sensor
+
+Disabled by default from 2.1.0, because the SPAN API's own values are unreliable
+(#234): Feedthrough Power, Feedthrough Produced Energy, Feedthrough Consumed
+Energy, Downstream L1 Current, Downstream L2 Current. The default applies at
+first registration only, so existing installs keep them.
 """
 
 from __future__ import annotations
@@ -297,42 +302,36 @@ UPSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
     )
 )
 
-DOWNSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
-    key="downstream_l1_current",
-    field_path="panel.downstream_l1_current_a",
-    # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
-    # note says this cannot be relied on -- reports the UPSTREAM service conductors, not a downstream measurement.
-    # Disabled rather than removed because it shipped in 2.0.8, so an existing
-    # install has it with history and entities must not vanish. This changes
-    # nothing for those installs -- the default applies at first registration
-    # only -- it stops NEW installs adopting it. See the delta document.
-    entity_registry_enabled_default=False,
-    translation_key="downstream_l1_current",
-    device_class=SensorDeviceClass.CURRENT,
-    state_class=SensorStateClass.MEASUREMENT,
-    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-    entity_category=EntityCategory.DIAGNOSTIC,
-    suggested_display_precision=2,
-    value_fn=lambda s: s.downstream_l1_current_a,
+DOWNSTREAM_L1_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
+    SpanPanelDataSensorEntityDescription(
+        key="downstream_l1_current",
+        field_path="panel.downstream_l1_current_a",
+        # Unreliable in the SPAN API; see the module docstring (#234).
+        entity_registry_enabled_default=False,
+        translation_key="downstream_l1_current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=2,
+        value_fn=lambda s: s.downstream_l1_current_a,
+    )
 )
 
-DOWNSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = SpanPanelDataSensorEntityDescription(
-    key="downstream_l2_current",
-    field_path="panel.downstream_l2_current_a",
-    # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
-    # note says this cannot be relied on -- reports the UPSTREAM service conductors, not a downstream measurement.
-    # Disabled rather than removed because it shipped in 2.0.8, so an existing
-    # install has it with history and entities must not vanish. This changes
-    # nothing for those installs -- the default applies at first registration
-    # only -- it stops NEW installs adopting it. See the delta document.
-    entity_registry_enabled_default=False,
-    translation_key="downstream_l2_current",
-    device_class=SensorDeviceClass.CURRENT,
-    state_class=SensorStateClass.MEASUREMENT,
-    native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-    entity_category=EntityCategory.DIAGNOSTIC,
-    suggested_display_precision=2,
-    value_fn=lambda s: s.downstream_l2_current_a,
+DOWNSTREAM_L2_CURRENT_SENSOR: SpanPanelDataSensorEntityDescription = (
+    SpanPanelDataSensorEntityDescription(
+        key="downstream_l2_current",
+        field_path="panel.downstream_l2_current_a",
+        # Unreliable in the SPAN API; see the module docstring (#234).
+        entity_registry_enabled_default=False,
+        translation_key="downstream_l2_current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=2,
+        value_fn=lambda s: s.downstream_l2_current_a,
+    )
 )
 
 # Main breaker rating sensor (v2 only, conditionally created)
@@ -986,13 +985,7 @@ PANEL_POWER_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="feedthroughPowerW",
         field_path="panel.feedthrough_power_w",
-        # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
-        # note says this cannot be relied on -- inverted: positive when power leaves the enclosure, where every other
-        # enclosure terminal is positive inbound. Negate to compensate.
-        # Disabled rather than removed because it shipped in 2.0.8, so an existing
-        # install has it with history and entities must not vanish. This changes
-        # nothing for those installs -- the default applies at first registration
-        # only -- it stops NEW installs adopting it. See the delta document.
+        # Unreliable in the SPAN API; see the module docstring (#234).
         entity_registry_enabled_default=False,
         translation_key="feedthrough_power",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -1083,13 +1076,7 @@ PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyProducedWh",
         field_path="panel.feedthrough_energy_produced_wh",
-        # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
-        # note says this cannot be relied on -- the difference of two unrelated counters, non-monotonic, and ~whole-panel
-        # figures where the truth is zero. No transformation recovers a real value.
-        # Disabled rather than removed because it shipped in 2.0.8, so an existing
-        # install has it with history and entities must not vanish. This changes
-        # nothing for those installs -- the default applies at first registration
-        # only -- it stops NEW installs adopting it. See the delta document.
+        # Unreliable in the SPAN API; see the module docstring (#234).
         entity_registry_enabled_default=False,
         translation_key="feedthrough_produced_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
@@ -1101,13 +1088,7 @@ PANEL_ENERGY_SENSORS: tuple[
     SpanPanelDataSensorEntityDescription(
         key="feedthroughEnergyConsumedWh",
         field_path="panel.feedthrough_energy_consumed_wh",
-        # Disabled by default from 2.1.0: the eBus maintainer's r202633 conformance
-        # note says this cannot be relied on -- the difference of two unrelated counters, non-monotonic, and ~whole-panel
-        # figures where the truth is zero. No transformation recovers a real value.
-        # Disabled rather than removed because it shipped in 2.0.8, so an existing
-        # install has it with history and entities must not vanish. This changes
-        # nothing for those installs -- the default applies at first registration
-        # only -- it stops NEW installs adopting it. See the delta document.
+        # Unreliable in the SPAN API; see the module docstring (#234).
         entity_registry_enabled_default=False,
         translation_key="feedthrough_consumed_energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
