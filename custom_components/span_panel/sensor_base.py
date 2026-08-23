@@ -123,7 +123,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     )
 
                 # Wire explicit entity_id via subclass helper
-                entity_id = self._construct_entity_id(snapshot, description, existing_entity_id)
+                entity_id = self._construct_entity_id(snapshot, description)
                 if entity_id:
                     self.entity_id = entity_id
         else:
@@ -228,17 +228,19 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         self,
         snapshot: SpanPanelSnapshot,
         description: T,
-        existing_entity_id: str | None = None,
     ) -> str | None:
         """Construct explicit entity_id for the sensor.
 
         Subclasses may override to use entity_id helpers from helpers.py.
         Returns None to let HA auto-generate from _attr_name.
 
+        Whether the entity is already in the registry is deliberately not an
+        input: the value is what current panel data and the naming flags
+        produce, and HA keeps an existing entity's stored ID regardless.
+
         Args:
             snapshot: The panel snapshot data
             description: The sensor description
-            existing_entity_id: The existing entity_id from registry, or None for new entities
 
         """
         return None

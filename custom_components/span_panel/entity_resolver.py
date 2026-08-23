@@ -284,10 +284,25 @@ def construct_single_circuit_entity_id(
     platform: str,
     suffix: str,
     circuit_data: SpanCircuitSnapshot,
-    unique_id: str | None = None,
     device_name: str | None = None,
 ) -> str | None:
-    """Construct entity ID for single-circuit sensors.
+    """Construct the entity ID the current panel data and naming flags produce.
+
+    Always computed, never read back from the registry -- including for a circuit
+    that already has entities. Home Assistant treats an entity_id set before the
+    entity is added as a *suggestion*: `EntityPlatform` splits it into
+    `suggested_object_id`, hands that to `async_get_or_create`, and for a
+    unique_id already on file that call routes to `_async_update_entity` with no
+    `new_entity_id`, then reassigns `entity.entity_id` from the stored entry. A
+    live entity ID therefore cannot move from here; only the stored suggestion
+    changes.
+
+    That suggestion is the field "Recreate entity IDs" regenerates from when the
+    registry holds no user `name` override, which in friendly-names mode is
+    always the case -- the panel name reaches the UI as `original_name`. Handing
+    back the stored entity ID froze the suggestion at whatever the circuit was
+    called on the day it was added, so a circuit renamed in the SPAN app was
+    offered its own ID and Recreate looked broken (issue #252).
 
     Args:
         coordinator: The coordinator instance
@@ -295,33 +310,12 @@ def construct_single_circuit_entity_id(
         platform: Platform name ("sensor", "switch", "select")
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_data: Circuit data object
-        unique_id: The unique ID for this entity (None to skip registry lookup)
         device_name: Device name for entity ID construction (None to use from config entry)
 
     Returns:
         Constructed entity ID string or None if device info unavailable
 
     """
-    # Check registry first only if unique_id is provided
-    if unique_id is not None:
-        entity_registry = er.async_get(coordinator.hass)
-        existing_entity_id = entity_registry.async_get_entity_id(platform, DOMAIN, unique_id)
-
-        _LOGGER.debug(
-            "Circuit helper registry lookup - unique_id=%s, found_entity_id=%s",
-            unique_id,
-            existing_entity_id,
-        )
-
-        if existing_entity_id:
-            return existing_entity_id
-        # FATAL ERROR: Expected unique_id not found in registry
-        raise ValueError(
-            f"REGISTRY LOOKUP ERROR: Expected unique_id '{unique_id}' not found in registry. "
-            f"This indicates a migration or configuration mismatch."
-        )
-    _LOGGER.debug("Circuit helper - no unique_id provided, skipping registry lookup")
-
     # Get device info
     device_info = snapshot_to_device_info(snapshot, device_name)
     if not device_info or not device_info.get("name"):

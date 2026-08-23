@@ -120,16 +120,15 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         super().__init__(coordinator)
 
         # Explicitly set entity_id using construct_single_circuit_entity_id
-        # which correctly handles 240V two-tab circuits.
-        # Only pass unique_id for existing entities (registry lookup);
-        # for new entities pass None to get the constructed default.
+        # which correctly handles 240V two-tab circuits. For an entity already
+        # in the registry this is a suggestion HA records and does not act on --
+        # the stored entity_id stands. See the helper's docstring.
         constructed_id = construct_single_circuit_entity_id(
             coordinator,
             snapshot,
             "switch",
             "breaker",
             circuit,
-            unique_id=self._attr_unique_id if existing_entity_id else None,
         )
         if constructed_id:
             self.entity_id = constructed_id
