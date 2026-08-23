@@ -130,27 +130,26 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         desc_name = description.entity_description.name
         if existing_entity_id:
-            # Entity exists - use circuit-based name when configured, else panel name
-            if use_circuit_numbers:
-                circuit_identifier = construct_circuit_identifier_from_tabs(
-                    circuit.tabs, circuit_id
-                )
-                self._attr_name = f"{circuit_identifier} {desc_name}"
-            elif circuit.name:
+            # Phase 2: the panel's name, in both modes. It reaches the UI as
+            # `original_name`, which ranks below `suggested_object_id` and so
+            # cannot decide what "Recreate entity IDs" proposes.
+            if circuit.name:
                 self._attr_name = f"{circuit.name} {desc_name}"
             else:
                 fallback = _unnamed_select_fallback(circuit, circuit_id)
                 self._attr_name = f"{fallback} {desc_name}"
 
-        # Sync the panel friendly name to the entity registry display name
-        # so the UI shows e.g. "Air Conditioner Circuit Priority" while the
-        # entity_id stays circuit-based.
-        if existing_entity_id and use_circuit_numbers and circuit.name:
+        # Circuit-numbers mode used to deliver the panel's name by writing the
+        # registry's `name`. That field is the user's override, and Home Assistant
+        # reads it ahead of `suggested_object_id` when generating an entity id, so
+        # occupying it made "Recreate entity IDs" propose a friendly-name id for a
+        # circuit-numbered entity. The name travels as `original_name` now, so all
+        # that is left is to let go of what the old scheme wrote -- and only that:
+        # any other name is the user's.
+        if existing_entity_id and circuit.name:
             entity_entry = entity_registry.async_get(existing_entity_id)
-            if entity_entry:
-                expected_name = f"{circuit.name} {desc_name}"
-                if entity_entry.name is None or entity_entry.name == expected_name:
-                    entity_registry.async_update_entity(existing_entity_id, name=expected_name)
+            if entity_entry and entity_entry.name == f"{circuit.name} {desc_name}":
+                entity_registry.async_update_entity(existing_entity_id, name=None)
 
         if not existing_entity_id:
             # Initial install - use flag-based name for entity_id generation
@@ -289,70 +288,38 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         circuit = snapshot.circuits.get(self.id)
         if circuit:
             current_circuit_name = circuit.name
-            use_circuit_numbers = self.coordinator.config_entry.options.get(
-                USE_CIRCUIT_NUMBERS, False
-            )
-            desc_name = self.description_wrapper.entity_description.name
 
-            if use_circuit_numbers:
-                # Circuit-numbers mode: update registry display name, no reload
-                if self.entity_id and current_circuit_name:
-                    entity_registry = er.async_get(self.hass)
-                    entity_entry = entity_registry.async_get(self.entity_id)
-                    if entity_entry:
-                        # Compute old expected display BEFORE updating
-                        # _previous_circuit_name
-                        old_display = (
-                            f"{self._previous_circuit_name} {desc_name}"
-                            if isinstance(self._previous_circuit_name, str)
-                            else None
-                        )
-                        new_display = f"{current_circuit_name} {desc_name}"
+            # One path for both modes: the name is carried by `original_name`,
+            # which is written when the entity is added, so a reload is what
+            # refreshes it. A name in the registry is one the user set.
+            user_has_override = False
+            if self.entity_id:
+                entity_registry = er.async_get(self.hass)
+                entity_entry = entity_registry.async_get(self.entity_id)
+                if entity_entry and entity_entry.name:
+                    user_has_override = True
+                    _LOGGER.debug(
+                        "User has customized name for %s, skipping sync",
+                        self.entity_id,
+                    )
 
-                        # User override: registry name differs from both old
-                        # and new expected display names
-                        user_has_override = (
-                            entity_entry.name is not None
-                            and entity_entry.name not in {old_display, new_display}
-                        )
-
-                        if not user_has_override and (
-                            self._previous_circuit_name is _NAME_UNSET
-                            or current_circuit_name != self._previous_circuit_name
-                        ):
-                            entity_registry.async_update_entity(self.entity_id, name=new_display)
-
+            if user_has_override:
                 self._previous_circuit_name = current_circuit_name
-            else:
-                # Friendly-names mode: existing reload behavior
-                user_has_override = False
-                if self.entity_id:
-                    entity_registry = er.async_get(self.hass)
-                    entity_entry = entity_registry.async_get(self.entity_id)
-                    if entity_entry and entity_entry.name:
-                        user_has_override = True
-                        _LOGGER.debug(
-                            "User has customized name for %s, skipping sync",
-                            self.entity_id,
-                        )
-
-                if user_has_override:
-                    self._previous_circuit_name = current_circuit_name
-                elif self._previous_circuit_name is _NAME_UNSET:
-                    _LOGGER.info(
-                        "First update: syncing entity name to panel name '%s' for select, requesting reload",
-                        current_circuit_name,
-                    )
-                    self._previous_circuit_name = current_circuit_name
-                    self.coordinator.request_reload()
-                elif current_circuit_name != self._previous_circuit_name:
-                    _LOGGER.info(
-                        "Auto-sync detected circuit name change from '%s' to '%s' for select, requesting integration reload",
-                        self._previous_circuit_name,
-                        current_circuit_name,
-                    )
-                    self._previous_circuit_name = current_circuit_name
-                    self.coordinator.request_reload()
+            elif self._previous_circuit_name is _NAME_UNSET:
+                _LOGGER.info(
+                    "First update: syncing entity name to panel name '%s' for select, requesting reload",
+                    current_circuit_name,
+                )
+                self._previous_circuit_name = current_circuit_name
+                self.coordinator.request_reload()
+            elif current_circuit_name != self._previous_circuit_name:
+                _LOGGER.info(
+                    "Auto-sync detected circuit name change from '%s' to '%s' for select, requesting integration reload",
+                    self._previous_circuit_name,
+                    current_circuit_name,
+                )
+                self._previous_circuit_name = current_circuit_name
+                self.coordinator.request_reload()
 
         # Update options and current option based on coordinator data
         circuit = self._get_circuit()

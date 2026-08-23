@@ -22,7 +22,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from span_panel_api import SpanPanelSnapshot
 
-from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION, USE_CIRCUIT_NUMBERS
+from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import build_dip_attributes, process_energy_dip
 from .entity import SpanPanelEntity
@@ -99,26 +99,17 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     "sensor", DOMAIN, self._attr_unique_id
                 )
 
-                use_circuit_numbers = data_coordinator.config_entry.options.get(
-                    USE_CIRCUIT_NUMBERS, False
-                )
-
                 if existing_entity_id:
-                    if use_circuit_numbers:
-                        # Circuit-numbers mode: keep circuit-based name for entity_id stability
-                        self._attr_name = self._generate_friendly_name(snapshot, description)
-                    else:
-                        # Friendly-names mode: use panel name for sync
-                        self._attr_name = self._generate_panel_name(snapshot, description)
+                    # Phase 2: the panel's name, in both modes. It reaches the UI
+                    # as `original_name`, which ranks below `suggested_object_id`
+                    # and so cannot decide what "Recreate entity IDs" proposes.
+                    self._attr_name = self._generate_panel_name(snapshot, description)
                 else:
-                    # Initial install - use flag-based name
+                    # Phase 1: the flag-based name the mode calls for.
                     self._attr_name = self._generate_friendly_name(snapshot, description)
 
-                # Sync panel friendly name to registry display name in
-                # circuit-numbers mode so the UI shows e.g.
-                # "Kitchen Power" while entity_id stays circuit-based.
-                if existing_entity_id and use_circuit_numbers:
-                    self._sync_friendly_name_to_registry(
+                if existing_entity_id:
+                    self._release_synced_registry_name(
                         snapshot, description, entity_registry, existing_entity_id
                     )
 
@@ -205,24 +196,35 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         # For now, fall back to friendly name
         return self._generate_friendly_name(snapshot, description)
 
-    def _sync_friendly_name_to_registry(
+    def _release_synced_registry_name(
         self,
         snapshot: SpanPanelSnapshot,
         description: T,
         entity_registry: er.EntityRegistry,
         existing_entity_id: str,
     ) -> None:
-        """Sync panel circuit name to registry display name in circuit-numbers mode."""
+        """Give the registry's `name` back to the user, where an older release took it.
+
+        Circuit-numbers mode used to deliver the panel's name by writing the
+        registry's `name`. That field is the *user's* override, and Home Assistant
+        reads it ahead of `suggested_object_id` when generating an entity id -- so
+        occupying it made "Recreate entity IDs" propose a friendly-name id for a
+        circuit-numbered entity, converting the whole panel if accepted.
+
+        The name now travels as `original_name` instead, so this only has to let
+        go of what the old scheme wrote. Only a name this integration would have
+        written is cleared; anything else is the user's and is left exactly where
+        it is, which is the same test the write used to gate on.
+        """
+        entity_entry = entity_registry.async_get(existing_entity_id)
+        if not entity_entry or entity_entry.name is None:
+            return
         circuit = snapshot.circuits.get(getattr(self, "circuit_id", ""))
         if not (circuit and circuit.name):
             return
-        entity_entry = entity_registry.async_get(existing_entity_id)
-        if not entity_entry:
-            return
         description_suffix = str(getattr(description, "name", None) or "Sensor")
-        expected_name = f"{circuit.name} {description_suffix}"
-        if entity_entry.name is None or entity_entry.name == expected_name:
-            entity_registry.async_update_entity(existing_entity_id, name=expected_name)
+        if entity_entry.name == f"{circuit.name} {description_suffix}":
+            entity_registry.async_update_entity(existing_entity_id, name=None)
 
     def _construct_entity_id(
         self,
@@ -248,7 +250,14 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         return None
 
     def _sync_circuit_name(self) -> None:
-        """Sync circuit name changes: registry display in circuit-numbers mode, reload in friendly-names mode."""
+        """Follow a circuit renamed on the panel, by reloading so the name is rebuilt.
+
+        One path for both modes. The name is carried by `original_name`, which is
+        written when the entity is added, so a reload is what refreshes it --
+        circuit-numbers mode used to write the registry's `name` in place instead,
+        which was quicker but handed that field the last word over entity id
+        generation. See `_release_synced_registry_name`.
+        """
         if not (hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits")):
             return
 
@@ -257,61 +266,33 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             return
 
         current_circuit_name = circuit.name
-        use_circuit_numbers = self.coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        if use_circuit_numbers:
-            # Circuit-numbers mode: update registry display name, no reload
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry:
-                    description_suffix = str(
-                        getattr(self.entity_description, "name", None) or "Sensor"
-                    )
-                    old_display = (
-                        f"{self._previous_circuit_name} {description_suffix}"
-                        if isinstance(self._previous_circuit_name, str)
-                        else None
-                    )
-                    new_display = f"{current_circuit_name} {description_suffix}"
+        # A name in the registry is one the user set: theirs outranks the panel's,
+        # and reloading would not change what is displayed anyway.
+        user_has_override = False
+        if self.entity_id:
+            entity_registry = er.async_get(self.hass)
+            entity_entry = entity_registry.async_get(self.entity_id)
+            if entity_entry and entity_entry.name:
+                user_has_override = True
 
-                    user_has_override = entity_entry.name is not None and entity_entry.name not in {
-                        old_display,
-                        new_display,
-                    }
-
-                    if not user_has_override and (
-                        self._previous_circuit_name is _NAME_UNSET
-                        or current_circuit_name != self._previous_circuit_name
-                    ):
-                        entity_registry.async_update_entity(self.entity_id, name=new_display)
+        if user_has_override:
             self._previous_circuit_name = current_circuit_name
-        else:
-            # Friendly-names mode: existing reload behavior
-            user_has_override = False
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry and entity_entry.name:
-                    user_has_override = True
-
-            if user_has_override:
-                self._previous_circuit_name = current_circuit_name
-            elif self._previous_circuit_name is _NAME_UNSET:
-                _LOGGER.info(
-                    "First update: syncing sensor name to panel name '%s', requesting reload",
-                    current_circuit_name,
-                )
-                self._previous_circuit_name = current_circuit_name
-                self.coordinator.request_reload()
-            elif current_circuit_name != self._previous_circuit_name:
-                _LOGGER.info(
-                    "Auto-sync detected circuit name change from '%s' to '%s' for sensor, requesting integration reload",
-                    self._previous_circuit_name,
-                    current_circuit_name,
-                )
-                self._previous_circuit_name = current_circuit_name
-                self.coordinator.request_reload()
+        elif self._previous_circuit_name is _NAME_UNSET:
+            _LOGGER.info(
+                "First update: syncing sensor name to panel name '%s', requesting reload",
+                current_circuit_name,
+            )
+            self._previous_circuit_name = current_circuit_name
+            self.coordinator.request_reload()
+        elif current_circuit_name != self._previous_circuit_name:
+            _LOGGER.info(
+                "Auto-sync detected circuit name change from '%s' to '%s' for sensor, requesting integration reload",
+                self._previous_circuit_name,
+                current_circuit_name,
+            )
+            self._previous_circuit_name = current_circuit_name
+            self.coordinator.request_reload()
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""

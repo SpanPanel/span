@@ -1198,8 +1198,8 @@ def test_energy_sensor_name_change_requests_reload() -> None:
     assert sensor._previous_circuit_name == "Renamed Kitchen"
 
 
-def test_circuit_sensor_entity_id_stable_in_circuit_numbers_mode() -> None:
-    """Entity name should be circuit-based in circuit-numbers mode for entity_id stability."""
+def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode() -> None:
+    """The name follows the panel; the entity_id does not follow the name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot, options={USE_CIRCUIT_NUMBERS: True})
@@ -1214,14 +1214,13 @@ def test_circuit_sensor_entity_id_stable_in_circuit_numbers_mode() -> None:
 
         sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
-    # In circuit-numbers mode, _attr_name should be circuit-based (contains "Circuit")
-    assert sensor._attr_name is not None
-    assert "Circuit" in sensor._attr_name
+    assert sensor._attr_name == "Kitchen Current"
+    assert sensor.entity_id == "sensor.span_panel_circuit_5_current"
     assert sensor._previous_circuit_name == "Kitchen"
 
 
-def test_circuit_sensor_name_change_updates_registry_in_circuit_numbers_mode() -> None:
-    """In circuit-numbers mode, name changes update registry display name without reload."""
+def test_circuit_sensor_name_change_requests_reload_in_circuit_numbers_mode() -> None:
+    """A renamed circuit reloads, which is what rebuilds original_name."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen", tabs=[5])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot, options={USE_CIRCUIT_NUMBERS: True})
@@ -1248,15 +1247,12 @@ def test_circuit_sensor_name_change_updates_registry_in_circuit_numbers_mode() -
     with patch("custom_components.span_panel.sensor_base.er.async_get") as mock_async_get:
         runtime_registry = MagicMock()
         runtime_entry = MagicMock()
-        runtime_entry.name = "Kitchen Current"
+        # Released at construction, so nothing occupies the field any more.
+        runtime_entry.name = None
         runtime_registry.async_get.return_value = runtime_entry
         mock_async_get.return_value = runtime_registry
         sensor._handle_coordinator_update()
 
-    # Registry should be updated with the new display name
-    runtime_registry.async_update_entity.assert_called_once_with(
-        "sensor.circuit_5_current", name="Renamed Kitchen Current"
-    )
-    # No reload should be requested in circuit-numbers mode
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()
     assert sensor._previous_circuit_name == "Renamed Kitchen"

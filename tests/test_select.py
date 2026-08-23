@@ -515,8 +515,9 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
             "SPAN Panel",
         )
 
-    # Entity_id must still be circuit-based
-    assert select2.name == "Circuit 15 17 Circuit Priority"
+    # Phase 2: the panel's name, carried by original_name rather than the
+    # registry's `name`, which would outrank the preset id.
+    assert select2.name == "Air Conditioner Circuit Priority"
     assert select2.entity_id == "select.span_panel_circuit_15_17_circuit_priority"
 
 
@@ -558,7 +559,7 @@ def test_select_circuit_numbers_entity_id_120v_single_tab(
     assert select.entity_id == "select.span_panel_circuit_10_circuit_priority"
 
 
-def test_select_coordinator_update_circuit_numbers_updates_registry(
+def test_select_coordinator_update_circuit_numbers_requests_reload(
     hass: HomeAssistant,
 ) -> None:
     """In circuit-numbers mode, a name change should update the registry display name."""
@@ -610,9 +611,8 @@ def test_select_coordinator_update_circuit_numbers_updates_registry(
     with pytest.MonkeyPatch.context() as mp:
         runtime_registry = MagicMock()
         runtime_entry = MagicMock()
-        type(runtime_entry).name = PropertyMock(
-            return_value="Air Conditioner Circuit Priority"
-        )
+        # Released at construction, so nothing occupies the field any more.
+        type(runtime_entry).name = PropertyMock(return_value=None)
         runtime_registry.async_get.return_value = runtime_entry
         mp.setattr(
             "custom_components.span_panel.select.er.async_get",
@@ -620,8 +620,5 @@ def test_select_coordinator_update_circuit_numbers_updates_registry(
         )
         select._handle_coordinator_update()
 
-    runtime_registry.async_update_entity.assert_called_once_with(
-        "select.span_panel_circuit_15_17_circuit_priority",
-        name="Kitchen AC Circuit Priority",
-    )
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()

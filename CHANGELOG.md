@@ -160,6 +160,14 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
   follows the panel. **It is still an offer you accept** — a rename in the SPAN app never moves a live entity id by itself, and unique ids and statistics are
   untouched. Circuit-numbers installations are unchanged: there the display name written by name sync is also what Home Assistant builds the proposal from, so
   the button behaves exactly as it did.
+- **Recreate entity IDs no longer offers to convert a tab-named panel to friendly names.** In Tab Based Names mode the button used to propose
+  `sensor.span_panel_air_conditioner_power` for a live `sensor.span_panel_circuit_15_power` — accepting it undid, for every circuit at once, the one thing that
+  mode exists to provide. It now proposes the tab-based ID the entity already has, so Recreate is a no-op unless a breaker actually moved.
+- **Names still follow your panel in that mode**, and still stop at a name you set yourself. What changed is where the name is kept: in a field that describes
+  the entity rather than the one Home Assistant reads when it builds an entity ID. A name written by an earlier release is handed back the first time each
+  entity loads — nothing to run, nothing to confirm. **One consequence:** a circuit renamed in the SPAN app now updates the display after the integration
+  reloads, a few seconds rather than immediately, which is what Circuit Friendly Names mode has always done.
+
 - **Only circuits you actually renamed are offered.** Installations old enough to predate the current suffixes carry entity ids ending `_consumed_energy`,
   `_produced_energy`, `_net_energy` or `_current_power`, where an entity created today would end `_energy_consumed`, `_energy_produced`, `_energy_net` or
   `_power`. Those ids keep the suffix they have. Renormalising them would have offered a rename for **every circuit on the panel** — seventy-four on one we

@@ -247,21 +247,17 @@ async def test_an_unrenamed_circuit_is_offered_its_own_entity_id(
     assert registry.async_regenerate_entity_id(registry_entry) == ORIGINAL_ENTITY_ID
 
 
-async def test_circuit_numbers_mode_keeps_its_id_its_display_name_and_its_sync(
+async def test_circuit_numbers_mode_is_offered_its_own_tab_based_id(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """Regression guard: nothing in circuit-numbers mode may change.
+    """Recreate must not offer to convert a circuit-numbered panel to friendly names.
 
-    There the registry `name` written by phase 2 name sync is both what puts the
-    panel's name in the UI and what outranks `suggested_object_id` during
-    regeneration. That second effect means Recreate in this mode proposes a
-    friendly-name ID for a circuit-numbered entity -- a known limitation, and
-    the assertion below pins it deliberately: it is what the mode did before
-    this fix, and this fix must not disturb it.
+    The mode exists so an id follows the breaker position rather than the name.
+    Accepting a friendly-name proposal would undo that for every circuit at once.
 
-    The two are the same write, so correcting Recreate here would mean dropping
-    or rerouting phase 2 sync. That is a product decision, recorded in the design
-    doc, not something to change while fixing friendly-names mode.
+    It used to be offered because phase 2 sync wrote the panel's name into the
+    registry's `name`, which Home Assistant reads ahead of `suggested_object_id`.
+    The name now travels as `original_name`, which ranks below it.
     """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
@@ -275,42 +271,113 @@ async def test_circuit_numbers_mode_keeps_its_id_its_display_name_and_its_sync(
     registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
     assert registry_entry is not None
 
-    # Phase 2 sync still writes the panel's name as the display name.
-    assert registry_entry.name == f"{RENAMED} Power"
-
-    # And that name still outranks the suggestion, so the offer is composed
-    # from it -- unchanged, limitation included.
-    assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_ENTITY_ID
+    assert registry.async_regenerate_entity_id(registry_entry) == CIRCUIT_NUMBERS_ENTITY_ID
 
 
-async def test_the_breaker_switch_gets_the_same_refreshed_suggestion(
+async def test_circuit_numbers_mode_still_shows_the_panels_name(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """Switches and selects preset their IDs through the same helper.
+    """Phase 2 sync still follows the panel -- through a field that cannot move an id."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    They call it from their own constructors rather than through
-    `_construct_entity_id`, so a fix that only reached the sensor path would
-    leave a renamed circuit's breaker switch still offering its old ID.
-    """
-    platform = MockEntityPlatform(hass, domain="switch", platform_name=DOMAIN)
-    platform.config_entry = entry
-
-    for circuit_name in (ORIGINAL_NAME, RENAMED):
-        snapshot = _snapshot(circuit_name)
-        coordinator = _coordinator(hass, snapshot, entry)
-        switch = SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, circuit_name, "SPAN Panel")
-        await platform.async_add_entities([switch])
-        await hass.async_block_till_done()
-        await platform.async_reset()
+    install = _Install(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    sensor = await install.load(RENAMED)
 
     registry = er.async_get(hass)
-    registry_entry = registry.async_get("switch.span_panel_refrigerator_breaker")
+    registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
     assert registry_entry is not None
-    assert registry_entry.suggested_object_id == "span_panel_beer_fridge_breaker"
-    assert (
-        registry.async_regenerate_entity_id(registry_entry)
-        == "switch.span_panel_beer_fridge_breaker"
-    )
+
+    assert registry_entry.original_name == f"{RENAMED} Power"
+    assert sensor.name == f"{RENAMED} Power"
+    assert registry_entry.name is None
+
+
+async def test_circuit_numbers_mode_releases_a_name_an_older_release_wrote(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An install upgrading has the old scheme's name handed back to it."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+
+    install = _Install(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+
+    registry = er.async_get(hass)
+    # Exactly what the previous release's phase 2 sync would have written.
+    registry.async_update_entity(sensor.entity_id, name=f"{ORIGINAL_NAME} Power")
+    assert registry.async_get(sensor.entity_id).name == f"{ORIGINAL_NAME} Power"
+
+    await install.load(ORIGINAL_NAME)
+
+    registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry_entry.name is None
+    assert registry.async_regenerate_entity_id(registry_entry) == CIRCUIT_NUMBERS_ENTITY_ID
+
+
+async def test_releasing_the_name_is_idempotent(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Two reloads in a row are the same as one. There is no migration to run twice."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+
+    install = _Install(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+    registry = er.async_get(hass)
+    registry.async_update_entity(sensor.entity_id, name=f"{ORIGINAL_NAME} Power")
+
+    await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry_entry.name is None
+    assert registry_entry.entity_id == CIRCUIT_NUMBERS_ENTITY_ID
+
+
+async def test_a_name_the_user_set_is_never_released(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The registry's `name` is the user's field, and only their own writes are theirs.
+
+    A name we did not write is left exactly where it is -- which also means it
+    keeps outranking the suggestion, so Recreate composes from it. That is what
+    Home Assistant does for any integration once a user names an entity.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+
+    install = _Install(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+
+    registry = er.async_get(hass)
+    registry.async_update_entity(sensor.entity_id, name="Beverage Cooling")
+
+    await install.load(ORIGINAL_NAME)
+
+    registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry_entry.name == "Beverage Cooling"
+    assert registry_entry.entity_id == CIRCUIT_NUMBERS_ENTITY_ID
+
+
+async def test_circuit_numbers_mode_does_not_move_ids_across_the_change(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Neither id moves, whatever happens to the name."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+
+    install = _Install(hass, entry)
+    before = await install.load(ORIGINAL_NAME)
+    unique_id_before = before.unique_id
+
+    registry = er.async_get(hass)
+    registry.async_update_entity(before.entity_id, name=f"{ORIGINAL_NAME} Power")
+
+    after = await install.load(RENAMED)
+
+    assert after.entity_id == CIRCUIT_NUMBERS_ENTITY_ID
+    assert after.unique_id == unique_id_before
+    assert registry.async_get(RENAMED_ENTITY_ID) is None
 
 
 # --- Entities that predate the suffix mapping reaching entity ids -------------

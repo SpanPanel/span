@@ -560,7 +560,11 @@ def test_switch_relay_state_target_absent_when_none() -> None:
 def test_switch_circuit_numbers_entity_id_stable_after_reload(
     hass: HomeAssistant,
 ) -> None:
-    """Entity_id must stay circuit-based after name sync sets friendly display name."""
+    """Entity_id stays circuit-based while the displayed name follows the panel.
+
+    Phase 1 names the entity for the mode; phase 2 replaces that with the panel's
+    name. The entity_id is preset either way, so it does not follow the name.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Air Conditioner",
@@ -601,8 +605,9 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
             coordinator, "2", "Air Conditioner", "SPAN Panel"
         )
 
-    # Entity_id must still be circuit-based
-    assert switch2.name == "Circuit 15 17 Breaker"
+    # Phase 2: the panel's name, carried by original_name rather than the
+    # registry's `name`, which would outrank the preset id.
+    assert switch2.name == "Air Conditioner Breaker"
     assert switch2.entity_id == "switch.span_panel_circuit_15_17_breaker"
 
 
@@ -636,10 +641,10 @@ def test_switch_circuit_numbers_entity_id_120v_single_tab(
     assert switch.entity_id == "switch.span_panel_circuit_10_breaker"
 
 
-def test_switch_circuit_numbers_syncs_friendly_name_to_registry(
+def test_switch_circuit_numbers_releases_the_synced_registry_name(
     hass: HomeAssistant,
 ) -> None:
-    """Registry display name should be synced to the panel friendly name."""
+    """A name an older release wrote is handed back, so it stops deciding the id."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Air Conditioner",
@@ -660,7 +665,7 @@ def test_switch_circuit_numbers_syncs_friendly_name_to_registry(
         # Use PropertyMock because MagicMock(name=...) sets the mock's
         # internal label rather than the .name attribute.
         entity_entry = MagicMock()
-        type(entity_entry).name = PropertyMock(return_value=None)
+        type(entity_entry).name = PropertyMock(return_value="Air Conditioner Breaker")
         registry.async_get.return_value = entity_entry
         mp.setattr(
             "custom_components.span_panel.switch.er.async_get",
@@ -669,7 +674,7 @@ def test_switch_circuit_numbers_syncs_friendly_name_to_registry(
         SpanPanelCircuitsSwitch(coordinator, "2", "Air Conditioner", "SPAN Panel")
 
     registry.async_update_entity.assert_called_once_with(
-        "switch.span_panel_circuit_15_17_breaker", name="Air Conditioner Breaker"
+        "switch.span_panel_circuit_15_17_breaker", name=None
     )
 
 
@@ -708,10 +713,10 @@ def test_switch_circuit_numbers_preserves_user_custom_name(
     registry.async_update_entity.assert_not_called()
 
 
-def test_switch_coordinator_update_circuit_numbers_updates_registry(
+def test_switch_coordinator_update_circuit_numbers_requests_reload(
     hass: HomeAssistant,
 ) -> None:
-    """In circuit-numbers mode, a name change should update the registry display name."""
+    """A renamed circuit reloads, which is what rebuilds original_name."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Air Conditioner",
@@ -750,7 +755,8 @@ def test_switch_coordinator_update_circuit_numbers_updates_registry(
     with pytest.MonkeyPatch.context() as mp:
         runtime_registry = MagicMock()
         runtime_entry = MagicMock()
-        type(runtime_entry).name = PropertyMock(return_value="Air Conditioner Breaker")
+        # Released at construction, so nothing occupies the field any more.
+        type(runtime_entry).name = PropertyMock(return_value=None)
         runtime_registry.async_get.return_value = runtime_entry
         mp.setattr(
             "custom_components.span_panel.switch.er.async_get",
@@ -758,10 +764,8 @@ def test_switch_coordinator_update_circuit_numbers_updates_registry(
         )
         switch._handle_coordinator_update()
 
-    runtime_registry.async_update_entity.assert_called_once_with(
-        "switch.span_panel_circuit_15_17_breaker", name="Kitchen AC Breaker"
-    )
-    coordinator.request_reload.assert_not_called()
+    coordinator.request_reload.assert_called_once()
+    runtime_registry.async_update_entity.assert_not_called()
 
 
 def test_switch_coordinator_update_circuit_numbers_preserves_user_override(
