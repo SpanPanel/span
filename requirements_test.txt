@@ -3,6 +3,6 @@ pytest-asyncio>=1.3.0
 setuptools>=65.7.0
 pytest-homeassistant-custom-component==0.13.354
 homeassistant==2026.8.0
-span-panel-api==3.0.0
+span-panel-api==3.0.1
 span-panel-api-schema-0==1.0.0
 span-panel-api-schema-1==1.0.0
