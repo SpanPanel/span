@@ -460,11 +460,11 @@ def test_circuit_energy_sensor_missing_circuit_uses_fallback_names() -> None:
 
     assert (
         sensor._generate_friendly_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Consumed Energy"
+        == "Circuit c9 Energy Consumed"
     )
     assert (
         sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Consumed Energy"
+        == "Circuit c9 Energy Consumed"
     )
 
 
@@ -483,8 +483,8 @@ def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
         device_info_override={"identifiers": {("span_panel", "evse")}},
     )
 
-    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Consumed Energy"
-    assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Consumed Energy"
+    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Energy Consumed"
+    assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Energy Consumed"
 
 
 def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing() -> None:

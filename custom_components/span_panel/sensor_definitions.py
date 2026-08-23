@@ -200,7 +200,7 @@ UNMAPPED_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="producedEnergyWh",
         field_path="circuit.produced_energy_wh",
-        name="Produced Energy",
+        name="Energy Produced",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -212,7 +212,7 @@ UNMAPPED_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="consumedEnergyWh",
         field_path="circuit.consumed_energy_wh",
-        name="Consumed Energy",
+        name="Energy Consumed",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -1168,7 +1168,7 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_produced",
         field_path="circuit.produced_energy_wh",
-        name="Produced Energy",
+        name="Energy Produced",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -1180,7 +1180,7 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_consumed",
         field_path="circuit.consumed_energy_wh",
-        name="Consumed Energy",
+        name="Energy Consumed",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -1192,7 +1192,7 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_net",
         derived=DerivedReason.MULTIPLE_FIELDS,
-        name="Net Energy",
+        name="Energy Net",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
