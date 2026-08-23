@@ -175,6 +175,7 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
             "select",
             description.entity_description.key,
             circuit,
+            existing_entity_id=existing_entity_id,
         )
         if constructed_id:
             self.entity_id = constructed_id

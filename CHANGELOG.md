@@ -149,18 +149,21 @@ on an older Home Assistant, stay on 2.0.8 until you can update; HACS will not of
   `panel_size` was already in that attribute block. If you have a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')`, point it at
   the Wi-Fi Link binary sensor instead. `panel_size` is unaffected and stays where it is.
 
-- **The three circuit energy sensors are renamed to match the entity ids they have always had.** "Produced Energy", "Consumed Energy" and "Net Energy" become
-  **Energy Produced**, **Energy Consumed** and **Energy Net** — the order their entity ids (`..._energy_produced`, `..._energy_consumed`, `..._energy_net`) have
-  used since those sensors shipped. **Entity ids, unique ids and history are unchanged**; only the name shown in the UI reorders. Left alone, the word order
-  would have had Recreate entity IDs offering you a rename for every circuit on your panel.
+- **The three circuit energy sensors are renamed to match the ids they are given.** "Produced Energy", "Consumed Energy" and "Net Energy" become **Energy
+  Produced**, **Energy Consumed** and **Energy Net**, the order used by the `energy_produced`, `energy_consumed` and `energy_net` suffixes that these sensors'
+  unique ids carry and that new entities are given. **Entity ids, unique ids and history are unchanged**; only the name shown in the UI reorders.
 
 ### Fixed
 
 - **Recreate entity IDs proposes the ids your panel would produce now.** Renaming a circuit in the SPAN app used to leave the button offering each entity the id
   it already had, so it looked like it did nothing (#252). The proposal was frozen at whatever the circuit was called when the entity was first created; it now
   follows the panel. **It is still an offer you accept** — a rename in the SPAN app never moves a live entity id by itself, and unique ids and statistics are
-  untouched. Rename nothing and Recreate proposes the ids you already have. Circuit-numbers installations are unchanged: there the display name written by name
-  sync is also what Home Assistant builds the proposal from, so the button behaves exactly as it did.
+  untouched. Circuit-numbers installations are unchanged: there the display name written by name sync is also what Home Assistant builds the proposal from, so
+  the button behaves exactly as it did.
+- **Only circuits you actually renamed are offered.** Installations old enough to predate the current suffixes carry entity ids ending `_consumed_energy`,
+  `_produced_energy`, `_net_energy` or `_current_power`, where an entity created today would end `_energy_consumed`, `_energy_produced`, `_energy_net` or
+  `_power`. Those ids keep the suffix they have. Renormalising them would have offered a rename for **every circuit on the panel** — seventy-four on one we
+  measured — burying the one circuit that had actually been renamed and breaking the dashboards and automations of anyone who accepted.
 - **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
   "Possible states: Unknown".
 - **The README described Battery Power's sign backwards.** The sensor reports **discharging** as positive and always has — that is what release 2.0.5

@@ -204,6 +204,7 @@ class SpanCircuitPowerSensor(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
+        existing_entity_id: str | None = None,
     ) -> str | None:
         """Construct explicit entity_id for circuit power sensors."""
         circuit = snapshot.circuits.get(self.circuit_id)
@@ -218,6 +219,7 @@ class SpanCircuitPowerSensor(
             "sensor",
             suffix,
             circuit,
+            existing_entity_id=existing_entity_id,
         )
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
@@ -387,6 +389,7 @@ class SpanCircuitEnergySensor(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
+        existing_entity_id: str | None = None,
     ) -> str | None:
         """Construct explicit entity_id for circuit energy sensors."""
         circuit = snapshot.circuits.get(self.circuit_id)
@@ -405,6 +408,7 @@ class SpanCircuitEnergySensor(
             "sensor",
             suffix,
             circuit,
+            existing_entity_id=existing_entity_id,
         )
 
     # Map original_key to the energy type used for coordinator dip offset tracking

@@ -37,7 +37,14 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
-from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
+from custom_components.span_panel.id_builder import (
+    build_circuit_unique_id,
+    preserve_legacy_entity_id_suffix,
+)
+from custom_components.span_panel.sensor_circuit import (
+    SpanCircuitEnergySensor,
+    SpanCircuitPowerSensor,
+)
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
@@ -303,4 +310,139 @@ async def test_the_breaker_switch_gets_the_same_refreshed_suggestion(
     assert (
         registry.async_regenerate_entity_id(registry_entry)
         == "switch.span_panel_beer_fridge_breaker"
+    )
+
+
+# --- Entities that predate the suffix mapping reaching entity ids -------------
+#
+# Every case above builds its entities with the current code, so the preset and
+# the live id are the same string by construction and a suffix disagreement
+# cannot appear. A real install upgrading is the case that matters: those
+# entities took their id from the descriptor name ("Consumed Energy" ->
+# `..._consumed_energy`) where the mapping says `energy_consumed`, so their
+# entity id and their own unique id have always disagreed. Recomputing the
+# suggestion surfaces that, and on a measured panel it offered 74 renames.
+
+LEGACY_ENTITY_ID = "sensor.span_panel_refrigerator_consumed_energy"
+CANONICAL_ENTITY_ID = "sensor.span_panel_refrigerator_energy_consumed"
+RENAMED_LEGACY_ENTITY_ID = "sensor.span_panel_beer_fridge_energy_consumed"
+
+ENERGY_DESCRIPTION = next(
+    desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
+)
+
+
+class _LegacyInstall(_Install):
+    """An install whose energy sensor id was composed from the descriptor name."""
+
+    def _seed(self) -> str:
+        """Register the entity the way a pre-preset install left it."""
+        registry = er.async_get(self._hass)
+        unique_id = build_circuit_unique_id(SERIAL, CIRCUIT_ID, "consumedEnergyWh")
+        entry = registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            unique_id,
+            suggested_object_id="span_panel_refrigerator_consumed_energy",
+            original_name=f"{ORIGINAL_NAME} Consumed Energy",
+            config_entry=self._entry,
+        )
+        return entry.entity_id
+
+    async def load(self, circuit_name: str) -> SpanCircuitEnergySensor:  # type: ignore[override]
+        """Set the platform up for the energy sensor, tearing down any previous one."""
+        if self._platform is not None:
+            await self._platform.async_reset()
+
+        snapshot = _snapshot(circuit_name)
+        coordinator = _coordinator(self._hass, snapshot, self._entry)
+        self._entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator, panel_device_id="panel-device-id"
+        )
+
+        self._platform = MockEntityPlatform(self._hass, domain="sensor", platform_name=DOMAIN)
+        self._platform.config_entry = self._entry
+
+        sensor = SpanCircuitEnergySensor(
+            coordinator, ENERGY_DESCRIPTION, snapshot, CIRCUIT_ID
+        )
+        await self._platform.async_add_entities([sensor])
+        await self._hass.async_block_till_done()
+
+        assert sensor.hass is not None, "entity was rejected before it reached the registry"
+        return sensor
+
+
+async def test_upgrading_does_not_offer_to_renormalise_a_legacy_suffix(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The 74-rename case. Nothing was renamed on the panel, so nothing is offered."""
+    install = _LegacyInstall(hass, entry)
+    seeded = install._seed()
+    assert seeded == LEGACY_ENTITY_ID
+
+    sensor = await install.load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == LEGACY_ENTITY_ID
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(LEGACY_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == LEGACY_ENTITY_ID
+
+
+async def test_a_legacy_entity_still_follows_a_circuit_rename(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Preserving the suffix must not cost the fix.
+
+    A renamed circuit differs in the name half, so the proposal is the computed
+    id -- carrying the canonical suffix, because there is no older spelling of
+    `beer_fridge` to preserve.
+    """
+    install = _LegacyInstall(hass, entry)
+    install._seed()
+
+    await install.load(ORIGINAL_NAME)
+    sensor = await install.load(RENAMED)
+
+    assert sensor.entity_id == LEGACY_ENTITY_ID
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(LEGACY_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_LEGACY_ENTITY_ID
+
+
+async def test_a_new_install_gets_the_canonical_suffix(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Preservation is for ids that already exist; nothing new inherits the old form."""
+    sensor = await _LegacyInstall(hass, entry).load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == CANONICAL_ENTITY_ID
+
+
+def test_a_suffix_with_no_older_spelling_is_left_alone() -> None:
+    """A name that merely looks like a suffix change is a rename, not a legacy form.
+
+    Renaming a circuit "Kitchen Outlets" to "Kitchen" leaves an existing id whose
+    trailing segments differ from the computed suffix. That is exactly the case
+    #252 exists to offer, so it must not be mistaken for an older spelling.
+    """
+    assert (
+        preserve_legacy_entity_id_suffix(
+            "sensor.span_panel_kitchen_power",
+            "sensor.span_panel_kitchen_outlets_power",
+            "power",
+        )
+        == "sensor.span_panel_kitchen_power"
+    )
+    assert (
+        preserve_legacy_entity_id_suffix(
+            "sensor.span_panel_kitchen_energy_consumed",
+            "sensor.span_panel_kitchen_consumed_energy",
+            "energy_consumed",
+        )
+        == "sensor.span_panel_kitchen_consumed_energy"
     )

@@ -129,6 +129,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             "switch",
             "breaker",
             circuit,
+            existing_entity_id=existing_entity_id,
         )
         if constructed_id:
             self.entity_id = constructed_id

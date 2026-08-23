@@ -25,6 +25,7 @@ from .id_builder import (
     build_select_unique_id,
     build_switch_unique_id,
     construct_synthetic_unique_id,
+    preserve_legacy_entity_id_suffix,
 )
 from .util import snapshot_to_device_info
 
@@ -285,6 +286,7 @@ def construct_single_circuit_entity_id(
     suffix: str,
     circuit_data: SpanCircuitSnapshot,
     device_name: str | None = None,
+    existing_entity_id: str | None = None,
 ) -> str | None:
     """Construct the entity ID the current panel data and naming flags produce.
 
@@ -311,6 +313,8 @@ def construct_single_circuit_entity_id(
         suffix: Entity-specific suffix ("power", "energy_produced", etc.)
         circuit_data: Circuit data object
         device_name: Device name for entity ID construction (None to use from config entry)
+        existing_entity_id: This entity's id in the registry, when it has one, so an
+            id predating the suffix mapping keeps the suffix it shipped with
 
     Returns:
         Constructed entity ID string or None if device info unavailable
@@ -366,7 +370,13 @@ def construct_single_circuit_entity_id(
     if suffix and not circuit_part.endswith(f"_{suffix}"):
         parts.append(suffix)
 
-    return f"{platform}.{'_'.join(parts)}"
+    # An entity created before the suffix mapping reached entity ids carries the
+    # older spelling. Renormalising it would offer a rename to every circuit on
+    # the panel, so the circuit-name half follows the panel and the suffix half
+    # stays as it shipped.
+    return preserve_legacy_entity_id_suffix(
+        f"{platform}.{'_'.join(parts)}", existing_entity_id, suffix
+    )
 
 
 def construct_unmapped_entity_id(

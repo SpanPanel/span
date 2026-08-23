@@ -34,10 +34,14 @@ CIRCUIT_SUFFIX_MAPPING = {
 """**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
 
 Every entry here translates a legacy camelCase description key into the suffix
-its entities have carried since before 2.0.8 -- and that suffix is shared by the
-`unique_id` *and* the `entity_id`, so a changed entry moves both on every
-installed panel. A moved `unique_id` costs the statistics; a moved `entity_id`
-breaks the templates and automations a user wrote.
+its entities have carried since before 2.0.8, so a changed entry moves a live
+`unique_id` on every installed panel, and a moved `unique_id` costs the
+statistics.
+
+It governs the `entity_id` too, but only for entities created since the
+integration began presetting one. Older entities took their id from the
+descriptor name instead, which used the opposite word order -- that is what
+`LEGACY_ENTITY_ID_SUFFIXES` records, and why it has to exist.
 
 So the rule for anything new is **verbatim**: a description key added from here on
 resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
@@ -48,6 +52,60 @@ written snake_case and never needed translating.
 exact contents. It fails on an added key, a removed key and a changed value,
 because all three move a live id.
 """
+
+
+# Entity-id suffixes that predate the mapping above, keyed by the suffix that
+# replaced them.
+LEGACY_ENTITY_ID_SUFFIXES: dict[str, frozenset[str]] = {
+    "power": frozenset({"current_power"}),
+    "energy_produced": frozenset({"produced_energy"}),
+    "energy_consumed": frozenset({"consumed_energy"}),
+    "energy_net": frozenset({"net_energy"}),
+}
+"""Entity ids only -- never a `unique_id`, which has always used the canonical form.
+
+Before the integration preset an `entity_id`, Home Assistant composed one from the
+descriptor name: "Consumed Energy" gave `..._consumed_energy` where the mapping
+above says `energy_consumed`. Installs from that era carry an entity id whose
+suffix disagrees with their own unique id; the two orders were only reconciled
+going forward.
+
+That disagreement is not a defect to correct on a user's behalf. Renormalising it
+offers a rename for every circuit on the panel -- seventy-four on a measured one --
+which buries the circuit they actually renamed and breaks every dashboard and
+automation belonging to anyone who accepts. So an existing entity keeps the suffix
+it has; only the circuit-name half of its id follows the panel.
+
+Entries are historical fact, so this table only grows by discovering another form
+that shipped. `energy_imported`, `energy_exported`, `priority`, `current` and
+`breaker_rating` have no entry because they were never named the other way round.
+"""
+
+
+def preserve_legacy_entity_id_suffix(
+    computed_entity_id: str, existing_entity_id: str | None, suffix: str
+) -> str:
+    """Return the id to use, keeping an existing entity's legacy suffix form.
+
+    The ids are compared with the suffix removed, so the existing id wins only
+    when the circuit-name half already agrees and the suffix is a known older
+    spelling. A circuit renamed on the panel differs in that half and gets the
+    computed id, which is what issue #252 is about.
+    """
+    if not existing_entity_id or existing_entity_id == computed_entity_id:
+        return computed_entity_id
+
+    legacy_forms = LEGACY_ENTITY_ID_SUFFIXES.get(suffix)
+    if not legacy_forms:
+        return computed_entity_id
+
+    stem = computed_entity_id.removesuffix(f"_{suffix}")
+    if stem == computed_entity_id:
+        return computed_entity_id
+
+    if any(existing_entity_id == f"{stem}_{form}" for form in legacy_forms):
+        return existing_entity_id
+    return computed_entity_id
 
 
 # Panel sensor API field mappings (used by get_user_friendly_suffix)
@@ -70,10 +128,14 @@ PANEL_SUFFIX_MAPPING = {
 """**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
 
 Every entry here translates a legacy camelCase description key into the suffix
-its entities have carried since before 2.0.8 -- and that suffix is shared by the
-`unique_id` *and* the `entity_id`, so a changed entry moves both on every
-installed panel. A moved `unique_id` costs the statistics; a moved `entity_id`
-breaks the templates and automations a user wrote.
+its entities have carried since before 2.0.8, so a changed entry moves a live
+`unique_id` on every installed panel, and a moved `unique_id` costs the
+statistics.
+
+It governs the `entity_id` too, but only for entities created since the
+integration began presetting one. Older entities took their id from the
+descriptor name instead, which used the opposite word order -- that is what
+`LEGACY_ENTITY_ID_SUFFIXES` records, and why it has to exist.
 
 So the rule for anything new is **verbatim**: a description key added from here on
 resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
@@ -107,10 +169,14 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
 """**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
 
 Every entry here translates a legacy camelCase description key into the suffix
-its entities have carried since before 2.0.8 -- and that suffix is shared by the
-`unique_id` *and* the `entity_id`, so a changed entry moves both on every
-installed panel. A moved `unique_id` costs the statistics; a moved `entity_id`
-breaks the templates and automations a user wrote.
+its entities have carried since before 2.0.8, so a changed entry moves a live
+`unique_id` on every installed panel, and a moved `unique_id` costs the
+statistics.
+
+It governs the `entity_id` too, but only for entities created since the
+integration began presetting one. Older entities took their id from the
+descriptor name instead, which used the opposite word order -- that is what
+`LEGACY_ENTITY_ID_SUFFIXES` records, and why it has to exist.
 
 So the rule for anything new is **verbatim**: a description key added from here on
 resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
