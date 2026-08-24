@@ -44,7 +44,7 @@ This integration communicates with the SPAN Panel over your local network using 
 infrastructure. eBus uses the [Homie Convention](https://homieiot.github.io/) for MQTT topics and messages, with the panel's built-in MQTT broker delivering
 real-time state updates without polling.
 
-## ⚠️ Backup and Upgrade to 2.1.x before your panel's firmware updates, or the integration will stop working (upgrade only from v2.0.8!)
+## ⚠️ Backup and Upgrade to v2.1.x before your panel's firmware updates, or the integration will stop working (upgrade only from v2.0.8!)
 
 **SPAN firmware `r202633` changes the API in a non-compatible way after the firmware hits** When your panel takes that update, 2.0.8 stops being able to read
 it. The integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go
@@ -75,24 +75,6 @@ itself as a long list of properties. It presents a tree that can proxy other dev
 The old format is retired in the same update that introduces the new one — there is no overlap and no setting to keep the old behaviour.
 
 </details>
-
-## 2.0.x Breaking Changes (v2)
-
-**Do NOT upgrade unless your panel is running firmware `spanos2/r202603/05` or later and you are on 2.0.8 of the integration.**
-
-**What you need:**
-
-- SPAN Panel firmware `spanos2/r202603/05` or later
-- Panel passphrase (found in the SPAN mobile app, On-premise settings) **or** physical access to the panel door for proof-of-proximity authentication
-
-**Breaking:**
-
-- Requires firmware `spanos2/r202603/05` or later — panels on older firmware will not work
-- `Cellular` binary sensor removed — replaced by `Vendor Cloud` sensor
-
-> Running older firmware? See [v1 Legacy Documentation](v1-legacy.md).
-
-See [CHANGELOG.md](CHANGELOG.md) for all additions or value changes.
 
 ## Prerequisites
 
@@ -667,6 +649,7 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **Replaced sub-device shows the old serial number** | After replacing a SPAN sub-device (Drive / EVSE, BESS, PV inverter), the device entry in Home Assistant keeps showing the previous hardware's serial number. The integration keys entities off the panel-assigned node identity, which is intentionally stable across hardware swaps so long-term history (e.g. lifetime charging kWh for a Drive) is preserved. The device-registry serial number, however, does not auto-refresh. | In**Settings → Devices & Services → Span Panel**, open the affected sub-device and delete it, then reload the integration (or restart Home Assistant). The device re-registers with the new serial number. Entity IDs and their recorded history are preserved.                                                                                                                                                                     |
 | **Door sensor unavailable**                         | The SPAN API returns UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API.                                                                                                                                                                                                                                                                                                                  | The integration reports the sensor as unavailable until a proper value arrives. Opening or closing the door publishes the correct state. The door is classified as a tamper sensor (`Detected` / `Clear`) to differentiate it from a normal entry door.                                                                                                                                                                             |
 | **No switch on a circuit**                          | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The circuit is configured in the SPAN App as one of the "Always on Circuits". The API does not permit user control of those circuits, so no switch is created.                                                                                                                                                                                                                                                                      |
+| **Reinstalling to change the entity ID style gives back the old entity IDs** | The naming style is chosen at install and cannot be changed from the options, so reinstalling looks like the way to switch. It is not: every entity returns with the entity ID it had before. | Home Assistant remembers a removed entity for **30 days**, keyed on its unique ID, and restores that record's entity ID — along with its name, area, labels and icon — as soon as an entity with the same unique ID appears again. This integration's unique IDs do not change with the naming style, so the remembered ID wins over the one the new style asks for. Either clear the leftover registry entries between removing and reinstalling, or wait out the 30 days and let Home Assistant discard them. A tool such as [ha-registry-clean](https://github.com/LegoTypes/ha-registry-clean) can do the clearing; it is a separate project, not part of this integration. Clearing also discards the names, areas and labels you had assigned. |
 
 ## Development
 
