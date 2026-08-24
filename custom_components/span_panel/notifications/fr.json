@@ -1,0 +1,19 @@
+{
+  "panel_upgraded": {
+    "title": "Micrologiciel du Panneau SPAN mis à jour",
+    "body": "Votre Panneau SPAN a signalé un nouveau modèle de données eBus (**{previous} → {current}**), ce qui se produit après une mise à jour du micrologiciel. L'intégration a été rechargée afin que ses appareils et ses entités correspondent à ce que le panneau publie désormais.\n\nRien de ce que vous utilisez n'a disparu et aucune modification de vos automatisations n'est nécessaire : cet avis explique simplement ce qui a changé.\n\n**État Réseau DSM** conserve son identifiant d'entité et son historique, et gagne en fiabilité. Avec le micrologiciel précédent, il était *déduit* : à partir de la batterie lorsqu'il y en avait une, sinon à partir de la source d'énergie dominante et de la présence de puissance transitant par le raccordement réseau. Il lit désormais l'état d'îlotage réellement mesuré par le Dispositif d'Interconnexion de Micro-réseau (MID).\n\n**Îlotage Réseau Possible** continue également de fonctionner. Le nouveau modèle de données ne publie aucune propriété `grid-islandable` au niveau du panneau ; ce capteur indique donc maintenant la présence d'un MID, ce qui est la façon dont la capacité de secours est déterminée.\n\n**Nouveau :** un Dispositif d'Interconnexion de Micro-réseau apparaît parmi vos appareils, avec **État du Réseau** — l'état de l'alimentation du réseau public, que le micrologiciel précédent ne signalait pas. Les entités ajoutées par la mise à jour sont répertoriées dans un avis distinct.\n\nLes entités renommées ou remplacées par la mise à jour peuvent devoir être supprimées manuellement si elles restent indisponibles.\n\nVous pouvez ignorer cet avis après consultation."
+  },
+  "new_entities": {
+    "title": "Le Panneau SPAN a ajouté de nouvelles entités",
+    "intro_one": "Cette mise à jour a ajouté 1 nouvelle entité à votre Panneau SPAN.",
+    "intro_many": "Cette mise à jour a ajouté {count} nouvelles entités à votre Panneau SPAN.",
+    "enabled_heading": "Ajoutées et prêtes à l'emploi",
+    "disabled_heading": "Ajoutées mais désactivées",
+    "how_to_enable": "Les entités désactivées n'enregistrent rien tant que vous ne les activez pas. Ouvrez la page de l'appareil Panneau SPAN, affichez ses entités désactivées et activez celles que vous souhaitez.",
+    "nothing_broken": "Rien n'est cassé et aucune action n'est requise. Des entités apparaissent pour plusieurs raisons : une mise à jour qui expose davantage de ce que votre panneau rapporte, un circuit ajouté au panneau, ou du matériel tel qu'une batterie, du solaire ou un chargeur qui se met en ligne."
+  },
+  "extension_overflow": {
+    "title": "Panneau SPAN : certaines mesures du fabricant n'ont pas été ajoutées",
+    "body": "Un appareil de votre panneau déclare plus de mesures du fabricant que cette intégration n'en ajoute pour un seul appareil ({limit}). Les autres ont été laissées de côté : {devices}.\n\nRien de ce que vous avez déjà n'est affecté et rien n'est cassé. Les mesures laissées de côté figurent toujours dans le téléchargement des diagnostics de cette intégration, qu'il convient de joindre si vous souhaitez les voir apparaître."
+  }
+}

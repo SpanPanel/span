@@ -1,0 +1,19 @@
+{
+  "panel_upgraded": {
+    "title": "Firmware del Panel SPAN actualizado",
+    "body": "Su Panel SPAN ha comunicado un nuevo modelo de datos eBus (**{previous} → {current}**), lo que ocurre tras una actualización de firmware. La integración se ha recargado para que sus dispositivos y entidades coincidan con lo que el panel publica ahora.\n\nNada de lo que usted utiliza ha desaparecido y no es necesario modificar ninguna automatización: este aviso solo explica lo que ha cambiado.\n\n**Estado de Red DSM** conserva su ID de entidad y su historial, y ahora es más fiable. Con el firmware anterior se *deducía*: a partir de la batería cuando había una instalada y, en su defecto, de la fuente de energía dominante y de si circulaba potencia por la conexión a la red. Ahora lee el estado de aislamiento que el Dispositivo de Interconexión de Microrred (MID) detecta realmente.\n\n**Aislable de la Red** también sigue funcionando. El nuevo modelo de datos no publica ninguna propiedad `grid-islandable` a nivel de panel, por lo que ahora refleja si hay un MID presente, que es como se determina la capacidad de respaldo.\n\n**Novedad:** aparece un Dispositivo de Interconexión de Microrred entre sus dispositivos, con **Estado de la Red**, es decir, el estado del suministro eléctrico, que el firmware anterior no informaba. Las entidades que la actualización haya añadido se enumeran en su propio aviso.\n\nLas entidades renombradas o sustituidas por la actualización pueden tener que eliminarse manualmente si siguen sin estar disponibles.\n\nPuede descartar este aviso cuando lo haya revisado."
+  },
+  "new_entities": {
+    "title": "El Panel SPAN ha añadido nuevas entidades",
+    "intro_one": "Esta actualización añadió 1 entidad nueva a tu Panel SPAN.",
+    "intro_many": "Esta actualización añadió {count} entidades nuevas a tu Panel SPAN.",
+    "enabled_heading": "Añadidas y listas para usar",
+    "disabled_heading": "Añadidas pero desactivadas",
+    "how_to_enable": "Las entidades desactivadas no registran nada hasta que las actives. Abre la página del dispositivo Panel SPAN, muestra sus entidades desactivadas y activa las que quieras.",
+    "nothing_broken": "No hay ningún problema y no se requiere ninguna acción. Las entidades aparecen por varios motivos: una actualización que expone más de lo que informa tu panel, un circuito añadido al panel, o hardware como una batería, paneles solares o un cargador que se pone en línea."
+  },
+  "extension_overflow": {
+    "title": "Panel SPAN: algunas lecturas del fabricante no se añadieron",
+    "body": "Un dispositivo de tu panel declara más lecturas del fabricante de las que esta integración añade para un solo dispositivo ({limit}). El resto quedó fuera: {devices}.\n\nNada de lo que ya tienes se ve afectado y nada está roto. Las lecturas que quedaron fuera siguen apareciendo en la descarga de diagnósticos de esta integración, que es lo que conviene adjuntar si quieres que se muestren."
+  }
+}

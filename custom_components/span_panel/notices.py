@@ -306,12 +306,20 @@ async def async_forget(hass: HomeAssistant, entry: ConfigEntry) -> None:
 def read_translations(language: str, section: str) -> dict[str, str]:
     """One notification's strings for one language, or an empty mapping.
 
-    Read from this component's `translations/` directory rather than through
+    Read from this component's `notifications/` directory rather than through
     `homeassistant.helpers.translation`, because that helper filters to the
     categories Home Assistant defines and a persistent notification is not one of
     them -- a custom category loads as nothing at all. These are this
     integration's own package files, so reading them is not reaching into
     somebody else's layout.
+
+    **A directory of its own, not `translations/`.** hassfest validates
+    `strings.json` and `translations/en.json` against Home Assistant's schema and
+    rejects any key it does not define, so a `notifications` section there fails
+    the check outright -- which is what a custom category being unsupported looks
+    like from the outside. Keeping these strings beside those files rather than
+    inside them is what makes both true at once: hassfest sees only what it
+    defines, and the notices keep per-language files.
 
     Falls back along the language chain -- `pt-BR`, then `pt`, then `en` -- so a
     regional variant with no file of its own still gets its language rather than
@@ -319,7 +327,7 @@ def read_translations(language: str, section: str) -> dict[str, str]:
 
     Blocking file I/O. Callers run it in an executor.
     """
-    directory = Path(__file__).parent / "translations"
+    directory = Path(__file__).parent / "notifications"
     for candidate in (f"{language}.json", f"{language.split('-')[0]}.json", "en.json"):
         path = directory / candidate
         if not path.is_file():
@@ -331,7 +339,7 @@ def read_translations(language: str, section: str) -> dict[str, str]:
             continue
         if not isinstance(loaded, dict):
             continue
-        strings = loaded.get("notifications", {}).get(section, {})
+        strings = loaded.get(section, {})
         if isinstance(strings, dict) and strings:
             return {str(key): str(value) for key, value in strings.items()}
     return {}
