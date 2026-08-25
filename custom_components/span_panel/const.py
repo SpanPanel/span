@@ -17,8 +17,23 @@ CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"  # nosec B105
 CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
 CONF_HOP_PASSPHRASE = "hop_passphrase"  # nosec B105
 CONF_HTTP_PORT = "http_port"
+CONF_HTTPS_PORT = "https_port"
+CONF_PANEL_CA_PEM = "panel_ca_pem"
 CONF_PANEL_SERIAL = "panel_serial"
 CONF_REGISTERED_FQDN = "registered_fqdn"
+
+DEFAULT_HTTPS_PORT = 443
+"""Where the panel serves TLS. Configurable for the same reason `http_port` is:
+a reverse proxy on the panel's VLAN does not have to listen on 443."""
+
+PANEL_CA_PENDING = "panel_ca_pending"
+"""Set in `entry.data` for a v2 entry that predates CA pinning.
+
+The CA cannot be fetched in `async_migrate_entry` — that runs during startup, so
+a network call there delays boot whenever the panel is unreachable and leaves a
+failed fetch with no recovery path. The flag defers it to the first successful
+setup, which retries on every subsequent one for free. Same shape as
+`solar_migration_pending`."""
 
 # Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"

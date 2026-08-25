@@ -10,6 +10,7 @@ from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import SpanPanelConnectionError
 
 from custom_components.span_panel.config_flow_validation import (
+    async_leaf_chains_to_ca,
     check_fqdn_tls_ready,
     is_fqdn,
     validate_host,
@@ -164,9 +165,12 @@ async def test_validate_v2_helpers_delegate_register_v2() -> None:
         "Home Assistant",
         "passphrase",
     )
+    # No transport given, so the plaintext bootstrap shape: shared client, no
+    # context. Initial registration is the case with nothing pinned yet.
     assert mock_register.await_args_list[0].kwargs == {
         "port": 8080,
         "httpx_client": fake_client,
+        "ssl_context": None,
     }
     assert mock_register.await_args_list[1].args == (
         "panel.example.com",
@@ -175,6 +179,7 @@ async def test_validate_v2_helpers_delegate_register_v2() -> None:
     assert mock_register.await_args_list[1].kwargs == {
         "port": 9090,
         "httpx_client": fake_client,
+        "ssl_context": None,
     }
 
 
@@ -240,20 +245,10 @@ async def test_check_fqdn_tls_ready_returns_true_on_success() -> None:
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    class FakeWrappedSocket(FakeSocket):
-        pass
-
     class FakeSSLContext:
-        def __init__(self, _protocol) -> None:
-            self.check_hostname = False
-            self.verify_mode = ssl.CERT_NONE
-
-        def load_verify_locations(self, _path: str) -> None:
-            return None
-
         def wrap_socket(self, _sock, server_hostname: str):
             assert server_hostname == "panel.example.com"
-            return FakeWrappedSocket()
+            return FakeSocket()
 
     hass = MagicMock()
     fake_client = MagicMock()
@@ -271,15 +266,19 @@ async def test_check_fqdn_tls_ready_returns_true_on_success() -> None:
             return_value=FakeLoop(),
         ),
         patch(
-            "custom_components.span_panel.config_flow_validation.ssl.SSLContext",
-            side_effect=FakeSSLContext,
-        ),
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=FakeSSLContext(),
+        ) as build_context,
         patch(
             "custom_components.span_panel.config_flow_validation.socket.create_connection",
             return_value=FakeSocket(),
         ),
     ):
         assert await check_fqdn_tls_ready(hass, "panel.example.com", 8883) is True
+
+    # The library's builder, not a hand-rolled context: it is the one that clears
+    # VERIFY_X509_STRICT, which the panel's AKI-less CA fails without.
+    build_context.assert_called_once_with("pem-data")
 
 
 @pytest.mark.asyncio
@@ -298,13 +297,6 @@ async def test_check_fqdn_tls_ready_returns_false_on_ssl_error() -> None:
             return False
 
     class FakeSSLContext:
-        def __init__(self, _protocol) -> None:
-            self.check_hostname = False
-            self.verify_mode = ssl.CERT_NONE
-
-        def load_verify_locations(self, _path: str) -> None:
-            return None
-
         def wrap_socket(self, _sock, server_hostname: str):
             raise ssl.SSLError(f"bad cert for {server_hostname}")
 
@@ -324,8 +316,8 @@ async def test_check_fqdn_tls_ready_returns_false_on_ssl_error() -> None:
             return_value=FakeLoop(),
         ),
         patch(
-            "custom_components.span_panel.config_flow_validation.ssl.SSLContext",
-            side_effect=FakeSSLContext,
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=FakeSSLContext(),
         ),
         patch(
             "custom_components.span_panel.config_flow_validation.socket.create_connection",
@@ -333,3 +325,30 @@ async def test_check_fqdn_tls_ready_returns_false_on_ssl_error() -> None:
         ),
     ):
         assert await check_fqdn_tls_ready(hass, "panel.example.com", 8883) is False
+
+
+@pytest.mark.asyncio
+async def test_leaf_validation_rejects_a_ca_that_does_not_parse() -> None:
+    """A PEM the ssl module will not load is not an anchor, and is not fatal."""
+
+    class FakeLoop:
+        async def run_in_executor(self, _executor, func):
+            return func()
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.asyncio.get_running_loop",
+            return_value=FakeLoop(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            side_effect=ssl.SSLError("not a certificate"),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.socket.create_connection"
+        ) as connect,
+    ):
+        assert await async_leaf_chains_to_ca("panel.example.com", 443, "junk") is False
+
+    # Nothing is dialled when there is no anchor to dial with.
+    connect.assert_not_called()

@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "Painel Span já configurado. Só é possível uma única configuração.",
       "cannot_connect": "Falha ao ligar ao Painel Span",
+      "host_not_set": "Não foi definido nenhum endereço do painel; reinicie a configuração.",
       "no_devices_found": "Não foram encontrados dispositivos na rede",
       "no_host": "Nenhum endereço de anfitrião foi fornecido pelo add-on.",
       "no_serial": "Não foi possível determinar o número de série do painel.",
@@ -119,6 +120,28 @@
         },
         "description": "Insira os detalhes de conexão para seu SPAN Panel.",
         "title": "Ligar ao Painel Span"
+      },
+      "panel_https_port": {
+        "title": "Porta HTTPS do painel",
+        "description": "Definiu uma porta HTTP não padrão para este painel, pelo que também poderá servir TLS numa porta não padrão — por exemplo através de um proxy inverso. Indique a porta em que o certificado do painel é servido.",
+        "data": {
+          "https_port": "Porta HTTPS"
+        },
+        "data_description": {
+          "https_port": "Deixe em 443, a não ser que um proxy ou um mapeamento de portas a tenha mudado."
+        }
+      },
+      "panel_ca": {
+        "title": "Confiar no certificado deste painel",
+        "description": "O painel publicou esta autoridade de certificação, e o certificado que serve está assinado por ela:\n\n**{fingerprint}**\n\nA partir de agora o Home Assistant aceitará apenas esta autoridade para a ligação ao seu painel, e irá parar e perguntar-lhe antes de aceitar outra.\n\nIsto é confiança na primeira utilização. A integração obteve a autoridade através da rede local e não a consegue distinguir de uma substituída por outro equipamento dessa rede — apenas lhe pode dizer se mudar daqui em diante. Se conseguir ler a impressão digital noutra origem, como outra instalação desta integração ligada ao mesmo painel, compare-a antes de continuar."
+      },
+      "panel_ca_failed": {
+        "title": "Não foi possível verificar o certificado do painel",
+        "description": "Não foi possível obter a autoridade de certificação do painel, ou o certificado que o painel serve não está assinado por ela.\n\nPode tentar novamente ou terminar a configuração sem fixar a autoridade. Sem a fixar, a integração continua a ligar-se por TLS, mas volta a obter a autoridade em cada ligação e confia no que responder — pelo que um equipamento da sua rede se poderia fazer passar pelo painel. A integração repete a tentativa sempre que arranca e fixa a autoridade assim que uma tentativa tiver êxito.",
+        "menu_options": {
+          "panel_ca": "Tentar novamente",
+          "panel_ca_skip": "Continuar sem fixar a autoridade"
+        }
       }
     }
   },
@@ -800,6 +823,21 @@
     "schema_unit_mismatch": {
       "title": "Discrepância de unidades do Painel SPAN",
       "description": "O seu painel comunica `{field_path}` em {schema_unit}, mas esta integração espera {ha_unit}. Entidades afetadas: {count} (por exemplo: {examples}). As suas leituras e estatísticas de longo prazo podem estar erradas. Não foram alteradas automaticamente."
+    },
+    "panel_ca_changed": {
+      "title": "A autoridade de certificação do SPAN Panel mudou",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Confiar na nova autoridade de certificação?",
+            "description": "{panel} anuncia agora esta autoridade de certificação:\n\n**{fingerprint}**\n\nAceitá-la fixa-a e volta a ligar. Faça-o apenas se souber por que mudou — uma atualização de firmware ou uma reposição de fábrica rodam-na legitimamente.\n\nSe nada devia ter mudado, não aceite. Um equipamento da sua rede a fazer-se passar pelo seu painel tem exatamente este aspeto, e aceitar entregar-lhe-ia a ligação."
+          }
+        },
+        "abort": {
+          "entry_gone": "Esse SPAN Panel já não está configurado.",
+          "ca_unreadable": "Não foi possível ler a autoridade de certificação do painel. Verifique se o painel está acessível e tente novamente."
+        }
+      }
     }
   }
 }

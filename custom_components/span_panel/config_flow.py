@@ -21,6 +21,7 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 from span_panel_api import (
     V2AuthResponse,
+    ca_fingerprint,
     delete_fqdn,
     detect_api_version,
     register_fqdn,
@@ -39,8 +40,12 @@ from .config_flow_options import (
     process_general_options_input,
 )
 from .config_flow_validation import (
+    PanelRestTransport,
+    async_fetch_panel_ca,
+    async_leaf_chains_to_ca,
     check_fqdn_tls_ready,
     is_fqdn,
+    panel_rest_transport,
     validate_host,
     validate_v2_passphrase,
     validate_v2_proximity,
@@ -53,11 +58,15 @@ from .const import (
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
     CONF_HTTP_PORT,
+    CONF_HTTPS_PORT,
+    CONF_PANEL_CA_PEM,
     CONF_PANEL_SERIAL,
     CONF_REGISTERED_FQDN,
+    DEFAULT_HTTPS_PORT,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
+    PANEL_CA_PENDING,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
@@ -138,6 +147,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_broker_password: str | None = None
         self._v2_panel_serial: str | None = None
         self._http_port: int = 80
+        self._https_port: int = DEFAULT_HTTPS_PORT
+        # The panel CA, once fetched and leaf-confirmed. None means the flow
+        # could not acquire one and the entry is created with the pending flag.
+        self._panel_ca_pem: str | None = None
+        # How this flow's REST calls reach the panel. Set from the existing
+        # entry on reauth and reconfigure, where a pin may already exist; left
+        # None on initial setup, which has nothing pinned yet by construction.
+        self._rest_transport: PanelRestTransport | None = None
         # Energy dip compensation default for fresh installs
         self._enable_dip_compensation: bool = True
         # FQDN registration task (async_show_progress)
@@ -342,12 +359,16 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Handle a flow initiated by re-auth."""
         host = entry_data[CONF_HOST]
         self._http_port = int(entry_data.get(CONF_HTTP_PORT, 80))
+        # This entry may already have a pinned CA, and a reauth is precisely
+        # where fresh credentials cross the wire. Adopted before the first call.
+        self._rest_transport = panel_rest_transport(self.hass, entry_data)
 
         # Detect current API version of the panel
         detection = await detect_api_version(
             host,
-            port=self._http_port,
-            httpx_client=get_async_client(self.hass, verify_ssl=False),
+            port=self._rest_transport.port,
+            httpx_client=self._rest_transport.httpx_client,
+            ssl_context=self._rest_transport.ssl_context,
         )
         if detection.probe_failed:
             return self.async_abort(reason="cannot_connect")
@@ -442,7 +463,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return await self.async_step_auth_proximity()
 
         try:
-            result = await validate_v2_proximity(self.hass, self.host, port=self._http_port)
+            result = await validate_v2_proximity(
+                self.hass, self.host, port=self._http_port, transport=self._rest_transport
+            )
         except (SpanPanelAuthError, SpanPanelConnectionError):
             return await self.async_step_auth_proximity()
 
@@ -473,7 +496,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         try:
             result = await validate_v2_passphrase(
-                self.hass, self.host, passphrase, port=self._http_port
+                self.hass,
+                self.host,
+                passphrase,
+                port=self._http_port,
+                transport=self._rest_transport,
             )
         except SpanPanelAuthError:
             return self.async_show_form(
@@ -514,7 +541,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # If host is an FQDN, register it with the panel for TLS cert SAN inclusion
         if self.host and is_fqdn(self.host):
             return await self.async_step_register_fqdn()
-        return await self.async_step_choose_entity_naming_initial()
+        return await self.async_step_panel_ca_start()
 
     async def async_step_register_fqdn(
         self, user_input: dict[str, Any] | None = None
@@ -541,20 +568,28 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self.async_show_progress_done(next_step_id="fqdn_failed")
 
         self._fqdn_task = None
-        return self.async_show_progress_done(next_step_id="choose_entity_naming_initial")
+        return self.async_show_progress_done(next_step_id="panel_ca_start")
 
     async def _async_register_fqdn_and_wait(self) -> None:
         """Register the FQDN and poll until the TLS cert includes it."""
         if not self.host or not self.access_token:
             raise ConfigFlowError("Host and access token required for FQDN registration")
 
-        httpx_client = get_async_client(self.hass, verify_ssl=False)
+        # Carries the access token, so it goes over the pin where this flow has
+        # one — which is the reconfigure path. Initial setup has not fetched a CA
+        # yet at this point and falls back to the plaintext bootstrap port.
+        transport = self._rest_transport or PanelRestTransport(
+            port=self._http_port,
+            ssl_context=None,
+            httpx_client=get_async_client(self.hass, verify_ssl=False),
+        )
         await register_fqdn(
             self.host,
             self.access_token,
             self.host,
-            port=self._http_port,
-            httpx_client=httpx_client,
+            port=transport.port,
+            httpx_client=transport.httpx_client,
+            ssl_context=transport.ssl_context,
         )
 
         mqtts_port = self._v2_broker_port or 8883
@@ -578,12 +613,109 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Handle FQDN registration failure — user may continue without it."""
         if user_input is not None:
-            return await self.async_step_choose_entity_naming_initial()
+            return await self.async_step_panel_ca_start()
         return self.async_show_form(
             step_id="fqdn_failed",
             data_schema=vol.Schema({}),
             errors={"base": "fqdn_registration_failed"},
         )
+
+    async def async_step_panel_ca_start(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter CA acquisition, asking for the HTTPS port first when it is not 443.
+
+        The port is only prompted for on an install that already moved the HTTP
+        port, because that is the install most likely to be reaching the panel
+        through something that also moved the TLS one. Asking everybody would put
+        a question about reverse proxies in front of users who have none.
+        """
+        if self._http_port == 80:
+            return await self.async_step_panel_ca()
+        return await self.async_step_panel_https_port()
+
+    async def async_step_panel_https_port(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect the port the panel serves TLS on."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="panel_https_port",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_HTTPS_PORT, default=DEFAULT_HTTPS_PORT): int,
+                    }
+                ),
+            )
+        self._https_port = int(user_input[CONF_HTTPS_PORT])
+        return await self.async_step_panel_ca()
+
+    async def async_step_panel_ca(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Fetch the panel's CA, prove it signs what the panel serves, and show it.
+
+        `user_input` is `None` on the way in — including on a retry chosen from
+        the failure menu — and a submitted (empty) mapping when the user has
+        confirmed the fingerprint.
+        """
+        if user_input is not None:
+            return await self.async_step_choose_entity_naming_initial()
+
+        if not self.host:
+            return self.async_abort(reason="host_not_set")
+
+        try:
+            ca_pem = await async_fetch_panel_ca(self.hass, self.host, http_port=self._http_port)
+        except (
+            SpanPanelAPIError,
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+        ) as err:
+            _LOGGER.warning("Could not fetch the CA from panel %s: %s", self.host, err)
+            return await self.async_step_panel_ca_failed()
+
+        # A CA that cannot validate the certificate the panel actually serves is
+        # not the panel's CA. Checked before the fingerprint is shown, so the
+        # user is never asked to accept a value that already failed.
+        if not await async_leaf_chains_to_ca(self.host, self._https_port, ca_pem):
+            _LOGGER.warning(
+                "The certificate served by %s on port %s does not chain to the CA the "
+                "panel published; not pinning it",
+                self.host,
+                self._https_port,
+            )
+            return await self.async_step_panel_ca_failed()
+
+        self._panel_ca_pem = ca_pem
+        return self.async_show_form(
+            step_id="panel_ca",
+            data_schema=vol.Schema({}),
+            description_placeholders={"fingerprint": ca_fingerprint(ca_pem)},
+        )
+
+    async def async_step_panel_ca_failed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Offer a retry, or setting the panel up without a pin.
+
+        Continuing is permitted because refusing would make an unreachable
+        certificate endpoint a hard setup failure for a panel that is otherwise
+        working, and the entry is created with `panel_ca_pending` so every later
+        setup retries the fetch. Until one succeeds the library keeps 3.0.1's
+        behaviour of refetching the CA on each connect.
+        """
+        return self.async_show_menu(
+            step_id="panel_ca_failed",
+            menu_options=["panel_ca", "panel_ca_skip"],
+        )
+
+    async def async_step_panel_ca_skip(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Continue without a pinned CA."""
+        self._panel_ca_pem = None
+        return await self.async_step_choose_entity_naming_initial()
 
     def create_new_entry(
         self, host: str, serial_number: str, access_token: str
@@ -618,6 +750,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if self._http_port != 80:
             entry_data[CONF_HTTP_PORT] = self._http_port
+        if self._https_port != DEFAULT_HTTPS_PORT:
+            entry_data[CONF_HTTPS_PORT] = self._https_port
+        if self._panel_ca_pem is not None:
+            entry_data[CONF_PANEL_CA_PEM] = self._panel_ca_pem
+        else:
+            # Acquisition failed and the user chose to continue. Every later
+            # setup retries it, on the same flag the migration uses.
+            entry_data[PANEL_CA_PENDING] = True
         if is_fqdn(host):
             entry_data[CONF_REGISTERED_FQDN] = host
 
@@ -729,11 +869,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         # Validate the host is reachable and is a v2 panel
         http_port = int(reconfigure_entry.data.get(CONF_HTTP_PORT, 80))
+        self._rest_transport = panel_rest_transport(self.hass, reconfigure_entry.data)
         try:
             detection = await detect_api_version(
                 host,
-                port=http_port,
-                httpx_client=get_async_client(self.hass, verify_ssl=False),
+                port=self._rest_transport.port,
+                httpx_client=self._rest_transport.httpx_client,
+                ssl_context=self._rest_transport.ssl_context,
             )
         except (
             ValueError,
@@ -783,8 +925,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 await delete_fqdn(
                     host,
                     access_token,
-                    port=http_port,
-                    httpx_client=get_async_client(self.hass, verify_ssl=False),
+                    port=self._rest_transport.port,
+                    httpx_client=self._rest_transport.httpx_client,
+                    ssl_context=self._rest_transport.ssl_context,
                 )
             except (
                 SpanPanelAPIError,

@@ -21,9 +21,13 @@ from homeassistant.exceptions import (
     HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
+from span_panel_api.exceptions import (
+    SpanPanelAuthError,
+    SpanPanelCAChangedError,
+    SpanPanelStaleDataError,
+)
 
 from .const import DOMAIN
 from .helpers import detect_capabilities
@@ -715,6 +719,20 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             self._check_capability_change(snapshot)
 
             await self._run_post_update_tasks(snapshot)
+
+        except SpanPanelCAChangedError as err:
+            # Not an outage, and must not be handled as one. The offline branch
+            # below keeps serving the last snapshot so a brief broker drop does
+            # not blank the dashboard, which is right for a transport that will
+            # come back and wrong for one that has stopped for good: it would
+            # leave every entity showing a plausible value read before the pin
+            # broke. `UpdateFailed` takes them unavailable instead.
+            #
+            # Nothing is retried or torn down here. The library refuses to
+            # reconnect, the Repair is raised from the fatal-error channel in
+            # `async_setup_entry`, and re-pinning requires a person.
+            self._mark_panel_offline(err)
+            raise UpdateFailed(str(err)) from err
 
         except SpanPanelAuthError as err:
             raise ConfigEntryAuthFailed from err

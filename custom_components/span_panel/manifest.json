@@ -10,7 +10,8 @@
     "frontend",
     "http",
     "panel_custom",
-    "persistent_notification"
+    "persistent_notification",
+    "repairs"
   ],
   "documentation": "https://github.com/SpanPanel/span",
   "integration_type": "device",

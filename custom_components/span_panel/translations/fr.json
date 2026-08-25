@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
       "cannot_connect": "Échec de la connexion au Span Panel",
+      "host_not_set": "Aucune adresse de panneau n'a été définie ; recommencez la configuration.",
       "no_devices_found": "Aucun appareil trouvé sur le réseau",
       "no_host": "Aucune adresse d'hôte n'a été fournie par le module complémentaire.",
       "no_serial": "Impossible de déterminer le numéro de série du panneau.",
@@ -119,6 +120,28 @@
         },
         "description": "Entrez les détails de connexion pour votre SPAN Panel.",
         "title": "Connectez-vous au Span Panel"
+      },
+      "panel_https_port": {
+        "title": "Port HTTPS du panneau",
+        "description": "Vous avez défini un port HTTP non standard pour ce panneau : il sert peut-être aussi TLS sur un port non standard, par exemple derrière un proxy inverse. Indiquez le port sur lequel le certificat du panneau est servi.",
+        "data": {
+          "https_port": "Port HTTPS"
+        },
+        "data_description": {
+          "https_port": "Laissez 443, sauf si un proxy ou une redirection de port l'a déplacé."
+        }
+      },
+      "panel_ca": {
+        "title": "Faire confiance au certificat de ce panneau",
+        "description": "Le panneau a publié cette autorité de certification, et le certificat qu'il présente est signé par elle :\n\n**{fingerprint}**\n\nDésormais, Home Assistant n'acceptera que cette autorité pour la connexion à votre panneau, et s'arrêtera pour vous demander avant d'en accepter une autre.\n\nIl s'agit d'une confiance à la première utilisation. L'intégration a récupéré l'autorité sur le réseau local et ne peut pas la distinguer d'une autorité substituée par un autre appareil de ce réseau ; elle peut seulement vous signaler un changement ultérieur. Si vous pouvez lire l'empreinte ailleurs — par exemple sur une autre installation de cette intégration reliée au même panneau — comparez-la avant de continuer."
+      },
+      "panel_ca_failed": {
+        "title": "Impossible de vérifier le certificat du panneau",
+        "description": "L'autorité de certification du panneau n'a pas pu être récupérée, ou le certificat présenté par le panneau n'est pas signé par elle.\n\nVous pouvez réessayer ou terminer la configuration sans épinglage. Sans épinglage, l'intégration se connecte toujours en TLS, mais elle récupère l'autorité à chaque connexion et fait confiance à ce qui répond : un appareil de votre réseau pourrait donc se faire passer pour le panneau. L'intégration retente la récupération à chaque démarrage et épingle l'autorité dès qu'elle y parvient.",
+        "menu_options": {
+          "panel_ca": "Réessayer",
+          "panel_ca_skip": "Continuer sans épinglage"
+        }
       }
     }
   },
@@ -800,6 +823,21 @@
     "schema_unit_mismatch": {
       "title": "Incohérence d'unité du Panneau SPAN",
       "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. Entités concernées : {count} (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
+    },
+    "panel_ca_changed": {
+      "title": "L'autorité de certification du SPAN Panel a changé",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Faire confiance à la nouvelle autorité de certification ?",
+            "description": "{panel} annonce désormais cette autorité de certification :\n\n**{fingerprint}**\n\nL'accepter l'épingle et rétablit la connexion. Ne le faites que si vous savez pourquoi elle a changé : une mise à jour du micrologiciel ou une réinitialisation d'usine la renouvelle légitimement.\n\nSi rien n'aurait dû changer, n'acceptez pas. Un appareil de votre réseau se faisant passer pour votre panneau ressemble exactement à ceci, et accepter lui remettrait la connexion."
+          }
+        },
+        "abort": {
+          "entry_gone": "Ce SPAN Panel n'est plus configuré.",
+          "ca_unreadable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et réessayez."
+        }
+      }
     }
   }
 }

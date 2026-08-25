@@ -10,7 +10,7 @@ from homeassistant.components.frontend import async_remove_panel as async_remove
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
-from homeassistant.core import CoreState, HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryError,
@@ -23,12 +23,16 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot
+from span_panel_api import SpanMqttClient, SpanPanelSnapshot, ca_fingerprint
 from span_panel_api.exceptions import (
+    SpanPanelAPIError,
     SpanPanelAuthError,
+    SpanPanelCAChangedError,
     SpanPanelConnectionError,
+    SpanPanelError,
     SpanPanelServerError,
     SpanPanelTimeoutError,
+    SpanPanelValidationError,
 )
 from span_panel_api.mqtt.models import MqttClientConfig
 
@@ -36,6 +40,8 @@ from span_panel_api.mqtt.models import MqttClientConfig
 from . import config_flow  # noqa: F401
 from .additions import async_announce_new_entities, async_forget_announcements
 from .adoption import async_register_adopted_devices
+from .ca_repairs import async_clear_ca_changed, async_raise_ca_changed
+from .config_flow_validation import async_fetch_panel_ca
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -43,9 +49,11 @@ from .const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HTTP_PORT,
+    CONF_PANEL_CA_PEM,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     ENABLE_CURRENT_MONITORING,
+    PANEL_CA_PENDING,
 )
 from .coordinator import SpanPanelCoordinator
 from .current_monitor import CurrentMonitor
@@ -129,6 +137,65 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+async def _async_pinned_ca(
+    hass: HomeAssistant, entry: SpanPanelConfigEntry, host: str, http_port: int
+) -> str | None:
+    """Return the CA to anchor this entry's broker connection on.
+
+    An entry provisioned since CA pinning landed already carries one. An entry
+    that predates it carries `panel_ca_pending` instead, put there by the v7
+    migration, and this is where that is settled — at setup, where the panel is
+    about to be reachable anyway, rather than in the migration, which runs during
+    startup and would delay boot for an unreachable panel.
+
+    A failed fetch is not a setup failure. The flag survives, the next setup
+    retries for free, and in the meantime the library falls back to its 3.0.1
+    behaviour of refetching the CA on each connect. Refusing to start would trade
+    a partial control for no integration at all.
+
+    The store is logged at WARNING with the fingerprint on purpose. This is
+    trust-on-first-use on an upgrade path — nobody confirmed this certificate
+    against anything — and the user should be able to find the value afterwards
+    to compare it against another install or the panel's own label.
+    """
+    pinned = entry.data.get(CONF_PANEL_CA_PEM)
+    if pinned:
+        return str(pinned)
+
+    if not entry.data.get(PANEL_CA_PENDING):
+        return None
+
+    try:
+        ca_pem = await async_fetch_panel_ca(hass, host, http_port=http_port)
+        fingerprint = ca_fingerprint(ca_pem)
+    except (
+        SpanPanelAPIError,
+        SpanPanelConnectionError,
+        SpanPanelTimeoutError,
+        SpanPanelValidationError,
+    ) as err:
+        _LOGGER.warning(
+            "Could not acquire the CA for SPAN panel %s (%s). Continuing unpinned; "
+            "the fetch is retried on the next setup",
+            entry.title,
+            err,
+        )
+        return None
+
+    data = dict(entry.data)
+    data[CONF_PANEL_CA_PEM] = ca_pem
+    data.pop(PANEL_CA_PENDING, None)
+    hass.config_entries.async_update_entry(entry, data=data)
+    _LOGGER.warning(
+        "Pinned the CA advertised by SPAN panel %s: SHA-256 %s. Nothing has confirmed "
+        "this certificate — compare it against another install or the panel itself if "
+        "you can, and see the integration's security documentation",
+        entry.title,
+        fingerprint,
+    )
+    return ca_pem
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
     """Set up Span Panel from a config entry."""
     _LOGGER.debug("Setting up entry %s (version %s)", entry.entry_id, entry.version)
@@ -193,14 +260,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                     host,
                 )
 
+            panel_http_port = int(config.get(CONF_HTTP_PORT, 80))
+
+            # Before the client is built, because the pin is a constructor
+            # argument: supplying it is what stops the bridge fetching a CA over
+            # plaintext HTTP on every connect and trusting whatever answers.
+            ca_pem = await _async_pinned_ca(hass, entry, host, panel_http_port)
+
             broker_config = MqttClientConfig(
                 broker_host=host,
                 username=config[CONF_EBUS_BROKER_USERNAME],
                 password=config[CONF_EBUS_BROKER_PASSWORD],
                 mqtts_port=int(config[CONF_EBUS_BROKER_PORT]),
+                ca_pem=ca_pem,
             )
-
-            panel_http_port = int(config.get(CONF_HTTP_PORT, 80))
 
             snapshot_interval = entry.options.get(
                 SNAPSHOT_UPDATE_INTERVAL, DEFAULT_SNAPSHOT_INTERVAL
@@ -227,6 +300,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             )
             try:
                 await client.connect()
+            except SpanPanelCAChangedError as err:
+                # Terminal on purpose, and `ConfigEntryError` rather than
+                # `ConfigEntryNotReady` for the same reason the library refuses
+                # to retry: a client that keeps trying is a client waiting to
+                # succeed against whatever is answering, which is the outcome
+                # pinning exists to prevent. The Repair is the only way forward,
+                # and it requires a person.
+                await client.close()
+                async_raise_ca_changed(
+                    hass, entry, err.expected_fingerprint, err.observed_fingerprint
+                )
+                raise ConfigEntryError(str(err)) from err
             except SpanPanelAuthError as err:
                 await client.close()
                 raise ConfigEntryAuthFailed(f"MQTT authentication failed: {err}") from err
@@ -245,6 +330,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             ) as err:
                 await client.close()
                 raise ConfigEntryNotReady(f"SPAN panel is not ready yet: {err}") from err
+
+            # The connection got as far as a handshake under the current pin, so
+            # any standing Repair describes a state that no longer holds.
+            async_clear_ca_changed(hass, entry)
+
+            # The other half of the same condition: the reconnect loop runs
+            # fire-and-forget, so a CA that changes mid-session cannot surface as
+            # an exception on anybody's call stack. The library gives it a
+            # channel of its own precisely so a consumer can act on it.
+            @callback
+            def _on_fatal_transport_error(error: SpanPanelError) -> None:
+                if isinstance(error, SpanPanelCAChangedError):
+                    async_raise_ca_changed(
+                        hass, entry, error.expected_fingerprint, error.observed_fingerprint
+                    )
+
+            entry.async_on_unload(client.register_fatal_error_callback(_on_fatal_transport_error))
 
             coordinator = SpanPanelCoordinator(hass, client, entry)
             await coordinator.async_config_entry_first_refresh()

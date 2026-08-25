@@ -8,7 +8,8 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from span_panel_api import SpanPanelSnapshot
+from span_panel_api import SpanPanelSnapshot, ca_fingerprint
+from span_panel_api.exceptions import SpanPanelValidationError
 
 from . import SpanPanelConfigEntry
 from .adoption import adopted_control_count, classify
@@ -16,6 +17,8 @@ from .const import (
     CONF_EBUS_BROKER_PASSWORD,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HOP_PASSPHRASE,
+    CONF_PANEL_CA_PEM,
+    PANEL_CA_PENDING,
 )
 from .schema_validation import SchemaFindings
 
@@ -26,6 +29,11 @@ TO_REDACT = {
     # No longer persisted as of entry version 7, but an entry that has not yet
     # been through the migration still carries it.
     CONF_HOP_PASSPHRASE,
+    # Not a secret — it is a public certificate — but multi-KB, and it would
+    # drown the dump. The diagnostically useful value is its fingerprint, which
+    # is injected separately below; `async_redact_data` is key-based and cannot
+    # transform a value.
+    CONF_PANEL_CA_PEM,
     "password",
     "username",
 }
@@ -233,6 +241,23 @@ def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
     }
 
 
+def _panel_ca(entry: SpanPanelConfigEntry) -> dict[str, Any]:
+    """How this entry's broker connection is anchored, without the PEM itself.
+
+    The fingerprint is what a support conversation actually needs: it says
+    whether two installs see the same panel CA, and whether the anchor moved.
+    A malformed stored PEM is reported as such rather than raising — diagnostics
+    that fail to render are worse than diagnostics that name the problem.
+    """
+    pem = entry.data.get(CONF_PANEL_CA_PEM)
+    if not pem:
+        return {"pinned": False, "pending": bool(entry.data.get(PANEL_CA_PENDING))}
+    try:
+        return {"pinned": True, "pending": False, "fingerprint": ca_fingerprint(str(pem))}
+    except SpanPanelValidationError as err:
+        return {"pinned": True, "pending": False, "fingerprint_error": str(err)}
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant,
     entry: SpanPanelConfigEntry,
@@ -300,6 +325,7 @@ async def async_get_config_entry_diagnostics(
 
     return {
         "config_entry": async_redact_data(entry.as_dict(), TO_REDACT),
+        "panel_ca": _panel_ca(entry),
         "entities": _entity_registry_rows(hass, entry),
         "panel": panel_data,
         "circuits": circuit_data,

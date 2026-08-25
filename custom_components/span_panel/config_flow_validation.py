@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
+from dataclasses import dataclass
 import ipaddress
 import logging
-from pathlib import Path
 import socket
 import ssl
-import tempfile
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.util.network import is_ipv4_address
+import httpx
 from span_panel_api import (
     V2AuthResponse,
+    build_panel_ssl_context,
     detect_api_version,
     download_ca_cert,
     register_v2,
@@ -23,6 +25,13 @@ from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelConnectionError,
     SpanPanelTimeoutError,
+)
+
+from .const import (
+    CONF_HTTP_PORT,
+    CONF_HTTPS_PORT,
+    CONF_PANEL_CA_PEM,
+    DEFAULT_HTTPS_PORT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,9 +60,17 @@ async def validate_host(
 
 
 async def validate_v2_passphrase(
-    hass: HomeAssistant, host: str, passphrase: str, port: int = 80
+    hass: HomeAssistant,
+    host: str,
+    passphrase: str,
+    port: int = 80,
+    transport: PanelRestTransport | None = None,
 ) -> V2AuthResponse:
     """Validate a v2 panel passphrase and return MQTT credentials.
+
+    `transport` carries a pinned CA where one exists, which is the case on every
+    reauth of an already-pinned entry. Initial registration has no pin yet — the
+    anchor is fetched later in the same flow — and passes `port` alone.
 
     Raises:
         SpanPanelAuthError: on invalid passphrase (401/403).
@@ -61,8 +78,17 @@ async def validate_v2_passphrase(
         SpanPanelTimeoutError: on request timeout.
 
     """
-    client = get_async_client(hass, verify_ssl=False)
-    return await register_v2(host, "Home Assistant", passphrase, port=port, httpx_client=client)
+    resolved = transport or PanelRestTransport(
+        port=port, ssl_context=None, httpx_client=get_async_client(hass, verify_ssl=False)
+    )
+    return await register_v2(
+        host,
+        "Home Assistant",
+        passphrase,
+        port=resolved.port,
+        httpx_client=resolved.httpx_client,
+        ssl_context=resolved.ssl_context,
+    )
 
 
 def is_fqdn(host: str) -> bool:
@@ -105,32 +131,70 @@ async def check_fqdn_tls_ready(
     ):
         return False
 
+    return await async_leaf_chains_to_ca(fqdn, mqtts_port, ca_pem)
+
+
+async def async_fetch_panel_ca(hass: HomeAssistant, host: str, http_port: int = 80) -> str:
+    """Fetch the panel's CA over plain HTTP.
+
+    Unauthenticated and unverified by construction — it fetches the very anchor
+    everything else is checked against, so there is nothing for it to check
+    itself against. Anything on the path can answer with a CA of its own. The
+    caller owes the trust decision; see `async_leaf_chains_to_ca` for the one
+    check that can be made without a value from another channel, and the confirm
+    step for the fingerprint a user can compare against one.
+
+    Raises whatever `download_ca_cert` raises; the caller decides what a failure
+    to acquire means, and that differs between a config flow and a deferred fetch
+    at setup.
+    """
+    return await download_ca_cert(
+        host, port=http_port, httpx_client=get_async_client(hass, verify_ssl=False)
+    )
+
+
+async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool:
+    """Whether the certificate served on `tls_port` validates against `ca_pem` alone.
+
+    A CA that cannot validate the certificate the panel actually serves is not
+    the panel's CA. That does not make a fetched PEM trustworthy — an attacker
+    who can substitute the CA can serve a leaf signed by it — but it does catch
+    the fetch that returned something unrelated, and it is the only check
+    available without a fingerprint from another channel.
+
+    Hostname verification stays on, so this also fails when the panel's
+    certificate does not name the address being used, which is the condition
+    `check_fqdn_tls_ready` is polling for.
+    """
     loop = asyncio.get_running_loop()
 
     def _check() -> bool:
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.check_hostname = True
-        ctx.verify_mode = ssl.CERT_REQUIRED
-
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as tmp:
-            tmp.write(ca_pem)
-            ca_path = Path(tmp.name)
         try:
-            ctx.load_verify_locations(str(ca_path))
+            # The library's builder, not a hand-rolled context: the panel's CA
+            # omits the Authority Key Identifier extension, which Python's
+            # default-on VERIFY_X509_STRICT rejects outright. A context built
+            # here without clearing that flag fails against a healthy panel.
+            ctx = build_panel_ssl_context(ca_pem)
+        except (ssl.SSLError, ValueError):
+            return False
+        try:
             with (
-                socket.create_connection((fqdn, mqtts_port), timeout=5) as sock,
-                ctx.wrap_socket(sock, server_hostname=fqdn),
+                socket.create_connection((host, tls_port), timeout=5) as sock,
+                ctx.wrap_socket(sock, server_hostname=host),
             ):
                 return True
         except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError):
             return False
-        finally:
-            ca_path.unlink(missing_ok=True)
 
     return await loop.run_in_executor(None, _check)
 
 
-async def validate_v2_proximity(hass: HomeAssistant, host: str, port: int = 80) -> V2AuthResponse:
+async def validate_v2_proximity(
+    hass: HomeAssistant,
+    host: str,
+    port: int = 80,
+    transport: PanelRestTransport | None = None,
+) -> V2AuthResponse:
     """Validate v2 panel proximity (door bypass) and return MQTT credentials.
 
     Calls register_v2 without a passphrase, which triggers door-bypass
@@ -143,5 +207,82 @@ async def validate_v2_proximity(hass: HomeAssistant, host: str, port: int = 80) 
         SpanPanelTimeoutError: on request timeout.
 
     """
-    client = get_async_client(hass, verify_ssl=False)
-    return await register_v2(host, "Home Assistant", port=port, httpx_client=client)
+    resolved = transport or PanelRestTransport(
+        port=port, ssl_context=None, httpx_client=get_async_client(hass, verify_ssl=False)
+    )
+    return await register_v2(
+        host,
+        "Home Assistant",
+        port=resolved.port,
+        httpx_client=resolved.httpx_client,
+        ssl_context=resolved.ssl_context,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PanelRestTransport:
+    """How to reach one panel's bootstrap REST API.
+
+    Two shapes, and the difference is not cosmetic. With a pinned CA the calls
+    go to the TLS port under an anchor built from it, and Home Assistant's shared
+    httpx client cannot be used — httpx fixes its trust store at construction, so
+    a context cannot be applied to a client somebody else built, and the library
+    builds a dedicated one rather than silently ignoring the pin. Without a pin
+    they go to the plaintext port on the shared client, exactly as before.
+
+    Mixing the two is refused by the library rather than guessed at: an explicit
+    `port=80` alongside an `ssl_context` raises, because "HTTPS on port 80" and
+    "a port stored before the CA was pinned" are both plausible readings.
+    """
+
+    port: int
+    ssl_context: ssl.SSLContext | None
+    httpx_client: httpx.AsyncClient | None
+
+
+def _as_port(value: object, default: int) -> int:
+    """Read a port out of untyped entry data without trusting its type.
+
+    `entry.data` round-trips through JSON and is typed `Any` at the boundary; a
+    hand-edited `.storage` can put a string there. Anything unusable falls back
+    to the default rather than raising, because a bad port must not be the reason
+    an otherwise healthy entry cannot start.
+    """
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return default
+
+
+def panel_rest_transport(
+    hass: HomeAssistant, entry_data: Mapping[str, object]
+) -> PanelRestTransport:
+    """Decide how this entry's REST calls should reach the panel.
+
+    A malformed stored PEM falls back to plaintext rather than raising. The
+    alternative is a config entry that cannot make a single REST call until
+    somebody edits `.storage` by hand, which is a worse outcome than the
+    transport this entry had before it was pinned — and the CA-changed repair is
+    the path back to a good pin.
+    """
+    pem = entry_data.get(CONF_PANEL_CA_PEM)
+    if pem:
+        try:
+            context = build_panel_ssl_context(str(pem))
+        except (ssl.SSLError, ValueError):
+            _LOGGER.warning(
+                "The stored panel CA is not a certificate this system accepts; "
+                "falling back to plaintext HTTP for REST calls"
+            )
+        else:
+            https_port = _as_port(entry_data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+            return PanelRestTransport(port=https_port, ssl_context=context, httpx_client=None)
+
+    return PanelRestTransport(
+        port=_as_port(entry_data.get(CONF_HTTP_PORT), 80),
+        ssl_context=None,
+        httpx_client=get_async_client(hass, verify_ssl=False),
+    )

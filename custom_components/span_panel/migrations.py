@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from .const import CONF_API_VERSION, CONF_HOP_PASSPHRASE
+from .const import CONF_API_VERSION, CONF_HOP_PASSPHRASE, PANEL_CA_PENDING
 
 if TYPE_CHECKING:
     from . import SpanPanelConfigEntry
@@ -124,13 +124,22 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: SpanPanelConfig
         )
         _LOGGER.debug("Migrated config entry %s to version 6", config_entry.entry_id)
 
-    # --- v6 → v7: drop the stored panel passphrase ---
+    # --- v6 → v7: drop the stored passphrase, and queue the CA acquisition ---
     if config_entry.version < 7:
         updated_data = dict(config_entry.data)
         # The passphrase is a registration input only — nothing at runtime reads
         # it back. Holding it in `.storage` bought nothing and cost a credential
         # that re-registers any client against the panel.
         removed = updated_data.pop(CONF_HOP_PASSPHRASE, None) is not None
+
+        # No I/O here, deliberately. This runs during startup, so a fetch would
+        # delay boot whenever the panel is unreachable and a failure would have
+        # nowhere to recover to. The flag defers it to the first successful
+        # setup and is cleared there; the same shape as solar_migration_pending
+        # above. Only v2 entries: v1 fails setup before it reaches a panel, and
+        # a simulation entry has none to fetch from.
+        if updated_data.get(CONF_API_VERSION) == "v2":
+            updated_data[PANEL_CA_PENDING] = True
 
         hass.config_entries.async_update_entry(
             config_entry,

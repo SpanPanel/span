@@ -9,7 +9,6 @@ from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from homeassistant.helpers.httpx_client import get_async_client
 from span_panel_api import regenerate_passphrase
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -19,10 +18,10 @@ from span_panel_api.exceptions import (
 )
 import voluptuous as vol
 
+from .config_flow_validation import panel_rest_transport
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_PASSWORD,
-    CONF_HTTP_PORT,
     DEFAULT_GRAPH_HORIZON,
     DOMAIN,
     VALID_GRAPH_HORIZONS,
@@ -727,12 +726,17 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
                 translation_key="rotate_credentials_no_token",
             )
 
+        # Over the pinned CA where this entry has one. A credential-rotation
+        # service that delivered fresh secrets over unverified HTTP would undo
+        # the point of pinning at the one moment it matters most.
+        transport = panel_rest_transport(hass, entry.data)
         try:
             new_password = await regenerate_passphrase(
                 host,
                 token,
-                port=int(entry.data.get(CONF_HTTP_PORT, 80)),
-                httpx_client=get_async_client(hass, verify_ssl=False),
+                port=transport.port,
+                httpx_client=transport.httpx_client,
+                ssl_context=transport.ssl_context,
             )
         except SpanPanelAuthError as err:
             raise ServiceValidationError(

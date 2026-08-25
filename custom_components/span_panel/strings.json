@@ -9,7 +9,8 @@
       "reauth_successful": "Authentication successful.",
       "reconfigure_successful": "Host updated successfully.",
       "unique_id_mismatch": "The panel at this address has a different serial number. You cannot switch to a different panel during reconfiguration.",
-      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2."
+      "v1_not_supported": "v1 firmware is not supported. Please upgrade your panel firmware to v2.",
+      "host_not_set": "No panel address was set; restart the setup."
     },
     "error": {
       "cannot_connect": "Failed to connect to Span Panel",
@@ -119,6 +120,28 @@
         },
         "description": "Enter the connection details for your SPAN Panel.",
         "title": "Connect to the Span Panel"
+      },
+      "panel_https_port": {
+        "title": "Panel HTTPS port",
+        "description": "You set a non-standard HTTP port for this panel, so it may serve TLS on a non-standard port too — for instance through a reverse proxy. Enter the port the panel's certificate is served on.",
+        "data": {
+          "https_port": "HTTPS port"
+        },
+        "data_description": {
+          "https_port": "Leave at 443 unless a proxy or a port mapping moved it."
+        }
+      },
+      "panel_ca": {
+        "title": "Trust this panel's certificate",
+        "description": "The panel published this certificate authority, and the certificate it serves is signed by it:\n\n**{fingerprint}**\n\nHome Assistant will accept only this authority for the connection to your panel from now on, and will stop and ask you before accepting a different one.\n\nThis is trust on first use. The integration fetched the authority over the local network and cannot tell it apart from one substituted by something else on that network — it can only tell you that nothing has changed since now. If you can read the fingerprint from another source, such as an existing install of this integration on the same panel, compare it before continuing."
+      },
+      "panel_ca_failed": {
+        "title": "Could not verify the panel's certificate",
+        "description": "The panel's certificate authority could not be fetched, or the certificate the panel serves is not signed by it.\n\nYou can try again, or finish setting the panel up without pinning. Without a pin the integration still connects over TLS, but it re-fetches the authority on every connection and trusts whatever answers — so a device on your network could stand in for the panel. The integration retries the fetch every time it starts, and pins the authority as soon as one succeeds.",
+        "menu_options": {
+          "panel_ca": "Try again",
+          "panel_ca_skip": "Continue without pinning"
+        }
       }
     }
   },
@@ -800,6 +823,21 @@
     "schema_unit_mismatch": {
       "title": "SPAN Panel unit mismatch",
       "description": "Your panel reports `{field_path}` in {schema_unit}, but this integration expects {ha_unit}. Entities affected: {count} (for example: {examples}). Their readings and long-term statistics may be wrong. They have not been changed automatically."
+    },
+    "panel_ca_changed": {
+      "title": "SPAN Panel certificate authority changed",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Trust the new certificate authority?",
+            "description": "{panel} is now advertising this certificate authority:\n\n**{fingerprint}**\n\nAccepting pins it and reconnects. Only do that if you know why it changed — a firmware upgrade or a factory reset rotates it legitimately.\n\nIf nothing should have changed, do not accept. A device on your network standing in for your panel looks exactly like this, and accepting would hand it the connection."
+          }
+        },
+        "abort": {
+          "entry_gone": "That SPAN Panel is no longer configured.",
+          "ca_unreadable": "The panel's certificate authority could not be read. Check that the panel is reachable and try again."
+        }
+      }
     }
   }
 }

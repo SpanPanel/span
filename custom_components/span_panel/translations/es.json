@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "Span Panel ya esta configurado. Solo una configuración es posible.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
+      "host_not_set": "No se ha definido la dirección del panel; reinicie la configuración.",
       "no_devices_found": "No se hallaron aparatos en la red",
       "no_host": "No se proporcionó una dirección de host desde el complemento.",
       "no_serial": "No se pudo determinar el número de serie del panel.",
@@ -119,6 +120,28 @@
         },
         "description": "Ingrese los detalles de conexión para su SPAN Panel.",
         "title": "Establecer conexión al Span Panel"
+      },
+      "panel_https_port": {
+        "title": "Puerto HTTPS del panel",
+        "description": "Ha configurado un puerto HTTP no estándar para este panel, por lo que también podría servir TLS en un puerto no estándar, por ejemplo a través de un proxy inverso. Introduzca el puerto en el que se sirve el certificado del panel.",
+        "data": {
+          "https_port": "Puerto HTTPS"
+        },
+        "data_description": {
+          "https_port": "Déjelo en 443 salvo que un proxy o una redirección de puertos lo haya cambiado."
+        }
+      },
+      "panel_ca": {
+        "title": "Confiar en el certificado de este panel",
+        "description": "El panel ha publicado esta autoridad de certificación, y el certificado que sirve está firmado por ella:\n\n**{fingerprint}**\n\nA partir de ahora, Home Assistant aceptará únicamente esta autoridad para la conexión con su panel, y se detendrá a preguntarle antes de aceptar otra distinta.\n\nEsto es confianza en el primer uso. La integración ha obtenido la autoridad a través de la red local y no puede distinguirla de una suplantada por otro equipo de esa red; solo puede avisarle si cambia a partir de ahora. Si puede leer la huella digital desde otra fuente, como otra instalación de esta integración sobre el mismo panel, compárela antes de continuar."
+      },
+      "panel_ca_failed": {
+        "title": "No se ha podido verificar el certificado del panel",
+        "description": "No se ha podido obtener la autoridad de certificación del panel, o el certificado que sirve el panel no está firmado por ella.\n\nPuede volver a intentarlo o terminar de configurar el panel sin fijar la autoridad. Sin fijarla, la integración sigue conectándose por TLS, pero vuelve a obtener la autoridad en cada conexión y confía en lo que responda, de modo que un dispositivo de su red podría hacerse pasar por el panel. La integración reintenta la obtención cada vez que se inicia y fija la autoridad en cuanto lo consigue.",
+        "menu_options": {
+          "panel_ca": "Volver a intentarlo",
+          "panel_ca_skip": "Continuar sin fijar la autoridad"
+        }
       }
     }
   },
@@ -800,6 +823,21 @@
     "schema_unit_mismatch": {
       "title": "Discrepancia de unidades del Panel SPAN",
       "description": "Su panel informa de `{field_path}` en {schema_unit}, pero esta integración espera {ha_unit}. Entidades afectadas: {count} (por ejemplo: {examples}). Sus lecturas y estadísticas a largo plazo pueden ser incorrectas. No se han modificado automáticamente."
+    },
+    "panel_ca_changed": {
+      "title": "La autoridad de certificación del SPAN Panel ha cambiado",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "¿Confiar en la nueva autoridad de certificación?",
+            "description": "{panel} anuncia ahora esta autoridad de certificación:\n\n**{fingerprint}**\n\nAceptarla la fija y vuelve a conectar. Hágalo solo si sabe por qué ha cambiado: una actualización de firmware o un restablecimiento de fábrica la rotan de forma legítima.\n\nSi no debería haber cambiado nada, no la acepte. Un dispositivo de su red que suplante a su panel tiene exactamente este aspecto, y aceptarla le entregaría la conexión."
+          }
+        },
+        "abort": {
+          "entry_gone": "Ese SPAN Panel ya no está configurado.",
+          "ca_unreadable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible e inténtelo de nuevo."
+        }
+      }
     }
   }
 }
