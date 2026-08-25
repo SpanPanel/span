@@ -677,9 +677,14 @@ asking you.
 shows an error and stops. Submitting the form again retries the fetch, which is what a panel that was briefly unreachable needs. An opt-out would quietly
 restore the plaintext credential exchange this ordering exists to remove, at the moment you are least likely to weigh it.
 
-**Panels configured before this release are different**, because their credentials were exchanged long ago and nothing crosses the wire at startup. They are
-pinned on the first startup that reaches the panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. If the panel is unreachable
-the integration starts anyway and retries on the next startup; until it succeeds, the connection behaves as it did before.
+**Panels configured before this release are pinned differently, and are not risk-free until they are.** They are pinned on the first startup that reaches the
+panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. Until that succeeds, the connection to the broker still authenticates with
+your panel's password while the authority is re-fetched over plaintext HTTP on every connection and whatever answers is trusted — the substitution pinning
+exists to close.
+
+If the panel is unreachable the integration starts anyway and retries on the next startup. That is deliberate. The exposure in the meantime is exactly the one
+the entry already had before this release, and refusing to start would not remove it — it would only remove the integration, leaving the credential no safer
+while guaranteeing an outage. Retrying closes it at the first opportunity instead.
 
 Diagnostics report the fingerprint under `panel_ca`. The certificate itself is not included — it is public, but multi-KB, and the fingerprint is the part worth
 reading.

@@ -38,9 +38,21 @@ setup, which retries on every subsequent one for free. Same shape as
 **Only the migration sets this.** A newly configured entry always carries a pin,
 because the config flow fetches and confirms the CA before it authenticates and
 refuses to continue without one — registration is the exchange that carries the
-passphrase. An upgraded entry is a different case: its credentials were
-exchanged long ago, nothing crosses the wire at setup, and refusing to start
-would take down a working integration to no benefit."""
+passphrase.
+
+An upgraded entry is a different case, but not a risk-free one, and the
+difference is not that nothing is at stake. Its MQTTS session authenticates with
+the broker password, and with no `ca_pem` the library falls back to fetching the
+CA over unauthenticated plaintext HTTP on every connect and trusting whatever
+answers — which is the substitution this pin exists to close. So an unpinned
+upgraded entry is exposed on each connect until the flag settles.
+
+Starting anyway is still right, for a different reason: that exposure is exactly
+the status quo ante. It is what the entry already had under 3.0.1, and refusing
+to start does not remove it — it removes the integration, and an integration
+that will not start protects nothing. Retrying converts a pre-existing, bounded
+exposure into a closed one at the first successful setup; refusing converts it
+into a guaranteed outage with the credential no safer."""
 
 # Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"
