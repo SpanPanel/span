@@ -68,6 +68,7 @@ from .schema_repairs import (
     async_clear_schema_issues,
 )
 from .services import (  # noqa: F401
+    _async_register_credential_services,
     _async_register_favorites_services,
     _async_register_graph_horizon_services,
     _async_register_monitoring_services,
@@ -121,6 +122,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     _async_register_monitoring_services(hass)
     _async_register_graph_horizon_services(hass)
     _async_register_favorites_services(hass)
+    _async_register_credential_services(hass)
 
     await async_apply_panel_registration(hass)
 

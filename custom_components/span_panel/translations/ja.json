@@ -446,6 +446,24 @@
     },
     "panel_not_ready": {
       "message": "SPAN Panelの準備ができていません。パネルがオンラインであることを確認してください。"
+    },
+    "rotate_credentials_auth_failed": {
+      "message": "SPAN Panel が保存済みのアクセストークンを拒否しました。認証情報をローテーションする前に、統合を再認証してください。"
+    },
+    "rotate_credentials_failed": {
+      "message": "{host} の SPAN Panel が認証情報のローテーションを完了しませんでした。既存の認証情報は変更されていません。"
+    },
+    "rotate_credentials_no_entry": {
+      "message": "v2 API を使用する読み込み済みの SPAN Panel が見つかりません。"
+    },
+    "rotate_credentials_no_token": {
+      "message": "この SPAN Panel には保存済みのアクセストークンがありません。認証情報をローテーションする前に、統合を再認証してください。"
+    },
+    "rotate_credentials_requires_admin": {
+      "message": "SPAN Panel の認証情報をローテーションできるのは Home Assistant の管理者だけです。"
+    },
+    "rotate_credentials_requires_user": {
+      "message": "認証情報のローテーションは、管理者がユーザーインターフェースから実行する必要があります。オートメーション、スクリプト、他の統合からは呼び出せません。"
     }
   },
   "options": {
@@ -760,6 +778,16 @@
         "entity_id": {
           "name": "エンティティ",
           "description": "お気に入りから削除する回路またはサブデバイスの任意のセンサー。"
+        }
+      }
+    },
+    "rotate_credentials": {
+      "name": "パネルの認証情報をローテーション",
+      "description": "SPAN Panel に新しい eBus MQTT ブローカーのパスワードを要求し、保存して統合を再読み込みします。以前のブローカーのパスワードは直ちに無効になるため、それを使用している他のローカルクライアント（2 台目の Home Assistant、スクリプト、サードパーティのツールなど）は、再接続する前にパネルから再プロビジョニングする必要があります。パネルのアクセストークンとパネルのパスフレーズは変更されません。実行できるのは Home Assistant の管理者だけで、オートメーションやスクリプトからは呼び出せません。",
+      "fields": {
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "任意の設定エントリ id。SPAN Panel を複数設定している場合にのみ必要です。"
         }
       }
     }

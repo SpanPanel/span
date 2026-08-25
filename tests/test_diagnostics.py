@@ -70,8 +70,11 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     # than as the "no metadata yet" state it actually is.
     coordinator.schema_findings = None
 
+    # Version 6 deliberately: an entry that has not yet been through the v7
+    # migration still carries the passphrase, and redaction must still cover it.
     entry = MockConfigEntry(
         domain=DOMAIN,
+        version=6,
         data={
             CONF_ACCESS_TOKEN: "access-secret",
             CONF_EBUS_BROKER_PASSWORD: "mqtt-password",

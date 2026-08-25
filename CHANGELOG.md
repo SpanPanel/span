@@ -132,6 +132,19 @@ working entirely in 2027.8.
 - **The README described Battery Power's sign backwards.** The sensor reports **discharging** as positive and always has, as release 2.0.5 established (#184)
   and a measured panel confirms — **no entity changed and no reading moved**, only the documentation was ever wrong.
 
+### Security
+
+- **The panel passphrase is no longer stored.** It is an input to registration and nothing afterwards read it, but a stored copy could mint fresh panel
+  credentials at any time. Upgrading migrates the config entry to version 7 and removes it; nothing else in the entry changes and no entity is affected.
+  Reauthenticating removes it too, if you upgrade later. **Once an entry reaches version 7, an older build of the integration will refuse to load it** — Home
+  Assistant does not downgrade config entries, so roll back from a backup rather than by reinstalling.
+- **New action `span_panel.rotate_credentials`** asks the panel for a new eBus MQTT broker password, stores it, and reloads the integration — for use after a
+  contractor visit or a suspected exposure. It is restricted to Home Assistant administrators and cannot be called from an automation or script. **The previous
+  broker password stops working immediately**, so any other local client using it must be re-provisioned from the panel. The panel access token and the panel
+  passphrase are unchanged, and a failed rotation leaves the existing credentials in place.
+- **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
+  actually bound the panel's exposure — VLAN isolation, a locked enclosure, read-only Home Assistant users, and encrypted backups.
+
 ## [2.0.8] - 5/2026
 
 ### Fixed

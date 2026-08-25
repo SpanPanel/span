@@ -109,7 +109,7 @@ class TriggerFlowType(enum.Enum):
 class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
-    VERSION = 6
+    VERSION = 7
     MINOR_VERSION = 1
     domain = DOMAIN
 
@@ -136,7 +136,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_broker_port: int | None = None
         self._v2_broker_username: str | None = None
         self._v2_broker_password: str | None = None
-        self._v2_passphrase: str | None = None
         self._v2_panel_serial: str | None = None
         self._http_port: int = 80
         # Energy dip compensation default for fresh installs
@@ -447,7 +446,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         except (SpanPanelAuthError, SpanPanelConnectionError):
             return await self.async_step_auth_proximity()
 
-        self._store_v2_auth_result(result, passphrase="")  # nosec B106
+        self._store_v2_auth_result(result)
         return await self._async_finalize_v2_auth()
 
     async def async_step_auth_passphrase(
@@ -489,17 +488,21 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 errors={"base": "cannot_connect"},
             )
 
-        self._store_v2_auth_result(result, passphrase)
+        self._store_v2_auth_result(result)
         return await self._async_finalize_v2_auth()
 
-    def _store_v2_auth_result(self, result: V2AuthResponse, passphrase: str) -> None:
-        """Store v2 auth credentials from registration result."""
+    def _store_v2_auth_result(self, result: V2AuthResponse) -> None:
+        """Store v2 auth credentials from registration result.
+
+        The passphrase that produced this result is deliberately not kept. It is
+        an input to registration and nothing afterwards reads it, so holding it
+        only widens what a flow in progress has in memory.
+        """
         self.access_token = result.access_token
         self._v2_broker_host = result.ebus_broker_host
         self._v2_broker_port = result.ebus_broker_mqtts_port
         self._v2_broker_username = result.ebus_broker_username
         self._v2_broker_password = result.ebus_broker_password
-        self._v2_passphrase = passphrase
         self._v2_panel_serial = result.serial_number
 
     async def _async_finalize_v2_auth(self) -> ConfigFlowResult:
@@ -610,7 +613,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             CONF_EBUS_BROKER_PORT: self._v2_broker_port,
             CONF_EBUS_BROKER_USERNAME: self._v2_broker_username,
             CONF_EBUS_BROKER_PASSWORD: self._v2_broker_password,
-            CONF_HOP_PASSPHRASE: self._v2_passphrase,
             CONF_PANEL_SERIAL: self._v2_panel_serial,
         }
 
@@ -645,8 +647,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         updated_data[CONF_EBUS_BROKER_PORT] = self._v2_broker_port
         updated_data[CONF_EBUS_BROKER_USERNAME] = self._v2_broker_username
         updated_data[CONF_EBUS_BROKER_PASSWORD] = self._v2_broker_password
-        updated_data[CONF_HOP_PASSPHRASE] = self._v2_passphrase
         updated_data[CONF_PANEL_SERIAL] = self._v2_panel_serial
+        # A reauth on an entry that predates v7 is also the moment to drop the
+        # passphrase it still carries; the migration only sees entries at setup.
+        updated_data.pop(CONF_HOP_PASSPHRASE, None)
         if self._http_port != 80:
             updated_data[CONF_HTTP_PORT] = self._http_port
 

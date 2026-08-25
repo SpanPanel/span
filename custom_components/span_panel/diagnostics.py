@@ -23,6 +23,8 @@ TO_REDACT = {
     CONF_ACCESS_TOKEN,
     CONF_EBUS_BROKER_PASSWORD,
     CONF_EBUS_BROKER_USERNAME,
+    # No longer persisted as of entry version 7, but an entry that has not yet
+    # been through the migration still carries it.
     CONF_HOP_PASSPHRASE,
     "password",
     "username",

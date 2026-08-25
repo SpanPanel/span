@@ -5,13 +5,28 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.httpx_client import get_async_client
+from span_panel_api import regenerate_passphrase
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelTimeoutError,
+)
 import voluptuous as vol
 
-from .const import DEFAULT_GRAPH_HORIZON, DOMAIN, VALID_GRAPH_HORIZONS
+from .const import (
+    CONF_API_VERSION,
+    CONF_EBUS_BROKER_PASSWORD,
+    CONF_HTTP_PORT,
+    DEFAULT_GRAPH_HORIZON,
+    DOMAIN,
+    VALID_GRAPH_HORIZONS,
+)
 from .current_monitor import CurrentMonitor
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
@@ -643,4 +658,119 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         async_handle_remove_favorite,
         schema=_favorite_mutation_schema,
         supports_response=SupportsResponse.OPTIONAL,
+    )
+
+
+async def _async_require_admin_caller(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Refuse a service call that does not come from a logged-in administrator.
+
+    `verify_domain_control` is deliberately not used here. It returns early for
+    a call with no `user_id` — every automation, script and integration — and
+    otherwise checks `POLICY_CONTROL`, which Home Assistant's default user
+    policy grants to non-admins. Neither is an administrator check.
+
+    A contextless call is refused outright rather than being treated as
+    trusted: an unattended automation has no business rotating credentials.
+    """
+    user_id = call.context.user_id
+    if user_id is None:
+        raise ServiceValidationError(
+            "Credential rotation must be run by an administrator from the "
+            "user interface, not from an automation or script.",
+            translation_domain=DOMAIN,
+            translation_key="rotate_credentials_requires_user",
+        )
+
+    user = await hass.auth.async_get_user(user_id)
+    if user is None or not user.is_admin:
+        raise ServiceValidationError(
+            "Only a Home Assistant administrator can rotate SPAN Panel credentials.",
+            translation_domain=DOMAIN,
+            translation_key="rotate_credentials_requires_admin",
+        )
+
+
+def _async_register_credential_services(hass: HomeAssistant) -> None:
+    """Register credential-rotation services."""
+
+    def _get_v2_entry(config_entry_id: str | None) -> ConfigEntry:
+        """Return the loaded v2 entry to rotate, or explain why there isn't one."""
+        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
+
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if config_entry_id is not None and entry.entry_id != config_entry_id:
+                continue
+            if not hasattr(entry, "runtime_data") or not isinstance(
+                entry.runtime_data, SpanPanelRuntimeData
+            ):
+                continue
+            if entry.data.get(CONF_API_VERSION) != "v2":
+                continue
+            return entry
+
+        raise ServiceValidationError(
+            "No loaded SPAN panel using the v2 API was found.",
+            translation_domain=DOMAIN,
+            translation_key="rotate_credentials_no_entry",
+        )
+
+    async def async_handle_rotate_credentials(call: ServiceCall) -> None:
+        await _async_require_admin_caller(hass, call)
+
+        entry = _get_v2_entry(call.data.get("config_entry_id"))
+        host = str(entry.data[CONF_HOST])
+        token = str(entry.data.get(CONF_ACCESS_TOKEN, ""))
+        if not token:
+            raise ServiceValidationError(
+                "This SPAN panel has no stored access token. Reauthenticate before rotating.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_no_token",
+            )
+
+        try:
+            new_password = await regenerate_passphrase(
+                host,
+                token,
+                port=int(entry.data.get(CONF_HTTP_PORT, 80)),
+                httpx_client=get_async_client(hass, verify_ssl=False),
+            )
+        except SpanPanelAuthError as err:
+            raise ServiceValidationError(
+                "The stored access token was rejected by the panel. Reauthenticate first.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_auth_failed",
+            ) from err
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as err:
+            # Nothing has been written yet, so the entry still holds the
+            # credential the panel still accepts.
+            raise ServiceValidationError(
+                f"The SPAN panel at {host} did not complete the rotation.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_failed",
+                translation_placeholders={"host": host},
+            ) from err
+
+        updated_data = dict(entry.data)
+        updated_data[CONF_EBUS_BROKER_PASSWORD] = new_password
+        hass.config_entries.async_update_entry(entry, data=updated_data)
+
+        # Awaited rather than fired and forgotten: the running client still
+        # holds the password the panel just invalidated, so the call should not
+        # report success until the entry is back up on the new one.
+        await hass.config_entries.async_reload(entry.entry_id)
+
+        _LOGGER.info(
+            "Rotated the MQTT broker credential for SPAN panel entry %s",
+            entry.entry_id,
+        )
+
+    hass.services.async_register(
+        DOMAIN,
+        "rotate_credentials",
+        async_handle_rotate_credentials,
+        schema=vol.Schema({vol.Optional("config_entry_id"): str}),
     )

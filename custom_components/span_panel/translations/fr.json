@@ -446,6 +446,24 @@
     },
     "panel_not_ready": {
       "message": "Le SPAN Panel n'est pas prêt. Veuillez vérifier que le panneau est en ligne."
+    },
+    "rotate_credentials_auth_failed": {
+      "message": "Le SPAN Panel a rejeté le jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
+    },
+    "rotate_credentials_failed": {
+      "message": "Le SPAN Panel à l'adresse {host} n'a pas terminé le renouvellement des identifiants. Les identifiants existants sont inchangés."
+    },
+    "rotate_credentials_no_entry": {
+      "message": "Aucun SPAN Panel chargé utilisant l'API v2 n'a été trouvé."
+    },
+    "rotate_credentials_no_token": {
+      "message": "Ce SPAN Panel n'a aucun jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
+    },
+    "rotate_credentials_requires_admin": {
+      "message": "Seul un administrateur Home Assistant peut renouveler les identifiants du SPAN Panel."
+    },
+    "rotate_credentials_requires_user": {
+      "message": "Le renouvellement des identifiants doit être lancé par un administrateur depuis l'interface utilisateur. Les automatisations, les scripts et les autres intégrations ne peuvent pas l'appeler."
     }
   },
   "options": {
@@ -760,6 +778,16 @@
         "entity_id": {
           "name": "Entité",
           "description": "N'importe quel capteur du circuit ou du sous-appareil à retirer des favoris."
+        }
+      }
+    },
+    "rotate_credentials": {
+      "name": "Renouveler les identifiants du panneau",
+      "description": "Demande au SPAN Panel un nouveau mot de passe pour le broker MQTT eBus, l'enregistre et recharge l'intégration. Le mot de passe précédent cesse immédiatement de fonctionner : tout autre client local qui l'utilise — une seconde instance Home Assistant, un script ou un outil tiers — devra être réapprovisionné depuis le panneau avant de pouvoir se reconnecter. Le jeton d'accès du panneau et le mot de passe du panneau ne sont pas modifiés. Seul un administrateur Home Assistant peut l'exécuter, et il ne peut pas être appelé depuis une automatisation ou un script.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrée de configuration",
+          "description": "Id d'entrée de configuration facultatif. Nécessaire uniquement lorsque plusieurs SPAN Panel sont configurés."
         }
       }
     }

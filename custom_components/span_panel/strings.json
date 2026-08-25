@@ -446,6 +446,24 @@
     },
     "panel_not_ready": {
       "message": "The SPAN Panel is not ready. Please check that the panel is online."
+    },
+    "rotate_credentials_auth_failed": {
+      "message": "The SPAN Panel rejected the stored access token. Reauthenticate the integration before rotating credentials."
+    },
+    "rotate_credentials_failed": {
+      "message": "The SPAN Panel at {host} did not complete the credential rotation. The existing credentials are unchanged."
+    },
+    "rotate_credentials_no_entry": {
+      "message": "No loaded SPAN panel using the v2 API was found."
+    },
+    "rotate_credentials_no_token": {
+      "message": "This SPAN panel has no stored access token. Reauthenticate the integration before rotating credentials."
+    },
+    "rotate_credentials_requires_admin": {
+      "message": "Only a Home Assistant administrator can rotate SPAN Panel credentials."
+    },
+    "rotate_credentials_requires_user": {
+      "message": "Credential rotation must be run by an administrator from the user interface. Automations, scripts and other integrations cannot call it."
     }
   },
   "options": {
@@ -760,6 +778,16 @@
         "entity_id": {
           "name": "Entity",
           "description": "Any sensor of the circuit or sub-device to remove from favorites."
+        }
+      }
+    },
+    "rotate_credentials": {
+      "name": "Rotate panel credentials",
+      "description": "Ask the SPAN panel for a new eBus MQTT broker password, store it, and reload the integration. The previous broker password stops working immediately, so any other local client using it — a second Home Assistant instance, a script, or third-party tooling — must be re-provisioned from the panel before it will reconnect. The panel access token and the panel passphrase are not changed. Only a Home Assistant administrator can run this, and it cannot be called from an automation or script.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
         }
       }
     }

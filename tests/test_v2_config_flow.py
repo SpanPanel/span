@@ -379,7 +379,8 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
         assert data[CONF_EBUS_BROKER_PORT] == 8883
         assert data[CONF_EBUS_BROKER_USERNAME] == "span-user"
         assert data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
-        assert data[CONF_HOP_PASSPHRASE] == MOCK_PASSPHRASE
+        # The passphrase is a registration input, never entry data.
+        assert CONF_HOP_PASSPHRASE not in data
         assert data[CONF_PANEL_SERIAL] == "SPAN-V2-001"
 
 
@@ -397,7 +398,7 @@ async def test_config_flow_uses_current_config_entry_version() -> None:
 async def test_migration_updates_older_entry_to_current_version(
     hass: HomeAssistant,
 ) -> None:
-    """v1.3.1 entries (version 2) should migrate through v3→v4→v5→v6."""
+    """v1.3.1 entries (version 2) should migrate through to the current version."""
     entry = MockConfigEntry(
         version=2,
         minor_version=1,
@@ -416,14 +417,14 @@ async def test_migration_updates_older_entry_to_current_version(
     result = await async_migrate_entry(hass, entry)
 
     assert result is True
-    assert entry.version == 6
+    assert entry.version == CURRENT_CONFIG_VERSION
     # v2→v3 migration adds api_version field
     assert entry.data[CONF_API_VERSION] == "v1"
 
 
 @pytest.mark.asyncio
 async def test_simulation_entry_migrates_normally(hass: HomeAssistant) -> None:
-    """Simulation entries migrate to v6; setup will fail naturally at connection time."""
+    """Simulation entries migrate forward; setup will fail naturally at connection time."""
     entry = MockConfigEntry(
         version=5,
         minor_version=1,
@@ -443,7 +444,77 @@ async def test_simulation_entry_migrates_normally(hass: HomeAssistant) -> None:
 
     result = await async_migrate_entry(hass, entry)
     assert result is True
-    assert entry.version == 6
+    assert entry.version == CURRENT_CONFIG_VERSION
+
+
+@pytest.mark.asyncio
+async def test_v6_migration_drops_the_stored_passphrase(hass: HomeAssistant) -> None:
+    """v6 entries lose the persisted passphrase and keep everything else."""
+    entry = MockConfigEntry(
+        version=6,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_HOST: MOCK_HOST,
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_EBUS_BROKER_USERNAME: "span-user",
+            CONF_EBUS_BROKER_PASSWORD: "mqtt-secret",
+            CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE,
+            CONF_PANEL_SERIAL: "SPAN-V2-001",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.version == 7
+    assert CONF_HOP_PASSPHRASE not in entry.data
+    assert entry.data[CONF_ACCESS_TOKEN] == "v2-token-abc"
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
+
+
+@pytest.mark.asyncio
+async def test_home_assistant_actually_runs_the_v7_migration(hass: HomeAssistant) -> None:
+    """Core must decide to migrate a v6 entry.
+
+    `CURRENT_CONFIG_VERSION` drives the migration body, but it is
+    `SpanPanelConfigFlow.VERSION` that core compares against `entry.version` to
+    decide whether to call `async_migrate_entry` at all. Calling the migration
+    directly cannot catch the two drifting apart, so this goes through
+    `async_setup` with the integration's own entry setup stubbed out.
+    """
+    entry = MockConfigEntry(
+        version=6,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+            CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert entry.version == CURRENT_CONFIG_VERSION
+    assert CONF_HOP_PASSPHRASE not in entry.data
 
 
 # ---------- zeroconf v2 discovery ----------
@@ -1922,7 +1993,7 @@ async def test_update_v2_entry_missing_entry_aborts_with_reauth_failed(
     flow.serial_number = "SPAN-V2-001"
     flow.access_token = MOCK_V2_AUTH.access_token
     flow._is_flow_setup = True
-    flow._store_v2_auth_result(MOCK_V2_AUTH, MOCK_PASSPHRASE)
+    flow._store_v2_auth_result(MOCK_V2_AUTH)
 
     result = await flow._async_finalize_v2_auth()
 

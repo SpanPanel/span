@@ -446,6 +446,24 @@
     },
     "panel_not_ready": {
       "message": "O SPAN Panel não está pronto. Verifique se o painel está online."
+    },
+    "rotate_credentials_auth_failed": {
+      "message": "O SPAN Panel rejeitou o token de acesso guardado. Volte a autenticar a integração antes de rodar as credenciais."
+    },
+    "rotate_credentials_failed": {
+      "message": "O SPAN Panel em {host} não concluiu a rotação de credenciais. As credenciais existentes mantêm-se inalteradas."
+    },
+    "rotate_credentials_no_entry": {
+      "message": "Não foi encontrado nenhum SPAN Panel carregado que utilize a API v2."
+    },
+    "rotate_credentials_no_token": {
+      "message": "Este SPAN Panel não tem um token de acesso guardado. Volte a autenticar a integração antes de rodar as credenciais."
+    },
+    "rotate_credentials_requires_admin": {
+      "message": "Apenas um administrador do Home Assistant pode rodar as credenciais do SPAN Panel."
+    },
+    "rotate_credentials_requires_user": {
+      "message": "A rotação de credenciais tem de ser executada por um administrador a partir da interface de utilizador. Automações, scripts e outras integrações não a podem invocar."
     }
   },
   "options": {
@@ -760,6 +778,16 @@
         "entity_id": {
           "name": "Entidade",
           "description": "Qualquer sensor do circuito ou sub-dispositivo a remover dos favoritos."
+        }
+      }
+    },
+    "rotate_credentials": {
+      "name": "Rodar as credenciais do painel",
+      "description": "Pede ao SPAN Panel uma nova palavra-passe do broker MQTT eBus, guarda-a e recarrega a integração. A palavra-passe anterior deixa de funcionar imediatamente, pelo que qualquer outro cliente local que a utilize — uma segunda instância do Home Assistant, um script ou ferramentas de terceiros — terá de ser reaprovisionado a partir do painel antes de conseguir voltar a ligar-se. O token de acesso do painel e a frase-passe do painel não são alterados. Só um administrador do Home Assistant o pode executar, e não pode ser invocado a partir de uma automação ou script.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrada de configuração",
+          "description": "Id da entrada de configuração, opcional. Apenas necessário quando existe mais do que um SPAN Panel configurado."
         }
       }
     }
