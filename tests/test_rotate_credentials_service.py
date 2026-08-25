@@ -237,3 +237,54 @@ async def test_no_v2_entry_is_reported(hass: HomeAssistant) -> None:
         await _call_rotate(hass, _admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_no_entry"
+
+
+@pytest.mark.asyncio
+async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> None:
+    """With two panels configured, the call rotates only the one named."""
+    first = _add_v2_entry(hass)
+    second = MockConfigEntry(
+        domain=DOMAIN,
+        version=7,
+        data=dict(first.data) | {CONF_HOST: "192.168.1.101"},
+        entry_id="span_entry_two",
+        unique_id="sp3-test-003",
+    )
+    second.add_to_hass(hass)
+    second.mock_state(hass, ConfigEntryState.LOADED)
+    second.runtime_data = SpanPanelRuntimeData(
+        coordinator=MagicMock(),
+        panel_device_id="panel-device-id-two",
+    )
+    _async_register_credential_services(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.regenerate_passphrase",
+            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        ),
+        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "rotate_credentials",
+            {"config_entry_id": second.entry_id},
+            blocking=True,
+            context=_admin_context(hass),
+        )
+
+    assert second.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
+    assert first.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
+
+
+@pytest.mark.asyncio
+async def test_entry_without_runtime_data_is_skipped(hass: HomeAssistant) -> None:
+    """An entry that reports loaded but carries no runtime data is not a candidate."""
+    entry = _add_v2_entry(hass)
+    del entry.runtime_data
+    _async_register_credential_services(hass)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await _call_rotate(hass, _admin_context(hass))
+
+    assert err.value.translation_key == "rotate_credentials_no_entry"
