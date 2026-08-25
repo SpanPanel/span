@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 import voluptuous as vol
 
 from .const import (
@@ -19,8 +24,13 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
+from .control_gate import DEFAULT_RELAY_DEBOUNCE_SECONDS, ControlMode
 from .options import (
+    ALLOW_CONTEXTLESS_CONTROL,
+    CONTROL_LOCK_TIMEOUT,
+    CONTROL_MODE,
     ENERGY_REPORTING_GRACE_PERIOD,
+    RELAY_DEBOUNCE_SECONDS,
     SNAPSHOT_UPDATE_INTERVAL,
 )
 
@@ -36,6 +46,22 @@ GENERAL_OPTIONS_SCHEMA: vol.Schema = vol.Schema(
         vol.Optional(ENABLE_UNMAPPED_CIRCUIT_SENSORS): bool,
         vol.Optional(ENERGY_REPORTING_GRACE_PERIOD): vol.All(int, vol.Range(min=0, max=60)),
         vol.Optional(ENABLE_ENERGY_DIP_COMPENSATION): bool,
+        # A SelectSelector rather than `vol.In`, so the three choices are
+        # translated from `selector.control_mode` rather than shown as raw
+        # option values.
+        vol.Optional(CONTROL_MODE): SelectSelector(
+            SelectSelectorConfig(
+                options=[mode.value for mode in ControlMode],
+                translation_key=CONTROL_MODE,
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Optional(ALLOW_CONTEXTLESS_CONTROL): bool,
+        # Minutes. `0` means the lock stays armed until somebody disarms it; a
+        # negative value turns the feature off, which is how "no lock entity"
+        # is expressed without a second option.
+        vol.Optional(CONTROL_LOCK_TIMEOUT): vol.All(vol.Coerce(float), vol.Range(min=-1, max=1440)),
+        vol.Optional(RELAY_DEBOUNCE_SECONDS): vol.All(vol.Coerce(float), vol.Range(min=0, max=60)),
     }
 )
 
@@ -73,6 +99,15 @@ def get_general_options_defaults(
         ENERGY_REPORTING_GRACE_PERIOD: config_entry.options.get(ENERGY_REPORTING_GRACE_PERIOD, 15),
         ENABLE_ENERGY_DIP_COMPENSATION: config_entry.options.get(
             ENABLE_ENERGY_DIP_COMPENSATION, True
+        ),
+        # Every default below reproduces what an entry already does. A silent
+        # tightening on upgrade would break a household's automations with an
+        # error the user cannot diagnose from the entity.
+        CONTROL_MODE: config_entry.options.get(CONTROL_MODE, ControlMode.ALL_USERS.value),
+        ALLOW_CONTEXTLESS_CONTROL: config_entry.options.get(ALLOW_CONTEXTLESS_CONTROL, True),
+        CONTROL_LOCK_TIMEOUT: config_entry.options.get(CONTROL_LOCK_TIMEOUT, -1),
+        RELAY_DEBOUNCE_SECONDS: config_entry.options.get(
+            RELAY_DEBOUNCE_SECONDS, DEFAULT_RELAY_DEBOUNCE_SECONDS
         ),
     }
 

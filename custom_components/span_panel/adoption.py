@@ -430,8 +430,10 @@ class AdoptedControl(AdoptedEntity):
         exists because a v1.0 tree reported an adopted device, and that is the
         same transport that carries the write.
         """
-        await self.coordinator.client.set_adopted_property(
-            self._device_wire_id, self._node_id, self._property_id, value
+        await self._async_guarded_control(
+            self.coordinator.client.set_adopted_property(
+                self._device_wire_id, self._node_id, self._property_id, value
+            )
         )
         await self.coordinator.async_request_refresh()
 

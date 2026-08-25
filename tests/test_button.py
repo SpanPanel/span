@@ -13,6 +13,7 @@ from custom_components.span_panel.button import (
     async_setup_entry,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.control_gate import ControlPolicy
 from homeassistant.core import HomeAssistant
 
 from .factories import SpanBatterySnapshotFactory, SpanPanelSnapshotFactory
@@ -151,7 +152,7 @@ async def test_button_async_setup_entry_only_adds_button_for_mqtt_with_bess(
     coordinator = _make_button_coordinator(snapshot)
     coordinator.client = FakeSpanMqttClient()
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    config_entry.runtime_data = MagicMock(coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
     async_add_entities = MagicMock()
 
     with patch(
@@ -169,7 +170,7 @@ async def test_button_async_setup_entry_only_adds_button_for_mqtt_with_bess(
         )
     )
     coordinator_no_bess.client = FakeSpanMqttClient()
-    config_entry.runtime_data = MagicMock(coordinator=coordinator_no_bess)
+    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator_no_bess)
     async_add_entities = MagicMock()
 
     with patch(

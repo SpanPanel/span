@@ -11,6 +11,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .const import CONF_DEVICE_NAME
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
@@ -70,7 +71,9 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
             return
 
         try:
-            await client.set_dominant_power_source(self._override_value)
+            await self._async_guarded_control(
+                client.set_dominant_power_source(self._override_value)
+            )
             await self.coordinator.async_request_refresh()
         except SpanPanelServerError:
             warning_msg = (
@@ -123,6 +126,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up button entities for Span Panel."""
+    # Under `disabled` no control entity is created and no registry entry is
+    # removed. See `switch.async_setup_entry` for why the registry entries stay.
+    if config_entry.runtime_data.control_policy.mode is ControlMode.DISABLED:
+        return
+
     coordinator = config_entry.runtime_data.coordinator
 
     entities: list[SpanPanelGFEOverrideButton] = []

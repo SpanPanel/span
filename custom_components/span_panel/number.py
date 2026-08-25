@@ -55,6 +55,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedNumber, create_adopted_numbers
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .field_paths import DerivedReason, FieldPathDeclarationMixin
@@ -261,7 +262,9 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
                 translation_placeholders={"charger": self._evse_id},
             )
         try:
-            await self._description.set_fn(client, self._evse_id, int(value))
+            await self._async_guarded_control(
+                self._description.set_fn(client, self._evse_id, int(value))
+            )
         except SpanPanelServerError as err:
             _LOGGER.warning("SPAN panel refused a charge-current limit: %s", err)
             raise HomeAssistantError(
@@ -284,6 +287,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up number entities for Span Panel."""
     _LOGGER.debug("ASYNC SETUP ENTRY NUMBER")
+
+    # Under `disabled` no control entity is created and no registry entry is
+    # removed. See `switch.async_setup_entry` for why the registry entries stay.
+    if config_entry.runtime_data.control_policy.mode is ControlMode.DISABLED:
+        return
 
     coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data

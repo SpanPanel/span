@@ -6,13 +6,16 @@ from typing import Any, ClassVar
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
+from .control_gate import ControlLock, ControlMode, ControlPolicy, outcome_is_failure
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
@@ -22,6 +25,7 @@ from .helpers import (
     construct_tabs_attribute,
     construct_voltage_attribute,
 )
+from .util import snapshot_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -260,24 +264,44 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
-        client = self.coordinator.client
-        if not hasattr(client, "set_circuit_relay"):
-            _LOGGER.warning("Client does not support relay control")
-            return
-
-        await client.set_circuit_relay(self._circuit_id, "CLOSED")
-        self._attr_is_on = True
-        self.async_write_ha_state()
+        await self._async_set_relay("CLOSED", is_on=True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
+        await self._async_set_relay("OPEN", is_on=False)
+
+    async def _async_set_relay(self, state: str, *, is_on: bool) -> None:
+        """Operate the relay and show the result honestly.
+
+        The optimistic write is deliberately *after* the publish, not before. A
+        gate refusal or a debounce rejection raises out of the awaited call, and
+        setting the state first would leave the switch showing a position the
+        relay never took — with no coordinator update coming to correct it,
+        because nothing on the panel changed.
+
+        `FAILED` is the only outcome that means the command will never be
+        delivered. `ACCEPTED` and `UNCONFIRMED` were both handed to the broker
+        and may already have been acted on; `UNCONFIRMED` most often means the
+        relay was already in the requested position. Neither is a failure and
+        neither should discard the requested state.
+        """
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_relay"):
             _LOGGER.warning("Client does not support relay control")
             return
 
-        await client.set_circuit_relay(self._circuit_id, "OPEN")
-        self._attr_is_on = False
+        outcome = await self._async_guarded_control(
+            client.set_circuit_relay(self._circuit_id, state)
+        )
+        if outcome_is_failure(outcome):
+            _LOGGER.warning(
+                "Relay command for %s was not delivered: %s",
+                self.entity_id,
+                outcome.detail or outcome.state,
+            )
+            return
+
+        self._attr_is_on = is_on
         self.async_write_ha_state()
 
     def _construct_switch_unique_id(
@@ -292,6 +316,72 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         )
 
 
+class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity):
+    """Arms and disarms this panel's control lock.
+
+    Not a control over the panel — it never publishes anything — so it is
+    deliberately outside `_async_guarded_control` and is never seen by the
+    interceptor. It is the thing the interceptor consults.
+
+    The asymmetry is the whole design. Arming is permitted for anyone, including
+    a contextless caller, because making a household safer should not require
+    admin. Disarming requires an administrator, and is refused for a contextless
+    caller regardless of `allow_contextless_control`: an automation that can
+    unlock the panel is not a lock.
+    """
+
+    _attr_entity_category: EntityCategory | None = EntityCategory.CONFIG
+    _attr_translation_key: str | None = "control_lock"
+
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        lock: ControlLock,
+        policy: ControlPolicy,
+        device_name: str,
+    ) -> None:
+        """Bind the entity to this entry's single lock object."""
+        super().__init__(coordinator)
+        snapshot: SpanPanelSnapshot = coordinator.data
+        self._lock = lock
+        self._policy = policy
+        self._attr_device_info = snapshot_to_device_info(snapshot, device_name)
+        self._attr_unique_id = f"span_{snapshot.serial_number}_control_lock"
+
+    @property
+    def is_on(self) -> bool:
+        """Armed reads as on, matching an alarm panel rather than a door."""
+        return self._lock.armed
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Arm the lock. Anyone may do this, including an automation."""
+        self._lock.arm()
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disarm the lock, for an administrator only."""
+        context = self._context
+        user_id = context.user_id if context is not None else None
+        if user_id is None:
+            raise ServiceValidationError(
+                "The SPAN panel control lock can only be disarmed by a logged-in "
+                "administrator, not by an automation or script.",
+                translation_domain=DOMAIN,
+                translation_key="control_lock_disarm_requires_user",
+            )
+        user = await self.hass.auth.async_get_user(user_id)
+        if user is None or not user.is_admin:
+            raise ServiceValidationError(
+                "Only a Home Assistant administrator can disarm the SPAN panel control lock.",
+                translation_domain=DOMAIN,
+                translation_key="control_lock_disarm_requires_admin",
+            )
+
+        timeout = self._policy.lock_timeout_minutes
+        self._lock.disarm(timeout if timeout is not None else 0)
+        self.async_write_ha_state()
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
@@ -300,12 +390,32 @@ async def async_setup_entry(
     """Set up sensor platform."""
 
     coordinator = config_entry.runtime_data.coordinator
+    policy = config_entry.runtime_data.control_policy
     snapshot: SpanPanelSnapshot = coordinator.data
 
     # Get device name from config entry data
     _device_name = config_entry.data.get("device_name", config_entry.title)
 
-    entities: list[SpanPanelCircuitsSwitch | AdoptedSwitch] = []
+    entities: list[SpanPanelCircuitsSwitch | AdoptedSwitch | SpanPanelControlLockSwitch] = []
+
+    if policy.lock_enabled:
+        entities.append(
+            SpanPanelControlLockSwitch(
+                coordinator,
+                config_entry.runtime_data.control_lock,
+                policy,
+                _device_name,
+            )
+        )
+
+    # Under `disabled` the control entities are not created, and their registry
+    # entries are deliberately left in place. Removing them would risk a
+    # regenerated entity_id on the way back — a `_2` suffix if anything else
+    # claimed the slug meanwhile — and would discard the user's names, areas and
+    # customizations. They read as unavailable instead, which is recoverable.
+    if policy.mode is ControlMode.DISABLED:
+        async_add_entities(entities)
+        return
 
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_data.is_user_controllable:

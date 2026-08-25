@@ -419,14 +419,34 @@
       "bess_meter_power": {
         "name": "メーター電力"
       }
+    },
+    "switch": {
+      "control_lock": {
+        "name": "コントロールロック"
+      }
     }
   },
   "exceptions": {
+    "admin_only_control": {
+      "message": "この SPAN Panel を操作できるのは Home Assistant の管理者だけです。"
+    },
     "circuit_priority_failed": {
       "message": "{circuit}の回路優先度の設定に失敗しました。"
     },
     "circuit_relay_failed": {
       "message": "{circuit}の回路リレー状態の設定に失敗しました。"
+    },
+    "contextless_control_refused": {
+      "message": "この SPAN Panel は、ログインユーザーからではない操作コマンドを拒否します。"
+    },
+    "control_lock_disarm_requires_admin": {
+      "message": "SPAN Panel のコントロールロックを解除できるのは Home Assistant の管理者だけです。"
+    },
+    "control_lock_disarm_requires_user": {
+      "message": "SPAN Panel のコントロールロックを解除できるのは、ログインした管理者だけです。オートメーションやスクリプトからは解除できません。"
+    },
+    "control_locked": {
+      "message": "SPAN Panel のコントロールロックが施錠されています。回路を操作する前に解除してください。"
     },
     "evse_charge_limit_failed": {
       "message": "充電器 {charger} の充電電流上限を設定できませんでした: {reason}"
@@ -470,6 +490,9 @@
     "panel_not_ready": {
       "message": "SPAN Panelの準備ができていません。パネルがオンラインであることを確認してください。"
     },
+    "relay_debounced": {
+      "message": "その回路のリレーはついさきほど操作されました。コマンドはキューに入れずに拒否しました。"
+    },
     "rotate_credentials_auth_failed": {
       "message": "SPAN Panel が保存済みのアクセストークンを拒否しました。認証情報をローテーションする前に、統合を再認証してください。"
     },
@@ -493,23 +516,31 @@
     "step": {
       "init": {
         "data": {
-          "show_panel": "サイドバーにダッシュボードを表示",
-          "panel_admin_only": "管理ユーザーのみ",
+          "allow_contextless_control": "ログインユーザーなしの操作を許可する",
+          "control_lock_timeout": "コントロールロックの自動再施錠（分）",
+          "control_mode": "パネルを操作できるユーザー",
           "enable_circuit_net_energy_sensors": "回路正味エネルギー",
           "enable_energy_dip_compensation": "エネルギー低下を自動補正",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
           "enable_unmapped_circuit_sensors": "未割当回路センサー",
           "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
+          "panel_admin_only": "管理ユーザーのみ",
+          "relay_debounce_seconds": "リレーのデバウンス（秒）",
+          "show_panel": "サイドバーにダッシュボードを表示",
           "snapshot_update_interval": "スナップショット更新間隔（秒）"
         },
         "data_description": {
-          "show_panel": "SPANパネルダッシュボードをサイドバーエントリとして表示します。",
-          "panel_admin_only": "ダッシュボードサイドバーエントリを管理ユーザーのみに制限します。",
+          "allow_contextless_control": "オートメーション、スクリプト、他の統合は、ユーザーが紐づかない状態でサービスを呼び出します。無効にすると、そうしたコマンドを拒否します。オートメーションで回路を操作していない場合を除き、有効のままにしてください。",
+          "control_lock_timeout": "-1 はコントロールロックを無効にし、そのスイッチを削除します。0 は誰かが解除するまで施錠したままにします。それ以外の値は、解除してからその分数後に再施錠します。解除できるのは管理者だけです。",
+          "control_mode": "Home Assistant は既定で、管理者以外のすべてのユーザーにすべてのエンティティの操作を許可します。管理者のみに制限することが、これを変更する唯一の方法です。無効にすると操作用エンティティが作成されなくなりますが、レジストリのエントリ、名前、エリアは保持されます。",
           "enable_circuit_net_energy_sensors": "無効電力を考慮した回路ごとの正味エネルギー。",
           "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に補正します。無効にするとオフセットがクリアされます。",
           "enable_panel_net_energy_sensors": "双方向フローを考慮した主幹メーターとフィードスルーの正味エネルギー。",
           "enable_unmapped_circuit_sensors": "名前付きブレーカーに割り当てられていないタブのバッキングセンサー。",
           "energy_reporting_grace_period": "パネルがオフライン時にセンサーが最後の値を保持する分数（0〜60）。デフォルト：15。",
+          "panel_admin_only": "ダッシュボードサイドバーエントリを管理ユーザーのみに制限します。",
+          "relay_debounce_seconds": "同じ回路のリレーへの 2 回目のコマンドを、この秒数のあいだ拒否します。キューに入れずに拒否します。状態の変わったパネルに対して数秒遅れで発火するリレーコマンドは、オートメーションの作成者が気づけるエラーよりも危険だからです。0 で無効になります。",
+          "show_panel": "SPANパネルダッシュボードをサイドバーエントリとして表示します。",
           "snapshot_update_interval": "スナップショット再構築の間隔（秒）（0〜15）。低い値＝高速、CPU負荷増。0＝デバウンスなし。"
         },
         "description": "SPAN Panel統合の設定を構成します。",
@@ -518,6 +549,13 @@
     }
   },
   "selector": {
+    "control_mode": {
+      "options": {
+        "admin_only": "管理者のみ",
+        "all_users": "すべての Home Assistant ユーザー",
+        "disabled": "なし — 操作用エンティティを作成しない"
+      }
+    },
     "entity_naming_pattern": {
       "options": {
         "circuit_numbers": "回路番号（例：span_panel_circuit_15_power）",

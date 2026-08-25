@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
@@ -55,6 +55,7 @@ from .const import (
     ENABLE_CURRENT_MONITORING,
     PANEL_CA_PENDING,
 )
+from .control_gate import ControlGate, ControlLock, ControlPolicy
 from .coordinator import SpanPanelCoordinator
 from .current_monitor import CurrentMonitor
 from .extension import async_notice_declined_extensions
@@ -104,6 +105,14 @@ class SpanPanelRuntimeData:
     # exists, so an id looked up here is one no caller has to handle the absence
     # of. See `ensure_device_registered`.
     panel_device_id: str
+    # Resolved once at setup and read by every control platform, so a single
+    # answer decides which entities exist and which callers may operate them.
+    # Defaulted rather than required because the default *is* the policy an entry
+    # with no control options has, and that is most of them.
+    control_policy: ControlPolicy = field(default_factory=ControlPolicy.default)
+    # Shared with the gate, and mutated by the lock entity. One object per entry:
+    # the gate reads it on every publish and the entity writes it.
+    control_lock: ControlLock = field(default_factory=ControlLock)
 
 
 type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
@@ -348,6 +357,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
 
             entry.async_on_unload(client.register_fatal_error_callback(_on_fatal_transport_error))
 
+            # One interceptor, installed before the coordinator starts streaming
+            # so no control command can reach the panel ungated — including one
+            # issued during the first refresh.
+            control_policy = ControlPolicy.from_options(entry.options)
+            control_lock = ControlLock()
+            client.set_control_interceptor(ControlGate(hass, entry, control_policy, control_lock))
+            entry.async_on_unload(lambda: client.set_control_interceptor(None))
+
             coordinator = SpanPanelCoordinator(hass, client, entry)
             await coordinator.async_config_entry_first_refresh()
             await coordinator.async_setup_streaming()
@@ -401,6 +418,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
         # runtime_data, and platforms — which all do — are forwarded below.
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator,
+            control_policy=control_policy,
+            control_lock=control_lock,
             panel_device_id=await ensure_device_registered(
                 hass, entry, snapshot, smart_device_name
             ),

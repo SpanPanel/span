@@ -14,3 +14,9 @@ NOTIFY_TARGETS = "notify_targets"
 NOTIFICATION_TITLE_TEMPLATE = "notification_title_template"
 NOTIFICATION_MESSAGE_TEMPLATE = "notification_message_template"
 NOTIFICATION_PRIORITY = "notification_priority"
+
+# Control authorization and flap protection. See `control_gate`.
+CONTROL_MODE = "control_mode"
+ALLOW_CONTEXTLESS_CONTROL = "allow_contextless_control"
+CONTROL_LOCK_TIMEOUT = "control_lock_timeout"
+RELAY_DEBOUNCE_SECONDS = "relay_debounce_seconds"

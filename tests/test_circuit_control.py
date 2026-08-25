@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
+from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.switch import (
     SpanPanelCircuitsSwitch,
     async_setup_entry,
@@ -61,7 +62,7 @@ async def test_switch_creation_for_controllable_circuit(hass: HomeAssistant) -> 
     mock_entry = MagicMock()
     mock_entry.title = "SPAN Panel"
     mock_entry.data = {}
-    mock_entry.runtime_data = MagicMock(coordinator=coordinator)
+    mock_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
 
     await async_setup_entry(hass, mock_entry, lambda e, **kw: entities.extend(e))
 
@@ -294,7 +295,7 @@ async def test_switch_async_setup_entry_filters_supported_circuits(
     mock_entry = MagicMock()
     mock_entry.title = "SPAN Panel"
     mock_entry.data = {}
-    mock_entry.runtime_data = MagicMock(coordinator=coordinator)
+    mock_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
 
     await async_setup_entry(hass, mock_entry, lambda e, **kw: entities.extend(e))
 

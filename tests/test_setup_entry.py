@@ -89,9 +89,12 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
 
     # The panel's registry id is carried forward, not recomputed: every sub-device
     # links to it with `via_device_id`, and registration is the only place it is known.
-    assert entry.runtime_data == SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
-    )
+    assert isinstance(entry.runtime_data, SpanPanelRuntimeData)
+    assert entry.runtime_data.coordinator is coordinator
+    assert entry.runtime_data.panel_device_id == "panel-device-id"
+    # The control lock is one object per entry, shared with the gate, so it is
+    # compared by identity elsewhere and never by value.
+    assert entry.runtime_data.control_lock.armed is False
     assert hass.data[DOMAIN]["websocket_registered"] is True
     mock_ws.assert_called_once_with(hass)
     mock_client_cls.assert_called_once()

@@ -419,14 +419,34 @@
       "bess_meter_power": {
         "name": "Potência do Medidor"
       }
+    },
+    "switch": {
+      "control_lock": {
+        "name": "Bloqueio de controlo"
+      }
     }
   },
   "exceptions": {
+    "admin_only_control": {
+      "message": "Apenas um administrador do Home Assistant pode operar este SPAN Panel."
+    },
     "circuit_priority_failed": {
       "message": "Falha ao definir a prioridade do circuito para {circuit}."
     },
     "circuit_relay_failed": {
       "message": "Falha ao definir o estado do relé do circuito para {circuit}."
+    },
+    "contextless_control_refused": {
+      "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada."
+    },
+    "control_lock_disarm_requires_admin": {
+      "message": "Apenas um administrador do Home Assistant pode desarmar o bloqueio de controlo do SPAN Panel."
+    },
+    "control_lock_disarm_requires_user": {
+      "message": "O bloqueio de controlo do SPAN Panel só pode ser desarmado por um administrador com sessão iniciada, não por uma automação ou script."
+    },
+    "control_locked": {
+      "message": "O bloqueio de controlo do SPAN Panel está armado. Desarme-o antes de operar circuitos."
     },
     "evse_charge_limit_failed": {
       "message": "Falha ao definir o limite de corrente de carga do carregador {charger}: {reason}"
@@ -470,6 +490,9 @@
     "panel_not_ready": {
       "message": "O SPAN Panel não está pronto. Verifique se o painel está online."
     },
+    "relay_debounced": {
+      "message": "O relé desse circuito foi operado há instantes. O comando foi recusado em vez de colocado em fila."
+    },
     "rotate_credentials_auth_failed": {
       "message": "O SPAN Panel rejeitou o token de acesso guardado. Volte a autenticar a integração antes de rodar as credenciais."
     },
@@ -493,23 +516,31 @@
     "step": {
       "init": {
         "data": {
-          "show_panel": "Mostrar Painel na Barra Lateral",
-          "panel_admin_only": "Apenas Usuários Administradores",
+          "allow_contextless_control": "Permitir controlo sem um utilizador com sessão iniciada",
+          "control_lock_timeout": "Rearme automático do bloqueio de controlo (minutos)",
+          "control_mode": "Quem pode operar o painel",
           "enable_circuit_net_energy_sensors": "Energia Líquida do Circuito",
           "enable_energy_dip_compensation": "Compensar Quedas de Energia Automaticamente",
           "enable_panel_net_energy_sensors": "Energia Líquida do Painel",
           "enable_unmapped_circuit_sensors": "Sensores de Circuitos Não Mapeados",
           "energy_reporting_grace_period": "Período de Graça do Sensor de Energia (minutos)",
+          "panel_admin_only": "Apenas Usuários Administradores",
+          "relay_debounce_seconds": "Antirrepique do relé (segundos)",
+          "show_panel": "Mostrar Painel na Barra Lateral",
           "snapshot_update_interval": "Intervalo de Atualização do Snapshot (segundos)"
         },
         "data_description": {
-          "show_panel": "Exiba o painel de controle do SPAN como uma entrada de barra lateral.",
-          "panel_admin_only": "Restrinja a entrada da barra lateral do painel de controle apenas aos usuários administradores.",
+          "allow_contextless_control": "Automações, scripts e outras integrações invocam serviços sem qualquer utilizador associado. Desativar esta opção recusa esses comandos. Deixe-a ativa a não ser que as suas automações não operem circuitos.",
+          "control_lock_timeout": "-1 desativa o bloqueio de controlo e remove o respetivo interruptor. 0 mantém o bloqueio armado até alguém o desarmar. Qualquer outro valor rearma-o esse número de minutos depois de ser desarmado. Só os administradores o podem desarmar.",
+          "control_mode": "Por predefinição, o Home Assistant concede a todos os utilizadores não administradores o controlo de todas as entidades. Restringir a administradores é a única forma de alterar isso. Desativar deixa de criar as entidades de controlo; as respetivas entradas de registo, nomes e áreas são mantidos.",
           "enable_circuit_net_energy_sensors": "Energia líquida por circuito, contabilizando potência reativa.",
           "enable_energy_dip_compensation": "Compensar quando o painel reporta leituras de energia mais baixas. Ao desativar, as compensações são apagadas.",
           "enable_panel_net_energy_sensors": "Energia líquida para o medidor principal e derivação, contabilizando fluxos bidirecionais.",
           "enable_unmapped_circuit_sensors": "Sensores de apoio para posições não atribuídas a disjuntores nomeados.",
           "energy_reporting_grace_period": "Minutos que os sensores mantêm o último valor quando o painel está offline (0–60). Padrão: 15.",
+          "panel_admin_only": "Restrinja a entrada da barra lateral do painel de controle apenas aos usuários administradores.",
+          "relay_debounce_seconds": "Recusa um segundo comando ao relé do mesmo circuito dentro deste número de segundos. Recusado, nunca colocado em fila: um comando de relé disparado segundos mais tarde contra um painel que mudou é pior do que um erro que o autor da automação consegue ver. 0 desativa.",
+          "show_panel": "Exiba o painel de controle do SPAN como uma entrada de barra lateral.",
           "snapshot_update_interval": "Segundos entre reconstruções do snapshot (0–15). Menor = mais rápido, mais CPU. 0 = sem debounce."
         },
         "description": "Configurar os ajustes da integração SPAN Panel.",
@@ -518,6 +549,13 @@
     }
   },
   "selector": {
+    "control_mode": {
+      "options": {
+        "admin_only": "Apenas administradores",
+        "all_users": "Qualquer utilizador do Home Assistant",
+        "disabled": "Ninguém — não criar entidades de controlo"
+      }
+    },
     "entity_naming_pattern": {
       "options": {
         "circuit_numbers": "Números de Circuito (ex., span_panel_circuit_15_power)",

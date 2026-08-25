@@ -7,6 +7,7 @@ import pytest
 from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.const import CircuitPriority
+from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.select import (
     CIRCUIT_PRIORITY_DESCRIPTION,
     SpanPanelCircuitsSelect,
@@ -449,7 +450,7 @@ async def test_async_setup_entry_filters_supported_circuits() -> None:
     config_entry = MagicMock()
     config_entry.title = "SPAN Panel"
     config_entry.data = {}
-    config_entry.runtime_data = MagicMock(coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
     async_add_entities = MagicMock()
 
     await async_setup_entry(MagicMock(), config_entry, async_add_entities)
@@ -496,7 +497,7 @@ async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable()
     config_entry = MagicMock()
     config_entry.title = "SPAN Panel"
     config_entry.data = {}
-    config_entry.runtime_data = MagicMock(coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
     async_add_entities = MagicMock()
 
     await async_setup_entry(MagicMock(), config_entry, async_add_entities)

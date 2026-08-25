@@ -419,14 +419,34 @@
       "bess_meter_power": {
         "name": "Puissance du Compteur"
       }
+    },
+    "switch": {
+      "control_lock": {
+        "name": "Verrou de contrôle"
+      }
     }
   },
   "exceptions": {
+    "admin_only_control": {
+      "message": "Seul un administrateur Home Assistant peut piloter ce SPAN Panel."
+    },
     "circuit_priority_failed": {
       "message": "Échec de la définition de la priorité du circuit pour {circuit}."
     },
     "circuit_relay_failed": {
       "message": "Échec de la définition de l'état du relais du circuit pour {circuit}."
+    },
+    "contextless_control_refused": {
+      "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté."
+    },
+    "control_lock_disarm_requires_admin": {
+      "message": "Seul un administrateur Home Assistant peut désarmer le verrou de contrôle du SPAN Panel."
+    },
+    "control_lock_disarm_requires_user": {
+      "message": "Le verrou de contrôle du SPAN Panel ne peut être désarmé que par un administrateur connecté, pas par une automatisation ou un script."
+    },
+    "control_locked": {
+      "message": "Le verrou de contrôle du SPAN Panel est armé. Désarmez-le avant de piloter des circuits."
     },
     "evse_charge_limit_failed": {
       "message": "Échec du réglage de la limite de courant de charge pour le chargeur {charger} : {reason}"
@@ -470,6 +490,9 @@
     "panel_not_ready": {
       "message": "Le SPAN Panel n'est pas prêt. Veuillez vérifier que le panneau est en ligne."
     },
+    "relay_debounced": {
+      "message": "Le relais de ce circuit a été actionné il y a quelques instants. La commande a été refusée plutôt que mise en file d'attente."
+    },
     "rotate_credentials_auth_failed": {
       "message": "Le SPAN Panel a rejeté le jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
     },
@@ -493,23 +516,31 @@
     "step": {
       "init": {
         "data": {
-          "show_panel": "Afficher le Panneau dans la Barre Latérale",
-          "panel_admin_only": "Utilisateurs Administrateurs Uniquement",
+          "allow_contextless_control": "Autoriser le contrôle sans utilisateur connecté",
+          "control_lock_timeout": "Réarmement automatique du verrou de contrôle (minutes)",
+          "control_mode": "Qui peut piloter le panneau",
           "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit",
           "enable_energy_dip_compensation": "Compenser les Baisses d'Énergie Automatiquement",
           "enable_panel_net_energy_sensors": "Énergie Nette du Panneau",
           "enable_unmapped_circuit_sensors": "Capteurs de Circuits Non Assignés",
           "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)",
+          "panel_admin_only": "Utilisateurs Administrateurs Uniquement",
+          "relay_debounce_seconds": "Anti-rebond du relais (secondes)",
+          "show_panel": "Afficher le Panneau dans la Barre Latérale",
           "snapshot_update_interval": "Intervalle de Mise à Jour du Snapshot (secondes)"
         },
         "data_description": {
-          "show_panel": "Afficher le tableau de bord du panneau SPAN comme entrée de barre latérale.",
-          "panel_admin_only": "Restreindre l'entrée de la barre latérale du tableau de bord aux utilisateurs administrateurs.",
+          "allow_contextless_control": "Les automatisations, les scripts et les autres intégrations appellent les services sans utilisateur associé. Désactiver cette option refuse ces commandes. Laissez-la activée sauf si vos automatisations ne pilotent pas de circuits.",
+          "control_lock_timeout": "-1 désactive le verrou de contrôle et supprime son interrupteur. 0 maintient le verrou armé jusqu'à ce que quelqu'un le désarme. Toute autre valeur le réarme ce nombre de minutes après son désarmement. Seuls les administrateurs peuvent le désarmer.",
+          "control_mode": "Par défaut, Home Assistant accorde à chaque utilisateur non administrateur le contrôle de toutes les entités. Le restreindre aux administrateurs est le seul moyen de changer cela. Le désactiver arrête la création des entités de contrôle ; leurs entrées de registre, noms et zones sont conservés.",
           "enable_circuit_net_energy_sensors": "Énergie nette par circuit, tenant compte de la puissance réactive.",
           "enable_energy_dip_compensation": "Compenser lorsque le panneau signale des lectures d'énergie inférieures. La désactivation efface les compensations.",
           "enable_panel_net_energy_sensors": "Énergie nette pour le compteur principal et la dérivation, tenant compte des flux bidirectionnels.",
           "enable_unmapped_circuit_sensors": "Capteurs sous-jacents pour les onglets non assignés à des disjoncteurs nommés.",
           "energy_reporting_grace_period": "Minutes pendant lesquelles les capteurs conservent leur dernière valeur lorsque le panneau est hors ligne (0–60). Par défaut : 15.",
+          "panel_admin_only": "Restreindre l'entrée de la barre latérale du tableau de bord aux utilisateurs administrateurs.",
+          "relay_debounce_seconds": "Refuse une seconde commande au relais du même circuit pendant ce nombre de secondes. Refusée, jamais mise en file : une commande de relais déclenchée quelques secondes plus tard sur un panneau qui a changé est pire qu'une erreur visible par l'auteur de l'automatisation. 0 la désactive.",
+          "show_panel": "Afficher le tableau de bord du panneau SPAN comme entrée de barre latérale.",
           "snapshot_update_interval": "Secondes entre les reconstructions de snapshot (0–15). Plus bas = plus rapide, plus de CPU. 0 = pas de temporisation."
         },
         "description": "Configurer les paramètres de l'intégration SPAN Panel.",
@@ -518,6 +549,13 @@
     }
   },
   "selector": {
+    "control_mode": {
+      "options": {
+        "admin_only": "Administrateurs uniquement",
+        "all_users": "Tout utilisateur Home Assistant",
+        "disabled": "Personne — ne pas créer d'entités de contrôle"
+      }
+    },
     "entity_naming_pattern": {
       "options": {
         "circuit_numbers": "Numéros de Circuit (ex., span_panel_circuit_15_power)",

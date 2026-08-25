@@ -16,6 +16,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSelect, create_adopted_selects
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
@@ -213,7 +214,7 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         priority = CircuitPriority(option)
 
         try:
-            await client.set_circuit_priority(self.id, priority.name)
+            await self._async_guarded_control(client.set_circuit_priority(self.id, priority.name))
             await self.coordinator.async_request_refresh()
         except ServiceNotFound as snf:
             _LOGGER.warning(
@@ -351,6 +352,11 @@ async def async_setup_entry(
     """Set up select entities for Span Panel."""
 
     _LOGGER.debug("ASYNC SETUP ENTRY SELECT")
+
+    # Under `disabled` no control entity is created and no registry entry is
+    # removed. See `switch.async_setup_entry` for why the registry entries stay.
+    if config_entry.runtime_data.control_policy.mode is ControlMode.DISABLED:
+        return
 
     coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data

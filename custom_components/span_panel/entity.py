@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from typing import ClassVar
 
 from homeassistant.const import CONF_HOST
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from span_panel_api import SpanPanelSnapshot
+from span_panel_api import PublishOutcome, SpanPanelSnapshot
 
 from .const import CONF_DEVICE_NAME
+from .control_gate import CONTROL_CALLER, async_bind_caller
 from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
 from .util import snapshot_to_device_info
@@ -36,6 +38,27 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
     Keep the list short. A new entry is a hint that the reader belongs on a
     description instead, where the declaration and the reader are one object.
     """
+
+    async def _async_guarded_control(self, action: Awaitable[PublishOutcome]) -> PublishOutcome:
+        """Run one control call with this entity's caller bound to it.
+
+        `self._context` is set by core immediately before a service handler runs
+        (`helpers/service.py`), in the same task, so reading it here is reading
+        the call that is happening right now. It is read explicitly rather than
+        captured by overriding `async_set_context`, which would inherit core's
+        five-second `CONTEXT_RECENT_TIME_SECONDS` staleness window and would also
+        fire for paths that are not service calls.
+
+        The binding is around the awaited call and reset in a `finally`, so it
+        cannot leak into an unrelated task the way a mutable attribute would. The
+        decision itself is made in `ControlGate`, at the publish — see that
+        module for why the two halves are separate.
+        """
+        token = async_bind_caller(self._context, self.entity_id)
+        try:
+            return await action
+        finally:
+            CONTROL_CALLER.reset(token)
 
     async def async_added_to_hass(self) -> None:
         """Tell the coordinator which snapshot fields this entity reads.

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.const import (
     DOMAIN,
     ENABLE_CIRCUIT_NET_ENERGY_SENSORS,
@@ -49,7 +50,7 @@ async def test_sensor_async_setup_entry_adds_entities_and_refreshes(
     coordinator.data = snapshot
     coordinator.async_request_refresh = AsyncMock()
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    entry.runtime_data = MagicMock(coordinator=coordinator)
+    entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
     entities = [MagicMock(), MagicMock()]
     async_add_entities = MagicMock()
 
@@ -71,7 +72,7 @@ async def test_sensor_async_setup_entry_logs_and_reraises_errors(
     coordinator = MagicMock()
     coordinator.data = SpanPanelSnapshotFactory.create()
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    entry.runtime_data = MagicMock(coordinator=coordinator)
+    entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
 
     caplog.set_level(logging.ERROR)
 
