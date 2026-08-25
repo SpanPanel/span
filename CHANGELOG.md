@@ -144,6 +144,19 @@ working entirely in 2027.8.
   passphrase are unchanged, and a failed rotation leaves the existing credentials in place.
 - **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
   actually bound the panel's exposure — VLAN isolation, a locked enclosure, read-only Home Assistant users, and encrypted backups.
+- **The panel's certificate authority is pinned.** Setup fetches it, checks that the certificate your panel actually serves is signed by it, and shows you the
+  fingerprint to accept. From then on nothing else is accepted for either the MQTT connection or the REST calls. Previously the authority was re-fetched over
+  plaintext HTTP on every connection and whatever answered was trusted. Panels configured before this release are pinned on the first startup that reaches them,
+  logged at `WARNING` with the fingerprint.
+- **A changed authority stops the integration and raises a repair** carrying both fingerprints, rather than reconnecting. A legitimate rotation and a device
+  impersonating your panel look identical from here, so re-pinning takes an explicit acceptance from you. Nothing retries in the meantime.
+- **Four new options decide who may operate the panel** — restrict controls to administrators, refuse commands from automations, add an admin-only control lock,
+  and debounce repeated relay commands. **Every default is what your panel already does**, so upgrading changes nothing until you choose otherwise. See
+  [Restricting who can operate the panel](README.md#restricting-who-can-operate-the-panel), which is also explicit about what these do _not_ protect against.
+- **Every control command is now recorded** — in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`. Commands from an automation are
+  attributed to that automation rather than to nobody.
+- **Controls now report what happened to them.** A command that was refused, or that was never handed to the broker, no longer looks the same as one the panel
+  confirmed — and a switch no longer shows a position its relay never took.
 
 ## [2.0.8] - 5/2026
 

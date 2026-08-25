@@ -652,6 +652,68 @@ have not yet upgraded, reauthenticating also removes it.
 These are the limits of what the integration can enforce. Anything that already holds the broker password — including another integration running in the same
 Home Assistant process — talks to the panel directly and is not subject to Home Assistant's permission model at all.
 
+### The panel's certificate authority
+
+The panel issues its own certificate authority and signs its TLS certificate with it. Setting up a panel fetches that authority, checks that the certificate the
+panel actually serves is signed by it, and shows you the SHA-256 fingerprint. From then on the integration accepts only that authority for both the MQTT
+connection and its REST calls, and stops rather than accepting a different one.
+
+**This is trust on first use.** The authority is fetched over your local network on a connection that has nothing to verify itself against — it is the anchor
+everything else is checked against — so a device sitting between Home Assistant and the panel could answer with an authority of its own and sign a certificate
+with it. What pinning buys you is that nothing can change afterwards without you being asked. If you can read the fingerprint from another source, such as an
+existing install of this integration on the same panel, compare it before accepting.
+
+Panels configured before this release are pinned on the first successful startup that reaches the panel, and that acquisition is logged at `WARNING` with the
+fingerprint so you can find the value afterwards. If the panel is unreachable the integration starts anyway and retries on the next startup; until it succeeds,
+the connection behaves as it did before.
+
+Diagnostics report the fingerprint under `panel_ca`. The certificate itself is not included — it is public, but multi-KB, and the fingerprint is the part worth
+reading.
+
+If your panel serves TLS somewhere other than port 443 — behind a reverse proxy, say — the setup flow asks for the port, but only when you have already changed
+the HTTP port from 80.
+
+### Restricting who can operate the panel
+
+Four options in **Settings → Devices & Services → Span Panel → Configure**. **Every one defaults to the behaviour your panel already has**, so upgrading changes
+nothing until you choose otherwise.
+
+| Option                                     | What it does                                                                                                                                                                                  | What it does not do                                                                                                        |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Who may operate the panel**              | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and adopted controls from non-admin users. `Nobody` stops creating those entities altogether. | Neither affects sensors, and neither constrains anything holding the broker password.                                      |
+| **Allow control without a logged-in user** | Turning it off refuses commands from automations, scripts and other integrations, which arrive with no user attached.                                                                         | It cannot tell a well-behaved automation from a runaway one — only that neither has a user.                                |
+| **Control lock auto-relock**               | Adds a switch that, while armed, refuses every control command. Anyone can arm it; only an administrator can disarm it, and never an automation.                                              | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
+| **Relay debounce**                         | Refuses a second command to the same circuit's relay within the window.                                                                                                                       | It is per circuit, so an automation cycling many circuits still gets through.                                              |
+
+**Why `Administrators only` is worth setting.** Home Assistant's default user policy grants every non-admin user control of every entity. Until you change this,
+a dashboard-only household member can open any breaker in the house.
+
+**What none of this defends against.** These options constrain callers arriving through Home Assistant. They do not constrain anything that already holds the
+broker credential — a second Home Assistant instance, a script you wrote, or a malicious custom integration running inside this same Home Assistant process,
+which reads the credential straight out of memory. For that, see [Recommended deployment](#recommended-deployment) below; network topology and a locked
+enclosure are the real boundary.
+
+**Nothing is deleted when you choose `Nobody`.** The control entities stop being created and read as unavailable; their registry entries, names, areas and
+customizations are kept, so turning the option back on restores exactly the entities you had. Dashboards and automations referencing them will show them
+unavailable in the meantime — including the shipped SPAN Panel card, whose toggles call `switch.turn_on` and `select.select_option` directly and have no
+card-side message for a refusal. A non-admin using that card under `Administrators only` gets a refusal with no explanation on the card.
+
+### The record of what was commanded
+
+Every control command fires a `span_panel_control_command` event and appears in the logbook, whether it succeeded, was refused, or never reached the panel. When
+there is no user — an automation — the originating automation or script is named instead, so an unattended write is attributed to _what_ rather than left blank.
+Every command is also logged at `INFO`.
+
+Commands report one of four outcomes, and the distinctions matter:
+
+| Outcome       | Meaning                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `confirmed`   | The panel reported the value you asked for.                                              |
+| `accepted`    | The broker acknowledged the message and the panel did not report a change.               |
+| `unconfirmed` | Nothing came back within the deadline. **Not an error** — see the troubleshooting entry. |
+| `failed`      | The command was never handed to the broker and will not be delivered.                    |
+| `refused:…`   | This integration refused it, for the named reason.                                       |
+
 ### Rotating panel credentials
 
 The `span_panel.rotate_credentials` action asks the panel for a new eBus MQTT broker password, stores it, and reloads the integration.
@@ -710,6 +772,8 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **No switch on a circuit**                                                   | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The circuit is configured in the SPAN App as one of the "Always on Circuits". The API does not permit user control of those circuits, so no switch is created.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | **Reinstalling to change the entity ID style gives back the old entity IDs** | The naming style is chosen at install and cannot be changed from the options, so reinstalling looks like the way to switch. It is not: every entity returns with the entity ID it had before.                                                                                                                                                                                                                                       | Home Assistant remembers a removed entity for **30 days**, keyed on its unique ID, and restores that record's entity ID — along with its name, area, labels and icon — as soon as an entity with the same unique ID appears again. This integration's unique IDs do not change with the naming style, so the remembered ID wins over the one the new style asks for. Either clear the leftover registry entries between removing and reinstalling, or wait out the 30 days and let Home Assistant discard them. A tool such as [ha-registry-clean](https://github.com/LegoTypes/ha-registry-clean) can do the clearing; it is a separate project, not part of this integration. Clearing also discards the names, areas and labels you had assigned. |
 | **Setup fails after downgrading the integration**                            | After installing an older release, the SPAN Panel config entry fails to set up and Home Assistant reports an unsupported configuration version.                                                                                                                                                                                                                                                                                     | The release that stopped storing the panel passphrase migrated the config entry to version 7. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and there is no automatic downgrade. Reinstall the newer release, or restore a backup taken before the upgrade. Removing and re-adding the integration also works and preserves entity IDs, but needs the panel passphrase or physical access to the door again.                                                                                                                                                                                                                                                                      |
+| **"SPAN Panel certificate authority changed" repair**                        | The integration has stopped connecting and a repair reports two fingerprints: the one it pinned and the one the panel now advertises. Entities are unavailable.                                                                                                                                                                                                                                                                     | The panel is presenting a different certificate authority than the one you accepted at setup. Two things look identical from here and only you can tell them apart: a firmware upgrade or a factory reset rotates the authority legitimately, and so does a device on your network standing in for your panel. **If you know why it changed**, open the repair, compare the new fingerprint, and accept it — that re-pins and reconnects. **If nothing should have changed**, do not accept. Check what else is on the panel's network segment first. The integration will not reconnect on its own and will not re-pin on its own, deliberately: retrying would mean waiting to succeed against whatever is answering.                              |
+| **A control reports `unconfirmed`**                                          | The logbook or the `span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                     | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                           |
 
 ## Development
 
