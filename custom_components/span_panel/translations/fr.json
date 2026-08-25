@@ -13,6 +13,8 @@
       "v1_not_supported": "Le micrologiciel v1 n'est pas pris en charge. Veuillez mettre à jour le micrologiciel de votre panneau vers la version v2."
     },
     "error": {
+      "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
+      "ca_unavailable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et sous tension, puis réessayez. La configuration ne peut pas continuer sans elle, car votre mot de passe serait sinon envoyé en clair.",
       "cannot_connect": "Échec de la connexion au Span Panel",
       "fqdn_registration_failed": "Impossible d'enregistrer le nom de domaine auprès du panneau ou le certificat TLS n'a pas été mis à jour à temps.",
       "host_required": "L'hôte est requis",
@@ -132,16 +134,12 @@
         }
       },
       "panel_ca": {
-        "title": "Faire confiance au certificat de ce panneau",
-        "description": "Le panneau a publié cette autorité de certification, et le certificat qu'il présente est signé par elle :\n\n**{fingerprint}**\n\nDésormais, Home Assistant n'acceptera que cette autorité pour la connexion à votre panneau, et s'arrêtera pour vous demander avant d'en accepter une autre.\n\nIl s'agit d'une confiance à la première utilisation. L'intégration a récupéré l'autorité sur le réseau local et ne peut pas la distinguer d'une autorité substituée par un autre appareil de ce réseau ; elle peut seulement vous signaler un changement ultérieur. Si vous pouvez lire l'empreinte ailleurs — par exemple sur une autre installation de cette intégration reliée au même panneau — comparez-la avant de continuer."
+        "title": "Lecture du certificat du panneau",
+        "description": "Home Assistant récupère l'autorité de certification publiée par votre panneau et vérifie que le certificat présenté par celui-ci est signé par elle. Cela se produit avant que vous ne saisissiez votre mot de passe : celui-ci, ainsi que les identifiants que le panneau renvoie en échange, transitent donc par une connexion vérifiée plutôt qu'en clair.\n\nSélectionnez **Valider** pour réessayer."
       },
-      "panel_ca_failed": {
-        "title": "Impossible de vérifier le certificat du panneau",
-        "description": "L'autorité de certification du panneau n'a pas pu être récupérée, ou le certificat présenté par le panneau n'est pas signé par elle.\n\nVous pouvez réessayer ou terminer la configuration sans épinglage. Sans épinglage, l'intégration se connecte toujours en TLS, mais elle récupère l'autorité à chaque connexion et fait confiance à ce qui répond : un appareil de votre réseau pourrait donc se faire passer pour le panneau. L'intégration retente la récupération à chaque démarrage et épingle l'autorité dès qu'elle y parvient.",
-        "menu_options": {
-          "panel_ca": "Réessayer",
-          "panel_ca_skip": "Continuer sans épinglage"
-        }
+      "panel_ca_confirm": {
+        "title": "Faire confiance au certificat de ce panneau",
+        "description": "Le panneau a publié cette autorité de certification, et le certificat qu'il présente est signé par elle :\n\n**{fingerprint}**\n\nL'accepter l'épingle. Votre mot de passe est envoyé sur cette connexion, et tout ce qui suit l'utilise. Home Assistant s'arrêtera pour vous demander avant d'en accepter une autre.\n\n**Ce que cela protège et ce que cela ne protège pas.** Cette autorité a été récupérée sur votre réseau local, par une connexion qui n'avait rien pour se vérifier elle-même. Quiconque se contente d'*écouter* votre réseau ne peut plus lire votre mot de passe ni les identifiants renvoyés par le panneau — c'est le cas courant, et il est désormais fermé. Mais un appareil qui s'interpose activement entre Home Assistant et votre panneau en ce moment même a pu répondre avec sa propre autorité, et les verrait quand même.\n\nComparer cette empreinte avec une autre source est ce qui ferme ce cas, et c'est pourquoi elle est affichée. Une autre installation de cette intégration reliée au même panneau indiquera la même valeur."
       }
     }
   },

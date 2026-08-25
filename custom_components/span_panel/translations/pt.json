@@ -13,6 +13,8 @@
       "v1_not_supported": "O firmware v1 não é suportado. Atualize o firmware do seu painel para v2."
     },
     "error": {
+      "ca_leaf_mismatch": "O certificado que este painel serve não está assinado pela autoridade que publicou. Verifique se a porta HTTPS está correta e se nada está a intercetar a ligação, e tente novamente.",
+      "ca_unavailable": "Não foi possível ler a autoridade de certificação do painel. Verifique se o painel está acessível e ligado e tente novamente. A configuração não pode continuar sem ela, porque de outro modo a sua frase-passe seria enviada em claro.",
       "cannot_connect": "Falha ao ligar ao Painel Span",
       "fqdn_registration_failed": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo.",
       "host_required": "O anfitrião é necessário",
@@ -132,16 +134,12 @@
         }
       },
       "panel_ca": {
-        "title": "Confiar no certificado deste painel",
-        "description": "O painel publicou esta autoridade de certificação, e o certificado que serve está assinado por ela:\n\n**{fingerprint}**\n\nA partir de agora o Home Assistant aceitará apenas esta autoridade para a ligação ao seu painel, e irá parar e perguntar-lhe antes de aceitar outra.\n\nIsto é confiança na primeira utilização. A integração obteve a autoridade através da rede local e não a consegue distinguir de uma substituída por outro equipamento dessa rede — apenas lhe pode dizer se mudar daqui em diante. Se conseguir ler a impressão digital noutra origem, como outra instalação desta integração ligada ao mesmo painel, compare-a antes de continuar."
+        "title": "A ler o certificado do painel",
+        "description": "O Home Assistant obtém a autoridade de certificação que o seu painel publica e verifica que o certificado servido pelo painel está assinado por ela. Isto acontece antes de introduzir a sua frase-passe, pelo que a frase-passe e as credenciais que o painel devolve em troca viajam por uma ligação verificada e não em claro.\n\nSelecione **Submeter** para tentar novamente."
       },
-      "panel_ca_failed": {
-        "title": "Não foi possível verificar o certificado do painel",
-        "description": "Não foi possível obter a autoridade de certificação do painel, ou o certificado que o painel serve não está assinado por ela.\n\nPode tentar novamente ou terminar a configuração sem fixar a autoridade. Sem a fixar, a integração continua a ligar-se por TLS, mas volta a obter a autoridade em cada ligação e confia no que responder — pelo que um equipamento da sua rede se poderia fazer passar pelo painel. A integração repete a tentativa sempre que arranca e fixa a autoridade assim que uma tentativa tiver êxito.",
-        "menu_options": {
-          "panel_ca": "Tentar novamente",
-          "panel_ca_skip": "Continuar sem fixar a autoridade"
-        }
+      "panel_ca_confirm": {
+        "title": "Confiar no certificado deste painel",
+        "description": "O painel publicou esta autoridade de certificação, e o certificado que serve está assinado por ela:\n\n**{fingerprint}**\n\nAceitá-la fixa-a. A sua frase-passe é enviada por esta ligação, e tudo o que se segue utiliza-a. O Home Assistant irá parar e perguntar-lhe antes de aceitar outra.\n\n**O que isto protege e o que não protege.** Esta autoridade foi obtida através da sua rede local, numa ligação que não tinha nada com que se verificar a si própria. Quem apenas *escuta* a sua rede já não consegue ler a sua frase-passe nem as credenciais devolvidas pelo painel — esse é o caso comum e está agora fechado. Mas um equipamento que neste momento se interponha activamente entre o Home Assistant e o seu painel poderia ter respondido com uma autoridade própria, e continuaria a vê-las.\n\nComparar esta impressão digital com outra origem é o que fecha esse caso, e é por isso que é mostrada. Outra instalação desta integração ligada ao mesmo painel indicará o mesmo valor."
       }
     }
   },

@@ -13,6 +13,8 @@
       "v1_not_supported": "El firmware v1 no es compatible. Actualice el firmware de su panel a v2."
     },
     "error": {
+      "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo.",
+      "ca_unavailable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible y está encendido, y vuelva a intentarlo. La configuración no puede continuar sin ella, porque de lo contrario su contraseña se enviaría en claro.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo.",
       "host_required": "Se requiere host",
@@ -132,16 +134,12 @@
         }
       },
       "panel_ca": {
-        "title": "Confiar en el certificado de este panel",
-        "description": "El panel ha publicado esta autoridad de certificación, y el certificado que sirve está firmado por ella:\n\n**{fingerprint}**\n\nA partir de ahora, Home Assistant aceptará únicamente esta autoridad para la conexión con su panel, y se detendrá a preguntarle antes de aceptar otra distinta.\n\nEsto es confianza en el primer uso. La integración ha obtenido la autoridad a través de la red local y no puede distinguirla de una suplantada por otro equipo de esa red; solo puede avisarle si cambia a partir de ahora. Si puede leer la huella digital desde otra fuente, como otra instalación de esta integración sobre el mismo panel, compárela antes de continuar."
+        "title": "Leyendo el certificado del panel",
+        "description": "Home Assistant obtiene la autoridad de certificación que publica su panel y comprueba que el certificado que este sirve está firmado por ella. Esto ocurre antes de que introduzca su contraseña, de modo que la contraseña y las credenciales que el panel devuelve a cambio viajan por una conexión verificada y no en claro.\n\nSeleccione **Enviar** para volver a intentarlo."
       },
-      "panel_ca_failed": {
-        "title": "No se ha podido verificar el certificado del panel",
-        "description": "No se ha podido obtener la autoridad de certificación del panel, o el certificado que sirve el panel no está firmado por ella.\n\nPuede volver a intentarlo o terminar de configurar el panel sin fijar la autoridad. Sin fijarla, la integración sigue conectándose por TLS, pero vuelve a obtener la autoridad en cada conexión y confía en lo que responda, de modo que un dispositivo de su red podría hacerse pasar por el panel. La integración reintenta la obtención cada vez que se inicia y fija la autoridad en cuanto lo consigue.",
-        "menu_options": {
-          "panel_ca": "Volver a intentarlo",
-          "panel_ca_skip": "Continuar sin fijar la autoridad"
-        }
+      "panel_ca_confirm": {
+        "title": "Confiar en el certificado de este panel",
+        "description": "El panel ha publicado esta autoridad de certificación, y el certificado que sirve está firmado por ella:\n\n**{fingerprint}**\n\nAceptarla la fija. Su contraseña se envía por esta conexión, y todo lo posterior la utiliza. Home Assistant se detendrá a preguntarle antes de aceptar otra distinta.\n\n**Qué protege y qué no.** Esta autoridad se obtuvo a través de su red local por una conexión que no tenía nada con lo que verificarse. Quien simplemente *escuche* en su red ya no puede leer su contraseña ni las credenciales que devuelve el panel: ese es el caso habitual y queda cerrado. Pero un dispositivo que en este momento se interponga activamente entre Home Assistant y su panel podría haber respondido con una autoridad propia, y sí las vería.\n\nComparar esta huella digital con otra fuente es lo que cierra ese caso, y por eso se muestra. Otra instalación de esta integración sobre el mismo panel indicará el mismo valor."
       }
     }
   },

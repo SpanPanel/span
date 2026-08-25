@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Mapping
 import enum
 import logging
+import ssl
 from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
@@ -21,6 +22,7 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.util.network import is_ipv4_address
 from span_panel_api import (
     V2AuthResponse,
+    build_panel_ssl_context,
     ca_fingerprint,
     delete_fqdn,
     detect_api_version,
@@ -31,6 +33,7 @@ from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelConnectionError,
     SpanPanelTimeoutError,
+    SpanPanelValidationError,
 )
 import voluptuous as vol
 
@@ -66,7 +69,6 @@ from .const import (
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
-    PANEL_CA_PENDING,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
@@ -350,7 +352,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             }
             self._is_flow_setup = True
             await self.ensure_not_already_configured(raise_on_progress=False)
-            return await self.async_step_choose_v2_auth()
+            # The CA first, then authentication over it. Registration is the one
+            # exchange that carries the passphrase and returns both credentials.
+            return await self.async_step_panel_ca_start()
 
         # Non-v2 panels are not supported
         return self.async_abort(reason="v1_not_supported")
@@ -415,7 +419,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 },
             )
 
-        return await self.async_step_choose_v2_auth()
+        return await self.async_step_panel_ca_start()
 
     async def async_step_choose_v2_auth(
         self, user_input: dict[str, Any] | None = None
@@ -541,7 +545,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # If host is an FQDN, register it with the panel for TLS cert SAN inclusion
         if self.host and is_fqdn(self.host):
             return await self.async_step_register_fqdn()
-        return await self.async_step_panel_ca_start()
+        return await self.async_step_choose_entity_naming_initial()
 
     async def async_step_register_fqdn(
         self, user_input: dict[str, Any] | None = None
@@ -568,7 +572,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self.async_show_progress_done(next_step_id="fqdn_failed")
 
         self._fqdn_task = None
-        return self.async_show_progress_done(next_step_id="panel_ca_start")
+        return self.async_show_progress_done(next_step_id="choose_entity_naming_initial")
 
     async def _async_register_fqdn_and_wait(self) -> None:
         """Register the FQDN and poll until the TLS cert includes it."""
@@ -613,7 +617,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Handle FQDN registration failure — user may continue without it."""
         if user_input is not None:
-            return await self.async_step_panel_ca_start()
+            return await self.async_step_choose_entity_naming_initial()
         return self.async_show_form(
             step_id="fqdn_failed",
             data_schema=vol.Schema({}),
@@ -653,15 +657,18 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_panel_ca(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Fetch the panel's CA, prove it signs what the panel serves, and show it.
+        """Fetch the panel's CA, prove it signs what the panel serves, and offer it.
 
-        `user_input` is `None` on the way in — including on a retry chosen from
-        the failure menu — and a submitted (empty) mapping when the user has
-        confirmed the fingerprint.
+        This runs **before** authentication, which is the whole point of its
+        position in the flow: registration is the exchange that carries the
+        passphrase and returns both the access token and the broker password, and
+        it is the message most worth protecting. Everything after this step goes
+        over the anchor accepted here.
+
+        `user_input` is ignored. The step does its work on entry, and a submitted
+        error form re-enters it — which is exactly the retry semantics wanted,
+        since the failures are transient network ones.
         """
-        if user_input is not None:
-            return await self.async_step_choose_entity_naming_initial()
-
         if not self.host:
             return self.async_abort(reason="host_not_set")
 
@@ -673,7 +680,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             SpanPanelTimeoutError,
         ) as err:
             _LOGGER.warning("Could not fetch the CA from panel %s: %s", self.host, err)
-            return await self.async_step_panel_ca_failed()
+            return self._async_show_ca_error("ca_unavailable")
 
         # A CA that cannot validate the certificate the panel actually serves is
         # not the panel's CA. Checked before the fingerprint is shown, so the
@@ -681,41 +688,63 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not await async_leaf_chains_to_ca(self.host, self._https_port, ca_pem):
             _LOGGER.warning(
                 "The certificate served by %s on port %s does not chain to the CA the "
-                "panel published; not pinning it",
+                "panel published; refusing to pin it",
                 self.host,
                 self._https_port,
             )
-            return await self.async_step_panel_ca_failed()
+            return self._async_show_ca_error("ca_leaf_mismatch")
+
+        try:
+            fingerprint = ca_fingerprint(ca_pem)
+        except SpanPanelValidationError as err:
+            _LOGGER.warning("Panel %s served an unreadable CA: %s", self.host, err)
+            return self._async_show_ca_error("ca_unavailable")
 
         self._panel_ca_pem = ca_pem
         return self.async_show_form(
+            step_id="panel_ca_confirm",
+            data_schema=vol.Schema({}),
+            description_placeholders={"fingerprint": fingerprint},
+        )
+
+    def _async_show_ca_error(self, reason: str) -> ConfigFlowResult:
+        """Re-show the CA step with an actionable error.
+
+        Deliberately not a way past. There is no "carry on unpinned" option here,
+        because the next thing this flow does is send the panel passphrase: an
+        opt-out would quietly restore the plaintext credential exchange that
+        pinning before registration exists to remove, at the moment a user is
+        least likely to weigh it.
+
+        Submitting the form re-enters `async_step_panel_ca`, so a panel that was
+        briefly unreachable is one click away from working.
+        """
+        return self.async_show_form(
             step_id="panel_ca",
             data_schema=vol.Schema({}),
-            description_placeholders={"fingerprint": ca_fingerprint(ca_pem)},
+            errors={"base": reason},
         )
 
-    async def async_step_panel_ca_failed(
+    async def async_step_panel_ca_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Offer a retry, or setting the panel up without a pin.
+        """Adopt the accepted anchor, then authenticate over it."""
+        if user_input is None or self._panel_ca_pem is None:
+            return await self.async_step_panel_ca()
 
-        Continuing is permitted because refusing would make an unreachable
-        certificate endpoint a hard setup failure for a panel that is otherwise
-        working, and the entry is created with `panel_ca_pending` so every later
-        setup retries the fetch. Until one succeeds the library keeps 3.0.1's
-        behaviour of refetching the CA on each connect.
-        """
-        return self.async_show_menu(
-            step_id="panel_ca_failed",
-            menu_options=["panel_ca", "panel_ca_skip"],
+        try:
+            context = build_panel_ssl_context(self._panel_ca_pem)
+        except (ssl.SSLError, ValueError) as err:
+            # Unreachable in practice — the leaf check above already built a
+            # context from this PEM. Handled rather than assumed, because the
+            # alternative to raising here is registering in plaintext.
+            _LOGGER.warning("Accepted CA from %s could not be used: %s", self.host, err)
+            return self._async_show_ca_error("ca_unavailable")
+
+        self._rest_transport = PanelRestTransport(
+            port=self._https_port, ssl_context=context, httpx_client=None
         )
-
-    async def async_step_panel_ca_skip(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Continue without a pinned CA."""
-        self._panel_ca_pem = None
-        return await self.async_step_choose_entity_naming_initial()
+        return await self.async_step_choose_v2_auth()
 
     def create_new_entry(
         self, host: str, serial_number: str, access_token: str
@@ -752,12 +781,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             entry_data[CONF_HTTP_PORT] = self._http_port
         if self._https_port != DEFAULT_HTTPS_PORT:
             entry_data[CONF_HTTPS_PORT] = self._https_port
-        if self._panel_ca_pem is not None:
-            entry_data[CONF_PANEL_CA_PEM] = self._panel_ca_pem
-        else:
-            # Acquisition failed and the user chose to continue. Every later
-            # setup retries it, on the same flag the migration uses.
-            entry_data[PANEL_CA_PENDING] = True
+        if self._panel_ca_pem is None:
+            # Unreachable: the flow cannot reach entity naming without passing
+            # the CA confirmation, and authentication ran over the anchor
+            # accepted there. Raised rather than defaulted, because the only
+            # other option is to write an unpinned entry whose credentials were
+            # nonetheless exchanged over TLS — a state nothing else expects.
+            raise ConfigFlowError("Reached entry creation with no pinned panel CA")
+        entry_data[CONF_PANEL_CA_PEM] = self._panel_ca_pem
         if is_fqdn(host):
             entry_data[CONF_REGISTERED_FQDN] = host
 

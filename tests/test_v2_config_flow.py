@@ -77,14 +77,33 @@ def panel_ca_available():
             "custom_components.span_panel.config_flow.ca_fingerprint",
             return_value=FAKE_CA_FINGERPRINT,
         ),
+        # The fake PEM is not a certificate the ssl module will load, and the
+        # accepted anchor is turned into a real context before authentication
+        # runs over it.
+        patch(
+            "custom_components.span_panel.config_flow.build_panel_ssl_context",
+            return_value=MagicMock(),
+        ),
     ):
         yield
 
 
 async def _confirm_panel_ca(hass: HomeAssistant, flow_id: str):
     """Accept the fingerprint the CA step is showing."""
-    result = await hass.config_entries.flow.async_configure(flow_id, {})
-    return result
+    return await hass.config_entries.flow.async_configure(flow_id, {})
+
+
+async def _submit_host_and_pin(hass: HomeAssistant, flow_id: str, data: dict):
+    """Submit the host form and accept the CA the panel serves.
+
+    The CA step sits between the host form and the authentication menu, because
+    registration is the exchange that carries the passphrase and it runs over the
+    pin. Tests that are not about the CA itself elide it here rather than
+    repeating the same two lines twenty times.
+    """
+    result = await hass.config_entries.flow.async_configure(flow_id, data)
+    assert result["step_id"] == "panel_ca_confirm", result["step_id"]
+    return await _confirm_panel_ca(hass, result["flow_id"])
 
 
 MOCK_HOST = "192.168.1.100"
@@ -159,9 +178,8 @@ async def test_user_flow_detects_v2_and_shows_auth_choice(hass: HomeAssistant) -
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         assert result2["type"] == FlowResultType.MENU
@@ -252,9 +270,8 @@ async def test_passphrase_auth_success(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
         assert result2["step_id"] == "choose_v2_auth"
 
@@ -270,14 +287,8 @@ async def test_passphrase_auth_success(hass: HomeAssistant) -> None:
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
-        # The CA is fetched and confirmed before anything else is asked.
         assert result3["type"] == FlowResultType.FORM
-        assert result3["step_id"] == "panel_ca"
-        assert result3["description_placeholders"] == {"fingerprint": FAKE_CA_FINGERPRINT}
-
-        result4 = await _confirm_panel_ca(hass, result3["flow_id"])
-        assert result4["type"] == FlowResultType.FORM
-        assert result4["step_id"] == "choose_entity_naming_initial"
+        assert result3["step_id"] == "choose_entity_naming_initial"
 
 
 @pytest.mark.asyncio
@@ -301,9 +312,8 @@ async def test_passphrase_auth_bad_passphrase(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         # Select passphrase auth from the menu
@@ -343,9 +353,8 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         # Select passphrase auth from the menu
@@ -390,9 +399,8 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
         )
 
         # Step 1: submit host
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         # Step 2: choose auth method (passphrase)
@@ -407,12 +415,9 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
-        # Step 4: accept the panel's CA fingerprint
-        result3b = await _confirm_panel_ca(hass, result3["flow_id"])
-
-        # Step 5: choose entity naming pattern (accept default)
+        # Step 4: choose entity naming pattern (accept default)
         result4 = await hass.config_entries.flow.async_configure(
-            result3b["flow_id"],
+            result3["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
         )
 
@@ -431,19 +436,62 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
 
 
 async def _reach_the_ca_step(hass: HomeAssistant):
-    """Drive a user flow as far as the CA step and return that result."""
+    """Drive a user flow as far as the CA step and return that result.
+
+    That is only two steps now: the CA is fetched before authentication, so the
+    host form leads straight into it.
+    """
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
-    result2 = await hass.config_entries.flow.async_configure(
+    return await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_HOST: MOCK_HOST}
     )
-    result2b = await hass.config_entries.flow.async_configure(
-        result2["flow_id"], {"next_step_id": "auth_passphrase"}
-    )
-    return await hass.config_entries.flow.async_configure(
-        result2b["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
-    )
+
+
+@pytest.mark.asyncio
+async def test_the_ca_is_pinned_before_the_passphrase_is_ever_sent(
+    hass: HomeAssistant,
+) -> None:
+    """Registration carries the passphrase and returns both credentials.
+
+    It is the one exchange most worth protecting, so the anchor has to be
+    accepted before the authentication menu is even offered.
+    """
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ) as register,
+    ):
+        shown = await _reach_the_ca_step(hass)
+        assert shown["step_id"] == "panel_ca_confirm"
+        assert shown["description_placeholders"] == {"fingerprint": FAKE_CA_FINGERPRINT}
+
+        # Nothing has been sent to the panel yet.
+        register.assert_not_called()
+
+        menu = await _confirm_panel_ca(hass, shown["flow_id"])
+        assert menu["step_id"] == "choose_v2_auth"
+
+        picked = await hass.config_entries.flow.async_configure(
+            menu["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        await hass.config_entries.flow.async_configure(
+            picked["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    # And when it was, it went over the accepted anchor rather than plaintext.
+    transport = register.call_args.kwargs["transport"]
+    assert transport is not None
+    assert transport.ssl_context is not None
+    assert transport.httpx_client is None
+    assert transport.port == 443
 
 
 @pytest.mark.asyncio
@@ -458,28 +506,28 @@ async def test_a_ca_that_does_not_sign_what_the_panel_serves_is_not_offered(
         ),
         patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
         patch(
-            "custom_components.span_panel.config_flow.validate_v2_passphrase",
-            return_value=MOCK_V2_AUTH,
-        ),
-        patch(
             "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
             new=AsyncMock(return_value=False),
         ),
     ):
         result = await _reach_the_ca_step(hass)
 
-    assert result["type"] == FlowResultType.MENU
-    assert result["step_id"] == "panel_ca_failed"
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "panel_ca"
+    assert result["errors"] == {"base": "ca_leaf_mismatch"}
 
 
 @pytest.mark.asyncio
-async def test_a_fetch_failure_offers_a_retry_and_a_way_past(
+async def test_a_fetch_failure_is_a_flow_error_with_no_way_past(
     hass: HomeAssistant,
 ) -> None:
-    """An unreachable certificate endpoint is not a hard setup failure.
+    """There is deliberately no "carry on unpinned" option here.
 
-    Continuing creates the entry with the pending flag rather than a pin, so
-    every later setup retries the fetch on its own.
+    The next thing this flow does is send the panel passphrase. An opt-out would
+    quietly restore the plaintext credential exchange that pinning before
+    registration exists to remove, at the moment a user is least likely to weigh
+    it. Resubmitting the form retries the fetch, which is the recovery a
+    transient network failure actually needs.
     """
     with (
         patch(
@@ -490,32 +538,52 @@ async def test_a_fetch_failure_offers_a_retry_and_a_way_past(
         patch(
             "custom_components.span_panel.config_flow.validate_v2_passphrase",
             return_value=MOCK_V2_AUTH,
-        ),
+        ) as register,
         patch(
             "custom_components.span_panel.config_flow.async_fetch_panel_ca",
             new=AsyncMock(side_effect=SpanPanelConnectionError("unreachable")),
-        ),
+        ) as fetch,
+    ):
+        failed = await _reach_the_ca_step(hass)
+        assert failed["type"] == FlowResultType.FORM
+        assert failed["step_id"] == "panel_ca"
+        assert failed["errors"] == {"base": "ca_unavailable"}
+        # No menu, so no option that leads anywhere but back through the fetch.
+        assert "menu_options" not in failed
+
+        # Resubmitting retries rather than continuing.
+        retried = await hass.config_entries.flow.async_configure(failed["flow_id"], {})
+        assert retried["step_id"] == "panel_ca"
+        assert fetch.await_count == 2
+
+    # The panel was never asked to register anything.
+    register.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_recovered_panel_can_be_retried_into_a_successful_pin(
+    hass: HomeAssistant,
+) -> None:
+    """The error form is a retry, so a panel that comes back needs no restart."""
+    with (
         patch(
-            "custom_components.span_panel.async_setup_entry",
-            new=AsyncMock(return_value=True),
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
+        patch(
+            "custom_components.span_panel.config_flow.async_fetch_panel_ca",
+            new=AsyncMock(
+                side_effect=[SpanPanelConnectionError("unreachable"), FAKE_CA_PEM]
+            ),
         ),
     ):
-        result = await _reach_the_ca_step(hass)
-        assert result["type"] == FlowResultType.MENU
-        assert set(result["menu_options"]) == {"panel_ca", "panel_ca_skip"}
+        failed = await _reach_the_ca_step(hass)
+        assert failed["errors"] == {"base": "ca_unavailable"}
 
-        skipped = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {"next_step_id": "panel_ca_skip"}
-        )
-        assert skipped["step_id"] == "choose_entity_naming_initial"
+        recovered = await hass.config_entries.flow.async_configure(failed["flow_id"], {})
 
-        created = await hass.config_entries.flow.async_configure(
-            skipped["flow_id"], {"entity_naming_pattern": "friendly_names"}
-        )
-
-    assert created["type"] == FlowResultType.CREATE_ENTRY
-    assert CONF_PANEL_CA_PEM not in created["data"]
-    assert created["data"][PANEL_CA_PENDING] is True
+    assert recovered["step_id"] == "panel_ca_confirm"
 
 
 # ---------- config entry migration (2.0.4 baseline) ----------
@@ -914,9 +982,8 @@ async def test_user_flow_recovery_after_bad_host(hass: HomeAssistant) -> None:
         assert result2["errors"] == {"base": "cannot_connect"}
 
         # Second attempt succeeds
-        result3 = await hass.config_entries.flow.async_configure(
-            result2["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result3 = await _submit_host_and_pin(
+            hass, result2["flow_id"], {CONF_HOST: MOCK_HOST}
         )
         assert result3["type"] == FlowResultType.MENU
         assert result3["step_id"] == "choose_v2_auth"
@@ -942,9 +1009,8 @@ async def test_passphrase_auth_empty_passphrase(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -983,9 +1049,8 @@ async def test_passphrase_auth_recovery_after_error(hass: HomeAssistant) -> None
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -1006,11 +1071,7 @@ async def test_passphrase_auth_recovery_after_error(hass: HomeAssistant) -> None
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
         assert result4["type"] == FlowResultType.FORM
-        assert result4["step_id"] == "panel_ca"
-
-        result5 = await _confirm_panel_ca(hass, result4["flow_id"])
-        assert result5["type"] == FlowResultType.FORM
-        assert result5["step_id"] == "choose_entity_naming_initial"
+        assert result4["step_id"] == "choose_entity_naming_initial"
 
 
 # ---------- proximity auth ----------
@@ -1037,9 +1098,8 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
         assert result2["step_id"] == "choose_v2_auth"
 
@@ -1056,11 +1116,7 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
         )
 
         assert result3["type"] == FlowResultType.FORM
-        assert result3["step_id"] == "panel_ca"
-
-        result4 = await _confirm_panel_ca(hass, result3["flow_id"])
-        assert result4["type"] == FlowResultType.FORM
-        assert result4["step_id"] == "choose_entity_naming_initial"
+        assert result3["step_id"] == "choose_entity_naming_initial"
 
 
 @pytest.mark.asyncio
@@ -1080,9 +1136,8 @@ async def test_proximity_not_proven_returns_to_menu(hass: HomeAssistant) -> None
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -1118,9 +1173,8 @@ async def test_proximity_switch_to_passphrase(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: MOCK_HOST},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
         )
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -1331,11 +1385,8 @@ async def test_zeroconf_end_to_end_entry_creation(hass: HomeAssistant) -> None:
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "confirm_discovery"
 
-        # Step 2: confirm → auth choice
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {},
-        )
+        # Step 2: confirm → accept the panel's CA → auth choice
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {})
         assert result2["type"] == FlowResultType.MENU
         assert result2["step_id"] == "choose_v2_auth"
 
@@ -1351,15 +1402,11 @@ async def test_zeroconf_end_to_end_entry_creation(hass: HomeAssistant) -> None:
             result3["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
-        assert result4["step_id"] == "panel_ca"
+        assert result4["step_id"] == "choose_entity_naming_initial"
 
-        # Step 5: accept the CA fingerprint
-        result4b = await _confirm_panel_ca(hass, result4["flow_id"])
-        assert result4b["step_id"] == "choose_entity_naming_initial"
-
-        # Step 6: accept naming default → entry created
+        # Step 5: accept naming default → entry created
         result5 = await hass.config_entries.flow.async_configure(
-            result4b["flow_id"],
+            result4["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
         )
         assert result5["type"] == FlowResultType.CREATE_ENTRY
@@ -1814,10 +1861,11 @@ async def test_hassio_end_to_end_entry_creation(hass: HomeAssistant) -> None:
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "confirm_discovery"
 
-        # Step 2: confirm -> auth choice
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {},
+        # Step 2: confirm -> HTTPS port (this panel moved its HTTP port) -> CA
+        port_step = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert port_step["step_id"] == "panel_https_port"
+        result2 = await _submit_host_and_pin(
+            hass, port_step["flow_id"], {CONF_HTTPS_PORT: 9443}
         )
         assert result2["type"] == FlowResultType.MENU
         assert result2["step_id"] == "choose_v2_auth"
@@ -1834,21 +1882,10 @@ async def test_hassio_end_to_end_entry_creation(hass: HomeAssistant) -> None:
             result3["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
-        # Step 5: a non-default HTTP port means the TLS one is asked for too.
-        assert result4["step_id"] == "panel_https_port"
-        result4b = await hass.config_entries.flow.async_configure(
-            result4["flow_id"],
-            {CONF_HTTPS_PORT: 9443},
-        )
-
-        # Step 6: accept the CA fingerprint
-        assert result4b["step_id"] == "panel_ca"
-        result4c = await _confirm_panel_ca(hass, result4b["flow_id"])
-        assert result4c["step_id"] == "choose_entity_naming_initial"
-
-        # Step 7: accept naming default -> entry created
+        # Step 5: accept naming default -> entry created
+        assert result4["step_id"] == "choose_entity_naming_initial"
         result5 = await hass.config_entries.flow.async_configure(
-            result4c["flow_id"],
+            result4["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
         )
         assert result5["type"] == FlowResultType.CREATE_ENTRY
@@ -2005,9 +2042,8 @@ async def test_user_flow_fqdn_registration_progress_then_naming(
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: "panel.example.com"},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: "panel.example.com"}
         )
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -2017,20 +2053,12 @@ async def test_user_flow_fqdn_registration_progress_then_naming(
             result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
-    assert result3["type"] == FlowResultType.FORM
-    assert result3["step_id"] == "panel_ca"
-
-    result4 = await _confirm_panel_ca(hass, result3["flow_id"])
-    assert result4["type"] == FlowResultType.FORM
-    assert result4["step_id"] == "choose_entity_naming_initial"
-
-    result5 = await hass.config_entries.flow.async_configure(
-        result4["flow_id"],
-        {"entity_naming_pattern": "friendly_names"},
-    )
-    assert result5["type"] == FlowResultType.CREATE_ENTRY
-    assert result5["data"][CONF_REGISTERED_FQDN] == "panel.example.com"
-    assert result5["data"][CONF_PANEL_CA_PEM] == FAKE_CA_PEM
+    # The progress step carries its triggering input through to the naming step,
+    # which takes the default and creates the entry in one go.
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert result3["data"][CONF_REGISTERED_FQDN] == "panel.example.com"
+    # Registration itself ran over this anchor, not just what followed it.
+    assert result3["data"][CONF_PANEL_CA_PEM] == FAKE_CA_PEM
 
 
 @pytest.mark.usefixtures("socket_enabled")
@@ -2068,9 +2096,8 @@ async def test_user_flow_fqdn_registration_failure_can_continue(
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
-        result2 = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_HOST: "panel.example.com"},
+        result2 = await _submit_host_and_pin(
+            hass, result["flow_id"], {CONF_HOST: "panel.example.com"}
         )
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -2081,7 +2108,7 @@ async def test_user_flow_fqdn_registration_failure_can_continue(
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
         assert result3["type"] == FlowResultType.FORM
-        assert result3["step_id"] == "panel_ca"
+        assert result3["step_id"] == "choose_entity_naming_initial"
 
 
 @pytest.mark.usefixtures("socket_enabled")
@@ -2131,9 +2158,14 @@ async def test_fqdn_entry_creation_sets_registered_fqdn_and_unique_title(
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
-        result2 = await hass.config_entries.flow.async_configure(
+        port_step = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             {CONF_HOST: "panel.example.com", CONF_HTTP_PORT: 8080},
+        )
+        assert port_step["step_id"] == "panel_https_port"
+        # Left at the default, so it is not written to the entry.
+        result2 = await _submit_host_and_pin(
+            hass, port_step["flow_id"], {CONF_HTTPS_PORT: 443}
         )
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -2143,26 +2175,12 @@ async def test_fqdn_entry_creation_sets_registered_fqdn_and_unique_title(
             result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
-        assert result3["type"] == FlowResultType.FORM
-        assert result3["step_id"] == "panel_https_port"
-
-        # Left at the default, so it is not written to the entry.
-        result3b = await hass.config_entries.flow.async_configure(
-            result3["flow_id"],
-            {CONF_HTTPS_PORT: 443},
-        )
-        result4 = await _confirm_panel_ca(hass, result3b["flow_id"])
-        result5 = await hass.config_entries.flow.async_configure(
-            result4["flow_id"],
-            {"entity_naming_pattern": "friendly_names"},
-        )
-
-    assert result5["type"] == FlowResultType.CREATE_ENTRY
-    assert result5["title"] == "Span Panel 2"
-    assert result5["data"][CONF_HOST] == "panel.example.com"
-    assert result5["data"][CONF_REGISTERED_FQDN] == "panel.example.com"
-    assert result5["data"][CONF_HTTP_PORT] == 8080
-    assert CONF_HTTPS_PORT not in result5["data"]
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert result3["title"] == "Span Panel 2"
+    assert result3["data"][CONF_HOST] == "panel.example.com"
+    assert result3["data"][CONF_REGISTERED_FQDN] == "panel.example.com"
+    assert result3["data"][CONF_HTTP_PORT] == 8080
+    assert CONF_HTTPS_PORT not in result3["data"]
 
 
 @pytest.mark.asyncio

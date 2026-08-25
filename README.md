@@ -654,18 +654,32 @@ Home Assistant process — talks to the panel directly and is not subject to Hom
 
 ### The panel's certificate authority
 
-The panel issues its own certificate authority and signs its TLS certificate with it. Setting up a panel fetches that authority, checks that the certificate the
-panel actually serves is signed by it, and shows you the SHA-256 fingerprint. From then on the integration accepts only that authority for both the MQTT
-connection and its REST calls, and stops rather than accepting a different one.
+The panel issues its own certificate authority and signs its TLS certificate with it. **Before you are asked for your passphrase**, setup fetches that
+authority, checks that the certificate the panel actually serves is signed by it, and shows you the SHA-256 fingerprint to accept. Everything after that —
+registration itself, and every later connection — runs over the authority you accepted, and the integration stops rather than accepting a different one.
 
-**This is trust on first use.** The authority is fetched over your local network on a connection that has nothing to verify itself against — it is the anchor
-everything else is checked against — so a device sitting between Home Assistant and the panel could answer with an authority of its own and sign a certificate
-with it. What pinning buys you is that nothing can change afterwards without you being asked. If you can read the fingerprint from another source, such as an
-existing install of this integration on the same panel, compare it before accepting.
+The ordering is the point. Registration is the exchange that sends your passphrase and returns both the access token and the broker password, so it is the
+single most valuable message on your network. It now travels over a verified connection instead of in the clear.
 
-Panels configured before this release are pinned on the first successful startup that reaches the panel, and that acquisition is logged at `WARNING` with the
-fingerprint so you can find the value afterwards. If the panel is unreachable the integration starts anyway and retries on the next startup; until it succeeds,
-the connection behaves as it did before.
+**What that does and does not buy you.** The authority is fetched over your local network on a connection that has nothing to verify itself against — it is the
+anchor everything else is checked against. So:
+
+- Anyone merely **listening** on your network can no longer read your passphrase or the credentials the panel returns for it. That is the common case, and it is
+  closed.
+- A device **actively standing between** Home Assistant and your panel at that first fetch could answer with an authority of its own, sign a certificate with
+  it, and still see them. Pinning cannot detect that on its own.
+
+Comparing the fingerprint against another source is what closes the second case, and it is exactly why the fingerprint is shown rather than accepted silently.
+Another install of this integration on the same panel reports the same value. After the first acceptance, nothing can change the authority without stopping and
+asking you.
+
+**There is no "continue without pinning" for a new panel.** If the authority cannot be read, or the certificate the panel serves is not signed by it, setup
+shows an error and stops. Submitting the form again retries the fetch, which is what a panel that was briefly unreachable needs. An opt-out would quietly
+restore the plaintext credential exchange this ordering exists to remove, at the moment you are least likely to weigh it.
+
+**Panels configured before this release are different**, because their credentials were exchanged long ago and nothing crosses the wire at startup. They are
+pinned on the first startup that reaches the panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. If the panel is unreachable
+the integration starts anyway and retries on the next startup; until it succeeds, the connection behaves as it did before.
 
 Diagnostics report the fingerprint under `panel_ca`. The certificate itself is not included — it is public, but multi-KB, and the fingerprint is the part worth
 reading.

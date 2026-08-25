@@ -33,7 +33,14 @@ The CA cannot be fetched in `async_migrate_entry` — that runs during startup, 
 a network call there delays boot whenever the panel is unreachable and leaves a
 failed fetch with no recovery path. The flag defers it to the first successful
 setup, which retries on every subsequent one for free. Same shape as
-`solar_migration_pending`."""
+`solar_migration_pending`.
+
+**Only the migration sets this.** A newly configured entry always carries a pin,
+because the config flow fetches and confirms the CA before it authenticates and
+refuses to continue without one — registration is the exchange that carries the
+passphrase. An upgraded entry is a different case: its credentials were
+exchanged long ago, nothing crosses the wire at setup, and refusing to start
+would take down a working integration to no benefit."""
 
 # Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"

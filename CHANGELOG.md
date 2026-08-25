@@ -144,10 +144,13 @@ working entirely in 2027.8.
   passphrase are unchanged, and a failed rotation leaves the existing credentials in place.
 - **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
   actually bound the panel's exposure — VLAN isolation, a locked enclosure, read-only Home Assistant users, and encrypted backups.
-- **The panel's certificate authority is pinned.** Setup fetches it, checks that the certificate your panel actually serves is signed by it, and shows you the
-  fingerprint to accept. From then on nothing else is accepted for either the MQTT connection or the REST calls. Previously the authority was re-fetched over
-  plaintext HTTP on every connection and whatever answered was trusted. Panels configured before this release are pinned on the first startup that reaches them,
-  logged at `WARNING` with the fingerprint.
+- **The panel's certificate authority is pinned, before your passphrase is ever sent.** Setup fetches it, checks that the certificate your panel actually serves
+  is signed by it, and shows you the fingerprint to accept — and only then asks you to authenticate. Registration is the exchange that carries your passphrase
+  and returns both the access token and the broker password, and it used to cross your network in the clear; it now travels over the authority you accepted, as
+  does everything after it. Previously the authority was also re-fetched over plaintext HTTP on every connection and whatever answered was trusted. **Anyone
+  merely listening on your network can no longer read those credentials.** A device actively impersonating your panel at that first fetch still could, which is
+  why the fingerprint is shown for you to compare rather than accepted silently. Panels configured before this release exchanged their credentials long ago and
+  are simply pinned on the first startup that reaches them, logged at `WARNING` with the fingerprint.
 - **A changed authority stops the integration and raises a repair** carrying both fingerprints, rather than reconnecting. A legitimate rotation and a device
   impersonating your panel look identical from here, so re-pinning takes an explicit acceptance from you. Nothing retries in the meantime.
 - **Four new options decide who may operate the panel** — restrict controls to administrators, refuse commands from automations, add an admin-only control lock,
