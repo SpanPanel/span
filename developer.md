@@ -78,6 +78,71 @@ echo 'dotenv' > .envrc
 direnv allow
 ```
 
+## Working against unreleased library code
+
+`pyproject.toml` installs `span-panel-api` and both adapters from `../../span/span-panel-api` as editable path dependencies. That is a committed, shared file:
+whatever it names is what every import in this suite resolves to, for everyone, on every machine.
+
+Sooner or later you need to test against library work that is not on `main` yet — an unmerged branch in a worktree beside the checkout. **Do not edit
+`pyproject.toml` to point at it.** Put the worktree in your virtual environment instead:
+
+```bash
+uv sync                                                   # canonical, from the committed file
+uv pip install -e ../../span/span-panel-api-<worktree>    # local override, this venv only
+uv sync                                                   # back to canonical
+```
+
+`uv sync` is the undo. It rebuilds the environment from `pyproject.toml` and `uv.lock`, which never mentioned the worktree, so the override disappears with no
+record of having been there. Nothing is committed at any point.
+
+### What the second install actually does
+
+The venv holds one `.pth` file per editable distribution — `_editable_impl_span_panel_api.pth`, `_editable_impl_span_panel_api_schema_0.pth`,
+`_editable_impl_span_panel_api_schema_1.pth` — each holding the `src` directory of the main checkout. `uv pip install -e <worktree>` **replaces** the one for
+the distribution it installs: same filename, rewritten to the worktree, with the `dist-info` (including `direct_url.json`, which is where the redirection is
+recorded as data) replaced alongside it. There is no stacking and no shadowing, so no ordering question — the old target is gone.
+
+It replaces only that distribution. `span-panel-api` and the two adapters are three separate distributions, and installing the bootstrap from a worktree leaves
+`span_panel_api_schema_0` and `span_panel_api_schema_1` resolving to the main checkout. If the branch under test changes an adapter, or moves
+`ADAPTER_CONTRACT_VERSION`, install all three:
+
+```bash
+uv pip install -e ../../span/span-panel-api-<worktree> \
+                -e ../../span/span-panel-api-<worktree>/packages/schema-0 \
+                -e ../../span/span-panel-api-<worktree>/packages/schema-1
+```
+
+### What not to do: `PYTHONPATH` and `MYPYPATH`
+
+Prefixing a worktree onto `PYTHONPATH` or `MYPYPATH` looks like the same thing and is not. A worktree on the path has **no distribution metadata of its own**,
+so `importlib.metadata` goes on describing the installed distribution: the right name, the right version, the right location — all of it about a copy of the
+library that is not the one running. `span_panel_api.__file__` is in the worktree and every version-based check in this suite reads the installed distribution
+and passes.
+
+That is the worst available state, because it is the one where everything is green. The editable install moves the code and the metadata together, so they
+cannot disagree; the path prefix moves one and not the other.
+
+### The two guards
+
+| Guard                                       | When        | Catches                                                                      |
+| ------------------------------------------- | ----------- | ---------------------------------------------------------------------------- |
+| `scripts/check-library-path.py` (prek hook) | commit time | a `span-panel-api` path in `pyproject.toml` naming anything but the checkout |
+| `tests/test_library_resolution.py`          | every run   | the library that actually resolved not being the one `manifest.json` pins    |
+
+The hook is why editing `pyproject.toml` is not the route: it rejects the commit and names this section. The test reads `span_panel_api.__file__` rather than
+metadata, so it sees the `PYTHONPATH` case as well as a stale checkout. A deliberate editable override **skips** it locally, naming the path and version it
+found, and **fails** under `CI` — where `[tool.uv.sources]` is deleted before installing and no legitimate override exists. A version behind or ahead of the pin
+fails everywhere; that one is never intentional.
+
+### Why the version alone is not enough
+
+`3cbf02a` pointed both `[tool.uv.sources]` and `[tool.pyright].extraPaths` at a scratch worktree and committed it. It survived several commits and hours of
+other work. While it stood, a test fixture was vendored through that resolution and captured a producer defect the library had already fixed — and every
+version-based check passed, because the stale worktree declared the same version number as the corrected code. Only a byte comparison caught it.
+
+**A version string does not identify content. Only a filesystem location does.** That is what both guards check and why neither of them checks a version on its
+own.
+
 ## Pre-commit Hooks
 
 This project uses prek for pre-commit hooks. Hooks run automatically on `git commit` and check formatting, linting, type checking, translations, and test
