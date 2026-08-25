@@ -363,6 +363,12 @@ async def async_setup_entry(
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_data.is_user_controllable:
             continue
+        # Priority settability is its own commissioning flag, not the relay's.
+        # v1.0 expresses never-backup as the absence of `$settable` on
+        # `load-shed/priority`, which the adapter carries here; offering the
+        # control without checking it means offering a write the panel refuses.
+        if circuit_data.is_never_backup:
+            continue
         # PV/EVSE circuits only get selects if they have a physical breaker
         # (relative_position == "DOWNSTREAM" means connected at a breaker slot)
         if (

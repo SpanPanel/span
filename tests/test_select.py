@@ -459,6 +459,52 @@ async def test_async_setup_entry_filters_supported_circuits() -> None:
     assert {entity.id for entity in entities} == {"main-1", "pv-1"}
 
 
+async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable() -> None:
+    """A never-backup circuit gets no priority select, even with a controllable relay.
+
+    Relay controllability and priority settability are two independent
+    commissioning flags. Under v1.0 the panel expresses never-backup as the
+    absence of `$settable` on `load-shed/priority`, which the adapter carries as
+    `is_never_backup` -- a different property from `switch/relay-controllable`,
+    which it carries as `is_user_controllable`.
+
+    Gating this platform on the relay flag alone offers a priority control on a
+    circuit whose priority the panel will refuse to change. The panels we have
+    captures from declare every circuit's priority settable, so hardware does not
+    exercise this today; the flag exists because a panel may say otherwise, and
+    it is the only thing that says so.
+    """
+    settable_priority = SpanCircuitSnapshotFactory.create(
+        circuit_id="main-1",
+        name="Kitchen",
+        is_user_controllable=True,
+        is_never_backup=False,
+        tabs=[1],
+    )
+    locked_priority = SpanCircuitSnapshotFactory.create(
+        circuit_id="main-2",
+        name="Water Heater",
+        is_user_controllable=True,
+        is_never_backup=True,
+        tabs=[2],
+    )
+
+    coordinator = MagicMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(
+        circuits={"main-1": settable_priority, "main-2": locked_priority}
+    )
+    config_entry = MagicMock()
+    config_entry.title = "SPAN Panel"
+    config_entry.data = {}
+    config_entry.runtime_data = MagicMock(coordinator=coordinator)
+    async_add_entities = MagicMock()
+
+    await async_setup_entry(MagicMock(), config_entry, async_add_entities)
+
+    entities = async_add_entities.call_args.args[0]
+    assert {entity.id for entity in entities} == {"main-1"}
+
+
 def test_select_circuit_numbers_entity_id_stable_after_reload(
     hass: HomeAssistant,
 ) -> None:
