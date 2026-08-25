@@ -44,7 +44,12 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from span_panel_api import EvseControlProtocol, SpanEvseSnapshot, SpanPanelSnapshot
+from span_panel_api import (
+    EvseControlProtocol,
+    PublishOutcome,
+    SpanEvseSnapshot,
+    SpanPanelSnapshot,
+)
 from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
@@ -72,7 +77,7 @@ class SpanEvseNumberRequiredKeysMixin(FieldPathDeclarationMixin):
     maximum_fn: Callable[[SpanEvseSnapshot], int | None]
     target_fn: Callable[[SpanEvseSnapshot], int | None]
     settable_fn: Callable[[SpanEvseSnapshot], bool]
-    set_fn: Callable[[EvseControlProtocol, str, int], Awaitable[None]]
+    set_fn: Callable[[EvseControlProtocol, str, int], Awaitable[PublishOutcome]]
 
 
 @dataclass(frozen=True, kw_only=True)

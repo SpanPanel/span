@@ -518,7 +518,7 @@ async def test_the_write_reaches_the_wire_as_one_publish(hass: HomeAssistant) ->
 
     assert entity._evse_id != EVSE
     bridge.publish.assert_called_once_with(
-        f"ebus/5/{EVSE}/config/user-max-charge-current/set", str(asked), qos=1
+        f"ebus/5/{EVSE}/config/user-max-charge-current/set", str(asked)
     )
     entity.coordinator.async_request_refresh.assert_awaited_once()
 
@@ -532,7 +532,7 @@ async def test_the_write_goes_to_the_charger_the_entity_belongs_to(hass: HomeAss
     await _for(created, tree, EVSE_2).async_set_native_value(float(asked))
 
     bridge.publish.assert_called_once_with(
-        f"ebus/5/{EVSE_2}/config/user-max-charge-current/set", str(asked), qos=1
+        f"ebus/5/{EVSE_2}/config/user-max-charge-current/set", str(asked)
     )
 
 
@@ -551,7 +551,7 @@ async def test_a_fractional_request_truncates_downward(hass: HomeAssistant) -> N
     await _for(created, tree, EVSE).async_set_native_value(whole + 0.7)
 
     bridge.publish.assert_called_once_with(
-        f"ebus/5/{EVSE}/config/user-max-charge-current/set", str(whole), qos=1
+        f"ebus/5/{EVSE}/config/user-max-charge-current/set", str(whole)
     )
 
 
