@@ -170,6 +170,15 @@ async def handle_panel_topology(
             "always_on": circuit.always_on,
             "priority": circuit.priority,
             "priority_target": circuit.priority_target,
+            # Whether `priority` above can be written, which is a different
+            # commissioning flag from `is_user_controllable`: that one governs
+            # the relay. A never-backup circuit has a working relay and a
+            # priority the panel pins, so a consumer that infers priority
+            # settability from relay controllability gets it wrong in both
+            # directions. Carried even though no entity is created for such a
+            # circuit, because a consumer rendering from this record has no
+            # other way to tell a pinned priority from an absent one.
+            "is_never_backup": circuit.is_never_backup,
             "entities": entity_map.get(circuit_id, {}),
         }
 
