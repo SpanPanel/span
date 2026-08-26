@@ -756,7 +756,8 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(
                 "The stored certificate authority for this SPAN panel cannot be "
                 "read, so the rotation would have to travel unencrypted. "
-                "Nothing was changed.",
+                "Nothing was changed. Repair the panel's certificate authority, "
+                "then rotate again.",
                 translation_domain=DOMAIN,
                 translation_key="rotate_credentials_ca_unusable",
             ) from err

@@ -395,11 +395,16 @@ def as_port(value: object, default: int) -> int:
     return default if parsed is None else parsed
 
 
-class PanelCaUnusableError(Exception):
+class PanelCaUnusableError(ValueError):
     """An entry stores a panel CA that cannot be turned into a trust anchor.
 
     Raised only for a caller that passed `allow_plaintext_fallback=False`; the
     default path logs and downgrades, as it always has.
+
+    A `ValueError`, because that is what a stored value that cannot be parsed
+    is, and because it is one of the two exceptions `build_panel_ssl_context`
+    already raises for the same condition -- a caller that catches `ValueError`
+    around either function keeps catching this.
     """
 
 

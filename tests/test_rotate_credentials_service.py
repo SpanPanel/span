@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
+from homeassistant.core import Context, HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 
 from custom_components.span_panel import (
@@ -20,12 +25,6 @@ from custom_components.span_panel.const import (
     CONF_PANEL_CA_PEM,
     DOMAIN,
 )
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import Context, HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
 OLD_BROKER_PASSWORD = "old-broker-password"
 NEW_BROKER_PASSWORD = "new-broker-password"
@@ -114,9 +113,8 @@ async def test_non_admin_is_refused(hass: HomeAssistant) -> None:
     with patch(
         "custom_components.span_panel.services.regenerate_passphrase",
         AsyncMock(return_value=NEW_BROKER_PASSWORD),
-    ) as rotate:
-        with pytest.raises(ServiceValidationError) as err:
-            await _call_rotate(hass, _non_admin_context(hass))
+    ) as rotate, pytest.raises(ServiceValidationError) as err:
+        await _call_rotate(hass, _non_admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_requires_admin"
     rotate.assert_not_awaited()
@@ -132,9 +130,8 @@ async def test_contextless_call_is_refused(hass: HomeAssistant) -> None:
     with patch(
         "custom_components.span_panel.services.regenerate_passphrase",
         AsyncMock(return_value=NEW_BROKER_PASSWORD),
-    ) as rotate:
-        with pytest.raises(ServiceValidationError) as err:
-            await _call_rotate(hass, None)
+    ) as rotate, pytest.raises(ServiceValidationError) as err:
+        await _call_rotate(hass, None)
 
     assert err.value.translation_key == "rotate_credentials_requires_user"
     rotate.assert_not_awaited()
@@ -168,9 +165,9 @@ async def test_connection_failure_leaves_the_old_password_in_place(
             AsyncMock(side_effect=SpanPanelConnectionError("unreachable")),
         ),
         patch.object(hass.config_entries, "async_reload", reload_mock),
+        pytest.raises(ServiceValidationError) as err,
     ):
-        with pytest.raises(ServiceValidationError) as err:
-            await _call_rotate(hass, _admin_context(hass))
+        await _call_rotate(hass, _admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_failed"
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
@@ -186,9 +183,8 @@ async def test_rejected_token_asks_for_reauthentication(hass: HomeAssistant) -> 
     with patch(
         "custom_components.span_panel.services.regenerate_passphrase",
         AsyncMock(side_effect=SpanPanelAuthError("401")),
-    ):
-        with pytest.raises(ServiceValidationError) as err:
-            await _call_rotate(hass, _admin_context(hass))
+    ), pytest.raises(ServiceValidationError) as err:
+        await _call_rotate(hass, _admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_auth_failed"
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
@@ -208,9 +204,8 @@ async def test_missing_access_token_is_reported_before_any_call(
     with patch(
         "custom_components.span_panel.services.regenerate_passphrase",
         AsyncMock(return_value=NEW_BROKER_PASSWORD),
-    ) as rotate:
-        with pytest.raises(ServiceValidationError) as err:
-            await _call_rotate(hass, _admin_context(hass))
+    ) as rotate, pytest.raises(ServiceValidationError) as err:
+        await _call_rotate(hass, _admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_no_token"
     rotate.assert_not_awaited()
