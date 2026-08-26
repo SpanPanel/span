@@ -25,10 +25,10 @@ import voluptuous as vol
 from .ca_repairs import CA_CHANGED_ISSUE_PREFIX
 from .config_flow_validation import as_port, async_ca_signs_panel_leaf, async_fetch_panel_ca
 from .const import (
+    CONF_EBUS_BROKER_PORT,
     CONF_HTTP_PORT,
-    CONF_HTTPS_PORT,
     CONF_PANEL_CA_PEM,
-    DEFAULT_HTTPS_PORT,
+    DEFAULT_MQTTS_PORT,
     DOMAIN,
     PANEL_CA_PENDING,
 )
@@ -117,16 +117,20 @@ class PanelCAChangedRepairFlow(RepairsFlow):
         # nothing the panel serves cannot be the panel's, and its fingerprint is
         # not one to put in front of a person as the panel's own -- accepting it
         # would replace a working pin with one that can never connect.
-        https_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
-        if not await async_ca_signs_panel_leaf(self.hass, host, https_port, ca_pem):
+        #
+        # Checked on the broker's port, because that is the connection the pin
+        # anchors and the one this repair exists to restore. Verifying somewhere
+        # else would be answering a question nobody asked.
+        mqtts_port = as_port(entry.data.get(CONF_EBUS_BROKER_PORT), DEFAULT_MQTTS_PORT)
+        if not await async_ca_signs_panel_leaf(self.hass, host, mqtts_port, ca_pem):
             _LOGGER.warning(
                 "SPAN panel %s published a CA (SHA-256 %s) that does not sign the "
-                "certificate served at %s:%s; refusing to offer it. The pin in place "
-                "is SHA-256 %s and has not been touched",
+                "certificate served by its broker at %s:%s; refusing to offer it. The "
+                "pin in place is SHA-256 %s and has not been touched",
                 entry.title,
                 fingerprint,
                 host,
-                https_port,
+                mqtts_port,
                 _fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM)),
             )
             return self.async_abort(reason="ca_leaf_mismatch")

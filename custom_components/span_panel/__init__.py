@@ -49,9 +49,8 @@ from .const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HTTP_PORT,
-    CONF_HTTPS_PORT,
     CONF_PANEL_CA_PEM,
-    DEFAULT_HTTPS_PORT,
+    DEFAULT_MQTTS_PORT,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     ENABLE_CURRENT_MONITORING,
@@ -171,11 +170,11 @@ async def _async_pinned_ca(
 
     Trust on first use is not the same as trust in anything that answers. The
     fetch is plaintext and unauthenticated, so what comes back is checked
-    against the certificate the panel serves on its TLS port before it is
-    stored; a CA that signs nothing the panel serves is not the panel's. A
-    refusal is treated exactly as a failed fetch, because it is the same
-    situation from the entry's point of view: no anchor was acquired, the flag
-    stays, and the next setup tries again.
+    against the certificate the panel's broker serves before it is stored; a CA
+    that signs nothing the panel serves is not the panel's. A refusal is treated
+    exactly as a failed fetch, because it is the same situation from the entry's
+    point of view: no anchor was acquired, the flag stays, and the next setup
+    tries again.
     """
     pinned = entry.data.get(CONF_PANEL_CA_PEM)
     if pinned:
@@ -201,18 +200,35 @@ async def _async_pinned_ca(
         )
         return None
 
-    https_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
-    if not await async_ca_signs_panel_leaf(hass, host, https_port, ca_pem):
+    # The broker's port, not the panel's HTTPS port. This anchor is only ever
+    # used for one thing -- the MQTTS session the coordinator opens -- so that
+    # is the certificate it has to be checked against, and the port is on every
+    # v2 entry by construction: setup refuses one without it a few lines above,
+    # and the same value is handed to `MqttClientConfig` below. `https_port` was
+    # the wrong choice for the entries that actually reach here. It arrived in
+    # the same commit as `panel_ca_pending`, so an entry carrying the flag is by
+    # definition one migrated from before either existed and can never hold a
+    # port: every such check ran against 443, and a pre-pinning install whose
+    # TLS lives elsewhere -- behind NAT, a port forward, a proxy -- would have
+    # been refused on every setup and left on the unauthenticated refetch path
+    # for good, which is the one population this deferred pin exists for.
+    #
+    # One asymmetry to know about: `async_ca_signs_panel_leaf` accepts a leaf
+    # reached at the address `host` resolves to, while the bridge dials `host`
+    # itself. A certificate that names only the address would pin here and then
+    # fail hostname verification at connect. Pre-existing -- the config flow
+    # bootstraps the same way -- and not made worse by checking this port.
+    mqtts_port = as_port(entry.data.get(CONF_EBUS_BROKER_PORT), DEFAULT_MQTTS_PORT)
+    if not await async_ca_signs_panel_leaf(hass, host, mqtts_port, ca_pem):
         _LOGGER.warning(
             "The CA published by SPAN panel %s (SHA-256 %s) does not sign the "
-            "certificate served at %s:%s, so it is not this panel's CA and has not "
-            "been pinned. Continuing unpinned and retrying on the next setup; check "
-            "that %s is the panel's TLS port and that nothing is answering for it",
+            "certificate served by its broker at %s:%s, so it is not this panel's CA "
+            "and has not been pinned. Continuing unpinned and retrying on the next "
+            "setup; check that nothing on the network is answering for the panel",
             entry.title,
             fingerprint,
             host,
-            https_port,
-            https_port,
+            mqtts_port,
         )
         return None
 

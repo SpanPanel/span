@@ -32,6 +32,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.span_panel import _async_pinned_ca
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
+    CONF_EBUS_BROKER_PORT,
     CONF_HTTP_PORT,
     CONF_HTTPS_PORT,
     CONF_PANEL_CA_PEM,
@@ -60,7 +61,13 @@ def panel(tmp_path: Any) -> Iterator[Panel]:
 
 
 def _entry(hass: HomeAssistant, panel: Panel, **data: object) -> MockConfigEntry:
-    """Add an entry pointed at the listener, with TLS on its ephemeral port."""
+    """Add an entry whose broker is the listener, shaped as a v7 migration leaves it.
+
+    No `https_port`: that key and `panel_ca_pending` arrived in the same commit,
+    so an entry carrying the flag predates both and can never hold one. The
+    broker port is what the pin is checked against and every v2 entry has it --
+    setup refuses one without it before the pin is ever reached.
+    """
     entry = MockConfigEntry(
         version=7,
         minor_version=1,
@@ -71,7 +78,7 @@ def _entry(hass: HomeAssistant, panel: Panel, **data: object) -> MockConfigEntry
             CONF_ACCESS_TOKEN: "synthetic-token",
             CONF_API_VERSION: "v2",
             CONF_HTTP_PORT: 8080,
-            CONF_HTTPS_PORT: panel.port,
+            CONF_EBUS_BROKER_PORT: panel.port,
             **data,
         },
         source=config_entries.SOURCE_USER,
@@ -112,6 +119,38 @@ async def test_the_deferred_pin_still_stores_the_panels_own_ca(
 ) -> None:
     """The check must not cost a healthy upgrade its pin."""
     entry = _entry(hass, panel, **{PANEL_CA_PENDING: True})
+
+    with patch(
+        "custom_components.span_panel.async_fetch_panel_ca",
+        new=AsyncMock(return_value=panel.ca_pem),
+    ):
+        assert await _async_pinned_ca(hass, entry, PANEL_LOOPBACK, 8080) == panel.ca_pem
+
+    assert entry.data[CONF_PANEL_CA_PEM] == panel.ca_pem
+    assert PANEL_CA_PENDING not in entry.data
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_the_deferred_pin_checks_the_broker_port_an_upgraded_entry_actually_has(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The one population this pin exists for has no `https_port` and never will.
+
+    `https_port` and `panel_ca_pending` were added in the same commit, so an
+    entry reaching the deferred pin is by definition migrated from before either
+    existed. Checking a port such an entry cannot hold means checking 443 for
+    all of them, which refuses every pre-pinning install whose TLS is somewhere
+    else -- behind a port forward, a NAT rule, a proxy -- and leaves exactly
+    those entries on the unauthenticated refetch path for good.
+
+    The broker's port is on every v2 entry by construction and is the connection
+    the anchor is used for, so it is what the anchor is checked against.
+    """
+    entry = _entry(hass, panel, **{PANEL_CA_PENDING: True})
+    assert CONF_HTTPS_PORT not in entry.data
+    # Nothing is listening on 443 here, so a check made there could not pass.
+    assert entry.data[CONF_EBUS_BROKER_PORT] == panel.port
 
     with patch(
         "custom_components.span_panel.async_fetch_panel_ca",

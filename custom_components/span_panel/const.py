@@ -26,6 +26,14 @@ DEFAULT_HTTPS_PORT = 443
 """Where the panel serves TLS. Configurable for the same reason `http_port` is:
 a reverse proxy on the panel's VLAN does not have to listen on 443."""
 
+DEFAULT_MQTTS_PORT = 8883
+"""Where the panel serves MQTT over TLS.
+
+A fallback and nothing more: the panel publishes this port during registration
+and every v2 entry carries it, so a stored value is what is actually used. It is
+here for the reader that has to name a port when `entry.data` holds something
+unusable, rather than refuse an otherwise healthy entry over it."""
+
 PANEL_CA_PENDING = "panel_ca_pending"
 """Set in `entry.data` for a v2 entry that predates CA pinning.
 
