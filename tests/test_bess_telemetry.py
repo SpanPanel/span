@@ -11,29 +11,34 @@ pins passes whether or not the wire is ever read. Each reading is proved by
 republishing it, deleting it, or dropping the node that carries it.
 
 **The sign is the hard part, and it is what most of this module is about.** The
-capture is of a *charging* battery, published as a negative `meter/active-power`
-because the enclosure meters the BESS the way it meters a circuit it feeds. The
-snapshot negates that into its charge-positive frame, and `battery_power` — the
-sensor already on this device, reading the enclosure's discharge-positive
-`power-flows/battery` — negates too. Two negations of two opposite wire
-conventions, landing on one convention in the UI. A sensor whose sign
-contradicted the one beside it would be worse than no sensor, so the agreement is
-asserted directly rather than inferred from the two definitions.
+capture is of a *charging* battery, published as a positive `meter/active-power`
+because the enclosure meters the BESS the way it meters a circuit it feeds, in a
+frame where positive means power flowing *into* the thing being metered. Each
+path applies exactly one negation — the snapshot negates the BESS's own meter,
+and `battery_power` negates the enclosure's `power-flows/battery` — so both
+sensors land on the same convention in the UI, reading negative for this charging
+battery. A sensor whose sign contradicted the one beside it would be worse than
+no sensor, so the agreement is asserted directly rather than inferred from the
+two definitions.
 
 **The agreement is structural; the direction is inherited from the fixture.**
-Both wire properties carry the *same* sign as each other -- a live panel capture
-and `ebus-panel-sim` 0.6.0 both publish `-3500.0` for the pair -- and each path
-applies exactly one negation, so the two entities cannot disagree whatever the
+Both wire properties carry the *same* sign as each other and each path applies
+exactly one negation, so the two entities cannot disagree whatever the
 convention. That is what the agreement assertions below pin, and it holds
-independently of which way is charging.
+independently of which way is charging. Neither negation changed here:
+`BATTERY_POWER_SENSOR` is the single negation it has been since 2.0.8, and what a
+real panel displays depends on what that panel publishes, not on this fixture.
 
-Which way *is* charging is read off the vendored capture, and that capture
-predates `distribution-enclosure-simulator#39`: its four power-flow terms satisfy
-`grid + pv + battery == site` rather than summing to zero, so it carries the
-pre-fix frame. The only live capture available has the battery idle at 100
-percent SoC with both properties exactly zero, so nothing has settled the
-absolute direction. Refresh the fixture from a 0.6.0-era emitter and revisit
-these assertions together; do not change one without the other.
+Which way *is* charging is read off the vendored capture, and the capture now
+carries the post-`distribution-enclosure-simulator#39` frame: `power-flows` 0.3
+defines the node balance as every term positive when power flows into the thing
+it names, so `pv` is negative while producing and the four terms sum to zero.
+The capture this module was first written against predated that fix and satisfied
+`grid + pv + battery == site` instead, which is why these assertions read the
+other way until span-panel-api re-captured the reference tree. The library pins
+the same four values and states the same frame (`test_schema_one_panel.py`,
+`test_power_flows`). Refresh the fixture and revisit these assertions together;
+do not change one without the other.
 """
 
 from __future__ import annotations
@@ -207,7 +212,13 @@ def test_the_capture_is_a_charging_battery() -> None:
 
     The capture: 8500 W of PV meets 2653 W of site load and exports 2347 W, and
     the 3500 W left over is going into the battery. So this battery is charging,
-    and the enclosure publishes that as a *negative* number.
+    and the enclosure publishes that as a *positive* number.
+
+    `power-flows` 0.3 defines the balance as a node balance — every term positive
+    when power flows into the thing it names — so the four sum to zero rather than
+    three of them summing to the fourth, and PV reads negative while producing.
+    Asserting the sum against zero rather than against `site` is what makes this a
+    statement about the frame and not just about four numbers.
 
     Were the capture ever retaken with the battery discharging, this fails first
     and says so, rather than the sign tests failing and reading as a wiring bug.
@@ -217,12 +228,13 @@ def test_the_capture_is_a_charging_battery() -> None:
         for name in ("pv", "battery", "grid", "site")
     }
 
-    assert flows["pv"] + flows["battery"] + flows["grid"] == pytest.approx(flows["site"])
+    assert sum(flows.values()) == pytest.approx(0.0, abs=1e-6)
     # PV alone exceeds the site load, so the surplus has nowhere to go but the
-    # battery and the grid — and the grid term is an export.
-    assert flows["pv"] > flows["site"]
-    assert flows["grid"] < 0
-    assert flows["battery"] < 0
+    # battery and the grid — and the grid term is an export, which in this frame
+    # is power flowing into the grid and therefore positive.
+    assert -flows["pv"] > flows["site"]
+    assert flows["grid"] > 0
+    assert flows["battery"] > 0
 
 
 def test_the_bess_meter_agrees_with_the_enclosure_about_direction() -> None:
@@ -244,30 +256,36 @@ def test_the_bess_meter_agrees_with_the_enclosure_about_direction() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_charging_reads_positive() -> None:
+def test_charging_reads_negative() -> None:
     """The convention, asserted on the state a user sees rather than on the field.
 
-    The wire is charge-negative and the snapshot is charge-positive, so the
-    sensor's state is the negation of the published value. Magnitude and sign are
-    asserted separately on purpose: losing the negation keeps the magnitude, so
-    only the sign check catches it.
+    The wire is charge-positive — the enclosure meters the BESS the way it meters
+    anything else it feeds, positive into the device — and the snapshot negates
+    it, so a charging battery reads negative and the sensor is discharge-positive.
+    The library pins the same relation on the same capture
+    (`test_schema_one_devices.py`: `battery.power_w == -raw`, and `< 0` here).
+
+    Magnitude and sign are asserted separately on purpose: losing the negation
+    keeps the magnitude, so only the sign check catches it.
     """
     published = float(_published(BESS, POWER_TOPIC))
     state = _state(schema_one_snapshot(), POWER_KEY)
 
     assert state == -published
-    assert isinstance(state, float) and state > 0
+    assert isinstance(state, float) and state < 0
 
 
 def test_it_agrees_with_the_battery_power_sensor_beside_it() -> None:
     """The two battery-power sensors on this device must not contradict each other.
 
-    `battery_power` reads the enclosure's arbitrated `power-flows/battery`, which
-    the capability catalog defines as discharge-positive; this one reads the
-    BESS's own meter, which the enclosure publishes charge-negative. Two opposite
-    wire conventions, and the UI shows one — so the check is on the states, not
-    on either definition. A flip on either side fails here even if the side that
-    flipped still looks self-consistent.
+    `battery_power` reads the enclosure's arbitrated `power-flows/battery`; this
+    one reads the BESS's own meter. The specification defines the first as the
+    negation of the second, and this firmware publishes them with the *same* sign
+    instead — an alignment `sensor_definitions.py` records as the spec's violation
+    rather than its rule. Each path negates exactly once, so the UI shows one
+    convention either way, and the check is on the states rather than on either
+    definition. A flip on either side fails here even if the side that flipped
+    still looks self-consistent.
     """
     snapshot = schema_one_snapshot()
 
@@ -282,7 +300,8 @@ def test_they_agree_when_the_battery_discharges_too() -> None:
     """Agreement at one operating point could be coincidence; this is the other.
 
     Both properties are republished with the battery discharging — the capture's
-    two values negated — and both sensors must go negative together.
+    two values negated — and both sensors must go positive together, the sensors
+    being discharge-positive.
     """
     snapshot = _republishing_both(
         power=-float(_published(BESS, POWER_TOPIC)),
@@ -292,8 +311,8 @@ def test_they_agree_when_the_battery_discharges_too() -> None:
     own_meter = _state(snapshot, POWER_KEY)
     enclosure_flow = _state(snapshot, ENCLOSURE_FLOW_KEY)
 
-    assert isinstance(own_meter, float) and own_meter < 0
-    assert isinstance(enclosure_flow, float) and enclosure_flow < 0
+    assert isinstance(own_meter, float) and own_meter > 0
+    assert isinstance(enclosure_flow, float) and enclosure_flow > 0
 
 
 def _republishing_both(*, power: float, enclosure_flow: float) -> SpanPanelSnapshot:

@@ -104,7 +104,11 @@ def test_a_discovered_row_carries_the_declaration_and_the_retention() -> None:
         assert entry.datatype == row.datatype
         assert entry.unit == row.unit
     assert by_path["discovered.distribution-enclosure/status/time-zone"].retained is True
-    assert by_path["discovered.circuit/connection/count"].retained is False
+    # Both retention states have to appear, or the row is not carrying retention at
+    # all. `lugs/connection/feeds-device-status` is the unretained one for the same
+    # reason `circuit/connection/count` was before the capture dropped it: the
+    # panel declares the property and no producer publishes a value for it.
+    assert by_path["discovered.lugs/connection/feeds-device-status"].retained is False
 
 
 def test_a_namespaced_row_without_the_enriched_type_still_reports() -> None:
@@ -202,9 +206,15 @@ async def test_diagnostics_carries_the_discovery_report(hass: HomeAssistant) -> 
     assert block["available"] is True
     assert block["count"] == len(findings.discovered)
     assert block["count"] > 0
-    assert block["properties"][0] == {
-        "path": "discovered.circuit/connection/count",
-        "datatype": "integer",
+    # Addressed by path rather than by position. The ordering is pinned once, in
+    # `test_partition_splits_the_map_and_loses_nothing`; re-pinning it here meant
+    # that a capture dropping any earlier-sorting property failed this test with a
+    # diff about the wrong row, which is what happened when `connection/count` went
+    # away.
+    by_path = {row["path"]: row for row in block["properties"]}
+    assert by_path["discovered.pv/info/serial-number"] == {
+        "path": "discovered.pv/info/serial-number",
+        "datatype": "string",
         "unit": None,
         "retained": False,
     }

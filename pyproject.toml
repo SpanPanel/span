@@ -45,22 +45,27 @@ dev = [
 package = false
 
 [tool.uv.sources]
-# Pointed at the `-security` worktree while 3.1.0 is unreleased. The primary
-# checkout is still on 3.0.1 and has none of this work, so pointing here is not a
-# convenience -- against the primary checkout the security tests would resolve the
-# old library and pass without exercising anything. Move these back to
-# `../../span/span-panel-api` once 3.1.0 is merged and published.
+# The primary checkout, which is where 3.1.0 and both 1.1.0 adapters now live.
+#
+# These pointed at a `-security` worktree while that work was unmerged. That
+# outlived its reason and became actively harmful: the worktree never received
+# span-panel-api#161, so `span_panel_api_schema_1.reference_payloads` resolved to
+# a parent/child capture that still recorded the emitter's `$settable` defect on
+# a locked relay, and `tests/fixtures/schema_one_tree.json` was vendored from it.
+# A path override is a redirection of what every import in the suite resolves to;
+# leaving one aimed at a stale checkout silently tests against a producer that no
+# longer exists. Point these at a checkout that tracks `main`, and move them only
+# for as long as an unmerged branch is actually under test.
 #
 # A path that does not exist is not a soft failure: `uv run` cannot build the
 # environment at all, so nothing in this repo runs until it is corrected.
 #
 # CI never reads this block -- it deletes it and re-locks from PyPI (.github/
-# workflows/ci.yml) -- so a stale path here breaks only local work, and only
-# noisily. It does mean CI cannot pass until 3.1.0 and both 1.1.0 adapters are on
-# PyPI.
-span-panel-api = { path = "../../span/span-panel-api-security", editable = true }
-span-panel-api-schema-0 = { path = "../../span/span-panel-api-security/packages/schema-0", editable = true }
-span-panel-api-schema-1 = { path = "../../span/span-panel-api-security/packages/schema-1", editable = true }
+# workflows/ci.yml) -- so a stale path here breaks only local work. It does mean
+# CI cannot pass until 3.1.0 and both 1.1.0 adapters are on PyPI.
+span-panel-api = { path = "../../span/span-panel-api", editable = true }
+span-panel-api-schema-0 = { path = "../../span/span-panel-api/packages/schema-0", editable = true }
+span-panel-api-schema-1 = { path = "../../span/span-panel-api/packages/schema-1", editable = true }
 
 [tool.jscpd]
 path = ["custom_components/span_panel", "./*.{html,md}"]

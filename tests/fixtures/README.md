@@ -78,6 +78,23 @@ and that is how a stale vendored capture went unnoticed for nine days."_ Do not 
 CI derives the tag from `schema_one_tree.source` rather than hardcoding it — `span-panel-api-schema-1==1.1.0` becomes `schema-1-v1.1.0` — so there is no second
 copy of the pin that could disagree with the first.
 
+### What it caught the first time it ran
+
+Worth recording, because it is the failure mode the guard was built for and it had already happened.
+
+`schema_one_tree.json` was vendored from a **stale sibling checkout**. `pyproject.toml` pointed its `[tool.uv.sources]` path overrides at a `span-panel-api`
+worktree that predated span-panel-api#161, so `span_panel_api_schema_1.reference_payloads` resolved there, and the copy inherited a capture that still recorded
+the emitter's `$settable` defect on a locked relay together with `load-shed/priority` values (`UNKNOWN`) that no producer publishes. The copy itself was
+faithful — byte-identical to the `schema-1-v1.0.0` release artifact — and `schema_one_tree.source` claimed 1.1.0. Both halves looked right in isolation; only
+holding the bytes against the release the claim names showed the mismatch.
+
+Nothing else in either repository could see it. The version guard compared a string to a string and passed. The conformance tests passed, because they were
+asserting against the capture. The integration was testing its locked-circuit and priority-settability work against a producer defect that upstream had already
+fixed.
+
+The fix was to repoint the path overrides at a checkout that tracks `main` and re-vendor. A path override redirects what every import in the suite resolves to,
+so one aimed at a stale checkout quietly tests against a producer that no longer exists — worth checking before believing any fixture taken through one.
+
 ### Refreshing
 
 In one commit:
@@ -85,9 +102,11 @@ In one commit:
 1. Copy `tests/reference_payloads/parent_child_tree.json` from `$SPAN_PANEL_API_DIR` over `schema_one_tree.json`, with no reformatting.
 2. Set the version in `schema_one_tree.source` to the release it came from.
 
-Copy from a checkout positioned on a **released tag**, never from a working tree that is ahead of one. A capture taken from unreleased work carries a version
-claim nothing can ever be positioned to verify: the byte comparison clones the tag that claim names, and until that tag exists there is nothing to compare
-against.
+Copy from a checkout positioned on the release `schema_one_tree.source` names, and prefer a released tag. The current copy is an exception made knowingly: it
+comes from `main`, because `schema-1-v1.1.0` is not cut yet and the alternative was to keep shipping a capture that records a producer defect. It verifies
+against a `main` checkout today and will verify against the tag once 1.1.0 is released from these bytes; if `main` moves the capture again first, the guard says
+so, which is the whole point. What is never acceptable is a capture taken from a checkout that is _behind_ the recorded release — that is how this one went
+wrong.
 
 ## These files are exempt from formatting
 
@@ -104,9 +123,10 @@ with LF endings and no trailing whitespace. Stripping the final newline from `sc
 `Fixing tests/fixtures/schema_one_tree.json` without the exclusion, and leaves it untouched with it. The first capture vendored without a final newline would
 have been rewritten on commit, and the guard would then have failed against a source the copy genuinely matched when it was made.
 
-Prettier is excluded as a precaution rather than a fix: nothing here currently runs it over JSON — `scripts/fix-markdown.sh` passes only `*.md` globs and
-`prek.toml` has no Prettier hook — but `.prettierrc` sets `tabWidth: 2` while these captures carry their producer's own 1-space indentation, so a JSON glob
-added later would silently reindent them.
+Prettier is excluded as a **precaution, not a fix.** It has never touched these files and caused none of the drift we have seen — nothing here runs it over JSON
+(`scripts/fix-markdown.sh` passes only `*.md` globs, `prek.toml` has no Prettier hook), and the drift the byte guard actually caught was a stale source
+checkout. The line still earns its place: `schema_zero_types.json` carries its producer's 4-space indentation, and Prettier under `.prettierrc` rewrites it from
+14675 to 11779 bytes. That file has no byte guard, so nothing would report it.
 
 The scope is `schema_*.json` rather than the whole directory, because only the adapter captures have this property. `tests/fixtures/README.md` is prose this
 repository owns and should keep being formatted; the migration YAMLs are hand-written source; and `unread_declarations_baseline.json`, despite being a

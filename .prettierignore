@@ -45,11 +45,16 @@ poetry.lock
 # a byte-identical vendored fixture cannot both be unconditional, and it is the
 # formatter that has to yield -- the bytes are the artifact.
 #
-# Prophylactic today: nothing here runs Prettier over JSON (scripts/fix-markdown.sh
-# passes only *.md globs, and prek.toml has no Prettier hook). But .prettierrc sets
-# tabWidth 2 and these captures are 1-space indented as their producer wrote them,
-# so the day a JSON glob is added they would be silently reindented and the guard
-# would start failing with nobody knowing why.
+# PRECAUTIONARY. Prettier has never touched these files and did not cause any
+# drift we have seen: nothing here runs it over JSON (scripts/fix-markdown.sh
+# passes only *.md globs, and prek.toml has no Prettier hook). The drift the byte
+# guard actually caught was a stale source checkout, not a formatter.
+#
+# It is not idle, though. `schema_zero_types.json` carries its producer's 4-space
+# indentation, and Prettier under .prettierrc rewrites it from 14675 to 11779
+# bytes -- and that file has no byte guard, so nothing would report it. The day a
+# JSON glob is added, this line is what stands between a captured payload and a
+# silent 3 KB rewrite.
 tests/fixtures/schema_*.json
 
 # Keep docs directory included for formatting
