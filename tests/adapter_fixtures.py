@@ -15,14 +15,54 @@ from __future__ import annotations
 
 import json
 import pathlib
+from typing import NamedTuple
 
 from ebus_sdk.homie import DiscoveredDevice
 from span_panel_api.models import FieldMetadata, SpanPanelSnapshot
-from span_panel_api_schema_1.reference_payloads import parent_child_tree
 
 from custom_components.span_panel.schema_validation import DiscoveredProperty
 
 _FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+
+SCHEMA_ONE_TREE = _FIXTURES / "schema_one_tree.json"
+"""The vendored parent/child capture. See `tests/fixtures/README.md` for provenance."""
+
+SCHEMA_ONE_TREE_SOURCE = _FIXTURES / "schema_one_tree.source"
+"""The release `SCHEMA_ONE_TREE` was copied from, checked by `test_fixture_provenance.py`."""
+
+
+class VendoredSource(NamedTuple):
+    """The distribution and release a vendored fixture was copied from."""
+
+    distribution: str
+    version: str
+
+
+def schema_one_source() -> VendoredSource:
+    """Read the release recorded beside the vendored capture.
+
+    Recorded as a pinned requirement -- `span-panel-api-schema-1==1.1.0` -- rather
+    than a bare version, for two reasons. It names *which* distribution the claim
+    is about, and this repository pins three of them; and it is written in the
+    same vocabulary as the `manifest.json` requirement it has to agree with, so
+    the two can be compared by eye during a bump as well as by
+    `test_fixture_provenance.py`.
+
+    It lives in its own file rather than inside the payload because the refresh
+    procedure is a byte-for-byte copy: a key added to the JSON would be
+    overwritten by every refresh, and a payload that differs from its source is
+    exactly what the README forbids.
+    """
+    recorded = SCHEMA_ONE_TREE_SOURCE.read_text().strip()
+    distribution, separator, version = recorded.partition("==")
+    if not (separator and distribution and version):
+        raise ValueError(
+            f"{SCHEMA_ONE_TREE_SOURCE} must hold one pinned requirement naming the "
+            f"release the vendored capture was copied from, such as "
+            f"'span-panel-api-schema-1==1.1.0'. It holds {recorded!r}."
+        )
+    return VendoredSource(distribution, version)
+
 
 SCHEMA_ONE_PANEL = "example-40t-001"
 """Device id of the enclosure in the adapter's published capture.
@@ -60,14 +100,13 @@ def _devices_from(tree: dict[str, dict[str, str]]) -> list[DiscoveredDevice]:
 def schema_one_tree(without: str | None = None) -> dict[str, dict[str, str]]:
     """A mutable copy of the parent/child capture, ready to be rewritten.
 
-    **Read from the library's package data, not vendored here.** The adapter ships
-    `parent_child_tree.json` precisely so a consumer can read it -- its own README
-    says "never by path", and that a consumer pinning a version gets the bytes
-    that version's parser was written against. This repository used to keep a
-    byte-identical copy under `tests/fixtures/`, which is one more artifact to go
-    stale and nothing checked the two still agreed. Reading the published one
-    means the capture moves when the pinned adapter moves, and the library's own
-    peer-conformance check against the producer covers it transitively.
+    **Vendored here, not read from the library's package data.** The capture is
+    test data; carrying it in the runtime wheel put 56 KB of it on every user's
+    disk, and reading it by import made this suite depend on a distribution
+    continuing to ship files nothing at runtime reads. The objection to a copy was
+    that it goes stale in silence -- answered by `schema_one_source()` and
+    `test_fixture_provenance.py`, which hold the recorded release against the one
+    actually installed, so a moved pin with an unrefreshed copy fails CI by name.
 
     Copied per call, and one level deep, which is as deep as a topic goes: a test
     proves a reading came off the wire by republishing it and asserting the entity
@@ -78,7 +117,8 @@ def schema_one_tree(without: str | None = None) -> dict[str, dict[str, str]]:
     from the base by construction -- the only difference each ever had was the one
     missing device.
     """
-    tree = {device_id: dict(topics) for device_id, topics in parent_child_tree().items()}
+    capture: dict[str, dict[str, str]] = json.loads(SCHEMA_ONE_TREE.read_text())
+    tree = {device_id: dict(topics) for device_id, topics in capture.items()}
     if without is not None:
         assert without in tree, f"{without!r} is not in the capture; nothing to drop"
         del tree[without]
