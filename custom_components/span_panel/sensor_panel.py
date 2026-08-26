@@ -413,6 +413,56 @@ This class backs four sensors -- grid, feedthrough, battery and PV -- and only
 the grid one reads a meter whose meaning depends on where the panel sits.
 """
 
+_SERVICE_ENTRANCE_ADAPTER = "schema_1"
+"""The adapter key whose mapper resolves `lugs_at_service_entrance`.
+
+`SpanMqttClient.schema_major` reports the running adapter's key, and only the
+parent/child one answers this question: it reads the upstream lugs' own
+`connection/fed-by-device-id` and sets the field from whether that property is
+there. The flat adapter contains no reference to the field at all.
+
+**Why this is asked of the adapter rather than of the field metadata**, which is
+how every other "did the adapter produce this" question in this integration is
+settled (`schema_validation`, `SpanPanelEntity._reads_an_unresolved_field`).
+That machinery rests on the adapter classifying absence, and here it cannot: a
+metadata row states a *reading's* unit and datatype, and the property behind
+this field is topology rather than a reading, so schema_1 lists it in
+`_CONSUMED_WITHOUT_A_ROW` and emits no row for it. Neither adapter publishes
+`panel.lugs_at_service_entrance`, so the metadata map is silent for both the
+panel that resolved the field and the panel that never looked -- exactly the
+distinction that has to be drawn.
+
+**This is a workaround for a library type, and it is meant to be deleted.**
+`SpanPanelSnapshot.lugs_at_service_entrance` is a plain `bool` defaulting to
+True, alone among the snapshot's conditional members in having no `None` to mean
+"not answered". Once span-panel-api makes it `bool | None` (wanted for 3.1.1),
+the honest test is `is not None` on the value itself, this constant goes, and the
+integration stops needing to know which adapter is running -- which it knows
+nowhere else, deliberately.
+"""
+
+
+def _service_entrance_was_read(coordinator: SpanPanelCoordinator) -> bool:
+    """Whether `lugs_at_service_entrance` is a reading rather than a default.
+
+    The attribute exists to tell a topology from a fault, so publishing it where
+    the value came from a dataclass default answers a question the panel was
+    never asked -- and answers it `True`, which is exactly the "your two grid
+    figures agree" reading a user would act on. A flat panel with a BESS ahead
+    of its lugs is the changelog's own example of the topology this attribute is
+    for, and it is the one install that would be told the opposite.
+
+    Omission rather than a third value: nothing renders a missing attribute, so
+    a flat panel looks exactly as it did before the attribute existed, while an
+    `unknown` string would be a new row on a dashboard meaning "ignore me".
+
+    The test is where the value came from and never what it is. Suppressing
+    `True` as "probably a default" would silence the real reading a panel at the
+    service entrance publishes, which is the same mistake in the other
+    direction.
+    """
+    return coordinator.client.schema_major == _SERVICE_ENTRANCE_ADAPTER
+
 
 class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, SpanPanelSnapshot]):
     """Panel power sensor with calculated amperage attribute.
@@ -427,6 +477,10 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
     That disagreement is what this attribute exists for. Someone whose two grid
     figures differ has no way to tell a topology from a fault, and the answer now
     sits on the sensor they are already looking at.
+
+    Published only where it is a reading -- see `_service_entrance_was_read`. An
+    answer to a question the panel was never asked is worse here than no answer,
+    because the value a consumer would get is the reassuring one.
 
     An attribute rather than an entity, deliberately. Topology is static -- a
     panel's position in a chain does not change without an electrician -- so a
@@ -489,7 +543,9 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
         else:
             attributes["amperage"] = 0.0
 
-        if self._description_key == _GRID_POWER_KEY:
+        if self._description_key == _GRID_POWER_KEY and _service_entrance_was_read(
+            self.coordinator
+        ):
             attributes["at_service_entrance"] = self.coordinator.data.lugs_at_service_entrance
 
         return attributes

@@ -18,7 +18,7 @@ import pathlib
 from typing import NamedTuple
 
 from ebus_sdk.homie import DiscoveredDevice
-from span_panel_api.models import FieldMetadata, SpanPanelSnapshot
+from span_panel_api.models import FieldMetadata, SpanPanelSnapshot, V2HomieSchema
 
 from custom_components.span_panel.schema_validation import DiscoveredProperty
 
@@ -194,6 +194,43 @@ def schema_zero_metadata() -> dict[str, FieldMetadata]:
 
     raw = json.loads((_FIXTURES / "schema_zero_types.json").read_text())
     return _curated(build_field_metadata(raw["types"]))
+
+
+SCHEMA_ZERO_SERIAL = "sp3-synthetic-0001"
+"""Serial the flat fixture adapter is built for. Synthetic, like every id here."""
+
+SCHEMA_ZERO_FIRMWARE = "r202612"
+"""A release in the flat window (r202603-r202627), which is what makes it flat.
+
+`V2HomieSchema.data_model_version` is left at its default `None` for the same
+reason: absent is the flat discriminator, and the dispatcher reads it.
+"""
+
+
+def schema_zero_snapshot() -> SpanPanelSnapshot:
+    """A snapshot as the real flat adapter builds it, before any topic arrives.
+
+    The counterpart to `schema_one_snapshot`, and it exists for the fields the
+    flat adapter never writes. Retained topics only ever *add* to this: a field
+    the adapter does not reference at all keeps whatever value the snapshot
+    dataclass gives it, and no message can move it.
+
+    `lugs_at_service_entrance` is such a field. It is a plain `bool` defaulting
+    to True, and `span_panel_api_schema_0` contains no reference to the name, so
+    on flat firmware the value a consumer reads is the library's default rather
+    than anything the panel said. Driving the adapter rather than the snapshot
+    factory is what makes that a fact about the adapter instead of a fact the
+    test wrote down itself.
+    """
+    from span_panel_api_schema_0.adapter import SchemaZeroAdapter
+
+    raw = json.loads((_FIXTURES / "schema_zero_types.json").read_text())
+    schema = V2HomieSchema(
+        firmware_version=SCHEMA_ZERO_FIRMWARE,
+        types_schema_hash="0" * 16,
+        types=raw["types"],
+    )
+    return SchemaZeroAdapter(SCHEMA_ZERO_SERIAL, schema).build_snapshot()
 
 
 def _curated(metadata: dict[str, FieldMetadata]) -> dict[str, FieldMetadata]:
