@@ -15,6 +15,7 @@
     "error": {
       "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo.",
       "ca_unavailable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible y está encendido, y vuelva a intentarlo. La configuración no puede continuar sin ella, porque de lo contrario su contraseña se enviaría en claro.",
+      "ca_unusable": "La autoridad de certificación almacenada para este panel no se puede leer, por lo que este cambio tendría que enviarse sin cifrar. No se ha cambiado nada. Vuelva a autenticar el panel para almacenar una autoridad utilizable y vuelva a intentarlo.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo.",
       "host_required": "Se requiere host",

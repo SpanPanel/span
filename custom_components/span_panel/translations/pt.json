@@ -15,6 +15,7 @@
     "error": {
       "ca_leaf_mismatch": "O certificado que este painel serve não está assinado pela autoridade que publicou. Verifique se a porta HTTPS está correta e se nada está a intercetar a ligação, e tente novamente.",
       "ca_unavailable": "Não foi possível ler a autoridade de certificação do painel. Verifique se o painel está acessível e ligado e tente novamente. A configuração não pode continuar sem ela, porque de outro modo a sua frase-passe seria enviada em claro.",
+      "ca_unusable": "A autoridade de certificação armazenada para este painel não pode ser lida, pelo que esta alteração teria de ser enviada sem cifra. Nada foi alterado. Volte a autenticar o painel para armazenar uma autoridade utilizável e tente novamente.",
       "cannot_connect": "Falha ao ligar ao Painel Span",
       "fqdn_registration_failed": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo.",
       "host_required": "O anfitrião é necessário",

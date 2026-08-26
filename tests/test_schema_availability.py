@@ -286,10 +286,13 @@ def test_every_available_override_is_accounted_for() -> None:
 
     `SpanSensorBase` and `SpanPanelBinarySensor` return True on their own
     before delegating, so each carries the probe ahead of that branch. The
-    switch, select and button return False when the panel is offline and
+    circuit switch, select and button return False when the panel is offline and
     otherwise delegate, so the override on `SpanPanelEntity` covers them.
-    Anything new in this list has to answer the same question, and this
-    assertion is what forces it to be asked.
+    `SpanPanelControlLockSwitch` answers the question a third way — it never
+    delegates, because it reads no panel field and arming it is local — and is
+    the one control a dead transport deliberately leaves alone. Anything new in
+    this list has to answer the same question, and this assertion is what forces
+    it to be asked.
     """
     overriders = {
         cls.__name__
@@ -305,6 +308,7 @@ def test_every_available_override_is_accounted_for() -> None:
         "SpanSensorBase",
         "SpanPanelBinarySensor",
         "SpanPanelCircuitsSwitch",
+        "SpanPanelControlLockSwitch",
         "SpanPanelGFEOverrideButton",
         "SpanPanelCircuitsSelect",
     }

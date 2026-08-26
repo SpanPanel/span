@@ -78,6 +78,7 @@ from .options import SNAPSHOT_UPDATE_INTERVAL
 from .runtime import (
     SpanPanelConfigEntry as SpanPanelConfigEntry,
     SpanPanelRuntimeData as SpanPanelRuntimeData,
+    loaded_runtime_data,
 )
 from .schema_repairs import (
     async_clear_retired_new_entity_notices,
@@ -184,18 +185,30 @@ async def _async_pinned_ca(
         )
         return None
 
-    # The broker's port, not the panel's HTTPS port. This anchor is only ever
-    # used for one thing -- the MQTTS session the coordinator opens -- so that
-    # is the certificate it has to be checked against, and the port is on every
-    # v2 entry by construction: setup refuses one without it a few lines above,
-    # and the same value is handed to `MqttClientConfig` below. `https_port` was
-    # the wrong choice for the entries that actually reach here. It arrived in
-    # the same commit as `panel_ca_pending`, so an entry carrying the flag is by
-    # definition one migrated from before either existed and can never hold a
-    # port: every such check ran against 443, and a pre-pinning install whose
-    # TLS lives elsewhere -- behind NAT, a port forward, a proxy -- would have
-    # been refused on every setup and left on the unauthenticated refetch path
-    # for good, which is the one population this deferred pin exists for.
+    # The broker's port, not the panel's HTTPS port. The anchor has two uses,
+    # and this checks it against one of them: the MQTTS session the coordinator
+    # opens below, and -- once it is stored -- the REST transport that
+    # `panel_rest_transport` builds on the HTTPS port for reauth detection,
+    # reconfigure, FQDN registration and `rotate_credentials`. The broker's is
+    # the connection this pin was introduced for, and the only one every v2
+    # entry carries a port for: setup refuses an entry without
+    # `CONF_EBUS_BROKER_PORT` a few lines above, and the same value is handed to
+    # `MqttClientConfig` below.
+    #
+    # `https_port` was the wrong port to verify on for the entries that actually
+    # reach here. It arrived in the same commit as `panel_ca_pending`, so an
+    # entry carrying the flag is by definition one migrated from before either
+    # existed and can never hold a port: every such check ran against 443, and a
+    # pre-pinning install whose TLS lives elsewhere -- behind NAT, a port
+    # forward, a proxy -- would have been refused on every setup and left on the
+    # unauthenticated refetch path for good, which is the one population this
+    # deferred pin exists for.
+    #
+    # Verifying one port and using the anchor on two has a cost, and it is
+    # stated rather than hidden: a CA that signs the broker's leaf but not
+    # whatever answers on 443 -- a proxy terminating only the HTTPS port --
+    # pins here and then fails every REST path, which the callers that carry a
+    # secret refuse rather than downgrade. README and the changelog say so.
     #
     # One asymmetry to know about: `async_ca_signs_panel_leaf` accepts a leaf
     # reached at the address `host` resolves to, while the bridge dials `host`
@@ -294,7 +307,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                     host,
                 )
 
-            panel_http_port = int(config.get(CONF_HTTP_PORT, 80))
+            # `as_port` rather than `int()`: `entry.data` round-trips through
+            # JSON and is typed `Any` at this boundary, so a hand-edited
+            # `.storage` can put anything here, and `int("http")` would raise
+            # out of setup where the pin site a few lines above quietly falls
+            # back to the documented default. Same treatment, same answer.
+            panel_http_port = as_port(config.get(CONF_HTTP_PORT), 80)
 
             # Before the client is built, because the pin is a constructor
             # argument: supplying it is what stops the bridge fetching a CA over
@@ -305,7 +323,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 broker_host=host,
                 username=config[CONF_EBUS_BROKER_USERNAME],
                 password=config[CONF_EBUS_BROKER_PASSWORD],
-                mqtts_port=int(config[CONF_EBUS_BROKER_PORT]),
+                mqtts_port=as_port(config[CONF_EBUS_BROKER_PORT], DEFAULT_MQTTS_PORT),
                 ca_pem=ca_pem,
             )
 
@@ -506,10 +524,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     if not unload_ok:
         return False
 
-    if hasattr(entry, "runtime_data") and entry.runtime_data is not None:
-        if entry.runtime_data.coordinator.current_monitor is not None:
-            entry.runtime_data.coordinator.current_monitor.async_stop()
-        await entry.runtime_data.coordinator.async_shutdown()
+    runtime_data = loaded_runtime_data(entry)
+    if runtime_data is not None:
+        if runtime_data.coordinator.current_monitor is not None:
+            runtime_data.coordinator.current_monitor.async_stop()
+        await runtime_data.coordinator.async_shutdown()
 
     return True
 
@@ -541,10 +560,11 @@ async def async_remove_config_entry_device(
     The main panel device cannot be removed — only sub-devices (like EVSE
     chargers) that are no longer present can be removed by the user.
     """
-    if not hasattr(config_entry, "runtime_data") or config_entry.runtime_data is None:
+    runtime_data = loaded_runtime_data(config_entry)
+    if runtime_data is None:
         return True
 
-    coordinator = config_entry.runtime_data.coordinator
+    coordinator = runtime_data.coordinator
     snapshot = coordinator.data
 
     # Identify the main panel device identifier

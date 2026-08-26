@@ -16,6 +16,7 @@ import httpx
 from span_panel_api import (
     V2AuthResponse,
     build_panel_ssl_context,
+    ca_fingerprint,
     detect_api_version,
     download_ca_cert,
     register_v2,
@@ -24,6 +25,7 @@ from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelConnectionError,
     SpanPanelTimeoutError,
+    SpanPanelValidationError,
 )
 
 from .const import (
@@ -393,6 +395,31 @@ def as_port(value: object, default: int) -> int:
     """
     parsed = port_or_none(value)
     return default if parsed is None else parsed
+
+
+def pem_fingerprint_or_reason(pem: object) -> str:
+    """Name a stored anchor for a log line, without letting it raise into one.
+
+    Every caller is a log line about a refusal, and each of them is naming the
+    anchor *already stored on the entry* — the value the install logged when it
+    pinned and the value diagnostics reports, so the one a user can compare
+    something against. Never the certificate the refused host served: reading
+    that would mean opening a second, deliberately unverified connection to a
+    host this code has just decided not to trust, for a number with nothing to
+    compare it to.
+
+    `object` rather than `str` because that is what `entry.data` hands out. The
+    two ways a stored anchor can fail to name itself are answered rather than
+    raised, because a log line that cannot be written is worse than an imprecise
+    one: "none" for an entry that stores no anchor, "unreadable" for one whose
+    PEM this system cannot parse.
+    """
+    if not isinstance(pem, str) or not pem:
+        return "none"
+    try:
+        return ca_fingerprint(pem)
+    except SpanPanelValidationError:
+        return "unreadable"
 
 
 class PanelCaUnusableError(ValueError):

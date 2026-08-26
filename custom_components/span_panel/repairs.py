@@ -23,7 +23,12 @@ from span_panel_api.exceptions import (
 import voluptuous as vol
 
 from .ca_repairs import CA_CHANGED_ISSUE_PREFIX
-from .config_flow_validation import as_port, async_ca_signs_panel_leaf, async_fetch_panel_ca
+from .config_flow_validation import (
+    as_port,
+    async_ca_signs_panel_leaf,
+    async_fetch_panel_ca,
+    pem_fingerprint_or_reason,
+)
 from .const import (
     CONF_EBUS_BROKER_PORT,
     CONF_HTTP_PORT,
@@ -34,16 +39,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _fingerprint_or_reason(pem: object) -> str:
-    """Name a stored PEM for a log line, without letting it raise into one."""
-    if not isinstance(pem, str) or not pem:
-        return "none"
-    try:
-        return ca_fingerprint(pem)
-    except SpanPanelValidationError:
-        return "unreadable"
 
 
 class PanelCAChangedRepairFlow(RepairsFlow):
@@ -131,7 +126,7 @@ class PanelCAChangedRepairFlow(RepairsFlow):
                 fingerprint,
                 host,
                 mqtts_port,
-                _fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM)),
+                pem_fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM)),
             )
             return self.async_abort(reason="ca_leaf_mismatch")
 

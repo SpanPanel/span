@@ -271,9 +271,10 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         default; that needs the snapshot model to admit None.
 
         Also the availability of every entity that does not override this --
-        the adopted and extension entities, the EVSE binary sensors and the
-        control-lock switch -- which is where the transport check earns its
-        place on the base class.
+        the adopted and extension entities and the EVSE binary sensors -- which
+        is where the transport check earns its place on the base class. The
+        control-lock switch is the one control that does override it, because
+        arming is local and stays answerable with no panel at the other end.
         """
         if self._reads_an_unresolved_field:
             return False

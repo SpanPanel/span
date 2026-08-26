@@ -332,3 +332,36 @@ async def test_the_auto_relock_writes_the_state_when_it_falls_due(
         state = hass.states.get(LOCK_ENTITY)
         assert state is not None
         assert state.state == STATE_ON
+
+
+# ---------- a dead transport does not take the lock with it ----------
+
+
+@pytest.mark.asyncio
+async def test_the_lock_stays_operable_when_the_transport_dies(hass: HomeAssistant) -> None:
+    """Arming is local, so it is answerable with no panel at the other end.
+
+    Every other control goes unavailable once the transport is gone, and should:
+    they report something read from the panel. This one reports the state of an
+    in-process object the interceptor consults, and the moment a transport dies
+    is a plausible moment to want the lock shut before it comes back.
+
+    Inheriting the base class's transport probe cost more than a greyed-out
+    tile: core's entity-service helper skips an unavailable entity outright, so
+    `switch.turn_on` was dropped without an error and the lock stayed open. That
+    is what this asserts — the arm lands, not merely that the state renders.
+    """
+    async with _panel(hass, timeout=0) as entry:
+        await _disarm(hass)
+        state = hass.states.get(LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_OFF
+
+        entry.runtime_data.coordinator.transport_dead = True
+
+        await _arm(hass)
+
+        state = hass.states.get(LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_ON
+        assert _lock(entry).armed is True

@@ -742,6 +742,10 @@ while guaranteeing an outage. Retrying closes it at the first opportunity instea
 The same is true of an entry whose broker port does not serve a certificate the panel's own authority signs — a proxy terminating TLS with a certificate of its
 own, say. It stays unpinned and logs that warning at every start, and no repair is raised for it.
 
+The reverse arrangement has the opposite cost. Where a proxy terminates only port 443, the panel's own authority still signs the broker's certificate, so the
+entry pins at the reload — and the anchor is then also what every REST call to the panel is verified against. **Reauthenticate**, **Reconfigure** and **Rotate
+credentials** all refuse, rather than send your access token unencrypted, until port 443 serves the panel's own certificate too.
+
 **Reauthenticate is the route that does this on screen.** An unpinned entry sent through **Reauthenticate** goes to the certificate-authority step first, which
 asks for the TLS port where the HTTP port has been moved — the install most likely to be behind a proxy — and refuses with an error if the authority does not
 sign what the panel serves. Reconfiguring the entry to the panel's own address is the other way through, but the pin then happens during the reload that

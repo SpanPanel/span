@@ -823,11 +823,12 @@ whole integration. Seven modules imported them from the package root and five mo
 package root re-exports both names, so `from custom_components.span_panel import SpanPanelRuntimeData` keeps working, and every deferred import of them is a
 top-level one again.
 
-**Use `services._loaded_runtime_data(entry)` rather than an inline `hasattr` / `isinstance` pair.** Every service here is registered domain-wide and walks
-`async_loaded_entries(DOMAIN)`, so each one has to ask the same question before touching an entry, and this used to be five copies of it. Both halves of the
-check are real, which is why the helper is written the way it is: `ConfigEntry.runtime_data` is a bare annotation that core _deletes_ on unload, so the
-attribute is genuinely absent on an entry that has not finished setting up (hence `getattr` with a default), and what is there is whatever the owning
-integration put there, so `isinstance` is what says it is ours. AGENTS.md service point 6 names this helper.
+**Use `runtime.loaded_runtime_data(entry)` rather than an inline `hasattr` / `isinstance` pair.** Every service is registered domain-wide and walks
+`async_loaded_entries(DOMAIN)`, so each one has to ask the same question before touching an entry, and this used to be five copies of it — plus two more in the
+package root, in `async_unload_entry` and `async_remove_config_entry_device`, which is why the helper lives in `runtime` (a leaf that already owns the type)
+rather than in `services`. Both halves of the check are real, which is why the helper is written the way it is: `ConfigEntry.runtime_data` is a bare annotation
+that core _deletes_ on unload, so the attribute is genuinely absent on an entry that has not finished setting up (hence `getattr` with a default), and what is
+there is whatever the owning integration put there, so `isinstance` is what says it is ours. AGENTS.md service point 6 names this helper.
 
 ## The Supervisor discovery path is deliberately unguarded
 

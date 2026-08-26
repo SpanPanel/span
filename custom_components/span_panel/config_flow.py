@@ -43,6 +43,7 @@ from .config_flow_options import (
     process_general_options_input,
 )
 from .config_flow_validation import (
+    PanelCaUnusableError,
     PanelRestTransport,
     as_port,
     async_fetch_panel_ca,
@@ -51,6 +52,7 @@ from .config_flow_validation import (
     check_fqdn_tls_ready,
     is_fqdn,
     panel_rest_transport,
+    pem_fingerprint_or_reason,
     port_or_none,
     validate_host,
     validate_v2_passphrase,
@@ -69,6 +71,7 @@ from .const import (
     CONF_PANEL_SERIAL,
     CONF_REGISTERED_FQDN,
     DEFAULT_HTTPS_PORT,
+    DEFAULT_MQTTS_PORT,
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
@@ -344,32 +347,14 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         _LOGGER.warning(
             "Refusing to move the entry for panel %s to %s: the certificate served there on "
-            "port %s does not chain to the authority this entry is pinned to (SHA-256 %s)",
+            "port %s does not chain to the authority this entry is pinned to (SHA-256 %s). "
+            "If the panel really has moved, use Reconfigure to move this entry",
             self.unique_id,
             host,
             tls_port,
-            self._pinned_fingerprint(str(ca_pem)),
+            pem_fingerprint_or_reason(ca_pem),
         )
         return None
-
-    @staticmethod
-    def _pinned_fingerprint(ca_pem: str) -> str:
-        """Return the fingerprint of the anchor that refused a host, for the log line.
-
-        The anchor's, not the certificate the refused host served. This is the
-        value the install logged and diagnostics reports, so it is the one a
-        user can compare something against — and reading the other one would
-        mean opening a second, deliberately unverified connection to a host this
-        code has just decided not to trust, to obtain a number with nothing to
-        compare it to.
-
-        A PEM this system cannot read is not a reason to lose the warning, so it
-        degrades to a placeholder rather than raising.
-        """
-        try:
-            return ca_fingerprint(ca_pem)
-        except SpanPanelValidationError:
-            return "unreadable"
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """Handle a flow initiated by zeroconf discovery."""
@@ -441,6 +426,19 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         on different HTTP ports (for example the SPAN Panel Simulator add-on).
         Deduplicate by panel serial, not by host, so each panel gets its own
         config entry.
+
+        **This route is deliberately not held to the pinned-address check** that
+        `async_step_zeroconf` and the by-hand re-add both go through, in
+        `_async_host_update`. A Supervisor discovery arrives over the
+        authenticated Supervisor API from an add-on the user installed, and
+        add-ons legitimately reallocate their own ports, so applying that guard
+        would freeze the entry against its own add-on -- which is why the ports
+        go straight into the update below. The cost is stated rather than
+        hidden, here and in README's Security section: an add-on that already
+        holds Supervisor privileges can move a pinned entry. If the trade is
+        ever revisited, the guard is the same helper the other two routes call.
+        See developer.md, "The Supervisor discovery path is deliberately
+        unguarded".
         """
         config = discovery_info.config
         host = str(config.get("host", ""))
@@ -848,7 +846,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             ssl_context=transport.ssl_context,
         )
 
-        mqtts_port = self._v2_broker_port or 8883
+        mqtts_port = self._v2_broker_port or DEFAULT_MQTTS_PORT
         max_attempts = 30
         for attempt in range(max_attempts):
             await asyncio.sleep(2)
@@ -1281,8 +1279,31 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             )
 
         # Validate the host is reachable and is a v2 panel
-        http_port = int(reconfigure_entry.data.get(CONF_HTTP_PORT, 80))
-        self._rest_transport = panel_rest_transport(self.hass, reconfigure_entry.data)
+        http_port = as_port(reconfigure_entry.data.get(CONF_HTTP_PORT), 80)
+        # Fail closed rather than downgrade, as `rotate_credentials` does and
+        # for the same reason: this flow carries the entry's access token to the
+        # panel -- `delete_fqdn` on one branch, `register_fqdn` on the other --
+        # and `_async_verify_host_over_pin` has nothing to check the new name
+        # against without an anchor. A stored PEM that cannot be read would
+        # otherwise turn a pinned entry's reconfigure into a plaintext one that
+        # also skips its own host check, which is the pin undone twice over. The
+        # CA-changed repair and Reauthenticate are the routes back.
+        try:
+            self._rest_transport = panel_rest_transport(
+                self.hass, reconfigure_entry.data, allow_plaintext_fallback=False
+            )
+        except PanelCaUnusableError as err:
+            _LOGGER.warning(
+                "The certificate authority stored for panel %s cannot be read (%s); "
+                "refusing to reconfigure it over an unverified connection",
+                reconfigure_entry.title,
+                err,
+            )
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                errors={"base": "ca_unusable"},
+            )
         # The new host may be a name the panel has never heard of, and this
         # entry is pinned: probing it by name would fail hostname verification
         # and report the panel unreachable. Settle the address first, so the
@@ -1339,7 +1360,9 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # New host is FQDN — register it (replaces any existing FQDN on the panel)
             self.access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
             self._http_port = http_port
-            self._v2_broker_port = int(reconfigure_entry.data.get(CONF_EBUS_BROKER_PORT, 8883))
+            self._v2_broker_port = as_port(
+                reconfigure_entry.data.get(CONF_EBUS_BROKER_PORT), DEFAULT_MQTTS_PORT
+            )
             return await self.async_step_reconfigure_register_fqdn()
 
         # New host is not an FQDN — simple update. Nothing on this branch will

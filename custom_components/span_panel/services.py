@@ -37,34 +37,12 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-from .runtime import SpanPanelRuntimeData
+from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 
 _LOGGER = logging.getLogger(__name__)
 
 # Map internal device_type values to external manifest format
 _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
-
-
-def _loaded_runtime_data(entry: ConfigEntry) -> SpanPanelRuntimeData | None:
-    """Return this entry's runtime data, or None if it is not one of ours.
-
-    Every service here is registered domain-wide and walks
-    `async_loaded_entries(DOMAIN)`, so each of them has to answer the same
-    question before touching an entry: does this entry carry runtime data of
-    ours? Both halves of that are real. `ConfigEntry.runtime_data` is a bare
-    annotation that core deletes on unload (`config_entries.py:1044-1045`), so
-    the attribute is genuinely absent on an entry that has not finished setting
-    up -- hence `getattr` with a default rather than an attribute read. And what
-    is there is whatever the owning integration put there, so `isinstance` is
-    what says it is ours; a test double may put anything at all in it.
-
-    One helper, one answer: this used to be five copies of the same two lines,
-    each preceded by its own deferred import of the runtime-data type.
-    """
-    runtime_data = getattr(entry, "runtime_data", None)
-    if isinstance(runtime_data, SpanPanelRuntimeData):
-        return runtime_data
-    return None
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
@@ -86,7 +64,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         panels: list[JsonValueType] = []
 
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            runtime_data = _loaded_runtime_data(entry)
+            runtime_data = loaded_runtime_data(entry)
             if runtime_data is None:
                 continue
 
@@ -222,7 +200,7 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         Otherwise falls back to the first loaded entry.
         """
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            runtime_data = _loaded_runtime_data(entry)
+            runtime_data = loaded_runtime_data(entry)
             if runtime_data is None:
                 continue
             if config_entry_id is None or entry.entry_id == config_entry_id:
@@ -405,7 +383,7 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         """Find the GraphHorizonManager for the given entry."""
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            runtime_data = _loaded_runtime_data(entry)
+            runtime_data = loaded_runtime_data(entry)
             if runtime_data is None:
                 continue
             if entry_id is None or entry.entry_id == entry_id:
@@ -450,7 +428,7 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
     ) -> ServiceResponse:
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            runtime_data = _loaded_runtime_data(entry)
+            runtime_data = loaded_runtime_data(entry)
             if runtime_data is None:
                 continue
             if entry_id is None or entry.entry_id == entry_id:
@@ -733,7 +711,7 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             if config_entry_id is not None and entry.entry_id != config_entry_id:
                 continue
-            if _loaded_runtime_data(entry) is None:
+            if loaded_runtime_data(entry) is None:
                 continue
             if entry.data.get(CONF_API_VERSION) != "v2":
                 continue

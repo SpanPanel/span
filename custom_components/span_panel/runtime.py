@@ -63,3 +63,29 @@ class SpanPanelRuntimeData:
 
 
 type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
+
+
+def loaded_runtime_data(entry: ConfigEntry) -> SpanPanelRuntimeData | None:
+    """Return this entry's runtime data, or None if it is not one of ours.
+
+    Every service is registered domain-wide and walks
+    `async_loaded_entries(DOMAIN)`, so each of them has to answer this question
+    before touching an entry -- and so does anything handed an entry by core:
+    `async_unload_entry` after the platforms have gone, and
+    `async_remove_config_entry_device`.
+
+    Both halves of the check are real. `ConfigEntry.runtime_data` is a bare
+    annotation that core deletes on unload (`config_entries.py:1044-1045`), so
+    the attribute is genuinely absent on an entry that has not finished setting
+    up -- hence `getattr` with a default rather than an attribute read. And what
+    is there is whatever the owning integration put there, so `isinstance` is
+    what says it is ours; a test double may put anything at all in it.
+
+    One helper, one answer. It lives here rather than in `services` because
+    `services` is not a leaf and half the callers are not services: this module
+    already owns the type the check is against, and importing it costs nothing.
+    """
+    runtime_data = getattr(entry, "runtime_data", None)
+    if isinstance(runtime_data, SpanPanelRuntimeData):
+        return runtime_data
+    return None

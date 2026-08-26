@@ -15,6 +15,7 @@
     "error": {
       "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
       "ca_unavailable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et sous tension, puis réessayez. La configuration ne peut pas continuer sans elle, car votre mot de passe serait sinon envoyé en clair.",
+      "ca_unusable": "L'autorité de certification enregistrée pour ce panneau ne peut pas être lue, ce changement devrait donc être envoyé sans chiffrement. Rien n'a été modifié. Réauthentifiez le panneau pour enregistrer une autorité utilisable, puis réessayez.",
       "cannot_connect": "Échec de la connexion au Span Panel",
       "fqdn_registration_failed": "Impossible d'enregistrer le nom de domaine auprès du panneau ou le certificat TLS n'a pas été mis à jour à temps.",
       "host_required": "L'hôte est requis",

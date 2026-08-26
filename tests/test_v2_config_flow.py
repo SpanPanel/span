@@ -56,6 +56,13 @@ MOCK_V2_DETECTION_OTHER = DetectionResult(
 FAKE_CA_PEM = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
 FAKE_CA_FINGERPRINT = "0" * 64
 
+#: An anchor already stored on an entry that `ssl` will not load. Named apart
+#: from `FAKE_CA_PEM` — which happens to be unreadable too, hence the autouse
+#: fixture — because a test about an unusable pin should say which property of
+#: the PEM it is about. `build_panel_ssl_context` is left unpatched wherever
+#: this is used, so the refusal comes from the real one.
+UNREADABLE_CA_PEM = "-----BEGIN CERTIFICATE-----\nbm90LWEtY2VydA==\n-----END CERTIFICATE-----\n"
+
 
 @pytest.fixture(autouse=True)
 def panel_ca_available():
@@ -2950,3 +2957,55 @@ async def test_reconfigure_switch_from_fqdn_to_ip_clears_registration(
     )
     assert entry.data[CONF_HOST] == "192.168.1.201"
     assert entry.data[CONF_REGISTERED_FQDN] == ""
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_refuses_to_downgrade_an_unreadable_pin(
+    hass: HomeAssistant,
+) -> None:
+    """A pin that cannot be read is not permission to reconfigure over plaintext.
+
+    This flow carries the entry's access token to the panel — `delete_fqdn` on
+    this branch, `register_fqdn` on the other — and checks the new host against
+    the anchor before writing it. With no usable anchor it can do neither, so it
+    refuses instead of falling back to the transport the entry had before it was
+    pinned. Nothing reaches the network and nothing is written.
+    """
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="SPAN Panel",
+        data={
+            CONF_HOST: "panel.example.com",
+            CONF_REGISTERED_FQDN: "panel.example.com",
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: UNREADABLE_CA_PEM,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    detect = AsyncMock(return_value=MOCK_V2_DETECTION)
+    delete = AsyncMock()
+    with (
+        patch("custom_components.span_panel.config_flow.detect_api_version", new=detect),
+        patch("custom_components.span_panel.config_flow.delete_fqdn", new=delete),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: "192.168.1.201"},
+        )
+
+    assert result2["type"] == FlowResultType.FORM
+    assert result2["step_id"] == "reconfigure"
+    assert result2["errors"] == {"base": "ca_unusable"}
+    detect.assert_not_awaited()
+    delete.assert_not_awaited()
+    assert entry.data[CONF_HOST] == "panel.example.com"
+    assert entry.data[CONF_REGISTERED_FQDN] == "panel.example.com"
+    assert entry.data[CONF_PANEL_CA_PEM] == UNREADABLE_CA_PEM

@@ -148,9 +148,9 @@ working entirely in 2027.8.
 - **Energy dip compensation no longer books a dip that never happened** (#259), where a partial reading at startup looked like a counter reset and every restart
   added each circuit's whole lifetime counter to its offset.
 - **A compensated dip stays provisional until it settles, and is only reported then**: it is compensated the moment it is seen, corroborated by a reading that
-  climbs from the new low base, held for three further readings during which the counter returning to where it started takes the whole offset back, and named in
-  a notification once that window closes — so a burst of stale samples cannot leave a permanent step in your energy statistics or a notice for an event that did
-  not happen.
+  climbs from the new low base, held for three further readings during which the counter returning to where it started takes that dip's whole compensation back,
+  and named in a notification once that window closes — so a burst of stale samples cannot leave a permanent step in your energy statistics or a notice for an
+  event that did not happen.
 - **A panel this integration can no longer reach makes its entities unavailable instead of reporting 0 W** — a certificate authority that changes mid-session
   used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
@@ -229,7 +229,10 @@ working entirely in 2027.8.
 - **An upgraded entry whose broker port does not serve a certificate the panel's own authority signs stays unpinned** — a proxy terminating TLS with a
   certificate of its own, say — logging a warning at every start and raising no repair. **Reauthenticate** is the route that does the check on screen: it asks
   for the TLS port and refuses with an error if the authority does not sign what the panel serves. Reconfiguring the entry to the panel's own address instead
-  leaves the pin to the reload that follows, which happens silently — watch the log for "Pinned the CA advertised by…".
+  leaves the pin to the reload that follows, which happens silently — watch the log for "Pinned the CA advertised by…". The reverse arrangement — a proxy
+  terminating only port 443, so that the panel's own authority signs the broker's certificate but not the one served on the HTTPS port — does pin at that
+  reload, and every path that then talks to the panel over HTTPS (**Reauthenticate**, **Reconfigure**, **Rotate credentials**) refuses rather than sending your
+  token unencrypted, until port 443 also serves the panel's own certificate.
 - **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved, use **Reconfigure** on
   the entry, which checks the new address against the standing pin before storing it.
 - **A panel discovered through the Supervisor is deliberately not held to the address check** the other discovery routes are, because a Home Assistant add-on

@@ -253,9 +253,14 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def _mark_transport_dead(self, reason: Exception | str) -> None:
         """Record that the transport has failed terminally and tell the entities.
 
-        Logged at ERROR, once, because unlike an outage this one needs a
-        person: nothing here retries, and the Repair raised alongside it is the
-        only way back.
+        Logged at WARNING, once. This condition does need a person -- nothing
+        here retries, and the Repair raised alongside it is the only way back --
+        but it is already reported at ERROR by the library that gave up on the
+        transport and again by `ca_repairs.async_raise_ca_changed`, which logs
+        at ERROR and raises an `IssueSeverity.ERROR` Repair. A third copy at
+        that level says nothing the first two did not. This line's job is
+        narrower: it records the coordinator's own transition, for whoever is
+        reading the log around those two.
 
         The fan-out matters on the fatal-callback path. That path is not an
         update cycle -- `last_update_success` is still True and no listener
@@ -266,7 +271,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """
         if self._transport_dead:
             return
-        _LOGGER.error(
+        _LOGGER.warning(
             "%s transport has stopped and will not recover on its own: %s",
             self.config_entry.title or "SPAN Panel",
             reason,
@@ -689,6 +694,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         -- and counting an absence as a settability change would turn a flap
         into a reload loop. Membership is still carried forward, so a circuit
         that leaves and returns with a different answer is caught on its return.
+
+        One known false positive, upstream of here: a library client rebuilt
+        mid-session replays retained MQTT topics, and a replay that arrives
+        partial can present a circuit whose `relay-controllable` has not been
+        redelivered yet. The absent field reads as True for that one dispatch,
+        which looks like a settability change and costs one spurious reload per
+        rebuild. It is a library item (3.1.1), not one this reader can settle --
+        a partial snapshot is indistinguishable here from a real change -- and
+        the reload debounce is what keeps the cost to one.
         """
         current = self._read_settability(snapshot)
         if self._known_settability is None:

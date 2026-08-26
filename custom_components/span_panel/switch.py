@@ -469,6 +469,33 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
         self.async_write_ha_state()
 
     @property
+    def available(self) -> bool:
+        """A dead transport does not take this switch with it.
+
+        The base class turns every entity unavailable once the transport is
+        gone, and it is right to: those entities all report something read from
+        the panel, and holding a value from before the transport died is exactly
+        what that probe is for. This one reports nothing from the panel. Arming
+        is local — it writes to `ControlLock`, which the interceptor consults
+        before it publishes anything — so it is answerable whether or not the
+        panel is reachable, and it is worth answering: the moment a transport
+        dies is a plausible moment to want the lock shut before it comes back.
+
+        The asymmetry only runs one way, and safely. Arming works with no panel
+        at all; disarming works too, and buys nothing, because every control it
+        would open is unavailable anyway and the gate is not the thing that is
+        broken.
+
+        Unconditional, so nothing in `super().available` is consulted, and each
+        of the three things it would have asked is answered here: the transport
+        probe is the one this overrides; the unresolved-field probe never fires
+        on an entity that declares no `field_path`, as this one does not; and
+        `CoordinatorEntity`'s `last_update_success` is a fact about the last
+        snapshot fetch, which this entity does not read and does not need.
+        """
+        return True
+
+    @property
     def is_on(self) -> bool:
         """Armed reads as on, matching an alarm panel rather than a door."""
         return self._lock.armed

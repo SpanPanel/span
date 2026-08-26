@@ -15,6 +15,7 @@
     "error": {
       "ca_leaf_mismatch": "The certificate this panel serves is not signed by the authority it published. Check that the HTTPS port is correct and that nothing is intercepting the connection, then try again.",
       "ca_unavailable": "The panel's certificate authority could not be read. Check that the panel is reachable and powered on, then try again. Setup cannot continue without it, because your passphrase would otherwise be sent in the clear.",
+      "ca_unusable": "The certificate authority stored for this panel cannot be read, so this change would have to be sent unencrypted. Nothing has been changed. Reauthenticate the panel to store a usable authority, then try again.",
       "cannot_connect": "Failed to connect to Span Panel",
       "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time.",
       "host_required": "Host is required",
