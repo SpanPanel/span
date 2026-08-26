@@ -443,7 +443,12 @@ def test_a_negative_lock_timeout_turns_the_feature_off() -> None:
 
 @pytest.mark.asyncio
 async def test_a_disabled_entry_creates_no_control_entities(hass: HomeAssistant) -> None:
-    """No control entities, and no registry entries removed either."""
+    """The half of `disabled` this test actually proves: nothing is created.
+
+    That the registry entries *survive* is the other half, and it is asserted
+    separately below rather than in this docstring — a claim made here and
+    checked nowhere reads as coverage to anyone auditing by name.
+    """
     from custom_components.span_panel.switch import async_setup_entry
 
     from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
@@ -790,3 +795,89 @@ async def test_the_logbook_explains_a_refusal(hass: HomeAssistant) -> None:
     )
 
     assert "operated moments ago" in described["message"]
+
+
+# ---------- `disabled` keeps the entity_ids it stops creating ----------
+
+
+@pytest.mark.asyncio
+async def test_disabling_control_leaves_the_registry_entries_alone(
+    hass: HomeAssistant,
+) -> None:
+    """The permanence half of §5.6, which the creation test does not reach.
+
+    `entity_id` is permanent in this integration, so `disabled` had to be a mode
+    that stops *creating* controls rather than one that removes them. The
+    difference is invisible from the created-entity list — both spellings add
+    nothing — and shows up only in what the registry still holds afterwards.
+
+    Asserted through a customised entry rather than a bare one because the cost
+    of getting this wrong is not the identifier alone: a user's name, area and
+    icon travel with the registry entry, and a removed entry loses them even if
+    the same `entity_id` is later reissued.
+    """
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.span_panel.entity_resolver import (
+        build_switch_unique_id_for_entry,
+    )
+    from custom_components.span_panel.switch import async_setup_entry
+
+    from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
+
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen", is_user_controllable=True
+    )
+    coordinator = MagicMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"1": circuit})
+    coordinator.config_entry = MagicMock()
+    coordinator.config_entry.options = {}
+    coordinator.client = AsyncMock()
+
+    config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
+    config_entry.add_to_hass(hass)
+
+    unique_id = build_switch_unique_id_for_entry(
+        coordinator, coordinator.data, "1", "SPAN Panel"
+    )
+
+    registry = er.async_get(hass)
+    existing = registry.async_get_or_create(
+        "switch",
+        DOMAIN,
+        unique_id,
+        suggested_object_id="span_panel_kitchen_breaker",
+        config_entry=config_entry,
+    )
+    registry.async_update_entity(
+        existing.entity_id, name="Kitchen Breaker", icon="mdi:toaster"
+    )
+
+    entry = MagicMock()
+    entry.title = "SPAN Panel"
+    entry.data = {}
+    entry.entry_id = config_entry.entry_id
+    entry.runtime_data = MagicMock(
+        coordinator=coordinator,
+        control_policy=ControlPolicy(
+            mode=ControlMode.DISABLED,
+            allow_contextless=True,
+            lock_timeout_minutes=None,
+            relay_debounce_seconds=2.0,
+        ),
+    )
+
+    added: list[object] = []
+    await async_setup_entry(hass, entry, lambda e, **kw: added.extend(e))
+
+    assert added == []
+
+    survivor = registry.async_get(existing.entity_id)
+    assert survivor is not None, (
+        "`disabled` removed the registry entry for a control it merely stopped "
+        "creating. The entity_id is now free for anything else to claim, and "
+        "re-enabling control would reissue it with a _2 suffix at best."
+    )
+    assert registry.async_get_entity_id("switch", DOMAIN, unique_id) == existing.entity_id
+    assert survivor.name == "Kitchen Breaker"
+    assert survivor.icon == "mdi:toaster"
