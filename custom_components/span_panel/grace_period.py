@@ -64,6 +64,13 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
     energy_offset: float | None = None
     last_panel_reading: float | None = None
     last_dip_delta: float | None = None
+    # An unsettled dip, carried across restarts because a restart is exactly
+    # when one is most likely to be outstanding: the reading that would settle
+    # it is the one after the reading that booked it, and Home Assistant may
+    # stop in between. Dropping it would silently confirm the offset by
+    # forgetting it was ever provisional.
+    pending_dip_baseline: float | None = None
+    pending_dip_delta: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dict representation of the extra data."""
@@ -75,6 +82,8 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
             "energy_offset": self.energy_offset,
             "last_panel_reading": self.last_panel_reading,
             "last_dip_delta": self.last_dip_delta,
+            "pending_dip_baseline": self.pending_dip_baseline,
+            "pending_dip_delta": self.pending_dip_delta,
         }
 
     @classmethod
@@ -97,6 +106,8 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
                 energy_offset=restored.get("energy_offset"),
                 last_panel_reading=restored.get("last_panel_reading"),
                 last_dip_delta=restored.get("last_dip_delta"),
+                pending_dip_baseline=restored.get("pending_dip_baseline"),
+                pending_dip_delta=restored.get("pending_dip_delta"),
             )
         except (AttributeError, KeyError, TypeError):
             return None

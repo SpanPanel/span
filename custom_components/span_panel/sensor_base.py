@@ -24,7 +24,13 @@ from span_panel_api import SpanPanelSnapshot
 
 from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
-from .energy_dip import build_dip_attributes, process_energy_dip
+from .energy_dip import (
+    DipEvent,
+    DipOutcome,
+    PendingDip,
+    build_dip_attributes,
+    process_energy_dip,
+)
 from .entity import SpanPanelEntity
 from .grace_period import (  # noqa: F401
     SpanEnergyExtraStoredData,
@@ -505,6 +511,10 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         self._energy_offset: float = 0.0
         self._last_panel_reading: float | None = None
         self._last_dip_delta: float | None = None
+        # A dip that has been compensated but not yet settled — see
+        # `process_energy_dip`. Non-None means part of `_energy_offset` is
+        # provisional and may still be taken back.
+        self._pending_dip: PendingDip | None = None
         self._is_total_increasing: bool = (
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
@@ -525,21 +535,48 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             and isinstance(raw_value, float | int)
         ):
             raw_float = float(raw_value)
-            new_offset, dip_delta, compensated = process_energy_dip(
-                raw_float, self._last_panel_reading, self._energy_offset
+            outcome = process_energy_dip(
+                raw_float, self._last_panel_reading, self._energy_offset, self._pending_dip
             )
-            if dip_delta is not None:
-                self._last_dip_delta = dip_delta
-                self.coordinator.report_energy_dip(
-                    self.entity_id or self._attr_unique_id or "unknown",
-                    dip_delta,
-                    new_offset,
-                )
-            self._energy_offset = new_offset
+            self._apply_dip_event(outcome)
+            self._energy_offset = outcome.offset
+            self._pending_dip = outcome.pending
             self._last_panel_reading = raw_float
-            super()._process_raw_value(compensated)
+            super()._process_raw_value(outcome.compensated)
         else:
             super()._process_raw_value(raw_value)
+
+    def _apply_dip_event(self, outcome: DipOutcome) -> None:
+        """Record the diagnostic, and tell the coordinator once a dip is believed.
+
+        The notification moves to confirmation rather than firing when the dip
+        is first seen. Reporting on sight is what made `SpanPanel/span#259` so
+        loud — a notification naming essentially every circuit on the panel,
+        for an event that had not happened. A dip that gets retracted now
+        produces no notification at all, because nothing happened.
+
+        `last_dip_delta` is set when the dip is booked, since it describes what
+        the counter did and the compensation is applied from that moment, and
+        cleared on retraction, since by then the counter turns out not to have
+        done it.
+        """
+        if outcome.event is DipEvent.BOOKED:
+            self._last_dip_delta = outcome.delta
+        elif outcome.event is DipEvent.RETRACTED:
+            self._last_dip_delta = None
+            _LOGGER.debug(
+                "Energy dip retracted for %s: %s Wh returned to %s, offset back to %s",
+                self.entity_id or self._attr_unique_id,
+                outcome.delta,
+                self._pending_dip.baseline if self._pending_dip else None,
+                outcome.offset,
+            )
+        elif outcome.event is DipEvent.CONFIRMED and outcome.delta is not None:
+            self.coordinator.report_energy_dip(
+                self.entity_id or self._attr_unique_id or "unknown",
+                outcome.delta,
+                outcome.offset,
+            )
 
     async def async_added_to_hass(self) -> None:
         """Restore grace period state when entity is added to Home Assistant.
@@ -573,6 +610,10 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._last_panel_reading = restored.last_panel_reading
             if restored.last_dip_delta is not None:
                 self._last_dip_delta = restored.last_dip_delta
+            if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
+                self._pending_dip = PendingDip(
+                    baseline=restored.pending_dip_baseline, delta=restored.pending_dip_delta
+                )
             _LOGGER.debug(
                 "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
                 self.entity_id or self._attr_unique_id,
@@ -667,6 +708,8 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 energy_offset=self._energy_offset or None,
                 last_panel_reading=self._last_panel_reading,
                 last_dip_delta=self._last_dip_delta,
+                pending_dip_baseline=self._pending_dip.baseline if self._pending_dip else None,
+                pending_dip_delta=self._pending_dip.delta if self._pending_dip else None,
             ),
         )
 
