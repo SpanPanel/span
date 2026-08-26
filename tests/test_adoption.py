@@ -807,6 +807,7 @@ async def test_a_vendor_format_nothing_can_read_leaves_the_curated_control_stand
     snapshot = _panel_with_a_charger_and_a_malformed_numeric()
     coordinator = MagicMock(data=snapshot)
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.unresolved_paths = frozenset()
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={}, title="SPAN Panel", unique_id=PANEL_SERIAL)

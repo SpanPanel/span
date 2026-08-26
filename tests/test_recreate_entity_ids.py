@@ -93,6 +93,7 @@ def _coordinator(
     coordinator.hass = hass
     coordinator.data = snapshot
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.config_entry = entry
     coordinator.request_reload = MagicMock()
     coordinator.register_circuit_energy_sensor = MagicMock()

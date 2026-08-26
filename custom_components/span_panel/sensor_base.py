@@ -340,8 +340,16 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         The unresolved-field probe runs first: the grace-period branch below
         returns True unconditionally, so probing after it would let every
         offline sensor keep reporting a field the adapter cannot resolve.
+
+        The transport probe runs for the same reason and answers the harder
+        case: a grace period is a bet that the reading will be true again
+        shortly, and a transport that has stopped for good makes that bet
+        unpayable. `_handle_offline_state` gives POWER sensors 0.0 while it
+        runs, which is a reading nobody took.
         """
         if self._reads_an_unresolved_field:
+            return False
+        if not self._transport_available:
             return False
         try:
             if getattr(self.coordinator, "panel_offline", False):

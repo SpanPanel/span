@@ -266,6 +266,8 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         Selects become unavailable when panel is offline since they can't change settings.
         """
+        if not self._transport_available:
+            return False
         if getattr(self.coordinator, "panel_offline", False):
             return False
         return super().available

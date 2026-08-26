@@ -36,6 +36,7 @@ def _make_coordinator(snapshot) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.config_entry = MockConfigEntry(
         domain=DOMAIN,

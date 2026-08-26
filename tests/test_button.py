@@ -28,6 +28,7 @@ def _make_button_coordinator(snapshot) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.config_entry = MockConfigEntry(
         domain=DOMAIN,
         data={},

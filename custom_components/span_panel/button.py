@@ -103,6 +103,8 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         One useful consequence: `dsm_state` folds in the user's own assertion, so once
         a press takes effect the button disables itself rather than inviting a second.
         """
+        if not self._transport_available:
+            return False
         if getattr(self.coordinator, "panel_offline", False):
             return False
         if not super().available:

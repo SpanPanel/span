@@ -182,6 +182,7 @@ def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
     coordinator = MagicMock()
     coordinator.data = _snapshot()
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = findings
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="example-40t-001")

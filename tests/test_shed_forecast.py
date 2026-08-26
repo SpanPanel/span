@@ -65,6 +65,7 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
     coordinator.data = snapshot
     coordinator.hass = MagicMock()
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.unresolved_paths = frozenset()
     coordinator.config_entry = MockConfigEntry(
         domain="span_panel",

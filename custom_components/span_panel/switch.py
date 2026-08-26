@@ -200,6 +200,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
         Switches become unavailable when panel is offline since they can't control circuits.
         """
+        if not self._transport_available:
+            return False
         if getattr(self.coordinator, "panel_offline", False):
             return False
         return super().available

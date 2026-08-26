@@ -83,6 +83,7 @@ def _make_coordinator(snapshot, *, options: dict | None = None) -> MagicMock:
     coordinator.data = snapshot
     coordinator.hass = MagicMock()
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.config_entry = MockConfigEntry(
         domain="span_panel",
         data={CONF_HOST: "192.168.1.50"},

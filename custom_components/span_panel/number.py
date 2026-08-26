@@ -218,6 +218,8 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         panel has not told us what the charger is rated for, which is the true
         statement; the entity comes back when the ceiling does.
         """
+        if not self._transport_available:
+            return False
         if self.coordinator.panel_offline:
             return False
         if self._description.maximum_fn(self._evse()) is None:

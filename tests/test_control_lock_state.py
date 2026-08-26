@@ -84,6 +84,7 @@ async def _panel(hass: HomeAssistant, *, timeout: float) -> AsyncIterator[MockCo
     client.close = AsyncMock()
     coordinator = MagicMock()
     coordinator.data = snapshot
+    coordinator.transport_dead = False
     coordinator.current_monitor = None
     coordinator.async_config_entry_first_refresh = AsyncMock()
     coordinator.async_setup_streaming = AsyncMock()

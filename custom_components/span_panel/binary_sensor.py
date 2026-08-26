@@ -274,6 +274,14 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         `door_state`, `eth0_link` and `wlan_link` reporting a field the adapter
         cannot resolve. `panel_status` and the derived sensors declare no
         `field_path`, so the probe never fires for them.
+
+        `panel_status` is the one entity a dead transport does not take with
+        it, and the exception is the same one that already exempts it from the
+        offline branch: it reports reachability, so it has to survive the
+        condition it exists to report. It reads `off` rather than holding a
+        stale `on` -- see `_handle_coordinator_update`. Every other binary
+        sensor here reads a snapshot field, and holding one from before the
+        transport died is exactly what the transport probe is for.
         """
         if self._reads_an_unresolved_field:
             return False
@@ -281,6 +289,9 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         # Panel status sensor should always be available to show online/offline state
         if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
             return True
+
+        if not self._transport_available:
+            return False
 
         # Hardware status sensors should remain available when offline to show Unknown
         hardware_status_sensors = {
@@ -305,7 +316,14 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
         """Handle updated data from the coordinator."""
         # Special handling for panel_status sensor
         if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
-            self._attr_is_on = not self.coordinator.panel_offline
+            # Both flags, because both mean "no panel at the other end". A dead
+            # transport is deliberately not marked offline -- that flag makes
+            # the other entities hold their last reading -- and reading it here
+            # is what stops the one connectivity sensor in the integration from
+            # reporting connected while the connection is gone for good.
+            self._attr_is_on = not (
+                self.coordinator.panel_offline or self.coordinator.transport_dead
+            )
             self._attr_available = True
             super()._handle_coordinator_update()
             return

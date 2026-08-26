@@ -27,6 +27,7 @@ class DummyDipSensor(SpanEnergySensorBase):
         """Bypass parent __init__ to avoid full HA dependencies."""
         self.coordinator = SimpleNamespace(
             panel_offline=False,
+            transport_dead=False,
             config_entry=SimpleNamespace(
                 options={
                     ENERGY_REPORTING_GRACE_PERIOD: 15,

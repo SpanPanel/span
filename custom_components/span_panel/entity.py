@@ -225,6 +225,24 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         return source is not None and source in self.coordinator.unresolved_paths
 
     @property
+    def _transport_available(self) -> bool:
+        """False once the panel's transport has stopped for good.
+
+        The single copy of this check. Every platform's `available` consults it
+        *ahead of* whatever that platform does about `panel_offline`, because
+        each of those offline branches answers a question this one has already
+        settled: the sensors and the hardware-status binary sensors return True
+        to keep showing a held reading, and the controls return False for a
+        reason -- unreachable -- that understates a transport nobody can reach
+        again. Both are answers about a gap that closes. A dead transport is
+        not one, so it is decided first and decided once.
+
+        See `SpanPanelCoordinator.transport_dead` for what makes it dead and
+        what brings it back.
+        """
+        return not self.coordinator.transport_dead
+
+    @property
     def available(self) -> bool:
         """False when this entity's snapshot field could not be resolved.
 
@@ -236,8 +254,15 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         This covers the resolution-failure case only. A field the adapter
         resolves but the device stops publishing still reaches HA as a parsed
         default; that needs the snapshot model to admit None.
+
+        Also the availability of every entity that does not override this --
+        the adopted and extension entities, the EVSE binary sensors and the
+        control-lock switch -- which is where the transport check earns its
+        place on the base class.
         """
         if self._reads_an_unresolved_field:
+            return False
+        if not self._transport_available:
             return False
         return super().available
 

@@ -198,6 +198,7 @@ def _coordinator(
     coordinator.data = snapshot
     coordinator.hass = hass
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.unresolved_paths = frozenset()
     coordinator.config_entry = entry

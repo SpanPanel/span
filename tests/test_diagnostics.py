@@ -64,6 +64,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
     # Explicit: a MagicMock answers `len()` and iteration happily, so leaving
     # this unset would let the discovery block render as an empty report rather
@@ -231,6 +232,7 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     coordinator = MagicMock()
     coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
     entry.runtime_data = SimpleNamespace(coordinator=coordinator)

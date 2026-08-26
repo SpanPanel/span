@@ -26,6 +26,7 @@ from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSna
 from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelCAChangedError,
+    SpanPanelError,
     SpanPanelStaleDataError,
 )
 
@@ -114,11 +115,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._reload_requested = False
         # Flag to track if panel is offline/unreachable
         self._panel_offline = False
+        # Flag to track a transport that has stopped for good. Distinct from
+        # offline on purpose; see `transport_dead`.
+        self._transport_dead = False
 
         # Streaming state
         self._unregister_streaming: Callable[[], None] | None = None
         self._unregister_connection: Callable[[], None] | None = None
         self._unregister_schema_change: Callable[[], None] | None = None
+        self._unregister_fatal_error: Callable[[], None] | None = None
 
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
@@ -182,6 +187,34 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """Return True if the panel is currently offline/unreachable."""
         return self._panel_offline
 
+    @property
+    def transport_dead(self) -> bool:
+        """True once the transport has stopped in a way waiting cannot fix.
+
+        Deliberately not `panel_offline`. Offline means "no data right now",
+        and every consumer of it is written for a gap that closes: sensors
+        hold their last reading through the grace period, POWER sensors read
+        0.0, the panel-status binary sensor says so, and all of them stay
+        available because that is the right answer for a broker that drops for
+        thirty seconds.
+
+        None of it is the right answer for a transport that is not coming
+        back. The last snapshot was read before the failure and is indefinitely
+        old; a dashboard cannot tell a held reading from a live one, and 0 W is
+        not a measurement at all. Entities that read this go unavailable, which
+        is the one honest state -- it says the value is not knowable rather
+        than substituting a plausible one.
+
+        Set by the library's fatal-error channel and by the CA branch of the
+        update path -- today the same condition reached two ways, since a
+        changed CA is the only failure the library declares terminal. Cleared
+        by a connection edge back to connected, which is the only evidence that
+        disproves it; the library refuses to reconnect after a CA change, so in
+        that case the edge arrives only after a person re-pins and the entry
+        reloads.
+        """
+        return self._transport_dead
+
     def request_reload(self) -> None:
         """Request a reload of the integration."""
         self._reload_requested = True
@@ -207,6 +240,30 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
                 reason,
             )
         self._panel_offline = True
+
+    def _mark_transport_dead(self, reason: Exception | str) -> None:
+        """Record that the transport has failed terminally and tell the entities.
+
+        Logged at ERROR, once, because unlike an outage this one needs a
+        person: nothing here retries, and the Repair raised alongside it is the
+        only way back.
+
+        The fan-out matters on the fatal-callback path. That path is not an
+        update cycle -- `last_update_success` is still True and no listener
+        would otherwise be notified -- so without it every entity would keep
+        rendering its last value until the fallback poll came round a minute
+        later and raised `UpdateFailed`. Guarded on the edge so the second
+        route into the same condition does not re-render everything.
+        """
+        if self._transport_dead:
+            return
+        _LOGGER.error(
+            "%s transport has stopped and will not recover on its own: %s",
+            self.config_entry.title or "SPAN Panel",
+            reason,
+        )
+        self._transport_dead = True
+        self.async_update_listeners()
 
     # --- Energy dip compensation ---
 
@@ -271,6 +328,15 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         )
         self._unregister_schema_change = self._client.register_schema_change_callback(
             self._on_schema_generation_change
+        )
+        # Subscribed here rather than only in `async_setup_entry`, which takes
+        # the same channel for the Repair, because the two consumers want
+        # different things from it and neither is the other's business: the
+        # entry raises something a person can act on, and the coordinator marks
+        # the transport dead so the entities stop answering. The library fans
+        # out to every subscriber.
+        self._unregister_fatal_error = self._client.register_fatal_error_callback(
+            self._on_fatal_transport_error
         )
         self._unregister_streaming = self._client.register_snapshot_callback(self._on_snapshot_push)
         await self._client.start_streaming()
@@ -381,12 +447,29 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         trigger spurious entity re-renders.
         """
         was_offline = self._panel_offline
+        was_dead = self._transport_dead
         if connected:
             self._mark_panel_online()
+            # The one thing that disproves a dead transport: it connected. Not
+            # folded into `_mark_panel_online`, which a successful snapshot also
+            # calls -- a read that came back cannot say the failure the library
+            # declared terminal has been resolved, only that this read worked.
+            self._transport_dead = False
         else:
             self._mark_panel_offline("MQTT broker disconnected")
-        if self._panel_offline != was_offline:
+        if self._panel_offline != was_offline or self._transport_dead != was_dead:
             self.async_update_listeners()
+
+    @callback
+    def _on_fatal_transport_error(self, error: SpanPanelError) -> None:
+        """Take the entities down when the library gives up on the transport.
+
+        The reconnect loop runs fire-and-forget, so a mid-session failure has
+        no call stack to surface on. Waiting for the next fallback poll to
+        re-raise it would leave a minute of entities reporting values read
+        before the transport died.
+        """
+        self._mark_transport_dead(error)
 
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
@@ -404,6 +487,10 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         if self._unregister_schema_change is not None:
             self._unregister_schema_change()
             self._unregister_schema_change = None
+
+        if self._unregister_fatal_error is not None:
+            self._unregister_fatal_error()
+            self._unregister_fatal_error = None
 
         if self._unregister_streaming is not None:
             self._unregister_streaming()
@@ -721,17 +808,19 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             await self._run_post_update_tasks(snapshot)
 
         except SpanPanelCAChangedError as err:
-            # Not an outage, and must not be handled as one. The offline branch
+            # Not an outage, and must not be marked as one. The offline branch
             # below keeps serving the last snapshot so a brief broker drop does
             # not blank the dashboard, which is right for a transport that will
             # come back and wrong for one that has stopped for good: it would
             # leave every entity showing a plausible value read before the pin
-            # broke. `UpdateFailed` takes them unavailable instead.
+            # broke. Marking it offline used to do exactly that -- `available`
+            # returns True on the offline shortcut, ahead of `UpdateFailed`, so
+            # the sensors stayed available and the POWER ones read 0 W.
             #
             # Nothing is retried or torn down here. The library refuses to
             # reconnect, the Repair is raised from the fatal-error channel in
             # `async_setup_entry`, and re-pinning requires a person.
-            self._mark_panel_offline(err)
+            self._mark_transport_dead(err)
             raise UpdateFailed(str(err)) from err
 
         except SpanPanelAuthError as err:

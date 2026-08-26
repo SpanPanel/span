@@ -86,6 +86,7 @@ def _make_gfe_coordinator(
 
     coordinator = MagicMock()
     coordinator.data = snapshot
+    coordinator.transport_dead = False
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.title = "SPAN Panel"
     coordinator.config_entry.data = {}

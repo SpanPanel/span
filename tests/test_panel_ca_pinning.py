@@ -8,6 +8,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api.exceptions import SpanPanelCAChangedError, SpanPanelConnectionError
@@ -24,7 +25,13 @@ from custom_components.span_panel.const import (
     CONF_PANEL_CA_PEM,
     DOMAIN,
     PANEL_CA_PENDING,
+    PANEL_STATUS,
 )
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
+from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
+
+from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 PEM = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
 OTHER_PEM = "-----BEGIN CERTIFICATE-----\nb3RoZXI=\n-----END CERTIFICATE-----\n"
@@ -267,26 +274,181 @@ async def test_the_fix_flow_aborts_when_the_panel_cannot_be_read(
     assert entry.data[CONF_PANEL_CA_PEM] == PEM
 
 
-@pytest.mark.asyncio
-async def test_the_coordinator_takes_entities_unavailable_on_a_ca_change(
-    hass: HomeAssistant,
-) -> None:
-    """A dead transport must not keep serving the snapshot read before it died."""
-    from homeassistant.helpers.update_coordinator import UpdateFailed
+# ---------- a transport that has stopped for good ----------
 
-    from custom_components.span_panel.coordinator import SpanPanelCoordinator
+
+def _panel_reading_1200_watts(
+    hass: HomeAssistant,
+) -> tuple[SpanPanelCoordinator, SpanCircuitPowerSensor]:
+    """Build a live entry whose next read finds the panel behind a different CA.
+
+    The sensor is a real one on a real coordinator: the defect was in how the
+    two of them agreed on availability, so a mock of either proves nothing.
+    """
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1", name="Kitchen Outlets", instant_power_w=1200.0
+    )
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
 
     entry = _entry(hass, **{CONF_PANEL_CA_PEM: PEM})
     client = MagicMock()
     client.get_snapshot = AsyncMock(side_effect=SpanPanelCAChangedError("aa" * 32, "bb" * 32))
     coordinator = SpanPanelCoordinator(hass, client, entry)
     # A previous good snapshot, which the ordinary offline path would keep serving.
-    coordinator.data = MagicMock()
+    coordinator.data = snapshot
+
+    power = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_power")
+    return coordinator, SpanCircuitPowerSensor(coordinator, power, snapshot, "c1")
+
+
+@pytest.mark.asyncio
+async def test_the_coordinator_takes_entities_unavailable_on_a_ca_change(
+    hass: HomeAssistant,
+) -> None:
+    """A dead transport must not keep serving the snapshot read before it died."""
+    coordinator, _ = _panel_reading_1200_watts(hass)
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
 
+    # Dead, not merely offline: the offline flag is what keeps sensors serving
+    # the last snapshot, and a transport that is not coming back must not.
+    assert coordinator.transport_dead is True
+    assert coordinator.panel_offline is False
+
+
+@pytest.mark.asyncio
+async def test_a_power_sensor_goes_unavailable_rather_than_reporting_zero(
+    hass: HomeAssistant,
+) -> None:
+    """The defect: a CA change left every POWER sensor 'available' at 0 W."""
+    coordinator, sensor = _panel_reading_1200_watts(hass)
+
+    sensor._update_native_value()
+    assert sensor.available is True
+    assert sensor.native_value == 1200.0
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    sensor._update_native_value()
+
+    assert sensor.available is False
+    assert sensor.native_value != 0.0
+
+
+@pytest.mark.asyncio
+async def test_the_fatal_channel_takes_the_entities_down_without_waiting_for_a_poll(
+    hass: HomeAssistant,
+) -> None:
+    """The mid-session route in: no exception reaches anybody's call stack.
+
+    The reconnect loop is fire-and-forget, so the only notification is this
+    callback. Without it the entities keep rendering the last snapshot until
+    the fallback poll comes round.
+    """
+    coordinator, sensor = _panel_reading_1200_watts(hass)
+    coordinator.client.start_streaming = AsyncMock()
+    await coordinator.async_setup_streaming()
+    on_fatal = coordinator.client.register_fatal_error_callback.call_args.args[0]
+
+    rendered: list[None] = []
+    # Listening is also what starts the coordinator's refresh timer, hence the
+    # unsubscribe below.
+    unsubscribe = coordinator.async_add_listener(lambda: rendered.append(None))
+
+    on_fatal(SpanPanelCAChangedError("aa" * 32, "bb" * 32))
+
+    assert coordinator.transport_dead is True
+    assert sensor.available is False
+    # Told at once, rather than a minute later: nothing else fires here.
+    assert rendered == [None]
+    unsubscribe()
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_disconnect_still_holds_the_last_reading(
+    hass: HomeAssistant,
+) -> None:
+    """The grace period is for outages, and this fix must not have taken it."""
+    coordinator, sensor = _panel_reading_1200_watts(hass)
+
+    coordinator._on_connection_change(False)
+
     assert coordinator.panel_offline is True
+    assert coordinator.transport_dead is False
+    assert sensor.available is True
+
+
+@pytest.mark.asyncio
+async def test_a_reconnection_brings_the_entities_back(hass: HomeAssistant) -> None:
+    """Dead is not permanent -- it is 'until something connects again'."""
+    coordinator, sensor = _panel_reading_1200_watts(hass)
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    assert sensor.available is False
+
+    coordinator._on_connection_change(True)
+
+    assert coordinator.transport_dead is False
+    assert sensor.available is True
+
+
+@pytest.mark.asyncio
+async def test_a_held_hardware_reading_and_a_control_go_with_the_transport(
+    hass: HomeAssistant,
+) -> None:
+    """The other two shapes of availability, both wrong for a dead transport.
+
+    `door_state` returns True on the offline branch so it can render Unknown
+    through an outage, and the switch returns False there because a control
+    that cannot reach the panel is not a control. Neither branch is consulted
+    now: the transport probe settles both ahead of them.
+    """
+    from custom_components.span_panel.binary_sensor import BINARY_SENSORS, SpanPanelBinarySensor
+    from custom_components.span_panel.const import SYSTEM_DOOR_STATE
+    from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
+
+    coordinator, _ = _panel_reading_1200_watts(hass)
+    door = SpanPanelBinarySensor(
+        coordinator, next(desc for desc in BINARY_SENSORS if desc.key == SYSTEM_DOOR_STATE)
+    )
+    relay = SpanPanelCircuitsSwitch(coordinator, "c1", "SPAN Panel")
+    assert door.available is True
+    assert relay.available is True
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert door.available is False
+    assert relay.available is False
+
+
+@pytest.mark.asyncio
+async def test_the_connectivity_sensor_reports_disconnected_rather_than_vanishing(
+    hass: HomeAssistant,
+) -> None:
+    """The one entity that must survive the condition it reports.
+
+    `panel_status` is exempt from the transport probe, so it has to read the
+    flag itself -- otherwise it would sit at 'connected' describing a transport
+    that has stopped for good.
+    """
+    from custom_components.span_panel.binary_sensor import BINARY_SENSORS, SpanPanelBinarySensor
+
+    coordinator, _ = _panel_reading_1200_watts(hass)
+    description = next(desc for desc in BINARY_SENSORS if desc.key == PANEL_STATUS)
+    status = SpanPanelBinarySensor(coordinator, description)
+    status.async_write_ha_state = MagicMock()
+
+    status._handle_coordinator_update()
+    assert status.is_on is True
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    status._handle_coordinator_update()
+
+    assert status.available is True
+    assert status.is_on is False
 
 
 # ---------- the transport those credentials travel over ----------
