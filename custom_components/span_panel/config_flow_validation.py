@@ -245,6 +245,50 @@ async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool
     return await loop.run_in_executor(None, _check)
 
 
+async def async_panel_leaf_host(
+    hass: HomeAssistant, host: str, tls_port: int, ca_pem: str
+) -> str | None:
+    """Return the address that reaches the panel at `host` under `ca_pem`, or None.
+
+    The single implementation of "which address does this panel answer on".
+    `host` itself when the certificate it serves already names it, the resolved
+    address when only that works, and None when neither does.
+
+    The name is tried first, always: the panel's leaf names the addresses it
+    knows itself by, and where it already names the host there is nothing to
+    work around and no reason to prefer anything else. Only then the resolved
+    address, which is the case that matters -- a host recorded as a name (an
+    add-on's container hostname, a search-domain short name, an FQDN the panel
+    has not been told about) fails hostname verification against a perfectly
+    good certificate, and an FQDN joins the SAN only once `register_fqdn` has
+    run, which is after authentication.
+
+    A host that will not resolve simply has one candidate and fails exactly as
+    it would have without this fallback.
+
+    Callers differ in what they may do with a resolved answer. Dialling one is
+    always safe; *persisting* one, or persisting the name it stood in for, is
+    not -- see `SpanPanelConfigFlow._async_choose_bootstrap_host`, which records
+    the substitution precisely so the rest of the flow can refuse to store a
+    host the anchor rejects.
+    """
+    if not host:
+        return None
+    if await async_leaf_chains_to_ca(host, tls_port, ca_pem):
+        return host
+    if is_ip_literal(host):
+        return None
+    resolved = await async_resolve_host(hass, host)
+    if resolved is None:
+        _LOGGER.debug("Could not resolve %s to an address; only the name is tried", host)
+        return None
+    if resolved == host:
+        return None
+    if await async_leaf_chains_to_ca(resolved, tls_port, ca_pem):
+        return resolved
+    return None
+
+
 async def async_ca_signs_panel_leaf(
     hass: HomeAssistant, host: str, tls_port: int, ca_pem: str
 ) -> bool:
@@ -258,26 +302,11 @@ async def async_ca_signs_panel_leaf(
     change diagnosis finds the fetched CA and the pinned one identical and has
     no change to report, and the entry retries forever with no repair to offer.
 
-    The address fallback is the config flow's, for the same reason: the panel's
-    leaf names the addresses it knows itself by, so a host recorded as a name --
-    an add-on's container hostname, a search-domain short name, an FQDN the
-    panel has not been told about -- fails hostname verification against a
-    perfectly good certificate. The name is tried first, always, because a panel
-    that already names it has nothing to work around.
-
-    A host that will not resolve simply has one candidate and fails as it would
-    have anyway.
+    For callers that only need the verdict; `async_panel_leaf_host` carries the
+    address the panel was actually reached on, and why there is more than one
+    candidate.
     """
-    if not host:
-        return False
-    if await async_leaf_chains_to_ca(host, tls_port, ca_pem):
-        return True
-    if is_ip_literal(host):
-        return False
-    resolved = await async_resolve_host(hass, host)
-    if resolved is None or resolved == host:
-        return False
-    return await async_leaf_chains_to_ca(resolved, tls_port, ca_pem)
+    return await async_panel_leaf_host(hass, host, tls_port, ca_pem) is not None
 
 
 async def validate_v2_proximity(

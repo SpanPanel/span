@@ -84,14 +84,14 @@ def panel_ca_available():
             "custom_components.span_panel.config_flow.build_panel_ssl_context",
             return_value=MagicMock(),
         ),
-        # Nothing resolves in a test run — the harness refuses DNS outright —
-        # so the flow takes its documented fallback and dials the name it was
-        # given, which is what every assertion in this module was written
-        # against. The resolved-address bootstrap is exercised for real against
-        # a live listener in `test_v2_config_flow_tls.py`.
+        # Every panel here is reached at the host it was given: no DNS (the
+        # harness refuses it outright) and no address substituted for a name,
+        # which is what every assertion in this module was written against. The
+        # resolved-address bootstrap is exercised for real against a live
+        # listener in `test_v2_config_flow_tls.py`.
         patch(
-            "custom_components.span_panel.config_flow.async_resolve_host",
-            new=AsyncMock(return_value=None),
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=AsyncMock(side_effect=lambda _hass, host, _port, _pem: host),
         ),
     ):
         yield
@@ -509,8 +509,8 @@ async def test_a_ca_that_does_not_sign_what_the_panel_serves_is_not_offered(
         ),
         patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
         patch(
-            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
-            new=AsyncMock(return_value=False),
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=AsyncMock(return_value=None),
         ),
     ):
         result = await _reach_the_ca_step(hass)
@@ -1080,8 +1080,8 @@ async def test_reauth_refuses_to_send_the_passphrase_when_the_leaf_does_not_chai
             return_value=MOCK_V2_DETECTION,
         ),
         patch(
-            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
-            new=AsyncMock(return_value=False),
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=AsyncMock(return_value=None),
         ),
         patch(
             "custom_components.span_panel.config_flow_validation.register_v2",
@@ -1257,7 +1257,7 @@ async def test_reauth_asks_where_a_moved_panel_serves_tls_and_keeps_the_answer(
     """An entry behind a proxy has to say where the leaf is before it can be checked."""
     entry = _unpinned_entry(hass, {CONF_API_VERSION: "v2", CONF_HTTP_PORT: 8080})
 
-    leaf_check = AsyncMock(return_value=True)
+    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
 
     with (
         patch(
@@ -1265,8 +1265,8 @@ async def test_reauth_asks_where_a_moved_panel_serves_tls_and_keeps_the_answer(
             return_value=MOCK_V2_DETECTION,
         ),
         patch(
-            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
-            new=leaf_check,
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=leaf_host,
         ),
         patch(
             "custom_components.span_panel.config_flow.validate_v2_passphrase",
@@ -1292,8 +1292,8 @@ async def test_reauth_asks_where_a_moved_panel_serves_tls_and_keeps_the_answer(
 
     assert done["reason"] == "reauth_successful"
     # Checked on the port the user named, and stored so the pin keeps pointing there.
-    assert leaf_check.await_args is not None
-    assert leaf_check.await_args.args[1] == 9443
+    assert leaf_host.await_args is not None
+    assert leaf_host.await_args.args[2] == 9443
     assert entry.data[CONF_HTTPS_PORT] == 9443
     assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
 
@@ -2322,7 +2322,7 @@ async def test_hassio_published_https_port_is_used_without_asking(hass: HomeAssi
     for a number they would have to go read out of an add-on log is a question
     with a worse answer available.
     """
-    leaf_check = AsyncMock(return_value=True)
+    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -2333,8 +2333,8 @@ async def test_hassio_published_https_port_is_used_without_asking(hass: HomeAssi
             return_value=MOCK_V2_AUTH,
         ),
         patch(
-            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
-            new=leaf_check,
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=leaf_host,
         ),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -2349,7 +2349,7 @@ async def test_hassio_published_https_port_is_used_without_asking(hass: HomeAssi
         assert result2["step_id"] == "choose_v2_auth"
 
         # The published port is the one the CA was checked against, not 443.
-        assert leaf_check.await_args.args[1] == 10090
+        assert leaf_host.await_args.args[2] == 10090
 
         result3 = await hass.config_entries.flow.async_configure(
             result2["flow_id"], {"next_step_id": "auth_passphrase"}
@@ -2381,7 +2381,7 @@ async def test_zeroconf_https_port_txt_record_is_used_without_asking(
         type="_ebus._tcp.local.",
     )
 
-    leaf_check = AsyncMock(return_value=True)
+    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -2392,8 +2392,8 @@ async def test_zeroconf_https_port_txt_record_is_used_without_asking(
             return_value=True,
         ),
         patch(
-            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
-            new=leaf_check,
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=leaf_host,
         ),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -2405,7 +2405,7 @@ async def test_zeroconf_https_port_txt_record_is_used_without_asking(
 
         result2 = await _submit_host_and_pin(hass, result["flow_id"], {})
         assert result2["step_id"] == "choose_v2_auth"
-        assert leaf_check.await_args.args[1] == 9081
+        assert leaf_host.await_args.args[2] == 9081
 
 
 @pytest.mark.asyncio

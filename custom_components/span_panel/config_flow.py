@@ -47,10 +47,9 @@ from .config_flow_validation import (
     as_port,
     async_fetch_panel_ca,
     async_leaf_chains_to_ca,
-    async_resolve_host,
+    async_panel_leaf_host,
     check_fqdn_tls_ready,
     is_fqdn,
-    is_ip_literal,
     panel_rest_transport,
     port_or_none,
     validate_host,
@@ -237,46 +236,34 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> bool:
         """Settle which address the panel is dialled by, and whether it can be at all.
 
-        The host the user gave is tried first, always. A panel's certificate
-        names the addresses it already knows itself by -- its IP, its mDNS name,
-        an FQDN registered by a previous install, the hostname an add-on serves
-        under -- and where the leaf already names the host there is nothing to
-        work around and no reason to prefer anything else. Only when that fails
-        is the resolved address tried, which is the case that matters: an FQDN
-        joins the SAN when `register_fqdn` runs, and that is after
-        authentication, so a fresh FQDN install has to be bootstrapped over the
-        address until the panel has been told the name.
+        Which addresses are tried, and in what order, is `async_panel_leaf_host`
+        -- one implementation, shared with the setup-time and repair-time
+        checks. What is this flow's own is the *consequence* of the answer: a
+        panel reached at something other than the host the user gave is a panel
+        whose certificate does not name that host, and `_bootstrap_host` records
+        exactly that, so every later step about to persist `self.host` can read
+        it as "the anchor would reject this" and refuse.
 
-        Returns False when neither answers under the published CA, which is a
-        leaf mismatch and is fatal to the step that called it. A name that will
-        not resolve simply has one candidate, so it fails exactly as it did
-        before this address fallback existed.
+        Returns False when nothing answers under the published CA, which is a
+        leaf mismatch and is fatal to the step that called it.
         """
         self._bootstrap_host = None
         host = self.host
         if not host:
             return False
 
-        candidates = [host]
-        if not is_ip_literal(host):
-            resolved = await async_resolve_host(self.hass, host)
-            if resolved is None:
-                _LOGGER.debug("Could not resolve %s to an address; only the name is tried", host)
-            elif resolved != host:
-                candidates.append(resolved)
-
-        for candidate in candidates:
-            if await async_leaf_chains_to_ca(candidate, tls_port, ca_pem):
-                self._bootstrap_host = None if candidate == host else candidate
-                if self._bootstrap_host is not None:
-                    _LOGGER.debug(
-                        "The certificate this panel serves does not name %s; reaching it "
-                        "at %s until it does",
-                        host,
-                        candidate,
-                    )
-                return True
-        return False
+        reached = await async_panel_leaf_host(self.hass, host, tls_port, ca_pem)
+        if reached is None:
+            return False
+        if reached != host:
+            self._bootstrap_host = reached
+            _LOGGER.debug(
+                "The certificate this panel serves does not name %s; reaching it "
+                "at %s until it does",
+                host,
+                reached,
+            )
+        return True
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
