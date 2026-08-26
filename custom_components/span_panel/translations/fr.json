@@ -71,7 +71,7 @@
         "title": "Connectez-vous au Span Panel"
       },
       "fqdn_failed": {
-        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer, mais la connexion MQTT peut échouer si le certificat du panneau n'inclut pas votre nom de domaine.",
+        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer : le panneau sera configuré à l'adresse que son certificat désigne réellement, et le nom de domaine n'est pas enregistré, car le panneau le rejetterait. Réessayez avec le nom de domaine depuis Reconfigurer une fois le problème résolu.",
         "title": "Enregistrement du domaine"
       },
       "reauth_confirm": {
@@ -96,7 +96,7 @@
         "title": "Reconfiguration terminée"
       },
       "reconfigure_fqdn_failed": {
-        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer, mais la connexion MQTT peut échouer si le certificat du panneau n'inclut pas votre nom de domaine.",
+        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer : le panneau sera configuré à l'adresse que son certificat désigne réellement, et le nom de domaine n'est pas enregistré, car le panneau le rejetterait. Réessayez avec le nom de domaine depuis Reconfigurer une fois le problème résolu.",
         "title": "Enregistrement du domaine"
       },
       "reconfigure_register_fqdn": {

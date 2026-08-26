@@ -71,7 +71,7 @@
         "title": "Ligar ao Painel Span"
       },
       "fqdn_failed": {
-        "description": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo. Pode continuar, mas a conexão MQTT pode falhar se o certificado do painel não incluir o seu nome de domínio.",
+        "description": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo. Pode continuar, e o painel será configurado no endereço que o certificado indica; o nome de domínio não é guardado, porque o painel iria rejeitá-lo. Tente novamente o nome de domínio em Reconfigurar assim que resolver o que impediu o registo.",
         "title": "Registo de Domínio"
       },
       "reauth_confirm": {
@@ -96,7 +96,7 @@
         "title": "Reconfiguração Concluída"
       },
       "reconfigure_fqdn_failed": {
-        "description": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo. Pode continuar, mas a conexão MQTT pode falhar se o certificado do painel não incluir o seu nome de domínio.",
+        "description": "Não foi possível registar o nome de domínio no painel ou o certificado TLS não foi atualizado a tempo. Pode continuar, e o painel será configurado no endereço que o certificado indica; o nome de domínio não é guardado, porque o painel iria rejeitá-lo. Tente novamente o nome de domínio em Reconfigurar assim que resolver o que impediu o registo.",
         "title": "Registo de Domínio"
       },
       "reconfigure_register_fqdn": {

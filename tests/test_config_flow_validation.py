@@ -472,3 +472,51 @@ async def test_resolve_host_returns_none_when_the_name_does_not_resolve() -> Non
         return_value=[],
     ):
         assert await async_resolve_host(hass, "panel.example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_host_survives_a_name_that_cannot_be_idna_encoded() -> None:
+    """A label over 63 characters fails encoding, not lookup, and raises a ValueError.
+
+    `socket.getaddrinfo` raises `UnicodeEncodeError` — a `UnicodeError`, which is
+    a `ValueError` and not an `OSError` — before it attempts any lookup. A host
+    the user typed into a form must not be able to end the flow in a traceback.
+    """
+
+    async def _run(func):
+        return func()
+
+    hass = MagicMock()
+    hass.async_add_executor_job = _run
+    overlong = "a" * 70 + ".example.com"
+    with patch(
+        "custom_components.span_panel.config_flow_validation.socket.getaddrinfo",
+        side_effect=UnicodeEncodeError("idna", overlong, 0, 70, "label too long"),
+    ):
+        assert await async_resolve_host(hass, overlong) is None
+
+
+@pytest.mark.asyncio
+async def test_leaf_check_survives_a_name_that_cannot_be_idna_encoded() -> None:
+    """The leaf check resolves the name too, and fails the same way."""
+
+    class FakeLoop:
+        async def run_in_executor(self, _executor, func):
+            return func()
+
+    overlong = "a" * 70 + ".example.com"
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.asyncio.get_running_loop",
+            return_value=FakeLoop(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.socket.create_connection",
+            side_effect=UnicodeEncodeError("idna", overlong, 0, 70, "label too long"),
+        ),
+    ):
+        assert await async_leaf_chains_to_ca(overlong, 443, "pem") is False

@@ -174,7 +174,11 @@ async def async_resolve_host(hass: HomeAssistant, host: str) -> str | None:
     def _resolve() -> str | None:
         try:
             infos = socket.getaddrinfo(host, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
-        except OSError:
+        except (OSError, UnicodeError):
+            # `UnicodeError` rather than only `OSError`: a label over 63
+            # characters fails IDNA encoding before any lookup is attempted, and
+            # `UnicodeEncodeError` is a `ValueError`. A host the user typed must
+            # not be able to end a config flow in a traceback.
             return None
         for *_unused, sockaddr in infos:
             return str(sockaddr[0])
@@ -232,7 +236,10 @@ async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool
                 ctx.wrap_socket(sock, server_hostname=host),
             ):
                 return True
-        except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError):
+        except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError, UnicodeError):
+            # `UnicodeError` for the same reason as in `async_resolve_host`: the
+            # connect resolves the name, and an over-long label raises out of
+            # IDNA encoding rather than as a lookup failure.
             return False
 
     return await loop.run_in_executor(None, _check)

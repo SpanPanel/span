@@ -192,13 +192,23 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # entry on reauth and reconfigure, where a pin may already exist; left
         # None on initial setup, which has nothing pinned yet by construction.
         self._rest_transport: PanelRestTransport | None = None
-        # The address this flow dials, which is not always the host it is
-        # setting up. A panel's certificate names the addresses it already knows
-        # itself by; an FQDN joins that list only once `register_fqdn` has run,
-        # and everything before that has to be dialled by an address the leaf
-        # already names. None means "dial `self.host`" -- an IP install, or a
-        # name that would not resolve.
+        # The address this flow dials while `self.host` is a name the panel's
+        # certificate does not yet name -- an FQDN before `register_fqdn` has
+        # run, which is every FQDN install up to the moment it authenticates.
+        #
+        # It carries an invariant the rest of the flow leans on: **it is set
+        # only while `self.host` is unverified under the pin.** It is None when
+        # the host is an IP, when the leaf already names the host, and again as
+        # soon as registration makes the panel serve the name. So anything about
+        # to persist `self.host` can read it as "this host is one the anchor
+        # would reject", and refuse rather than write an entry that cannot
+        # connect to its own panel.
         self._bootstrap_host: str | None = None
+        # Whether the panel accepted the FQDN and now serves it. Recorded rather
+        # than re-derived from `is_fqdn(host)` at entry creation, because that
+        # question is "does this look like a domain name" and the one that
+        # matters is "did the registration this flow performed succeed".
+        self._fqdn_registered: bool = False
         # Energy dip compensation default for fresh installs
         self._enable_dip_compensation: bool = True
         # FQDN registration task (async_show_progress)
@@ -223,24 +233,49 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             raise ConfigFlowError("Reached a panel REST call with no transport pinned")
         return self._rest_transport
 
-    async def _async_adopt_bootstrap_host(self) -> None:
-        """Dial the panel by address while its certificate still names only that.
+    async def _async_choose_bootstrap_host(self, ca_pem: str, tls_port: int) -> bool:
+        """Settle which address the panel is dialled by, and whether it can be at all.
 
-        A name that does not resolve leaves the host as it was, which is what
-        shipped: the leaf check then runs against the name and reports what it
-        finds. Better than refusing to continue over a lookup the user may not
-        need -- an mDNS name on a host without an mDNS resolver still reaches
-        the panel through whatever answered the plaintext probe.
+        The host the user gave is tried first, always. A panel's certificate
+        names the addresses it already knows itself by -- its IP, its mDNS name,
+        an FQDN registered by a previous install, the hostname an add-on serves
+        under -- and where the leaf already names the host there is nothing to
+        work around and no reason to prefer anything else. Only when that fails
+        is the resolved address tried, which is the case that matters: an FQDN
+        joins the SAN when `register_fqdn` runs, and that is after
+        authentication, so a fresh FQDN install has to be bootstrapped over the
+        address until the panel has been told the name.
+
+        Returns False when neither answers under the published CA, which is a
+        leaf mismatch and is fatal to the step that called it. A name that will
+        not resolve simply has one candidate, so it fails exactly as it did
+        before this address fallback existed.
         """
         self._bootstrap_host = None
         host = self.host
-        if not host or is_ip_literal(host):
-            return
-        resolved = await async_resolve_host(self.hass, host)
-        if resolved is None:
-            _LOGGER.debug("Could not resolve %s to an address; dialling the name", host)
-            return
-        self._bootstrap_host = resolved
+        if not host:
+            return False
+
+        candidates = [host]
+        if not is_ip_literal(host):
+            resolved = await async_resolve_host(self.hass, host)
+            if resolved is None:
+                _LOGGER.debug("Could not resolve %s to an address; only the name is tried", host)
+            elif resolved != host:
+                candidates.append(resolved)
+
+        for candidate in candidates:
+            if await async_leaf_chains_to_ca(candidate, tls_port, ca_pem):
+                self._bootstrap_host = None if candidate == host else candidate
+                if self._bootstrap_host is not None:
+                    _LOGGER.debug(
+                        "The certificate this panel serves does not name %s; reaching it "
+                        "at %s until it does",
+                        host,
+                        candidate,
+                    )
+                return True
+        return False
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
@@ -654,14 +689,35 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_panel_serial = result.serial_number
 
     async def _async_finalize_v2_auth(self) -> ConfigFlowResult:
-        """Route to appropriate next step after successful v2 auth."""
+        """Route to appropriate next step after successful v2 auth.
+
+        Registration is the one thing that can make the panel name a host it
+        does not name yet, so it is the only route allowed to persist a host
+        that is currently unverified. Every other route here writes `self.host`
+        into an entry pinned to this anchor, and writing one the anchor rejects
+        produces an entry that cannot reach its own panel — a single-label name
+        that a search domain resolves, or an FQDN this flow bootstrapped over
+        the address for and is not going on to register.
+        """
+        # If host is an FQDN, register it with the panel for TLS cert SAN inclusion
+        installing = self.trigger_flow_type != TriggerFlowType.UPDATE_ENTRY
+        if installing and self.host and is_fqdn(self.host):
+            return await self.async_step_register_fqdn()
+
+        if self._bootstrap_host is not None:
+            _LOGGER.warning(
+                "Panel %s does not name %s in the certificate it serves, and nothing in "
+                "this flow will ask it to; refusing to pin an entry to a host its own "
+                "certificate authority rejects",
+                self._bootstrap_host,
+                self.host,
+            )
+            return self._async_show_ca_error("ca_leaf_mismatch")
+
         if self.trigger_flow_type == TriggerFlowType.UPDATE_ENTRY:
             if "entry_id" not in self.context:
                 raise ValueError("Entry ID is missing from context")
             return self._update_v2_entry(self.context["entry_id"])
-        # If host is an FQDN, register it with the panel for TLS cert SAN inclusion
-        if self.host and is_fqdn(self.host):
-            return await self.async_step_register_fqdn()
         return await self.async_step_choose_entity_naming_initial()
 
     async def async_step_register_fqdn(
@@ -730,13 +786,17 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                     self.host,
                     attempt + 1,
                 )
-                await self._async_verify_fqdn_over_pin(transport)
+                await self._async_verify_host_over_pin(transport)
+                # The panel serves the name now, so the address it was reached
+                # by while it did not is no longer standing in for anything.
+                self._bootstrap_host = None
+                self._fqdn_registered = True
                 return
 
         raise ConfigFlowError(f"Timed out waiting for TLS certificate to include FQDN {self.host}")
 
-    async def _async_verify_fqdn_over_pin(self, transport: PanelRestTransport) -> None:
-        """Confirm the pinned anchor validates the panel at the FQDN and REST port.
+    async def _async_verify_host_over_pin(self, transport: PanelRestTransport) -> None:
+        """Confirm the pinned anchor validates the panel at `self.host` and the REST port.
 
         The readiness poll watches the broker port, which is the port the MQTT
         client uses. The entry's REST calls go somewhere else -- the HTTPS port
@@ -753,21 +813,52 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return
         if not await async_leaf_chains_to_ca(self.host or "", transport.port, transport.ca_pem):
             raise ConfigFlowError(
-                f"Panel registered FQDN {self.host} but does not serve it on port "
+                f"Panel registered {self.host} but does not serve it on port "
                 f"{transport.port} under the pinned certificate authority"
             )
 
     async def async_step_fqdn_failed(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle FQDN registration failure — user may continue without it."""
+        """Handle FQDN registration failure — user may continue over the panel's address.
+
+        Continuing keeps the panel, not the name. The certificate does not name
+        the domain, because getting it named is exactly what failed, so an entry
+        recording the domain would be pinned to a host its own anchor rejects
+        and would fail on its first connect. It is set up over the address the
+        certificate does name instead, and the domain can be tried again from
+        Reconfigure once whatever blocked the registration is fixed.
+        """
         if user_input is not None:
+            self._fall_back_to_the_bootstrap_address()
             return await self.async_step_choose_entity_naming_initial()
         return self.async_show_form(
             step_id="fqdn_failed",
             data_schema=vol.Schema({}),
             errors={"base": "fqdn_registration_failed"},
         )
+
+    def _fall_back_to_the_bootstrap_address(self) -> None:
+        """Adopt the address the panel was reached by as the host to record.
+
+        Only ever called where registration has already failed. `_bootstrap_host`
+        is set exactly when `self.host` is a name the pinned leaf does not name,
+        so this is the point where an unusable name is traded for the address
+        that got this far — and the invariant is restored, because the host
+        being recorded is now one the anchor accepts.
+        """
+        if self._bootstrap_host is None:
+            return
+        _LOGGER.warning(
+            "Could not get panel %s to serve %s, so the entry is set up over %s instead; "
+            "the certificate the panel serves does not name %s",
+            self._bootstrap_host,
+            self.host,
+            self._bootstrap_host,
+            self.host,
+        )
+        self.host = self._bootstrap_host
+        self._bootstrap_host = None
 
     async def async_step_panel_ca_start(
         self, user_input: dict[str, Any] | None = None
@@ -822,37 +913,26 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not self.host:
             return self.async_abort(reason="host_not_set")
 
-        # Both calls below go to the panel's address rather than to the name the
-        # user typed. The panel's leaf names the addresses it already knows
-        # itself by, and an FQDN is not one of them until `register_fqdn` runs --
-        # which is after authentication, which is after this. Checking a
-        # not-yet-registered FQDN against that leaf fails on the hostname, and
-        # this step is deliberately a dead end, so it would make an FQDN install
-        # impossible rather than merely unverified.
-        await self._async_adopt_bootstrap_host()
-
         try:
-            ca_pem = await async_fetch_panel_ca(
-                self.hass, self._rest_host, http_port=self._http_port
-            )
+            ca_pem = await async_fetch_panel_ca(self.hass, self.host, http_port=self._http_port)
         except (
             SpanPanelAPIError,
             SpanPanelConnectionError,
             SpanPanelTimeoutError,
         ) as err:
-            _LOGGER.warning("Could not fetch the CA from panel %s: %s", self._rest_host, err)
+            _LOGGER.warning("Could not fetch the CA from panel %s: %s", self.host, err)
             return self._async_show_ca_error("ca_unavailable")
 
         # A CA that cannot validate the certificate the panel actually serves is
         # not the panel's CA. Checked before the fingerprint is shown, so the
         # user is never asked to accept a value that already failed. Hostname
-        # verification stays on -- the address it is checked against changed,
-        # the check did not.
-        if not await async_leaf_chains_to_ca(self._rest_host, self._https_port, ca_pem):
+        # verification stays on throughout -- what the chooser varies is the
+        # address the panel is dialled by, never whether the name is checked.
+        if not await self._async_choose_bootstrap_host(ca_pem, self._https_port):
             _LOGGER.warning(
                 "The certificate served by %s on port %s does not chain to the CA the "
                 "panel published; refusing to pin it",
-                self._rest_host,
+                self.host,
                 self._https_port,
             )
             return self._async_show_ca_error("ca_leaf_mismatch")
@@ -972,7 +1052,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # nonetheless exchanged over TLS — a state nothing else expects.
             raise ConfigFlowError("Reached entry creation with no pinned panel CA")
         entry_data[CONF_PANEL_CA_PEM] = self._panel_ca_pem
-        if is_fqdn(host):
+        if self._fqdn_registered:
+            # Recorded from what the registration did, not from what the host
+            # looks like. `is_fqdn(host)` was true on the path where
+            # registration had just failed and the user chose to continue, so
+            # the entry claimed a name the panel had never accepted.
             entry_data[CONF_REGISTERED_FQDN] = host
 
         return self.async_create_entry(
@@ -1121,12 +1205,21 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Validate the host is reachable and is a v2 panel
         http_port = int(reconfigure_entry.data.get(CONF_HTTP_PORT, 80))
         self._rest_transport = panel_rest_transport(self.hass, reconfigure_entry.data)
-        # The new host may be an FQDN the panel has never heard of, and this
+        # The new host may be a name the panel has never heard of, and this
         # entry is pinned: probing it by name would fail hostname verification
-        # and report the panel unreachable. Probe the address, register the
-        # name, verify the name afterwards.
+        # and report the panel unreachable. Settle the address first, so the
+        # probe reaches the panel and `_bootstrap_host` records whether the new
+        # name is one the pinned certificate already covers.
         self.host = host
-        await self._async_adopt_bootstrap_host()
+        pinned_pem = self._rest_transport.ca_pem
+        if pinned_pem is not None and not await self._async_choose_bootstrap_host(
+            pinned_pem, self._rest_transport.port
+        ):
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                errors={"base": "ca_leaf_mismatch"},
+            )
         try:
             detection = await detect_api_version(
                 self._rest_host,
@@ -1171,7 +1264,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             self._v2_broker_port = int(reconfigure_entry.data.get(CONF_EBUS_BROKER_PORT, 8883))
             return await self.async_step_reconfigure_register_fqdn()
 
-        # New host is not an FQDN — simple update
+        # New host is not an FQDN — simple update. Nothing on this branch will
+        # ask the panel to start naming it, so a host the pinned certificate
+        # does not cover is refused here rather than written into the entry.
+        if self._bootstrap_host is not None:
+            _LOGGER.warning(
+                "Panel %s does not name %s in the certificate it serves; refusing to "
+                "point a pinned entry at a host its own certificate authority rejects",
+                self._bootstrap_host,
+                host,
+            )
+            return self.async_show_form(
+                step_id="reconfigure",
+                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                errors={"base": "ca_leaf_mismatch"},
+            )
+
         data_updates: dict[str, Any] = {CONF_HOST: host}
         old_fqdn = str(reconfigure_entry.data.get(CONF_REGISTERED_FQDN, ""))
         if old_fqdn:
@@ -1242,9 +1350,16 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_reconfigure_fqdn_failed(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle FQDN registration failure during reconfigure."""
+        """Handle FQDN registration failure during reconfigure.
+
+        Same trade as on install: the panel is kept and the name is not. The
+        entry's existing `CONF_REGISTERED_FQDN` is deliberately left alone —
+        whatever the panel had registered before this attempt, it still has, and
+        that is what the next reconfigure needs in order to clean it up.
+        """
         if user_input is not None:
             # User chose to continue anyway — update host without FQDN registration
+            self._fall_back_to_the_bootstrap_address()
             reconfigure_entry = self._get_reconfigure_entry()
             return self.async_update_reload_and_abort(
                 reconfigure_entry,

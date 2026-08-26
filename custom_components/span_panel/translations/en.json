@@ -71,7 +71,7 @@
         "title": "Connect to the Span Panel"
       },
       "fqdn_failed": {
-        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name.",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, and the panel will be set up at the address its certificate does name — the domain name is not recorded, because the panel would reject it. Try the domain name again from Reconfigure once whatever blocked the registration is fixed.",
         "title": "Domain Registration"
       },
       "reauth_confirm": {
@@ -96,7 +96,7 @@
         "title": "Reconfiguration Complete"
       },
       "reconfigure_fqdn_failed": {
-        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, but the MQTT connection may fail if the panel's certificate does not include your domain name.",
+        "description": "The domain name could not be registered with the panel, or the TLS certificate was not updated in time. You may continue, and the panel will be set up at the address its certificate does name — the domain name is not recorded, because the panel would reject it. Try the domain name again from Reconfigure once whatever blocked the registration is fixed.",
         "title": "Domain Registration"
       },
       "reconfigure_register_fqdn": {
