@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
-import logging
 
-from homeassistant.components.persistent_notification import async_create
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     entity_registry as er,  # noqa: F401 — re-exported for patch compatibility
 )
@@ -57,7 +54,6 @@ __all__ = [
     "PANEL_ENTITY_SUFFIX_MAPPING",
     "PANEL_SUFFIX_MAPPING",
     "adopted_capability_tokens",
-    "async_create_span_notification",
     "build_bess_unique_id",
     "build_mid_unique_id",
     "build_bess_unique_id_for_entry",
@@ -72,6 +68,8 @@ __all__ = [
     "build_select_unique_id_for_entry",
     "build_switch_unique_id",
     "build_switch_unique_id_for_entry",
+    "circuit_has_a_breaker_switch",
+    "circuit_has_a_priority_select",
     "construct_binary_sensor_unique_id",
     "construct_circuit_identifier_from_tabs",
     "construct_circuit_label",
@@ -102,40 +100,45 @@ __all__ = [
     "resolve_evse_display_suffix",
 ]
 
-_LOGGER = logging.getLogger(__name__)
 
+def circuit_has_a_breaker_switch(circuit: SpanCircuitSnapshot) -> bool:
+    """Whether this circuit gets a breaker switch at all.
 
-async def async_create_span_notification(
-    hass: HomeAssistant,
-    message: str,
-    title: str,
-    notification_id: str,
-    level: str = "warning",
-) -> None:
-    """Create a persistent notification for SPAN Panel issues.
+    One predicate, read by `switch.async_setup_entry` when it decides what to
+    create and by the coordinator when it decides whether that answer has moved
+    since setup. A second copy would drift, and the drift would be invisible: a
+    switch left on the dashboard offering a control the panel refuses, or a
+    circuit the panel has commissioned that never grows the switch it earned.
 
-    Args:
-        hass: Home Assistant instance
-        message: Notification message content
-        title: Notification title
-        notification_id: Unique identifier for the notification
-        level: Severity level (info, warning, error)
-
+    It lives here rather than in `switch.py` because the coordinator is the only
+    reader that sees every circuit, and `switch.py` imports the coordinator --
+    so the predicate has to sit below both of them.
     """
-    _LOGGER.log(
-        getattr(logging, level.upper(), logging.WARNING),
-        "SPAN Panel %s: %s - %s",
-        level,
-        title,
-        message,
-    )
+    if not circuit.is_user_controllable:
+        return False
+    # PV/EVSE circuits only get switches if they have a physical breaker
+    # (relative_position == "DOWNSTREAM" means connected at a breaker slot).
+    return not (circuit.device_type in ("pv", "evse") and circuit.relative_position != "DOWNSTREAM")
 
-    async_create(
-        hass,
-        message=message,
-        title=title,
-        notification_id=notification_id,
-    )
+
+def circuit_has_a_priority_select(circuit: SpanCircuitSnapshot) -> bool:
+    """Whether this circuit gets a shed-priority select at all.
+
+    The companion of `circuit_has_a_breaker_switch`, and read by the same two
+    callers for the same reason: `select.async_setup_entry` to decide what to
+    create, the coordinator to notice the answer changing under a live entry.
+
+    Priority settability is its own commissioning flag, not the relay's. v1.0
+    expresses never-backup as the absence of `$settable` on
+    `load-shed/priority`, which the adapter carries here.
+    """
+    if not circuit.is_user_controllable:
+        return False
+    if circuit.is_never_backup:
+        return False
+    # PV/EVSE circuits only get selects if they have a physical breaker
+    # (relative_position == "DOWNSTREAM" means connected at a breaker slot).
+    return not (circuit.device_type in ("pv", "evse") and circuit.relative_position != "DOWNSTREAM")
 
 
 def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = "") -> str:

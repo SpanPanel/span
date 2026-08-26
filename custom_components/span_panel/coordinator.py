@@ -31,7 +31,11 @@ from span_panel_api.exceptions import (
 )
 
 from .const import DOMAIN
-from .helpers import detect_capabilities
+from .helpers import (
+    circuit_has_a_breaker_switch,
+    circuit_has_a_priority_select,
+    detect_capabilities,
+)
 from .id_builder import build_circuit_unique_id
 from .notices import async_raise, read_translations
 from .schema_repairs import async_sync_schema_issues
@@ -128,6 +132,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
+
+        # Per-circuit control settability — detect when the panel changes its
+        # mind about whether a circuit may be operated, in either direction.
+        # None until the first snapshot, which is the baseline.
+        self._known_settability: dict[str, tuple[bool, bool]] | None = None
 
         # Schema validation — runs once SUCCESSFULLY; a pass that finds no
         # metadata yet leaves the flag unset so a later one can still answer.
@@ -475,6 +484,7 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """Handle a pushed snapshot from MQTT streaming."""
         self._mark_panel_online()
         self._check_capability_change(snapshot)
+        self._check_settability_change(snapshot)
         self.async_set_updated_data(snapshot)
         await self._run_post_update_tasks(snapshot)
 
@@ -636,6 +646,68 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
                 ", ".join(sorted(new_caps)),
             )
             self._known_capabilities = current
+            self.request_reload()
+
+    # --- Per-circuit control settability ---
+
+    @staticmethod
+    def _read_settability(snapshot: SpanPanelSnapshot) -> dict[str, tuple[bool, bool]]:
+        """Answer, for every circuit, which control entities it would get.
+
+        The same two predicates `switch.async_setup_entry` and
+        `select.async_setup_entry` gate creation on, read here over the whole
+        snapshot rather than restated. A second copy would drift, and the drift
+        would be silent: the platforms and the reload trigger disagreeing about
+        what the panel allows.
+        """
+        return {
+            circuit_id: (
+                circuit_has_a_breaker_switch(circuit),
+                circuit_has_a_priority_select(circuit),
+            )
+            for circuit_id, circuit in snapshot.circuits.items()
+        }
+
+    def _check_settability_change(self, snapshot: SpanPanelSnapshot) -> None:
+        """Request a reload when the panel changes its mind about a circuit.
+
+        Both directions, which is why this lives here rather than on the
+        entities. A circuit that stops being commandable keeps a switch that
+        refuses every press -- an entity can see that about itself. A circuit
+        that *becomes* commandable has no switch and no select at all, so there
+        is nothing on it to notice; only a reader over every circuit can.
+
+        A reload rather than a quiet availability change, because the entity
+        should not exist -- or should exist and does not -- under the new
+        answer, and creating and removing entities is what `async_setup_entry`
+        is for. The baseline is updated on the same pass that asks for the
+        reload, so a settled panel costs one dict comprehension per push and a
+        changed one asks exactly once.
+
+        Only circuits present in *both* readings are judged. A circuit can drop
+        out of a snapshot and come back -- the platforms guard for exactly that
+        -- and counting an absence as a settability change would turn a flap
+        into a reload loop. Membership is still carried forward, so a circuit
+        that leaves and returns with a different answer is caught on its return.
+        """
+        current = self._read_settability(snapshot)
+        if self._known_settability is None:
+            # First snapshot — record baseline
+            self._known_settability = current
+            return
+
+        known = self._known_settability
+        changed = sorted(
+            circuit_id
+            for circuit_id, answer in current.items()
+            if circuit_id in known and known[circuit_id] != answer
+        )
+        self._known_settability = current
+        if changed:
+            _LOGGER.info(
+                "Panel changed which controls it allows on circuit(s) %s — requesting reload",
+                ", ".join(changed),
+            )
             self.request_reload()
 
     # --- Solar entity migration (v1 → v2) ---
@@ -804,6 +876,11 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
 
             # Check for new hardware capabilities (BESS, PV, power-flows)
             self._check_capability_change(snapshot)
+
+            # Check whether the panel changed which circuits it will let a user
+            # operate. Both transports run it: the fallback poll is the only
+            # path a panel with no live MQTT stream has.
+            self._check_settability_change(snapshot)
 
             await self._run_post_update_tasks(snapshot)
 

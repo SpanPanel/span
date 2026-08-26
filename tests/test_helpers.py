@@ -2,13 +2,9 @@
 
 # pylint: disable=reimported
 
-from unittest.mock import MagicMock, patch
-
 from homeassistant.util import slugify
-import pytest
 
 from custom_components.span_panel.helpers import (
-    async_create_span_notification,
     construct_circuit_identifier_from_tabs,
     detect_capabilities,
     get_suffix_from_sensor_key,
@@ -120,27 +116,6 @@ class TestHelperFunctions:
         assert construct_circuit_identifier_from_tabs([5, 6], "c1") == "Circuit 5 6"
         assert construct_circuit_identifier_from_tabs([7], "c1") == "Circuit 7"
         assert construct_circuit_identifier_from_tabs([], "fallback") == "Circuit fallback"
-
-    @patch("custom_components.span_panel.helpers.async_create")
-    @pytest.mark.asyncio
-    async def test_async_create_span_notification_logs_and_forwards(self, mock_create):
-        """Test notification helper forwarding."""
-        hass = MagicMock()
-
-        await async_create_span_notification(
-            hass,
-            "Panel connection lost",
-            "SPAN Alert",
-            "notif-1",
-            level="error",
-        )
-
-        mock_create.assert_called_once_with(
-            hass,
-            message="Panel connection lost",
-            title="SPAN Alert",
-            notification_id="notif-1",
-        )
 
     def test_detect_capabilities_helper(self):
         """Test capability detection from a populated snapshot."""

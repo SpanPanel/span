@@ -27,6 +27,7 @@ from custom_components.span_panel.const import (
     CONF_HTTP_PORT,
     DOMAIN,
 )
+from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .factories import SpanPanelSnapshotFactory
@@ -525,3 +526,16 @@ async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forward
         assert await async_setup_entry(hass, entry) is True
 
     assert entry.runtime_data.control_lock.armed is True
+def test_runtime_data_defaults_its_lock_to_the_default_policys_answer() -> None:
+    """The dataclass default may not contradict the policy it stands in for.
+
+    `control_lock` is defaulted rather than required, so an entry built without
+    one gets whatever this class decides -- and a bare `ControlLock()` would be
+    disarmed, a promise about a feature the class has no way to check. Deriving
+    it from `ControlPolicy.default()` is what keeps it honest, and this pins the
+    two together so a change to the default policy cannot silently unlock the
+    entries that never named a lock.
+    """
+    runtime_data = SpanPanelRuntimeData(coordinator=MagicMock(), panel_device_id="panel-device-id")
+
+    assert runtime_data.control_lock.armed == ControlPolicy.default().lock_enabled

@@ -33,11 +33,17 @@ from span_panel_api.models import FieldMetadata
 from span_panel_api.protocol import SpanPanelClientProtocol
 
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.helpers import adopted_capability_tokens, detect_capabilities
+from custom_components.span_panel.helpers import (
+    adopted_capability_tokens,
+    circuit_has_a_breaker_switch,
+    circuit_has_a_priority_select,
+    detect_capabilities,
+)
 
 from .adapter_fixtures import schema_one_snapshot
 from .factories import (
     SpanBatterySnapshotFactory,
+    SpanCircuitSnapshotFactory,
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
 )
@@ -887,3 +893,218 @@ async def test_the_digest_is_stable_across_calls_and_distinguishes_devices() -> 
 
     assert adopted_capability_tokens(first) == adopted_capability_tokens(again)
     assert adopted_capability_tokens(first) != adopted_capability_tokens(other)
+async def test_a_circuit_that_becomes_controllable_requests_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """The direction no entity can see: a circuit that gains a control.
+
+    A circuit the panel declares non-commandable gets no switch and no select,
+    so there is no entity on that circuit to notice the panel changing its mind
+    later. Only a reader that sees every circuit can, and the coordinator is
+    the one thing that reads the whole snapshot on every push.
+    """
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = None
+    coordinator = _create_coordinator(hass, client=client)
+
+    locked = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=False
+    )
+    baseline = SpanPanelSnapshotFactory.create(circuits={"1": locked})
+    commissioned = SpanPanelSnapshotFactory.create(
+        circuits={"1": replace(locked, is_user_controllable=True)}
+    )
+
+    with patch.object(coordinator, "request_reload") as request_reload:
+        await coordinator._on_snapshot_push(baseline)
+        request_reload.assert_not_called()
+
+        await coordinator._on_snapshot_push(commissioned)
+        request_reload.assert_called_once()
+
+
+async def test_a_circuit_that_stops_being_controllable_requests_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """A control entity can outlive its own controllability, and must not.
+
+    `is_user_controllable` decided at setup that this circuit gets a switch and
+    a select. When the panel withdraws it mid-session both stay on the
+    dashboard and every press and every choice is refused, which is a worse
+    experience than the entities going away on the reload the change earns.
+    """
+    coordinator = _create_coordinator(hass)
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=True
+    )
+
+    coordinator._check_settability_change(SpanPanelSnapshotFactory.create(circuits={"1": circuit}))
+    assert coordinator._known_settability == {"1": (True, True)}
+    assert coordinator._reload_requested is False
+
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(
+            circuits={"1": replace(circuit, is_user_controllable=False)}
+        )
+    )
+
+    assert coordinator._known_settability == {"1": (False, False)}
+    assert coordinator._reload_requested is True
+
+
+async def test_a_circuit_commissioned_never_backup_requests_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """Priority settability is its own flag, and it decides whether a select exists.
+
+    A circuit the panel commissions never-backup keeps a relay it can still
+    operate, so the switch is unaffected -- but its priority select now refuses
+    every choice made in it.
+    """
+    coordinator = _create_coordinator(hass)
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=True
+    )
+
+    coordinator._check_settability_change(SpanPanelSnapshotFactory.create(circuits={"1": circuit}))
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(circuits={"1": replace(circuit, is_never_backup=True)})
+    )
+
+    assert coordinator._known_settability == {"1": (True, False)}
+    assert coordinator._reload_requested is True
+
+
+async def test_a_circuit_whose_settability_is_unchanged_requests_no_reload(
+    hass: HomeAssistant,
+) -> None:
+    """The watch has to be an edge, or every push would reload the entry."""
+    coordinator = _create_coordinator(hass)
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=True, relay_state="CLOSED"
+    )
+
+    coordinator._check_settability_change(SpanPanelSnapshotFactory.create(circuits={"1": circuit}))
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(circuits={"1": replace(circuit, relay_state="OPEN")})
+    )
+
+    assert coordinator._reload_requested is False
+
+
+async def test_a_settability_change_asks_for_one_reload_and_not_a_storm(
+    hass: HomeAssistant,
+) -> None:
+    """The baseline moves on the pass that asks, exactly like the capability check.
+
+    Without that, every push after a withdrawn control would re-request a
+    reload, and the entry would reload for as long as the panel held its new
+    answer.
+    """
+    coordinator = _create_coordinator(hass)
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=True
+    )
+    withdrawn = SpanPanelSnapshotFactory.create(
+        circuits={"1": replace(circuit, is_user_controllable=False)}
+    )
+
+    coordinator._check_settability_change(SpanPanelSnapshotFactory.create(circuits={"1": circuit}))
+
+    with patch.object(coordinator, "request_reload") as request_reload:
+        coordinator._check_settability_change(withdrawn)
+        coordinator._check_settability_change(withdrawn)
+        coordinator._check_settability_change(withdrawn)
+
+    request_reload.assert_called_once()
+
+
+async def test_a_circuit_dropping_out_of_a_snapshot_requests_no_reload(
+    hass: HomeAssistant,
+) -> None:
+    """Absence is not an answer about settability, and must not be read as one.
+
+    Circuits go missing from a snapshot and come back -- both control platforms
+    guard for exactly that. Counting the gap as a change would turn a flapping
+    circuit into a reload loop, so only circuits present in both readings are
+    judged. The one that returns is judged again on its return.
+    """
+    coordinator = _create_coordinator(hass)
+    kitchen = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=True
+    )
+    garage = SpanCircuitSnapshotFactory.create(
+        circuit_id="2", name="Garage Outlets", is_user_controllable=True
+    )
+
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(circuits={"1": kitchen, "2": garage})
+    )
+    coordinator._check_settability_change(SpanPanelSnapshotFactory.create(circuits={"1": kitchen}))
+    assert coordinator._reload_requested is False
+
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(circuits={"1": kitchen, "2": garage})
+    )
+    assert coordinator._reload_requested is False
+
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(
+            circuits={"1": kitchen, "2": replace(garage, is_user_controllable=False)}
+        )
+    )
+    assert coordinator._reload_requested is True
+
+
+async def test_the_settability_reader_gates_on_what_the_platforms_gate_on(
+    hass: HomeAssistant,
+) -> None:
+    """The coordinator must not derive its own, narrower notion of settable.
+
+    A second copy of either predicate would drift, and the drift would be
+    silent: the platforms and the reload trigger disagreeing about what the
+    panel allows. Both read `helpers`, and this pins the pair by driving a case
+    only the shared predicate answers -- a PV circuit with no physical breaker,
+    which is controllable and still gets neither entity.
+    """
+    upstream_pv = SpanCircuitSnapshotFactory.create(
+        circuit_id="9",
+        name="Solar",
+        device_type="pv",
+        relative_position="UPSTREAM",
+        is_user_controllable=True,
+    )
+    coordinator = _create_coordinator(hass)
+
+    coordinator._check_settability_change(
+        SpanPanelSnapshotFactory.create(circuits={"9": upstream_pv})
+    )
+
+    assert coordinator._known_settability == {"9": (False, False)}
+    assert circuit_has_a_breaker_switch(upstream_pv) is False
+    assert circuit_has_a_priority_select(upstream_pv) is False
+
+
+async def test_the_polling_path_watches_settability_too(hass: HomeAssistant) -> None:
+    """A panel with no live MQTT stream has only the fallback poll to notice on."""
+    client = MagicMock(spec=SpanPanelClientProtocol)
+    client.field_metadata = None
+    coordinator = _create_coordinator(hass, client=client)
+
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1", name="Kitchen Outlets", is_user_controllable=False
+    )
+    client.get_snapshot = AsyncMock(
+        return_value=SpanPanelSnapshotFactory.create(circuits={"1": circuit})
+    )
+    await coordinator._async_update_data()
+
+    client.get_snapshot = AsyncMock(
+        return_value=SpanPanelSnapshotFactory.create(
+            circuits={"1": replace(circuit, is_user_controllable=True)}
+        )
+    )
+    with patch.object(coordinator, "request_reload") as request_reload:
+        await coordinator._async_update_data()
+
+    request_reload.assert_called_once()
