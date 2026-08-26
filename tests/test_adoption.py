@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, InvalidStateError
 from homeassistant.helpers import device_registry as dr
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -29,6 +29,7 @@ from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.adoption import (
     CONTROL_PLATFORMS,
     DEVICE_CLASS_BY_UNIT,
+    MAX_STATE_LENGTH,
     AdoptedNumber,
     adopted_control_count,
     adopted_identifier,
@@ -682,6 +683,126 @@ def test_curation_changes_two_of_the_three_segments(hass: HomeAssistant) -> None
     assert ADOPTED_IDENTIFIER_TOKEN not in curated_if_modelled
 
 
+# -- The grammar is not injective, and the collision is caught ----------------
+
+
+def _colliding_pair() -> tuple[AdoptedProperty, AdoptedProperty]:
+    """Two wire addresses that differ only in which side of the hyphen the `2` falls.
+
+    The review's own example, and a realistic one: a battery vendor hanging a
+    second pack off the device publishes `battery-2/cell-temperature`, and a
+    vendor that numbers the property rather than the node publishes
+    `battery/2-cell-temperature`.
+    """
+    first = _property(node_id="battery-2", property_id="cell-temperature", unit="°C", value="31.4")
+    second = _property(node_id="battery", property_id="2-cell-temperature", unit="°C", value="99.9")
+    return first, second
+
+
+def test_the_adopted_grammar_is_not_injective() -> None:
+    """Stated as an assertion because it is a permanent property of these ids.
+
+    `{node}.{property}` with the hyphens flattened cannot distinguish where the
+    hyphen was, so two distinct wire addresses reach one id. The id form is
+    frozen -- an adopted `unique_id` is as permanent as a curated one, and
+    moving it would strand every entity already keyed on it -- so the collision
+    is *handled* rather than removed. `extension.py`'s grammar carries the wire
+    path verbatim and is injective by construction; that is the encoding a future
+    identity namespace would adopt, and this test records why it cannot be
+    adopted here.
+    """
+    identifier = adopted_identifier(PANEL_SERIAL, "battery-pack-1")
+    first, second = _colliding_pair()
+
+    assert adopted_unique_id(identifier, first) == adopted_unique_id(identifier, second)
+
+
+def test_the_second_of_two_colliding_properties_is_skipped_rather_than_built(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Home Assistant drops the loser of a unique_id collision permanently.
+
+    Two entities added under one id leaves the second unregistered with only a
+    core log line naming a `unique_id` the user cannot map back to a wire
+    address. Keeping the first and saying so names both addresses, which is what
+    makes the case reportable.
+    """
+    first, second = _colliding_pair()
+    snapshot = _snapshot(_device(properties=(first, second)))
+
+    sensors = create_adopted_sensors(
+        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+
+    assert len(sensors) == 1
+    assert sensors[0].native_value == 31.4
+    assert "battery-2/cell-temperature" in caplog.text
+    assert "battery/2-cell-temperature" in caplog.text
+
+
+def test_the_same_address_on_two_devices_is_not_a_collision(hass: HomeAssistant) -> None:
+    """The anchor is part of the id, so the guard must not pool devices together.
+
+    Two identical vendor devices publishing the same property is the ordinary
+    case, not the pathological one.
+    """
+    declaration = _property(node_id="meter", property_id="active-power")
+    snapshot = _snapshot(
+        _device("generator-1", properties=(declaration,)),
+        _device("generator-2", properties=(declaration,)),
+    )
+
+    sensors = create_adopted_sensors(
+        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+
+    assert len({str(sensor.unique_id) for sensor in sensors}) == 2
+
+
+# -- A vendor string longer than a Home Assistant state -----------------------
+
+
+def test_a_string_over_the_state_limit_is_clamped_rather_than_written(
+    hass: HomeAssistant,
+) -> None:
+    """`9567cb9` fixed this for extension properties and left adoption behind.
+
+    Home Assistant refuses a state over 255 characters -- the assertion below is
+    core's own rule, not this integration's. A vendor string is unbounded on the
+    wire, and an adopted `string` property with no unit reaches the state machine
+    verbatim: the entity platform's own setter does not raise, it logs an ERROR
+    and substitutes `unknown`, so the reading was lost on every update and the
+    log filled up saying so.
+    """
+    with pytest.raises(InvalidStateError):
+        hass.states.async_set("sensor.synthetic_adopted_notes", "x" * 300)
+
+    declaration = _property(
+        node_id="diagnostics", property_id="notes", datatype="string", unit=None, value="x" * 300
+    )
+    snapshot = _snapshot(_device(properties=(declaration,)))
+
+    (sensor,) = create_adopted_sensors(
+        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+
+    assert sensor.native_value == "x" * MAX_STATE_LENGTH
+
+
+def test_a_string_within_the_limit_is_passed_through_untouched(hass: HomeAssistant) -> None:
+    """Clamping the pathological case may not truncate the ordinary one."""
+    declaration = _property(
+        node_id="diagnostics", property_id="notes", datatype="string", unit=None, value="ok"
+    )
+    snapshot = _snapshot(_device(properties=(declaration,)))
+
+    (sensor,) = create_adopted_sensors(
+        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+
+    assert sensor.native_value == "ok"
+
+
 # -- Diagnostics report the proxy relationship, never the parent's id ---------
 
 
@@ -704,7 +825,19 @@ def test_diagnostics_report_whether_a_device_is_proxied_and_not_by_whom() -> Non
 
 # -- A numeric format this integration cannot read ---------------------------
 
-MALFORMED_FORMATS = ["0-100", "auto", "0:banana", "0:100:step", "nan:100", "0:inf", "%", "16 A"]
+MALFORMED_FORMATS = [
+    "0-100",
+    "auto",
+    "0:banana",
+    "0:100:step",
+    "nan:100",
+    "0:inf",
+    "%",
+    "16 A",
+    "80:10",
+    "0:100:0",
+    "0:100:-1",
+]
 """Formats a non-compliant publisher can put on a numeric, none of them a range.
 
 Homie 5 spells a numeric domain `min:max` with an optional `:step` and permits
@@ -712,6 +845,11 @@ nothing else, so every one of these needs a publisher that ignores the
 specification -- which a vendor-extensible schema is exactly where to meet.
 `nan:100` and `0:inf` are here because `float()` accepts both: they parse
 without raising and are still not bounds anything can be clamped to.
+
+The last three are the same class one step further in. `80:10` reverses the
+range, so the control admits no value at all; `0:100:0` and `0:100:-1` give a
+step that the frontend's own slider arithmetic divides by or counts backwards
+with. Each parses cleanly and none of them is a domain.
 """
 
 
@@ -743,6 +881,11 @@ def test_parsing_a_format_nothing_can_read_answers_none_rather_than_raising(fmt:
         ("10:", (10.0, 100.0, 1.0)),
         (":", (0.0, 100.0, 1.0)),
         ("-5:5:0.5", (-5.0, 5.0, 0.5)),
+        # Equal bounds are degenerate, not broken: a single-valued domain still
+        # admits a value, so refusing it would move a property nobody has
+        # complained about. The boundary is asserted from both sides -- `80:10`
+        # is in MALFORMED_FORMATS.
+        ("5:5:1", (5.0, 5.0, 1.0)),
     ],
 )
 def test_a_format_homie_permits_parses_exactly_as_it_always_did(

@@ -65,6 +65,49 @@ BOOLEAN_DATATYPE: Final = "boolean"
 ENUM_DATATYPE: Final = "enum"
 NUMERIC_DATATYPES: Final = frozenset({"float", "integer"})
 
+MAX_STATE_LENGTH: Final = 255
+"""Home Assistant's hard limit on a state string.
+
+The same number core spells `MAX_LENGTH_STATE_STATE`, and the same number its own
+error message quotes back at you.
+
+Lives in this module rather than in `extension.py` because both halves of vendor
+extensibility need it and this is the half the other imports from. It arrived in
+extension only, which is exactly how adoption came to be missing it.
+"""
+
+
+def clamp_state(published: str, wire_path: str) -> str:
+    """Return a published string short enough for Home Assistant to store as a state.
+
+    **Truncated rather than passed through, and truncated rather than refused.**
+    A vendor string is unbounded on the wire and core refuses one over
+    `MAX_STATE_LENGTH`: `hass.states.async_set` raises `InvalidStateError`, and
+    the entity platform's own setter logs an error and substitutes `unknown`. So
+    passing it through does not deliver a long reading, it delivers *no* reading
+    plus one error line per update, forever, for a value nobody chose to enable.
+    The first 255 characters are strictly more than that.
+
+    Applied only where the value reaches the state machine as text. A declared
+    numeric is parsed to a float first and cannot be long, and this must not
+    touch it: clamping the digits of a number would silently change its value
+    rather than shorten a label.
+
+    One function for both halves of vendor extensibility. `9567cb9` added this to
+    `extension.py` and left `adoption.py` -- the module with the *unbounded*
+    device vocabulary -- writing raw strings.
+    """
+    if len(published) <= MAX_STATE_LENGTH:
+        return published
+    _LOGGER.debug(
+        "%s published %d characters; truncated to %d",
+        wire_path,
+        len(published),
+        MAX_STATE_LENGTH,
+    )
+    return published[:MAX_STATE_LENGTH]
+
+
 DEVICE_CLASS_BY_UNIT: dict[str, SensorDeviceClass] = {
     "W": SensorDeviceClass.POWER,
     "kW": SensorDeviceClass.POWER,
@@ -234,6 +277,19 @@ def adopted_unique_id(identifier: str, declaration: AdoptedProperty) -> str:
     becomes a human-chosen description key rather than a wire address. Those are
     the change itself, not a formatting difference, which is why promotion needs
     to take over the existing id rather than expecting to reproduce it.
+
+    **This grammar is not injective, deliberately and permanently.** Flattening
+    the hyphens is what makes the suffix read like a curated one, and it is also
+    what collapses `battery-2` + `cell-temperature` and `battery` +
+    `2-cell-temperature` onto one id. `extension_unique_id` carries the wire path
+    verbatim and is injective by construction, and that is the encoding a *new*
+    identity namespace should use -- but adopting it here would move every
+    adopted id an install already holds, which strands the entities keyed on them
+    with nothing to migrate them back. So the collision is handled where the
+    entities are built (`_create`) rather than removed here: the first property
+    to claim an id keeps it and the second is skipped with both wire paths named.
+    Changing the encoding is a follow-on for whatever namespace comes next, and
+    it needs a maintainer's ruling rather than a fix.
     """
     wire_path = f"{declaration.node_id}.{declaration.property_id}".replace("-", "_")
     return f"span_{identifier.lower()}_{get_user_friendly_suffix(wire_path)}"
@@ -400,12 +456,16 @@ class AdoptedSensor(AdoptedEntity, SensorEntity):
         than as its raw text: the entity has a unit and a device class, and
         putting a string behind those would be a worse lie than reporting
         nothing.
+
+        An undeclared one is text, and text off a vendor device is unbounded, so
+        it goes through `clamp_state` -- see there for why truncating beats
+        letting core refuse it.
         """
         raw = self._published()
         if raw is None:
             return None
         if self.entity_description.native_unit_of_measurement is None:
-            return raw
+            return clamp_state(raw, f"Adopted {self._declaration_path}")
         try:
             return float(raw)
         except ValueError:
@@ -638,6 +698,15 @@ def parse_number_format(declared: str | None) -> tuple[float, float, float] | No
     Non-finite bounds are refused alongside the unparseable ones: `float()`
     accepts `"nan"` and `"inf"`, and neither is a bound a value can be clamped
     to or a figure the frontend can be handed.
+
+    So are a reversed range and a step of zero or less, for the same reason and
+    not for a different one: they parse, and they are still not a domain. A
+    `NumberEntity` with `min > max` admits no value at all, and a step of `0`
+    divides by zero in the frontend's own slider arithmetic while a negative one
+    counts the wrong way. The rule is `minimum <= maximum and step > 0`;
+    `minimum == maximum` is left alone, because a single-valued domain is a
+    degenerate control rather than a broken one and refusing it would move a
+    property nobody has complained about.
     """
     if not declared:
         return None
@@ -649,7 +718,9 @@ def parse_number_format(declared: str | None) -> tuple[float, float, float] | No
     except ValueError:
         return None
     bounds = (minimum, maximum, step)
-    return bounds if all(isfinite(bound) for bound in bounds) else None
+    if not all(isfinite(bound) for bound in bounds):
+        return None
+    return bounds if minimum <= maximum and step > 0 else None
 
 
 def adopted_control_count(snapshot: SpanPanelSnapshot) -> int:
@@ -770,18 +841,58 @@ def _create[AdoptedT: AdoptedEntity](
     *,
     panel_device_id: str,
 ) -> list[AdoptedT]:
-    """Build one platform's share of the adopted properties.
+    """Build one platform's share of the adopted properties, one entity per id.
 
     One partition function rather than five bodies, so `classify` stays the only
     place a property's platform is decided. Five bodies would each restate the
     predicate, and a property could then reach two platforms or none.
+
+    **The first property to claim an id keeps it.** `adopted_unique_id` is not
+    injective -- see its docstring for why that cannot be fixed by changing the
+    encoding -- so two wire addresses can arrive at one id. Handing both to Home
+    Assistant registers the first and drops the second *permanently*, with one
+    core log line naming a `unique_id` the user cannot map back to anything on
+    the wire. Skipping it here costs the same entity and names both addresses, so
+    the case is reportable by whoever meets it.
+
+    Claimed per platform, which is the scope the registry keys on: an entity is
+    unique by (domain, integration, unique_id), so the same id under `sensor` and
+    under `binary_sensor` is not a collision and must not be treated as one.
+
+    Arrival order decides the winner, and the order tracks the wire. That is a
+    real weakness -- a firmware update reordering a description could hand the id
+    to the other property -- and it is bounded by how unlikely the collision is
+    in the first place: it needs one device publishing two addresses that differ
+    only in which side of a hyphen a segment falls. The injective namespace is
+    the real answer; this is the guard until there is one.
     """
-    return [
-        entity_class(coordinator, identifier, device, declaration, panel_device_id=panel_device_id)
-        for device, identifier in _adopted(snapshot, registry)
-        for declaration in device.properties
-        if classify(declaration) is platform
-    ]
+    built: list[AdoptedT] = []
+    claimed: dict[str, str] = {}
+    for device, identifier in _adopted(snapshot, registry):
+        for declaration in device.properties:
+            if classify(declaration) is not platform:
+                continue
+            unique_id = adopted_unique_id(identifier, declaration)
+            first_claim = claimed.get(unique_id)
+            if first_claim is not None:
+                _LOGGER.warning(
+                    "Adopted %s on %s resolves to the same entity id as %s, which was seen "
+                    "first; %s is not surfaced. Both wire addresses flatten to %s. Attach "
+                    "this integration's diagnostics to an issue if you need the second one",
+                    declaration.path,
+                    device.device_id,
+                    first_claim,
+                    declaration.path,
+                    unique_id,
+                )
+                continue
+            claimed[unique_id] = declaration.path
+            built.append(
+                entity_class(
+                    coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+                )
+            )
+    return built
 
 
 def _adopted(

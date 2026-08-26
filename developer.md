@@ -537,6 +537,26 @@ node rule, creates no entity, and so had nothing to call `async_get_or_create` f
 Running it before the platforms also makes the identity freeze single-valued: `resolve_identifier` runs once, at registration, so every entity created
 afterwards resolves against a device that already exists and cannot disagree.
 
+### The device-level grammar is not injective, and the collision is caught
+
+`adopted_unique_id` spells `span_{serial}_adopted_{anchor}_{suffix}` and builds the suffix through `get_user_friendly_suffix`, which flattens the hyphens. That
+is what makes it read like a curated suffix, and it is also what collapses `battery-2` + `cell-temperature` and `battery` + `2-cell-temperature` onto one id —
+exactly the collision the extension grammar above avoids by carrying the path verbatim.
+
+The encoding does not change. An adopted `unique_id` is as permanent as a curated one, so adopting the injective form would move every id an install already
+holds and strand the entities keyed on them, with nothing to migrate them back. The collision is handled where the entities are built instead: `_create` claims
+one id per platform, the first property to reach an id keeps it, and the second is skipped with a WARNING naming both wire paths. Handing both to Home Assistant
+registers the first and drops the second permanently, with one core log line naming an id the user cannot map back to anything on the wire.
+
+The injective encoding belongs to whatever identity namespace comes next, and adopting it there is a maintainer's ruling rather than a fix.
+
+### A device or a property that arrives after setup
+
+Nothing here adds entities dynamically, so a vendor device or extension property that appears an hour after setup reaches the user through the capability reload
+and nothing else. `detect_capabilities` therefore carries one token per adopted device id and one per extension subject/path alongside the named flags, and
+`_check_capability_change` fires on set _expansion_ exactly as it does for `bess` or `pcs`. One token each rather than one hash of the set: a hash of a shrinking
+set is as "new" as a hash of a growing one, so a single token would reload the integration when a device left the tree and flap it on one that came and went.
+
 ### The proxy link is recorded, and the nesting is not built
 
 `AdoptedDevice` carries `parent` (the device id it declares as its parent) and `proxied` (whether that parent is a peer rather than the tree root). Adoption
@@ -753,6 +773,11 @@ interaction with curated logic the user cannot see. The library enforces it stru
 panel's card, so counting per card would pool thirty-five devices against one allowance and truncate a 32-circuit panel at two vendor properties each, with no
 misbehaving publisher anywhere. Overflow raises a durable notice (`async_notice_declined_extensions`, once at setup rather than once per platform), because a
 truncation the user cannot see is the one thing worse than the truncation: sixty of a device's eighty readings looks exactly like a device with sixty.
+
+**Told once, not once per setup.** The overflow is re-derived from the same wire at every setup, so raising it through `async_raise` put it back on screen after
+every restart and reload — un-dismissable in practice, which is the opposite of what `notices.py` promises. It goes through `async_raise_on_change` instead,
+which records what was announced in the notices store and raises again only when that changes. The fingerprint is the rendered device/count list rather than the
+message, so another device overflowing is news and a translation update is not; dismissal does not clear the record, because clearing it there is the defect.
 
 **An id the registry already holds is never displaced.** The cap admits in adapter emission order, which tracks the wire, so a firmware update declaring a new
 property earlier shifts everything after it. Capping on arrival order alone would let a new property evict a standing entity — whose registry row is permanent,

@@ -26,7 +26,9 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.additions import (
+    _ANNOUNCED,
     _SECTION,
+    _STORE_VERSION,
     COLLAPSE_ABOVE,
     async_announce_new_entities,
     async_forget_announcements,
@@ -557,3 +559,67 @@ async def test_one_past_the_threshold_collapses(
     message = _text(_announcement(hass, entry))
     assert f"Span Panel ({COLLAPSE_ABOVE + 1} entities)" in message
     assert "Acme Reading 0" not in message
+
+
+# -- A store file that is not what we wrote ------------------------------------
+#
+# `notices` narrows its own store for this reason and has three tests for it;
+# this one had none. The consequence here is worse, because this coroutine is
+# awaited from inside `async_setup_entry`: a wrong-shaped file raised out of it,
+# the coordinator was shut down, and the entry failed with no retry -- so a panel
+# stayed dead until somebody found and deleted a file about *notifications*.
+
+
+def _seed(hass_storage: dict[str, Any], entry: MockConfigEntry, data: object) -> None:
+    key = f"{DOMAIN}.announced.{entry.entry_id}"
+    hass_storage[key] = {"version": _STORE_VERSION, "key": key, "data": data}
+
+
+@pytest.mark.parametrize(
+    ("shape", "description"),
+    [
+        ({_ANNOUNCED: 7}, "a number where the list should be"),
+        ({_ANNOUNCED: {"a": 1}}, "a mapping where the list should be"),
+        ({_ANNOUNCED: ["fine", 3]}, "a list holding something that is not an id"),
+        ({_ANNOUNCED: None}, "an explicit null"),
+        ({}, "an object with no announced key"),
+        (["announced_unique_ids"], "a list at the top level"),
+        ("nonsense", "a bare string"),
+    ],
+)
+async def test_a_malformed_store_does_not_take_the_integration_down(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    entry: MockConfigEntry,
+    shape: object,
+    description: str,
+) -> None:
+    """Setup must survive every one of these; the record is recoverable, the entry is not."""
+    _seed(hass_storage, entry, shape)
+    _register(hass, entry, _PART_NUMBER, name="Part Number")
+
+    await async_announce_new_entities(hass, entry)
+
+    assert _announcement(hass, entry) is None
+
+
+async def test_a_malformed_store_is_re_seeded_rather_than_left_broken(
+    hass: HomeAssistant, hass_storage: dict[str, Any], entry: MockConfigEntry
+) -> None:
+    """Self-healing is what makes re-seeding the right trade.
+
+    The bad file is replaced by a valid one holding what is registered now, so
+    the *next* addition is announced normally and the user never has to find the
+    file. The cost is one pass of silence, which is the same trade a first
+    install already makes.
+    """
+    _seed(hass_storage, entry, {_ANNOUNCED: 7})
+    _register(hass, entry, _PART_NUMBER, name="Part Number")
+    await async_announce_new_entities(hass, entry)
+
+    _register(hass, entry, "sp3-001_grid_state", name="Grid State", disabled=False)
+    await async_announce_new_entities(hass, entry)
+
+    message = _text(_announcement(hass, entry))
+    assert "Grid State" in message
+    assert "Part Number" not in message

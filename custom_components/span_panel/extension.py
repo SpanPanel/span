@@ -37,11 +37,17 @@ from homeassistant.helpers.device_registry import DeviceInfo, DeviceRegistry
 from homeassistant.helpers.entity_registry import EntityRegistry
 from span_panel_api import ExtensionProperty, ExtensionSubject, SpanPanelSnapshot
 
-from .adoption import BOOLEAN_DATATYPE, DEVICE_CLASS_BY_UNIT, homie_boolean, humanised
+from .adoption import (
+    BOOLEAN_DATATYPE,
+    DEVICE_CLASS_BY_UNIT,
+    clamp_state,
+    homie_boolean,
+    humanised,
+)
 from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
-from .notices import async_raise, read_translations
+from .notices import async_raise_on_change, read_translations
 from .util import (
     ADOPTED_IDENTIFIER_TOKEN,
     SUB_DEVICE_BESS,
@@ -53,9 +59,6 @@ from .util import (
 _LOGGER = logging.getLogger(__name__)
 
 SCOPE_PANEL: Final = "panel"
-
-MAX_STATE_LENGTH: Final = 255
-"""Home Assistant's hard limit on a state string; a longer one raises on write."""
 
 HINT_READING: Final = "reading"
 HINT_DETAIL: Final = "detail"
@@ -401,24 +404,17 @@ class ExtensionSensor(ExtensionEntity, SensorEntity):
 
     @property
     def native_value(self) -> str | float | None:
-        """Return the published value, parsed to a number only where one is declared."""
+        """Return the published value, parsed to a number only where one is declared.
+
+        An undeclared one is text, and a vendor string is unbounded on the wire,
+        so it goes through the clamp `adoption` holds for both halves of vendor
+        extensibility.
+        """
         raw = self._published()
         if raw is None:
             return None
         if self.entity_description.native_unit_of_measurement is None:
-            # Truncated rather than passed through: Home Assistant refuses a
-            # state over 255 characters, and a vendor string is unbounded on the
-            # wire. Raising once per update for a value nobody chose is worse
-            # than showing the first 255 characters of it.
-            if len(raw) > MAX_STATE_LENGTH:
-                _LOGGER.debug(
-                    "Extension %s published %d characters; truncated to %d",
-                    self._declaration_path,
-                    len(raw),
-                    MAX_STATE_LENGTH,
-                )
-                return raw[:MAX_STATE_LENGTH]
-            return raw
+            return clamp_state(raw, f"Extension {self._declaration_path}")
         try:
             return float(raw)
         except ValueError:
@@ -618,26 +614,34 @@ async def async_notice_declined_extensions(
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
 ) -> None:
-    """Tell the user when the cap left vendor readings out, or say nothing.
+    """Tell the user once when the cap left vendor readings out, or say nothing.
 
     A durable notice rather than a log line, because the alternative is a
     truncation the user cannot see: an entity list showing sixty of a device's
     eighty readings looks exactly like a device with sixty readings. Raised once
     at setup rather than from `adoptable`, which both platforms call.
+
+    **Once, not once per setup.** The overflow is re-derived from the same wire
+    every time this runs, so raising it through `async_raise` put the notice back
+    on screen after every restart and reload -- for as long as the publisher kept
+    publishing, which is forever. `notices.py` says in its own opening paragraphs
+    that a notice stands until it is dismissed; one that ignores the dismissal is
+    not a notice, and this integration would have taught its users to ignore the
+    category.
+
+    The remembered fingerprint is the rendered device/count list rather than the
+    message, so a *worse* truncation later -- another device overflowing, or more
+    readings declined on the same one -- is news the user is told about, while a
+    translation change is not.
     """
     declined = declined_extensions(snapshot, device_registry, entity_registry)
     if not declined:
         return
     rendered = ", ".join(f"{key} ({count})" for key, count in sorted(declined.items()))
-    _LOGGER.warning(
-        "Vendor readings beyond the per-device limit of %d were not adopted: %s",
-        MAX_PER_DEVICE,
-        rendered,
-    )
     text = await hass.async_add_executor_job(
         read_translations, hass.config.language, _OVERFLOW_NOTICE
     )
-    async_raise(
+    raised = async_raise_on_change(
         hass,
         entry,
         _OVERFLOW_NOTICE,
@@ -645,4 +649,15 @@ async def async_notice_declined_extensions(
         message=(text.get("body") or _OVERFLOW_FALLBACK["body"]).format(
             limit=MAX_PER_DEVICE, devices=rendered
         ),
+        fingerprint=rendered,
+    )
+    # Logged on the same decision as the notice, for the same reason. A WARNING
+    # per setup for a condition the user has already answered is the log's
+    # version of an un-dismissable notice, and it is the line a maintainer would
+    # read as "this just happened".
+    _LOGGER.log(
+        logging.WARNING if raised else logging.DEBUG,
+        "Vendor readings beyond the per-device limit of %d were not adopted: %s",
+        MAX_PER_DEVICE,
+        rendered,
     )

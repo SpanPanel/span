@@ -28,7 +28,7 @@ place.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Final, TypedDict
 
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -87,13 +87,68 @@ announced, in English.
 """
 
 
-def _store(hass: HomeAssistant, entry: ConfigEntry) -> Store[dict[str, Any]]:
+class StoredAnnouncements(TypedDict):
+    """The unique_ids this entry has already announced.
+
+    Typed rather than `dict[str, Any]` so the one shape this file writes is
+    stated once. It is a compile-time claim only -- see `_load` for what the disk
+    is actually allowed to hold.
+    """
+
+    announced_unique_ids: list[str]
+
+
+def _store(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredAnnouncements]:
     """Return the record of what has already been announced for this entry.
 
     Per entry rather than per domain: two panels add entities independently, and
     a shared record would let one panel's announcement suppress the other's.
     """
     return Store(hass, _STORE_VERSION, f"{DOMAIN}.announced.{entry.entry_id}")
+
+
+def _load(stored: object, entry: ConfigEntry) -> frozenset[str] | None:
+    """Read the announced set off disk, or `None` when the file is not what we wrote.
+
+    `notices._load` does this and has three tests; this file had neither, and the
+    consequence here is the worse of the two. This coroutine is awaited from
+    inside `async_setup_entry`, so a wrong-shaped file raised out of it, the
+    coordinator was shut down and the entry went to SETUP_ERROR -- which is not
+    retried. A panel would stay down until somebody found and deleted a file
+    about *notifications*.
+
+    On-disk data violates the TypedDict freely: a hand edit, a partially restored
+    backup, a file written by a later version and read after a rollback. Home
+    Assistant already renames undecodable JSON and raises a core repair; the gap
+    is valid JSON of the wrong shape, which it hands back intact.
+
+    `None` means "no usable record", which the caller treats exactly as a first
+    install: re-seed from what is registered now and announce nothing. That
+    silently swallows one pass of genuine additions, which is the same trade the
+    first install already makes and is worth strictly less than the entry.
+
+    An `announced_unique_ids` holding something that is not a list of strings is
+    refused whole rather than filtered down to the strings in it. A partial read
+    would announce every id the bad row displaced as though it were new, which is
+    the flood the record exists to prevent -- and unlike a notice, an id here
+    carries no meaning of its own to salvage.
+    """
+    if stored is None:
+        return None
+    announced = stored.get(_ANNOUNCED) if isinstance(stored, dict) else None
+    if not isinstance(announced, list) or not all(
+        isinstance(unique_id, str) for unique_id in announced
+    ):
+        _LOGGER.warning(
+            "Ignoring the announcement record for %s: expected an object with an "
+            "'%s' list of ids, found %s. Entities added by this setup are recorded "
+            "as known rather than announced; the next addition is announced normally.",
+            entry.entry_id,
+            _ANNOUNCED,
+            type(announced if isinstance(stored, dict) else stored).__name__,
+        )
+        return None
+    return frozenset(announced)
 
 
 async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -108,13 +163,17 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
     predates the record has entities that were never announced but are not new
     either, so the first pass adopts them as already-known rather than announcing
     a release's worth of history.
+
+    Silent, once, after a record that could not be read -- the same seeding path,
+    reached from `_load` returning `None`. Nothing about a notification is worth
+    failing setup for.
     """
     store = _store(hass, entry)
-    stored = await store.async_load()
+    announced = _load(await store.async_load(), entry)
     registered = _registered(hass, entry)
 
-    if stored is None:
-        await store.async_save({_ANNOUNCED: sorted(registered)})
+    if announced is None:
+        await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(registered)))
         _LOGGER.debug(
             "Seeded the announcement record for %s with %d entities; nothing announced",
             entry.entry_id,
@@ -122,7 +181,6 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
         )
         return
 
-    announced = frozenset(stored.get(_ANNOUNCED, ()))
     added = [
         registry_entry
         for registry_entry in _entries(hass, entry)
@@ -139,7 +197,7 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
         title=_text(text, "title"),
         message=_message(hass, added, text),
     )
-    await store.async_save({_ANNOUNCED: sorted(announced | registered)})
+    await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(announced | registered)))
     _LOGGER.debug("Announced %d new entities for %s", len(added), entry.entry_id)
 
 

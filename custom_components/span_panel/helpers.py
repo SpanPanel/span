@@ -55,6 +55,7 @@ __all__ = [
     "CIRCUIT_SUFFIX_MAPPING",
     "PANEL_ENTITY_SUFFIX_MAPPING",
     "PANEL_SUFFIX_MAPPING",
+    "adopted_capability_tokens",
     "async_create_span_notification",
     "build_bess_unique_id",
     "build_mid_unique_id",
@@ -415,6 +416,35 @@ def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
     )
 
 
+def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
+    """One token per adopted device and per vendor extension property.
+
+    Vendor extensibility is the one part of the snapshot whose vocabulary this
+    integration cannot enumerate in advance, so it cannot be reduced to a named
+    flag the way `bess` or `pcs` are. It reaches the reload trigger as the
+    identities themselves.
+
+    **One token each rather than one hash of the set.** The trigger fires on set
+    *expansion* (`current - known`), and a hash of a shrinking set is as "new" as
+    a hash of a growing one — so a single token would reload the integration when
+    a vendor device left the tree, and flap it on a device that came and went.
+    Per-identity tokens make the expansion-only rule hold for free: a device that
+    arrives adds a token, a device that leaves removes one, and only the first is
+    a reload.
+
+    Keyed on the wire identity rather than on the value: a reading changing is
+    every refresh, and the question here is only whether an entity that could not
+    be created at setup now can.
+    """
+    return frozenset(
+        [f"adopted:{device.device_id}" for device in snapshot.adopted_devices]
+        + [
+            f"extension:{row.subject.kind}:{row.subject.instance_key or ''}:{row.path}"
+            for row in snapshot.extension_properties
+        ]
+    )
+
+
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """Derive the set of optional capabilities present in the snapshot.
 
@@ -423,8 +453,16 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     sensors are created. A capability is not hardware, but it reaches this the same
     way — the panel starts publishing a node it did not publish before — and the
     consequence is identical: entities that could not be created at setup now can.
+
+    Adopted devices and vendor extension properties are in the set for exactly
+    that reason. `adoption.py` opens by calling a device type nobody modelled an
+    *expected* event rather than a hypothetical one, and nothing adds those
+    entities dynamically — so with them excluded, a vendor device that appeared an
+    hour after setup produced no device, no entity and no reload, and the user saw
+    nothing at all until they restarted Home Assistant. See
+    `adopted_capability_tokens` for why they are carried as identities.
     """
-    caps: set[str] = set()
+    caps: set[str] = set(adopted_capability_tokens(snapshot))
     if has_bess(snapshot):
         caps.add("bess")
     if has_pv(snapshot):

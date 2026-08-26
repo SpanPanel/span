@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from span_panel_api import (
+    AdoptedDevice,
+    AdoptedProperty,
+    ExtensionProperty,
+    ExtensionSubject,
+)
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -16,6 +23,7 @@ from span_panel_api.exceptions import (
 )
 
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.helpers import detect_capabilities
 from homeassistant.core import HomeAssistant
 from span_panel_api import SpanMqttClient
 from span_panel_api.models import FieldMetadata
@@ -720,3 +728,111 @@ def test_the_reload_trigger_sees_every_capability_the_platforms_gate_on() -> Non
     assert {"shed_forecast", "pcs", "bess_telemetry", "der_link_health"} <= (
         detect_capabilities(snapshot)
     )
+
+
+# --- a device or a property that arrives after setup -------------------------
+
+
+def _adopted_device(device_id: str = "generator-1") -> AdoptedDevice:
+    return AdoptedDevice(
+        device_id=device_id,
+        device_type="energy.ebus.device.generator",
+        name="Backup Generator",
+        properties=(
+            AdoptedProperty(
+                node_id="meter", property_id="active-power", datatype="float", unit="W"
+            ),
+        ),
+    )
+
+
+def _extension_row(property_id: str = "cell-temperature") -> ExtensionProperty:
+    return ExtensionProperty(
+        subject=ExtensionSubject(kind="battery", instance_key=None),
+        node_id="battery-2",
+        property_id=property_id,
+        datatype="float",
+        unit="°C",
+    )
+
+
+async def test_an_adopted_device_arriving_after_setup_asks_for_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """Adoption's module docstring calls a device nobody modelled an *expected* event.
+
+    Nothing adds these entities dynamically, so the only way one reaches the user
+    without a manual restart is the capability reload -- and the capability set
+    used to be blind to them, so a vendor device that appeared an hour after
+    setup produced no device, no entity and no reload until somebody restarted
+    Home Assistant.
+    """
+    coordinator = _create_coordinator(hass)
+    baseline = SpanPanelSnapshotFactory.create()
+    arrived = replace(baseline, adopted_devices=(_adopted_device(),))
+
+    assert detect_capabilities(arrived) != detect_capabilities(baseline)
+
+    coordinator._check_capability_change(baseline)
+    coordinator._check_capability_change(arrived)
+
+    assert coordinator._reload_requested is True
+
+
+async def test_an_extension_property_arriving_after_setup_asks_for_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """The other half of vendor extensibility, and the same silence."""
+    coordinator = _create_coordinator(hass)
+    baseline = SpanPanelSnapshotFactory.create()
+    arrived = replace(baseline, extension_properties=(_extension_row(),))
+
+    assert detect_capabilities(arrived) != detect_capabilities(baseline)
+
+    coordinator._check_capability_change(baseline)
+    coordinator._check_capability_change(arrived)
+
+    assert coordinator._reload_requested is True
+
+
+async def test_a_device_that_leaves_the_tree_asks_for_nothing(hass: HomeAssistant) -> None:
+    """Expansion-only, exactly like every other capability flag.
+
+    A device that stops publishing costs nothing to leave alone: its entities
+    read unknown and nothing here removes a registry row, so a reload would
+    rebuild the identical set. Reloading on a shrink would also make a flapping
+    publisher reload the integration on a loop.
+    """
+    coordinator = _create_coordinator(hass)
+    present = replace(
+        SpanPanelSnapshotFactory.create(),
+        adopted_devices=(_adopted_device(), _adopted_device("generator-2")),
+    )
+    gone = replace(present, adopted_devices=(_adopted_device(),))
+
+    coordinator._check_capability_change(present)
+    coordinator._check_capability_change(gone)
+
+    assert coordinator._reload_requested is False
+
+
+async def test_the_same_devices_and_properties_ask_for_nothing(hass: HomeAssistant) -> None:
+    """The fingerprint has to be stable, or every refresh would reload the integration."""
+    coordinator = _create_coordinator(hass)
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(),
+        adopted_devices=(_adopted_device(),),
+        extension_properties=(_extension_row(), _extension_row("pack-voltage")),
+    )
+
+    coordinator._check_capability_change(snapshot)
+    for _ in range(5):
+        coordinator._check_capability_change(
+            replace(
+                SpanPanelSnapshotFactory.create(),
+                adopted_devices=(_adopted_device(),),
+                extension_properties=(_extension_row("pack-voltage"), _extension_row()),
+            )
+        )
+
+    assert coordinator._reload_requested is False

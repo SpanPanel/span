@@ -13,7 +13,8 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-from homeassistant.const import EntityCategory, Platform
+from homeassistant.components.persistent_notification import async_dismiss
+from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE, EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
@@ -28,6 +29,7 @@ from custom_components.span_panel.extension import (
     ExtensionBinarySensor,
     ExtensionSensor,
     adoptable,
+    async_notice_declined_extensions,
     classify_extension,
     create_extension_binary_sensors,
     create_extension_sensors,
@@ -37,6 +39,7 @@ from custom_components.span_panel.extension import (
     resolve_platform,
     subject_key,
 )
+from custom_components.span_panel.notices import _DATA, async_restore
 from custom_components.span_panel.util import SUB_DEVICE_BESS
 
 from .factories import SpanPanelSnapshotFactory
@@ -406,3 +409,104 @@ def test_the_hint_is_carried_on_the_entity_for_curation_triage(
     )[0]
     assert sensor._attr_extra_state_attributes["prominence_hint"] == HINT_READING
     assert sensor._attr_extra_state_attributes["wire_path"] == "battery-2/cell-temperature"
+
+
+# --- the overflow notice is told once, not at every setup --------------------
+
+
+def _overflowing(count: int = MAX_PER_DEVICE + 3) -> SpanPanelSnapshot:
+    """One battery declaring more vendor properties than the cap will admit."""
+    return _snapshot(*(_row(property_id=f"cell-{index}") for index in range(count)))
+
+
+def _notification_id(entry: MockConfigEntry) -> str:
+    return f"{DOMAIN}_extension_overflow_{entry.entry_id}"
+
+
+async def _notice(hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot) -> None:
+    await async_notice_declined_extensions(
+        hass, entry, snapshot, dr.async_get(hass), er.async_get(hass)
+    )
+
+
+async def test_the_overflow_notice_is_raised_when_the_cap_declines_something(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A silent truncation reads as "that is everything the vendor publishes"."""
+    entry = hass.config_entries.async_get_entry(registered_panel[0])
+    assert entry is not None
+    await async_restore(hass, entry)
+
+    await _notice(hass, entry, _overflowing())
+
+    assert _notification_id(entry) in dict(hass.data.get("persistent_notification", {}))
+
+
+async def test_a_dismissed_overflow_notice_is_not_raised_again_next_setup(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """`notices.py:21-26` states the rule this violated: dismissal is the acknowledgement.
+
+    The cap is re-derived from the same wire on every setup, so re-raising made
+    the notice un-dismissable -- it came back on every restart and every reload
+    for as long as the publisher kept publishing, which is forever.
+    """
+    entry = hass.config_entries.async_get_entry(registered_panel[0])
+    assert entry is not None
+    await async_restore(hass, entry)
+    snapshot = _overflowing()
+    await _notice(hass, entry, snapshot)
+
+    async_dismiss(hass, _notification_id(entry))
+    await hass.async_block_till_done()
+    await _notice(hass, entry, snapshot)
+
+    assert _notification_id(entry) not in dict(hass.data.get("persistent_notification", {}))
+
+
+async def test_a_dismissed_overflow_notice_returns_when_more_is_declined(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Remembering the announcement may not silence a *different* announcement.
+
+    A second vendor device overflowing later is news the first notice never
+    carried, so the record is of what was said rather than of having said
+    something.
+    """
+    entry = hass.config_entries.async_get_entry(registered_panel[0])
+    assert entry is not None
+    await async_restore(hass, entry)
+    await _notice(hass, entry, _overflowing())
+    async_dismiss(hass, _notification_id(entry))
+    await hass.async_block_till_done()
+
+    await _notice(hass, entry, _overflowing(MAX_PER_DEVICE + 9))
+
+    assert _notification_id(entry) in dict(hass.data.get("persistent_notification", {}))
+
+
+async def test_the_overflow_record_survives_a_restart(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The in-memory view dies with the process; the reason it must not come back does not."""
+    entry = hass.config_entries.async_get_entry(registered_panel[0])
+    assert entry is not None
+    await async_restore(hass, entry)
+    snapshot = _overflowing()
+    await _notice(hass, entry, snapshot)
+    async_dismiss(hass, _notification_id(entry))
+    await hass.async_block_till_done()
+
+    # Flushed through core's own final-write event rather than by advancing the
+    # clock. A dismissal and a raise each queue a delayed save, and a `Store`
+    # that has been re-armed will reschedule its timer rather than write when a
+    # test fires it early -- so the clock trick reports "nothing was recorded"
+    # for a record that was. This is the path Home Assistant takes at shutdown.
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_FINAL_WRITE)
+    await hass.async_block_till_done()
+    hass.data.get(_DATA, {}).pop(entry.entry_id, None)
+    hass.data.get("persistent_notification", {}).clear()
+    await async_restore(hass, entry)
+    await _notice(hass, entry, snapshot)
+
+    assert _notification_id(entry) not in dict(hass.data.get("persistent_notification", {}))

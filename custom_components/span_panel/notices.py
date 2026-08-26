@@ -24,6 +24,12 @@ re-derived -- a firmware upgrade, an entity that appeared. Anything re-derived
 from live state on every refresh does not belong here; it belongs in
 `schema_repairs`, which reconciles instead, and where being a defect is the
 point.
+
+There is a middle case, and `async_raise_on_change` is for it: a condition that
+*is* re-derived at every setup, but whose news value is spent the first time it
+is reported. Raised through `async_raise` such a notice reappears after every
+dismissal, which makes it un-dismissable in practice. That function remembers
+what was announced, so the notice returns only when what it says changes.
 """
 
 from __future__ import annotations
@@ -80,9 +86,10 @@ class StandingNotice(TypedDict):
 
 
 class StoredNotices(TypedDict):
-    """One config entry's undismissed notices, by notice id."""
+    """One config entry's undismissed notices, and what it has already been told."""
 
     standing: dict[str, StandingNotice]
+    announced: dict[str, str]
 
 
 @dataclass(slots=True)
@@ -92,10 +99,17 @@ class _Notices:
     The store is held rather than rebuilt per call because `async_delay_save`
     schedules on the instance: two `Store` objects over the same key would each
     hold a pending write and race to be last.
+
+    `standing` and `announced` answer different questions and are deliberately
+    not one dict. `standing` is "what is on screen", and dismissal empties it.
+    `announced` is "what the user has already been told", and *nothing* empties
+    it -- that is the whole point of it, because a notice whose record died with
+    its dismissal would be raised again by the next setup.
     """
 
     store: Store[StoredNotices]
     standing: dict[str, StandingNotice]
+    announced: dict[str, str]
 
 
 _DATA: HassKey[dict[str, _Notices]] = HassKey(f"{DOMAIN}_standing_notices")
@@ -137,7 +151,12 @@ async def async_restore(hass: HomeAssistant, entry: ConfigEntry) -> None:
         store: Store[StoredNotices] = Store(
             hass, _STORE_VERSION, f"{DOMAIN}.notices.{entry.entry_id}"
         )
-        notices = _Notices(store=store, standing=_load(await store.async_load(), entry))
+        stored = await store.async_load()
+        notices = _Notices(
+            store=store,
+            standing=_load(stored, entry),
+            announced=_load_announced(stored, entry),
+        )
         known[entry.entry_id] = notices
 
     for notice_id, notice in notices.standing.items():
@@ -200,6 +219,43 @@ def _load(stored: object, entry: ConfigEntry) -> dict[str, StandingNotice]:
     return kept
 
 
+def _load_announced(stored: object, entry: ConfigEntry) -> dict[str, str]:
+    """Read the announced fingerprints off disk, tolerating anything else.
+
+    Same trade as `_load`, and read separately rather than as part of it because
+    the two fall back differently in one way that matters: a lost `standing` set
+    shows a notice again, which is mildly annoying, while a lost `announced` set
+    shows a notice the user already dismissed, which is the exact defect the
+    record exists to prevent. Neither is worth failing setup over, so both fall
+    back to empty and the next raise rewrites the file.
+
+    Absent entirely on a record written before this field existed, which is the
+    ordinary upgrade path rather than an error: the first setup after the upgrade
+    raises once more and records it.
+
+    A row whose fingerprint is not a string is dropped without a line of its own.
+    Unlike a malformed *notice*, which loses text nothing can re-derive, a
+    dropped fingerprint costs exactly one extra raise of a notice that is
+    re-derived anyway.
+    """
+    announced = stored.get("announced") if isinstance(stored, dict) else None
+    if announced is None:
+        return {}
+    if not isinstance(announced, dict):
+        _LOGGER.warning(
+            "Ignoring the announcement record for %s: expected a mapping, found %s. A "
+            "notice already dismissed may be shown once more.",
+            entry.entry_id,
+            type(announced).__name__,
+        )
+        return {}
+    return {
+        str(notice_id): fingerprint
+        for notice_id, fingerprint in announced.items()
+        if isinstance(fingerprint, str)
+    }
+
+
 @callback
 def async_raise(
     hass: HomeAssistant, entry: ConfigEntry, notice_id: str, *, title: str, message: str
@@ -231,6 +287,60 @@ def async_raise(
 
 
 @callback
+def async_raise_on_change(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    notice_id: str,
+    *,
+    title: str,
+    message: str,
+    fingerprint: str,
+) -> bool:
+    """Raise a notice only when what it reports differs from what was last reported.
+
+    For the notices whose *cause* is re-derived from live state at every setup
+    rather than happening once. Those cannot use `async_raise` directly: it
+    re-raises unconditionally, so the cause being still true would put the notice
+    back on screen after every restart and reload, and a notice that returns
+    however often it is dismissed is not a notice, it is a nag with no off
+    switch. The module's own rule (see the top of this file) says a re-derivable
+    condition belongs in `schema_repairs`; this is the middle case, where the
+    condition is re-derivable but the *news* is not -- being told once that a
+    vendor device declares more readings than will be added is useful, and being
+    told again every Tuesday is not.
+
+    `fingerprint` is what was said, not that something was said, so a *different*
+    truncation later is news again and reaches the user. The caller chooses it;
+    it wants to be the rendered facts rather than the rendered prose, or a
+    translation update would re-announce.
+
+    Returns whether it raised, so a caller can scope its logging to the same
+    decision rather than duplicating it.
+
+    Dismissal does not clear the record -- that is the point -- so a user who
+    wants to be told again has to remove the entry. That is the correct trade for
+    a condition the diagnostics download reports in full anyway.
+
+    The record is written *before* the raise rather than after, so `async_raise`'s
+    own `_persist` carries both halves and this stays one queued write per
+    action. Two would be correct on disk and worse in every other way: a `Store`
+    keeps one pending write, so the second merely resets the first's timer.
+    """
+    notices = hass.data.get(_DATA, {}).get(entry.entry_id)
+    if notices is not None:
+        if notices.announced.get(notice_id) == fingerprint:
+            _LOGGER.debug(
+                "Notice %s already announced for %s with the same content; not raised again",
+                notice_id,
+                entry.entry_id,
+            )
+            return False
+        notices.announced[notice_id] = fingerprint
+    async_raise(hass, entry, notice_id, title=title, message=message)
+    return True
+
+
+@callback
 def _on_change(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -247,6 +357,11 @@ def _on_change(
     Filtered to this entry's own ids because the dispatcher delivers every
     notification change in the system, most of which belong to other
     integrations.
+
+    Only the standing set is touched. The announcement record deliberately
+    outlives dismissal -- clearing it here would let the next setup raise the
+    notice the user just dismissed, which is the defect `async_raise_on_change`
+    exists to close.
     """
     if change is not UpdateType.REMOVED:
         return
@@ -283,7 +398,7 @@ def _persist(notices: _Notices) -> None:
     property it buys -- what is queued is what was true when it was queued -- does
     not then depend on every future mutation site remembering to re-persist.
     """
-    written = StoredNotices(standing=dict(notices.standing))
+    written = StoredNotices(standing=dict(notices.standing), announced=dict(notices.announced))
     notices.store.async_delay_save(lambda: written, _SAVE_DELAY)
 
 
