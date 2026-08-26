@@ -145,10 +145,30 @@ def _load(stored: object, entry: ConfigEntry) -> frozenset[str] | None:
             "as known rather than announced; the next addition is announced normally.",
             entry.entry_id,
             _ANNOUNCED,
-            type(announced if isinstance(stored, dict) else stored).__name__,
+            _describe(stored),
         )
         return None
     return frozenset(announced)
+
+
+def _describe(stored: object) -> str:
+    """Say what was on disk where the announced list should have been.
+
+    A separate function because the honest answer has three cases and only one of
+    them is a type name. Reporting `type(stored.get(...))` for all three says
+    "found NoneType" for a record that simply has no such key, which reads as a
+    null somebody wrote and sends whoever is looking at the wrong part of the
+    file.
+    """
+    if not isinstance(stored, dict):
+        return type(stored).__name__
+    if _ANNOUNCED not in stored:
+        return "missing"
+    announced = stored[_ANNOUNCED]
+    if isinstance(announced, list):
+        offending = next((item for item in announced if not isinstance(item, str)), None)
+        return f"a list holding {type(offending).__name__}"
+    return type(announced).__name__
 
 
 async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:

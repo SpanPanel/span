@@ -623,3 +623,36 @@ async def test_a_malformed_store_is_re_seeded_rather_than_left_broken(
     message = _text(_announcement(hass, entry))
     assert "Grid State" in message
     assert "Part Number" not in message
+
+
+@pytest.mark.parametrize(
+    ("shape", "expected"),
+    [
+        ({}, "found missing"),
+        ({_ANNOUNCED: 7}, "found int"),
+        ({_ANNOUNCED: None}, "found NoneType"),
+        ({_ANNOUNCED: ["fine", 3]}, "found a list holding int"),
+        ("nonsense", "found str"),
+    ],
+)
+async def test_the_warning_says_what_was_actually_on_disk(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    entry: MockConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+    shape: object,
+    expected: str,
+) -> None:
+    """The line is the only thing anybody has to go on, so it may not mislead.
+
+    A record with no `announced_unique_ids` key at all reported "found NoneType"
+    -- the type of what `get` returned rather than of anything on disk -- which
+    reads as a null somebody wrote and sends the reader to the wrong part of the
+    file. `None` written *explicitly* still reports NoneType, because there it is
+    the truth.
+    """
+    _seed(hass_storage, entry, shape)
+
+    await async_announce_new_entities(hass, entry)
+
+    assert expected in caplog.text

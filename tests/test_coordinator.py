@@ -7,12 +7,20 @@ import logging
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import (
     AdoptedDevice,
     AdoptedProperty,
     ExtensionProperty,
     ExtensionSubject,
+    SpanMqttClient,
 )
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -21,18 +29,11 @@ from span_panel_api.exceptions import (
     SpanPanelServerError,
     SpanPanelTimeoutError,
 )
-
-from custom_components.span_panel.coordinator import SpanPanelCoordinator
-from custom_components.span_panel.helpers import detect_capabilities
-from homeassistant.core import HomeAssistant
-from span_panel_api import SpanMqttClient
 from span_panel_api.models import FieldMetadata
 from span_panel_api.protocol import SpanPanelClientProtocol
-from homeassistant.exceptions import (
-    ConfigEntryAuthFailed,
-    ConfigEntryNotReady,
-    HomeAssistantError,
-)
+
+from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.helpers import adopted_capability_tokens, detect_capabilities
 
 from .adapter_fixtures import schema_one_snapshot
 from .factories import (
@@ -40,8 +41,6 @@ from .factories import (
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
 )
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _create_coordinator(
@@ -453,9 +452,11 @@ async def test_on_connection_change_false_flips_offline_and_notifies_listeners(
     coordinator = _create_coordinator(hass)
     assert coordinator.panel_offline is False
 
-    with patch.object(coordinator, "async_update_listeners") as notify:
-        with caplog.at_level(logging.INFO):
-            coordinator._on_connection_change(False)
+    with (
+        patch.object(coordinator, "async_update_listeners") as notify,
+        caplog.at_level(logging.INFO),
+    ):
+        coordinator._on_connection_change(False)
 
     assert coordinator.panel_offline is True
     notify.assert_called_once_with()
@@ -472,9 +473,11 @@ async def test_on_connection_change_true_clears_offline_and_notifies_listeners(
     coordinator = _create_coordinator(hass)
     coordinator._panel_offline = True
 
-    with patch.object(coordinator, "async_update_listeners") as notify:
-        with caplog.at_level(logging.INFO):
-            coordinator._on_connection_change(True)
+    with (
+        patch.object(coordinator, "async_update_listeners") as notify,
+        caplog.at_level(logging.INFO),
+    ):
+        coordinator._on_connection_change(True)
 
     assert coordinator.panel_offline is False
     notify.assert_called_once_with()
@@ -836,3 +839,51 @@ async def test_the_same_devices_and_properties_ask_for_nothing(hass: HomeAssista
         )
 
     assert coordinator._reload_requested is False
+
+
+async def test_no_wire_identity_reaches_the_capability_set_in_the_clear() -> None:
+    """The capability set is logged at INFO whenever it expands, so it may not carry a serial.
+
+    `diagnostics.AdoptedDeviceRow` states the repo rule: a device id can embed a
+    serial, because producers derive a DER's id preferring a serial over a
+    default slug -- which is why this repository holds PV's `info/serial-number`
+    unvalued and why that block reports `proxied` rather than `parent`. A
+    capability token naming the id verbatim would put the same value in a log
+    line users paste into issues.
+
+    The subject kind and the wire path stay in the clear on purpose: they are
+    vendor vocabulary and name no install.
+    """
+    snapshot = replace(
+        SpanPanelSnapshotFactory.create(),
+        adopted_devices=(_adopted_device("panel-EX-0000-0001"),),
+        extension_properties=(
+            replace(
+                _extension_row(),
+                subject=ExtensionSubject(kind="evse", instance_key="evse-EX-0000-0002"),
+            ),
+        ),
+    )
+
+    tokens = adopted_capability_tokens(snapshot)
+
+    assert len(tokens) == 2
+    rendered = " ".join(sorted(tokens))
+    assert "EX-0000-0001" not in rendered
+    assert "EX-0000-0002" not in rendered
+    assert "panel-" not in rendered
+    # What is kept is what a maintainer can act on without an identity.
+    assert "extension:evse:" in rendered
+    assert "battery-2/cell-temperature" in rendered
+
+
+async def test_the_digest_is_stable_across_calls_and_distinguishes_devices() -> None:
+    """A digest that moved between snapshots would reload the integration on every refresh."""
+    first = replace(SpanPanelSnapshotFactory.create(), adopted_devices=(_adopted_device(),))
+    again = replace(SpanPanelSnapshotFactory.create(), adopted_devices=(_adopted_device(),))
+    other = replace(
+        SpanPanelSnapshotFactory.create(), adopted_devices=(_adopted_device("generator-2"),)
+    )
+
+    assert adopted_capability_tokens(first) == adopted_capability_tokens(again)
+    assert adopted_capability_tokens(first) != adopted_capability_tokens(other)

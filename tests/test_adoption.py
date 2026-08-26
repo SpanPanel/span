@@ -694,9 +694,17 @@ def _colliding_pair() -> tuple[AdoptedProperty, AdoptedProperty]:
     vendor that numbers the property rather than the node publishes
     `battery/2-cell-temperature`.
     """
-    first = _property(node_id="battery-2", property_id="cell-temperature", unit="°C", value="31.4")
-    second = _property(node_id="battery", property_id="2-cell-temperature", unit="°C", value="99.9")
-    return first, second
+    sorts_first = _property(
+        node_id="battery-2", property_id="cell-temperature", unit="°C", value="31.4"
+    )
+    sorts_second = _property(
+        node_id="battery", property_id="2-cell-temperature", unit="°C", value="99.9"
+    )
+    # `-` (0x2D) sorts before `/` (0x2F), so `battery-2/cell-temperature` is the
+    # lexically first of the two paths. The values differ so the survivor is
+    # identifiable by what it reads.
+    assert sorts_first.path < sorts_second.path
+    return sorts_first, sorts_second
 
 
 def test_the_adopted_grammar_is_not_injective() -> None:
@@ -717,18 +725,29 @@ def test_the_adopted_grammar_is_not_injective() -> None:
     assert adopted_unique_id(identifier, first) == adopted_unique_id(identifier, second)
 
 
-def test_the_second_of_two_colliding_properties_is_skipped_rather_than_built(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+@pytest.mark.parametrize("reversed_order", [False, True], ids=["as-declared", "reversed"])
+def test_the_lexically_first_of_two_colliding_properties_wins_either_way(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, reversed_order: bool
 ) -> None:
     """Home Assistant drops the loser of a unique_id collision permanently.
 
     Two entities added under one id leaves the second unregistered with only a
     core log line naming a `unique_id` the user cannot map back to a wire
-    address. Keeping the first and saying so names both addresses, which is what
-    makes the case reportable.
+    address. Keeping one and saying so names both addresses, which is what makes
+    the case reportable.
+
+    **Run in both declaration orders, and that is the point of the test.**
+    Adapter emission order tracks the wire, so a winner picked by arrival order
+    would let a firmware update that reordered a description change what a
+    standing entity reads -- silently, since the `unique_id` does not move and
+    nothing here would migrate it. The survivor is the lexically first wire path
+    in both runs. Registry preference cannot resolve this the way the extension
+    cap's does: both properties resolve to the same id, so the registry row
+    cannot say which of them put it there.
     """
-    first, second = _colliding_pair()
-    snapshot = _snapshot(_device(properties=(first, second)))
+    sorts_first, sorts_second = _colliding_pair()
+    declared = (sorts_second, sorts_first) if reversed_order else (sorts_first, sorts_second)
+    snapshot = _snapshot(_device(properties=declared))
 
     sensors = create_adopted_sensors(
         MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
@@ -736,6 +755,7 @@ def test_the_second_of_two_colliding_properties_is_skipped_rather_than_built(
 
     assert len(sensors) == 1
     assert sensors[0].native_value == 31.4
+    assert str(sensors[0].name) == "Cell Temperature"
     assert "battery-2/cell-temperature" in caplog.text
     assert "battery/2-cell-temperature" in caplog.text
 

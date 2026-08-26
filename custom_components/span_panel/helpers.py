@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 import logging
 
 from homeassistant.components.persistent_notification import async_create
@@ -416,13 +417,34 @@ def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
     )
 
 
+def _digest(identity: str) -> str:
+    """Return a short, stable digest of one wire identity.
+
+    Not a security boundary and not trying to be one — this is the same rule
+    `diagnostics.AdoptedDeviceRow` states and applies to `parent`: a device id can
+    embed a serial, because producers derive a DER's id preferring a serial over a
+    default slug, which is why this repository holds PV's `info/serial-number`
+    unvalued. The tokens below are the only capability names that carry wire
+    identity, and the capability set is *logged at INFO* by
+    `_check_capability_change` whenever it expands. A serial does not belong in
+    a line that ends up pasted into an issue.
+
+    Everything the reload trigger needs survives the digest: it compares tokens for
+    equality and never reads one, so a stable digest is the identity as far as
+    that comparison is concerned. What is lost is only a maintainer's ability to
+    read *which* device appeared out of the log line, and the diagnostics download
+    already answers that with the device type and counts.
+    """
+    return sha256(identity.encode("utf-8")).hexdigest()[:12]
+
+
 def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """One token per adopted device and per vendor extension property.
 
     Vendor extensibility is the one part of the snapshot whose vocabulary this
     integration cannot enumerate in advance, so it cannot be reduced to a named
-    flag the way `bess` or `pcs` are. It reaches the reload trigger as the
-    identities themselves.
+    flag the way `bess` or `pcs` are. It reaches the reload trigger as its
+    identities, digested — see `_digest` for why the raw ids must not appear here.
 
     **One token each rather than one hash of the set.** The trigger fires on set
     *expansion* (`current - known`), and a hash of a shrinking set is as "new" as
@@ -432,14 +454,21 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     arrives adds a token, a device that leaves removes one, and only the first is
     a reload.
 
+    The extension token digests its **instance key** and keeps its subject kind
+    and wire path in the clear. The key is an identity — an EVSE's node id, a
+    circuit's uuid — and can carry the same serial a device id can; `battery` and
+    `meter/cell-temperature` are vendor vocabulary that names no install.
+
     Keyed on the wire identity rather than on the value: a reading changing is
     every refresh, and the question here is only whether an entity that could not
     be created at setup now can.
     """
     return frozenset(
-        [f"adopted:{device.device_id}" for device in snapshot.adopted_devices]
+        [f"adopted:{_digest(device.device_id)}" for device in snapshot.adopted_devices]
         + [
-            f"extension:{row.subject.kind}:{row.subject.instance_key or ''}:{row.path}"
+            f"extension:{row.subject.kind}:"
+            f"{'' if row.subject.instance_key is None else _digest(row.subject.instance_key)}:"
+            f"{row.path}"
             for row in snapshot.extension_properties
         ]
     )

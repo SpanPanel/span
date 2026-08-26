@@ -286,8 +286,8 @@ def adopted_unique_id(identifier: str, declaration: AdoptedProperty) -> str:
     identity namespace should use -- but adopting it here would move every
     adopted id an install already holds, which strands the entities keyed on them
     with nothing to migrate them back. So the collision is handled where the
-    entities are built (`_create`) rather than removed here: the first property
-    to claim an id keeps it and the second is skipped with both wire paths named.
+    entities are built (`_create`) rather than removed here: the lexically first
+    wire path keeps the id and the other is skipped with both paths named.
     Changing the encoding is a follow-on for whatever namespace comes next, and
     it needs a maintainer's ruling rather than a fix.
     """
@@ -847,36 +847,44 @@ def _create[AdoptedT: AdoptedEntity](
     place a property's platform is decided. Five bodies would each restate the
     predicate, and a property could then reach two platforms or none.
 
-    **The first property to claim an id keeps it.** `adopted_unique_id` is not
-    injective -- see its docstring for why that cannot be fixed by changing the
-    encoding -- so two wire addresses can arrive at one id. Handing both to Home
-    Assistant registers the first and drops the second *permanently*, with one
-    core log line naming a `unique_id` the user cannot map back to anything on
-    the wire. Skipping it here costs the same entity and names both addresses, so
-    the case is reportable by whoever meets it.
+    **One id is claimed by one property, and which one does not depend on the
+    wire.** `adopted_unique_id` is not injective -- see its docstring for why that
+    cannot be fixed by changing the encoding -- so two wire addresses can arrive
+    at one id. Handing both to Home Assistant registers the first and drops the
+    second *permanently*, with one core log line naming a `unique_id` the user
+    cannot map back to anything on the wire. Skipping it here costs the same
+    entity and names both addresses, so the case is reportable by whoever meets
+    it.
 
     Claimed per platform, which is the scope the registry keys on: an entity is
     unique by (domain, integration, unique_id), so the same id under `sensor` and
     under `binary_sensor` is not a collision and must not be treated as one.
 
-    Arrival order decides the winner, and the order tracks the wire. That is a
-    real weakness -- a firmware update reordering a description could hand the id
-    to the other property -- and it is bounded by how unlikely the collision is
-    in the first place: it needs one device publishing two addresses that differ
-    only in which side of a hyphen a segment falls. The injective namespace is
-    the real answer; this is the guard until there is one.
+    **The winner is the lexically first wire path, not the first one published.**
+    Adapter emission order tracks the wire, so a firmware update that declared
+    the properties in the other order would have moved the id from one property
+    to the other -- which is a *standing entity changing what it reads* with no
+    id change to make it visible, and nothing here to migrate it back. Sorting on
+    `path` makes the survivor a function of the declarations alone. Registry
+    preference, which is how the extension cap resolves its equivalent problem,
+    is not available: both properties resolve to the same `unique_id`, so the
+    registry row cannot say which of them put it there.
+
+    The sort covers a whole device rather than only the colliding pair, because a
+    rule that only applied on collision would still depend on arrival order to
+    decide which pair collided first.
     """
     built: list[AdoptedT] = []
     claimed: dict[str, str] = {}
     for device, identifier in _adopted(snapshot, registry):
-        for declaration in device.properties:
+        for declaration in sorted(device.properties, key=lambda row: row.path):
             if classify(declaration) is not platform:
                 continue
             unique_id = adopted_unique_id(identifier, declaration)
             first_claim = claimed.get(unique_id)
             if first_claim is not None:
                 _LOGGER.warning(
-                    "Adopted %s on %s resolves to the same entity id as %s, which was seen "
+                    "Adopted %s on %s resolves to the same entity id as %s, which sorts "
                     "first; %s is not surfaced. Both wire addresses flatten to %s. Attach "
                     "this integration's diagnostics to an issue if you need the second one",
                     declaration.path,
