@@ -1244,4 +1244,6 @@ async def test_what_recreate_offers_after_a_pushed_rename_depends_on_the_mode(
     registry = er.async_get(hass)
     registry_entry = registry.async_get(sensor.entity_id)
     assert registry_entry is not None
+    assert registry_entry.original_name is not None
+    assert registry_entry.original_name.startswith(RENAMED)
     assert registry.async_regenerate_entity_id(registry_entry) == expected

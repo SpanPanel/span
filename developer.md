@@ -370,15 +370,60 @@ The adapter decides "read" from four enumerations of what it addresses — the m
 of the report. `tests/test_schema_one_discovery.py` in the library runs the same republish-and-diff experiment this gate uses and holds every entry to it in
 both directions, so the report means "nothing reads this" rather than "nobody wrote it down".
 
+## Circuit entity ids: a base, not a preset
+
+Since Home Assistant 2026.8 the user owns entity id composition — `entity_id_parts` says whether the area, the device and the entity name are in an id, and Core
+assembles it. This integration no longer presets `entity_id` for circuit entities. It supplies one _base_ per entity and Core does the rest, which is how every
+non-circuit entity here has always worked.
+
+`naming.py` is the only place the wording of a circuit id is written down. `circuit_object_id_base(identifier, suffix, existing_entity_id)` joins the
+naming-flag half — `Circuit 15`, `Kitchen Outlets`, `Unmapped Tab 32` — to the suffix wording, and it is the base, not the display name: the two are decoupled
+on purpose so a label can be reworded without a migration. The suffix wording is read back from the id an entity already has, because two spellings have shipped
+(`consumed_energy` before ids were preset, `energy_consumed` after); a new entity gets the noun-last form, matching the panel-level ids.
+`ENTITY_ID_SUFFIX_FORMS` records the forms that have shipped and gains an entry only when another is _discovered_, never to introduce one.
+
+`SpanPanelEntity.suggested_object_id` hands Core that base. It reads `_span_object_id_base`, which circuit entities set and every other entity leaves `None`, in
+which case the property falls through to Core's own answer — composition from the display name, exactly as before. Core consults `suggested_object_id` only for
+an entity that has not preset `entity_id`. The four circuit platforms reach the base by the same route: the sensors through `_object_id_parts`, and the switch
+and the select directly.
+
+### The legacy preset, and why two populations keep one
+
+R1 — "Recreate entity IDs" must never propose a change the user did not cause — bounds what may be composed. Two shapes Core cannot reproduce, for reasons that
+belong to this integration rather than to the user:
+
+- a circuit sensor shown on a **sub-device** card, whose id names the panel because the preset builder always did, where composition names the charger, that
+  being the entity's device;
+- any circuit entity on an install with **`USE_DEVICE_PREFIX` off**, whose id carries no device at all, where `has_entity_name` prefixes one regardless.
+
+`naming.legacy_preset_for_existing` is that whole exception, asked by all three circuit platforms so a copy per platform cannot drift. It answers `None` for
+anything new — an entity with no id yet has none to protect — and `None` for the ordinary existing entity, whose id composition reproduces exactly. Only an
+_existing_ entity in one of the two shapes goes on being preset, and the kept id is **computed from current panel data** rather than read back from the
+registry, so a circuit renamed in the SPAN app still refreshes the name half. That is issue #252, which the preset must not undo. `LEGACY_PRESET_DEVICE_NAME` is
+the literal `Span Panel` the old builder spelled every circuit id with — not the panel's own name, which is why a second panel's circuits are `span_panel_…`
+too, and why keeping an id means keeping that spelling.
+
+### Releasing the registry name
+
+Circuit-numbers mode used to deliver the panel's circuit name by writing the entity registry's `name` — the _user's_ field, which Core reads ahead of everything
+else when generating an entity id, so occupying it made Recreate propose a friendly-name id for a circuit-numbered entity.
+`naming.release_registry_name_written_by_older_release` hands that field back at the first start after upgrading. It clears only a value this integration would
+have written — `"{circuit_name} {description name}"`, for the description's current label and every label it has carried, which is what
+`SpanPanelCircuitsSensorEntityDescription.legacy_names` exists to record. Anything else in that field is the user's and is left alone.
+
+The display name now travels as `original_name` via `_attr_name` for both modes, which means a rename pushed from the SPAN app is picked up by rebuilding the
+entity: `_sync_circuit_name` asks the coordinator for a reload rather than writing the registry in place. It skips both the reload and the name where the
+registry holds a `name`, since the user's field outranks the panel's and reloading could not change what is displayed.
+
 ## The suffix mappings are closed
 
 `get_user_friendly_suffix` and `get_panel_entity_suffix` translate legacy camelCase description keys (`instantPowerW`, `instantGridPowerW`, `doorState`) into
 the suffixes their entities have carried since before 2.0.8. **Do not add entries.** A new description key needs none: it resolves to itself, which is what the
 sub-device builders (`build_bess_unique_id`, `build_mid_unique_id`, `build_evse_unique_id`) have always done, since their keys were written snake_case.
 
-The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (`sensor_circuit.py:213`, and
-`get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id` costs the long-term statistics, and the
-`entity_id` breaks whatever templates and automations a user wrote against it.
+The reason is that the suffix is not only in the `unique_id` — it is the segment shared with the `entity_id` (it is the `suffix` half of
+`naming.circuit_object_id_base`, and `get_panel_entity_suffix`'s own docstring says so). So an edit here moves both on every installed panel: the `unique_id`
+costs the long-term statistics, and the `entity_id` breaks whatever templates and automations a user wrote against it.
 
 `tests/test_suffix_mappings_are_closed.py` holds all three dictionaries to their exact contents and fails on an added key, a removed key or a changed value —
 verified by mutation, not by inspection.

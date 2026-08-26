@@ -103,8 +103,25 @@ working entirely in 2027.8.
 - **The Wi-Fi network name moved to the Wi-Fi Link sensor** as a `wifi_ssid` attribute, absent rather than blank on a panel that publishes no SSID.
 - **It is no longer an attribute of the Software Version sensor**, so a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` should
   point at the Wi-Fi Link binary sensor instead.
-- **The three circuit energy sensors are renamed** to **Energy Produced**, **Energy Consumed** and **Energy Net**, matching the id suffixes they already have,
-  with entity ids, unique ids and history unchanged.
+- **Circuit entity ids are now composed by Home Assistant from your own entity-id settings**, the way every other entity this integration creates already was:
+  the integration supplies the circuit half — `Circuit 15 Power` or `Kitchen Outlets Power`, as your naming option says — and Home Assistant adds the device
+  name, and the area as well if your settings include it (`Settings` > `System` > `General`).
+- **Nothing you already have moves**: an entity keeps the id it has until you press **Recreate entity IDs**, which offers an entity its own id back where
+  nothing changed, and an id reflecting your own configuration where something did — a circuit you renamed, an area you assigned, or the name you gave the panel
+  device.
+- **A panel whose device is not named "Span Panel"** — a second panel, or one you renamed — is now offered ids carrying that real device name, because the old
+  scheme spelled every circuit id `span_panel_` no matter what the device was called.
+- **New circuit energy sensors get `consumed_energy`, `produced_energy` and `net_energy`**, the same word order as the panel-level energy sensors; existing
+  sensors keep the spelling they have, whichever of the two it is, and are never offered the other one.
+- **Circuit sensors on a SPAN Drive's feed circuit are named for the charger alone on new installations** — `sensor.<charger>_power`, matching the charger's
+  other sensors — while the ones you already have go on naming the panel.
+- **The legacy `use_device_prefix` option can no longer keep the device out of a _new_ entity's id**, since Home Assistant includes the device unless your own
+  entity-id settings exclude it; the entities such an installation already has are untouched.
+- **An unnamed circuit in friendly-names mode is now named for the tab it occupies** (`Circuit 7 Power`) instead of taking Home Assistant's generic default, so
+  two unnamed circuits no longer collide.
+- **Circuit-numbers installations now show the device in the displayed name** — `SPAN Panel Kitchen Outlets Power`, as friendly-names installations always have
+  — so a template or a voice alias matching the old exact string needs updating.
+- **A name you set in an entity's own settings still outranks the panel's**, and this integration never writes or clears that field.
 
 ### Fixed
 
@@ -112,6 +129,8 @@ working entirely in 2027.8.
   added each circuit's whole lifetime counter to its offset.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
   untouched.
+- **The registry `Name` an older release wrote on circuit-numbers installations is handed back to you** at the first start after upgrading, for every label
+  those sensors have ever carried, so that field is yours again and no longer decides what Recreate proposes.
 - **Enum sensors advertise the states they can actually report**, where nine sensors declared only `unknown` and `DSM Grid State` sitting at `On Grid` showed
   "Possible states: Unknown".
 - **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
