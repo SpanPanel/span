@@ -164,6 +164,8 @@ working entirely in 2027.8.
   identical from here.
 - **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay
   debounce — every one defaulting to what your panel already does.
+- **The control lock arrives armed and stays where you left it**, so turning the option on locks control straight away and a restart or a settings save no
+  longer quietly unlocks the panel; a pending auto-relock comes back with the time it had left rather than starting its countdown over.
 - **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
   issued it rather than to nobody.
 - **Controls now report what happened to them**, so a command that was refused or never handed to the broker no longer looks like one the panel confirmed.

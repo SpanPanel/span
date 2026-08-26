@@ -1,15 +1,19 @@
 """Control switches."""
 
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 import logging
 from typing import Any, ClassVar
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.core import HomeAssistant
+from homeassistant.const import STATE_OFF
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
@@ -18,6 +22,7 @@ from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
 from .control_gate import (
     ControlLock,
+    ControlLockExtraStoredData,
     ControlMode,
     ControlPolicy,
     outcome_failure_reason,
@@ -347,7 +352,7 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         )
 
 
-class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity):
+class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
     """Arms and disarms this panel's control lock.
 
     Not a control over the panel — it never publishes anything — so it is
@@ -359,6 +364,15 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity):
     admin. Disarming requires an administrator, and is refused for a contextless
     caller regardless of `allow_contextless_control`: an automation that can
     unlock the panel is not a lock.
+
+    **It is also the lock's memory.** `ControlLock` is a plain object rebuilt by
+    every `async_setup_entry`, and an entry is reloaded by every options save,
+    every credential rotation, every circuit rename that asks for one and every
+    restart. The entity is the only participant Home Assistant persists, so it
+    restores the armed state on the way in and writes the pending auto-relock
+    deadline on the way out. The lock stays the single source of truth: the
+    restored answer is written *into* it, never kept alongside it, so the
+    interceptor and the switch cannot disagree.
     """
 
     _attr_entity_category: EntityCategory | None = EntityCategory.CONFIG
@@ -376,8 +390,95 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity):
         snapshot: SpanPanelSnapshot = coordinator.data
         self._lock = lock
         self._policy = policy
+        self._relock_timer: CALLBACK_TYPE | None = None
         self._attr_device_info = snapshot_to_device_info(snapshot, device_name)
         self._attr_unique_id = f"span_{snapshot.serial_number}_control_lock"
+
+    async def async_added_to_hass(self) -> None:
+        """Reopen the lock if that is where the last run left it.
+
+        Core writes this entity's state immediately after this returns, so the
+        restored answer reaches the UI without an explicit write here.
+        """
+        await super().async_added_to_hass()
+        self.async_on_remove(self._async_cancel_relock_timer)
+
+        # The lock arrives armed (`ControlLock.__init__`), so only a previous
+        # run that had opened it has anything to say. No previous run at all is
+        # the case the option text describes — "0 keeps the lock armed until
+        # someone disarms it" is only true if enabling the feature arms it. A
+        # restored `unknown`/`unavailable` says the last run never got far
+        # enough to be trusted, and armed is the safe reading of a lock whose
+        # state is in doubt.
+        last_state = await self.async_get_last_state()
+        if last_state is not None and last_state.state == STATE_OFF:
+            self._lock.resume_disarm(await self._async_restored_relock_seconds())
+        self._async_schedule_relock_write()
+
+    async def _async_restored_relock_seconds(self) -> float | None:
+        """Return what is left of the previous run's auto-relock window.
+
+        None means no window is pending. A value at or below zero means the
+        window closed while Home Assistant was down; `ControlLock.resume_disarm`
+        turns that into an armed lock.
+        """
+        extra = await self.async_get_last_extra_data()
+        stored = None if extra is None else ControlLockExtraStoredData.from_dict(extra.as_dict())
+        if stored is None or stored.relock_at is None:
+            # Either the previous run had no deadline to record, or its record
+            # is unreadable — a store written before this release, say. Falling
+            # back to this entry's configured window rather than to "no
+            # deadline" is what keeps an upgrade from leaving a disarmed lock
+            # open forever, and it is also the right answer when the user has
+            # changed the option since: the window they configured is the one
+            # they asked for.
+            timeout = self._policy.lock_timeout_minutes
+            return None if timeout is None or timeout <= 0 else timeout * 60
+        return (stored.relock_at - datetime.now(tz=UTC)).total_seconds()
+
+    @property
+    def extra_restore_state_data(self) -> ControlLockExtraStoredData:
+        """Record the pending auto-relock as an instant rather than a duration."""
+        remaining = self._lock.relock_in_seconds
+        return ControlLockExtraStoredData(
+            relock_at=(
+                None if remaining is None else datetime.now(tz=UTC) + timedelta(seconds=remaining)
+            )
+        )
+
+    @callback
+    def _async_cancel_relock_timer(self) -> None:
+        """Drop any scheduled write, so a reload leaves no timer behind."""
+        if self._relock_timer is not None:
+            self._relock_timer()
+            self._relock_timer = None
+
+    @callback
+    def _async_schedule_relock_write(self) -> None:
+        """Show the auto-relock at the moment it falls due, not at the next read.
+
+        `ControlLock.armed` settles a lapsed deadline lazily, which keeps the
+        gate correct but leaves the switch reading off until something happens
+        to look at it — and nothing looks at a switch on a schedule. The panel
+        was locked and the UI said it was not, for as long as that took.
+        """
+        self._async_cancel_relock_timer()
+        remaining = self._lock.relock_in_seconds
+        if remaining is None:
+            return
+        self._relock_timer = async_call_later(self.hass, remaining, self._async_relock_reached)
+
+    @callback
+    def _async_relock_reached(self, _now: datetime) -> None:
+        """Arm at the deadline and say so.
+
+        Arms explicitly rather than leaving it to the read behind `is_on`: this
+        timer is the mechanism, and the lazy settle in `ControlLock.armed` is
+        the backstop for an event loop that was suspended past the deadline.
+        """
+        self._relock_timer = None
+        self._lock.arm()
+        self.async_write_ha_state()
 
     @property
     def is_on(self) -> bool:
@@ -387,6 +488,7 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Arm the lock. Anyone may do this, including an automation."""
         self._lock.arm()
+        self._async_cancel_relock_timer()
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -410,6 +512,7 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity):
 
         timeout = self._policy.lock_timeout_minutes
         self._lock.disarm(timeout if timeout is not None else 0)
+        self._async_schedule_relock_write()
         self.async_write_ha_state()
 
 

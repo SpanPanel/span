@@ -27,13 +27,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 import logging
 import time
+from typing import Any, Self
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.restore_state import ExtraStoredData
+from homeassistant.util import dt as dt_util
 from span_panel_api import ControlCommand, PublishOutcome, PublishState
 
 from .const import DOMAIN, EVENT_CONTROL_COMMAND
@@ -172,9 +176,11 @@ class ControlPolicy:
             mode = ControlMode.ALL_USERS
 
         raw_timeout = options.get(CONTROL_LOCK_TIMEOUT)
-        # Absent means the lock feature is off; 0 means armed until manually
-        # disarmed. The two are different states and a plain float cannot hold
-        # both, which is why this is nullable.
+        # Absent (or negative) means the lock feature is off and there is no
+        # switch; 0 means the feature is on with no auto-relock, so a disarm
+        # lasts until someone arms it again. "Off" and "on with no countdown"
+        # are different states and a plain float cannot hold both, which is why
+        # this is nullable.
         timeout: float | None = None
         if isinstance(raw_timeout, int | float) and not isinstance(raw_timeout, bool):
             timeout = float(raw_timeout) if raw_timeout >= 0 else None
@@ -204,23 +210,46 @@ class ControlLock:
     require admin; making it less safe should.
     """
 
-    def __init__(self) -> None:
-        """Start disarmed."""
-        self._armed = False
+    def __init__(self, *, armed: bool = False) -> None:
+        """Start armed or disarmed, before anything is known about the last run.
+
+        `async_setup_entry` passes the feature's own switch: a lock that exists
+        as a user-facing thing is a lock that is on. That is what the option
+        text promises, and it is what fails closed over the window between the
+        interceptor being installed and the entity being added — the first
+        refresh and the whole platform forward happen in between.
+
+        `SpanPanelControlLockSwitch.async_added_to_hass` then relaxes it to
+        whatever the previous run left behind. Relaxing is the only direction a
+        restore ever moves this, which is why the constructor can decide the
+        rest by itself.
+        """
+        self._armed = armed
         self._relock_at: float | None = None
 
     @property
     def armed(self) -> bool:
         """Whether control is currently locked out.
 
-        Auto-relock is evaluated on read rather than on a timer, so it cannot be
-        missed by a restart or a suspended event loop, and so the lock never
-        stays open longer than it was asked to.
+        Auto-relock is settled on read as well as on the entity's timer, so it
+        cannot be missed by a suspended event loop, and so the lock never stays
+        open longer than it was asked to even if nothing writes the state.
         """
         if self._relock_at is not None and time.monotonic() >= self._relock_at:
             self._armed = True
             self._relock_at = None
         return self._armed
+
+    @property
+    def relock_in_seconds(self) -> float | None:
+        """Seconds left of the auto-relock window, or None when none is running.
+
+        None for an armed lock and for a disarm that was asked to last until
+        someone arms it again — neither has a deadline to report.
+        """
+        if self.armed or self._relock_at is None:
+            return None
+        return max(0.0, self._relock_at - time.monotonic())
 
     def arm(self) -> None:
         """Lock control out."""
@@ -231,6 +260,74 @@ class ControlLock:
         """Allow control, re-arming after `timeout_minutes` unless that is zero."""
         self._armed = False
         self._relock_at = None if timeout_minutes <= 0 else time.monotonic() + timeout_minutes * 60
+
+    def resume_disarm(self, relock_in_seconds: float | None) -> None:
+        """Re-enter the disarmed state the previous run left this entry in.
+
+        The entity calls this and nothing else: a lock for an enabled entry is
+        constructed armed, so restoring a run that ended armed means leaving it
+        alone, and the only thing the previous run has to tell this object is
+        that it had been *opened*.
+
+        `relock_in_seconds` is what was left of that run's auto-relock window,
+        recomputed by the entity from a wall-clock deadline because `_relock_at`
+        is a monotonic reading and a monotonic reading does not survive a
+        restart. None means there was no window. Zero or less means it closed
+        while Home Assistant was down, and the lock stays armed rather than
+        granting a grace period nobody asked for.
+
+        Resuming the remainder rather than restarting the window is the point.
+        A reload happens on every options save, every credential rotation and
+        every circuit rename; a restarted window would let routine maintenance
+        hold the lock open indefinitely.
+        """
+        if relock_in_seconds is not None and relock_in_seconds <= 0:
+            self.arm()
+            return
+        self._armed = False
+        self._relock_at = (
+            None if relock_in_seconds is None else time.monotonic() + relock_in_seconds
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ControlLockExtraStoredData(ExtraStoredData):
+    """A pending auto-relock, written down in terms that outlive the process.
+
+    Lives beside `ControlLock` rather than in the switch module because it is
+    that class's deadline in serialized form: the two have to change together,
+    and a reader of one should not have to go looking for the other.
+
+    The switch's own `on`/`off` state is not duplicated here — Home Assistant
+    already restores it — so this holds exactly the one thing the state cannot
+    express, and holds it as an absolute instant because `_relock_at` is a
+    monotonic reading with no meaning after a restart.
+    """
+
+    relock_at: datetime | None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a dict representation of the extra data."""
+        return {"relock_at": None if self.relock_at is None else self.relock_at.isoformat()}
+
+    @classmethod
+    def from_dict(cls, restored: dict[str, Any]) -> Self | None:
+        """Read back what `as_dict` wrote, or None when it cannot be read.
+
+        None means the record holds something that is not a deadline — edited
+        by hand, or written in a shape this release does not know. An *absent*
+        key is not that case: a record written before this release, and one
+        written by a run with nothing pending, both say "no deadline", and both
+        read back as one. The caller decides what to do with either; failing
+        setup over a switch's restore data would not be a proportionate answer.
+        """
+        raw = restored.get("relock_at")
+        if raw is None:
+            return cls(relock_at=None)
+        if not isinstance(raw, str):
+            return None
+        parsed = dt_util.parse_datetime(raw)
+        return None if parsed is None else cls(relock_at=parsed)
 
 
 class ControlGate:

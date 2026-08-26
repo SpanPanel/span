@@ -11,12 +11,11 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from span_panel_api.exceptions import SpanPanelServerError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.httpx_client import get_async_client
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api.exceptions import SpanPanelAuthError
+from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelServerError
 
 from custom_components.span_panel import SpanPanelRuntimeData, async_setup_entry
 from custom_components.span_panel.const import (
@@ -28,6 +27,7 @@ from custom_components.span_panel.const import (
     CONF_HTTP_PORT,
     DOMAIN,
 )
+from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .factories import SpanPanelSnapshotFactory
 
@@ -484,3 +484,44 @@ async def test_setup_announces_additions_after_the_platforms(
         assert await async_setup_entry(hass, entry) is True
 
     assert order == ["forward", "sync", "announce"]
+
+
+async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forwarded(
+    hass: HomeAssistant,
+) -> None:
+    """The gate consults the lock long before the switch exists to restore it.
+
+    `set_control_interceptor` happens above the first refresh; the platform
+    forward is the last thing setup does. A lock built disarmed would leave
+    that whole window -- a first refresh, a streaming start, a device
+    registration -- with the feature nominally on and nothing refusing.
+
+    Asserted here rather than through the entity because the entity is exactly
+    what has not been created yet at the moment this matters.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, options={CONTROL_LOCK_TIMEOUT: 0})
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert entry.runtime_data.control_lock.armed is True

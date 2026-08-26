@@ -8,10 +8,12 @@ assuming otherwise would leave the gate untested while looking covered.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from span_panel_api import ControlCommand, PublishOutcome, PublishState
@@ -228,6 +230,99 @@ def test_auto_relock_fires_once_the_window_passes() -> None:
 
     with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=301.0):
         assert lock.armed is True
+
+
+# ---------- restoring the state a previous run left behind ----------
+
+
+def test_restoring_a_live_window_resumes_the_remainder() -> None:
+    """Ten minutes left before the reload is ten minutes left after it.
+
+    The entity converts the deadline to and from wall-clock time; this object
+    only ever sees what is left of it.
+    """
+    lock = ControlLock()
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=0.0):
+        lock.resume_disarm(600.0)
+        assert lock.armed is False
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=599.0):
+        assert lock.armed is False
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=601.0):
+        assert lock.armed is True
+
+
+def test_restoring_a_window_that_already_closed_arms_the_lock() -> None:
+    """The lock was asked to re-arm at a moment that has already passed."""
+    lock = ControlLock()
+
+    lock.resume_disarm(-30.0)
+
+    assert lock.armed is True
+
+
+def test_restoring_a_disarm_with_no_window_leaves_it_open() -> None:
+    """`None` is "there was no countdown", not "the countdown has run out"."""
+    lock = ControlLock()
+    lock.arm()
+
+    lock.resume_disarm(None)
+
+    assert lock.armed is False
+    assert lock.relock_in_seconds is None
+
+
+def test_an_armed_lock_reports_no_pending_window() -> None:
+    """There is nothing to count down to while control is already locked out."""
+    lock = ControlLock()
+    lock.disarm(5)
+    assert lock.relock_in_seconds == pytest.approx(300, abs=1)
+
+    lock.arm()
+
+    assert lock.relock_in_seconds is None
+
+
+def test_the_stored_deadline_survives_a_round_trip() -> None:
+    """What `as_dict` writes is what `from_dict` reads, to the microsecond."""
+    from custom_components.span_panel.control_gate import ControlLockExtraStoredData
+
+    deadline = dt_util.utcnow() + timedelta(minutes=7)
+
+    restored = ControlLockExtraStoredData.from_dict(
+        ControlLockExtraStoredData(relock_at=deadline).as_dict()
+    )
+
+    assert restored is not None
+    assert restored.relock_at == deadline
+
+
+@pytest.mark.parametrize("stored", [{"relock_at": 1234}, {"relock_at": "not-a-time"}])
+def test_an_unreadable_stored_deadline_is_reported_rather_than_guessed(
+    stored: dict[str, object],
+) -> None:
+    """A hand-edited record says nothing usable, and says so.
+
+    Reported as None so the entity can fall back to its configured window;
+    inventing a deadline here would hide the difference from the one caller
+    that has to tell them apart.
+    """
+    from custom_components.span_panel.control_gate import ControlLockExtraStoredData
+
+    assert ControlLockExtraStoredData.from_dict(stored) is None
+
+
+@pytest.mark.parametrize("stored", [{}, {"relock_at": None}])
+def test_an_absent_stored_deadline_reads_as_no_countdown(stored: dict[str, object]) -> None:
+    """A run that ended with nothing pending recorded exactly that."""
+    from custom_components.span_panel.control_gate import ControlLockExtraStoredData
+
+    restored = ControlLockExtraStoredData.from_dict(stored)
+
+    assert restored is not None
+    assert restored.relock_at is None
 
 
 # ---------- relay debounce ----------
