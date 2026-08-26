@@ -17,8 +17,10 @@ import pathlib
 
 import pytest
 from span_panel_api.models import FieldMetadata
+from span_panel_api_schema_0.adapter import SchemaZeroAdapter
+from span_panel_api_schema_1.adapter import SchemaOneAdapter
 
-from custom_components.span_panel import field_paths as field_paths_module
+from custom_components.span_panel import field_paths as field_paths_module, sensor_panel
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     Producibility,
@@ -442,4 +444,35 @@ def test_every_exempt_path_still_has_a_reader() -> None:
     assert not unread, (
         f"exempt paths no longer read anywhere in the package: {unread}. The "
         "reader was removed; drop the exemption with it."
+    )
+
+
+def test_the_service_entrance_gate_names_the_installed_adapter_keys() -> None:
+    """The one adapter fact this integration states outside `RESIDUAL_EXEMPT_PATHS`.
+
+    `sensor_panel._SERVICE_ENTRANCE_ADAPTER` says which adapter resolves
+    `lugs_at_service_entrance`, and the grid power sensor publishes its
+    `at_service_entrance` attribute only when that adapter is the one running.
+    It is here for the reason the exemption annotations are: a statement about
+    what an adapter produces belongs against the adapters, not in prose.
+
+    Without this the failure is silent and one-directional. A renamed adapter key
+    matches nothing, every panel looks like an adapter that does not resolve the
+    field, and the attribute simply stops appearing -- no error, no unavailable
+    entity, nothing in the log. The `!=` half matters just as much: the constant
+    naming the *flat* key would publish the library's `True` default on every
+    flat panel, which is the defect this gate was added to fix.
+
+    Read off the adapter classes rather than off a live client because the class
+    attribute is what a client reports (`SpanMqttClient.schema_major` returns
+    `self._adapter.schema_major`), and a class needs no MQTT connection.
+    """
+    assert SchemaOneAdapter.schema_major == sensor_panel._SERVICE_ENTRANCE_ADAPTER, (
+        f"the parent/child adapter's key is {SchemaOneAdapter.schema_major!r} but the "
+        f"grid sensor gates on {sensor_panel._SERVICE_ENTRANCE_ADAPTER!r}; "
+        "at_service_entrance would silently stop being published"
+    )
+    assert SchemaZeroAdapter.schema_major != sensor_panel._SERVICE_ENTRANCE_ADAPTER, (
+        "the grid sensor gates on the flat adapter's key, which would publish the "
+        "library's default as a reading on every flat panel"
     )

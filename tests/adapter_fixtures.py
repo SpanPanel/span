@@ -208,7 +208,7 @@ reason: absent is the flat discriminator, and the dispatcher reads it.
 
 
 def schema_zero_snapshot() -> SpanPanelSnapshot:
-    """A snapshot as the real flat adapter builds it, before any topic arrives.
+    """Build a snapshot as the real flat adapter builds it, before any topic arrives.
 
     The counterpart to `schema_one_snapshot`, and it exists for the fields the
     flat adapter never writes. Retained topics only ever *add* to this: a field
