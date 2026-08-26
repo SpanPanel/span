@@ -384,8 +384,11 @@ on purpose so a label can be reworded without a migration. The suffix wording is
 
 `SpanPanelEntity.suggested_object_id` hands Core that base. It reads `_span_object_id_base`, which circuit entities set and every other entity leaves `None`, in
 which case the property falls through to Core's own answer — composition from the display name, exactly as before. Core consults `suggested_object_id` only for
-an entity that has not preset `entity_id`. The four circuit platforms reach the base by the same route: the sensors through `_object_id_parts`, and the switch
-and the select directly.
+an entity that has not preset `entity_id`. **The property and a preset `entity_id` are not two routes to the same place**: `_async_derive_object_ids`
+(`entity_platform.py`) files what the property returns as the registry's `object_id_base`, which Core then prefixes with the device and the area per the user's
+parts, and files a preset `entity_id` as `suggested_object_id`, which outranks the base and is taken verbatim with no prefix at all. Setting `entity_id` to the
+base would therefore ship the base as the whole id. The three circuit platforms reach the base by the same route: the sensors through `_object_id_parts`, and
+the switch and the select directly.
 
 ### The legacy preset, and why two populations keep one
 
@@ -397,11 +400,13 @@ belong to this integration rather than to the user:
 - any circuit entity on an install with **`USE_DEVICE_PREFIX` off**, whose id carries no device at all, where `has_entity_name` prefixes one regardless.
 
 `naming.legacy_preset_for_existing` is that whole exception, asked by all three circuit platforms so a copy per platform cannot drift. It answers `None` for
-anything new — an entity with no id yet has none to protect — and `None` for the ordinary existing entity, whose id composition reproduces exactly. Only an
-_existing_ entity in one of the two shapes goes on being preset, and the kept id is **computed from current panel data** rather than read back from the
-registry, so a circuit renamed in the SPAN app still refreshes the name half. That is issue #252, which the preset must not undo. `LEGACY_PRESET_DEVICE_NAME` is
-the literal `Span Panel` the old builder spelled every circuit id with — not the panel's own name, which is why a second panel's circuits are `span_panel_…`
-too, and why keeping an id means keeping that spelling.
+anything new — an entity with no id yet has none to protect — and `None` for the ordinary existing entity, whose id composition reproduces exactly. A third gate
+sits in front of it on the sensor side, `_id_was_preset_by_this_integration` (`sensor_base.py`, set to `True` only by the circuit sensor classes): the hidden
+unmapped-tab sensors have had their ids composed by Home Assistant all along, and an id Core already composes cannot be moved by handing Core the job, so they
+never reach the preset path. Only an _existing_ entity in one of the two shapes goes on being preset, and the kept id is **computed from current panel data**
+rather than read back from the registry, so a circuit renamed in the SPAN app still refreshes the name half. That is issue #252, which the preset must not undo.
+`LEGACY_PRESET_DEVICE_NAME` is the literal `Span Panel` the old builder spelled every circuit id with — not the panel's own name, which is why a second panel's
+circuits are `span_panel_…` too, and why keeping an id means keeping that spelling.
 
 ### Releasing the registry name
 
