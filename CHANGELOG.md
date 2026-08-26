@@ -10,10 +10,6 @@ SPAN firmware `r202633` replaces the way the panel publishes its data — the wi
 the new one. There is no wire overlap and no setting to keep the old behaviour. **2.0.8 cannot read a panel on `r202633`**: it stays connected, reports every
 circuit as missing, and shows nothing useful.
 
-We do not control when that update reaches you, and the schedule belongs exclusively to SPAN. Panels update on SPAN's timing, not on yours or ours. If
-uninterrupted integration matters to you, install this release **before** your panel changes — afterwards you are looking at a blank integration while you work
-out why.
-
 **The transition itself is seamless.** Install 2.1.0 early and your only outage is the firmware update itself. A log line and a one-time notification tell you
 exactly what happened, so take a screenshot.
 
@@ -93,83 +89,57 @@ working entirely in 2027.8.
 ### Changed
 
 - **`DSM Grid State` is now more trustworthy**, reading the islanding state the Microgrid Interconnect Device actually senses rather than inferring it from the
-  battery, the dominant power source and which way power was crossing the grid connection. It keeps its entity id and all of its history.
-- **`Grid Islandable` keeps working** across the upgrade: the new firmware publishes no panel-level islandable property and makes the question structural
-  instead, so the entity now reflects whether a Microgrid Interconnect Device is present. A panel without one reads `Off`, which is an answer, rather than going
-  unavailable.
-- **Battery model** may read differently after upgrading: the new firmware separates the human-readable designation from the SKU, and this entity now shows the
-  designation. The normalisation happens in the library on both sides of the upgrade, so it lands once, at this release, rather than unpredictably when your
-  panel changes over.
-
-- **Five panel sensors are switched off for new installations** (#234), because the SPAN API documented three defects that predate SPAN firmware r202633: the
-  feedthrough energy registers can decrease or go negative, the feedthrough power reading is inverted relative to every other terminal, and the feedthrough
-  currents report the _upstream_ service conductors. The affected entities are **Feedthrough Produced Energy**, **Feedthrough Consumed Energy**, **Feedthrough
-  Power**, and the two **Downstream** current sensors.
-- **If you already have those five, nothing changes and they stay exactly where they are**, because Home Assistant consults the enabled-by-default setting only
-  when an entity is first created — so an existing installation keeps them, keeps its history and keeps its entity IDs. If you use any of the five on a
-  dashboard or in an automation they are worth removing, but that is your decision to make, not something an upgrade should do to you.
-- **Your other panel readings are unaffected, and that is now checked against a real panel rather than assumed.** A capture from a live upgraded panel shows the
-  four power-flow values summing to zero exactly and the battery power definition byte-for-byte what 2.0.8 shipped, with the upstream lugs, the main panel meter
-  and every circuit in the correct frame.
-
-- **New entities are now announced in a notification, whether or not they arrived switched on.** The notification now splits what arrived into ready to use and
-  switched off and names each entity.
-
-- **The Wi-Fi network name attribute moved to the Wi-Fi Link sensor**, which is where you would look for it: the entity that tells you whether Wi-Fi is up now
-  also tells you which network it is up on, as a `wifi_ssid` attribute. It is absent rather than blank on a panel that publishes no SSID.
-- **It is no longer an attribute of the Software Version sensor**, where a network name never made sense attribute block. If you have a template reading
-  `state_attr('sensor.span_panel_software_version', 'wifi_ssid')`, point it at the Wi-Fi Link binary sensor instead.
-
-- **The three circuit energy sensors are renamed to match the ids they are given**: "Produced Energy", "Consumed Energy" and "Net Energy" become **Energy
-  Produced**, **Energy Consumed** and **Energy Net**, the order the `energy_produced`, `energy_consumed` and `energy_net` suffixes already use. **Entity ids,
-  unique ids and history are unchanged**; only the name shown in the UI reorders.
+  battery and the dominant power source, and keeping its entity id and its history.
+- **`Grid Islandable` keeps working across the upgrade** by reflecting whether a Microgrid Interconnect Device is present, so a panel without one reads `Off`
+  rather than going unavailable.
+- **Battery model may read differently after upgrading**, now showing the human-readable designation rather than the SKU, normalised in the library on both
+  sides of the upgrade so it lands once at this release.
+- **Five panel sensors are switched off for new installations** (#234) because of three SPAN-documented defects predating firmware r202633: **Feedthrough
+  Produced Energy**, **Feedthrough Consumed Energy**, **Feedthrough Power**, and the two **Downstream** current sensors.
+- **Existing installations keep those five exactly where they are**, with their history and entity ids, because Home Assistant consults the enabled-by-default
+  setting only when an entity is first created.
+- **Your other panel readings are unaffected**, checked against a capture from a live upgraded panel rather than assumed.
+- **New entities are now announced in a notification** that splits what arrived into ready to use and switched off and names each one.
+- **The Wi-Fi network name moved to the Wi-Fi Link sensor** as a `wifi_ssid` attribute, absent rather than blank on a panel that publishes no SSID.
+- **It is no longer an attribute of the Software Version sensor**, so a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` should
+  point at the Wi-Fi Link binary sensor instead.
+- **The three circuit energy sensors are renamed** to **Energy Produced**, **Energy Consumed** and **Energy Net**, matching the id suffixes they already have,
+  with entity ids, unique ids and history unchanged.
 
 ### Fixed
 
-- **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style; unique ids and statistics are untouched.
-- **Enum sensors advertise the states they can actually report.** Nine sensors declared only `unknown`, so `DSM Grid State` sitting at `On Grid` showed
+- **Energy dip compensation no longer books a dip that never happened** (#259), where a partial reading at startup looked like a counter reset and every restart
+  added each circuit's whole lifetime counter to its offset.
+- **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
+  untouched.
+- **Enum sensors advertise the states they can actually report**, where nine sensors declared only `unknown` and `DSM Grid State` sitting at `On Grid` showed
   "Possible states: Unknown".
-- **The README described Battery Power's sign backwards.** The sensor reports **discharging** as positive and always has, as release 2.0.5 established (#184)
-  and a measured panel confirms — **no entity changed and no reading moved**, only the documentation was ever wrong.
-- **A breaker your panel refuses to operate now says so.** The switch had no handling for a refused relay command at all, so the failure surfaced as a traceback
-  in the log and a toggle that quietly sprang back. It now reports the panel's own reason where you pressed it, and the switch stays where the relay actually
-  is.
-- **A control command that never reached your panel now says so.** A relay, priority, GFE override or charge-limit command that the transport could not hand
-  over — the broker was disconnected, so it was refused rather than queued — was written to the log and nowhere else. It is reported where you issued it, and
-  says plainly that nothing was queued and nothing will happen later.
-- **A refused circuit priority no longer blames your firmware.** The old message said the panel's firmware did not support the operation, which stopped being
-  the only explanation once your panel could also declare an individual circuit's priority fixed. The priority select and the GFE override button now carry the
-  panel's reason instead of guessing at one, and report it as an error on the control you used rather than as a notification that sits in the sidebar until you
-  dismiss it by hand.
+- **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
+  ever wrong.
+- **A breaker your panel refuses to operate now says so**, reporting the panel's own reason where you pressed it instead of a traceback in the log and a toggle
+  that quietly springs back.
+- **A control command that never reached your panel now says so**, reported where you issued it rather than only in the log and stating plainly that nothing was
+  queued.
+- **A refused circuit priority no longer blames your firmware**, carrying the panel's own reason on the control you used rather than as a notification you
+  dismiss by hand.
 
 ### Security
 
-- **The panel passphrase is no longer stored.** It is an input to registration and nothing afterwards read it, but a stored copy could mint fresh panel
-  credentials at any time. Upgrading migrates the config entry to version 7 and removes it; nothing else in the entry changes and no entity is affected.
-  Reauthenticating removes it too, if you upgrade later. **Once an entry reaches version 7, an older build of the integration will refuse to load it** — Home
-  Assistant does not downgrade config entries, so roll back from a backup rather than by reinstalling.
-- **New action `span_panel.rotate_credentials`** asks the panel for a new eBus MQTT broker password, stores it, and reloads the integration — for use after a
-  contractor visit or a suspected exposure. It is restricted to Home Assistant administrators and cannot be called from an automation or script. **The previous
-  broker password stops working immediately**, so any other local client using it must be re-provisioned from the panel. The panel access token and the panel
-  passphrase are unchanged, and a failed rotation leaves the existing credentials in place.
+- **The panel passphrase is no longer stored** — upgrading migrates the config entry to version 7 and removes it, after which an older build of the integration
+  will refuse to load that entry, so roll back from a backup rather than by reinstalling.
+- **New admin-only action `span_panel.rotate_credentials`** replaces the eBus MQTT broker password on demand, which immediately breaks any other local client
+  using the old one.
+- **The panel's certificate authority is pinned before your passphrase is ever sent**, so the registration exchange that carries it — and everything after — no
+  longer crosses your network in the clear.
+- **A changed authority stops the integration and raises a repair** carrying both fingerprints, because a legitimate rotation and an impersonated panel look
+  identical from here.
+- **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay
+  debounce — every one defaulting to what your panel already does.
+- **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
+  issued it rather than to nobody.
+- **Controls now report what happened to them**, so a command that was refused or never handed to the broker no longer looks like one the panel confirmed.
 - **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
-  actually bound the panel's exposure — VLAN isolation, a locked enclosure, read-only Home Assistant users, and encrypted backups.
-- **The panel's certificate authority is pinned, before your passphrase is ever sent.** Setup fetches it, checks that the certificate your panel actually serves
-  is signed by it, and shows you the fingerprint to accept — and only then asks you to authenticate. Registration is the exchange that carries your passphrase
-  and returns both the access token and the broker password, and it used to cross your network in the clear; it now travels over the authority you accepted, as
-  does everything after it. Previously the authority was also re-fetched over plaintext HTTP on every connection and whatever answered was trusted. **Anyone
-  merely listening on your network can no longer read those credentials.** A device actively impersonating your panel at that first fetch still could, which is
-  why the fingerprint is shown for you to compare rather than accepted silently. Panels configured before this release exchanged their credentials long ago and
-  are simply pinned on the first startup that reaches them, logged at `WARNING` with the fingerprint.
-- **A changed authority stops the integration and raises a repair** carrying both fingerprints, rather than reconnecting. A legitimate rotation and a device
-  impersonating your panel look identical from here, so re-pinning takes an explicit acceptance from you. Nothing retries in the meantime.
-- **Four new options decide who may operate the panel** — restrict controls to administrators, refuse commands from automations, add an admin-only control lock,
-  and debounce repeated relay commands. **Every default is what your panel already does**, so upgrading changes nothing until you choose otherwise. See
-  [Restricting who can operate the panel](README.md#restricting-who-can-operate-the-panel), which is also explicit about what these do _not_ protect against.
-- **Every control command is now recorded** — in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`. Commands from an automation are
-  attributed to that automation rather than to nobody.
-- **Controls now report what happened to them.** A command that was refused, or that was never handed to the broker, no longer looks the same as one the panel
-  confirmed — and a switch no longer shows a position its relay never took.
+  actually bound the panel's exposure.
 
 ## [2.0.8] - 5/2026
 
