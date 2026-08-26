@@ -444,35 +444,41 @@ This closes the question of whether to go verbatim everywhere. The migration mec
 `entity_id`s — `sensor.span_panel_kitchen_instantPowerW`, breaking every user reference — or a decoupling of the two, which throws away the consistency the
 helper exists to provide. Closing the mapping gets the whole benefit for none of that.
 
-## Settability is read at setup, and deliberately not re-read
+## Settability is re-read, and the reader is the coordinator
 
-Which curated control entities exist is decided once, in each platform's `async_setup_entry`, from what the panel declares about each circuit at that moment.
-`switch` gates on `is_user_controllable`; `select` gates on that and on `is_never_backup`, which is a separate commissioning flag — a never-backup circuit has a
-working relay and a priority the panel pins.
+Which curated control entities exist is decided in each platform's `async_setup_entry`, from what the panel declares about each circuit. `switch` gates on
+`circuit_has_a_breaker_switch`; `select` gates on `circuit_has_a_priority_select`, which additionally excludes `is_never_backup` — a separate commissioning
+flag, since a never-backup circuit has a working relay and a priority the panel pins.
 
-SPAN documents that re-commissioning a circuit in place cycles that child device's `$state` and republishes its `$description` with a new `$settable`. So a
-circuit's settability can change while the integration is running, in either direction, and the setup-time gate cannot see it:
+Both predicates live in `helpers.py` rather than in their platforms, because two callers read them and a second copy would drift invisibly: a switch left on the
+dashboard offering a control the panel refuses, or a circuit the panel has commissioned that never grows the switch it earned. `helpers.py` is also the only
+place that sits below all three: `switch.py` and `select.py` import the coordinator, so the predicate they share with it cannot live in either of them.
 
-- **A circuit that stops being controllable keeps its entity.** The entity outlives its own controllability and every write it attempts now fails.
-- **A circuit that becomes controllable gets no entity.** Nothing is watching it, because no entity exists to watch, so this direction cannot be noticed from an
-  entity at all.
+SPAN documents that re-commissioning a circuit in place cycles that child device's `$state` and republishes its `$description` with a new `$settable`, so a
+circuit's settability can change while the integration is running, in either direction. `SpanPanelCoordinator._check_settability_change` watches both from one
+place, on every push:
 
-Both are safe, and the first is now well behaved. `span-panel-api` refuses a circuit relay or priority command for a circuit the panel declares non-settable,
-raising rather than publishing, and each control reports that refusal as a translated error on the control the user touched. Nothing is silently published and
-nothing is silently swallowed. The remedy for both directions is a reload.
+- **A circuit that stops being controllable** can be seen from its own entity — which is where this used to be watched, and it is only one of the two edges.
+- **A circuit that becomes controllable has no entity to see it with**, so only a reader over every circuit can catch that edge at all. That is the coordinator,
+  and putting both edges there keeps one answer rather than two half-answers.
 
-**Nothing re-evaluates settability at runtime, and the reason is not the one to expect.** Permanent entity IDs are not the obstacle: the entity registry maps
-`unique_id` to `entity_id`, so a reload gives every entity back the ID it had, both platforms already leave the registry entries of controls they do not create
-in place, and `coordinator.request_reload()` is already used when a circuit is renamed. The mechanism is available and precedented.
+`_read_settability` builds `{circuit_id: (switch?, select?)}` from the same two predicates the platforms gate on, and a difference against the previous reading
+calls `request_reload()`. A reload rather than a quiet availability change, because under the new answer the entity should not exist, or should exist and does
+not, and creating and removing entities is what `async_setup_entry` is for. Permanent entity IDs are not an obstacle: the registry maps `unique_id` to
+`entity_id`, so a reload gives every entity back the ID it had, and both platforms already leave the registry entries of controls they do not create in place.
 
-The obstacle is the signal. SPAN reports a firmware defect in which the `$settable` re-toggle on the runtime re-commissioning path is skipped until the service
-restarts — which is why the library refuses when _either_ the declaration or the `relay-controllable` value says no. Driving an entry-wide reload off a flag the
-publisher warns can be stale would tear down every entity in the entry, and with them the grace-period, energy-dip and current-monitor state, on a value that
-may not be true yet. An entity that exists and cleanly explains why it cannot act is a better answer than one that vanishes and reappears.
+Two details worth keeping:
 
-**If this is ever built, build it as a Repair rather than as a reload.** `schema_repairs` is the module for something re-derived from live state on every
-refresh: raise a Repair naming the circuit that changed, touch no entity, and let the user choose when to reload. Waiting is cheap, and worth doing until a
-panel is actually observed changing a circuit's settability in the field — so far that behaviour is documented by SPAN rather than seen here.
+- **Only circuits present in _both_ readings are judged.** A circuit can drop out of a snapshot and come back — the platforms guard for exactly that — and
+  counting an absence as a settability change would turn a flap into a reload loop. Membership is still carried forward, so a circuit that leaves and returns
+  with a different answer is caught on its return.
+- **The baseline is updated on the same pass that asks for the reload**, so a settled panel costs one dict comprehension per push and a changed one asks exactly
+  once.
+
+The library is the backstop under all of this: `span-panel-api` refuses a circuit relay or priority command for a circuit the panel declares non-settable,
+raising rather than publishing, and each control reports that refusal as a translated error on the control the user touched. SPAN also reports a firmware defect
+in which the `$settable` re-toggle on the runtime re-commissioning path is skipped until the service restarts, which is why the library refuses when _either_
+the declaration or the `relay-controllable` value says no. A stale flag therefore costs a reload rather than a wrong control.
 
 ## Adopting a device this integration models nothing for
 
@@ -545,8 +551,14 @@ exactly the collision the extension grammar above avoids by carrying the path ve
 
 The encoding does not change. An adopted `unique_id` is as permanent as a curated one, so adopting the injective form would move every id an install already
 holds and strand the entities keyed on them, with nothing to migrate them back. The collision is handled where the entities are built instead: `_create` claims
-one id per platform, the first property to reach an id keeps it, and the second is skipped with a WARNING naming both wire paths. Handing both to Home Assistant
-registers the first and drops the second permanently, with one core log line naming an id the user cannot map back to anything on the wire.
+one id per platform, the **lexically first wire path** keeps it, and the other is skipped with a WARNING naming both. Handing both to Home Assistant registers
+one and drops the other permanently, with one core log line naming an id the user cannot map back to anything on the wire.
+
+**Lexically first, not first to arrive.** `_create` sorts each device's properties by wire path, so the survivor is a function of the declarations alone.
+Picking by adapter emission order would have tracked the wire: a firmware update declaring the two colliding properties the other way round would then have
+changed what a standing entity reads, silently, since the `unique_id` does not move and nothing here migrates it. Registry preference — how the extension cap
+resolves its equivalent problem — is not available, because both properties resolve to the _same_ `unique_id` and the registry row cannot say which of them put
+it there.
 
 The injective encoding belongs to whatever identity namespace comes next, and adopting it there is a maintainer's ruling rather than a fix.
 
@@ -554,8 +566,9 @@ The injective encoding belongs to whatever identity namespace comes next, and ad
 
 Nothing here adds entities dynamically, so a vendor device or extension property that appears an hour after setup reaches the user through the capability reload
 and nothing else. `detect_capabilities` therefore carries one token per adopted device id and one per extension subject/path alongside the named flags, and
-`_check_capability_change` fires on set _expansion_ exactly as it does for `bess` or `pcs`. One token each rather than one hash of the set: a hash of a shrinking
-set is as "new" as a hash of a growing one, so a single token would reload the integration when a device left the tree and flap it on one that came and went.
+`_check_capability_change` fires on set _expansion_ exactly as it does for `bess` or `pcs`. One token each rather than one hash of the set: a hash of a
+shrinking set is as "new" as a hash of a growing one, so a single token would reload the integration when a device left the tree and flap it on one that came
+and went.
 
 ### The proxy link is recorded, and the nesting is not built
 
@@ -801,6 +814,30 @@ confidence, and the ranking is the argument:
 
 The real fix is upstream: a declared `role` on the property, proposed in `SpanPanel_Docs/span/docs/dev/ebus-property-role-proposal.md`. Until then the ranking
 is the shipping plan, and `entity_category` being free to revise is what makes a conservative default cheap.
+
+## Runtime data lives in `runtime.py`, and one helper answers for it
+
+`SpanPanelRuntimeData` and `SpanPanelConfigEntry` used to live in `__init__.py`, which imports every platform — so naming the entry type meant importing the
+whole integration. Seven modules imported them from the package root and five more reached for them from inside functions to break the cycle. They now live in
+`runtime.py`, whose only runtime dependency inside this package is `control_gate` (itself a leaf); the coordinator is needed there as an annotation only. The
+package root re-exports both names, so `from custom_components.span_panel import SpanPanelRuntimeData` keeps working, and every deferred import of them is a
+top-level one again.
+
+**Use `services._loaded_runtime_data(entry)` rather than an inline `hasattr` / `isinstance` pair.** Every service here is registered domain-wide and walks
+`async_loaded_entries(DOMAIN)`, so each one has to ask the same question before touching an entry, and this used to be five copies of it. Both halves of the
+check are real, which is why the helper is written the way it is: `ConfigEntry.runtime_data` is a bare annotation that core _deletes_ on unload, so the
+attribute is genuinely absent on an entry that has not finished setting up (hence `getattr` with a default), and what is there is whatever the owning
+integration put there, so `isinstance` is what says it is ours. AGENTS.md service point 6 names this helper.
+
+## The Supervisor discovery path is deliberately unguarded
+
+A pinned entry only follows a discovered host when that host serves a certificate the entry's anchor validates — `async_step_zeroconf` and the by-hand re-add
+both go through that check, because the serial they match on comes from an unauthenticated endpoint anything on the LAN can answer.
+
+`async_step_hassio` deliberately does not. A Supervisor discovery arrives over the authenticated Supervisor API from an add-on the user installed, and add-ons
+legitimately reallocate their own ports, so applying the stored-address guard would freeze the entry against its own add-on. The cost is stated rather than
+hidden: an add-on that already holds Supervisor privileges can move a pinned entry. If that trade is ever revisited, the guard is the same helper the other two
+routes call, and README's Security section carries the user-facing note.
 
 ## Linting and Type Checking
 

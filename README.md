@@ -595,8 +595,8 @@ The integration provides flexible entity naming patterns, configured during init
 
    - Entity IDs use descriptive circuit names from your SPAN panel
    - Example: `sensor.span_panel_kitchen_outlets_power`
-   - Renaming a circuit in the SPAN app updates the displayed name automatically; the entity ID changes only if you accept the offer from **Recreate entity
-     IDs**
+   - Renaming a circuit in the SPAN app updates the displayed name automatically — the integration reloads itself to pick the new name up, since it travels as
+     the entity's original name and only a rebuild refreshes it; the entity ID changes only if you accept the offer from **Recreate entity IDs**
    - More intuitive for automations and scripts
 
 2. **Circuit Numbers** (Stable entity IDs)
@@ -632,9 +632,17 @@ A dip is compensated as soon as it is seen, but not believed straight away. A co
 so a reading that drops and then returns to where it was is a transport artifact rather than a reset, and its offset is taken back. The offset stays provisional
 until a later reading either disproves it (the counter comes back) or corroborates it (the counter climbs from the new, lower base).
 
-**The persistent notification therefore lists a dip once it is corroborated, one reading after it is seen, and a dip that is disproved produces no notification
-at all** — the sensor was compensated the whole time and nothing needs your attention. Seeing no notification after a momentary dip is the feature working, not
+**Corroboration is evidence, not a verdict.** A debounced burst can deliver two stale samples with the later one higher, which looks exactly like a counter
+climbing away from a fresh base, so a corroborated dip stays provisional for three further readings; a return to the original baseline inside that window still
+takes the whole offset back. Once the window is spent the offset is final. A second dip arriving inside another's window is judged against its own baseline
+rather than folded into the older one, so each is retracted or kept on its own evidence.
+
+**The persistent notification therefore lists a dip once it settles — when that window closes — and a dip that is disproved produces no notification at all** —
+the sensor was compensated the whole time and nothing needs your attention. Reporting on corroboration alone left a notice standing for an event the next
+reading undid, which a persistent notification cannot take back the way the offset can. Seeing no notification after a momentary dip is the feature working, not
 failing.
+
+Both the provisional record and its remaining window survive a restart, so restarting neither loses a retraction nor renews the window it had left.
 
 **Diagnostic attributes** (visible when compensation is active):
 
@@ -701,14 +709,39 @@ to compare against. See the certificate-authority-changed entry in Troubleshooti
 shows an error and stops. Submitting the form again retries the fetch, which is what a panel that was briefly unreachable needs. An opt-out would quietly
 restore the plaintext credential exchange this ordering exists to remove, at the moment you are least likely to weigh it.
 
+**Re-authenticating an entry that has no anchor acquires one first.** Reauth is a registration, so it carries the passphrase out and the broker password back —
+the same exchange setup performs. An entry that arrived from before pinning, or one whose stored authority will no longer load, goes through the
+certificate-authority step before either sign-in method is offered, and keeps the anchor afterwards instead of falling back to a plaintext fetch on every
+connection.
+
+**Setting a panel up by hostname works, and the hostname is verified.** A panel's certificate names the addresses it already knows itself by; a domain joins
+that list only when the integration asks the panel to regenerate its certificate, which happens after you have authenticated. Everything before that runs
+against the address the certificate already names, hostname verification never relaxed, and the domain is checked once the panel reports the new certificate.
+Only a fully qualified domain is registered, so a single-label name — the hostname an add-on or the simulator is reached by — never joins the certificate, and a
+name the certificate does not already carry cannot be stored on a pinned entry; set that panel up by its address instead.
+
+**A pinned entry follows its panel to a new address only when the new address proves itself.** An entry moves when your panel announces itself over mDNS at a
+new address, and when you add the same panel again by hand. Both used to be decided by a serial read from an unauthenticated endpoint, which anything on your
+network can claim. The entry now asks whether the candidate serves a certificate its own anchor validates, on the port the entry uses, and refuses the move —
+logging at `WARNING` — otherwise. If the panel really has moved and its certificate really has changed, use **Reconfigure** on the entry.
+
+A panel that arrives through the **Supervisor** — a Home Assistant add-on — is the one exception to that check, and deliberately so: it announces itself over
+the authenticated Supervisor API and legitimately reallocates its own ports, so holding it to the stored address would freeze the entry. An add-on already
+holding Supervisor privileges can therefore move a pinned entry.
+
 **Panels configured before this release are pinned differently, and are not risk-free until they are.** They are pinned on the first startup that reaches the
-panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. Until that succeeds, the connection to the broker still authenticates with
-your panel's password while the authority is re-fetched over plaintext HTTP on every connection and whatever answers is trusted — the substitution pinning
-exists to close.
+panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. What was fetched is checked against the certificate the panel serves on
+the broker port — the connection the anchor is actually used for — and an authority that signs nothing the panel serves is not stored. Until a pin succeeds, the
+connection to the broker still authenticates with your panel's password while the authority is re-fetched over plaintext HTTP on every connection and whatever
+answers is trusted — the substitution pinning exists to close.
 
 If the panel is unreachable the integration starts anyway and retries on the next startup. That is deliberate. The exposure in the meantime is exactly the one
 the entry already had before this release, and refusing to start would not remove it — it would only remove the integration, leaving the credential no safer
 while guaranteeing an outage. Retrying closes it at the first opportunity instead.
+
+The same is true of an entry whose broker port does not serve a certificate the panel's own authority signs — a proxy terminating TLS with a certificate of its
+own, say. It stays unpinned and logs that warning at every start. Reconfiguring the entry so it names the panel directly is what pins it, because the setup flow
+performs the check with somewhere to send you when it fails.
 
 Diagnostics report the fingerprint under `panel_ca`. The certificate itself is not included — it is public, but multi-KB, and the fingerprint is the part worth
 reading.
@@ -731,15 +764,22 @@ nothing until you choose otherwise.
 **Why `Administrators only` is worth setting.** Home Assistant's default user policy grants every non-admin user control of every entity. Until you change this,
 a dashboard-only household member can open any breaker in the house.
 
+**`Administrators only` does not reach an automation a non-admin triggered.** It checks the user a command arrived with, and Home Assistant gives an automation
+a fresh context with no user on it — the triggering context is recorded as the parent, not carried through — so an automation a non-admin set off publishes with
+nothing for the admin test to hold. (A script is different: run by a person it keeps that person's user, and run from an automation it inherits the automation's
+userless one.) The option that covers those callers is **Allow control without a logged-in user**; the two are separate settings because most households want
+their automations to keep working. Set both if you want control limited to administrators acting in person.
+
 **What none of this defends against.** These options constrain callers arriving through Home Assistant. They do not constrain anything that already holds the
 broker credential — a second Home Assistant instance, a script you wrote, or a malicious custom integration running inside this same Home Assistant process,
 which reads the credential straight out of memory. For that, see [Recommended deployment](#recommended-deployment) below; network topology and a locked
 enclosure are the real boundary.
 
 **Nothing is deleted when you choose `Nobody`.** The control entities stop being created and read as unavailable; their registry entries, names, areas and
-customizations are kept, so turning the option back on restores exactly the entities you had. Dashboards and automations referencing them will show them
-unavailable in the meantime — including the shipped SPAN Panel card, whose toggles call `switch.turn_on` and `select.select_option` directly and have no
-card-side message for a refusal. A non-admin using that card under `Administrators only` gets a refusal with no explanation on the card.
+customizations are kept, so turning the option back on restores exactly the entities you had. The option is also enforced where commands are published, not only
+by the absence of entities, so a command reaching the panel by any other route is refused rather than sent. Dashboards and automations referencing them will
+show them unavailable in the meantime — including the shipped SPAN Panel card, whose toggles call `switch.turn_on` and `select.select_option` directly and have
+no card-side message for a refusal. A non-admin using that card under `Administrators only` gets a refusal with no explanation on the card.
 
 ### The record of what was commanded
 
@@ -768,6 +808,10 @@ data: {}
 
 Run it after a contractor visit, a suspected credential exposure, or any event that put someone else in front of the panel.
 
+**Name the panel when you have more than one.** The `config_entry_id` field is optional with a single panel loaded and required beyond that: rotating stops the
+previous broker password working for every other local client of whichever panel it ran against, so the action refuses an ambiguous call rather than picking
+one.
+
 **Know the blast radius before you run it.** The previous broker password stops working the moment the panel issues the new one, so every other local client
 using it — a second Home Assistant instance, a script, third-party tooling — must be re-provisioned from the panel before it will reconnect. This integration
 re-provisions itself automatically; nothing else does. The panel access token and the panel passphrase are not changed.
@@ -775,6 +819,13 @@ re-provisions itself automatically; nothing else does. The panel access token an
 Only a Home Assistant administrator can run it, and it cannot be called from an automation or script: a call arriving without a logged-in user is refused
 outright. If the panel rejects the stored access token, reauthenticate the integration first — the existing credentials are left untouched on every failure
 path.
+
+**It will not run over an unverified connection.** The rotation carries the access token out and the new broker password back, so an entry whose stored
+authority cannot be read is refused with nothing changed rather than falling back to plaintext; repair the panel's certificate authority and run it again. An
+entry that was never pinned has no anchor to fall back from and keeps the connection it has always used.
+
+**If the reload afterwards fails, do not rotate again.** The new password is stored and the panel has already accepted it, so a second rotation would invalidate
+the one that works. The action reports the failure and says so; check the log and reload the integration.
 
 ### Recommended deployment
 

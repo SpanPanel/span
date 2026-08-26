@@ -91,7 +91,7 @@ hooks = [
 # Ruff for linting, import sorting, and primary formatting
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.1"
+rev = "v0.15.12"
 hooks = [
   { id = "ruff-format", exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "ruff-check", args = ["--fix"], exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },

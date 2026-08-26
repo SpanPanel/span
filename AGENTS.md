@@ -91,7 +91,9 @@ forget action). Services that perform actions without returning data omit `suppo
 ### 6. Runtime Data Guards
 
 Handlers that access `entry.runtime_data` MUST verify the entry is loaded and its runtime data is the expected type before accessing coordinator or other
-runtime objects. Use `hasattr` and `isinstance` checks — never assume runtime data is present.
+runtime objects. Call `services._loaded_runtime_data(entry)`, which answers `SpanPanelRuntimeData | None` — never inline the check and never assume runtime data
+is present. It reads the attribute with a default, because core deletes `runtime_data` on unload, and then narrows it with `isinstance`, because what is there
+is whatever the owning integration put there.
 
 ### 7. Domain-Level Registration
 
