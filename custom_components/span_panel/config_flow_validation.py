@@ -68,9 +68,11 @@ async def validate_v2_passphrase(
 ) -> V2AuthResponse:
     """Validate a v2 panel passphrase and return MQTT credentials.
 
-    `transport` carries a pinned CA where one exists, which is the case on every
-    reauth of an already-pinned entry. Initial registration has no pin yet — the
-    anchor is fetched later in the same flow — and passes `port` alone.
+    `transport` carries the pinned CA, and every path that reaches this call has
+    one: the CA step runs before authentication on initial setup, and a reauth
+    of an entry that arrived unpinned is routed back through that step before
+    the passphrase is collected. The `port`-only fallback is for a caller that
+    holds no transport, which the flow itself no longer is.
 
     Raises:
         SpanPanelAuthError: on invalid passphrase (401/403).
@@ -240,7 +242,7 @@ class PanelRestTransport:
     httpx_client: httpx.AsyncClient | None
 
 
-def _as_port(value: object, default: int) -> int:
+def as_port(value: object, default: int) -> int:
     """Read a port out of untyped entry data without trusting its type.
 
     `entry.data` round-trips through JSON and is typed `Any` at the boundary; a
@@ -278,11 +280,11 @@ def panel_rest_transport(
                 "falling back to plaintext HTTP for REST calls"
             )
         else:
-            https_port = _as_port(entry_data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+            https_port = as_port(entry_data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
             return PanelRestTransport(port=https_port, ssl_context=context, httpx_client=None)
 
     return PanelRestTransport(
-        port=_as_port(entry_data.get(CONF_HTTP_PORT), 80),
+        port=as_port(entry_data.get(CONF_HTTP_PORT), 80),
         ssl_context=None,
         httpx_client=get_async_client(hass, verify_ssl=False),
     )

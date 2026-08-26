@@ -5,15 +5,20 @@ from __future__ import annotations
 import ipaddress
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant import config_entries
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.service_info.hassio import HassioServiceInfo
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
 
-from homeassistant import config_entries
 from custom_components.span_panel import (
     CURRENT_CONFIG_VERSION,
     async_migrate_entry,
-    async_setup_entry,
 )
 from custom_components.span_panel.config_flow import (
     SpanPanelConfigFlow,
@@ -34,13 +39,6 @@ from custom_components.span_panel.const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers.service_info.hassio import HassioServiceInfo
-from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -873,6 +871,285 @@ async def test_reauth_v2_success_updates_entry(hass: HomeAssistant) -> None:
     assert entry.data[CONF_ACCESS_TOKEN] == "v2-token-abc"
     assert entry.data[CONF_EBUS_BROKER_USERNAME] == "span-user"
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
+    # This entry had no anchor. Reauth acquires one before the passphrase goes
+    # out and keeps it, so the entry comes back pinned.
+    assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
+
+
+# ---------- reauth: the CA an unpinned entry has never had ----------
+
+# The three ways an entry reaches reauth with nothing pinned. (a) a v1 entry:
+# setup raises ConfigEntryAuthFailed before the deferred fetch can run, and the
+# v7 migration flags only v2 entries, so it carries neither a CA nor the flag.
+# (b) a v2 entry missing its broker credentials: setup raises before the fetch
+# too, so the flag it was migrated with is never settled. (c) a v2 entry whose
+# deferred fetch failed: the flag survives for the next setup, and reauth may
+# well come first.
+UNPINNED_REAUTH_POPULATIONS = [
+    pytest.param({CONF_API_VERSION: "v1"}, id="v1_entry"),
+    pytest.param(
+        {CONF_API_VERSION: "v2", PANEL_CA_PENDING: True},
+        id="missing_credentials",
+    ),
+    pytest.param(
+        {
+            CONF_API_VERSION: "v2",
+            PANEL_CA_PENDING: True,
+            CONF_EBUS_BROKER_HOST: "old-host",
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_EBUS_BROKER_USERNAME: "old-user",
+            CONF_EBUS_BROKER_PASSWORD: "old-pass",
+        },
+        id="failed_deferred_fetch",
+    ),
+]
+
+
+def _unpinned_entry(hass: HomeAssistant, extra_data: dict[str, object]) -> MockConfigEntry:
+    """Add an entry that carries no pinned CA."""
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            **extra_data,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+    assert CONF_PANEL_CA_PEM not in entry.data
+    return entry
+
+
+@pytest.mark.parametrize("extra_data", UNPINNED_REAUTH_POPULATIONS)
+@pytest.mark.asyncio
+async def test_reauth_of_an_unpinned_entry_pins_before_the_passphrase_is_sent(
+    hass: HomeAssistant, extra_data: dict[str, object]
+) -> None:
+    """Reauth is where fresh credentials cross the wire; it must not cross in the clear."""
+    entry = _unpinned_entry(hass, extra_data)
+
+    order: list[str] = []
+    captured: dict[str, object] = {}
+
+    async def _fetch_ca(*_args: object, **_kwargs: object) -> str:
+        order.append("fetch_ca")
+        return FAKE_CA_PEM
+
+    async def _register(*_args: object, **kwargs: object) -> V2AuthResponse:
+        order.append("register_v2")
+        captured.update(kwargs)
+        return MOCK_V2_AUTH
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.async_fetch_panel_ca",
+            new=_fetch_ca,
+        ),
+        # The boundary the flow actually reaches: `validate_v2_passphrase` is
+        # real here, so what it hands the library is what the panel would see.
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=_register,
+        ),
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
+        result = await entry.start_reauth_flow(hass)
+        assert result["type"] == FlowResultType.MENU
+        assert result["step_id"] == "reauth_confirm"
+
+        result1 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        assert result1["step_id"] == "auth_passphrase"
+
+        result2 = await hass.config_entries.flow.async_configure(
+            result1["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    assert result2["type"] == FlowResultType.ABORT
+    assert result2["reason"] == "reauth_successful"
+
+    # Registration went over a verified connection, and the anchor it used was
+    # acquired first rather than after the fact.
+    assert captured["ssl_context"] is not None
+    assert captured["httpx_client"] is None
+    assert order == ["fetch_ca", "register_v2"]
+
+    # And the anchor survives the reauth, so the next connect is pinned too.
+    assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
+    assert PANEL_CA_PENDING not in entry.data
+    assert entry.data[CONF_API_VERSION] == "v2"
+
+
+@pytest.mark.asyncio
+async def test_reauth_refuses_to_send_the_passphrase_when_the_leaf_does_not_chain(
+    hass: HomeAssistant,
+) -> None:
+    """A CA that cannot validate what the panel serves is no reason to fall back."""
+    entry = _unpinned_entry(hass, {CONF_API_VERSION: "v2"})
+
+    register = AsyncMock(return_value=MOCK_V2_AUTH)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
+            new=AsyncMock(return_value=False),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=register,
+        ),
+    ):
+        result = await entry.start_reauth_flow(hass)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "panel_ca"
+    assert result["errors"] == {"base": "ca_leaf_mismatch"}
+    register.assert_not_awaited()
+    assert CONF_PANEL_CA_PEM not in entry.data
+
+
+@pytest.mark.asyncio
+async def test_reauth_by_proximity_also_registers_over_the_pin(
+    hass: HomeAssistant,
+) -> None:
+    """The door bypass sends no passphrase but is handed the same broker password back."""
+    entry = _unpinned_entry(hass, {CONF_API_VERSION: "v2"})
+
+    captured: dict[str, object] = {}
+
+    async def _register(*_args: object, **kwargs: object) -> V2AuthResponse:
+        captured.update(kwargs)
+        return MOCK_V2_AUTH
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=_register,
+        ),
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
+        result = await entry.start_reauth_flow(hass)
+        assert result["step_id"] == "reauth_confirm"
+
+        proximity = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": "auth_proximity"}
+        )
+        done = await hass.config_entries.flow.async_configure(
+            proximity["flow_id"], {"next_step_id": "auth_proximity_confirm"}
+        )
+
+    assert done["reason"] == "reauth_successful"
+    assert captured["ssl_context"] is not None
+    assert captured["httpx_client"] is None
+    assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
+
+
+@pytest.mark.asyncio
+async def test_reauth_of_a_pinned_entry_does_not_go_back_for_a_ca(
+    hass: HomeAssistant,
+) -> None:
+    """An entry with a usable anchor already has the protection; leave it alone."""
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: FAKE_CA_PEM,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    fetch = AsyncMock(return_value=FAKE_CA_PEM)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch("custom_components.span_panel.config_flow.async_fetch_panel_ca", new=fetch),
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=MagicMock(),
+        ),
+    ):
+        result = await entry.start_reauth_flow(hass)
+
+    assert result["step_id"] == "reauth_confirm"
+    fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reauth_asks_where_a_moved_panel_serves_tls_and_keeps_the_answer(
+    hass: HomeAssistant,
+) -> None:
+    """An entry behind a proxy has to say where the leaf is before it can be checked."""
+    entry = _unpinned_entry(hass, {CONF_API_VERSION: "v2", CONF_HTTP_PORT: 8080})
+
+    leaf_check = AsyncMock(return_value=True)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
+            new=leaf_check,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
+        result = await entry.start_reauth_flow(hass)
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "panel_https_port"
+
+        menu = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HTTPS_PORT: 9443}
+        )
+        assert menu["step_id"] == "reauth_confirm"
+
+        form = await hass.config_entries.flow.async_configure(
+            menu["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    assert done["reason"] == "reauth_successful"
+    # Checked on the port the user named, and stored so the pin keeps pointing there.
+    assert leaf_check.await_args is not None
+    assert leaf_check.await_args.args[1] == 9443
+    assert entry.data[CONF_HTTPS_PORT] == 9443
+    assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
 
 
 # ---------- user flow error paths ----------

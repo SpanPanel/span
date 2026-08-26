@@ -44,6 +44,7 @@ from .config_flow_options import (
 )
 from .config_flow_validation import (
     PanelRestTransport,
+    as_port,
     async_fetch_panel_ca,
     async_leaf_chains_to_ca,
     check_fqdn_tls_ready,
@@ -69,6 +70,7 @@ from .const import (
     DOMAIN,
     ENABLE_ENERGY_DIP_COMPENSATION,
     ENTITY_NAMING_PATTERN,
+    PANEL_CA_PENDING,
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
@@ -174,12 +176,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_panel_serial: str | None = None
         self._http_port: int = 80
         self._https_port: int = DEFAULT_HTTPS_PORT
-        # Whether the TLS port came from the panel's own discovery record
-        # rather than from a default. Discovery is the authority when it
-        # speaks: a panel that publishes the port knows where it serves, and
-        # asking the user for it after being told is asking them to confirm a
-        # fact they have no way to check.
-        self._https_port_discovered: bool = False
+        # Whether something authoritative already told this flow where the panel
+        # serves TLS, rather than the value above being a default. Discovery is
+        # one such source: a panel that publishes the port knows where it
+        # serves, and asking the user for it after being told is asking them to
+        # confirm a fact they have no way to check. An existing entry is the
+        # other: on reauth the port it was pinned against is the answer.
+        self._https_port_known: bool = False
         # The panel CA, once fetched and leaf-confirmed. None means the flow
         # could not acquire one and the entry is created with the pending flag.
         self._panel_ca_pem: str | None = None
@@ -245,7 +248,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             https_port = _discovered_port(props, "httpsPort", "httpsport")
             if https_port is not None:
                 self._https_port = https_port
-                self._https_port_discovered = True
+                self._https_port_known = True
 
             detection = await detect_api_version(
                 discovery_info.host,
@@ -296,7 +299,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         https_port = _discovered_port(config, "https_port", "httpsPort")
         if https_port is not None:
             self._https_port = https_port
-            self._https_port_discovered = True
+            self._https_port_known = True
 
         # Validate panel is reachable and v2
         self._http_port = port
@@ -317,7 +320,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # cannot reach its panel.
         await self.async_set_unique_id(panel_serial)
         updates: dict[str, Any] = {CONF_HOST: host, CONF_HTTP_PORT: port}
-        if self._https_port_discovered:
+        if self._https_port_known:
             updates[CONF_HTTPS_PORT] = self._https_port
         self._abort_if_unique_id_configured(updates=updates)
 
@@ -415,6 +418,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Handle a flow initiated by re-auth."""
         host = entry_data[CONF_HOST]
         self._http_port = int(entry_data.get(CONF_HTTP_PORT, 80))
+        stored_https_port = entry_data.get(CONF_HTTPS_PORT)
+        if stored_https_port is not None:
+            self._https_port = as_port(stored_https_port, DEFAULT_HTTPS_PORT)
+            self._https_port_known = True
         # This entry may already have a pinned CA, and a reauth is precisely
         # where fresh credentials cross the wire. Adopted before the first call.
         self._rest_transport = panel_rest_transport(self.hass, entry_data)
@@ -439,6 +446,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             self.trigger_flow_type = TriggerFlowType.UPDATE_ENTRY
             self._is_flow_setup = True
             self.context["title_placeholders"] = {"host": host}
+            if self._rest_transport.ssl_context is None:
+                # Nothing pinned, and the next exchange carries the passphrase
+                # and returns the broker password. Entries arrive here unpinned
+                # by three routes — an entry still recorded as v1, a v2 entry
+                # missing its broker credentials, and one whose deferred fetch
+                # failed — and all three fail setup before the deferred fetch at
+                # setup can settle them, so reauth is where they get an anchor
+                # or do not proceed. The CA step returns to `reauth_confirm`.
+                return await self.async_step_panel_ca_start()
             return await self.async_step_reauth_confirm()
 
         # Non-v2 panels are not supported
@@ -691,7 +707,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         add-on allocates that port per panel and reallocates it across restarts,
         so the only correct answer is the one it just gave.
         """
-        if self._http_port == 80 or self._https_port_discovered:
+        if self._http_port == 80 or self._https_port_known:
             return await self.async_step_panel_ca()
         return await self.async_step_panel_https_port()
 
@@ -814,6 +830,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._rest_transport = PanelRestTransport(
             port=self._https_port, ssl_context=context, httpx_client=None
         )
+        if self.trigger_flow_type == TriggerFlowType.UPDATE_ENTRY:
+            # Same two methods, but the reauth wording: this user is not setting
+            # a panel up, they are being asked why an entry stopped working.
+            return await self.async_step_reauth_confirm()
         return await self.async_step_choose_v2_auth()
 
     def create_new_entry(
@@ -894,6 +914,17 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         updated_data.pop(CONF_HOP_PASSPHRASE, None)
         if self._http_port != 80:
             updated_data[CONF_HTTP_PORT] = self._http_port
+        if self._panel_ca_pem is not None:
+            # The entry reached this reauth with nothing usable pinned, so the
+            # flow acquired an anchor before sending the passphrase. Keeping it
+            # is what stops the next reauth — and every connect in between —
+            # from going back to a plaintext CA fetch. `_panel_ca_pem` is None
+            # only when the entry already carried a usable pin, which is left
+            # exactly as it was.
+            updated_data[CONF_PANEL_CA_PEM] = self._panel_ca_pem
+            updated_data.pop(PANEL_CA_PENDING, None)
+            if self._https_port != DEFAULT_HTTPS_PORT:
+                updated_data[CONF_HTTPS_PORT] = self._https_port
 
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))

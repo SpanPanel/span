@@ -155,6 +155,8 @@ working entirely in 2027.8.
   using the old one.
 - **The panel's certificate authority is pinned before your passphrase is ever sent**, so the registration exchange that carries it — and everything after — no
   longer crosses your network in the clear.
+- **Re-authenticating an entry that was never pinned pins it first**, so an entry that arrived from an older release sends its new credentials over a verified
+  connection and keeps the authority afterwards.
 - **A changed authority stops the integration and raises a repair** carrying both fingerprints, because a legitimate rotation and an impersonated panel look
   identical from here.
 - **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay
