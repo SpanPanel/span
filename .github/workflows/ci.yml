@@ -13,6 +13,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Check out span-panel-api at the release the vendored capture names
+        run: |
+          set -euo pipefail
+          # The tag is derived, never written down twice. `schema_one_tree.source`
+          # is the one place that records which release the vendored capture was
+          # copied from, and this clones that release so the byte comparison is
+          # against the source the copy claims -- not against whatever `main`
+          # happens to hold. A hardcoded tag here could disagree with that file,
+          # which would be a new instance of the staleness this check exists to
+          # remove.
+          #
+          # `span-panel-api-schema-1==1.1.0` -> tag `schema-1-v1.1.0`: the
+          # monorepo tags a per-package release as `<package>-v<version>`, and the
+          # package directory is the distribution name with the `span-panel-api-`
+          # prefix dropped (see RELEASE.md there). The bootstrap distribution is
+          # tagged plain `v<version>`, which is why this derives from the adapter
+          # pin rather than from the requirement list generally.
+          #
+          # `git clone` rather than actions/checkout because the ref has to be
+          # computed from a file in the workspace first, and splitting that across
+          # a step output would put the derivation in two places. The repository
+          # is public, so no token beyond the default is involved.
+          pin="$(tr -d '[:space:]' < tests/fixtures/schema_one_tree.source)"
+          case "$pin" in
+            *==*) ;;
+            *)
+              echo "schema_one_tree.source must hold one pinned requirement, got '$pin'" >&2
+              exit 1
+              ;;
+          esac
+          distribution="${pin%%==*}"
+          release="${pin##*==}"
+          tag="${distribution#span-panel-api-}-v${release}"
+          echo "Vendored capture records $pin; cloning SpanPanel/span-panel-api at $tag"
+          # Under RUNNER_TEMP rather than in the workspace: a second checkout
+          # inside it would be collected by pytest and walked by every
+          # --all-files linter.
+          checkout="$RUNNER_TEMP/span-panel-api"
+          git clone --depth 1 --branch "$tag" \
+            https://github.com/SpanPanel/span-panel-api.git "$checkout"
+          # Exported here rather than as a job-level `env:` because the `runner`
+          # context is not available there, and because two later steps run the
+          # suite -- the prek hooks (`pytest-cov-summary` always runs) and the
+          # coverage step. Either one running without it would fail the byte
+          # comparison for want of a checkout, which is exactly the "wiring came
+          # undone" state that check refuses to skip.
+          echo "SPAN_PANEL_API_DIR=$checkout" >> "$GITHUB_ENV"
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:

@@ -1,30 +1,40 @@
 # Adapter fixtures
 
 Real schema-adapter inputs, used by the field-path conformance tests via `tests/adapter_fixtures.py`. They are **committed rather than generated** so the test
-suite has no cross-repo dependency and CI needs no checkout of the library — and so no runtime wheel has to keep shipping test data for this repository's
-benefit. The cost of a copy is that it can go stale, which for `schema_one_tree.json` is answered by the version guard below.
+suite has no cross-repo dependency and no runtime wheel has to keep shipping test data for this repository's benefit. The cost of a copy is that it can go
+stale, which for `schema_one_tree.json` is answered by the two guards below.
 
 ## Provenance
 
 Both are byte-identical copies from the `span-panel-api` repository:
 
-| File here                | Source in `span-panel-api`                        | Version guard            |
+| File here                | Source in `$SPAN_PANEL_API_DIR`                   | Guarded by               |
 | ------------------------ | ------------------------------------------------- | ------------------------ |
-| `schema_zero_types.json` | `tests/fixtures/v2/homie_schema.json`             | none                     |
+| `schema_zero_types.json` | `tests/fixtures/v2/homie_schema.json`             | nothing                  |
 | `schema_one_tree.json`   | `tests/reference_payloads/parent_child_tree.json` | `schema_one_tree.source` |
 
 Refresh by copying them again, and keep `schema_one_tree.json` byte-identical to its source: the library pins what that capture leaves unvalued against
 panelbench's own baseline (`tests/test_reference_tree_values.py` there), so a copy that has drifted puts these tests on a wire no producer sends.
 
-Through the 1.1.0 release the parent/child capture also shipped as package data, at `span_panel_api_schema_1/reference_payloads/parent_child_tree.json` inside
-the installed wheel, and this repository imported it from there. `span-panel-api#162` takes it back out of the wheels, so the repository path above is the one
-to copy from.
+Through the 1.1.0 release the parent/child capture also shipped as package data, at `packages/schema-1/src/span_panel_api_schema_1/reference_payloads/` in the
+repository and inside the installed wheel, and this repository imported it from there. `span-panel-api#162` takes it back out of the wheels and moves it to
+`tests/reference_payloads/`, so the path in the table above is the one to copy from. The byte comparison below checks both locations, newest first, so it works
+against a checkout on either side of that merge; the older path can be dropped once no release this repository can pin still predates it.
 
 If a copy changes shape rather than content, the loader in `tests/adapter_fixtures.py` is what needs updating — note that `schema_one_tree.json` is a **dict
 keyed by device id**, whose `$description` value is a **JSON string**, not a parsed object. `tests/test_fixture_provenance.py` pins that shape, so a capture
 that arrives pre-parsed fails there rather than somewhere far from the fixture.
 
-## The version guard
+## The two guards
+
+They catch different failures, and neither one substitutes for the other.
+
+| Guard           | Compares                                                    | Catches                                                                                                                 | Needs a checkout |
+| --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| Version claim   | `schema_one_tree.source` against the installed distribution | a pin that moved while the copy stayed put                                                                              | no               |
+| Byte comparison | `schema_one_tree.json` against the capture in that release  | a copy that was refreshed **wrongly** — reformatted, edited, or taken from a working tree ahead of the release it names | yes              |
+
+### The version claim
 
 `schema_one_tree.source` records the release the capture was copied from, as a pinned requirement:
 
@@ -34,18 +44,41 @@ span-panel-api-schema-1==1.1.0
 
 `tests/test_fixture_provenance.py` holds that against `importlib.metadata.version("span-panel-api-schema-1")` — the release actually installed. When the pin in
 `manifest.json` moves and nobody refreshes the capture, that test fails and names the refresh, so staleness is loud rather than silent. It needs no checkout of
-the library and no network call, which is why a copy is safe to keep here at all.
+the library and no network call, which is why it runs everywhere and why a copy is safe to keep here at all.
 
 It is a separate file rather than a key inside the payload because a refresh is a byte-for-byte copy: anything added to the JSON would be overwritten by the
 next one. It names the distribution as well as the version because this repository pins three of them.
 
-To refresh, in one commit:
+What it cannot see is the bytes. A capture edited in place, reindented on the way in, or copied from a working tree that is ahead of the release it names
+satisfies this guard completely — the claim is a string, and the string is correct.
 
-1. Copy `tests/reference_payloads/parent_child_tree.json` from `span-panel-api` over `schema_one_tree.json`, with no reformatting.
+### The byte comparison
+
+`test_the_vendored_capture_is_byte_identical_to_its_source` closes exactly that hole. It reads `SPAN_PANEL_API_DIR` (see `.env.example`), confirms the checkout
+is on the release `schema_one_tree.source` names, and compares the vendored copy against the capture there byte for byte, with no reformatting tolerance.
+
+The release check is not decoration. Written without it, the comparison passed against a checkout sitting one release behind the recorded one, whose bytes
+happened to be the ones vendored here — proving only that the copy matched _something_, and "something" includes the working tree it was mistakenly taken from.
+
+**A skip here is not a pass.** Without a checkout, or with one on another release, the comparison skips: not every developer keeps a sibling checkout, and
+failing them for it is what gets a check deleted rather than configured. Under `CI` it fails instead, because the workflow clones `span-panel-api` at the
+release the pin names, so an unset or misplaced path there means the wiring has come undone rather than that the check is unavailable. `span-panel-api` paid for
+this asymmetry and states the reason plainly in its `DEVELOPMENT.md`, under "A skip here is not a pass": _"A skip reads in a summary line exactly like a pass,
+and that is how a stale vendored capture went unnoticed for nine days."_ Do not make the skip unconditional.
+
+CI derives the tag from `schema_one_tree.source` rather than hardcoding it — `span-panel-api-schema-1==1.1.0` becomes `schema-1-v1.1.0` — so there is no second
+copy of the pin that could disagree with the first.
+
+### Refreshing
+
+In one commit:
+
+1. Copy `tests/reference_payloads/parent_child_tree.json` from `$SPAN_PANEL_API_DIR` over `schema_one_tree.json`, with no reformatting.
 2. Set the version in `schema_one_tree.source` to the release it came from.
 
-The guard only sees the version claim, not the bytes. A capture edited in place under an unchanged version is invisible to it — refresh from a release, never
-from a working tree that is ahead of one.
+Copy from a checkout positioned on a **released tag**, never from a working tree that is ahead of one. A capture taken from unreleased work carries a version
+claim nothing can ever be positioned to verify: the byte comparison clones the tag that claim names, and until that tag exists there is nothing to compare
+against.
 
 ## Derived variants
 
