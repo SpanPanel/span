@@ -544,9 +544,12 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         self._last_panel_reading: float | None = None
         self._last_dip_delta: float | None = None
         # A dip that has been compensated but not yet settled — see
-        # `process_energy_dip`. Non-None means part of `_energy_offset` is
-        # provisional and may still be taken back.
+        # `process_energy_dip`. Either being non-None means part of
+        # `_energy_offset` is provisional and may still be taken back: the
+        # first is waiting on evidence, the second has it and is waiting out
+        # the window in which that evidence could still be an artefact.
         self._pending_dip: PendingDip | None = None
+        self._recently_confirmed_dip: PendingDip | None = None
         self._is_total_increasing: bool = (
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
@@ -568,24 +571,33 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         ):
             raw_float = float(raw_value)
             outcome = process_energy_dip(
-                raw_float, self._last_panel_reading, self._energy_offset, self._pending_dip
+                raw_float,
+                self._last_panel_reading,
+                self._energy_offset,
+                self._pending_dip,
+                self._recently_confirmed_dip,
             )
             self._apply_dip_event(outcome)
             self._energy_offset = outcome.offset
             self._pending_dip = outcome.pending
+            self._recently_confirmed_dip = outcome.recently_confirmed
             self._last_panel_reading = raw_float
             super()._process_raw_value(outcome.compensated)
         else:
             super()._process_raw_value(raw_value)
 
     def _apply_dip_event(self, outcome: DipOutcome) -> None:
-        """Record the diagnostic, and tell the coordinator once a dip is believed.
+        """Record the diagnostic, and tell the coordinator once a dip is final.
 
-        The notification moves to confirmation rather than firing when the dip
-        is first seen. Reporting on sight is what made `SpanPanel/span#259` so
-        loud — a notification naming essentially every circuit on the panel,
-        for an event that had not happened. A dip that gets retracted now
-        produces no notification at all, because nothing happened.
+        The notification waits for the dip to *settle* rather than firing when
+        it is first seen, or even when it is first corroborated. Reporting on
+        sight is what made `SpanPanel/span#259` so loud — a notification naming
+        essentially every circuit on the panel, for an event that had not
+        happened. Reporting on corroboration would be quieter but still
+        premature, because the reading after it can take the offset back; a
+        persistent notification cannot be taken back, so it is held until
+        nothing can undo what it describes. A dip that gets retracted produces
+        no notification at all, because nothing happened.
 
         `last_dip_delta` is set when the dip is booked, since it describes what
         the counter did and the compensation is applied from that moment, and
@@ -597,16 +609,24 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         elif outcome.event is DipEvent.RETRACTED:
             self._last_dip_delta = None
             _LOGGER.debug(
-                "Energy dip retracted for %s: %s Wh returned to %s, offset back to %s",
+                "Energy dip retracted for %s: %s Wh given back, offset back to %s",
                 self.entity_id or self._attr_unique_id,
                 outcome.delta,
-                self._pending_dip.baseline if self._pending_dip else None,
                 outcome.offset,
             )
-        elif outcome.event is DipEvent.CONFIRMED and outcome.delta is not None:
+        elif outcome.event is DipEvent.CONFIRMED:
+            _LOGGER.debug(
+                "Energy dip corroborated for %s: %s Wh, reported if it settles",
+                self.entity_id or self._attr_unique_id,
+                outcome.delta,
+            )
+
+        # Checked separately from `event`: a dip can settle on the same reading
+        # that books or retracts another one.
+        if outcome.settled is not None:
             self.coordinator.report_energy_dip(
                 self.entity_id or self._attr_unique_id or "unknown",
-                outcome.delta,
+                outcome.settled,
                 outcome.offset,
             )
 
@@ -646,7 +666,16 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._pending_dip = PendingDip(
                     baseline=restored.pending_dip_baseline,
                     delta=restored.pending_dip_delta,
-                    confirmed_ticks_left=restored.pending_dip_confirmed_ticks_left,
+                )
+            if (
+                restored.confirmed_dip_baseline is not None
+                and restored.confirmed_dip_delta is not None
+                and restored.confirmed_dip_ticks_left is not None
+            ):
+                self._recently_confirmed_dip = PendingDip(
+                    baseline=restored.confirmed_dip_baseline,
+                    delta=restored.confirmed_dip_delta,
+                    confirmed_ticks_left=restored.confirmed_dip_ticks_left,
                 )
             _LOGGER.debug(
                 "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
@@ -744,8 +773,16 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 last_dip_delta=self._last_dip_delta,
                 pending_dip_baseline=self._pending_dip.baseline if self._pending_dip else None,
                 pending_dip_delta=self._pending_dip.delta if self._pending_dip else None,
-                pending_dip_confirmed_ticks_left=(
-                    self._pending_dip.confirmed_ticks_left if self._pending_dip else None
+                confirmed_dip_baseline=(
+                    self._recently_confirmed_dip.baseline if self._recently_confirmed_dip else None
+                ),
+                confirmed_dip_delta=(
+                    self._recently_confirmed_dip.delta if self._recently_confirmed_dip else None
+                ),
+                confirmed_dip_ticks_left=(
+                    self._recently_confirmed_dip.confirmed_ticks_left
+                    if self._recently_confirmed_dip
+                    else None
                 ),
             ),
         )

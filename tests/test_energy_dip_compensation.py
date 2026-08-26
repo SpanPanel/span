@@ -59,6 +59,7 @@ class DummyDipSensor(SpanEnergySensorBase):
         self._last_panel_reading: float | None = None
         self._last_dip_delta: float | None = None
         self._pending_dip: PendingDip | None = None
+        self._recently_confirmed_dip: PendingDip | None = None
         self._is_total_increasing: bool = state_class == SensorStateClass.TOTAL_INCREASING
         self._dip_compensation_enabled: bool = dip_enabled
 
@@ -86,7 +87,16 @@ def _restart(before: DummyDipSensor) -> DummyDipSensor:
         after._pending_dip = PendingDip(
             baseline=restored.pending_dip_baseline,
             delta=restored.pending_dip_delta,
-            confirmed_ticks_left=restored.pending_dip_confirmed_ticks_left,
+        )
+    if (
+        restored.confirmed_dip_baseline is not None
+        and restored.confirmed_dip_delta is not None
+        and restored.confirmed_dip_ticks_left is not None
+    ):
+        after._recently_confirmed_dip = PendingDip(
+            baseline=restored.confirmed_dip_baseline,
+            delta=restored.confirmed_dip_delta,
+            confirmed_ticks_left=restored.confirmed_dip_ticks_left,
         )
     return after
 
@@ -130,9 +140,10 @@ class TestExtraStoredDataDipFields:
         assert result is not None
         assert result.energy_offset == 10.0
         assert result.last_panel_reading == 190.0
-        # Written before the confirmation window existed, so the dip it records
-        # is an unsettled one -- which is what those records always were.
-        assert result.pending_dip_confirmed_ticks_left is None
+        # Written before the corroborated slot existed, so it records only an
+        # unsettled dip -- which is the state those records were always in.
+        assert result.confirmed_dip_baseline is None
+        assert result.confirmed_dip_ticks_left is None
         assert result.last_dip_delta == 10.0
 
     def test_backward_compat_missing_dip_fields(self):
@@ -340,30 +351,42 @@ class TestDipCompensation:
         assert sensor._attr_native_value == 950.0
         assert sensor._energy_offset == 0.0
 
-    def test_dip_reports_to_coordinator_once_confirmed(self):
-        """Confirmation calls coordinator.report_energy_dip, not detection.
+    def test_dip_reports_to_coordinator_once_it_settles(self):
+        """The notification waits until nothing can take the offset back.
 
-        The notification waits for the counter to corroborate the drop. Firing
-        on sight is what produced the `SpanPanel/span#259` notification naming
-        essentially every circuit on the panel for an event that had not
-        happened.
+        Not on detection: firing on sight is what produced the
+        `SpanPanel/span#259` notification naming essentially every circuit on
+        the panel for an event that had not happened. And not on corroboration
+        either, because the readings just after it can still retract the dip,
+        while a persistent notification cannot be retracted at all.
         """
         sensor = DummyDipSensor(dip_enabled=True)
         sensor.entity_id = "sensor.test_energy"
 
-        sensor._mock_panel_value = 1000.0
-        sensor._update_native_value()
+        for value in (1000.0, 950.0, 955.0, 956.0, 957.0):
+            sensor._mock_panel_value = value
+            sensor._update_native_value()
+            sensor.coordinator.report_energy_dip.assert_not_called()
 
-        sensor._mock_panel_value = 950.0
-        sensor._update_native_value()
-        sensor.coordinator.report_energy_dip.assert_not_called()
-
-        sensor._mock_panel_value = 955.0
+        sensor._mock_panel_value = 958.0
         sensor._update_native_value()
 
         sensor.coordinator.report_energy_dip.assert_called_once_with(
             "sensor.test_energy", 50.0, 50.0
         )
+
+    def test_a_dip_retracted_inside_its_window_is_never_reported(self):
+        """A notification that cannot be taken back is not sent speculatively."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor.entity_id = "sensor.test_energy"
+
+        for value in (1000.0, 950.0, 955.0, 1001.0, 1002.0, 1003.0, 1004.0):
+            sensor._mock_panel_value = value
+            sensor._update_native_value()
+
+        assert sensor._energy_offset == 0.0
+        assert sensor._attr_native_value == 1004.0
+        sensor.coordinator.report_energy_dip.assert_not_called()
 
     def test_no_report_when_no_dip(self):
         """Normal increases don't trigger coordinator notification."""
@@ -605,8 +628,11 @@ class TestTheConfirmationWindowSurvivesARestart:
     def test_the_remaining_window_is_persisted(self):
         stored = self._confirmed().extra_restore_state_data.as_dict()
 
-        assert stored["pending_dip_baseline"] == 1000.0
-        assert stored["pending_dip_confirmed_ticks_left"] == CONFIRMED_RETRACTION_WINDOW
+        assert stored["confirmed_dip_baseline"] == 1000.0
+        assert stored["confirmed_dip_delta"] == 1000.0
+        assert stored["confirmed_dip_ticks_left"] == CONFIRMED_RETRACTION_WINDOW
+        # The corroborated dip left the unsettled slot when it was corroborated.
+        assert stored["pending_dip_baseline"] is None
 
     def test_a_return_after_the_restart_still_retracts(self):
         after = _restart(self._confirmed())
@@ -616,6 +642,7 @@ class TestTheConfirmationWindowSurvivesARestart:
 
         assert after._energy_offset == 0.0
         assert after._attr_native_value == 1001.0
+        after.coordinator.report_energy_dip.assert_not_called()
 
     def test_the_window_keeps_running_out_across_the_restart(self):
         """Restarting does not buy the record more readings."""
@@ -625,13 +652,26 @@ class TestTheConfirmationWindowSurvivesARestart:
             after._mock_panel_value = value
             after._update_native_value()
 
-        assert after._pending_dip is None
+        assert after._recently_confirmed_dip is None
 
         after._mock_panel_value = 1001.0
         after._update_native_value()
 
         assert after._energy_offset == 1000.0
         assert after._attr_native_value == 2001.0
+
+    def test_the_dip_is_reported_when_it_settles_after_the_restart(self):
+        """A restart delays the notification with the window, it does not lose it."""
+        after = _restart(self._confirmed())
+        after.entity_id = "sensor.test_energy"
+
+        for value in (6.0, 7.0, 8.0):
+            after._mock_panel_value = value
+            after._update_native_value()
+
+        after.coordinator.report_energy_dip.assert_called_once_with(
+            "sensor.test_energy", 1000.0, 1000.0
+        )
 
 
 class TestAnOutageDoesNotSettleADip:

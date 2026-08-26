@@ -23,12 +23,18 @@ failure that satisfies it.
 **And corroboration is evidence rather than proof.** The same burst that
 replays one stale sample can replay two, the second slightly higher than the
 first, which is indistinguishable on the tick from a counter climbing away from
-a fresh base. So confirming does not close the record: for
+a fresh base. So corroborating does not close the record: for
 `CONFIRMED_RETRACTION_WINDOW` more readings a return to the baseline still
-retracts everything. Once the window is spent the record is dropped and the
-offset is final, because a compensation that could be undone at any future
-reading would be undone by the ordinary growth of a counter that really did
-reset.
+retracts it. The reading that closes the window *settles* the dip — the offset
+is final and the user is told — because a compensation that could be undone at
+any future reading would be undone by the ordinary growth of a counter that
+really did reset.
+
+**A dip inside that window is a dip of its own**, kept apart from the older one
+and judged against the reading it fell from. A 3 Wh artefact folded into a
+1000 Wh dip's record would be measured against a baseline the counter cannot
+reach again inside the window, so it could never be retracted — a small replay
+made permanent by a large one.
 
 The cost is that a genuine reset on a circuit drawing nothing stays unconfirmed
 until it next moves. Compensation is applied throughout — only the notification
@@ -70,11 +76,13 @@ def _feed(readings: list[float], *, after: float) -> list[DipOutcome]:
     previous = after
     offset = 0.0
     pending: PendingDip | None = None
+    confirmed: PendingDip | None = None
 
     for raw in readings:
-        outcome = process_energy_dip(raw, previous, offset, pending)
+        outcome = process_energy_dip(raw, previous, offset, pending, confirmed)
         outcomes.append(outcome)
         offset, pending, previous = outcome.offset, outcome.pending, raw
+        confirmed = outcome.recently_confirmed
 
     return outcomes
 
@@ -174,7 +182,10 @@ class TestRetraction:
 
 
 class TestConfirmation:
-    """The counter counts up from the lower base, so the reset was real."""
+    """The counter counts up from the lower base, which only a reset produces.
+
+    Believed, not closed: the dip is corroborated here and settles later.
+    """
 
     def test_progress_from_the_dipped_reading_confirms(self) -> None:
         """Counting up from the lower base is what a reset looks like."""
@@ -185,10 +196,9 @@ class TestConfirmation:
         assert outcome.event is DipEvent.CONFIRMED
         assert outcome.delta == pytest.approx(BASELINE)
         assert outcome.offset == pytest.approx(BASELINE)
-        # Believed, but kept: see `TestConfirmThenReturn`.
-        assert outcome.pending == PendingDip(
-            baseline=BASELINE, delta=BASELINE, confirmed_ticks_left=CONFIRMED_RETRACTION_WINDOW
-        )
+        # Nothing is unsettled any more; the dip moves to the corroborated slot
+        # and waits out its window there. See `TestConfirmThenReturn`.
+        assert outcome.pending is None
 
     def test_the_offset_stays_applied_through_confirmation(self) -> None:
         """Confirming settles the belief, it does not change the arithmetic."""
@@ -248,15 +258,22 @@ class TestConfirmThenReturn:
     """
 
     def test_a_return_to_the_baseline_after_confirmation_still_retracts(self) -> None:
-        """The review's sequence: 1000 -> 0 (booked) -> 5 (confirmed) -> 1001."""
-        offset, pending = _book()
+        """The review's sequence: 1000 -> 0 (booked) -> 5 (corroborated) -> 1001."""
+        outcomes = _feed([0.0, 5.0, BASELINE + 1.0], after=BASELINE)
 
-        confirmed = process_energy_dip(5.0, 0.0, offset, pending)
-        returned = process_energy_dip(BASELINE + 1.0, 5.0, confirmed.offset, confirmed.pending)
+        assert outcomes[-1].event is DipEvent.RETRACTED
+        assert outcomes[-1].offset == pytest.approx(0.0)
+        assert outcomes[-1].compensated == pytest.approx(BASELINE + 1.0)
 
-        assert returned.event is DipEvent.RETRACTED
-        assert returned.offset == pytest.approx(0.0)
-        assert returned.compensated == pytest.approx(BASELINE + 1.0)
+    def test_the_corroborated_dip_is_kept_with_a_window(self) -> None:
+        """Believed, but not closed, and held apart from anything unsettled."""
+        outcomes = _feed([0.0, 5.0], after=BASELINE)
+
+        assert outcomes[-1].event is DipEvent.CONFIRMED
+        assert outcomes[-1].pending is None
+        assert outcomes[-1].recently_confirmed == PendingDip(
+            baseline=BASELINE, delta=BASELINE, confirmed_ticks_left=CONFIRMED_RETRACTION_WINDOW
+        )
 
     def test_the_last_reading_of_the_window_can_still_retract(self) -> None:
         """The window is three readings, and the third of them is one of them."""
@@ -280,40 +297,79 @@ class TestConfirmThenReturn:
         """
         outcomes = _feed([0.0, 5.0, 6.0, 7.0, 8.0, BASELINE + 1.0], after=BASELINE)
 
-        assert outcomes[-2].pending is None
+        assert outcomes[-2].event is DipEvent.SETTLED
+        assert outcomes[-2].recently_confirmed is None
         assert outcomes[-1].event is None
         assert outcomes[-1].offset == pytest.approx(BASELINE)
         assert outcomes[-1].compensated == pytest.approx(2 * BASELINE + 1.0)
 
-    def test_a_genuine_reset_that_keeps_counting_drops_its_record(self) -> None:
-        """Nothing is provisional forever: the record is not carried indefinitely."""
+    def test_a_genuine_reset_settles_on_the_reading_that_closes_the_window(self) -> None:
+        """Nothing stays provisional forever, and settling names the amount.
+
+        Which is what the notification reports, because it is the first moment
+        nothing can take the offset back.
+        """
         outcomes = _feed([0.0, 5.0, 6.0, 7.0, 8.0], after=BASELINE)
 
-        assert outcomes[1].pending is not None
-        assert outcomes[1].pending.confirmed_ticks_left == CONFIRMED_RETRACTION_WINDOW
-        assert [outcome.pending is None for outcome in outcomes[2:]] == [False, False, True]
+        assert [outcome.settled for outcome in outcomes] == [None, None, None, None, BASELINE]
+        assert [outcome.recently_confirmed is None for outcome in outcomes[1:]] == [
+            False,
+            False,
+            False,
+            True,
+        ]
 
-    def test_a_further_fall_inside_the_window_accumulates_and_still_retracts(self) -> None:
-        """A burst can deliver more than one stale sample, in any order.
 
-        The second fall extends the provisional amount against the original
-        baseline, so the return gives all of it back at once.
-        """
-        outcomes = _feed([0.0, 5.0, 2.0, BASELINE + 1.0], after=BASELINE)
+class TestADipInsideAConfirmedWindow:
+    """A fall while an older dip is still provisional is its own dip.
+
+    Its baseline is the reading it fell from, not the older dip's high-water
+    mark, because that is what the counter has to come back to for *this* fall
+    to be undone. Folding the two together would judge a 3 Wh artefact against a
+    counter's whole lifetime total — a mark it can never reach again inside the
+    window, so the artefact would be compensated for good.
+    """
+
+    def test_the_smaller_dip_retracts_against_its_own_baseline(self) -> None:
+        """`1000 -> 0 -> 5 -> 2 -> 6`: the 3 Wh comes back, the 1000 Wh stays."""
+        outcomes = _feed([0.0, 5.0, 2.0, 6.0], after=BASELINE)
 
         assert outcomes[2].event is DipEvent.BOOKED
-        assert outcomes[2].offset == pytest.approx(BASELINE + 3.0)
+        assert outcomes[2].pending == PendingDip(baseline=5.0, delta=3.0)
+        assert outcomes[-1].event is DipEvent.RETRACTED
+        assert outcomes[-1].delta == pytest.approx(3.0)
+        assert outcomes[-1].offset == pytest.approx(BASELINE)
+
+    def test_a_return_to_the_older_baseline_retracts_both(self) -> None:
+        """`1000 -> 0 -> 5 -> 2 -> 1001`: the counter is where it started."""
+        outcomes = _feed([0.0, 5.0, 2.0, BASELINE + 1.0], after=BASELINE)
+
         assert outcomes[-1].event is DipEvent.RETRACTED
         assert outcomes[-1].delta == pytest.approx(BASELINE + 3.0)
         assert outcomes[-1].offset == pytest.approx(0.0)
+        assert outcomes[-1].compensated == pytest.approx(BASELINE + 1.0)
 
-    def test_a_fall_inside_the_window_does_not_reopen_it(self) -> None:
-        """A fall is not a return, so it spends a reading like any other."""
-        outcomes = _feed([0.0, 5.0, 2.0, 3.0, 4.0, BASELINE + 1.0], after=BASELINE)
+    def test_the_older_dip_keeps_ageing_through_the_newer_one(self) -> None:
+        """A fall is not a return, so it does not buy the window more readings."""
+        outcomes = _feed([0.0, 5.0, 2.0, 6.0, 7.0], after=BASELINE)
 
-        assert outcomes[-2].pending is None
-        assert outcomes[-1].event is None
-        assert outcomes[-1].offset == pytest.approx(BASELINE + 3.0)
+        assert outcomes[-1].event is DipEvent.SETTLED
+        assert outcomes[-1].settled == pytest.approx(BASELINE)
+        assert outcomes[-1].offset == pytest.approx(BASELINE)
+
+    def test_corroborating_the_newer_dip_settles_the_older_one(self) -> None:
+        """The bound stays three readings from the most recent corroboration.
+
+        So the older dip is made final rather than merged into the newer one's
+        window, which would let a chain of falls keep it provisional forever.
+        """
+        outcomes = _feed([0.0, 5.0, 2.0, 3.0], after=BASELINE)
+
+        assert outcomes[-1].event is DipEvent.CONFIRMED
+        assert outcomes[-1].settled == pytest.approx(BASELINE)
+        assert outcomes[-1].recently_confirmed == PendingDip(
+            baseline=5.0, delta=3.0, confirmed_ticks_left=CONFIRMED_RETRACTION_WINDOW
+        )
 
 
 class TestASecondDropWhileUnconfirmed:
