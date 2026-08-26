@@ -644,7 +644,9 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._last_dip_delta = restored.last_dip_delta
             if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
                 self._pending_dip = PendingDip(
-                    baseline=restored.pending_dip_baseline, delta=restored.pending_dip_delta
+                    baseline=restored.pending_dip_baseline,
+                    delta=restored.pending_dip_delta,
+                    confirmed_ticks_left=restored.pending_dip_confirmed_ticks_left,
                 )
             _LOGGER.debug(
                 "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
@@ -742,6 +744,9 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 last_dip_delta=self._last_dip_delta,
                 pending_dip_baseline=self._pending_dip.baseline if self._pending_dip else None,
                 pending_dip_delta=self._pending_dip.delta if self._pending_dip else None,
+                pending_dip_confirmed_ticks_left=(
+                    self._pending_dip.confirmed_ticks_left if self._pending_dip else None
+                ),
             ),
         )
 

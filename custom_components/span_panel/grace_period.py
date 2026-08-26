@@ -71,6 +71,11 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
     # forgetting it was ever provisional.
     pending_dip_baseline: float | None = None
     pending_dip_delta: float | None = None
+    # How much of a confirmed dip's retraction window is left, or None for a dip
+    # that is not confirmed at all. Stored data written before the window
+    # existed has no key, and restores as None — an unsettled dip, which is what
+    # those records were.
+    pending_dip_confirmed_ticks_left: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a dict representation of the extra data."""
@@ -84,6 +89,7 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
             "last_dip_delta": self.last_dip_delta,
             "pending_dip_baseline": self.pending_dip_baseline,
             "pending_dip_delta": self.pending_dip_delta,
+            "pending_dip_confirmed_ticks_left": self.pending_dip_confirmed_ticks_left,
         }
 
     @classmethod
@@ -108,6 +114,7 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
                 last_dip_delta=restored.get("last_dip_delta"),
                 pending_dip_baseline=restored.get("pending_dip_baseline"),
                 pending_dip_delta=restored.get("pending_dip_delta"),
+                pending_dip_confirmed_ticks_left=restored.get("pending_dip_confirmed_ticks_left"),
             )
         except (AttributeError, KeyError, TypeError):
             return None

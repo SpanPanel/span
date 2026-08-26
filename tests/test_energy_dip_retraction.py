@@ -20,6 +20,16 @@ dispatched on a debounce, so one burst can deliver the same incomplete state
 twice. That is the failure this rule exists to catch, so it must not be the
 failure that satisfies it.
 
+**And corroboration is evidence rather than proof.** The same burst that
+replays one stale sample can replay two, the second slightly higher than the
+first, which is indistinguishable on the tick from a counter climbing away from
+a fresh base. So confirming does not close the record: for
+`CONFIRMED_RETRACTION_WINDOW` more readings a return to the baseline still
+retracts everything. Once the window is spent the record is dropped and the
+offset is final, because a compensation that could be undone at any future
+reading would be undone by the ordinary growth of a counter that really did
+reset.
+
 The cost is that a genuine reset on a circuit drawing nothing stays unconfirmed
 until it next moves. Compensation is applied throughout — only the notification
 waits — so the sensor reads correctly while the evidence is outstanding.
@@ -30,7 +40,9 @@ from __future__ import annotations
 import pytest
 
 from custom_components.span_panel.energy_dip import (
+    CONFIRMED_RETRACTION_WINDOW,
     DipEvent,
+    DipOutcome,
     PendingDip,
     process_energy_dip,
 )
@@ -46,6 +58,25 @@ def _book(raw: float = 0.0, offset: float = 0.0) -> tuple[float, PendingDip]:
     assert outcome.event is DipEvent.BOOKED
     assert outcome.pending is not None
     return outcome.offset, outcome.pending
+
+
+def _feed(readings: list[float], *, after: float) -> list[DipOutcome]:
+    """Run a run of readings through the rule from a standing start.
+
+    `after` is what the counter read before the first of them, so the caller
+    writes the panel's sequence and gets one outcome per reading back.
+    """
+    outcomes: list[DipOutcome] = []
+    previous = after
+    offset = 0.0
+    pending: PendingDip | None = None
+
+    for raw in readings:
+        outcome = process_energy_dip(raw, previous, offset, pending)
+        outcomes.append(outcome)
+        offset, pending, previous = outcome.offset, outcome.pending, raw
+
+    return outcomes
 
 
 class TestBooking:
@@ -153,8 +184,11 @@ class TestConfirmation:
 
         assert outcome.event is DipEvent.CONFIRMED
         assert outcome.delta == pytest.approx(BASELINE)
-        assert outcome.pending is None
         assert outcome.offset == pytest.approx(BASELINE)
+        # Believed, but kept: see `TestConfirmThenReturn`.
+        assert outcome.pending == PendingDip(
+            baseline=BASELINE, delta=BASELINE, confirmed_ticks_left=CONFIRMED_RETRACTION_WINDOW
+        )
 
     def test_the_offset_stays_applied_through_confirmation(self) -> None:
         """Confirming settles the belief, it does not change the arithmetic."""
@@ -202,6 +236,84 @@ class TestHolding:
         assert recovered.event is DipEvent.RETRACTED
         assert recovered.offset == 0.0
         assert recovered.compensated == pytest.approx(BASELINE + 7.6)
+
+
+class TestConfirmThenReturn:
+    """A dip corroborated by one tick of progress, and then undone.
+
+    The confirming reading is evidence, not proof: a replay burst can deliver a
+    low sample and then a slightly higher low sample before the real reading
+    arrives. If confirmation closed the record for good, that shape would leave
+    the counter's whole lifetime total in the offset permanently.
+    """
+
+    def test_a_return_to_the_baseline_after_confirmation_still_retracts(self) -> None:
+        """The review's sequence: 1000 -> 0 (booked) -> 5 (confirmed) -> 1001."""
+        offset, pending = _book()
+
+        confirmed = process_energy_dip(5.0, 0.0, offset, pending)
+        returned = process_energy_dip(BASELINE + 1.0, 5.0, confirmed.offset, confirmed.pending)
+
+        assert returned.event is DipEvent.RETRACTED
+        assert returned.offset == pytest.approx(0.0)
+        assert returned.compensated == pytest.approx(BASELINE + 1.0)
+
+    def test_the_last_reading_of_the_window_can_still_retract(self) -> None:
+        """The window is three readings, and the third of them is one of them."""
+        outcomes = _feed([0.0, 5.0, 6.0, 7.0, BASELINE + 1.0], after=BASELINE)
+
+        assert [outcome.event for outcome in outcomes[1:]] == [
+            DipEvent.CONFIRMED,
+            None,
+            None,
+            DipEvent.RETRACTED,
+        ]
+        assert outcomes[-1].offset == pytest.approx(0.0)
+        assert outcomes[-1].compensated == pytest.approx(BASELINE + 1.0)
+
+    def test_the_window_runs_out_and_the_offset_becomes_final(self) -> None:
+        """A fourth reading is past it, so a return then is just consumption.
+
+        Which is the cost of the window: a counter that genuinely reset and then
+        climbed its whole lifetime total back within three readings would be
+        mis-retracted. It is the offset staying put that matters here.
+        """
+        outcomes = _feed([0.0, 5.0, 6.0, 7.0, 8.0, BASELINE + 1.0], after=BASELINE)
+
+        assert outcomes[-2].pending is None
+        assert outcomes[-1].event is None
+        assert outcomes[-1].offset == pytest.approx(BASELINE)
+        assert outcomes[-1].compensated == pytest.approx(2 * BASELINE + 1.0)
+
+    def test_a_genuine_reset_that_keeps_counting_drops_its_record(self) -> None:
+        """Nothing is provisional forever: the record is not carried indefinitely."""
+        outcomes = _feed([0.0, 5.0, 6.0, 7.0, 8.0], after=BASELINE)
+
+        assert outcomes[1].pending is not None
+        assert outcomes[1].pending.confirmed_ticks_left == CONFIRMED_RETRACTION_WINDOW
+        assert [outcome.pending is None for outcome in outcomes[2:]] == [False, False, True]
+
+    def test_a_further_fall_inside_the_window_accumulates_and_still_retracts(self) -> None:
+        """A burst can deliver more than one stale sample, in any order.
+
+        The second fall extends the provisional amount against the original
+        baseline, so the return gives all of it back at once.
+        """
+        outcomes = _feed([0.0, 5.0, 2.0, BASELINE + 1.0], after=BASELINE)
+
+        assert outcomes[2].event is DipEvent.BOOKED
+        assert outcomes[2].offset == pytest.approx(BASELINE + 3.0)
+        assert outcomes[-1].event is DipEvent.RETRACTED
+        assert outcomes[-1].delta == pytest.approx(BASELINE + 3.0)
+        assert outcomes[-1].offset == pytest.approx(0.0)
+
+    def test_a_fall_inside_the_window_does_not_reopen_it(self) -> None:
+        """A fall is not a return, so it spends a reading like any other."""
+        outcomes = _feed([0.0, 5.0, 2.0, 3.0, 4.0, BASELINE + 1.0], after=BASELINE)
+
+        assert outcomes[-2].pending is None
+        assert outcomes[-1].event is None
+        assert outcomes[-1].offset == pytest.approx(BASELINE + 3.0)
 
 
 class TestASecondDropWhileUnconfirmed:

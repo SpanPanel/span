@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 from homeassistant.components.sensor import SensorStateClass
 
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
-from custom_components.span_panel.energy_dip import PendingDip
+from custom_components.span_panel.energy_dip import CONFIRMED_RETRACTION_WINDOW, PendingDip
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
@@ -69,6 +69,28 @@ class DummyDipSensor(SpanEnergySensorBase):
         return "dummy_data"
 
 
+def _restart(before: DummyDipSensor) -> DummyDipSensor:
+    """Persist a sensor's dip state and restore it into a fresh one.
+
+    Mirrors what `SpanEnergySensorBase.async_added_to_hass` does with the
+    record `extra_restore_state_data` wrote, without an HA instance to store it.
+    """
+    restored = SpanEnergyExtraStoredData.from_dict(before.extra_restore_state_data.as_dict())
+    assert restored is not None
+
+    after = DummyDipSensor(dip_enabled=True)
+    after._energy_offset = restored.energy_offset or 0.0
+    after._last_panel_reading = restored.last_panel_reading
+    after._last_dip_delta = restored.last_dip_delta
+    if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
+        after._pending_dip = PendingDip(
+            baseline=restored.pending_dip_baseline,
+            delta=restored.pending_dip_delta,
+            confirmed_ticks_left=restored.pending_dip_confirmed_ticks_left,
+        )
+    return after
+
+
 # =============================================================================
 # SpanEnergyExtraStoredData round-trip with new fields
 # =============================================================================
@@ -108,6 +130,9 @@ class TestExtraStoredDataDipFields:
         assert result is not None
         assert result.energy_offset == 10.0
         assert result.last_panel_reading == 190.0
+        # Written before the confirmation window existed, so the dip it records
+        # is an unsettled one -- which is what those records always were.
+        assert result.pending_dip_confirmed_ticks_left is None
         assert result.last_dip_delta == 10.0
 
     def test_backward_compat_missing_dip_fields(self):
@@ -546,19 +571,9 @@ class TestPendingDipSurvivesARestart:
         before._update_native_value()
         before._mock_panel_value = 0.0
         before._update_native_value()
-        stored = before.extra_restore_state_data.as_dict()
 
-        after = DummyDipSensor(dip_enabled=True)
-        restored = SpanEnergyExtraStoredData.from_dict(stored)
-        assert restored is not None
-        after._energy_offset = restored.energy_offset or 0.0
-        after._last_panel_reading = restored.last_panel_reading
-        after._last_dip_delta = restored.last_dip_delta
-        assert restored.pending_dip_baseline is not None
-        assert restored.pending_dip_delta is not None
-        after._pending_dip = PendingDip(
-            baseline=restored.pending_dip_baseline, delta=restored.pending_dip_delta
-        )
+        after = _restart(before)
+        assert after._pending_dip is not None
 
         after._mock_panel_value = 1007.6
         after._update_native_value()
@@ -566,6 +581,57 @@ class TestPendingDipSurvivesARestart:
         assert after._energy_offset == 0.0
         assert after._attr_native_value == 1007.6
         after.coordinator.report_energy_dip.assert_not_called()
+
+
+class TestTheConfirmationWindowSurvivesARestart:
+    """A confirmed dip is still provisional for a few readings, restart or not.
+
+    Both halves of that matter across a restart. Dropping the window would make
+    a mis-confirmed offset permanent; restoring the record as though it had
+    never been confirmed would leave it retractable indefinitely, so a counter
+    that genuinely reset would hand its offset back on the day it climbed past
+    its old lifetime total.
+    """
+
+    @staticmethod
+    def _confirmed() -> DummyDipSensor:
+        """Build a sensor that has booked a dip and just had it confirmed."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        for value in (1000.0, 0.0, 5.0):
+            sensor._mock_panel_value = value
+            sensor._update_native_value()
+        return sensor
+
+    def test_the_remaining_window_is_persisted(self):
+        stored = self._confirmed().extra_restore_state_data.as_dict()
+
+        assert stored["pending_dip_baseline"] == 1000.0
+        assert stored["pending_dip_confirmed_ticks_left"] == CONFIRMED_RETRACTION_WINDOW
+
+    def test_a_return_after_the_restart_still_retracts(self):
+        after = _restart(self._confirmed())
+
+        after._mock_panel_value = 1001.0
+        after._update_native_value()
+
+        assert after._energy_offset == 0.0
+        assert after._attr_native_value == 1001.0
+
+    def test_the_window_keeps_running_out_across_the_restart(self):
+        """Restarting does not buy the record more readings."""
+        after = _restart(self._confirmed())
+
+        for value in (6.0, 7.0, 8.0):
+            after._mock_panel_value = value
+            after._update_native_value()
+
+        assert after._pending_dip is None
+
+        after._mock_panel_value = 1001.0
+        after._update_native_value()
+
+        assert after._energy_offset == 1000.0
+        assert after._attr_native_value == 2001.0
 
 
 class TestAnOutageDoesNotSettleADip:
