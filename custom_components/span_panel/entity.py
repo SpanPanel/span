@@ -22,6 +22,22 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
 
     _attr_has_entity_name = True
 
+    _span_object_id_base: str | None = None
+    """The base Home Assistant composes this entity's id from, when set.
+
+    Circuit entities set it from `naming.circuit_object_id_base`; every other
+    entity leaves it None and Core composes from the display name as it
+    always has. Core reads `suggested_object_id` only for an entity that has
+    not preset `entity_id`, which after this release is every entity here.
+    """
+
+    @property
+    def suggested_object_id(self) -> str | None:
+        """Hand Core the base, or the stock answer when there is none."""
+        if self._span_object_id_base is not None:
+            return self._span_object_id_base
+        return super().suggested_object_id
+
     _residual_field_paths: ClassVar[tuple[str, ...]] = ()
     """Snapshot fields this entity reads from entity code, not from a description.
 

@@ -154,3 +154,28 @@ async def test_an_unknown_entity_is_a_no_op(hass: HomeAssistant) -> None:
     release_registry_name_written_by_older_release(
         registry, "sensor.does_not_exist", "Kitchen Outlets", ("Consumed Energy",)
     )
+
+
+from unittest.mock import MagicMock
+
+from custom_components.span_panel.entity import SpanPanelEntity
+
+
+class _Probe(SpanPanelEntity):
+    _attr_name = "Display Name"
+
+    def __init__(self) -> None:
+        coordinator = MagicMock()
+        super().__init__(coordinator)
+
+
+def test_the_base_is_what_core_is_told_when_one_is_set() -> None:
+    probe = _Probe()
+    probe._span_object_id_base = "Circuit 15 power"
+    assert probe.suggested_object_id == "Circuit 15 power"
+
+
+def test_without_a_base_core_gets_the_stock_answer() -> None:
+    """Panel, BESS, EVSE and MID entities keep composing from their name."""
+    probe = _Probe()
+    assert probe.suggested_object_id == "Display Name"
