@@ -8,14 +8,13 @@ from typing import Any, ClassVar
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import STATE_OFF
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
@@ -25,8 +24,6 @@ from .control_gate import (
     ControlLockExtraStoredData,
     ControlMode,
     ControlPolicy,
-    outcome_failure_reason,
-    outcome_is_failure,
 )
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
@@ -289,53 +286,28 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         relay was already in the requested position. Neither is a failure and
         neither should discard the requested state.
 
-        The two ways a command does not happen are reported the same way and
-        worded differently, because they are different facts. A refusal never
-        resolved an address -- the panel declares this relay non-commandable. A
-        `FAILED` outcome resolved one and never handed it over, because the
-        transport was closed or the broker was disconnected; the library
-        refuses such a write rather than letting paho queue it, so it is a
-        promise that nothing fires later against a panel nobody is watching.
-        Both raise: a control that silently does nothing is the defect.
+        Both ways the command can fail to happen -- a refusal that never resolved an
+        address, and a `FAILED` outcome that resolved one and was never handed
+        over -- are raised by `_async_control`, which every control in this
+        integration shares.
         """
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_relay"):
             _LOGGER.warning("Client does not support relay control")
             return
 
-        try:
-            outcome = await self._async_guarded_control(
-                client.set_circuit_relay(self._circuit_id, state)
-            )
-        except SpanPanelServerError as err:
-            _LOGGER.warning(
-                "SPAN panel did not accept a relay command for %s: %s", self.entity_id, err
-            )
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="circuit_relay_failed",
-                translation_placeholders={
-                    "circuit": construct_circuit_label(
-                        self.coordinator.data.circuits.get(self._circuit_id),
-                        self._circuit_id,
-                    ),
-                    "reason": str(err),
-                },
-            ) from err
-        if outcome_is_failure(outcome):
-            reason = outcome_failure_reason(outcome)
-            _LOGGER.warning("Relay command for %s was not delivered: %s", self.entity_id, reason)
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="circuit_relay_not_delivered",
-                translation_placeholders={
-                    "circuit": construct_circuit_label(
-                        self.coordinator.data.circuits.get(self._circuit_id),
-                        self._circuit_id,
-                    ),
-                    "reason": reason,
-                },
-            )
+        await self._async_control(
+            client.set_circuit_relay(self._circuit_id, state),
+            command=f"a relay command for {self.entity_id}",
+            failed_key="circuit_relay_failed",
+            not_delivered_key="circuit_relay_not_delivered",
+            placeholders={
+                "circuit": construct_circuit_label(
+                    self.coordinator.data.circuits.get(self._circuit_id),
+                    self._circuit_id,
+                )
+            },
+        )
 
         self._attr_is_on = is_on
         self.async_write_ha_state()

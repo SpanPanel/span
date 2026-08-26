@@ -3,18 +3,28 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable
+import logging
 from typing import ClassVar
 
 from homeassistant.const import CONF_HOST
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from span_panel_api import PublishOutcome, SpanPanelSnapshot
+from span_panel_api.exceptions import SpanPanelServerError
 
-from .const import CONF_DEVICE_NAME
-from .control_gate import CONTROL_CALLER, async_bind_caller
+from .const import CONF_DEVICE_NAME, DOMAIN
+from .control_gate import (
+    CONTROL_CALLER,
+    async_bind_caller,
+    outcome_failure_reason,
+    outcome_is_failure,
+)
 from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
 from .util import snapshot_to_device_info
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
@@ -75,6 +85,65 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
             return await action
         finally:
             CONTROL_CALLER.reset(token)
+
+    async def _async_control(
+        self,
+        action: Awaitable[PublishOutcome],
+        *,
+        command: str,
+        failed_key: str,
+        not_delivered_key: str,
+        placeholders: dict[str, str],
+    ) -> PublishOutcome:
+        """Run one control call and raise both ways it can fail to happen.
+
+        Every control this integration offers -- relay, priority, charge-current
+        limit, GFE override, and any settable property on an adopted device --
+        reaches the panel through here, because the two ways a command does not
+        happen are the same two facts whatever was being commanded, and stating
+        them once is what keeps a new control from silently reporting success.
+
+        They are reported separately and worded differently, because they are
+        different facts. A refusal (`SpanPanelServerError`) never resolved an
+        address: the panel declares the thing non-commandable, or the value has
+        no representation, and nothing was published. A `FAILED` outcome
+        resolved one and was never handed over, because the transport was closed
+        or the broker was disconnected; the library refuses such a write rather
+        than letting paho queue it, so it is also a promise that nothing fires
+        later against a panel nobody is watching. Both raise: a control that
+        silently does nothing is the defect.
+
+        `command` names what was asked in the caller's own words -- "a relay
+        command for switch.kitchen_outlets" -- and appears only in the log,
+        where a phrase reading as English is worth more than a key. What the
+        user sees is `failed_key` / `not_delivered_key` with `placeholders`,
+        which is why the reason is added here rather than at each call site: it
+        is the one placeholder every one of these messages carries, and the one
+        a caller cannot know before the call.
+
+        Returns the outcome for a caller that has something to say about a
+        delivered command -- `no_op`, say, or the topic it went to.
+        """
+        try:
+            outcome = await self._async_guarded_control(action)
+        except SpanPanelServerError as err:
+            _LOGGER.warning("SPAN panel did not accept %s: %s", command, err)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=failed_key,
+                translation_placeholders={**placeholders, "reason": str(err)},
+            ) from err
+
+        if outcome_is_failure(outcome):
+            reason = outcome_failure_reason(outcome)
+            _LOGGER.warning("SPAN panel was never handed %s: %s", command, reason)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=not_delivered_key,
+                translation_placeholders={**placeholders, "reason": reason},
+            )
+
+        return outcome
 
     async def async_added_to_hass(self) -> None:
         """Tell the coordinator which snapshot fields this entity reads.

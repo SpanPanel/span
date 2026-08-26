@@ -424,6 +424,12 @@
     "admin_only_control": {
       "message": "Apenas um administrador do Home Assistant pode operar este SPAN Panel."
     },
+    "adopted_control_failed": {
+      "message": "A escrita de {property} em {device} foi recusada: {reason}. Nada foi enviado ao painel, portanto o valor permanece inalterado."
+    },
+    "adopted_control_not_delivered": {
+      "message": "A escrita de {property} em {device} não pôde ser entregue ao painel: {reason}. Foi recusada em vez de enfileirada, portanto o valor permanece inalterado e não mudará mais tarde."
+    },
     "circuit_priority_failed": {
       "message": "A alteração de prioridade para {circuit} foi recusada: {reason}. Nada foi enviado ao painel, portanto a prioridade permanece inalterada."
     },

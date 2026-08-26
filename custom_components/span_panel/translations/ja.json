@@ -424,6 +424,12 @@
     "admin_only_control": {
       "message": "この SPAN Panel を操作できるのは Home Assistant の管理者だけです。"
     },
+    "adopted_control_failed": {
+      "message": "{device}の{property}への書き込みは拒否されました: {reason}。パネルには何も送信されていないため、値は変わっていません。"
+    },
+    "adopted_control_not_delivered": {
+      "message": "{device}の{property}への書き込みをパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、値は変わっておらず、後から変わることもありません。"
+    },
     "circuit_priority_failed": {
       "message": "{circuit}の優先度変更は拒否されました: {reason}。パネルには何も送信されていないため、優先度は変わっていません。"
     },

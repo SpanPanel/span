@@ -424,6 +424,12 @@
     "admin_only_control": {
       "message": "Only a Home Assistant administrator may operate this SPAN panel."
     },
+    "adopted_control_failed": {
+      "message": "The write to {property} on {device} was refused: {reason}. Nothing was sent to the panel, so the value is unchanged."
+    },
+    "adopted_control_not_delivered": {
+      "message": "The write to {property} on {device} could not be delivered to the panel: {reason}. It was refused rather than queued, so the value is unchanged and will not change later."
+    },
     "circuit_priority_failed": {
       "message": "The priority change for {circuit} was refused: {reason}. Nothing was sent to the panel, so the priority is unchanged."
     },

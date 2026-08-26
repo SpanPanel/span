@@ -5,14 +5,12 @@ from typing import Final
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
-from .const import CONF_DEVICE_NAME, DOMAIN
-from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
+from .const import CONF_DEVICE_NAME
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import construct_panel_unique_id_for_entry, has_bess
@@ -68,40 +66,21 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         published, so there is nothing to correct later, and the person who
         pressed the button is the one who needs to hear about it. A `FAILED`
         outcome -- handed to nobody, and promised not to arrive later -- is
-        raised on the same grounds and worded as the different fact it is.
+        raised on the same grounds and worded as the different fact it is. Both
+        live in `_async_control`, which every control here shares.
         """
         client = self.coordinator.client
         if not hasattr(client, "set_dominant_power_source"):
             _LOGGER.warning("Client does not support GFE override")
             return
 
-        try:
-            outcome = await self._async_guarded_control(
-                client.set_dominant_power_source(self._override_value)
-            )
-        except SpanPanelServerError as err:
-            _LOGGER.warning(
-                "SPAN panel did not accept a GFE override to %s: %s", self._override_value, err
-            )
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="gfe_override_failed",
-                translation_placeholders={
-                    "value": self._override_value,
-                    "reason": str(err),
-                },
-            ) from err
-
-        if outcome_is_failure(outcome):
-            reason = outcome_failure_reason(outcome)
-            _LOGGER.warning(
-                "GFE override to %s was not delivered: %s", self._override_value, reason
-            )
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="gfe_override_not_delivered",
-                translation_placeholders={"value": self._override_value, "reason": reason},
-            )
+        await self._async_control(
+            client.set_dominant_power_source(self._override_value),
+            command=f"a GFE override to {self._override_value}",
+            failed_key="gfe_override_failed",
+            not_delivered_key="gfe_override_not_delivered",
+            placeholders={"value": self._override_value},
+        )
 
         await self.coordinator.async_request_refresh()
 

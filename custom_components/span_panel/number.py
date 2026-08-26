@@ -50,12 +50,11 @@ from span_panel_api import (
     SpanEvseSnapshot,
     SpanPanelSnapshot,
 )
-from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedNumber, create_adopted_numbers
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
-from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .field_paths import DerivedReason, FieldPathDeclarationMixin
@@ -254,8 +253,9 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         a slower charge, asking for it and getting 17 is a current the user did
         not request.
 
-        Both ways the write does not happen reach the caller. A refusal never
-        resolved an address; a `FAILED` outcome resolved one and was never
+        Both ways the write does not happen reach the caller, through the
+        `_async_control` every control in this integration shares. A refusal
+        never resolved an address; a `FAILED` outcome resolved one and was never
         handed over, which the library promises means it will not arrive later.
         """
         client = self.coordinator.client
@@ -265,28 +265,13 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
                 translation_key="evse_charge_limit_unsupported",
                 translation_placeholders={"charger": self._evse_id},
             )
-        try:
-            outcome = await self._async_guarded_control(
-                self._description.set_fn(client, self._evse_id, int(value))
-            )
-        except SpanPanelServerError as err:
-            _LOGGER.warning("SPAN panel refused a charge-current limit: %s", err)
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="evse_charge_limit_failed",
-                translation_placeholders={"charger": self._evse_id, "reason": str(err)},
-            ) from err
-
-        if outcome_is_failure(outcome):
-            reason = outcome_failure_reason(outcome)
-            _LOGGER.warning(
-                "Charge-current limit for %s was not delivered: %s", self._evse_id, reason
-            )
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="evse_charge_limit_not_delivered",
-                translation_placeholders={"charger": self._evse_id, "reason": reason},
-            )
+        await self._async_control(
+            self._description.set_fn(client, self._evse_id, int(value)),
+            command=f"a charge-current limit for {self._evse_id}",
+            failed_key="evse_charge_limit_failed",
+            not_delivered_key="evse_charge_limit_not_delivered",
+            placeholders={"charger": self._evse_id},
+        )
 
         await self.coordinator.async_request_refresh()
 

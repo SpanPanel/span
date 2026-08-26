@@ -18,10 +18,12 @@ from unittest.mock import AsyncMock, MagicMock
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from span_panel_api import AdoptedDevice, AdoptedProperty
+from span_panel_api import AdoptedDevice, AdoptedProperty, PublishOutcome, PublishState
+from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.adoption import (
     CONTROL_PLATFORMS,
@@ -456,6 +458,62 @@ async def test_a_switch_publishes_the_vocabulary_homie_defines(hass: HomeAssista
     await entity.async_turn_on()
 
     coordinator.client.set_adopted_property.assert_awaited_once_with("generator-1", "relay", "enabled", "true")
+
+
+def _adopted_switch(hass: HomeAssistant) -> tuple[MagicMock, object]:
+    """One adopted switch and the coordinator whose client it writes through."""
+    declaration = _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True)
+    snapshot = _snapshot(_device(properties=(declaration,)))
+    coordinator = MagicMock(data=snapshot)
+    coordinator.async_request_refresh = AsyncMock()
+    (entity,) = create_adopted_switches(
+        coordinator, snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+    return coordinator, entity
+
+
+async def test_an_adopted_control_raises_when_the_command_was_not_delivered(hass: HomeAssistant) -> None:
+    """A `FAILED` outcome is the promise that nothing will happen later.
+
+    The library refuses such a write rather than letting paho queue it, so
+    returning normally would tell the person who flipped the switch that their
+    generator changed state when the command never left the process.
+    """
+    coordinator, entity = _adopted_switch(hass)
+    coordinator.client.set_adopted_property = AsyncMock(
+        return_value=PublishOutcome(
+            state=PublishState.FAILED,
+            topic=None,
+            value="true",
+            detail="broker not connected; refused rather than queued",
+        )
+    )
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await entity.async_turn_on()
+
+    assert raised.value.translation_key == "adopted_control_not_delivered"
+    assert raised.value.translation_placeholders is not None
+    assert raised.value.translation_placeholders["reason"] == "broker not connected; refused rather than queued"
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+async def test_an_adopted_control_translates_the_librarys_refusal(hass: HomeAssistant) -> None:
+    """A refusal reaches the caller in the user's language, like a curated one."""
+    coordinator, entity = _adopted_switch(hass)
+    coordinator.client.set_adopted_property = AsyncMock(
+        side_effect=SpanPanelServerError("No settable adopted property relay/enabled on device 'generator-1'")
+    )
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await entity.async_turn_on()
+
+    assert raised.value.translation_key == "adopted_control_failed"
+    assert raised.value.translation_placeholders is not None
+    assert raised.value.translation_placeholders["reason"] == (
+        "No settable adopted property relay/enabled on device 'generator-1'"
+    )
+    coordinator.async_request_refresh.assert_not_awaited()
 
 
 async def test_a_number_publishes_an_integer_where_the_declaration_says_integer(hass: HomeAssistant) -> None:

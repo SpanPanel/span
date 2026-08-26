@@ -424,6 +424,12 @@
     "admin_only_control": {
       "message": "Seul un administrateur Home Assistant peut piloter ce SPAN Panel."
     },
+    "adopted_control_failed": {
+      "message": "L'écriture de {property} sur {device} a été refusée : {reason}. Rien n'a été envoyé au panneau, la valeur est donc inchangée."
+    },
+    "adopted_control_not_delivered": {
+      "message": "L'écriture de {property} sur {device} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la valeur est donc inchangée et ne changera pas plus tard."
+    },
     "circuit_priority_failed": {
       "message": "Le changement de priorité pour {circuit} a été refusé : {reason}. Rien n'a été envoyé au panneau, la priorité est donc inchangée."
     },

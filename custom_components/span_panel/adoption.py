@@ -240,7 +240,7 @@ def adopted_device_info(
     """
     return DeviceInfo(
         identifiers={(DOMAIN, identifier)},
-        name=device.name or humanised(device.device_type.rsplit(".", 1)[-1]),
+        name=adopted_device_label(device),
         manufacturer=device.vendor_name or "Unknown",
         model=device.model or humanised(device.device_type.rsplit(".", 1)[-1]),
         serial_number=device.serial_number,
@@ -248,6 +248,15 @@ def adopted_device_info(
         hw_version=device.hardware_version,
         via_device_id=panel_device_id,
     )
+
+
+def adopted_device_label(device: AdoptedDevice) -> str:
+    """Return the name this device is known by, on its card and in its errors.
+
+    One function because the two have to agree: an error naming a device the
+    user cannot find in their device list is an error they cannot act on.
+    """
+    return device.name or humanised(device.device_type.rsplit(".", 1)[-1])
 
 
 def humanised(wire_token: str) -> str:
@@ -421,19 +430,40 @@ class AdoptedControl(AdoptedEntity):
         )
         self._node_id = declaration.node_id
         self._property_id = declaration.property_id
+        self._device_label = adopted_device_label(device)
 
     async def _publish(self, value: str) -> None:
-        """Write one value and refresh, or raise what the library raised.
+        """Write one value and refresh, reporting both ways it can fail to happen.
+
+        Through the same `_async_control` every curated control uses, and for the
+        same reason: a refusal (the device left the tree, the property stopped
+        being settable) never published anything, and a `FAILED` outcome was
+        never handed to the broker and will not arrive later. Either one leaves
+        the panel as it was, so returning normally would tell the person who
+        operated this control that their device changed when it did not.
+
+        The messages name the property and the device rather than the circuit or
+        the charger the curated keys name, because that is the whole identity an
+        adopted device has: this integration models nothing about it beyond its
+        declaration, and the wire vocabulary is what the user will find in the
+        panel's own tree.
 
         No `hasattr` guard, unlike the curated controls. Those ask because a
         transport may not implement an optional protocol at all; this entity only
         exists because a v1.0 tree reported an adopted device, and that is the
         same transport that carries the write.
         """
-        await self._async_guarded_control(
+        await self._async_control(
             self.coordinator.client.set_adopted_property(
                 self._device_wire_id, self._node_id, self._property_id, value
-            )
+            ),
+            command=f"a write to {self._node_id}/{self._property_id} on {self._device_wire_id}",
+            failed_key="adopted_control_failed",
+            not_delivered_key="adopted_control_not_delivered",
+            placeholders={
+                "property": f"{self._node_id}/{self._property_id}",
+                "device": self._device_label,
+            },
         )
         await self.coordinator.async_request_refresh()
 

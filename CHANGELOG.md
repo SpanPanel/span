@@ -168,7 +168,8 @@ working entirely in 2027.8.
   longer quietly unlocks the panel; a pending auto-relock comes back with the time it had left rather than starting its countdown over.
 - **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
   issued it rather than to nobody.
-- **Controls now report what happened to them**, so a command that was refused or never handed to the broker no longer looks like one the panel confirmed.
+- **Every control now reports what happened to it**, adopted devices' controls included, so a command that was refused or never handed to the broker no longer
+  looks like one the panel confirmed.
 - **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
   actually bound the panel's exposure.
 

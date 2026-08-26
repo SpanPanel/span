@@ -6,17 +6,16 @@ from typing import Any, ClassVar, Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
+from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSelect, create_adopted_selects
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
-from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
@@ -215,7 +214,14 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         A `FAILED` outcome is raised too, and separately worded: that command
         resolved an address and was never handed to the broker, which the
-        library promises means it will not arrive later either.
+        library promises means it will not arrive later either. Both live in
+        `_async_control`, which every control in this integration shares.
+
+        The `ServiceNotFound` branch is this platform's alone. Nothing on the
+        publish path calls a Home Assistant service -- the library does not
+        import Home Assistant at all -- so it survives as a guard against a
+        transport that one day does, and stays out of the shared helper rather
+        than being offered to controls that have never needed it.
         """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
@@ -226,8 +232,12 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         priority = CircuitPriority(option)
 
         try:
-            outcome = await self._async_guarded_control(
-                client.set_circuit_priority(self.id, priority.name)
+            await self._async_control(
+                client.set_circuit_priority(self.id, priority.name),
+                command=f"a priority change for {self.entity_id}",
+                failed_key="circuit_priority_failed",
+                not_delivered_key="circuit_priority_not_delivered",
+                placeholders={"circuit": construct_circuit_label(self._get_circuit(), self.id)},
             )
         except ServiceNotFound as snf:
             _LOGGER.warning(
@@ -242,30 +252,6 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                 notification_id=f"span_panel_service_not_found_{self.id}",
             )
             return
-        except SpanPanelServerError as err:
-            _LOGGER.warning(
-                "SPAN panel did not accept a priority change for %s: %s", self.entity_id, err
-            )
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="circuit_priority_failed",
-                translation_placeholders={
-                    "circuit": construct_circuit_label(self._get_circuit(), self.id),
-                    "reason": str(err),
-                },
-            ) from err
-
-        if outcome_is_failure(outcome):
-            reason = outcome_failure_reason(outcome)
-            _LOGGER.warning("Priority change for %s was not delivered: %s", self.entity_id, reason)
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="circuit_priority_not_delivered",
-                translation_placeholders={
-                    "circuit": construct_circuit_label(self._get_circuit(), self.id),
-                    "reason": reason,
-                },
-            )
 
         await self.coordinator.async_request_refresh()
 
