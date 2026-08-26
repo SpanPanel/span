@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from span_panel_api import PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.button import (
@@ -100,6 +101,36 @@ async def test_gfe_override_button_refusal_is_raised_at_the_caller() -> None:
     assert placeholders is not None
     assert placeholders["value"] == "GRID"
     assert placeholders["reason"] == "Core node not found in panel topology"
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gfe_override_button_undelivered_is_raised_at_the_caller() -> None:
+    """A `FAILED` outcome is the promise this override will not arrive later."""
+    snapshot = SpanPanelSnapshotFactory.create(
+        battery=SpanBatterySnapshotFactory.create(connected=False),
+        dominant_power_source="BATTERY",
+    )
+    coordinator = _make_button_coordinator(snapshot)
+    coordinator.client = MagicMock()
+    coordinator.client.set_dominant_power_source = AsyncMock(
+        return_value=PublishOutcome(
+            state=PublishState.FAILED,
+            topic=None,
+            value="GRID",
+            detail="broker not connected; refused rather than queued",
+        )
+    )
+    button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
+    button.hass = MagicMock()
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await button.async_press()
+
+    assert raised.value.translation_key == "gfe_override_not_delivered"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["reason"] == "broker not connected; refused rather than queued"
     coordinator.async_request_refresh.assert_not_awaited()
 
 

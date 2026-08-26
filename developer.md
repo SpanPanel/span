@@ -274,6 +274,36 @@ This closes the question of whether to go verbatim everywhere. The migration mec
 `entity_id`s — `sensor.span_panel_kitchen_instantPowerW`, breaking every user reference — or a decoupling of the two, which throws away the consistency the
 helper exists to provide. Closing the mapping gets the whole benefit for none of that.
 
+## Settability is read at setup, and deliberately not re-read
+
+Which curated control entities exist is decided once, in each platform's `async_setup_entry`, from what the panel declares about each circuit at that moment.
+`switch` gates on `is_user_controllable`; `select` gates on that and on `is_never_backup`, which is a separate commissioning flag — a never-backup circuit has a
+working relay and a priority the panel pins.
+
+SPAN documents that re-commissioning a circuit in place cycles that child device's `$state` and republishes its `$description` with a new `$settable`. So a
+circuit's settability can change while the integration is running, in either direction, and the setup-time gate cannot see it:
+
+- **A circuit that stops being controllable keeps its entity.** The entity outlives its own controllability and every write it attempts now fails.
+- **A circuit that becomes controllable gets no entity.** Nothing is watching it, because no entity exists to watch, so this direction cannot be noticed from an
+  entity at all.
+
+Both are safe, and the first is now well behaved. `span-panel-api` refuses a circuit relay or priority command for a circuit the panel declares non-settable,
+raising rather than publishing, and each control reports that refusal as a translated error on the control the user touched. Nothing is silently published and
+nothing is silently swallowed. The remedy for both directions is a reload.
+
+**Nothing re-evaluates settability at runtime, and the reason is not the one to expect.** Permanent entity IDs are not the obstacle: the entity registry maps
+`unique_id` to `entity_id`, so a reload gives every entity back the ID it had, both platforms already leave the registry entries of controls they do not create
+in place, and `coordinator.request_reload()` is already used when a circuit is renamed. The mechanism is available and precedented.
+
+The obstacle is the signal. SPAN reports a firmware defect in which the `$settable` re-toggle on the runtime re-commissioning path is skipped until the service
+restarts — which is why the library refuses when _either_ the declaration or the `relay-controllable` value says no. Driving an entry-wide reload off a flag the
+publisher warns can be stale would tear down every entity in the entry, and with them the grace-period, energy-dip and current-monitor state, on a value that
+may not be true yet. An entity that exists and cleanly explains why it cannot act is a better answer than one that vanishes and reappears.
+
+**If this is ever built, build it as a Repair rather than as a reload.** `schema_repairs` is the module for something re-derived from live state on every
+refresh: raise a Repair naming the circuit that changed, touch no entity, and let the user choose when to reload. Waiting is cheap, and worth doing until a
+panel is actually observed changing a circuit's settability in the field — so far that behaviour is documented by SPAN rather than seen here.
+
 ## Adopting a device this integration models nothing for
 
 The section above is about properties on devices we already read. This one is about a device type nobody modelled at all — a vendor's generator, heat pump or

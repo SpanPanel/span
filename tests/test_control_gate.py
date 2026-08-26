@@ -24,7 +24,7 @@ from custom_components.span_panel.control_gate import (
     outcome_is_failure,
 )
 from homeassistant.core import Context, Event, HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
@@ -623,7 +623,13 @@ async def test_a_refused_relay_leaves_the_switch_where_it_was(
 async def test_an_undelivered_relay_command_does_not_move_the_switch(
     hass: HomeAssistant,
 ) -> None:
-    """`FAILED` is the one outcome that promises the command will never arrive."""
+    """`FAILED` is the one outcome that promises the command will never arrive.
+
+    Raised, not logged. It means the same thing to the person who pressed the
+    switch as a refusal does -- the command did not happen and will not happen
+    later -- and it is worded as the different fact it is: this one resolved an
+    address and was never handed to the broker.
+    """
     from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
@@ -652,17 +658,30 @@ async def test_an_undelivered_relay_command_does_not_move_the_switch(
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
 
-    await entity.async_turn_on()
+    with pytest.raises(HomeAssistantError) as raised:
+        await entity.async_turn_on()
 
+    assert raised.value.translation_key == "circuit_relay_not_delivered"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["reason"] == "broker not connected; refused rather than queued"
+    # The optimistic write is last, so the raise cannot have reached it.
     assert entity.is_on == before
     entity.async_write_ha_state.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_an_unconfirmed_relay_command_still_shows_the_requested_state(
-    hass: HomeAssistant,
+@pytest.mark.parametrize("state", [PublishState.ACCEPTED, PublishState.UNCONFIRMED])
+async def test_a_handed_over_relay_command_still_shows_the_requested_state(
+    hass: HomeAssistant, state: PublishState
 ) -> None:
-    """`UNCONFIRMED` most often means the relay was already in that position."""
+    """Neither is a failure, and neither may discard what the user asked for.
+
+    `UNCONFIRMED` most often means the relay was already in that position, and
+    `ACCEPTED` means the broker took the message. Both were handed over and may
+    already have been acted on, so both keep the optimistic write that `FAILED`
+    and a refusal are denied.
+    """
     from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
     from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
@@ -679,10 +698,10 @@ async def test_an_unconfirmed_relay_command_still_shows_the_requested_state(
     coordinator.client = MagicMock()
     coordinator.client.set_circuit_relay = AsyncMock(
         return_value=PublishOutcome(
-            state=PublishState.UNCONFIRMED,
+            state=state,
             topic=RELAY.topic,
             value="CLOSED",
-            no_op=True,
+            no_op=state is PublishState.UNCONFIRMED,
             detail="the property already reports this value",
         )
     )

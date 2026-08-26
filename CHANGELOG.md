@@ -134,6 +134,9 @@ working entirely in 2027.8.
 - **A breaker your panel refuses to operate now says so.** The switch had no handling for a refused relay command at all, so the failure surfaced as a traceback
   in the log and a toggle that quietly sprang back. It now reports the panel's own reason where you pressed it, and the switch stays where the relay actually
   is.
+- **A control command that never reached your panel now says so.** A relay, priority, GFE override or charge-limit command that the transport could not hand
+  over — the broker was disconnected, so it was refused rather than queued — was written to the log and nowhere else. It is reported where you issued it, and
+  says plainly that nothing was queued and nothing will happen later.
 - **A refused circuit priority no longer blames your firmware.** The old message said the panel's firmware did not support the operation, which stopped being
   the only explanation once your panel could also declare an individual circuit's priority fixed. The priority select and the GFE override button now carry the
   panel's reason instead of guessing at one, and report it as an error on the control you used rather than as a notification that sits in the sidebar until you

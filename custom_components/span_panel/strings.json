@@ -431,8 +431,14 @@
     "circuit_priority_failed": {
       "message": "The priority change for {circuit} was refused: {reason}. Nothing was sent to the panel, so the priority is unchanged."
     },
+    "circuit_priority_not_delivered": {
+      "message": "The priority change for {circuit} could not be delivered to the panel: {reason}. It was refused rather than queued, so the priority is unchanged."
+    },
     "circuit_relay_failed": {
       "message": "The breaker command for {circuit} was refused: {reason}. Nothing was sent to the panel, so the breaker has not moved."
+    },
+    "circuit_relay_not_delivered": {
+      "message": "The breaker command for {circuit} could not be delivered to the panel: {reason}. It was refused rather than queued, so the breaker has not moved and will not move later."
     },
     "contextless_control_refused": {
       "message": "This SPAN panel refuses control commands that do not come from a logged-in user."
@@ -448,6 +454,9 @@
     },
     "evse_charge_limit_failed": {
       "message": "Failed to set the charge-current limit for charger {charger}: {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "The charge-current limit for charger {charger} could not be delivered to the panel: {reason}. It was refused rather than queued, so the limit is unchanged."
     },
     "evse_charge_limit_unsupported": {
       "message": "This SPAN panel offers no charge-current control for charger {charger}."
@@ -472,6 +481,9 @@
     },
     "gfe_override_failed": {
       "message": "The GFE override to {value} was refused: {reason}. Nothing was sent to the panel."
+    },
+    "gfe_override_not_delivered": {
+      "message": "The GFE override to {value} could not be delivered to the panel: {reason}. It was refused rather than queued, so nothing will happen later."
     },
     "graph_horizon_not_available": {
       "message": "Graph horizon manager is not available for the selected SPAN panel."

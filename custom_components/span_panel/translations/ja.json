@@ -431,8 +431,14 @@
     "circuit_priority_failed": {
       "message": "{circuit}の優先度変更は拒否されました: {reason}。パネルには何も送信されていないため、優先度は変わっていません。"
     },
+    "circuit_priority_not_delivered": {
+      "message": "{circuit}の優先度変更をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、優先度は変わっていません。"
+    },
     "circuit_relay_failed": {
       "message": "{circuit}のブレーカー操作は拒否されました: {reason}。パネルには何も送信されていないため、ブレーカーの状態は変わっていません。"
+    },
+    "circuit_relay_not_delivered": {
+      "message": "{circuit}のブレーカー操作をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、ブレーカーの状態は変わっておらず、後から変わることもありません。"
     },
     "contextless_control_refused": {
       "message": "この SPAN Panel は、ログインユーザーからではない操作コマンドを拒否します。"
@@ -448,6 +454,9 @@
     },
     "evse_charge_limit_failed": {
       "message": "充電器 {charger} の充電電流上限を設定できませんでした: {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "充電器 {charger} の充電電流上限をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、上限は変わっていません。"
     },
     "evse_charge_limit_unsupported": {
       "message": "このSPANパネルは充電器 {charger} の充電電流制御に対応していません。"
@@ -472,6 +481,9 @@
     },
     "gfe_override_failed": {
       "message": "{value}へのGFEオーバーライドは拒否されました: {reason}。パネルには何も送信されていません。"
+    },
+    "gfe_override_not_delivered": {
+      "message": "{value}へのGFEオーバーライドをパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、後から実行されることもありません。"
     },
     "graph_horizon_not_available": {
       "message": "選択されたSPANパネルではグラフホライズンマネージャーが利用できません。"

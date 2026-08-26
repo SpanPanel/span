@@ -431,8 +431,14 @@
     "circuit_priority_failed": {
       "message": "Le changement de priorité pour {circuit} a été refusé : {reason}. Rien n'a été envoyé au panneau, la priorité est donc inchangée."
     },
+    "circuit_priority_not_delivered": {
+      "message": "Le changement de priorité pour {circuit} n'a pas pu être transmis au panneau : {reason}. Il a été refusé plutôt que mis en file d'attente, la priorité est donc inchangée."
+    },
     "circuit_relay_failed": {
       "message": "La commande du disjoncteur pour {circuit} a été refusée : {reason}. Rien n'a été envoyé au panneau, le disjoncteur n'a donc pas changé de position."
+    },
+    "circuit_relay_not_delivered": {
+      "message": "La commande du disjoncteur pour {circuit} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, le disjoncteur n'a donc pas changé de position et ne changera pas plus tard."
     },
     "contextless_control_refused": {
       "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté."
@@ -448,6 +454,9 @@
     },
     "evse_charge_limit_failed": {
       "message": "Échec du réglage de la limite de courant de charge pour le chargeur {charger} : {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "La limite de courant de charge du chargeur {charger} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la limite est donc inchangée."
     },
     "evse_charge_limit_unsupported": {
       "message": "Ce panneau SPAN n'offre aucun contrôle du courant de charge pour le chargeur {charger}."
@@ -472,6 +481,9 @@
     },
     "gfe_override_failed": {
       "message": "Le forçage GFE vers {value} a été refusé : {reason}. Rien n'a été envoyé au panneau."
+    },
+    "gfe_override_not_delivered": {
+      "message": "Le forçage GFE vers {value} n'a pas pu être transmis au panneau : {reason}. Il a été refusé plutôt que mis en file d'attente, rien ne se produira donc plus tard."
     },
     "graph_horizon_not_available": {
       "message": "Le gestionnaire d'horizon de graphique n'est pas disponible pour le panneau SPAN sélectionné."

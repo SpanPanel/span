@@ -431,8 +431,14 @@
     "circuit_priority_failed": {
       "message": "A alteração de prioridade para {circuit} foi recusada: {reason}. Nada foi enviado ao painel, portanto a prioridade permanece inalterada."
     },
+    "circuit_priority_not_delivered": {
+      "message": "A alteração de prioridade para {circuit} não pôde ser entregue ao painel: {reason}. Foi recusada em vez de enfileirada, portanto a prioridade permanece inalterada."
+    },
     "circuit_relay_failed": {
       "message": "O comando do disjuntor para {circuit} foi recusado: {reason}. Nada foi enviado ao painel, portanto o disjuntor não mudou de posição."
+    },
+    "circuit_relay_not_delivered": {
+      "message": "O comando do disjuntor para {circuit} não pôde ser entregue ao painel: {reason}. Foi recusado em vez de enfileirado, portanto o disjuntor não mudou de posição nem mudará mais tarde."
     },
     "contextless_control_refused": {
       "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada."
@@ -448,6 +454,9 @@
     },
     "evse_charge_limit_failed": {
       "message": "Falha ao definir o limite de corrente de carga do carregador {charger}: {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "O limite de corrente de carga do carregador {charger} não pôde ser entregue ao painel: {reason}. Foi recusado em vez de enfileirado, portanto o limite permanece inalterado."
     },
     "evse_charge_limit_unsupported": {
       "message": "Este painel SPAN não oferece controlo da corrente de carga para o carregador {charger}."
@@ -472,6 +481,9 @@
     },
     "gfe_override_failed": {
       "message": "A substituição GFE para {value} foi recusada: {reason}. Nada foi enviado ao painel."
+    },
+    "gfe_override_not_delivered": {
+      "message": "A substituição GFE para {value} não pôde ser entregue ao painel: {reason}. Foi recusada em vez de enfileirada, portanto nada acontecerá mais tarde."
     },
     "graph_horizon_not_available": {
       "message": "O gerenciador de horizonte do gráfico não está disponível para o painel SPAN selecionado."

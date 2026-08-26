@@ -16,7 +16,13 @@ from span_panel_api.exceptions import SpanPanelServerError
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
-from .control_gate import ControlLock, ControlMode, ControlPolicy, outcome_is_failure
+from .control_gate import (
+    ControlLock,
+    ControlMode,
+    ControlPolicy,
+    outcome_failure_reason,
+    outcome_is_failure,
+)
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
@@ -287,12 +293,14 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         relay was already in the requested position. Neither is a failure and
         neither should discard the requested state.
 
-        A refusal is the third thing that can happen, and it is raised rather
-        than logged. The library refuses a relay command the panel declares
-        non-commandable before anything reaches the broker, so there is no
-        publish to report on and no coordinator update coming; swallowing it
-        would leave the person who pressed the switch with a control that
-        silently does nothing.
+        The two ways a command does not happen are reported the same way and
+        worded differently, because they are different facts. A refusal never
+        resolved an address -- the panel declares this relay non-commandable. A
+        `FAILED` outcome resolved one and never handed it over, because the
+        transport was closed or the broker was disconnected; the library
+        refuses such a write rather than letting paho queue it, so it is a
+        promise that nothing fires later against a panel nobody is watching.
+        Both raise: a control that silently does nothing is the defect.
         """
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_relay"):
@@ -319,12 +327,19 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
                 },
             ) from err
         if outcome_is_failure(outcome):
-            _LOGGER.warning(
-                "Relay command for %s was not delivered: %s",
-                self.entity_id,
-                outcome.detail or outcome.state,
+            reason = outcome_failure_reason(outcome)
+            _LOGGER.warning("Relay command for %s was not delivered: %s", self.entity_id, reason)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="circuit_relay_not_delivered",
+                translation_placeholders={
+                    "circuit": construct_circuit_label(
+                        self.coordinator.data.circuits.get(self._circuit_id),
+                        self._circuit_id,
+                    ),
+                    "reason": reason,
+                },
             )
-            return
 
         self._attr_is_on = is_on
         self.async_write_ha_state()

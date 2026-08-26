@@ -4,6 +4,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
+from span_panel_api import PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.const import CircuitPriority
@@ -127,6 +128,36 @@ async def test_async_select_option_refusal_is_raised_at_the_caller() -> None:
     assert placeholders is not None
     assert placeholders["circuit"] == "name"
     assert placeholders["reason"] == "Circuit 'id' declares its shed priority not settable"
+    coordinator.async_request_refresh.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_select_option_undelivered_is_raised_at_the_caller() -> None:
+    """A `FAILED` outcome is the promise this change will not arrive later."""
+    coordinator = _make_coordinator_with_circuit()
+    circuit = coordinator.data.circuits["id"]
+
+    select = SpanPanelCircuitsSelect(
+        coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name", "Test Device"
+    )
+    select.coordinator = coordinator
+    select.hass = MagicMock()
+
+    coordinator.client = AsyncMock()
+    coordinator.client.set_circuit_priority = AsyncMock(
+        return_value=PublishOutcome(
+            state=PublishState.FAILED, topic=None, value="NEVER", detail="transport is closed"
+        )
+    )
+
+    select._get_circuit = MagicMock(return_value=circuit)
+    with pytest.raises(HomeAssistantError) as raised:
+        await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
+
+    assert raised.value.translation_key == "circuit_priority_not_delivered"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["reason"] == "transport is closed"
     coordinator.async_request_refresh.assert_not_called()
 
 

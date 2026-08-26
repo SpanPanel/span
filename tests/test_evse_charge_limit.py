@@ -577,6 +577,34 @@ async def test_a_value_above_the_ceiling_is_refused_before_it_reaches_the_wire(
     bridge.publish.assert_not_called()
 
 
+async def test_a_command_the_transport_never_handed_over_is_reported(
+    hass: HomeAssistant,
+) -> None:
+    """`FAILED`, produced by the real transport declining while disconnected.
+
+    The bridge refuses rather than letting paho queue the publish across a
+    reconnect, which is what makes `FAILED` a promise: nothing fires later
+    against a panel nobody is watching. A promise that specific is worth telling
+    the user, and it is a different fact from a refusal -- this one resolved an
+    address and never handed it over.
+    """
+    tree = schema_one_tree()
+    client, bridge = _live_client()
+    bridge.publish.return_value = None
+    created = await _created(hass, schema_one_snapshot(tree), client)
+    entity = _for(created, tree, EVSE)
+    asked = _published(tree, EVSE, CEILING_TOPIC) - 8
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await entity.async_set_native_value(float(asked))
+
+    assert raised.value.translation_key == "evse_charge_limit_not_delivered"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["reason"] == "broker not connected; refused rather than queued"
+    entity.coordinator.async_request_refresh.assert_not_awaited()
+
+
 async def test_the_range_home_assistant_checks_is_the_commissioned_one(hass: HomeAssistant) -> None:
     """The first of the two checks, asserted through the range the entity reports.
 

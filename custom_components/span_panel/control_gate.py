@@ -379,6 +379,18 @@ def async_bind_caller(
     return CONTROL_CALLER.set(ControlCaller(context=context, entity_id=entity_id))
 
 
+def outcome_failure_reason(outcome: PublishOutcome) -> str:
+    """Return the library's own account of why a command was not delivered.
+
+    `detail` is the library's own words for why -- "broker not connected;
+    refused rather than queued" -- and is documented as free text for a human
+    reading a log or an audit row. So it is displayed and never parsed, the same
+    way a refusal's message is. The state is the fallback for an outcome
+    carrying no detail, which is worth saying poorly rather than not at all.
+    """
+    return outcome.detail or str(outcome.state)
+
+
 def outcome_is_failure(outcome: PublishOutcome) -> bool:
     """Whether this outcome means the command will never be delivered.
 

@@ -431,8 +431,14 @@
     "circuit_priority_failed": {
       "message": "Se rechazó el cambio de prioridad para {circuit}: {reason}. No se envió nada al panel, por lo que la prioridad no ha cambiado."
     },
+    "circuit_priority_not_delivered": {
+      "message": "El cambio de prioridad para {circuit} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que la prioridad no ha cambiado."
+    },
     "circuit_relay_failed": {
       "message": "Se rechazó el comando del interruptor para {circuit}: {reason}. No se envió nada al panel, por lo que el interruptor no ha cambiado de posición."
+    },
+    "circuit_relay_not_delivered": {
+      "message": "El comando del interruptor para {circuit} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el interruptor no ha cambiado de posición ni lo hará más tarde."
     },
     "contextless_control_refused": {
       "message": "Este SPAN Panel rechaza las órdenes de control que no proceden de un usuario con sesión iniciada."
@@ -448,6 +454,9 @@
     },
     "evse_charge_limit_failed": {
       "message": "No se pudo establecer el límite de corriente de carga para el cargador {charger}: {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "El límite de corriente de carga del cargador {charger} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el límite no ha cambiado."
     },
     "evse_charge_limit_unsupported": {
       "message": "Este panel SPAN no ofrece control de corriente de carga para el cargador {charger}."
@@ -472,6 +481,9 @@
     },
     "gfe_override_failed": {
       "message": "Se rechazó la anulación GFE a {value}: {reason}. No se envió nada al panel."
+    },
+    "gfe_override_not_delivered": {
+      "message": "La anulación GFE a {value} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que no ocurrirá nada más tarde."
     },
     "graph_horizon_not_available": {
       "message": "El gestor del horizonte del gráfico no está disponible para el SPAN Panel seleccionado."

@@ -12,7 +12,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .const import CONF_DEVICE_NAME, DOMAIN
-from .control_gate import ControlMode
+from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import construct_panel_unique_id_for_entry, has_bess
@@ -66,7 +66,9 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         A refusal is raised at the caller rather than filed as a persistent
         notification, the same way the circuit controls report one: nothing was
         published, so there is nothing to correct later, and the person who
-        pressed the button is the one who needs to hear about it.
+        pressed the button is the one who needs to hear about it. A `FAILED`
+        outcome -- handed to nobody, and promised not to arrive later -- is
+        raised on the same grounds and worded as the different fact it is.
         """
         client = self.coordinator.client
         if not hasattr(client, "set_dominant_power_source"):
@@ -74,7 +76,7 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
             return
 
         try:
-            await self._async_guarded_control(
+            outcome = await self._async_guarded_control(
                 client.set_dominant_power_source(self._override_value)
             )
         except SpanPanelServerError as err:
@@ -89,6 +91,18 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
                     "reason": str(err),
                 },
             ) from err
+
+        if outcome_is_failure(outcome):
+            reason = outcome_failure_reason(outcome)
+            _LOGGER.warning(
+                "GFE override to %s was not delivered: %s", self._override_value, reason
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="gfe_override_not_delivered",
+                translation_placeholders={"value": self._override_value, "reason": reason},
+            )
+
         await self.coordinator.async_request_refresh()
 
     @property

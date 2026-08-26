@@ -16,7 +16,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSelect, create_adopted_selects
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
-from .control_gate import ControlMode
+from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
@@ -213,6 +213,10 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         later and nobody to tell but the person who just made the choice -- and
         a notification keyed on the circuit would outlive the failure and sit in
         the sidebar until someone dismissed it by hand.
+
+        A `FAILED` outcome is raised too, and separately worded: that command
+        resolved an address and was never handed to the broker, which the
+        library promises means it will not arrive later either.
         """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
@@ -223,8 +227,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         priority = CircuitPriority(option)
 
         try:
-            await self._async_guarded_control(client.set_circuit_priority(self.id, priority.name))
-            await self.coordinator.async_request_refresh()
+            outcome = await self._async_guarded_control(
+                client.set_circuit_priority(self.id, priority.name)
+            )
         except ServiceNotFound as snf:
             _LOGGER.warning(
                 "Service not found when setting priority: %s.%s",
@@ -237,6 +242,7 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                 title="Service Not Found",
                 notification_id=f"span_panel_service_not_found_{self.id}",
             )
+            return
         except SpanPanelServerError as err:
             _LOGGER.warning(
                 "SPAN panel did not accept a priority change for %s: %s", self.entity_id, err
@@ -249,6 +255,20 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                     "reason": str(err),
                 },
             ) from err
+
+        if outcome_is_failure(outcome):
+            reason = outcome_failure_reason(outcome)
+            _LOGGER.warning("Priority change for %s was not delivered: %s", self.entity_id, reason)
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="circuit_priority_not_delivered",
+                translation_placeholders={
+                    "circuit": construct_circuit_label(self._get_circuit(), self.id),
+                    "reason": reason,
+                },
+            )
+
+        await self.coordinator.async_request_refresh()
 
     def select_option(self, option: str) -> None:
         """Select an option synchronously."""
