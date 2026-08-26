@@ -136,10 +136,6 @@
       "panel_ca": {
         "title": "A ler o certificado do painel",
         "description": "O Home Assistant obtém a autoridade de certificação que o seu painel publica e verifica que o certificado servido pelo painel está assinado por ela. Isto acontece antes de introduzir a sua frase-passe, pelo que a frase-passe e as credenciais que o painel devolve em troca viajam por uma ligação verificada e não em claro.\n\nSelecione **Submeter** para tentar novamente."
-      },
-      "panel_ca_confirm": {
-        "title": "Confiar no certificado deste painel",
-        "description": "O painel publicou esta autoridade de certificação, e o certificado que serve está assinado por ela:\n\n**{fingerprint}**\n\nAceitá-la fixa-a. A sua frase-passe é enviada por esta ligação, e tudo o que se segue utiliza-a. O Home Assistant irá parar e perguntar-lhe antes de aceitar outra.\n\n**O que isto protege e o que não protege.** Esta autoridade foi obtida através da sua rede local, numa ligação que não tinha nada com que se verificar a si própria. Quem apenas *escuta* a sua rede já não consegue ler a sua frase-passe nem as credenciais devolvidas pelo painel — esse é o caso comum e está agora fechado. Mas um equipamento que neste momento se interponha activamente entre o Home Assistant e o seu painel poderia ter respondido com uma autoridade própria, e continuaria a vê-las.\n\nComparar esta impressão digital com outra origem é o que fecha esse caso, e é por isso que é mostrada. Outra instalação desta integração ligada ao mesmo painel indicará o mesmo valor."
       }
     }
   },

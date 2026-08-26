@@ -136,10 +136,6 @@
       "panel_ca": {
         "title": "Lecture du certificat du panneau",
         "description": "Home Assistant récupère l'autorité de certification publiée par votre panneau et vérifie que le certificat présenté par celui-ci est signé par elle. Cela se produit avant que vous ne saisissiez votre mot de passe : celui-ci, ainsi que les identifiants que le panneau renvoie en échange, transitent donc par une connexion vérifiée plutôt qu'en clair.\n\nSélectionnez **Valider** pour réessayer."
-      },
-      "panel_ca_confirm": {
-        "title": "Faire confiance au certificat de ce panneau",
-        "description": "Le panneau a publié cette autorité de certification, et le certificat qu'il présente est signé par elle :\n\n**{fingerprint}**\n\nL'accepter l'épingle. Votre mot de passe est envoyé sur cette connexion, et tout ce qui suit l'utilise. Home Assistant s'arrêtera pour vous demander avant d'en accepter une autre.\n\n**Ce que cela protège et ce que cela ne protège pas.** Cette autorité a été récupérée sur votre réseau local, par une connexion qui n'avait rien pour se vérifier elle-même. Quiconque se contente d'*écouter* votre réseau ne peut plus lire votre mot de passe ni les identifiants renvoyés par le panneau — c'est le cas courant, et il est désormais fermé. Mais un appareil qui s'interpose activement entre Home Assistant et votre panneau en ce moment même a pu répondre avec sa propre autorité, et les verrait quand même.\n\nComparer cette empreinte avec une autre source est ce qui ferme ce cas, et c'est pourquoi elle est affichée. Une autre installation de cette intégration reliée au même panneau indiquera la même valeur."
       }
     }
   },

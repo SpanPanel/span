@@ -136,10 +136,6 @@
       "panel_ca": {
         "title": "Reading the panel's certificate",
         "description": "Home Assistant fetches the certificate authority your panel publishes, and checks that the certificate the panel serves is signed by it. This happens before you enter your passphrase, so the passphrase and the credentials the panel returns for it travel over a verified connection rather than in the clear.\n\nSelect **Submit** to try again."
-      },
-      "panel_ca_confirm": {
-        "title": "Trust this panel's certificate",
-        "description": "The panel published this certificate authority, and the certificate it serves is signed by it:\n\n**{fingerprint}**\n\nAccepting it pins it. Your passphrase is sent over this connection, and everything afterwards uses it. Home Assistant will stop and ask you before ever accepting a different one.\n\n**What this does and does not protect.** This authority was fetched over your local network on a connection that had nothing to verify itself against. Anyone merely *listening* on your network can no longer read your passphrase or the credentials the panel returns — that is the common case and it is now closed. But a device actively standing between Home Assistant and your panel right now could have answered with an authority of its own, and would still see them.\n\nComparing this fingerprint against another source is what closes that case, and it is why it is shown. Another install of this integration on the same panel will report the same value."
       }
     }
   },

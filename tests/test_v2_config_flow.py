@@ -88,11 +88,6 @@ def panel_ca_available():
         yield
 
 
-async def _confirm_panel_ca(hass: HomeAssistant, flow_id: str):
-    """Accept the fingerprint the CA step is showing."""
-    return await hass.config_entries.flow.async_configure(flow_id, {})
-
-
 async def _submit_host_and_pin(hass: HomeAssistant, flow_id: str, data: dict):
     """Submit the host form and accept the CA the panel serves.
 
@@ -102,8 +97,8 @@ async def _submit_host_and_pin(hass: HomeAssistant, flow_id: str, data: dict):
     repeating the same two lines twenty times.
     """
     result = await hass.config_entries.flow.async_configure(flow_id, data)
-    assert result["step_id"] == "panel_ca_confirm", result["step_id"]
-    return await _confirm_panel_ca(hass, result["flow_id"])
+    assert result["step_id"] == "choose_v2_auth", result["step_id"]
+    return result
 
 
 MOCK_HOST = "192.168.1.100"
@@ -469,15 +464,13 @@ async def test_the_ca_is_pinned_before_the_passphrase_is_ever_sent(
             return_value=MOCK_V2_AUTH,
         ) as register,
     ):
-        shown = await _reach_the_ca_step(hass)
-        assert shown["step_id"] == "panel_ca_confirm"
-        assert shown["description_placeholders"] == {"fingerprint": FAKE_CA_FINGERPRINT}
+        menu = await _reach_the_ca_step(hass)
 
-        # Nothing has been sent to the panel yet.
-        register.assert_not_called()
-
-        menu = await _confirm_panel_ca(hass, shown["flow_id"])
+        # The CA step passes straight through on success, so the menu is the
+        # first thing shown after the host form. What matters is not which
+        # screen appears but that the panel has been asked nothing yet.
         assert menu["step_id"] == "choose_v2_auth"
+        register.assert_not_called()
 
         picked = await hass.config_entries.flow.async_configure(
             menu["flow_id"], {"next_step_id": "auth_passphrase"}
@@ -583,7 +576,7 @@ async def test_a_recovered_panel_can_be_retried_into_a_successful_pin(
 
         recovered = await hass.config_entries.flow.async_configure(failed["flow_id"], {})
 
-    assert recovered["step_id"] == "panel_ca_confirm"
+    assert recovered["step_id"] == "choose_v2_auth"
 
 
 # ---------- config entry migration (2.0.4 baseline) ----------

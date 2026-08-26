@@ -700,12 +700,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             _LOGGER.warning("Panel %s served an unreadable CA: %s", self.host, err)
             return self._async_show_ca_error("ca_unavailable")
 
-        self._panel_ca_pem = ca_pem
-        return self.async_show_form(
-            step_id="panel_ca_confirm",
-            data_schema=vol.Schema({}),
-            description_placeholders={"fingerprint": fingerprint},
+        _LOGGER.info(
+            "Pinned the certificate authority published by panel %s (SHA-256 %s)",
+            self.host,
+            fingerprint,
         )
+        self._panel_ca_pem = ca_pem
+        return await self._async_adopt_anchor_and_authenticate()
 
     def _async_show_ca_error(self, reason: str) -> ConfigFlowResult:
         """Re-show the CA step with an actionable error.
@@ -725,11 +726,23 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             errors={"base": reason},
         )
 
-    async def async_step_panel_ca_confirm(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Adopt the accepted anchor, then authenticate over it."""
-        if user_input is None or self._panel_ca_pem is None:
+    async def _async_adopt_anchor_and_authenticate(self) -> ConfigFlowResult:
+        """Adopt the pinned anchor, then authenticate over it.
+
+        Not a step, and deliberately not a confirmation. Pinning happens either
+        way — the protection is that registration runs over the anchor, not that
+        somebody pressed Submit — and at first contact there is nothing to check
+        the fingerprint against: SPAN publishes it nowhere, so a screen asking a
+        user to accept it offers a decision they cannot make and an alarm they
+        cannot act on.
+
+        The fingerprint is surfaced where it is actionable instead: in
+        diagnostics, and in the Repair raised if it ever changes, where there is
+        a prior value to compare against and a real decision to take. It is also
+        logged here, so the value is recoverable from the moment of the install
+        that pinned it.
+        """
+        if self._panel_ca_pem is None:
             return await self.async_step_panel_ca()
 
         try:

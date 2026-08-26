@@ -136,10 +136,6 @@
       "panel_ca": {
         "title": "Leyendo el certificado del panel",
         "description": "Home Assistant obtiene la autoridad de certificación que publica su panel y comprueba que el certificado que este sirve está firmado por ella. Esto ocurre antes de que introduzca su contraseña, de modo que la contraseña y las credenciales que el panel devuelve a cambio viajan por una conexión verificada y no en claro.\n\nSeleccione **Enviar** para volver a intentarlo."
-      },
-      "panel_ca_confirm": {
-        "title": "Confiar en el certificado de este panel",
-        "description": "El panel ha publicado esta autoridad de certificación, y el certificado que sirve está firmado por ella:\n\n**{fingerprint}**\n\nAceptarla la fija. Su contraseña se envía por esta conexión, y todo lo posterior la utiliza. Home Assistant se detendrá a preguntarle antes de aceptar otra distinta.\n\n**Qué protege y qué no.** Esta autoridad se obtuvo a través de su red local por una conexión que no tenía nada con lo que verificarse. Quien simplemente *escuche* en su red ya no puede leer su contraseña ni las credenciales que devuelve el panel: ese es el caso habitual y queda cerrado. Pero un dispositivo que en este momento se interponga activamente entre Home Assistant y su panel podría haber respondido con una autoridad propia, y sí las vería.\n\nComparar esta huella digital con otra fuente es lo que cierra ese caso, y por eso se muestra. Otra instalación de esta integración sobre el mismo panel indicará el mismo valor."
       }
     }
   },

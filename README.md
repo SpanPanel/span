@@ -661,8 +661,8 @@ Home Assistant process — talks to the panel directly and is not subject to Hom
 ### The panel's certificate authority
 
 The panel issues its own certificate authority and signs its TLS certificate with it. **Before you are asked for your passphrase**, setup fetches that
-authority, checks that the certificate the panel actually serves is signed by it, and shows you the SHA-256 fingerprint to accept. Everything after that —
-registration itself, and every later connection — runs over the authority you accepted, and the integration stops rather than accepting a different one.
+authority, checks that the certificate the panel actually serves is signed by it, and pins it. Everything after that — registration itself, and every later
+connection — runs over that authority, and the integration stops rather than accepting a different one.
 
 The ordering is the point. Registration is the exchange that sends your passphrase and returns both the access token and the broker password, so it is the
 single most valuable message on your network. It now travels over a verified connection instead of in the clear.
@@ -675,9 +675,13 @@ anchor everything else is checked against. So:
 - A device **actively standing between** Home Assistant and your panel at that first fetch could answer with an authority of its own, sign a certificate with
   it, and still see them. Pinning cannot detect that on its own.
 
-Comparing the fingerprint against another source is what closes the second case, and it is exactly why the fingerprint is shown rather than accepted silently.
-Another install of this integration on the same panel reports the same value. After the first acceptance, nothing can change the authority without stopping and
-asking you.
+Comparing the fingerprint against another source is what closes the second case. Setup does not stop to ask you to do that, because at first contact there is
+nothing to compare against: SPAN does not publish the value, so the question could only be answered by pressing Submit. The fingerprint is put where it can
+actually be used instead — diagnostics report it under `panel_ca`, it is logged at setup, and another install of this integration on the same panel reports the
+same value.
+
+After the first pin, nothing can change the authority without stopping and asking you — and _that_ is a question you can answer, because there is a prior value
+to compare against. See the certificate-authority-changed entry in Troubleshooting.
 
 **There is no "continue without pinning" for a new panel.** If the authority cannot be read, or the certificate the panel serves is not signed by it, setup
 shows an error and stops. Submitting the form again retries the fetch, which is what a panel that was briefly unreachable needs. An opt-out would quietly
