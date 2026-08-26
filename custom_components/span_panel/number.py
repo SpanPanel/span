@@ -52,7 +52,7 @@ from span_panel_api import (
 )
 
 from . import SpanPanelConfigEntry
-from .adoption import AdoptedNumber, create_adopted_numbers
+from .adoption import create_adopted_numbers
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
@@ -297,7 +297,7 @@ async def async_setup_entry(
     coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data
 
-    entities: list[SpanEvseNumber | AdoptedNumber] = [
+    curated: list[SpanEvseNumber] = [
         SpanEvseNumber(coordinator, description, evse_id)
         for evse_id, evse in snapshot.evse.items()
         for description in EVSE_NUMBERS
@@ -307,11 +307,21 @@ async def async_setup_entry(
         # declare settable does not.
         if description.settable_fn(evse)
     ]
+    # Added before adoption is attempted, and in their own call, so that the
+    # controls this integration models cannot be lost to a device it does not.
+    # Adoption reads a vendor-extensible schema, so its inputs are the ones no
+    # amount of care here fully constrains -- a malformed numeric `$format` once
+    # raised out of `AdoptedNumber` and failed this whole coroutine, taking the
+    # charge-current limits of curated chargers with it. Ordering is what makes
+    # that structurally impossible; `classify` refusing an unreadable format is
+    # what makes it not happen. Both, because only one of them is a rule about
+    # data this integration controls.
+    async_add_entities(curated)
 
     # Settable numerics on devices this integration models nothing for, whose
     # bounds come from the declaration -- which is what made them numbers rather
     # than readings in the first place.
-    entities.extend(
+    async_add_entities(
         create_adopted_numbers(
             coordinator,
             snapshot,
@@ -319,5 +329,3 @@ async def async_setup_entry(
             panel_device_id=config_entry.runtime_data.panel_device_id,
         )
     )
-
-    async_add_entities(entities)

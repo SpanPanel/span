@@ -35,6 +35,7 @@ list, and why the classes below declare no `_residual_field_paths`.
 from __future__ import annotations
 
 import logging
+from math import isfinite
 from typing import TYPE_CHECKING, Final
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -102,7 +103,7 @@ def classify(declaration: AdoptedProperty) -> Platform:
     | `boolean`, settable | `SWITCH` |
     | `boolean` | `BINARY_SENSOR` |
     | `enum`, settable, with a `format` | `SELECT` |
-    | numeric, settable, with a `format` | `NUMBER` |
+    | numeric, settable, with a `format` **stating a range** | `NUMBER` |
     | anything else | `SENSOR` |
 
     **A settable property with no usable value domain falls back to a reading,
@@ -110,6 +111,15 @@ def classify(declaration: AdoptedProperty) -> Platform:
     bounds are not safer controls; they are broken ones. `format` is where Homie
     carries the domain, so its absence is the absence of the thing a control
     needs.
+
+    A numeric `format` that *is* present and states no range this integration can
+    read -- `"0-100"`, `"auto"` -- falls the same way, and for the same reason
+    rather than for safety: the bounds are what make a number a number, so a
+    declaration that carries none leaves nothing to build a control out of
+    except invented bounds. Homie 5 permits no such spelling, so this needs a
+    non-compliant publisher; what makes it worth a branch is that the parse used
+    to raise, and it raised inside `async_setup_entry`, where one vendor device
+    took down every number on the panel including the curated EVSE limits.
 
     Disabled-by-default is what gates a control, not read-only. Enabling an
     entity is a deliberate act and commanding it is a second one, the panel
@@ -122,7 +132,15 @@ def classify(declaration: AdoptedProperty) -> Platform:
     if declaration.datatype == ENUM_DATATYPE and settable_with_domain:
         return Platform.SELECT
     if declaration.datatype in NUMERIC_DATATYPES and settable_with_domain:
-        return Platform.NUMBER
+        if parse_number_format(declaration.format) is not None:
+            return Platform.NUMBER
+        _LOGGER.debug(
+            "Adopted %s/%s declares format %r, which states no range this integration can "
+            "read; surfacing the property as a reading rather than as a control",
+            declaration.node_id,
+            declaration.property_id,
+            declaration.format,
+        )
     return Platform.SENSOR
 
 
@@ -532,8 +550,23 @@ class AdoptedNumber(AdoptedControl, NumberEntity):
         *,
         panel_device_id: str,
     ) -> None:
-        """Take the bounds from the declaration, which is what makes this a number."""
+        """Take the bounds from the declaration, which is what makes this a number.
+
+        A declaration `parse_number_format` reads no range from never reaches
+        here -- `classify` routes it to a sensor -- so this raises rather than
+        substituting anything. There is no defensible substitute: bounds
+        invented here would offer the user a 0-100 control the panel never
+        declared, and a caller that got past `classify` has a bug worth hearing
+        about. `number.async_setup_entry` bounds what hearing about it can cost
+        by adding the curated controls first.
+        """
         bounds = parse_number_format(declaration.format)
+        if bounds is None:
+            raise ValueError(
+                f"{declaration.node_id}/{declaration.property_id} declares format "
+                f"{declaration.format!r}, which states no range; a numeric property "
+                "whose format cannot be read is classified as a sensor"
+            )
         super().__init__(
             coordinator, identifier, device, declaration, panel_device_id=panel_device_id
         )
@@ -587,18 +620,36 @@ def parse_enum_format(declared: str | None) -> list[str]:
     return [option.strip() for option in declared.split(",") if option.strip()]
 
 
-def parse_number_format(declared: str | None) -> tuple[float, float, float]:
-    """Return the `min:max:step` a Homie numeric `$format` states.
+def parse_number_format(declared: str | None) -> tuple[float, float, float] | None:
+    """Return the `min:max:step` a Homie numeric `$format` states, or None for no range.
 
-    Step defaults to 1 when the declaration gives only a range, which Homie
-    permits. `classify` has already required a format, so the two bounds are
-    present by the time this is called.
+    Step defaults to 1 when the declaration gives only a range, and either bound
+    may be left empty, both of which Homie permits.
+
+    **None is the answer for anything else, and this function never raises.**
+    It is the one place that decides whether a declared numeric domain is
+    readable, which is why `classify` asks it rather than testing the string
+    itself -- the platform decision and the bounds a `NUMBER` is built from then
+    cannot disagree. It used to raise `ValueError` straight out of `float()`,
+    which reached `number.async_setup_entry` and failed the whole platform, so a
+    single non-compliant publisher on a device nobody modelled cost the user
+    every number on the panel, curated EVSE charge limits included.
+
+    Non-finite bounds are refused alongside the unparseable ones: `float()`
+    accepts `"nan"` and `"inf"`, and neither is a bound a value can be clamped
+    to or a figure the frontend can be handed.
     """
-    parts = (declared or "").split(":")
-    minimum = float(parts[0]) if len(parts) > 0 and parts[0] else 0.0
-    maximum = float(parts[1]) if len(parts) > 1 and parts[1] else 100.0
-    step = float(parts[2]) if len(parts) > 2 and parts[2] else 1.0
-    return minimum, maximum, step
+    if not declared:
+        return None
+    parts = declared.split(":")
+    try:
+        minimum = float(parts[0]) if parts[0] else 0.0
+        maximum = float(parts[1]) if len(parts) > 1 and parts[1] else 100.0
+        step = float(parts[2]) if len(parts) > 2 and parts[2] else 1.0
+    except ValueError:
+        return None
+    bounds = (minimum, maximum, step)
+    return bounds if all(isfinite(bound) for bound in bounds) else None
 
 
 def adopted_control_count(snapshot: SpanPanelSnapshot) -> int:

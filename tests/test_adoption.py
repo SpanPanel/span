@@ -25,9 +25,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import AdoptedDevice, AdoptedProperty, PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
 
+from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.adoption import (
     CONTROL_PLATFORMS,
     DEVICE_CLASS_BY_UNIT,
+    AdoptedNumber,
     adopted_control_count,
     adopted_identifier,
     adopted_unique_id,
@@ -38,17 +40,22 @@ from custom_components.span_panel.adoption import (
     create_adopted_selects,
     create_adopted_sensors,
     create_adopted_switches,
+    parse_number_format,
     resolve_identifier,
 )
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.diagnostics import _adoption
 from custom_components.span_panel.id_builder import build_panel_unique_id
+from custom_components.span_panel.number import (
+    SpanEvseNumber,
+    async_setup_entry as number_async_setup_entry,
+)
 from custom_components.span_panel.util import (
     ADOPTED_IDENTIFIER_TOKEN,
     classify_sub_device_identifier,
 )
 
-from .factories import SpanPanelSnapshotFactory
+from .factories import SpanEvseSnapshotFactory, SpanPanelSnapshotFactory
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -693,3 +700,133 @@ def test_diagnostics_report_whether_a_device_is_proxied_and_not_by_whom() -> Non
     assert row["proxied"] is True
     assert "parent" not in row
     assert "gateway-1" not in json.dumps(block)
+
+
+# -- A numeric format this integration cannot read ---------------------------
+
+MALFORMED_FORMATS = ["0-100", "auto", "0:banana", "0:100:step", "nan:100", "0:inf", "%", "16 A"]
+"""Formats a non-compliant publisher can put on a numeric, none of them a range.
+
+Homie 5 spells a numeric domain `min:max` with an optional `:step` and permits
+nothing else, so every one of these needs a publisher that ignores the
+specification -- which a vendor-extensible schema is exactly where to meet.
+`nan:100` and `0:inf` are here because `float()` accepts both: they parse
+without raising and are still not bounds anything can be clamped to.
+"""
+
+
+@pytest.mark.parametrize("fmt", MALFORMED_FORMATS)
+def test_a_numeric_format_that_states_no_range_surfaces_as_a_reading(fmt: str) -> None:
+    """The same rule as a missing format, for a format that says nothing usable.
+
+    An unparseable range is no range, and a number with no bounds is not a safer
+    control than none -- it is an invented one. The property still has a value,
+    so it surfaces as the reading it can be.
+    """
+    assert classify(_property(datatype="float", fmt=fmt, settable=True)) is Platform.SENSOR
+    assert classify(_property(datatype="integer", fmt=fmt, settable=True)) is Platform.SENSOR
+
+
+@pytest.mark.parametrize("fmt", MALFORMED_FORMATS)
+def test_parsing_a_format_nothing_can_read_answers_none_rather_than_raising(fmt: str) -> None:
+    """`float()` raising here reached `async_setup_entry` and took the platform down."""
+    assert parse_number_format(fmt) is None
+
+
+@pytest.mark.parametrize(
+    ("fmt", "expected"),
+    [
+        ("0:100:1", (0.0, 100.0, 1.0)),
+        ("10:80:5", (10.0, 80.0, 5.0)),
+        ("10:80", (10.0, 80.0, 1.0)),
+        (":80", (0.0, 80.0, 1.0)),
+        ("10:", (10.0, 100.0, 1.0)),
+        (":", (0.0, 100.0, 1.0)),
+        ("-5:5:0.5", (-5.0, 5.0, 0.5)),
+    ],
+)
+def test_a_format_homie_permits_parses_exactly_as_it_always_did(
+    fmt: str, expected: tuple[float, float, float]
+) -> None:
+    """Defending against the malformed case may not move the well-formed one.
+
+    Homie leaves either bound omittable, and an omitted one has always taken
+    Home Assistant's own default -- `":"` included, which states neither and
+    still yields 0-100. Whether *that* is a range worth building a control from
+    is a question this change deliberately does not reopen: it is the behaviour
+    every existing install already has, and it is not what the crash was about.
+    """
+    assert parse_number_format(fmt) == expected
+
+
+def test_an_adopted_number_refuses_to_invent_the_bounds_it_was_not_given() -> None:
+    """The invariant `classify` establishes, asserted where it is relied on.
+
+    Nothing routes such a property here any more, so this is the guard rather
+    than the behaviour: a number built without bounds would present a 0-100
+    control the panel never declared, and being loud about a broken invariant is
+    better than shipping that. `number.async_setup_entry` bounds what the noise
+    can cost by adding the curated controls first.
+    """
+    declaration = _property(node_id="generator", property_id="setpoint", datatype="float", fmt="0-100", settable=True)
+    with pytest.raises(ValueError, match="states no range"):
+        AdoptedNumber(
+            MagicMock(data=_snapshot(_device(properties=(declaration,)))),
+            adopted_identifier(PANEL_SERIAL, "generator-1"),
+            _device(properties=(declaration,)),
+            declaration,
+            panel_device_id="panel-device-id",
+        )
+
+
+def _panel_with_a_charger_and_a_malformed_numeric() -> SpanPanelSnapshot:
+    """One curated EVSE that declares a settable limit, beside two unreadable formats."""
+    declarations = (
+        _property(node_id="generator", property_id="setpoint", datatype="float", fmt="0-100", settable=True, unit="%"),
+        _property(node_id="generator", property_id="ceiling", datatype="integer", fmt="auto", settable=True, unit="A"),
+    )
+    charger = replace(
+        SpanEvseSnapshotFactory.create(node_id="evse-0", serial_number="SN-EVSE-SYNTH"),
+        charge_current_limit_a=16,
+        charge_current_ceiling_a=48,
+        charge_current_limit_settable=True,
+    )
+    return replace(_snapshot(_device(properties=declarations)), evse={"SN-EVSE-SYNTH": charger})
+
+
+async def test_a_vendor_format_nothing_can_read_leaves_the_curated_control_standing(
+    hass: HomeAssistant,
+) -> None:
+    """The blast radius this finding is about, asserted through the platform.
+
+    A `float()` that raised while building an adopted number raised inside
+    `number.async_setup_entry`, so a non-compliant publisher on some device
+    nobody modelled cost the user the EVSE charge-current limit -- a curated
+    control on curated hardware, with nothing on screen to say why.
+    """
+    snapshot = _panel_with_a_charger_and_a_malformed_numeric()
+    coordinator = MagicMock(data=snapshot)
+    coordinator.panel_offline = False
+    coordinator.last_update_success = True
+    coordinator.unresolved_paths = frozenset()
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={}, title="SPAN Panel", unique_id=PANEL_SERIAL)
+    entry.add_to_hass(hass)
+    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    coordinator.config_entry = entry
+    added: list[object] = []
+
+    await number_async_setup_entry(hass, entry, lambda entities, *args, **kwargs: added.extend(entities))
+
+    assert [type(entity).__name__ for entity in added] == ["SpanEvseNumber"]
+    assert isinstance(added[0], SpanEvseNumber)
+
+
+def test_the_malformed_numeric_still_reaches_the_user_as_a_reading(hass: HomeAssistant) -> None:
+    """Routed to a sensor, not dropped: the property has a value, only no domain."""
+    snapshot = _panel_with_a_charger_and_a_malformed_numeric()
+    sensors = create_adopted_sensors(
+        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+    )
+
+    assert sorted(str(entity.name) for entity in sensors) == ["Ceiling", "Setpoint"]
+    assert adopted_control_count(snapshot) == 0

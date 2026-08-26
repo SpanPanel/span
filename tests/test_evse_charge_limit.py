@@ -210,13 +210,20 @@ def _coordinator(snapshot: SpanPanelSnapshot, client: object | None = None) -> M
 async def _created(
     hass: HomeAssistant, snapshot: SpanPanelSnapshot, client: object | None = None
 ) -> list[SpanEvseNumber]:
-    """Everything `number.async_setup_entry` creates for one snapshot."""
+    """Everything `number.async_setup_entry` creates for one snapshot.
+
+    Every call, not the last one: the platform adds the curated numbers in their
+    own call before it attempts the adopted ones, so that a device this
+    integration models nothing for cannot cost the user a control it does model.
+    """
     coordinator = _coordinator(snapshot, client)
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, coordinator.config_entry, async_add_entities)
 
-    added: Sequence[SpanEvseNumber] = async_add_entities.call_args.args[0]
+    added: Sequence[SpanEvseNumber] = [
+        entity for call in async_add_entities.call_args_list for entity in call.args[0]
+    ]
     for entity in added:
         assert isinstance(entity, SpanEvseNumber)
     return list(added)
@@ -387,7 +394,9 @@ async def test_the_control_is_unavailable_while_the_panel_is_offline(hass: HomeA
     coordinator = _coordinator(schema_one_snapshot(tree))
     async_add_entities = MagicMock()
     await async_setup_entry(hass, coordinator.config_entry, async_add_entities)
-    entity = _for(async_add_entities.call_args.args[0], tree, EVSE)
+    entity = _for(
+        [entity for call in async_add_entities.call_args_list for entity in call.args[0]], tree, EVSE
+    )
     assert entity.available is True
 
     coordinator.panel_offline = True
