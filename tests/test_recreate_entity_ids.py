@@ -20,18 +20,21 @@ cannot appear.
 
 from __future__ import annotations
 
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_registry import EntityNamePart
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     MockEntityPlatform,
 )
+from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
@@ -75,7 +78,7 @@ CIRCUIT_NUMBERS = {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True}
 POWER_DESCRIPTION = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_power")
 
 
-def _snapshot(circuit_name: str):
+def _snapshot(circuit_name: str) -> SpanPanelSnapshot:
     """Build a one-circuit panel snapshot with the circuit named as given."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id=CIRCUIT_ID, name=circuit_name, tabs=[15]
@@ -83,7 +86,9 @@ def _snapshot(circuit_name: str):
     return SpanPanelSnapshotFactory.create(serial_number=SERIAL, circuits={CIRCUIT_ID: circuit})
 
 
-def _coordinator(hass: HomeAssistant, snapshot, entry: MockConfigEntry) -> MagicMock:
+def _coordinator(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, entry: MockConfigEntry
+) -> MagicMock:
     """Build a coordinator standing in for a live one, bound to the real hass."""
     coordinator = MagicMock()
     coordinator.hass = hass
@@ -96,8 +101,8 @@ def _coordinator(hass: HomeAssistant, snapshot, entry: MockConfigEntry) -> Magic
     return coordinator
 
 
-class _Install:
-    """One install of the sensor platform, reloadable.
+class _Install[E: Entity]:
+    """One install of one platform's circuit entity, reloadable.
 
     `load` a second time is what a reload is: the entry's entities are torn down
     and rebuilt from the current snapshot, against the entity registry that
@@ -105,7 +110,58 @@ class _Install:
     `EntityPlatform` path, so a preset entity_id travels the same route into
     `async_get_or_create` that it does in a running install, and the teardown is
     the same `async_reset` an entry unload performs.
+
+    Four platforms take that route and it is the same route for all four, so
+    there is one `load` and each subclass says only what differs: the domain it
+    registers under and the entity it constructs. A subclass that owned a copy of
+    `load` instead would be free to drift away from the path under test, which is
+    the one thing these cases exist to exercise.
     """
+
+    _domain: ClassVar[str]
+    """The entity platform domain this install registers under."""
+
+    def __init__(self, hass: HomeAssistant, entry: MockConfigEntry) -> None:
+        self._hass = hass
+        self._entry = entry
+        self._platform: MockEntityPlatform | None = None
+
+    def _build(self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str) -> E:
+        """Construct the one entity this install adds. Subclasses answer."""
+        raise NotImplementedError
+
+    async def load(self, circuit_name: str) -> E:
+        """Tear down any previous platform, then set one up from fresh panel data."""
+        if self._platform is not None:
+            await self._platform.async_reset()
+
+        snapshot = _snapshot(circuit_name)
+        coordinator = _coordinator(self._hass, snapshot, self._entry)
+        self._entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator, panel_device_id="panel-device-id"
+        )
+
+        self._platform = MockEntityPlatform(
+            self._hass, domain=self._domain, platform_name=DOMAIN
+        )
+        self._platform.config_entry = self._entry
+
+        entity = self._build(coordinator, snapshot, circuit_name)
+        await self._platform.async_add_entities([entity])
+        await self._hass.async_block_till_done()
+
+        assert entity.hass is not None, "entity was rejected before it reached the registry"
+        return entity
+
+
+class _SensorInstall(_Install[SpanCircuitPowerSensor]):
+    """One install of the circuit power sensor.
+
+    The only one of the four that can be shown on a sub-device's card, so it is
+    the only one that takes a `device_info_override`.
+    """
+
+    _domain: ClassVar[str] = "sensor"
 
     def __init__(
         self,
@@ -113,89 +169,46 @@ class _Install:
         entry: MockConfigEntry,
         device_info_override: DeviceInfo | None = None,
     ) -> None:
-        self._hass = hass
-        self._entry = entry
+        super().__init__(hass, entry)
         self._device_info_override = device_info_override
-        self._platform: MockEntityPlatform | None = None
 
-    async def load(self, circuit_name: str) -> SpanCircuitPowerSensor:
-        """Tear down any previous platform, then set one up from fresh panel data."""
-        if self._platform is not None:
-            await self._platform.async_reset()
-
-        snapshot = _snapshot(circuit_name)
-        coordinator = _coordinator(self._hass, snapshot, self._entry)
-        self._entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=coordinator, panel_device_id="panel-device-id"
-        )
-
-        self._platform = MockEntityPlatform(self._hass, domain="sensor", platform_name=DOMAIN)
-        self._platform.config_entry = self._entry
-
-        sensor = SpanCircuitPowerSensor(
+    def _build(
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+    ) -> SpanCircuitPowerSensor:
+        """Build the power sensor, on the panel's card or a sub-device's."""
+        return SpanCircuitPowerSensor(
             coordinator,
             POWER_DESCRIPTION,
             snapshot,
             CIRCUIT_ID,
             device_info_override=self._device_info_override,
         )
-        await self._platform.async_add_entities([sensor])
-        await self._hass.async_block_till_done()
-
-        assert sensor.hass is not None, "entity was rejected before it reached the registry"
-        return sensor
 
 
-class _SwitchInstall(_Install):
-    """One install of the breaker switch, reloadable the same way."""
+class _SwitchInstall(_Install[SpanPanelCircuitsSwitch]):
+    """One install of the breaker switch."""
 
-    async def load(self, circuit_name: str) -> SpanPanelCircuitsSwitch:  # type: ignore[override]
-        """Tear down any previous platform, then set one up from fresh panel data."""
-        if self._platform is not None:
-            await self._platform.async_reset()
+    _domain: ClassVar[str] = "switch"
 
-        snapshot = _snapshot(circuit_name)
-        coordinator = _coordinator(self._hass, snapshot, self._entry)
-        self._entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=coordinator, panel_device_id="panel-device-id"
-        )
-
-        self._platform = MockEntityPlatform(self._hass, domain="switch", platform_name=DOMAIN)
-        self._platform.config_entry = self._entry
-
-        switch = SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, circuit_name, "SPAN Panel")
-        await self._platform.async_add_entities([switch])
-        await self._hass.async_block_till_done()
-
-        assert switch.hass is not None, "entity was rejected before it reached the registry"
-        return switch
+    def _build(
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+    ) -> SpanPanelCircuitsSwitch:
+        """Build the breaker switch."""
+        return SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, circuit_name, "SPAN Panel")
 
 
-class _SelectInstall(_Install):
-    """One install of the circuit-priority select, reloadable the same way."""
+class _SelectInstall(_Install[SpanPanelCircuitsSelect]):
+    """One install of the circuit-priority select."""
 
-    async def load(self, circuit_name: str) -> SpanPanelCircuitsSelect:  # type: ignore[override]
-        """Tear down any previous platform, then set one up from fresh panel data."""
-        if self._platform is not None:
-            await self._platform.async_reset()
+    _domain: ClassVar[str] = "select"
 
-        snapshot = _snapshot(circuit_name)
-        coordinator = _coordinator(self._hass, snapshot, self._entry)
-        self._entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=coordinator, panel_device_id="panel-device-id"
-        )
-
-        self._platform = MockEntityPlatform(self._hass, domain="select", platform_name=DOMAIN)
-        self._platform.config_entry = self._entry
-
-        select = SpanPanelCircuitsSelect(
+    def _build(
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+    ) -> SpanPanelCircuitsSelect:
+        """Build the circuit-priority select."""
+        return SpanPanelCircuitsSelect(
             coordinator, CIRCUIT_PRIORITY_DESCRIPTION, CIRCUIT_ID, circuit_name, "SPAN Panel"
         )
-        await self._platform.async_add_entities([select])
-        await self._hass.async_block_till_done()
-
-        assert select.hass is not None, "entity was rejected before it reached the registry"
-        return select
 
 
 @pytest.fixture
@@ -230,7 +243,7 @@ async def test_the_first_install_takes_its_entity_id_from_the_circuit_name(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     """Baseline for every case below: the ID before any rename."""
-    sensor = await _Install(hass, entry).load(ORIGINAL_NAME)
+    sensor = await _SensorInstall(hass, entry).load(ORIGINAL_NAME)
 
     assert sensor.entity_id == ORIGINAL_ENTITY_ID
 
@@ -243,7 +256,7 @@ async def test_renaming_a_circuit_does_not_move_an_existing_entity_id(
     Dashboards, automations, and recorder history all key off the entity_id.
     Recreate is an offer the user accepts; a rename is not.
     """
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     await install.load(ORIGINAL_NAME)
     sensor = await install.load(RENAMED)
 
@@ -263,7 +276,7 @@ async def test_renaming_a_circuit_does_not_move_the_unique_id(
     it would break any future migration that has to predict what a unique_id
     looks like.
     """
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     before = await install.load(ORIGINAL_NAME)
     unique_id_before = before.unique_id
 
@@ -287,7 +300,7 @@ async def test_renaming_a_circuit_refreshes_the_registrys_entity_id_suggestion(
     *base*, not a whole object id: Core prefixes the device and, where the user
     has assigned one, the area.
     """
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     await install.load(ORIGINAL_NAME)
     await install.load(RENAMED)
 
@@ -302,7 +315,7 @@ async def test_recreate_entity_ids_proposes_the_renamed_id(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
     """Issue #252 itself, at the API the button calls."""
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     await install.load(ORIGINAL_NAME)
     await install.load(RENAMED)
 
@@ -325,7 +338,7 @@ async def test_an_unrenamed_circuit_is_offered_its_own_entity_id(
     that moves on every reload would satisfy it while offering every user a
     pointless rename.
     """
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
@@ -350,7 +363,7 @@ async def test_circuit_numbers_mode_is_offered_its_own_tab_based_id(
     """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     await install.load(ORIGINAL_NAME)
     sensor = await install.load(RENAMED)
 
@@ -369,7 +382,7 @@ async def test_circuit_numbers_mode_still_shows_the_panels_name(
     """Phase 2 sync still follows the panel -- through a field that cannot move an id."""
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     await install.load(ORIGINAL_NAME)
     sensor = await install.load(RENAMED)
 
@@ -388,7 +401,7 @@ async def test_circuit_numbers_mode_releases_a_name_an_older_release_wrote(
     """An install upgrading has the old scheme's name handed back to it."""
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
 
     registry = er.async_get(hass)
@@ -410,7 +423,7 @@ async def test_releasing_the_name_is_idempotent(
     """Two reloads in a row are the same as one. There is no migration to run twice."""
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
     registry = er.async_get(hass)
     registry.async_update_entity(sensor.entity_id, name=f"{ORIGINAL_NAME} Power")
@@ -435,7 +448,7 @@ async def test_a_name_the_user_set_is_never_released(
     """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
 
     registry = er.async_get(hass)
@@ -455,7 +468,7 @@ async def test_circuit_numbers_mode_does_not_move_ids_across_the_change(
     """Neither id moves, whatever happens to the name."""
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     before = await install.load(ORIGINAL_NAME)
     unique_id_before = before.unique_id
 
@@ -491,11 +504,17 @@ ENERGY_DESCRIPTION = next(
 )
 
 
-class _LegacyInstall(_Install):
+class _LegacyInstall(_Install[SpanCircuitEnergySensor]):
     """An install whose energy sensor id was composed from the descriptor name."""
 
+    _domain: ClassVar[str] = "sensor"
+
     def _seed(self) -> str:
-        """Register the entity the way a pre-preset install left it."""
+        """Register the entity the way a pre-preset install left it.
+
+        Called by the cases that need one, not by `load`: the point of several of
+        them is what happens when there is nothing seeded at all.
+        """
         registry = er.async_get(self._hass)
         unique_id = build_circuit_unique_id(SERIAL, CIRCUIT_ID, "consumedEnergyWh")
         entry = registry.async_get_or_create(
@@ -508,28 +527,11 @@ class _LegacyInstall(_Install):
         )
         return entry.entity_id
 
-    async def load(self, circuit_name: str) -> SpanCircuitEnergySensor:  # type: ignore[override]
-        """Set the platform up for the energy sensor, tearing down any previous one."""
-        if self._platform is not None:
-            await self._platform.async_reset()
-
-        snapshot = _snapshot(circuit_name)
-        coordinator = _coordinator(self._hass, snapshot, self._entry)
-        self._entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=coordinator, panel_device_id="panel-device-id"
-        )
-
-        self._platform = MockEntityPlatform(self._hass, domain="sensor", platform_name=DOMAIN)
-        self._platform.config_entry = self._entry
-
-        sensor = SpanCircuitEnergySensor(
-            coordinator, ENERGY_DESCRIPTION, snapshot, CIRCUIT_ID
-        )
-        await self._platform.async_add_entities([sensor])
-        await self._hass.async_block_till_done()
-
-        assert sensor.hass is not None, "entity was rejected before it reached the registry"
-        return sensor
+    def _build(
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+    ) -> SpanCircuitEnergySensor:
+        """Build the energy sensor, whose id has shipped with two suffix spellings."""
+        return SpanCircuitEnergySensor(coordinator, ENERGY_DESCRIPTION, snapshot, CIRCUIT_ID)
 
 
 async def test_upgrading_does_not_offer_to_renormalise_a_legacy_suffix(
@@ -674,7 +676,7 @@ async def test_an_area_the_user_assigned_reaches_the_proposal_under_default_part
     integration -- and only where the user has actually assigned an area.
     """
     hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
     assert sensor.entity_id == CIRCUIT_NUMBERS_ENTITY_ID  # no area yet: identical to today
 
@@ -703,7 +705,7 @@ async def test_an_unnamed_circuit_in_friendly_mode_still_gets_a_distinct_id(
     circuit on the panel `sensor.span_panel_power`, and the registry would
     disambiguate them with `_2`, `_3`, ... in whatever order they were added.
     """
-    sensor = await _Install(hass, entry).load("")
+    sensor = await _SensorInstall(hass, entry).load("")
 
     assert sensor.entity_id == "sensor.span_panel_circuit_15_power"
 
@@ -745,7 +747,7 @@ async def test_an_existing_sub_device_sensor_is_offered_its_own_id(
     """An EVSE feed circuit's sensor is spelled with the panel, and stays so."""
     seeded = _seed_power_entity(hass, entry, "span_panel_refrigerator_power")
 
-    install = _Install(hass, entry, device_info_override=EVSE_DEVICE_INFO)
+    install = _SensorInstall(hass, entry, device_info_override=EVSE_DEVICE_INFO)
     sensor = await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
@@ -763,7 +765,7 @@ async def test_an_existing_sub_device_sensor_still_follows_a_rename(
     """Keeping the shape must not cost #252: the name half still tracks the panel."""
     seeded = _seed_power_entity(hass, entry, "span_panel_refrigerator_power")
 
-    install = _Install(hass, entry, device_info_override=EVSE_DEVICE_INFO)
+    install = _SensorInstall(hass, entry, device_info_override=EVSE_DEVICE_INFO)
     await install.load(ORIGINAL_NAME)
     await install.load(RENAMED)
 
@@ -780,7 +782,7 @@ async def test_an_existing_sensor_on_a_no_prefix_install_is_offered_its_own_id(
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
     seeded = _seed_power_entity(hass, entry, "refrigerator_power")
 
-    install = _Install(hass, entry)
+    install = _SensorInstall(hass, entry)
     sensor = await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
@@ -798,7 +800,7 @@ async def test_a_new_sensor_on_a_no_prefix_install_composes_like_every_other_ent
     """The preset is for ids that exist. Nothing new inherits the prefix-less shape."""
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
 
-    sensor = await _Install(hass, entry).load(ORIGINAL_NAME)
+    sensor = await _SensorInstall(hass, entry).load(ORIGINAL_NAME)
 
     assert sensor.entity_id == ORIGINAL_ENTITY_ID
 
