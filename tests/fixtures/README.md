@@ -1,8 +1,15 @@
-# Adapter fixtures
+# Test fixtures
 
-Real schema-adapter inputs, used by the field-path conformance tests via `tests/adapter_fixtures.py`. They are **committed rather than generated** so the test
-suite has no cross-repo dependency and no runtime wheel has to keep shipping test data for this repository's benefit. The cost of a copy is that it can go
-stale, which for `schema_one_tree.json` is answered by the two guards below.
+Two kinds of vendored byte copy live here, on the same terms: committed rather than generated, held to their source by a guard, and exempt from the formatters
+because in both cases the bytes are the artifact.
+
+**Adapter captures** (`schema_*.json`) are real schema-adapter inputs, used by the field-path conformance tests via `tests/adapter_fixtures.py`. They are
+committed so the test suite has no cross-repo dependency and no runtime wheel has to keep shipping test data for this repository's benefit. The cost of a copy
+is that it can go stale, which for `schema_one_tree.json` is answered by the two guards below. Everything from here to "Why the flat capture has no byte guard"
+is about them.
+
+**Historical `pyproject.toml` copies** (`pyproject_*.toml`) are this repository's own file at the two commits where the library path override went wrong. See
+"[The historical pyproject copies](#the-historical-pyproject-copies)".
 
 ## Provenance
 
@@ -137,10 +144,34 @@ the byte comparison vacuous: a copy compared against the thing it was just copie
 their source are the whole mechanism.** That freedom to disagree is what let the comparison find a capture vendored from a stale path override, which nothing
 else in either repository could see. A fixture that silently re-syncs itself cannot report anything.
 
+## The historical pyproject copies
+
+`pyproject_both_blocks_redirected.toml` and `pyproject_type_checker_path_left_behind.toml` are byte copies of this repository's own `pyproject.toml`, taken from
+its git history. Each has a `.source` file beside it recording the commit it came from, and `tests/test_library_path_hook.py` holds the copy to that commit.
+
+| File                                           | Commit     | State                                                                         |
+| ---------------------------------------------- | ---------- | ----------------------------------------------------------------------------- |
+| `pyproject_both_blocks_redirected.toml`        | `3cbf02a`  | `[tool.uv.sources]` **and** `[tool.pyright].extraPaths` on a scratch worktree |
+| `pyproject_type_checker_path_left_behind.toml` | `82a512f^` | sources block corrected, `extraPaths` still on the worktree                   |
+
+They are the failing cases for `scripts/check-library-path.py`, the hook that rejects a `span-panel-api` path naming anything but `../../span/span-panel-api`.
+The real files rather than constructed ones, because **a gate proven against a made-up example is proven against the wrong thing** — a synthetic version of a
+defect is written by somebody who already knows what the rule checks, so it exercises the rule rather than the mistake. The second file matters as much as the
+first: it is the interval between the two corrections, several commits during which the repository looked fixed, and a hook covering only `[tool.uv.sources]`
+calls it clean.
+
+Unlike the adapter captures, these cannot go stale. A commit is content-addressed, so `3cbf02a:pyproject.toml` cannot become different bytes; the only failure
+the comparison can report is a copy that was wrong when it was vendored. That is why its guard **skips** when the object is unreachable — a shallow clone has no
+history to compare against, and failing there would report the clone rather than the fixture. This is the one place in this directory where a skip is not hiding
+a moving target; "A skip here is not a pass" above is the case where it would be, and that distinction is the whole reason this one is allowed.
+
+Re-vendor either with `git show <commit>:pyproject.toml > tests/fixtures/<name>.toml`, and only to correct a copy — never to make a failing case pass.
+
 ## These files are exempt from formatting
 
-`tests/fixtures/schema_*.json` is excluded from every hook that rewrites files — `trailing-whitespace`, `end-of-file-fixer` and `mixed-line-ending` in
-`prek.toml`, and `tests/fixtures/schema_*.json` in `.prettierignore`.
+`tests/fixtures/schema_*.json` and `tests/fixtures/pyproject_*.toml` are excluded from every hook that rewrites files — `trailing-whitespace`,
+`end-of-file-fixer` and `mixed-line-ending` in `prek.toml`, and `tests/fixtures/schema_*.json` in `.prettierignore` (Prettier cannot format TOML, so the
+historical copies need no line there).
 
 The reason is the whole point of the byte comparison: **these are captured bytes, not source we own.** A vendored fixture held byte-identical to its source and
 an unconditional formatter cannot both exist, and it is the formatter that has to yield. A capture reindented on the way in is one nothing upstream can hold to
@@ -157,12 +188,14 @@ Prettier is excluded as a **precaution, not a fix.** It has never touched these 
 checkout. The line still earns its place: `schema_zero_types.json` carries its producer's 4-space indentation, and Prettier under `.prettierrc` rewrites it from
 14675 to 11779 bytes. That file has no byte guard, so nothing would report it.
 
-The scope is `schema_*.json` rather than the whole directory, because only the adapter captures have this property. `tests/fixtures/README.md` is prose this
+The scope is two prefixes rather than the whole directory, because only the vendored byte copies have this property. `tests/fixtures/README.md` is prose this
 repository owns and should keep being formatted; the migration YAMLs are hand-written source; and `unread_declarations_baseline.json`, despite being a
-mechanically-checked inventory, is hand-maintained — its values are one-line human explanations. The `schema_*` prefix is the vocabulary
-`tests/adapter_fixtures.py` already uses for adapter captures, so the next one vendored is covered without anyone remembering to widen the rule.
+mechanically-checked inventory, is hand-maintained — its values are one-line human explanations. Each prefix is a vocabulary something already uses — `schema_*`
+is `tests/adapter_fixtures.py`'s for adapter captures, `pyproject_*` is `tests/test_library_path_hook.py`'s for historical copies of this repository's own
+`pyproject.toml` — so the next one vendored under either is covered without anyone remembering to widen the rule.
 
-The read-only hooks still cover these files, `check-json` in particular. A capture that does not parse is worth hearing about wherever it came from.
+The read-only hooks still cover these files, `check-json` and `check-toml` in particular. A copy that does not parse is worth hearing about wherever it came
+from.
 
 ## Why the flat capture has no byte guard
 

@@ -1,20 +1,29 @@
 default_stages = ["pre-commit"]
 
-# `CAPTURES` is the vendored adapter captures: byte copies of files span-panel-api
-# owns, held to their source byte for byte by tests/test_fixture_provenance.py.
+# Two kinds of vendored byte copy live under tests/fixtures/, and neither is
+# source this repository owns:
+#
+#   schema_*.json     captures of files span-panel-api owns, held to their source
+#                     byte for byte by tests/test_fixture_provenance.py
+#   pyproject_*.toml  this file's own pyproject.toml at the commits where the
+#                     library path override went wrong, held to those commits by
+#                     tests/test_library_path_hook.py -- they are what proves the
+#                     library-path gate fires, so they have to stay the real files
+#                     rather than approximations of them
+#
 # The three hooks below that *rewrite* files -- trailing-whitespace,
-# end-of-file-fixer and mixed-line-ending -- are excluded from them, because a
+# end-of-file-fixer and mixed-line-ending -- are excluded from both, because a
 # formatter and a byte-identical vendored fixture cannot both be unconditional and
 # it is the formatter that has to yield: the bytes are the artifact.
 #
 # Not hypothetical, merely not yet triggered. Those three cover tests/ today, and
-# they leave the current captures alone only because both happen to be
-# newline-terminated with LF endings and no trailing whitespace. The first capture
+# they leave the current copies alone only because all of them happen to be
+# newline-terminated with LF endings and no trailing whitespace. The first one
 # vendored without a final newline would be rewritten on commit, and the guard
 # would then fail against a source the copy had genuinely matched when it was made.
 #
-# The read-only hooks keep covering them. check-json in particular should: a
-# capture that does not parse is worth hearing about wherever it came from.
+# The read-only hooks keep covering them. check-json and check-toml in particular
+# should: a copy that does not parse is worth hearing about wherever it came from.
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v5.0.0"
@@ -25,9 +34,9 @@ hooks = [
   { id = "check-added-large-files" },
   { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*', language_version = "python3.14" },
-  { id = "trailing-whitespace", exclude = '^tests/fixtures/schema_.*\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "end-of-file-fixer", exclude = '^tests/fixtures/schema_.*\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/schema_.*\.json$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "trailing-whitespace", exclude = '^tests/fixtures/(schema_.*\.json|pyproject_.*\.toml)$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "end-of-file-fixer", exclude = '^tests/fixtures/(schema_.*\.json|pyproject_.*\.toml)$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/(schema_.*\.json|pyproject_.*\.toml)$|\.\S*_cache/.*|dist/.*|venv/.*' },
 ]
 
 # The library path override in pyproject.toml must name the checkout, not a
