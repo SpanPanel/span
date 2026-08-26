@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant import config_entries
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api.exceptions import SpanPanelCAChangedError, SpanPanelConnectionError
 
 from custom_components.span_panel import _async_pinned_ca, async_migrate_entry
@@ -20,12 +25,6 @@ from custom_components.span_panel.const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
-from homeassistant import config_entries
-from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 PEM = "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"
 OTHER_PEM = "-----BEGIN CERTIFICATE-----\nb3RoZXI=\n-----END CERTIFICATE-----\n"
@@ -58,9 +57,7 @@ async def test_a_stored_pin_is_used_without_any_fetch(hass: HomeAssistant) -> No
     """An entry that already carries a CA does not go back to the panel for one."""
     entry = _entry(hass, **{CONF_PANEL_CA_PEM: PEM})
 
-    with patch(
-        "custom_components.span_panel.async_fetch_panel_ca", new=AsyncMock()
-    ) as fetch:
+    with patch("custom_components.span_panel.async_fetch_panel_ca", new=AsyncMock()) as fetch:
         assert await _async_pinned_ca(hass, entry, "192.168.1.100", 80) == PEM
 
     fetch.assert_not_awaited()
@@ -70,13 +67,23 @@ async def test_a_stored_pin_is_used_without_any_fetch(hass: HomeAssistant) -> No
 async def test_the_deferred_fetch_stores_the_ca_and_clears_the_flag(
     hass: HomeAssistant,
 ) -> None:
-    """A migrated entry acquires its CA at the first setup that reaches the panel."""
+    """A migrated entry acquires its CA at the first setup that reaches the panel.
+
+    The leaf check is stood down here and exercised for real in
+    `test_panel_ca_pinning_tls`: this is about the bookkeeping either side of it.
+    """
     entry = _entry(hass, **{PANEL_CA_PENDING: True})
 
-    with patch(
-        "custom_components.span_panel.async_fetch_panel_ca",
-        new=AsyncMock(return_value=PEM),
-    ) as fetch:
+    with (
+        patch(
+            "custom_components.span_panel.async_fetch_panel_ca",
+            new=AsyncMock(return_value=PEM),
+        ) as fetch,
+        patch(
+            "custom_components.span_panel.async_ca_signs_panel_leaf",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
         assert await _async_pinned_ca(hass, entry, "192.168.1.100", 8080) == PEM
 
     fetch.assert_awaited_once_with(hass, "192.168.1.100", http_port=8080)
@@ -109,9 +116,7 @@ async def test_an_entry_with_neither_pin_nor_flag_is_left_alone(
     """Nothing acquires a CA behind the user's back."""
     entry = _entry(hass)
 
-    with patch(
-        "custom_components.span_panel.async_fetch_panel_ca", new=AsyncMock()
-    ) as fetch:
+    with patch("custom_components.span_panel.async_fetch_panel_ca", new=AsyncMock()) as fetch:
         assert await _async_pinned_ca(hass, entry, "192.168.1.100", 80) is None
 
     fetch.assert_not_awaited()
@@ -146,9 +151,7 @@ async def test_v7_flags_a_v2_entry_for_ca_acquisition(hass: HomeAssistant) -> No
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("api_version", ["v1", "simulation"])
-async def test_non_v2_entries_are_never_flagged(
-    hass: HomeAssistant, api_version: str
-) -> None:
+async def test_non_v2_entries_are_never_flagged(hass: HomeAssistant, api_version: str) -> None:
     """v1 fails setup before it reaches a panel, and a simulation has none."""
     entry = MockConfigEntry(
         version=6,
@@ -197,10 +200,7 @@ async def test_a_clean_connection_clears_a_standing_repair(hass: HomeAssistant) 
 
     async_clear_ca_changed(hass, entry)
 
-    assert (
-        ir.async_get(hass).async_get_issue(DOMAIN, ca_changed_issue_id(entry.entry_id))
-        is None
-    )
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ca_changed_issue_id(entry.entry_id)) is None
 
 
 @pytest.mark.asyncio
@@ -214,10 +214,18 @@ async def test_the_fix_flow_re_pins_only_on_an_explicit_confirmation(
     flow = PanelCAChangedRepairFlow(entry.entry_id)
     flow.hass = hass
 
-    with patch(
-        "custom_components.span_panel.repairs.async_fetch_panel_ca",
-        new=AsyncMock(return_value=OTHER_PEM),
-    ) as fetch:
+    with (
+        patch(
+            "custom_components.span_panel.repairs.async_fetch_panel_ca",
+            new=AsyncMock(return_value=OTHER_PEM),
+        ) as fetch,
+        # Stood down here and exercised for real in `test_panel_ca_pinning_tls`;
+        # this test is about what an explicit confirmation does and does not do.
+        patch(
+            "custom_components.span_panel.repairs.async_ca_signs_panel_leaf",
+            new=AsyncMock(return_value=True),
+        ),
+    ):
         shown = await flow.async_step_init()
 
     fetch.assert_awaited_once_with(hass, "192.168.1.100", http_port=8080)
@@ -270,9 +278,7 @@ async def test_the_coordinator_takes_entities_unavailable_on_a_ca_change(
 
     entry = _entry(hass, **{CONF_PANEL_CA_PEM: PEM})
     client = MagicMock()
-    client.get_snapshot = AsyncMock(
-        side_effect=SpanPanelCAChangedError("aa" * 32, "bb" * 32)
-    )
+    client.get_snapshot = AsyncMock(side_effect=SpanPanelCAChangedError("aa" * 32, "bb" * 32))
     coordinator = SpanPanelCoordinator(hass, client, entry)
     # A previous good snapshot, which the ordinary offline path would keep serving.
     coordinator.data = MagicMock()
@@ -307,7 +313,7 @@ async def test_an_unpinned_entry_uses_the_plaintext_bootstrap_port(
 async def test_a_pinned_entry_moves_to_tls_and_drops_the_shared_client(
     hass: HomeAssistant,
 ) -> None:
-    """httpx fixes its trust store at construction, so a pin needs its own client."""
+    """A pin needs its own client: httpx fixes its trust store at construction."""
     from custom_components.span_panel.config_flow_validation import panel_rest_transport
 
     entry = _entry(hass, **{CONF_PANEL_CA_PEM: PEM, CONF_HTTP_PORT: 8080})
@@ -373,14 +379,13 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
     """Fresh secrets over unverified HTTP would undo the pin where it matters most."""
     from homeassistant.config_entries import ConfigEntryState
     from homeassistant.core import Context
+    from pytest_homeassistant_custom_component.common import MockUser
 
     from custom_components.span_panel import (
         SpanPanelRuntimeData,
         _async_register_credential_services,
     )
     from custom_components.span_panel.const import CONF_EBUS_BROKER_PASSWORD
-
-    from pytest_homeassistant_custom_component.common import MockUser
 
     entry = _entry(
         hass,

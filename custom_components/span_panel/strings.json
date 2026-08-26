@@ -885,7 +885,8 @@
         },
         "abort": {
           "entry_gone": "That SPAN Panel is no longer configured.",
-          "ca_unreadable": "The panel's certificate authority could not be read. Check that the panel is reachable and try again."
+          "ca_unreadable": "The panel's certificate authority could not be read. Check that the panel is reachable and try again.",
+          "ca_leaf_mismatch": "The certificate this panel serves is not signed by the authority it published, so that authority has not been offered for you to accept and nothing has been changed. Check that the HTTPS port is correct and that nothing is intercepting the connection, then try again."
         }
       }
     }

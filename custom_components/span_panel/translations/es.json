@@ -885,7 +885,8 @@
         },
         "abort": {
           "entry_gone": "Ese SPAN Panel ya no está configurado.",
-          "ca_unreadable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible e inténtelo de nuevo."
+          "ca_unreadable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible e inténtelo de nuevo.",
+          "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado, por lo que esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo."
         }
       }
     }

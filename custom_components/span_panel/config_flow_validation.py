@@ -245,6 +245,41 @@ async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool
     return await loop.run_in_executor(None, _check)
 
 
+async def async_ca_signs_panel_leaf(
+    hass: HomeAssistant, host: str, tls_port: int, ca_pem: str
+) -> bool:
+    """Whether `ca_pem` signs the certificate the panel at `host` actually serves.
+
+    The one check that can be made on a CA nobody has confirmed. `ca_pem` comes
+    off an unauthenticated plaintext fetch, so anything on the path can have
+    answered it -- a reverse proxy in front of the panel answers it with an
+    authority of its own -- and pinning that is not a recoverable mistake: the
+    broker connection then fails against a certificate the pin rejects, the
+    change diagnosis finds the fetched CA and the pinned one identical and has
+    no change to report, and the entry retries forever with no repair to offer.
+
+    The address fallback is the config flow's, for the same reason: the panel's
+    leaf names the addresses it knows itself by, so a host recorded as a name --
+    an add-on's container hostname, a search-domain short name, an FQDN the
+    panel has not been told about -- fails hostname verification against a
+    perfectly good certificate. The name is tried first, always, because a panel
+    that already names it has nothing to work around.
+
+    A host that will not resolve simply has one candidate and fails as it would
+    have anyway.
+    """
+    if not host:
+        return False
+    if await async_leaf_chains_to_ca(host, tls_port, ca_pem):
+        return True
+    if is_ip_literal(host):
+        return False
+    resolved = await async_resolve_host(hass, host)
+    if resolved is None or resolved == host:
+        return False
+    return await async_leaf_chains_to_ca(resolved, tls_port, ca_pem)
+
+
 async def validate_v2_proximity(
     host: str,
     transport: PanelRestTransport,

@@ -41,7 +41,7 @@ from . import config_flow  # noqa: F401
 from .additions import async_announce_new_entities, async_forget_announcements
 from .adoption import async_register_adopted_devices
 from .ca_repairs import async_clear_ca_changed, async_raise_ca_changed
-from .config_flow_validation import async_fetch_panel_ca
+from .config_flow_validation import as_port, async_ca_signs_panel_leaf, async_fetch_panel_ca
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -49,7 +49,9 @@ from .const import (
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
     CONF_HTTP_PORT,
+    CONF_HTTPS_PORT,
     CONF_PANEL_CA_PEM,
+    DEFAULT_HTTPS_PORT,
     DEFAULT_SNAPSHOT_INTERVAL,
     DOMAIN,
     ENABLE_CURRENT_MONITORING,
@@ -166,6 +168,14 @@ async def _async_pinned_ca(
     trust-on-first-use on an upgrade path — nobody confirmed this certificate
     against anything — and the user should be able to find the value afterwards
     to compare it against another install or the panel's own label.
+
+    Trust on first use is not the same as trust in anything that answers. The
+    fetch is plaintext and unauthenticated, so what comes back is checked
+    against the certificate the panel serves on its TLS port before it is
+    stored; a CA that signs nothing the panel serves is not the panel's. A
+    refusal is treated exactly as a failed fetch, because it is the same
+    situation from the entry's point of view: no anchor was acquired, the flag
+    stays, and the next setup tries again.
     """
     pinned = entry.data.get(CONF_PANEL_CA_PEM)
     if pinned:
@@ -188,6 +198,21 @@ async def _async_pinned_ca(
             "the fetch is retried on the next setup",
             entry.title,
             err,
+        )
+        return None
+
+    https_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+    if not await async_ca_signs_panel_leaf(hass, host, https_port, ca_pem):
+        _LOGGER.warning(
+            "The CA published by SPAN panel %s (SHA-256 %s) does not sign the "
+            "certificate served at %s:%s, so it is not this panel's CA and has not "
+            "been pinned. Continuing unpinned and retrying on the next setup; check "
+            "that %s is the panel's TLS port and that nothing is answering for it",
+            entry.title,
+            fingerprint,
+            host,
+            https_port,
+            https_port,
         )
         return None
 

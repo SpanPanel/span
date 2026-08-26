@@ -885,7 +885,8 @@
         },
         "abort": {
           "entry_gone": "Ce SPAN Panel n'est plus configuré.",
-          "ca_unreadable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et réessayez."
+          "ca_unreadable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et réessayez.",
+          "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez."
         }
       }
     }

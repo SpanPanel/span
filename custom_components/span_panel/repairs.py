@@ -23,10 +23,27 @@ from span_panel_api.exceptions import (
 import voluptuous as vol
 
 from .ca_repairs import CA_CHANGED_ISSUE_PREFIX
-from .config_flow_validation import async_fetch_panel_ca
-from .const import CONF_HTTP_PORT, CONF_PANEL_CA_PEM, DOMAIN, PANEL_CA_PENDING
+from .config_flow_validation import as_port, async_ca_signs_panel_leaf, async_fetch_panel_ca
+from .const import (
+    CONF_HTTP_PORT,
+    CONF_HTTPS_PORT,
+    CONF_PANEL_CA_PEM,
+    DEFAULT_HTTPS_PORT,
+    DOMAIN,
+    PANEL_CA_PENDING,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _fingerprint_or_reason(pem: object) -> str:
+    """Name a stored PEM for a log line, without letting it raise into one."""
+    if not isinstance(pem, str) or not pem:
+        return "none"
+    try:
+        return ca_fingerprint(pem)
+    except SpanPanelValidationError:
+        return "unreadable"
 
 
 class PanelCAChangedRepairFlow(RepairsFlow):
@@ -38,6 +55,11 @@ class PanelCAChangedRepairFlow(RepairsFlow):
     has to be the one that will actually be stored, not a record of an earlier
     observation. Accepting a fingerprint and pinning a different certificate
     would make the confirmation meaningless.
+
+    That fresh fetch has to earn its place in the dialog: it is plaintext and
+    unauthenticated, so it is checked against the certificate the panel serves
+    before any fingerprint is shown. Everything this flow asks of the user rests
+    on the value being the panel's own.
     """
 
     def __init__(self, entry_id: str) -> None:
@@ -73,9 +95,12 @@ class PanelCAChangedRepairFlow(RepairsFlow):
             return self.async_create_entry(data={})
 
         host = str(entry.data.get(CONF_HOST, ""))
+        # Cleared before the fetch, not after: nothing accepted on an earlier
+        # pass through this step may survive into a pass that refuses.
+        self._ca_pem = None
         try:
             ca_pem = await async_fetch_panel_ca(
-                self.hass, host, http_port=int(entry.data.get(CONF_HTTP_PORT, 80))
+                self.hass, host, http_port=as_port(entry.data.get(CONF_HTTP_PORT), 80)
             )
             fingerprint = ca_fingerprint(ca_pem)
         except (
@@ -86,6 +111,25 @@ class PanelCAChangedRepairFlow(RepairsFlow):
         ) as err:
             _LOGGER.warning("Could not re-read the CA from panel %s: %s", host, err)
             return self.async_abort(reason="ca_unreadable")
+
+        # The fetch is plaintext and unauthenticated, so whatever answered it
+        # decides what this dialog would ask the user to trust. A CA that signs
+        # nothing the panel serves cannot be the panel's, and its fingerprint is
+        # not one to put in front of a person as the panel's own -- accepting it
+        # would replace a working pin with one that can never connect.
+        https_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+        if not await async_ca_signs_panel_leaf(self.hass, host, https_port, ca_pem):
+            _LOGGER.warning(
+                "SPAN panel %s published a CA (SHA-256 %s) that does not sign the "
+                "certificate served at %s:%s; refusing to offer it. The pin in place "
+                "is SHA-256 %s and has not been touched",
+                entry.title,
+                fingerprint,
+                host,
+                https_port,
+                _fingerprint_or_reason(entry.data.get(CONF_PANEL_CA_PEM)),
+            )
+            return self.async_abort(reason="ca_leaf_mismatch")
 
         self._ca_pem = ca_pem
         return self.async_show_form(
