@@ -362,9 +362,9 @@ feature. A display suffix differentiates multiple chargers on the same panel:
 | Circuit numbers | `Main House SPAN Drive (SN-EVSE-001)` | `sensor.main_house_span_drive_sn_evse_001_charger_status` |
 | No suffix       | `Main House SPAN Drive`               | `sensor.main_house_span_drive_charger_status`             |
 
-The circuit that feeds a charger has its sensors shown on the charger's device. For sensors created from this release on, their entity IDs name the charger
-alone — `sensor.main_house_span_drive_garage_power` — matching the charger's other sensors; sensors that already exist keep the IDs they have, which name the
-panel.
+The circuit that feeds a charger has its sensors shown on the charger's device. Their entity IDs name the charger alone —
+`sensor.main_house_span_drive_garage_power` — matching the charger's other sensors. A feed sensor you already have keeps its current id until you press
+**Recreate entity IDs**, which offers the charger-named one.
 
 #### EVSE Sensors (per charger)
 
@@ -607,14 +607,13 @@ The integration provides flexible entity naming patterns, configured during init
    - Friendly names still sync from SPAN panel for display
 
 The integration supplies only the circuit half of the ID shown above — `Kitchen Outlets Power` or `Circuit 15 Power`. Home Assistant composes the rest from your
-own entity ID settings (`entity_id_parts`, Home Assistant 2026.8 and newer), which decide whether the device name and the area are prefixed; entities you
-already have keep the IDs they have until you press **Recreate entity IDs**.
+own entity ID settings (`entity_id_parts`, Home Assistant 2026.8 and newer), which decide whether the device name and the area are prefixed.
 
 For an entity that already exists, the suffix wording in that half is read back from the ID the entity has rather than reworded. Circuit energy IDs have shipped
 in two spellings — `consumed_energy` and `energy_consumed` — so an installation is offered whichever one it is already using, and never the other; only new
 sensors get the `consumed_energy` word order that the panel-level sensors use. Because your entity ID settings decide the rest of the ID, an installation whose
 circuits were named before those settings existed — a SPAN Drive feed circuit, a second panel, or an installation predating the device prefix — may be offered
-an ID with a different device half. Nothing moves until you accept the offer.
+an ID with a different device half. Entities you already have keep the IDs they have until you press **Recreate entity IDs** and accept the offer.
 
 ### Energy Dip Compensation
 

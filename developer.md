@@ -407,6 +407,13 @@ One consequence worth naming: a circuit sensor on a sub-device card supplies **n
 composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity sets its base
 whenever `_object_id_parts` answers.
 
+**The suffix read-back therefore does not apply to sub-device (SPAN Drive feed) sensors.** The read-back lives in `circuit_object_id_base`, and a sub-device
+sensor never calls it — with no base, Core composes the entity half from the description label, which is the current one. So an existing feed energy sensor
+spelled `…_energy_consumed` is offered `sensor.<charger>_consumed_energy`: the device half changes (panel → charger) and so does the suffix wording
+(`energy_consumed` → `consumed_energy`, the label being `Consumed Energy`). **That is by design, not a bug.** These sensors belong to the charger's card, and
+the alternative — reading a base back for them — is the bypass R1 was clarified to forbid. As everywhere else, nothing moves until the user presses Recreate and
+accepts (R5).
+
 ### Releasing the registry name
 
 Circuit-numbers mode used to deliver the panel's circuit name by writing the entity registry's `name` — the _user's_ field, which Core reads ahead of everything
