@@ -740,8 +740,12 @@ the entry already had before this release, and refusing to start would not remov
 while guaranteeing an outage. Retrying closes it at the first opportunity instead.
 
 The same is true of an entry whose broker port does not serve a certificate the panel's own authority signs — a proxy terminating TLS with a certificate of its
-own, say. It stays unpinned and logs that warning at every start. Reconfiguring the entry so it names the panel directly is what pins it, because the setup flow
-performs the check with somewhere to send you when it fails.
+own, say. It stays unpinned and logs that warning at every start, and no repair is raised for it.
+
+**Reauthenticate is the route that does this on screen.** An unpinned entry sent through **Reauthenticate** goes to the certificate-authority step first, which
+asks for the TLS port where the HTTP port has been moved — the install most likely to be behind a proxy — and refuses with an error if the authority does not
+sign what the panel serves. Reconfiguring the entry to the panel's own address is the other way through, but the pin then happens during the reload that
+follows, silently: the only announcement is a `WARNING` reading "Pinned the CA advertised by SPAN panel …" with the fingerprint.
 
 Diagnostics report the fingerprint under `panel_ca`. The certificate itself is not included — it is public, but multi-KB, and the fingerprint is the part worth
 reading.

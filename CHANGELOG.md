@@ -68,8 +68,7 @@ working entirely in 2027.8.
 - **A property an adopted device accepts writes to becomes a control**: a boolean becomes a switch, an enum a select, a bounded number a number entity,
   constrained to what the device declared and nothing invented.
 - **A number box appears only where the declared range can actually be read** — a range this integration cannot parse, one whose bounds are the wrong way round,
-  or one with a zero step surfaces as a plain reading instead of a control admitting no value; if you ran a 2.1.0 beta and a reversed range gave you a `number.`
-  entity that never worked, you get a sensor in its place.
+  or one with a zero step surfaces as a plain reading instead of a control admitting no value.
 - **Two vendor readings that would land on the same entity id no longer silently cost you one of them**: the lexically first wire path keeps the id and the
   other is named in a warning in the log, rather than being dropped by Home Assistant under an id you cannot map back to anything.
 - **A vendor device or reading that turns up hours after setup reaches you on its own**, through the same reload a new battery or charger triggers, instead of
@@ -148,11 +147,10 @@ working entirely in 2027.8.
 
 - **Energy dip compensation no longer books a dip that never happened** (#259), where a partial reading at startup looked like a counter reset and every restart
   added each circuit's whole lifetime counter to its offset.
-- **A dip that comes back to where it started is still taken back after it looked corroborated**, because one reading climbing from the new low base is no
-  longer final: the compensation stays provisional for three further readings, so a debounced burst of stale samples cannot leave a permanent step in your
-  energy statistics.
-- **The notification about a compensated dip now arrives when the dip settles** rather than the moment it looks corroborated, so you are no longer told about a
-  counter reset that the next reading undoes — a persistent notification cannot be taken back the way the offset can.
+- **A compensated dip stays provisional until it settles, and is only reported then**: it is compensated the moment it is seen, corroborated by a reading that
+  climbs from the new low base, held for three further readings during which the counter returning to where it started takes the whole offset back, and named in
+  a notification once that window closes — so a burst of stale samples cannot leave a permanent step in your energy statistics or a notice for an event that did
+  not happen.
 - **A panel this integration can no longer reach makes its entities unavailable instead of reporting 0 W** — a certificate authority that changes mid-session
   used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
@@ -223,16 +221,17 @@ working entirely in 2027.8.
 - **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
   actually bound the panel's exposure.
 
-### Known issues
+### Known limitations
 
 - **A panel reachable only by a single-label name cannot complete a pinned setup by that name** — the SPAN simulator add-on and anything else whose certificate
   names only its IP address — because nothing registers a name that is not a fully qualified domain, so the certificate never comes to name it; set the panel up
   by its IP address instead.
 - **An upgraded entry whose broker port does not serve a certificate the panel's own authority signs stays unpinned** — a proxy terminating TLS with a
-  certificate of its own, say — logging a warning at every start and raising no repair; reconfigure the entry so it names the panel directly, which pins it
-  through the setup flow.
-- **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved and its certificate
-  really has changed, use **Reconfigure** on the entry to set the new address up under a fresh check.
+  certificate of its own, say — logging a warning at every start and raising no repair. **Reauthenticate** is the route that does the check on screen: it asks
+  for the TLS port and refuses with an error if the authority does not sign what the panel serves. Reconfiguring the entry to the panel's own address instead
+  leaves the pin to the reload that follows, which happens silently — watch the log for "Pinned the CA advertised by…".
+- **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved, use **Reconfigure** on
+  the entry, which checks the new address against the standing pin before storing it.
 - **A panel discovered through the Supervisor is deliberately not held to the address check** the other discovery routes are, because a Home Assistant add-on
   arrives over the authenticated Supervisor API and legitimately reallocates its own ports; an add-on with Supervisor privileges can therefore move a pinned
   entry.
