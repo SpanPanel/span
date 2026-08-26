@@ -99,6 +99,7 @@ def test_every_form_table_entry_has_a_new_wording_and_vice_versa() -> None:
 from custom_components.span_panel.naming import (
     LEGACY_PRESET_DEVICE_NAME,
     legacy_preset_entity_id,
+    legacy_preset_for_existing,
 )
 
 
@@ -181,6 +182,88 @@ def test_the_preset_device_name_is_the_literal_the_old_builder_fell_back_to() ->
     existing id with.
     """
     assert LEGACY_PRESET_DEVICE_NAME == "Span Panel"
+
+
+# --- Who is offered the kept shape, and who composes -------------------------
+#
+# The same decision for every platform: the sensors, the breaker switch and the
+# priority select all ask this one question rather than each keeping a copy of
+# the answer. A copy is how three platforms drift apart.
+
+
+def test_a_new_entity_composes_whatever_the_install_looks_like() -> None:
+    """There is no id to protect, so nothing is kept and Core composes."""
+    assert (
+        legacy_preset_for_existing(
+            "switch",
+            identifier="Kitchen Outlets",
+            suffix="breaker",
+            existing_entity_id=None,
+            use_device_prefix=False,
+            is_sub_device=True,
+        )
+        is None
+    )
+
+
+def test_an_ordinary_existing_entity_composes_too() -> None:
+    """The device prefix is on and the entity is on the panel: composition agrees."""
+    assert (
+        legacy_preset_for_existing(
+            "switch",
+            identifier="Kitchen Outlets",
+            suffix="breaker",
+            existing_entity_id="switch.span_panel_kitchen_outlets_breaker",
+            use_device_prefix=True,
+            is_sub_device=False,
+        )
+        is None
+    )
+
+
+def test_an_existing_entity_on_a_no_prefix_install_keeps_its_bare_id() -> None:
+    """`has_entity_name` prefixes the device unconditionally; these ids never did."""
+    assert (
+        legacy_preset_for_existing(
+            "select",
+            identifier="Kitchen Outlets",
+            suffix="circuit_priority",
+            existing_entity_id="select.kitchen_outlets_circuit_priority",
+            use_device_prefix=False,
+            is_sub_device=False,
+        )
+        == "select.kitchen_outlets_circuit_priority"
+    )
+
+
+def test_an_existing_sub_device_entity_keeps_the_panel_prefix() -> None:
+    """Composition would name the charger; the id names the panel and goes on doing so."""
+    assert (
+        legacy_preset_for_existing(
+            "sensor",
+            identifier="Kitchen Outlets",
+            suffix="power",
+            existing_entity_id="sensor.span_panel_kitchen_outlets_power",
+            use_device_prefix=True,
+            is_sub_device=True,
+        )
+        == "sensor.span_panel_kitchen_outlets_power"
+    )
+
+
+def test_the_kept_id_still_follows_a_circuit_rename() -> None:
+    """Computed from current panel data, so #252 survives the exception."""
+    assert (
+        legacy_preset_for_existing(
+            "switch",
+            identifier="Beer Fridge",
+            suffix="breaker",
+            existing_entity_id="switch.kitchen_outlets_breaker",
+            use_device_prefix=False,
+            is_sub_device=False,
+        )
+        == "switch.beer_fridge_breaker"
+    )
 
 
 from homeassistant.core import HomeAssistant

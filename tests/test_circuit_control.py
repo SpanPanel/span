@@ -4,6 +4,8 @@ from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 from span_panel_api.exceptions import SpanPanelServerError
 
@@ -12,8 +14,6 @@ from custom_components.span_panel.switch import (
     SpanPanelCircuitsSwitch,
     async_setup_entry,
 )
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -394,7 +394,13 @@ def test_switch_existing_entity_uses_solar_fallback_name(hass: HomeAssistant) ->
 def test_switch_initial_install_uses_circuit_numbers_when_enabled(
     hass: HomeAssistant,
 ) -> None:
-    """Initial switch names should honor the use-circuit-numbers option."""
+    """The option decides the id base, and the displayed name is the panel's regardless.
+
+    It used to decide the name too, on a first install only, because the name was
+    the only thing an id could be composed from. The base is composed from the
+    option directly now, so the name is free to be the one the panel reports --
+    the same string an existing entity has always shown.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Kitchen",
@@ -415,13 +421,19 @@ def test_switch_initial_install_uses_circuit_numbers_when_enabled(
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "2", "Kitchen", "SPAN Panel")
 
-    assert switch.name == "Circuit 2 3 Breaker"
+    assert switch.name == "Kitchen Breaker"
+    assert switch.suggested_object_id == "Circuit 2 3 breaker"
 
 
-def test_switch_initial_install_without_name_lets_ha_default(
+def test_switch_initial_install_without_name_falls_back_to_the_tabs(
     hass: HomeAssistant,
 ) -> None:
-    """Unnamed switches on first install should let HA provide the name."""
+    """An unnamed circuit is named for its breaker position, not left to HA.
+
+    Letting HA default it gave every unnamed circuit on the panel the same name
+    and the same id stem, which the registry then disambiguated with `_2`, `_3`,
+    ... in whatever order the platform happened to add them.
+    """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="3",
         name="",
@@ -440,7 +452,8 @@ def test_switch_initial_install_without_name_lets_ha_default(
         )
         switch = SpanPanelCircuitsSwitch(coordinator, "3", "", "SPAN Panel")
 
-    assert switch._attr_name is None
+    assert switch.name == "Circuit 3 Breaker"
+    assert switch.suggested_object_id == "Circuit 3 breaker"
     assert switch._previous_circuit_name is not None
 
 
@@ -623,10 +636,11 @@ def test_switch_relay_state_target_absent_when_none() -> None:
 def test_switch_circuit_numbers_entity_id_stable_after_reload(
     hass: HomeAssistant,
 ) -> None:
-    """Entity_id stays circuit-based while the displayed name follows the panel.
+    """The base stays circuit-based while the displayed name follows the panel.
 
-    Phase 1 names the entity for the mode; phase 2 replaces that with the panel's
-    name. The entity_id is preset either way, so it does not follow the name.
+    One name path in both modes -- the panel's -- and one id path: the base
+    handed to Core, which is composed from the naming flag and never from the
+    name. The two are decoupled, so the display name cannot move an id.
     """
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
@@ -651,8 +665,8 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
             coordinator, "2", "Air Conditioner", "SPAN Panel"
         )
 
-    assert switch.name == "Circuit 15 17 Breaker"
-    assert switch.entity_id == "switch.span_panel_circuit_15_17_breaker"
+    assert switch.name == "Air Conditioner Breaker"
+    assert switch.suggested_object_id == "Circuit 15 17 breaker"
 
     # --- After reload: entity EXISTS in registry ---
     with pytest.MonkeyPatch.context() as mp:
@@ -668,16 +682,16 @@ def test_switch_circuit_numbers_entity_id_stable_after_reload(
             coordinator, "2", "Air Conditioner", "SPAN Panel"
         )
 
-    # Phase 2: the panel's name, carried by original_name rather than the
-    # registry's `name`, which would outrank the preset id.
+    # The panel's name, carried by original_name rather than the registry's
+    # `name`, which would outrank the base.
     assert switch2.name == "Air Conditioner Breaker"
-    assert switch2.entity_id == "switch.span_panel_circuit_15_17_breaker"
+    assert switch2.suggested_object_id == "Circuit 15 17 breaker"
 
 
 def test_switch_circuit_numbers_entity_id_120v_single_tab(
     hass: HomeAssistant,
 ) -> None:
-    """120V single-tab circuit should produce entity_id with one tab number."""
+    """120V single-tab circuit should produce a base with one tab number."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="5",
         name="Kitchen Outlets",
@@ -700,8 +714,8 @@ def test_switch_circuit_numbers_entity_id_120v_single_tab(
             coordinator, "5", "Kitchen Outlets", "SPAN Panel"
         )
 
-    assert switch.name == "Circuit 10 Breaker"
-    assert switch.entity_id == "switch.span_panel_circuit_10_breaker"
+    assert switch.name == "Kitchen Outlets Breaker"
+    assert switch.suggested_object_id == "Circuit 10 breaker"
 
 
 def test_switch_circuit_numbers_releases_the_synced_registry_name(

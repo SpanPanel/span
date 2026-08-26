@@ -40,9 +40,8 @@ from .grace_period import (  # noqa: F401
     initialize_from_last_state,
 )
 from .naming import (
-    LEGACY_PRESET_DEVICE_NAME,
     circuit_object_id_base,
-    legacy_preset_entity_id,
+    legacy_preset_for_existing,
     release_registry_name_written_by_older_release,
 )
 from .options import ENERGY_REPORTING_GRACE_PERIOD
@@ -256,27 +255,23 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
     ) -> str | None:
         """Return the id to go on presetting, or None to let Core compose one.
 
-        R1: Recreate must never propose a move the user did not cause, and this
-        release moves the id-building job to Home Assistant. Two shapes it spells
-        differently are answered here rather than accepted -- a sensor on a
-        sub-device card, and any circuit entity on an install with the device
-        prefix off. See `naming.legacy_preset_entity_id` for both.
-
-        Existing entities only. A new one has no id to protect and composes like
-        everything else, which is what makes this a shrinking exception rather
-        than a permanent fork.
+        The decision itself belongs to `naming.legacy_preset_for_existing`, which
+        the switch and the select ask the same question of. What is added here is
+        the one fact only a sensor class knows: whether this integration ever
+        preset this entity's id at all. The hidden unmapped-tab sensors say no,
+        and an id Home Assistant has always composed cannot be moved by handing
+        Home Assistant the job.
         """
-        if existing_entity_id is None or not self._id_was_preset_by_this_integration:
+        if not self._id_was_preset_by_this_integration:
             return None
         use_device_prefix: bool = self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
-        if not (self._is_sub_device or not use_device_prefix):
-            return None
-        return legacy_preset_entity_id(
+        return legacy_preset_for_existing(
             "sensor",
-            LEGACY_PRESET_DEVICE_NAME if use_device_prefix else None,
-            identifier,
-            suffix,
-            existing_entity_id,
+            identifier=identifier,
+            suffix=suffix,
+            existing_entity_id=existing_entity_id,
+            use_device_prefix=use_device_prefix,
+            is_sub_device=self._is_sub_device,
         )
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:

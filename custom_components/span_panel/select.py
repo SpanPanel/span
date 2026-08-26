@@ -15,7 +15,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSelect, create_adopted_selects
-from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
+from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX, CircuitPriority
 from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
@@ -24,9 +24,13 @@ from .helpers import (
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
-    construct_single_circuit_entity_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
+)
+from .naming import (
+    circuit_object_id_base,
+    legacy_preset_for_existing,
+    release_registry_name_written_by_older_release,
 )
 
 # Device types that use "Solar" as the fallback identifier when unnamed.
@@ -65,6 +69,15 @@ class SpanPanelSelectEntityDescriptionWrapper:
         select_option_fn: Callable[[SpanCircuitSnapshot, str], None] | None = None,
     ) -> None:
         """Initialize the select entity description wrapper."""
+        self.name: str = name
+        """The description's label, kept as the `str` it is.
+
+        `SelectEntityDescription.name` is typed `str | UndefinedType | None`,
+        being optional for a description that declares a `translation_key`
+        instead. This one always declares a label, and the registry-name release
+        wants a `str`, so the wrapper holds on to what it was handed rather than
+        narrowing the frozen description's field back down at every reader.
+        """
         self.entity_description = SelectEntityDescription(
             key=key,
             name=name,
@@ -89,8 +102,8 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
     # Read in entity code rather than through a description: the wrapper
     # class is not a frozen dataclass description, so it cannot carry the
-    # declaration. `priority` is the selected option (~80); `name` and
-    # `tabs` build the display name (~125-148).
+    # declaration. `priority` is the selected option (~96); `name` and
+    # `tabs` build the display name and the id base (~153-171).
     _residual_field_paths: ClassVar[tuple[str, ...]] = (
         "circuit.priority",
         "circuit.name",
@@ -105,7 +118,13 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         name: str,
         device_name: str,
     ) -> None:
-        """Initialize the select."""
+        """Initialize the select.
+
+        `name` is the circuit's name as of platform setup and is deliberately
+        unused: both the display name and the id base are read from the circuit
+        in the current snapshot, so a circuit renamed on the panel reaches both
+        on the next reload. The parameter stays because every caller passes it.
+        """
         super().__init__(coordinator)
         snapshot: SpanPanelSnapshot = coordinator.data
 
@@ -129,17 +148,42 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         )
 
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        use_device_prefix: bool = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+        desc_name = description.name
+        circuit_name = circuit.name or _unnamed_select_fallback(circuit, circuit_id)
 
-        desc_name = description.entity_description.name
-        if existing_entity_id:
-            # Phase 2: the panel's name, in both modes. It reaches the UI as
-            # `original_name`, which ranks below `suggested_object_id` and so
-            # cannot decide what "Recreate entity IDs" proposes.
-            if circuit.name:
-                self._attr_name = f"{circuit.name} {desc_name}"
-            else:
-                fallback = _unnamed_select_fallback(circuit, circuit_id)
-                self._attr_name = f"{fallback} {desc_name}"
+        # One name path, in both naming modes: the panel's name, carried as
+        # `original_name`. That field ranks below the object-id base below, so
+        # what is displayed can no longer decide what "Recreate entity IDs"
+        # proposes.
+        self._attr_name = f"{circuit_name} {desc_name}"
+
+        # The id itself is Home Assistant's to compose. This entity supplies only
+        # its base -- the naming-flag half plus the description's key -- and
+        # leaves `entity_id` unset so Core assembles the rest from the user's
+        # `entity_id_parts`. The key is used as the suffix verbatim:
+        # `get_user_friendly_suffix` maps `circuit_priority` to `priority`, which
+        # is the unique_id's spelling and not this entity's.
+        suffix = description.entity_description.key
+        identifier = (
+            construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+            if use_circuit_numbers
+            else circuit_name
+        )
+        preset = legacy_preset_for_existing(
+            "select",
+            identifier=identifier,
+            suffix=suffix,
+            existing_entity_id=existing_entity_id,
+            use_device_prefix=use_device_prefix,
+            is_sub_device=False,
+        )
+        if preset is not None:
+            self.entity_id = preset
+        else:
+            self._span_object_id_base = circuit_object_id_base(
+                identifier, suffix, existing_entity_id
+            )
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant
@@ -148,38 +192,10 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         # circuit-numbered entity. The name travels as `original_name` now, so all
         # that is left is to let go of what the old scheme wrote -- and only that:
         # any other name is the user's.
-        if existing_entity_id and circuit.name:
-            entity_entry = entity_registry.async_get(existing_entity_id)
-            if entity_entry and entity_entry.name == f"{circuit.name} {desc_name}":
-                entity_registry.async_update_entity(existing_entity_id, name=None)
-
-        if not existing_entity_id:
-            # Initial install - use flag-based name for entity_id generation
-            if use_circuit_numbers:
-                circuit_identifier = construct_circuit_identifier_from_tabs(
-                    circuit.tabs, circuit_id
-                )
-                self._attr_name = f"{circuit_identifier} {desc_name}"
-            elif name:
-                self._attr_name = f"{name} {desc_name}"
-            else:
-                # v1 behavior: None lets HA handle default naming
-                self._attr_name = None
-
-        # Explicitly set entity_id using construct_single_circuit_entity_id
-        # which correctly handles 240V two-tab circuits. For an entity already
-        # in the registry this is a suggestion HA records and does not act on --
-        # the stored entity_id stands. See the helper's docstring.
-        constructed_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "select",
-            description.entity_description.key,
-            circuit,
-            existing_entity_id=existing_entity_id,
-        )
-        if constructed_id:
-            self.entity_id = constructed_id
+        if existing_entity_id:
+            release_registry_name_written_by_older_release(
+                entity_registry, existing_entity_id, circuit.name, (desc_name,)
+            )
 
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)

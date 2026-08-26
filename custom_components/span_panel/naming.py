@@ -139,6 +139,42 @@ def legacy_preset_entity_id(
     return f"{platform}.{object_id}"
 
 
+def legacy_preset_for_existing(
+    platform: str,
+    *,
+    identifier: str,
+    suffix: str,
+    existing_entity_id: str | None,
+    use_device_prefix: bool,
+    is_sub_device: bool,
+) -> str | None:
+    """Return the id this entity keeps, or None to let Home Assistant compose one.
+
+    The whole R1 exception in one place, asked by all three circuit platforms --
+    the sensors, the breaker switch and the priority select. Each used to preset
+    its id through the same builder, so each faces the same two shapes
+    composition spells differently; a copy of this decision per platform is how
+    three platforms drift apart on which entities the release moves.
+
+    `None` for anything new: an entity with no id yet has none to protect, and
+    composing one is the point of the release. `None` too for the ordinary
+    existing entity, whose id composition reproduces exactly. What is left is
+    `legacy_preset_entity_id`'s two shapes -- see it for why each is kept and for
+    why the kept id is computed from current panel data rather than read back.
+    """
+    if existing_entity_id is None:
+        return None
+    if not (is_sub_device or not use_device_prefix):
+        return None
+    return legacy_preset_entity_id(
+        platform,
+        LEGACY_PRESET_DEVICE_NAME if use_device_prefix else None,
+        identifier,
+        suffix,
+        existing_entity_id,
+    )
+
+
 def release_registry_name_written_by_older_release(
     registry: er.EntityRegistry,
     entity_id: str,

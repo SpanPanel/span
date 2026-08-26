@@ -3,6 +3,8 @@
 from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 import pytest
 from span_panel_api import PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
@@ -14,8 +16,6 @@ from custom_components.span_panel.select import (
     SpanPanelCircuitsSelect,
     async_setup_entry,
 )
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -219,8 +219,13 @@ async def test_async_select_option_without_priority_support_returns_early(
     coordinator.async_request_refresh.assert_not_awaited()
 
 
-def test_select_uses_circuit_number_name_when_option_enabled() -> None:
-    """Number-based naming should use breaker tabs when configured."""
+def test_select_uses_circuit_numbers_for_the_base_when_the_option_is_enabled() -> None:
+    """The option decides the id base; the displayed name is the panel's regardless.
+
+    It used to decide the name too, on a first install only, because the name was
+    the only thing an id could be composed from. The base is composed from the
+    option directly now.
+    """
     coordinator = _make_coordinator_with_circuit()
     coordinator.config_entry.options = {"use_circuit_numbers": True}
     coordinator.hass = MagicMock()
@@ -236,11 +241,17 @@ def test_select_uses_circuit_number_name_when_option_enabled() -> None:
             coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Kitchen", "SPAN Panel"
         )
 
-    assert select.name == "Circuit 1 Circuit Priority"
+    assert select.name == "name Circuit Priority"
+    assert select.suggested_object_id == "Circuit 1 circuit priority"
 
 
-def test_select_unnamed_friendly_mode_leaves_name_none() -> None:
-    """Unnamed selects in friendly-name mode should defer to HA naming."""
+def test_select_unnamed_friendly_mode_falls_back_to_the_tabs() -> None:
+    """An unnamed circuit is named for its breaker position, not left to HA.
+
+    Deferring gave every unnamed circuit on the panel the same name and the same
+    id stem, which the registry then disambiguated with `_2`, `_3`, ... in
+    whatever order the platform happened to add them.
+    """
     coordinator = _make_coordinator_with_circuit(circuit_name="")
     coordinator.hass = MagicMock()
 
@@ -255,7 +266,8 @@ def test_select_unnamed_friendly_mode_leaves_name_none() -> None:
             coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "", "SPAN Panel"
         )
 
-    assert select.name is None
+    assert select.name == "Circuit 1 Circuit Priority"
+    assert select.suggested_object_id == "Circuit 1 circuit priority"
 
 
 def test_select_existing_entity_uses_solar_fallback_name() -> None:
@@ -549,7 +561,7 @@ async def test_async_setup_entry_skips_circuits_whose_priority_is_not_settable()
 def test_select_circuit_numbers_entity_id_stable_after_reload(
     hass: HomeAssistant,
 ) -> None:
-    """Entity_id must stay circuit-based after name sync sets friendly display name."""
+    """The base must stay circuit-based after name sync sets the friendly display name."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="2",
         name="Air Conditioner",
@@ -581,8 +593,8 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
             "SPAN Panel",
         )
 
-    assert select.name == "Circuit 15 17 Circuit Priority"
-    assert select.entity_id == "select.span_panel_circuit_15_17_circuit_priority"
+    assert select.name == "Air Conditioner Circuit Priority"
+    assert select.suggested_object_id == "Circuit 15 17 circuit priority"
 
     # --- After reload: entity EXISTS in registry ---
     with pytest.MonkeyPatch.context() as mp:
@@ -602,16 +614,16 @@ def test_select_circuit_numbers_entity_id_stable_after_reload(
             "SPAN Panel",
         )
 
-    # Phase 2: the panel's name, carried by original_name rather than the
-    # registry's `name`, which would outrank the preset id.
+    # The panel's name, carried by original_name rather than the registry's
+    # `name`, which would outrank the base.
     assert select2.name == "Air Conditioner Circuit Priority"
-    assert select2.entity_id == "select.span_panel_circuit_15_17_circuit_priority"
+    assert select2.suggested_object_id == "Circuit 15 17 circuit priority"
 
 
 def test_select_circuit_numbers_entity_id_120v_single_tab(
     hass: HomeAssistant,
 ) -> None:
-    """120V single-tab circuit should produce entity_id with one tab number."""
+    """120V single-tab circuit should produce a base with one tab number."""
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="5",
         name="Kitchen Outlets",
@@ -642,8 +654,8 @@ def test_select_circuit_numbers_entity_id_120v_single_tab(
             "SPAN Panel",
         )
 
-    assert select.name == "Circuit 10 Circuit Priority"
-    assert select.entity_id == "select.span_panel_circuit_10_circuit_priority"
+    assert select.name == "Kitchen Outlets Circuit Priority"
+    assert select.suggested_object_id == "Circuit 10 circuit priority"
 
 
 def test_select_coordinator_update_circuit_numbers_requests_reload(

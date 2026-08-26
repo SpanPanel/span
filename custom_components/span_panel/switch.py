@@ -15,7 +15,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
-from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
+from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX, CircuitRelayState
 from .control_gate import (
     ControlLock,
     ControlMode,
@@ -29,9 +29,13 @@ from .helpers import (
     build_switch_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
-    construct_single_circuit_entity_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
+)
+from .naming import (
+    circuit_object_id_base,
+    legacy_preset_for_existing,
+    release_registry_name_written_by_older_release,
 )
 from .util import snapshot_to_device_info
 
@@ -58,7 +62,8 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
     # Read in entity code rather than through a description: this platform
     # has no entity description at all. `relay_state` is the switch's own
-    # state (line ~262); `name` and `tabs` build its display name (~77-101).
+    # state (~258); `name` and `tabs` build its display name and its id base
+    # (~106-122).
     _residual_field_paths: ClassVar[tuple[str, ...]] = (
         "circuit.relay_state",
         "circuit.name",
@@ -72,7 +77,13 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         name: str,
         device_name: str,
     ) -> None:
-        """Initialize the values."""
+        """Initialize the values.
+
+        `name` is the circuit's name as of platform setup and is deliberately
+        unused: both the display name and the id base are read from the circuit
+        in the current snapshot, so a circuit renamed on the panel reaches both
+        on the next reload. The parameter stays because every caller passes it.
+        """
         snapshot: SpanPanelSnapshot = coordinator.data
 
         circuit = snapshot.circuits.get(circuit_id)
@@ -92,16 +103,39 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         )
 
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        use_device_prefix: bool = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+        circuit_name = circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
 
-        if existing_entity_id:
-            # Phase 2: the panel's name, in both modes. It reaches the UI as
-            # `original_name`, which ranks below `suggested_object_id` and so
-            # cannot decide what "Recreate entity IDs" proposes.
-            if circuit.name:
-                self._attr_name = f"{circuit.name} Breaker"
-            else:
-                fallback = _unnamed_switch_fallback(circuit, circuit_id)
-                self._attr_name = f"{fallback} Breaker"
+        # One name path, in both naming modes: the panel's name, carried as
+        # `original_name`. That field ranks below the object-id base below, so
+        # what is displayed can no longer decide what "Recreate entity IDs"
+        # proposes.
+        self._attr_name = f"{circuit_name} Breaker"
+
+        # The id itself is Home Assistant's to compose. This entity supplies only
+        # its base -- the naming-flag half plus "breaker" -- and leaves
+        # `entity_id` unset so Core assembles the rest from the user's
+        # `entity_id_parts`. The suffix is named outright rather than mapped:
+        # `get_user_friendly_suffix` has no entry for a switch at all.
+        identifier = (
+            construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+            if use_circuit_numbers
+            else circuit_name
+        )
+        preset = legacy_preset_for_existing(
+            "switch",
+            identifier=identifier,
+            suffix="breaker",
+            existing_entity_id=existing_entity_id,
+            use_device_prefix=use_device_prefix,
+            is_sub_device=False,
+        )
+        if preset is not None:
+            self.entity_id = preset
+        else:
+            self._span_object_id_base = circuit_object_id_base(
+                identifier, "breaker", existing_entity_id
+            )
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant
@@ -110,40 +144,12 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         # circuit-numbered entity. The name travels as `original_name` now, so all
         # that is left is to let go of what the old scheme wrote -- and only that:
         # any other name is the user's.
-        if existing_entity_id and circuit.name:
-            entity_entry = entity_registry.async_get(existing_entity_id)
-            if entity_entry and entity_entry.name == f"{circuit.name} Breaker":
-                entity_registry.async_update_entity(existing_entity_id, name=None)
-
-        if not existing_entity_id:
-            # Initial install - use flag-based name for entity_id generation
-            if use_circuit_numbers:
-                circuit_identifier = construct_circuit_identifier_from_tabs(
-                    circuit.tabs, circuit_id
-                )
-                self._attr_name = f"{circuit_identifier} Breaker"
-            elif name:
-                self._attr_name = f"{name} Breaker"
-            else:
-                # v1 behavior: None lets HA handle default naming
-                self._attr_name = None
+        if existing_entity_id:
+            release_registry_name_written_by_older_release(
+                entity_registry, existing_entity_id, circuit.name, ("Breaker",)
+            )
 
         super().__init__(coordinator)
-
-        # Explicitly set entity_id using construct_single_circuit_entity_id
-        # which correctly handles 240V two-tab circuits. For an entity already
-        # in the registry this is a suggestion HA records and does not act on --
-        # the stored entity_id stands. See the helper's docstring.
-        constructed_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "switch",
-            "breaker",
-            circuit,
-            existing_entity_id=existing_entity_id,
-        )
-        if constructed_id:
-            self.entity_id = constructed_id
 
         self._update_is_on()
 

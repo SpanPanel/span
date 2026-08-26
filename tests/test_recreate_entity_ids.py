@@ -22,12 +22,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_registry import EntityNamePart
+import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     MockEntityPlatform,
@@ -41,7 +41,13 @@ from custom_components.span_panel.const import (
 )
 from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
+    build_select_unique_id,
+    build_switch_unique_id,
     preserve_legacy_entity_id_suffix,
+)
+from custom_components.span_panel.select import (
+    CIRCUIT_PRIORITY_DESCRIPTION,
+    SpanPanelCircuitsSelect,
 )
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
@@ -140,9 +146,61 @@ class _Install:
         return sensor
 
 
+class _SwitchInstall(_Install):
+    """One install of the breaker switch, reloadable the same way."""
+
+    async def load(self, circuit_name: str) -> SpanPanelCircuitsSwitch:  # type: ignore[override]
+        """Tear down any previous platform, then set one up from fresh panel data."""
+        if self._platform is not None:
+            await self._platform.async_reset()
+
+        snapshot = _snapshot(circuit_name)
+        coordinator = _coordinator(self._hass, snapshot, self._entry)
+        self._entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator, panel_device_id="panel-device-id"
+        )
+
+        self._platform = MockEntityPlatform(self._hass, domain="switch", platform_name=DOMAIN)
+        self._platform.config_entry = self._entry
+
+        switch = SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, circuit_name, "SPAN Panel")
+        await self._platform.async_add_entities([switch])
+        await self._hass.async_block_till_done()
+
+        assert switch.hass is not None, "entity was rejected before it reached the registry"
+        return switch
+
+
+class _SelectInstall(_Install):
+    """One install of the circuit-priority select, reloadable the same way."""
+
+    async def load(self, circuit_name: str) -> SpanPanelCircuitsSelect:  # type: ignore[override]
+        """Tear down any previous platform, then set one up from fresh panel data."""
+        if self._platform is not None:
+            await self._platform.async_reset()
+
+        snapshot = _snapshot(circuit_name)
+        coordinator = _coordinator(self._hass, snapshot, self._entry)
+        self._entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=coordinator, panel_device_id="panel-device-id"
+        )
+
+        self._platform = MockEntityPlatform(self._hass, domain="select", platform_name=DOMAIN)
+        self._platform.config_entry = self._entry
+
+        select = SpanPanelCircuitsSelect(
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, CIRCUIT_ID, circuit_name, "SPAN Panel"
+        )
+        await self._platform.async_add_entities([select])
+        await self._hass.async_block_till_done()
+
+        assert select.hass is not None, "entity was rejected before it reached the registry"
+        return select
+
+
 @pytest.fixture
 def entry(hass: HomeAssistant) -> MockConfigEntry:
-    """A config entry in friendly-names mode."""
+    """Return a config entry in friendly-names mode."""
     config_entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_HOST: "192.168.1.50", "device_name": "SPAN Panel"},
@@ -811,4 +869,194 @@ def test_a_suffix_with_no_older_spelling_is_left_alone() -> None:
             "energy_consumed",
         )
         == "sensor.span_panel_kitchen_consumed_energy"
+    )
+
+
+# --- The two circuit controls -------------------------------------------------
+#
+# The breaker switch and the priority select are the other two circuit entities
+# whose ids this integration used to spell out in full. They take the same route
+# as the sensors: one base, Core composes, and the only exception is the id shape
+# composition cannot reproduce.
+
+SWITCH_ENTITY_ID = "switch.span_panel_circuit_15_breaker"
+SELECT_ENTITY_ID = "select.span_panel_circuit_15_circuit_priority"
+
+
+async def test_a_new_switch_and_select_compose_todays_ids(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """Composition spells both exactly as the preset builder used to."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    switch = await _SwitchInstall(hass, entry).load(ORIGINAL_NAME)
+    select = await _SelectInstall(hass, entry).load(ORIGINAL_NAME)
+
+    assert switch.entity_id == SWITCH_ENTITY_ID
+    assert select.entity_id == SELECT_ENTITY_ID
+
+
+async def test_switch_and_select_are_offered_their_own_ids_after_a_rename_in_circuit_numbers_mode(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """#252's other half: the name follows the panel and the id does not move."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    switches = _SwitchInstall(hass, entry)
+    await switches.load(ORIGINAL_NAME)
+    switch = await switches.load(RENAMED)
+    selects = _SelectInstall(hass, entry)
+    await selects.load(ORIGINAL_NAME)
+    select = await selects.load(RENAMED)
+
+    registry = er.async_get(hass)
+
+    assert switch.entity_id == SWITCH_ENTITY_ID
+    switch_entry = registry.async_get(switch.entity_id)
+    assert switch_entry is not None
+    assert switch_entry.original_name == f"{RENAMED} Breaker"
+    assert registry.async_regenerate_entity_id(switch_entry) == switch.entity_id
+
+    assert select.entity_id == SELECT_ENTITY_ID
+    select_entry = registry.async_get(select.entity_id)
+    assert select_entry is not None
+    assert select_entry.original_name == f"{RENAMED} Circuit Priority"
+    assert registry.async_regenerate_entity_id(select_entry) == select.entity_id
+
+
+async def test_switch_and_select_release_the_name_an_older_release_wrote(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """2.0.8 wrote the panel's name into the registry's `name` for these two as well."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    registry = er.async_get(hass)
+
+    switches = _SwitchInstall(hass, entry)
+    switch = await switches.load(ORIGINAL_NAME)
+    registry.async_update_entity(switch.entity_id, name=f"{ORIGINAL_NAME} Breaker")
+    await switches.load(ORIGINAL_NAME)
+
+    selects = _SelectInstall(hass, entry)
+    select = await selects.load(ORIGINAL_NAME)
+    registry.async_update_entity(select.entity_id, name=f"{ORIGINAL_NAME} Circuit Priority")
+    await selects.load(ORIGINAL_NAME)
+
+    switch_entry = registry.async_get(switch.entity_id)
+    assert switch_entry is not None
+    assert switch_entry.name is None
+    assert registry.async_regenerate_entity_id(switch_entry) == SWITCH_ENTITY_ID
+
+    select_entry = registry.async_get(select.entity_id)
+    assert select_entry is not None
+    assert select_entry.name is None
+    assert registry.async_regenerate_entity_id(select_entry) == SELECT_ENTITY_ID
+
+
+async def test_a_name_the_user_set_on_a_control_is_never_released(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """Only a name this integration would have written is handed back."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    registry = er.async_get(hass)
+
+    switches = _SwitchInstall(hass, entry)
+    switch = await switches.load(ORIGINAL_NAME)
+    registry.async_update_entity(switch.entity_id, name="Beverage Cooling")
+
+    await switches.load(ORIGINAL_NAME)
+
+    switch_entry = registry.async_get(switch.entity_id)
+    assert switch_entry is not None
+    assert switch_entry.name == "Beverage Cooling"
+
+
+async def test_an_existing_switch_on_a_no_prefix_install_is_offered_its_own_id(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The pre-1.0.4 shape reaches the controls too, and composition cannot produce it."""
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+    registry = er.async_get(hass)
+    seeded = registry.async_get_or_create(
+        "switch",
+        DOMAIN,
+        build_switch_unique_id(SERIAL, CIRCUIT_ID),
+        suggested_object_id="refrigerator_breaker",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == "switch.refrigerator_breaker"
+
+    install = _SwitchInstall(hass, entry)
+    switch = await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    assert switch.entity_id == seeded.entity_id
+
+    registry_entry = registry.async_get(seeded.entity_id)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
+
+
+async def test_an_existing_select_on_a_no_prefix_install_is_offered_its_own_id(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The same shape, kept for the same reason."""
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+    registry = er.async_get(hass)
+    seeded = registry.async_get_or_create(
+        "select",
+        DOMAIN,
+        build_select_unique_id(SERIAL, CIRCUIT_ID),
+        suggested_object_id="refrigerator_circuit_priority",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == "select.refrigerator_circuit_priority"
+
+    install = _SelectInstall(hass, entry)
+    select = await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    assert select.entity_id == seeded.entity_id
+
+    registry_entry = registry.async_get(seeded.entity_id)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
+
+
+async def test_a_new_control_on_a_no_prefix_install_composes_like_every_other_entity(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """The exception is for ids that exist; nothing new inherits the prefix-less shape."""
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+
+    switch = await _SwitchInstall(hass, entry).load(ORIGINAL_NAME)
+    select = await _SelectInstall(hass, entry).load(ORIGINAL_NAME)
+
+    assert switch.entity_id == "switch.span_panel_refrigerator_breaker"
+    assert select.entity_id == "select.span_panel_refrigerator_circuit_priority"
+
+
+async def test_an_area_reaches_the_proposal_for_a_control_too(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """R2: the controls stop exempting themselves from the user's `entity_id_parts`.
+
+    A preset id could not carry an area. Handing Core a base means the switch is
+    composed exactly like every other integration's entity -- and only where the
+    user has actually assigned one.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    switch = await _SwitchInstall(hass, entry).load(ORIGINAL_NAME)
+    assert switch.entity_id == SWITCH_ENTITY_ID  # no area yet: identical to today
+
+    area = ar.async_get(hass).async_get_or_create("Basement")
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_device(identifiers={(DOMAIN, SERIAL)})
+    assert device is not None
+    device_registry.async_update_device(device.id, area_id=area.id)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(SWITCH_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry_entry.entity_id == SWITCH_ENTITY_ID  # R5: nothing moved
+    assert (
+        registry.async_regenerate_entity_id(registry_entry)
+        == "switch.basement_span_panel_circuit_15_breaker"
     )
