@@ -12,7 +12,6 @@ import ssl
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.httpx_client import get_async_client
-from homeassistant.util.network import is_ipv4_address
 import httpx
 from span_panel_api import (
     V2AuthResponse,
@@ -60,19 +59,19 @@ async def validate_host(
 
 
 async def validate_v2_passphrase(
-    hass: HomeAssistant,
     host: str,
     passphrase: str,
-    port: int = 80,
-    transport: PanelRestTransport | None = None,
+    transport: PanelRestTransport,
 ) -> V2AuthResponse:
     """Validate a v2 panel passphrase and return MQTT credentials.
 
-    `transport` carries the pinned CA, and every path that reaches this call has
-    one: the CA step runs before authentication on initial setup, and a reauth
-    of an entry that arrived unpinned is routed back through that step before
-    the passphrase is collected. The `port`-only fallback is for a caller that
-    holds no transport, which the flow itself no longer is.
+    `transport` is required rather than defaulted, because it is what carries
+    the pinned CA and this is the call that sends the panel passphrase. A
+    default would be a plaintext transport, and a caller that forgot to pass one
+    would get the exchange this pinning exists to prevent without anything
+    saying so. Every path that reaches here has a transport by construction: the
+    CA step runs before authentication on initial setup, and a reauth of an
+    entry that arrived unpinned is routed back through that step first.
 
     Raises:
         SpanPanelAuthError: on invalid passphrase (401/403).
@@ -80,17 +79,23 @@ async def validate_v2_passphrase(
         SpanPanelTimeoutError: on request timeout.
 
     """
-    resolved = transport or PanelRestTransport(
-        port=port, ssl_context=None, httpx_client=get_async_client(hass, verify_ssl=False)
-    )
     return await register_v2(
         host,
         "Home Assistant",
         passphrase,
-        port=resolved.port,
-        httpx_client=resolved.httpx_client,
-        ssl_context=resolved.ssl_context,
+        port=transport.port,
+        httpx_client=transport.httpx_client,
+        ssl_context=transport.ssl_context,
     )
+
+
+def is_ip_literal(host: str) -> bool:
+    """Whether `host` is already an address rather than a name to be resolved."""
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def is_fqdn(host: str) -> bool:
@@ -99,13 +104,7 @@ def is_fqdn(host: str) -> bool:
     Returns True for domain names like 'span.home.lan' or 'panel.example.com'.
     Returns False for IP addresses, mDNS (.local) names, and single-label hostnames.
     """
-    if is_ipv4_address(host):
-        return False
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    else:
+    if is_ip_literal(host):
         return False
     if host.endswith((".local", ".local.")):
         return False
@@ -113,27 +112,75 @@ def is_fqdn(host: str) -> bool:
 
 
 async def check_fqdn_tls_ready(
-    hass: HomeAssistant, fqdn: str, mqtts_port: int, http_port: int = 80
+    hass: HomeAssistant,
+    fqdn: str,
+    mqtts_port: int,
+    ca_pem: str | None,
+    http_port: int = 80,
 ) -> bool:
-    """Check if the MQTTS server certificate includes the FQDN in its SAN.
+    """Whether the panel now serves a certificate that names `fqdn`.
 
-    Downloads the CA certificate from the panel via HTTP, then attempts
-    a TLS connection to the MQTTS port using the FQDN as server_hostname.
-    If the TLS handshake succeeds with hostname verification, the panel
-    has regenerated its certificate to include the FQDN.
+    A TLS connection is made to the MQTTS port with the FQDN as
+    `server_hostname`; a handshake that completes with hostname verification on
+    means the panel has regenerated its leaf to include the FQDN, which is what
+    this is polling for.
+
+    `ca_pem` is the anchor the caller already pinned, and passing it is the
+    point: this used to refetch the CA over plain HTTP on every poll, which
+    means a fresh trust decision every two seconds against whatever answered,
+    made against a panel the caller had already anchored. Anything that can
+    answer that fetch can also serve a leaf signed by the CA it just handed
+    over, so the poll would have reported the FQDN ready on a certificate the
+    pinned anchor does not sign.
+
+    `None` is for the one caller that genuinely holds no anchor -- a
+    reconfigure of an entry whose CA fetch never succeeded -- where the
+    plaintext fetch is the only channel there is and is no weaker than the
+    unpinned entry it belongs to.
     """
-    client = get_async_client(hass, verify_ssl=False)
-    try:
-        ca_pem = await download_ca_cert(fqdn, port=http_port, httpx_client=client)
-    except (
-        OSError,
-        SpanPanelAPIError,
-        SpanPanelConnectionError,
-        SpanPanelTimeoutError,
-    ):
-        return False
+    if ca_pem is None:
+        client = get_async_client(hass, verify_ssl=False)
+        try:
+            ca_pem = await download_ca_cert(fqdn, port=http_port, httpx_client=client)
+        except (
+            OSError,
+            SpanPanelAPIError,
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+        ):
+            return False
 
     return await async_leaf_chains_to_ca(fqdn, mqtts_port, ca_pem)
+
+
+async def async_resolve_host(hass: HomeAssistant, host: str) -> str | None:
+    """Resolve `host` to the IPv4 address the panel answers on, or None.
+
+    The panel's certificate names the addresses it knows itself by -- its IP and
+    its mDNS name -- and an FQDN only joins that list once `register_fqdn` has
+    run. Everything before that has to be dialled by an address the leaf already
+    names, and this is where that address comes from.
+
+    IPv4 only, and deliberately: the library builds bootstrap URLs by string
+    concatenation and does not bracket an IPv6 literal, so returning one would
+    produce a URL that cannot be parsed. `None` means "no answer this code can
+    use", and the caller falls back to the name it was given rather than
+    failing -- that is exactly the behaviour that shipped, so a host this
+    resolver cannot help with is no worse off than before.
+    """
+    if is_ip_literal(host):
+        return host
+
+    def _resolve() -> str | None:
+        try:
+            infos = socket.getaddrinfo(host, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+        except OSError:
+            return None
+        for *_unused, sockaddr in infos:
+            return str(sockaddr[0])
+        return None
+
+    return await hass.async_add_executor_job(_resolve)
 
 
 async def async_fetch_panel_ca(hass: HomeAssistant, host: str, http_port: int = 80) -> str:
@@ -192,10 +239,8 @@ async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool
 
 
 async def validate_v2_proximity(
-    hass: HomeAssistant,
     host: str,
-    port: int = 80,
-    transport: PanelRestTransport | None = None,
+    transport: PanelRestTransport,
 ) -> V2AuthResponse:
     """Validate v2 panel proximity (door bypass) and return MQTT credentials.
 
@@ -203,21 +248,22 @@ async def validate_v2_proximity(
     registration. The panel accepts this when the user opens/closes the
     door 3 times within the proximity window.
 
+    `transport` is required for the same reason as in `validate_v2_passphrase`:
+    no passphrase crosses the wire here, but the broker password comes back, and
+    a defaulted plaintext transport would return it in the clear.
+
     Raises:
         SpanPanelAuthError: if proximity was not proven (door not opened).
         SpanPanelConnectionError: on network/timeout failures.
         SpanPanelTimeoutError: on request timeout.
 
     """
-    resolved = transport or PanelRestTransport(
-        port=port, ssl_context=None, httpx_client=get_async_client(hass, verify_ssl=False)
-    )
     return await register_v2(
         host,
         "Home Assistant",
-        port=resolved.port,
-        httpx_client=resolved.httpx_client,
-        ssl_context=resolved.ssl_context,
+        port=transport.port,
+        httpx_client=transport.httpx_client,
+        ssl_context=transport.ssl_context,
     )
 
 
@@ -235,28 +281,47 @@ class PanelRestTransport:
     Mixing the two is refused by the library rather than guessed at: an explicit
     `port=80` alongside an `ssl_context` raises, because "HTTPS on port 80" and
     "a port stored before the CA was pinned" are both plausible readings.
+
+    `ca_pem` is the anchor `ssl_context` was built from, carried alongside it
+    because a context cannot be read back into a PEM and two callers need the
+    text: the FQDN readiness poll, which verifies a different port against the
+    same anchor, and anything that wants to fingerprint what it is pinned to.
+    It is None exactly when `ssl_context` is.
     """
 
     port: int
     ssl_context: ssl.SSLContext | None
     httpx_client: httpx.AsyncClient | None
+    ca_pem: str | None
 
 
-def as_port(value: object, default: int) -> int:
-    """Read a port out of untyped entry data without trusting its type.
+def port_or_none(value: object) -> int | None:
+    """Read a port out of untyped entry data, or None when it does not hold one.
 
     `entry.data` round-trips through JSON and is typed `Any` at the boundary; a
-    hand-edited `.storage` can put a string there. Anything unusable falls back
-    to the default rather than raising, because a bad port must not be the reason
-    an otherwise healthy entry cannot start.
+    hand-edited `.storage` can put a string there. `None` is the honest answer
+    for anything unreadable, and it is a different answer from a default: a
+    caller deciding whether the panel's TLS port is *known* must not be told yes
+    because a substitute was available.
     """
     if isinstance(value, bool):
-        return default
+        return None
     if isinstance(value, int):
         return value
     if isinstance(value, str) and value.isdigit():
         return int(value)
-    return default
+    return None
+
+
+def as_port(value: object, default: int) -> int:
+    """Read a port out of untyped entry data, falling back to `default`.
+
+    A bad port must not be the reason an otherwise healthy entry cannot start,
+    so this never raises. Use `port_or_none` where the difference between a
+    stored value and a substituted one matters.
+    """
+    parsed = port_or_none(value)
+    return default if parsed is None else parsed
 
 
 def panel_rest_transport(
@@ -281,10 +346,16 @@ def panel_rest_transport(
             )
         else:
             https_port = as_port(entry_data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
-            return PanelRestTransport(port=https_port, ssl_context=context, httpx_client=None)
+            return PanelRestTransport(
+                port=https_port,
+                ssl_context=context,
+                httpx_client=None,
+                ca_pem=str(pem),
+            )
 
     return PanelRestTransport(
         port=as_port(entry_data.get(CONF_HTTP_PORT), 80),
         ssl_context=None,
         httpx_client=get_async_client(hass, verify_ssl=False),
+        ca_pem=None,
     )

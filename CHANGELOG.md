@@ -157,6 +157,8 @@ working entirely in 2027.8.
   longer crosses your network in the clear.
 - **Re-authenticating an entry that was never pinned pins it first**, so an entry that arrived from an older release sends its new credentials over a verified
   connection and keeps the authority afterwards.
+- **Setting up or moving a panel to a hostname works with pinning on**, because the panel is set up over the address its certificate already names and the
+  hostname is verified after the panel has added it.
 - **A changed authority stops the integration and raises a repair** carrying both fingerprints, because a legitimate rotation and an impersonated panel look
   identical from here.
 - **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay

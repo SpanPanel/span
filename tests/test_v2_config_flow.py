@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
+import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
@@ -81,6 +83,15 @@ def panel_ca_available():
         patch(
             "custom_components.span_panel.config_flow.build_panel_ssl_context",
             return_value=MagicMock(),
+        ),
+        # Nothing resolves in a test run — the harness refuses DNS outright —
+        # so the flow takes its documented fallback and dials the name it was
+        # given, which is what every assertion in this module was written
+        # against. The resolved-address bootstrap is exercised for real against
+        # a live listener in `test_v2_config_flow_tls.py`.
+        patch(
+            "custom_components.span_panel.config_flow.async_resolve_host",
+            new=AsyncMock(return_value=None),
         ),
     ):
         yield
@@ -478,8 +489,9 @@ async def test_the_ca_is_pinned_before_the_passphrase_is_ever_sent(
         )
 
     # And when it was, it went over the accepted anchor rather than plaintext.
-    transport = register.call_args.kwargs["transport"]
-    assert transport is not None
+    # The transport is the third positional argument and has no default, so
+    # there is no shape of this call that sends the passphrase unpinned.
+    transport = register.call_args.args[2]
     assert transport.ssl_context is not None
     assert transport.httpx_client is None
     assert transport.port == 443
@@ -992,6 +1004,68 @@ async def test_reauth_of_an_unpinned_entry_pins_before_the_passphrase_is_sent(
 
 
 @pytest.mark.asyncio
+async def test_replacing_an_unusable_stored_anchor_says_what_it_is_now_pinned_to(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A stored PEM this system cannot load is replaced, and that is worth a line.
+
+    Silently swapping what an entry trusts is the one change a user needs a
+    record of, and the new fingerprint is the value to compare against the one
+    logged at install — the only trace of it once the old PEM is gone.
+    """
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: "not-a-certificate",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    def _build(pem: str) -> MagicMock:
+        if pem == "not-a-certificate":
+            raise ssl.SSLError("not a certificate")
+        return MagicMock()
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            side_effect=_build,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+        caplog.at_level(logging.WARNING),
+    ):
+        menu = await entry.start_reauth_flow(hass)
+        form = await hass.config_entries.flow.async_configure(
+            menu["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    assert done["reason"] == "reauth_successful"
+    assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
+    assert "Replaced the stored certificate authority" in caplog.text
+    assert FAKE_CA_FINGERPRINT in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_reauth_refuses_to_send_the_passphrase_when_the_leaf_does_not_chain(
     hass: HomeAssistant,
 ) -> None:
@@ -1102,6 +1176,78 @@ async def test_reauth_of_a_pinned_entry_does_not_go_back_for_a_ca(
 
     assert result["step_id"] == "reauth_confirm"
     fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_full_reauth_leaves_a_pinned_entry_pinned_to_the_same_thing(
+    hass: HomeAssistant,
+) -> None:
+    """Reauth replaces credentials. It must not quietly move the trust anchor.
+
+    The anchor and the port it was checked against are what a user compared a
+    fingerprint to and what a CA-changed repair compares against next time. A
+    reauth that rewrote either would make the repair fire on a panel that never
+    rotated anything, or hide one that did.
+    """
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_HOST: MOCK_HOST,
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_EBUS_BROKER_USERNAME: "old-user",
+            CONF_EBUS_BROKER_PASSWORD: "old-secret",
+            CONF_PANEL_CA_PEM: FAKE_CA_PEM,
+            CONF_HTTPS_PORT: 9443,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    fetch = AsyncMock(return_value="a-different-pem")
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch("custom_components.span_panel.config_flow.async_fetch_panel_ca", new=fetch),
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ) as register,
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
+        menu = await entry.start_reauth_flow(hass)
+        form = await hass.config_entries.flow.async_configure(
+            menu["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    assert done["reason"] == "reauth_successful"
+    # Credentials moved on; the anchor and its port did not.
+    assert entry.data[CONF_ACCESS_TOKEN] == MOCK_V2_AUTH.access_token
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == MOCK_V2_AUTH.ebus_broker_password
+    assert entry.data[CONF_PANEL_CA_PEM] == FAKE_CA_PEM
+    assert entry.data[CONF_HTTPS_PORT] == 9443
+    # Nothing was fetched to replace it with, and registration ran over the
+    # stored pin on the stored port.
+    fetch.assert_not_awaited()
+    assert register.call_args.args[2].port == 9443
+    assert register.call_args.args[2].ca_pem == FAKE_CA_PEM
 
 
 @pytest.mark.asyncio

@@ -44,12 +44,14 @@ from .config_flow_options import (
 )
 from .config_flow_validation import (
     PanelRestTransport,
-    as_port,
     async_fetch_panel_ca,
     async_leaf_chains_to_ca,
+    async_resolve_host,
     check_fqdn_tls_ready,
     is_fqdn,
+    is_ip_literal,
     panel_rest_transport,
+    port_or_none,
     validate_host,
     validate_v2_passphrase,
     validate_v2_proximity,
@@ -190,11 +192,55 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # entry on reauth and reconfigure, where a pin may already exist; left
         # None on initial setup, which has nothing pinned yet by construction.
         self._rest_transport: PanelRestTransport | None = None
+        # The address this flow dials, which is not always the host it is
+        # setting up. A panel's certificate names the addresses it already knows
+        # itself by; an FQDN joins that list only once `register_fqdn` has run,
+        # and everything before that has to be dialled by an address the leaf
+        # already names. None means "dial `self.host`" -- an IP install, or a
+        # name that would not resolve.
+        self._bootstrap_host: str | None = None
         # Energy dip compensation default for fresh installs
         self._enable_dip_compensation: bool = True
         # FQDN registration task (async_show_progress)
         self._fqdn_task: asyncio.Task[None] | None = None
         self._reconfigure_fqdn_task: asyncio.Task[None] | None = None
+
+    @property
+    def _rest_host(self) -> str:
+        """The address this flow's REST and TLS calls dial."""
+        return self._bootstrap_host or self.host or ""
+
+    def _require_transport(self) -> PanelRestTransport:
+        """Return the transport this flow's credential exchanges run over.
+
+        Raised rather than defaulted. Every path that asks for one has been
+        through the CA step or adopted an existing entry's pin, so a missing
+        transport is a routing bug -- and the only value that could stand in for
+        it is a plaintext one, which would send the panel passphrase in the
+        clear to paper over the bug.
+        """
+        if self._rest_transport is None:
+            raise ConfigFlowError("Reached a panel REST call with no transport pinned")
+        return self._rest_transport
+
+    async def _async_adopt_bootstrap_host(self) -> None:
+        """Dial the panel by address while its certificate still names only that.
+
+        A name that does not resolve leaves the host as it was, which is what
+        shipped: the leaf check then runs against the name and reports what it
+        finds. Better than refusing to continue over a lookup the user may not
+        need -- an mDNS name on a host without an mDNS resolver still reaches
+        the panel through whatever answered the plaintext probe.
+        """
+        self._bootstrap_host = None
+        host = self.host
+        if not host or is_ip_literal(host):
+            return
+        resolved = await async_resolve_host(self.hass, host)
+        if resolved is None:
+            _LOGGER.debug("Could not resolve %s to an address; dialling the name", host)
+            return
+        self._bootstrap_host = resolved
 
     def ensure_flow_is_set_up(self) -> None:
         """Ensure the flow is set up."""
@@ -418,9 +464,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """Handle a flow initiated by re-auth."""
         host = entry_data[CONF_HOST]
         self._http_port = int(entry_data.get(CONF_HTTP_PORT, 80))
-        stored_https_port = entry_data.get(CONF_HTTPS_PORT)
+        # Only a port that could actually be read counts as known. `as_port`
+        # would substitute the default for an unreadable stored value and this
+        # flow would then record "somebody authoritative told us" about a number
+        # nobody supplied, skipping the one question that could correct it.
+        stored_https_port = port_or_none(entry_data.get(CONF_HTTPS_PORT))
         if stored_https_port is not None:
-            self._https_port = as_port(stored_https_port, DEFAULT_HTTPS_PORT)
+            self._https_port = stored_https_port
             self._https_port_known = True
         # This entry may already have a pinned CA, and a reauth is precisely
         # where fresh credentials cross the wire. Adopted before the first call.
@@ -516,13 +566,18 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not self.host:
             return self.async_abort(reason="host_not_set")
 
+        transport = self._require_transport()
         # Check proximityProven before calling register_v2 (avoids 15-min block).
         # On older firmware the field is None — fall through to register_v2 directly.
+        # Over the pin, like the registration it gates: this probe is what
+        # decides whether the door challenge is believed, and a plaintext answer
+        # is one anything on the path can write.
         try:
             detection = await detect_api_version(
-                self.host,
-                port=self._http_port,
-                httpx_client=get_async_client(self.hass, verify_ssl=False),
+                self._rest_host,
+                port=transport.port,
+                httpx_client=transport.httpx_client,
+                ssl_context=transport.ssl_context,
             )
         except (SpanPanelAPIError, SpanPanelConnectionError, SpanPanelTimeoutError) as err:
             _LOGGER.warning("Failed to detect API version during proximity auth: %s", err)
@@ -535,9 +590,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return await self.async_step_auth_proximity()
 
         try:
-            result = await validate_v2_proximity(
-                self.hass, self.host, port=self._http_port, transport=self._rest_transport
-            )
+            result = await validate_v2_proximity(self._rest_host, transport)
         except (SpanPanelAuthError, SpanPanelConnectionError):
             return await self.async_step_auth_proximity()
 
@@ -568,11 +621,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         try:
             result = await validate_v2_passphrase(
-                self.hass,
-                self.host,
-                passphrase,
-                port=self._http_port,
-                transport=self._rest_transport,
+                self._rest_host, passphrase, self._require_transport()
             )
         except SpanPanelAuthError:
             return self.async_show_form(
@@ -643,20 +692,21 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         return self.async_show_progress_done(next_step_id="choose_entity_naming_initial")
 
     async def _async_register_fqdn_and_wait(self) -> None:
-        """Register the FQDN and poll until the TLS cert includes it."""
+        """Register the FQDN, wait for the panel's new leaf, then verify it.
+
+        Three addresses matter here and they are not the same one. The request
+        carries the access token, so it goes over the pin -- and it is dialled by
+        the address the current leaf names, because the FQDN is precisely what
+        this call is asking the panel to add. Only once the panel reports the
+        regenerated certificate is the FQDN itself verified, and it is verified
+        on the port the entry will actually use, before anything is persisted.
+        """
         if not self.host or not self.access_token:
             raise ConfigFlowError("Host and access token required for FQDN registration")
 
-        # Carries the access token, so it goes over the pin where this flow has
-        # one — which is the reconfigure path. Initial setup has not fetched a CA
-        # yet at this point and falls back to the plaintext bootstrap port.
-        transport = self._rest_transport or PanelRestTransport(
-            port=self._http_port,
-            ssl_context=None,
-            httpx_client=get_async_client(self.hass, verify_ssl=False),
-        )
+        transport = self._require_transport()
         await register_fqdn(
-            self.host,
+            self._rest_host,
             self.access_token,
             self.host,
             port=transport.port,
@@ -669,16 +719,43 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         for attempt in range(max_attempts):
             await asyncio.sleep(2)
             if await check_fqdn_tls_ready(
-                self.hass, self.host, mqtts_port, http_port=self._http_port
+                self.hass,
+                self.host,
+                mqtts_port,
+                transport.ca_pem,
+                http_port=self._http_port,
             ):
                 _LOGGER.debug(
                     "FQDN %s found in TLS cert SAN after %d attempts",
                     self.host,
                     attempt + 1,
                 )
+                await self._async_verify_fqdn_over_pin(transport)
                 return
 
         raise ConfigFlowError(f"Timed out waiting for TLS certificate to include FQDN {self.host}")
+
+    async def _async_verify_fqdn_over_pin(self, transport: PanelRestTransport) -> None:
+        """Confirm the pinned anchor validates the panel at the FQDN and REST port.
+
+        The readiness poll watches the broker port, which is the port the MQTT
+        client uses. The entry's REST calls go somewhere else -- the HTTPS port
+        this transport holds -- and an entry is about to be written naming the
+        FQDN for both. Confirming the exact pair that will be stored is what
+        stops registration reporting success on a combination that then fails on
+        the first connect after setup.
+
+        Nothing is pinned on a reconfigure of an entry whose CA fetch never
+        succeeded; there is no anchor to verify against and no pin to protect,
+        so that entry proceeds exactly as it did before.
+        """
+        if transport.ca_pem is None:
+            return
+        if not await async_leaf_chains_to_ca(self.host or "", transport.port, transport.ca_pem):
+            raise ConfigFlowError(
+                f"Panel registered FQDN {self.host} but does not serve it on port "
+                f"{transport.port} under the pinned certificate authority"
+            )
 
     async def async_step_fqdn_failed(
         self, user_input: dict[str, Any] | None = None
@@ -745,24 +822,37 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not self.host:
             return self.async_abort(reason="host_not_set")
 
+        # Both calls below go to the panel's address rather than to the name the
+        # user typed. The panel's leaf names the addresses it already knows
+        # itself by, and an FQDN is not one of them until `register_fqdn` runs --
+        # which is after authentication, which is after this. Checking a
+        # not-yet-registered FQDN against that leaf fails on the hostname, and
+        # this step is deliberately a dead end, so it would make an FQDN install
+        # impossible rather than merely unverified.
+        await self._async_adopt_bootstrap_host()
+
         try:
-            ca_pem = await async_fetch_panel_ca(self.hass, self.host, http_port=self._http_port)
+            ca_pem = await async_fetch_panel_ca(
+                self.hass, self._rest_host, http_port=self._http_port
+            )
         except (
             SpanPanelAPIError,
             SpanPanelConnectionError,
             SpanPanelTimeoutError,
         ) as err:
-            _LOGGER.warning("Could not fetch the CA from panel %s: %s", self.host, err)
+            _LOGGER.warning("Could not fetch the CA from panel %s: %s", self._rest_host, err)
             return self._async_show_ca_error("ca_unavailable")
 
         # A CA that cannot validate the certificate the panel actually serves is
         # not the panel's CA. Checked before the fingerprint is shown, so the
-        # user is never asked to accept a value that already failed.
-        if not await async_leaf_chains_to_ca(self.host, self._https_port, ca_pem):
+        # user is never asked to accept a value that already failed. Hostname
+        # verification stays on -- the address it is checked against changed,
+        # the check did not.
+        if not await async_leaf_chains_to_ca(self._rest_host, self._https_port, ca_pem):
             _LOGGER.warning(
                 "The certificate served by %s on port %s does not chain to the CA the "
                 "panel published; refusing to pin it",
-                self.host,
+                self._rest_host,
                 self._https_port,
             )
             return self._async_show_ca_error("ca_leaf_mismatch")
@@ -828,7 +918,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             return self._async_show_ca_error("ca_unavailable")
 
         self._rest_transport = PanelRestTransport(
-            port=self._https_port, ssl_context=context, httpx_client=None
+            port=self._https_port,
+            ssl_context=context,
+            httpx_client=None,
+            ca_pem=self._panel_ca_pem,
         )
         if self.trigger_flow_type == TriggerFlowType.UPDATE_ENTRY:
             # Same two methods, but the reauth wording: this user is not setting
@@ -921,6 +1014,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # from going back to a plaintext CA fetch. `_panel_ca_pem` is None
             # only when the entry already carried a usable pin, which is left
             # exactly as it was.
+            self._log_replaced_anchor(entry.data.get(CONF_PANEL_CA_PEM))
             updated_data[CONF_PANEL_CA_PEM] = self._panel_ca_pem
             updated_data.pop(PANEL_CA_PENDING, None)
             if self._https_port != DEFAULT_HTTPS_PORT:
@@ -929,6 +1023,31 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self.hass.config_entries.async_update_entry(entry, data=updated_data)
         self.hass.async_create_task(self.hass.config_entries.async_reload(entry_id))
         return self.async_abort(reason="reauth_successful")
+
+    def _log_replaced_anchor(self, previous_pem: object) -> None:
+        """Say so, at WARNING, when a reauth overwrites a stored trust anchor.
+
+        The entry only reaches here unpinned, and one of the ways it does is a
+        stored PEM this system can no longer load. Replacing that is silently
+        changing what the entry trusts, which is the one change a user needs a
+        record of: the fingerprint below is the value to compare against the one
+        logged at install, and the only trace of it if the old PEM is gone.
+
+        A first pin is not a replacement and says nothing here -- the install
+        log already named it.
+        """
+        if not previous_pem or previous_pem == self._panel_ca_pem or self._panel_ca_pem is None:
+            return
+        try:
+            fingerprint = ca_fingerprint(self._panel_ca_pem)
+        except SpanPanelValidationError:  # pragma: no cover - already fingerprinted once
+            fingerprint = "unreadable"
+        _LOGGER.warning(
+            "Replaced the stored certificate authority for panel %s during reauthentication; "
+            "the entry is now pinned to SHA-256 %s",
+            self.host,
+            fingerprint,
+        )
 
     def get_unique_device_name(self, base_name: str) -> str:
         """Return a unique device name based on existing config entry titles."""
@@ -1002,9 +1121,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # Validate the host is reachable and is a v2 panel
         http_port = int(reconfigure_entry.data.get(CONF_HTTP_PORT, 80))
         self._rest_transport = panel_rest_transport(self.hass, reconfigure_entry.data)
+        # The new host may be an FQDN the panel has never heard of, and this
+        # entry is pinned: probing it by name would fail hostname verification
+        # and report the panel unreachable. Probe the address, register the
+        # name, verify the name afterwards.
+        self.host = host
+        await self._async_adopt_bootstrap_host()
         try:
             detection = await detect_api_version(
-                host,
+                self._rest_host,
                 port=self._rest_transport.port,
                 httpx_client=self._rest_transport.httpx_client,
                 ssl_context=self._rest_transport.ssl_context,
@@ -1041,7 +1166,6 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if is_fqdn(host):
             # New host is FQDN — register it (replaces any existing FQDN on the panel)
-            self.host = host
             self.access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
             self._http_port = http_port
             self._v2_broker_port = int(reconfigure_entry.data.get(CONF_EBUS_BROKER_PORT, 8883))
@@ -1055,7 +1179,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             access_token = str(reconfigure_entry.data.get(CONF_ACCESS_TOKEN, ""))
             try:
                 await delete_fqdn(
-                    host,
+                    self._rest_host,
                     access_token,
                     port=self._rest_transport.port,
                     httpx_client=self._rest_transport.httpx_client,
