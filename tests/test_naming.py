@@ -88,6 +88,101 @@ def test_every_form_table_entry_has_a_new_wording_and_vice_versa() -> None:
         )
 
 
+# --- The id shape kept where composition would move one --------------------
+#
+# Two kinds of circuit entity are spelled differently by Home Assistant's
+# composition than by the builder that preset their ids: one on a sub-device,
+# where the DEVICE part is the charger and not the panel, and one on an install
+# that turned the device prefix off, where composition prefixes anyway. Neither
+# difference is anything the user did, so those entities keep being preset.
+
+from custom_components.span_panel.naming import (
+    LEGACY_PRESET_DEVICE_NAME,
+    legacy_preset_entity_id,
+)
+
+
+def test_a_sub_device_sensor_keeps_the_panel_prefixed_id_it_has() -> None:
+    """Composition would spell this one with the charger's name; its id says the panel."""
+    assert (
+        legacy_preset_entity_id(
+            "sensor",
+            LEGACY_PRESET_DEVICE_NAME,
+            "Kitchen Outlets",
+            "power",
+            "sensor.span_panel_kitchen_outlets_power",
+        )
+        == "sensor.span_panel_kitchen_outlets_power"
+    )
+
+
+def test_an_install_without_the_device_prefix_keeps_its_bare_id() -> None:
+    """`has_entity_name` prefixes the device unconditionally; these ids never did."""
+    assert (
+        legacy_preset_entity_id(
+            "sensor", None, "Kitchen Outlets", "power", "sensor.kitchen_outlets_power"
+        )
+        == "sensor.kitchen_outlets_power"
+    )
+
+
+def test_a_renamed_circuit_still_refreshes_the_name_half() -> None:
+    """Issue #252 has to survive the preset: the id is computed, never read back."""
+    assert (
+        legacy_preset_entity_id(
+            "sensor",
+            LEGACY_PRESET_DEVICE_NAME,
+            "Beer Fridge",
+            "power",
+            "sensor.span_panel_kitchen_outlets_power",
+        )
+        == "sensor.span_panel_beer_fridge_power"
+    )
+    assert (
+        legacy_preset_entity_id(
+            "sensor", None, "Beer Fridge", "power", "sensor.kitchen_outlets_power"
+        )
+        == "sensor.beer_fridge_power"
+    )
+
+
+@pytest.mark.parametrize(
+    ("device_slug", "existing", "expected"),
+    [
+        (
+            LEGACY_PRESET_DEVICE_NAME,
+            "sensor.span_panel_kitchen_consumed_energy",
+            "sensor.span_panel_kitchen_consumed_energy",
+        ),
+        (
+            LEGACY_PRESET_DEVICE_NAME,
+            "sensor.span_panel_kitchen_energy_consumed",
+            "sensor.span_panel_kitchen_energy_consumed",
+        ),
+        (None, "sensor.kitchen_consumed_energy", "sensor.kitchen_consumed_energy"),
+        (None, "sensor.kitchen_energy_consumed", "sensor.kitchen_energy_consumed"),
+    ],
+)
+def test_the_suffix_words_come_from_the_id_the_entity_already_has(
+    device_slug: str | None, existing: str, expected: str
+) -> None:
+    """Both spellings this integration has shipped survive the preset, as they must."""
+    assert (
+        legacy_preset_entity_id("sensor", device_slug, "Kitchen", "energy_consumed", existing)
+        == expected
+    )
+
+
+def test_the_preset_device_name_is_the_literal_the_old_builder_fell_back_to() -> None:
+    """Not the panel's own name: `construct_single_circuit_entity_id` passed none.
+
+    A second panel on a system is named "Span Panel 2" and its circuit ids still
+    began `span_panel_`, so the panel's name is the wrong thing to spell an
+    existing id with.
+    """
+    assert LEGACY_PRESET_DEVICE_NAME == "Span Panel"
+
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 

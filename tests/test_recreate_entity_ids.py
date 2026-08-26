@@ -26,6 +26,7 @@ import pytest
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_registry import EntityNamePart
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -45,8 +46,9 @@ from custom_components.span_panel.id_builder import (
 from custom_components.span_panel.sensor_circuit import (
     SpanCircuitEnergySensor,
     SpanCircuitPowerSensor,
+    SpanUnmappedCircuitSensor,
 )
-from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
+from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS, UNMAPPED_SENSORS
 from custom_components.span_panel.switch import SpanPanelCircuitsSwitch
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
@@ -99,9 +101,15 @@ class _Install:
     the same `async_reset` an entry unload performs.
     """
 
-    def __init__(self, hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: MockConfigEntry,
+        device_info_override: DeviceInfo | None = None,
+    ) -> None:
         self._hass = hass
         self._entry = entry
+        self._device_info_override = device_info_override
         self._platform: MockEntityPlatform | None = None
 
     async def load(self, circuit_name: str) -> SpanCircuitPowerSensor:
@@ -118,7 +126,13 @@ class _Install:
         self._platform = MockEntityPlatform(self._hass, domain="sensor", platform_name=DOMAIN)
         self._platform.config_entry = self._entry
 
-        sensor = SpanCircuitPowerSensor(coordinator, POWER_DESCRIPTION, snapshot, CIRCUIT_ID)
+        sensor = SpanCircuitPowerSensor(
+            coordinator,
+            POWER_DESCRIPTION,
+            snapshot,
+            CIRCUIT_ID,
+            device_info_override=self._device_info_override,
+        )
         await self._platform.async_add_entities([sensor])
         await self._hass.async_block_till_done()
 
@@ -634,6 +648,145 @@ async def test_an_unnamed_circuit_in_friendly_mode_still_gets_a_distinct_id(
     sensor = await _Install(hass, entry).load("")
 
     assert sensor.entity_id == "sensor.span_panel_circuit_15_power"
+
+
+# --- Entities composition would spell differently than the preset did ---------
+#
+# Two shapes disagree with what Home Assistant composes, for reasons belonging to
+# this integration and not to the user: a circuit sensor shown on a sub-device
+# card, where the DEVICE part is the charger rather than the panel, and any
+# entity on an install that turned the device prefix off, which `has_entity_name`
+# prefixes anyway. R1 says Recreate must not offer either move, so these keep
+# being preset -- from current panel data, so #252 still holds.
+
+EVSE_DEVICE_INFO = DeviceInfo(
+    identifiers={(DOMAIN, f"{SERIAL}_evse_node-1")},
+    name="SPAN Panel EV Charger",
+)
+
+LEGACY_NAMES = {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
+
+
+def _seed_power_entity(hass: HomeAssistant, entry: MockConfigEntry, object_id: str) -> str:
+    """Register the circuit power entity the way an install already has it."""
+    registry = er.async_get(hass)
+    seeded = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, CIRCUIT_ID, "instantPowerW"),
+        suggested_object_id=object_id,
+        config_entry=entry,
+    )
+    assert seeded.entity_id == f"sensor.{object_id}"
+    return seeded.entity_id
+
+
+async def test_an_existing_sub_device_sensor_is_offered_its_own_id(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """An EVSE feed circuit's sensor is spelled with the panel, and stays so."""
+    seeded = _seed_power_entity(hass, entry, "span_panel_refrigerator_power")
+
+    install = _Install(hass, entry, device_info_override=EVSE_DEVICE_INFO)
+    sensor = await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == seeded
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(seeded)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded
+
+
+async def test_an_existing_sub_device_sensor_still_follows_a_rename(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Keeping the shape must not cost #252: the name half still tracks the panel."""
+    seeded = _seed_power_entity(hass, entry, "span_panel_refrigerator_power")
+
+    install = _Install(hass, entry, device_info_override=EVSE_DEVICE_INFO)
+    await install.load(ORIGINAL_NAME)
+    await install.load(RENAMED)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(seeded)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_ENTITY_ID
+
+
+async def test_an_existing_sensor_on_a_no_prefix_install_is_offered_its_own_id(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The pre-1.0.4 shape: no device prefix at all, which composition cannot produce."""
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+    seeded = _seed_power_entity(hass, entry, "refrigerator_power")
+
+    install = _Install(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == seeded
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(seeded)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded
+
+
+async def test_a_new_sensor_on_a_no_prefix_install_composes_like_every_other_entity(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The preset is for ids that exist. Nothing new inherits the prefix-less shape."""
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+
+    sensor = await _Install(hass, entry).load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == ORIGINAL_ENTITY_ID
+
+
+async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The exception is for ids this integration spelled, and it never spelled these.
+
+    The hidden unmapped-tab sensors have always had their ids composed by Home
+    Assistant from the display name, so they carry a device prefix that the
+    naming flag never reached. Applying the prefix-less shape to them would
+    invent a move rather than prevent one.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
+
+    registry = er.async_get(hass)
+    seeded = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_circuit_unique_id(SERIAL, "unmapped_tab_32", "instantPowerW"),
+        suggested_object_id="span_panel_unmapped_tab_32_power",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == "sensor.span_panel_unmapped_tab_32_power"
+
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="unmapped_tab_32", name="", tabs=[32])
+    snapshot = SpanPanelSnapshotFactory.create(
+        serial_number=SERIAL, circuits={"unmapped_tab_32": circuit}
+    )
+    coordinator = _coordinator(hass, snapshot, entry)
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator, panel_device_id="panel-device-id"
+    )
+
+    platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
+    platform.config_entry = entry
+    sensor = SpanUnmappedCircuitSensor(coordinator, UNMAPPED_SENSORS[0], snapshot, "unmapped_tab_32")
+    await platform.async_add_entities([sensor])
+    await hass.async_block_till_done()
+
+    assert sensor.entity_id == seeded.entity_id
+
+    registry_entry = registry.async_get(seeded.entity_id)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
 
 
 def test_a_suffix_with_no_older_spelling_is_left_alone() -> None:

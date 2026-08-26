@@ -95,6 +95,8 @@ class SpanCircuitPowerSensor(
 ):
     """Circuit power/current/breaker-rating sensor with extra state attributes."""
 
+    _id_was_preset_by_this_integration = True
+
     # Beyond the value the description declares: `name` and `tabs` build the
     # entity's identity (~56-83), and `tabs`, `relay_state`, `relay_requester`
     # and `priority` are republished as state attributes (~231-243).
@@ -201,31 +203,22 @@ class SpanCircuitPowerSensor(
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name or 'Sensor'}"
 
-    def _object_id_identifier(
+    def _object_id_parts(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str | None:
-        """Return the naming-flag half of this sensor's object-id base."""
+    ) -> tuple[str, str] | None:
+        """Return the circuit identifier and the suffix this sensor's id ends with."""
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
             return None
-        if self._is_sub_device:
-            # On a sub-device (an EVSE's feed circuit) Core supplies that device
-            # as the DEVICE part of the id, so the base is the reading alone --
-            # the same shape the charger's own sensors have.
-            return None
-        return _resolve_circuit_identifier(
+        identifier = _resolve_circuit_identifier(
             circuit, self.circuit_id, self.coordinator.config_entry.options
         )
-
-    def _object_id_suffix(self, description: SpanPanelCircuitsSensorEntityDescription) -> str:
-        """Return the canonical suffix, from the key this sensor was built from.
-
-        `description.key` was overwritten with the circuit id during
-        construction, so the base class's answer would not be a suffix at all.
-        """
-        return get_user_friendly_suffix(self._API_KEY_MAP.get(self.original_key, self.original_key))
+        suffix = get_user_friendly_suffix(
+            self._API_KEY_MAP.get(self.original_key, self.original_key)
+        )
+        return identifier, suffix
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the circuit power sensor."""
@@ -288,8 +281,18 @@ class SpanCircuitEnergySensor(
 ):
     """Circuit energy sensor with grace period tracking."""
 
+    _id_was_preset_by_this_integration = True
+
     # Naming only; this sensor publishes no circuit attributes.
     _residual_field_paths: ClassVar[tuple[str, ...]] = ("circuit.name", "circuit.tabs")
+
+    # Map new description keys to the original API keys that migration
+    # normalized from; both the unique id and the entity-id suffix key on them.
+    _API_KEY_MAP: dict[str, str] = {
+        "circuit_energy_produced": "producedEnergyWh",
+        "circuit_energy_consumed": "consumedEnergyWh",
+        "circuit_energy_net": "netEnergyWh",
+    }
 
     def __init__(
         self,
@@ -381,34 +384,22 @@ class SpanCircuitEnergySensor(
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
 
-    def _object_id_identifier(
+    def _object_id_parts(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str | None:
-        """Return the naming-flag half of this sensor's object-id base."""
+    ) -> tuple[str, str] | None:
+        """Return the circuit identifier and the suffix this sensor's id ends with."""
         circuit = snapshot.circuits.get(self.circuit_id)
         if not circuit:
             return None
-        if self._is_sub_device:
-            # See `SpanCircuitPowerSensor._object_id_identifier`: the charger is
-            # the DEVICE part, so the base is the reading alone.
-            return None
-        return _resolve_circuit_identifier(
+        identifier = _resolve_circuit_identifier(
             circuit, self.circuit_id, self.coordinator.config_entry.options
         )
-
-    def _object_id_suffix(self, description: SpanPanelCircuitsSensorEntityDescription) -> str:
-        """Return the canonical suffix, from the key this sensor was built from."""
-        return get_user_friendly_suffix(self._API_KEY_MAP.get(self.original_key, self.original_key))
-
-    # Map new description keys to the original API keys that migration
-    # normalized from; both the unique id and the entity-id suffix key on them.
-    _API_KEY_MAP: dict[str, str] = {
-        "circuit_energy_produced": "producedEnergyWh",
-        "circuit_energy_consumed": "consumedEnergyWh",
-        "circuit_energy_net": "netEnergyWh",
-    }
+        suffix = get_user_friendly_suffix(
+            self._API_KEY_MAP.get(self.original_key, self.original_key)
+        )
+        return identifier, suffix
 
     # Map original_key to the energy type used for coordinator dip offset tracking
     _ENERGY_TYPE_MAP: dict[str, str] = {
@@ -530,17 +521,16 @@ class SpanUnmappedCircuitSensor(
         description_name = str(description.name) if description.name else "Sensor"
         return construct_unmapped_friendly_name(tab_number, description_name)
 
-    def _object_id_identifier(
+    def _object_id_parts(
         self,
         snapshot: SpanPanelSnapshot,
         description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str | None:
+    ) -> tuple[str, str] | None:
         """Return the tab this sensor backs; unmapped tabs carry no naming flag."""
-        return f"Unmapped Tab {self.circuit_id.replace('unmapped_tab_', '')}"
-
-    def _object_id_suffix(self, description: SpanPanelCircuitsSensorEntityDescription) -> str:
-        """Return the canonical suffix, from the key this sensor was built from."""
-        return get_user_friendly_suffix(self.original_key)
+        return (
+            f"Unmapped Tab {self.circuit_id.replace('unmapped_tab_', '')}",
+            get_user_friendly_suffix(self.original_key),
+        )
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
         """Get the data source for the unmapped circuit sensor."""

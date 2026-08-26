@@ -26,6 +26,7 @@ tables here govern entity ids only.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Final
 
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
@@ -91,6 +92,51 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
     if slugify(identifier).endswith(slugify(words)):
         return identifier
     return f"{identifier} {words}"
+
+
+LEGACY_PRESET_DEVICE_NAME: Final = "Span Panel"
+"""The device name the preset builder spelled every circuit id with.
+
+Not the panel's own name. `construct_single_circuit_entity_id` was called
+without one, so `snapshot_to_device_info` fell back to this literal on every
+install -- the second panel on a system is named "Span Panel 2" and its circuit
+entity ids still began `span_panel_`. An id being *kept* has to be spelled the
+way it actually is, so this is the string to keep spelling it with.
+"""
+
+
+def legacy_preset_entity_id(
+    platform: str,
+    device_slug: str | None,
+    identifier: str,
+    suffix: str,
+    existing_entity_id: str,
+) -> str:
+    """Return the id an existing entity keeps, where composing one would move it.
+
+    Two shapes Home Assistant's composition cannot reproduce, for reasons that
+    belong to this integration rather than to the user:
+
+    - a circuit sensor shown on a **sub-device** card, whose id names the panel
+      because the preset builder always did, where composition names the charger
+      -- that being the entity's device;
+    - any circuit entity on an install with **`USE_DEVICE_PREFIX` off**, whose id
+      carries no device at all, where `has_entity_name` prefixes one regardless.
+
+    R1 forbids offering either move, so those entities go on being preset. Only
+    those: `device_slug` is `None` for the prefix-less case and everything else
+    composes, which is the whole point of the release.
+
+    The id is *computed* from current panel data and never read back from the
+    registry, so a circuit renamed in the SPAN app still refreshes the name half
+    -- issue #252, which the preset must not undo. Only the suffix half is read
+    back, by `circuit_object_id_base`, since this integration has shipped two
+    spellings of it.
+    """
+    object_id = slugify(circuit_object_id_base(identifier, suffix, existing_entity_id))
+    if device_slug:
+        object_id = f"{slugify(device_slug)}_{object_id}"
+    return f"{platform}.{object_id}"
 
 
 def release_registry_name_written_by_older_release(

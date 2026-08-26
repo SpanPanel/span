@@ -22,7 +22,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from span_panel_api import SpanPanelSnapshot
 
-from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
+from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION, USE_DEVICE_PREFIX
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import (
     DipEvent,
@@ -39,12 +39,14 @@ from .grace_period import (  # noqa: F401
     handle_offline_grace_period,
     initialize_from_last_state,
 )
-from .id_builder import get_user_friendly_suffix
 from .naming import (
+    LEGACY_PRESET_DEVICE_NAME,
     circuit_object_id_base,
+    legacy_preset_entity_id,
     release_registry_name_written_by_older_release,
 )
 from .options import ENERGY_REPORTING_GRACE_PERIOD
+from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -87,6 +89,24 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
     """Abstract base class for Span Panel sensors with overridable methods."""
 
     _attr_has_entity_name = True
+
+    _is_sub_device: bool = False
+    """True when this entity is shown on a sub-device's card rather than the panel's.
+
+    Set by the circuit classes when they are handed a `device_info_override`. It
+    decides the id policy twice over: Core would compose a *new* one of these
+    from the sub-device, which is the shape its own sensors have and so the shape
+    wanted; an *existing* one carries the panel's name and keeps it.
+    """
+
+    _id_was_preset_by_this_integration: bool = False
+    """True for entities whose id this integration used to spell out in full.
+
+    Only those can be moved by handing composition the job, so only those are
+    kept preset where composition disagrees. The hidden unmapped-tab sensors set
+    it False deliberately: Home Assistant has always composed their ids, so they
+    already carry a device prefix that no naming flag ever removed.
+    """
 
     def __init__(
         self,
@@ -132,12 +152,21 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
                 # The id itself is Home Assistant's to compose. This entity
                 # supplies only its base; `entity_id` is left unset so Core
-                # assembles the rest from the user's `entity_id_parts`.
-                identifier = self._object_id_identifier(snapshot, description)
-                if identifier is not None:
-                    self._span_object_id_base = circuit_object_id_base(
-                        identifier, self._object_id_suffix(description), existing_entity_id
+                # assembles the rest from the user's `entity_id_parts` -- except
+                # where composing one would move an id this integration spelled
+                # its own way, which R1 forbids offering.
+                parts = self._object_id_parts(snapshot, description)
+                if parts is not None:
+                    identifier, suffix = parts
+                    preset = self._preset_composition_would_move(
+                        identifier, suffix, existing_entity_id
                     )
+                    if preset is not None:
+                        self.entity_id = preset
+                    elif not self._is_sub_device:
+                        self._span_object_id_base = circuit_object_id_base(
+                            identifier, suffix, existing_entity_id
+                        )
 
                 if existing_entity_id:
                     self._release_synced_registry_name(
@@ -204,27 +233,51 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    def _object_id_identifier(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
-        """Return the naming-flag half of this entity's object-id base.
+    def _object_id_parts(
+        self, snapshot: SpanPanelSnapshot, description: T
+    ) -> tuple[str, str] | None:
+        """Return the identifier and canonical suffix this entity's id is built from.
 
         `None` -- the default, and the answer for every entity that is not a
         circuit -- leaves `_span_object_id_base` unset, so Home Assistant
         composes the id from the display name exactly as it always has.
 
-        A circuit entity answers with `Circuit 15`, `Kitchen Outlets` or
-        `Unmapped Tab 32`, which is the one half of the id the naming flags
-        decide. `naming.circuit_object_id_base` supplies the other half.
+        A circuit entity answers with the naming-flag half (`Circuit 15`,
+        `Kitchen Outlets`, `Unmapped Tab 32`) and the suffix
+        `naming.circuit_object_id_base` keys on. The two travel together because
+        neither is any use alone, and because a circuit entity's
+        `description.key` has been overwritten with the circuit id by then, so
+        there is no suffix a default could compute.
         """
         return None
 
-    def _object_id_suffix(self, description: T) -> str:
-        """Return the canonical suffix `naming.circuit_object_id_base` keys on.
+    def _preset_composition_would_move(
+        self, identifier: str, suffix: str, existing_entity_id: str | None
+    ) -> str | None:
+        """Return the id to go on presetting, or None to let Core compose one.
 
-        The description key is the right question for a description whose key
-        survives construction. Circuit entities overwrite theirs with the
-        circuit id and so answer from the key they were built from.
+        R1: Recreate must never propose a move the user did not cause, and this
+        release moves the id-building job to Home Assistant. Two shapes it spells
+        differently are answered here rather than accepted -- a sensor on a
+        sub-device card, and any circuit entity on an install with the device
+        prefix off. See `naming.legacy_preset_entity_id` for both.
+
+        Existing entities only. A new one has no id to protect and composes like
+        everything else, which is what makes this a shrinking exception rather
+        than a permanent fork.
         """
-        return get_user_friendly_suffix(description.key)
+        if existing_entity_id is None or not self._id_was_preset_by_this_integration:
+            return None
+        use_device_prefix: bool = self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
+        if not (self._is_sub_device or not use_device_prefix):
+            return None
+        return legacy_preset_entity_id(
+            "sensor",
+            LEGACY_PRESET_DEVICE_NAME if use_device_prefix else None,
+            identifier,
+            suffix,
+            existing_entity_id,
+        )
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate the displayed name for the sensor, in either naming mode.
@@ -272,9 +325,14 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         circuit = snapshot.circuits.get(getattr(self, "circuit_id", ""))
         if not (circuit and circuit.name):
             return
-        # Declared by the circuit descriptions; a description type whose label
-        # has never been reworded carries none.
-        legacy_names: tuple[str, ...] = getattr(description, "legacy_names", ())
+        # Only the circuit descriptions declare a reworded label, and only a
+        # circuit entity reaches this line at all -- the guard above returns for
+        # anything with no circuit behind it.
+        legacy_names = (
+            description.legacy_names
+            if isinstance(description, SpanPanelCircuitsSensorEntityDescription)
+            else ()
+        )
         release_registry_name_written_by_older_release(
             entity_registry,
             existing_entity_id,
