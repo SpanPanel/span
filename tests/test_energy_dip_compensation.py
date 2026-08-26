@@ -567,3 +567,64 @@ class TestPendingDipSurvivesARestart:
         assert after._energy_offset == 0.0
         assert after._attr_native_value == 1007.6
         after.coordinator.report_energy_dip.assert_not_called()
+
+
+class TestAnOutageDoesNotSettleADip:
+    """Grace period and dip compensation share a stored record but not a decision.
+
+    While the panel is offline `_update_native_value` hands off to the grace
+    period and returns before any dip processing, so an outage cannot book,
+    confirm or retract anything. That is the intended division: grace period
+    answers "what should this sensor read while the panel is unreachable", dip
+    compensation answers "what did the counter do", and an outage is evidence
+    about the transport rather than about the counter.
+    """
+
+    def test_an_outage_leaves_an_unsettled_dip_exactly_as_it_was(self):
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+        booked = sensor._pending_dip
+
+        sensor.coordinator.panel_offline = True
+        sensor._mock_panel_value = 12345.0  # must not be read while offline
+        sensor._update_native_value()
+
+        assert sensor._pending_dip == booked
+        assert sensor._energy_offset == 1000.0
+        assert sensor._last_panel_reading == 0.0
+
+    def test_grace_period_holds_the_compensated_value(self):
+        """What HA was showing is what it keeps showing, offset included."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+
+        sensor.coordinator.panel_offline = True
+        sensor._update_native_value()
+
+        assert sensor._attr_native_value == 1000.0
+        assert sensor._last_valid_state == 1000.0
+
+    def test_the_dip_settles_normally_once_the_panel_returns(self):
+        """The outage delays the verdict rather than deciding it."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+
+        sensor.coordinator.panel_offline = True
+        sensor._update_native_value()
+        sensor.coordinator.panel_offline = False
+        sensor._mock_panel_value = 1007.6
+        sensor._update_native_value()
+
+        assert sensor._energy_offset == 0.0
+        assert sensor._pending_dip is None
+        assert sensor._attr_native_value == 1007.6
+        sensor.coordinator.report_energy_dip.assert_not_called()
