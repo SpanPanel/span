@@ -176,14 +176,16 @@ def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
 
 
 def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label() -> None:
-    """Every panel sensor now takes its displayed name from one shared answer.
+    """One shared answer replaces the per-class fallbacks, and it is name-only.
 
-    `_generate_panel_name` returns the description's own label, and a description
-    that declares a `translation_key` declares no name at all -- which is every
-    panel-level description this integration ships. Its real label reaches the UI
-    from `translations/en.json`, so the neutral word is what this layer can say.
-    The per-class fallbacks that used to answer here ("Battery", "Status", ...)
-    were never displayed and are gone.
+    `_generate_panel_name` returns the description's own label and nothing else;
+    the per-class fallbacks that used to answer here ("Battery", "Status", ...)
+    are gone. A description that declares a `translation_key` declares no name,
+    so the shared answer can only offer the neutral word -- which is why the
+    constructor does not ask it for those at all (`sensor_base.py`: `_attr_name`
+    is set only `if not ... translation_key`) and their real label reaches the UI
+    from `translations/en.json`. This case pins what the layer says when asked,
+    not what such a sensor displays.
     """
     battery = SpanBatterySnapshotFactory.create(soe_percentage=77.0)
     snapshot = SpanPanelSnapshotFactory.create(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -32,8 +31,6 @@ from .sensor_definitions import (
     SpanPVMetadataSensorEntityDescription,
     SpanShedForecastSensorEntityDescription,
 )
-
-_LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:

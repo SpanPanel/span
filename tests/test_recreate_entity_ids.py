@@ -247,6 +247,48 @@ async def test_the_first_install_takes_its_entity_id_from_the_circuit_name(
     assert sensor.entity_id == ORIGINAL_ENTITY_ID
 
 
+@pytest.mark.parametrize(
+    ("circuit_name", "expected"),
+    [
+        ("Kitchen Outlets", "sensor.span_panel_kitchen_outlets_power"),
+        ("Fridge/Freezer", "sensor.span_panel_fridge_freezer_power"),
+        ("A/C - Upstairs", "sensor.span_panel_a_c_upstairs_power"),
+        ("Garage  Door", "sensor.span_panel_garage_door_power"),
+        ("Café Lights", "sensor.span_panel_cafe_lights_power"),
+        ("Solar Power", "sensor.span_panel_solar_power"),
+        ("Power", "sensor.span_panel_power_power"),
+        ("SPAN Panel", "sensor.span_panel_span_panel_power"),
+    ],
+)
+async def test_composed_ids_match_the_preset_shape_for_odd_names(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    device_and_entity_parts: None,
+    circuit_name: str,
+    expected: str,
+) -> None:
+    """A new install must land on the id the deleted preset builder would have spelled.
+
+    The builder slugified the circuit name on its own and joined the parts with
+    `_`; Home Assistant slugifies `"{device} {base}"` as one string. The two
+    agree for punctuation, runs of whitespace and accents, and these are the
+    names a panel can actually carry -- so no new install diverges from today's
+    shape under `(DEVICE, ENTITY)`.
+
+    The last three are the cases where the wording, not the slug, decides:
+
+    - "Solar Power" already ends with the suffix word, so the builder omitted it
+      (`circuit_part.endswith(f"_{suffix}")`) and the id reads `..._solar_power`;
+    - "Power" does *not* -- the builder's test carried a leading underscore, so a
+      circuit named exactly "Power" got `..._power_power`;
+    - a circuit named after the panel gets both, `..._span_panel_span_panel_power`,
+      because the device half and the name half are composed independently.
+    """
+    sensor = await _SensorInstall(hass, entry).load(circuit_name)
+
+    assert sensor.entity_id == expected
+
+
 async def test_renaming_a_circuit_does_not_move_an_existing_entity_id(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:

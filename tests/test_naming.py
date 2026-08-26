@@ -80,6 +80,34 @@ def test_the_words_are_omitted_when_the_identifier_already_ends_with_them() -> N
     )
 
 
+def test_an_identifier_that_is_only_the_suffix_word_keeps_both_halves() -> None:
+    """The builder's test was `endswith(f"_{suffix}")`, underscore included.
+
+    A circuit named exactly "Power" therefore got `..._power_power`, because
+    "power" does not end with "_power" and there was nothing to omit. Omitting
+    it here would offer every such circuit a rename to `..._power` -- a move the
+    user did not cause, which R1 forbids.
+    """
+    assert circuit_object_id_base("Power", "power", None) == "Power power"
+    assert (
+        circuit_object_id_base("Power", "power", "sensor.span_panel_power_power")
+        == "Power power"
+    )
+
+
+def test_a_renamed_circuit_takes_the_new_name_and_reads_the_suffix_from_its_id() -> None:
+    """Issue #252 at the layer that decides it: only the name half follows the panel.
+
+    The identifier is the circuit's *current* name; the id it already carries is
+    consulted for nothing but which spelling of the suffix it shipped with. So a
+    circuit renamed in the SPAN app is proposed the new name and the same suffix.
+    """
+    assert (
+        circuit_object_id_base("Kitchen", "power", "sensor.span_panel_kitchen_outlets_power")
+        == "Kitchen power"
+    )
+
+
 def test_every_form_table_entry_has_a_new_wording_and_vice_versa() -> None:
     assert set(ENTITY_ID_SUFFIX_FORMS) == set(NEW_ENTITY_ID_SUFFIX_WORDS)
     for suffix, words in NEW_ENTITY_ID_SUFFIX_WORDS.items():

@@ -80,8 +80,15 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
     sensors derive from their description key via
     `id_builder.get_user_friendly_suffix` while the switch and the select --
     which have no such key -- name theirs outright ("breaker",
-    "circuit_priority"). Words are omitted when the identifier already ends with
-    them, which is what the preset builder did for a circuit named "Solar Power".
+    "circuit_priority").
+
+    Words are omitted when the identifier already ends with them as a whole
+    word, which is what the preset builder did for a circuit named "Solar
+    Power" (`..._solar_power`, not `..._solar_power_power`). The test carries a
+    leading underscore because the builder's did: a circuit named exactly
+    "Power" is not a repetition of anything and kept both halves,
+    `..._power_power`. Dropping the underscore here would offer every such
+    circuit a rename to `..._power`, which R1 forbids.
     """
     form = _existing_suffix_form(existing_entity_id, suffix)
     words = (
@@ -89,7 +96,7 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
         if form
         else NEW_ENTITY_ID_SUFFIX_WORDS.get(suffix, suffix.replace("_", " "))
     )
-    if slugify(identifier).endswith(slugify(words)):
+    if slugify(identifier).endswith(f"_{slugify(words)}"):
         return identifier
     return f"{identifier} {words}"
 
