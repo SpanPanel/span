@@ -1889,6 +1889,177 @@ async def test_hassio_end_to_end_entry_creation(hass: HomeAssistant) -> None:
         assert result5["data"][CONF_PANEL_CA_PEM] == FAKE_CA_PEM
 
 
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_hassio_published_https_port_is_used_without_asking(hass: HomeAssistant) -> None:
+    """A discovery record naming the TLS port skips the prompt and is believed.
+
+    The add-on allocates a TLS port per panel and reallocates it across
+    restarts, so it is the only party that knows the answer. Asking the user
+    for a number they would have to go read out of an add-on log is a question
+    with a worse answer available.
+    """
+    leaf_check = AsyncMock(return_value=True)
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION_SIM,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            return_value=MOCK_V2_AUTH,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
+            new=leaf_check,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info({**MOCK_HASSIO_CONFIG, "https_port": 10090}),
+        )
+        assert result["step_id"] == "confirm_discovery"
+
+        # Confirm goes straight past the port question to the auth menu.
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {})
+        assert result2["step_id"] == "choose_v2_auth"
+
+        # The published port is the one the CA was checked against, not 443.
+        assert leaf_check.await_args.args[1] == 10090
+
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"], {"next_step_id": "auth_passphrase"}
+        )
+        result4 = await hass.config_entries.flow.async_configure(
+            result3["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+        result5 = await hass.config_entries.flow.async_configure(
+            result4["flow_id"], {"entity_naming_pattern": "friendly_names"}
+        )
+
+    assert result5["type"] == FlowResultType.CREATE_ENTRY
+    assert result5["data"][CONF_HTTP_PORT] == 9090
+    assert result5["data"][CONF_HTTPS_PORT] == 10090
+
+
+@pytest.mark.asyncio
+async def test_zeroconf_https_port_txt_record_is_used_without_asking(
+    hass: HomeAssistant,
+) -> None:
+    """The same holds over mDNS, where the panel publishes the port in TXT."""
+    discovery_info = ZeroconfServiceInfo(
+        ip_address=ipaddress.IPv4Address("192.168.1.200"),
+        ip_addresses=[ipaddress.IPv4Address("192.168.1.200")],
+        hostname="span-panel.local.",
+        name="SPAN Panel._ebus._tcp.local.",
+        port=8883,
+        properties={"httpPort": "8081", "httpsPort": "9081"},
+        type="_ebus._tcp.local.",
+    )
+
+    leaf_check = AsyncMock(return_value=True)
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.is_ipv4_address",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.async_leaf_chains_to_ca",
+            new=leaf_check,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=discovery_info,
+        )
+        assert result["step_id"] == "confirm_discovery"
+
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {})
+        assert result2["step_id"] == "choose_v2_auth"
+        assert leaf_check.await_args.args[1] == 9081
+
+
+@pytest.mark.asyncio
+async def test_moved_http_port_alone_still_asks_for_the_https_one(
+    hass: HomeAssistant,
+) -> None:
+    """A panel that publishes no TLS port is still asked about, as before.
+
+    Hardware behind a reverse proxy advertises ``httpPort`` and nothing else.
+    Reading a port from discovery must not become a way for that install to
+    silently end up checking the CA against 443.
+    """
+    discovery_info = ZeroconfServiceInfo(
+        ip_address=ipaddress.IPv4Address("192.168.1.200"),
+        ip_addresses=[ipaddress.IPv4Address("192.168.1.200")],
+        hostname="span-panel.local.",
+        name="SPAN Panel._ebus._tcp.local.",
+        port=8883,
+        properties={"httpPort": "8080"},
+        type="_ebus._tcp.local.",
+    )
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.is_ipv4_address",
+            return_value=True,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=discovery_info,
+        )
+        port_step = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert port_step["step_id"] == "panel_https_port"
+
+
+@pytest.mark.asyncio
+async def test_unreadable_https_port_in_discovery_falls_back_to_asking(
+    hass: HomeAssistant,
+) -> None:
+    """A TXT record that cannot be read is not a port, so the question stands."""
+    discovery_info = ZeroconfServiceInfo(
+        ip_address=ipaddress.IPv4Address("192.168.1.200"),
+        ip_addresses=[ipaddress.IPv4Address("192.168.1.200")],
+        hostname="span-panel.local.",
+        name="SPAN Panel._ebus._tcp.local.",
+        port=8883,
+        properties={"httpPort": "8080", "httpsPort": "not-a-port"},
+        type="_ebus._tcp.local.",
+    )
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.is_ipv4_address",
+            return_value=True,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=discovery_info,
+        )
+        port_step = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+
+    assert port_step["step_id"] == "panel_https_port"
+
+
 # ---------- user flow: null status_info ----------
 
 

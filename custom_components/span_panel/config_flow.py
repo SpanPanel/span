@@ -110,6 +110,30 @@ STEP_AUTH_PASSPHRASE_DATA_SCHEMA = vol.Schema(
 )
 
 
+def _discovered_port(record: Mapping[str, Any], *names: str) -> int | None:
+    """Read a port out of a discovery record, or None when it names none.
+
+    Everything in a discovery record is whatever the panel put on the wire:
+    mDNS TXT values arrive as strings, may be absent, and may be spelled in a
+    case this integration did not pick. Anything unreadable is treated as
+    unpublished rather than raising, because a malformed TXT record must not be
+    the reason a panel cannot be set up.
+
+    None is distinct from a published value that happens to equal the default:
+    only None leaves the flow free to ask the user.
+    """
+    for name in names:
+        raw = record.get(name)
+        if raw is None or raw == "":
+            continue
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            _LOGGER.debug("Discovery record carried an unreadable %s: %r", name, raw)
+            return None
+    return None
+
+
 class TriggerFlowType(enum.Enum):
     """Types of configuration flow triggers."""
 
@@ -150,6 +174,12 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_panel_serial: str | None = None
         self._http_port: int = 80
         self._https_port: int = DEFAULT_HTTPS_PORT
+        # Whether the TLS port came from the panel's own discovery record
+        # rather than from a default. Discovery is the authority when it
+        # speaks: a panel that publishes the port knows where it serves, and
+        # asking the user for it after being told is asking them to confirm a
+        # fact they have no way to check.
+        self._https_port_discovered: bool = False
         # The panel CA, once fetched and leaf-confirmed. None means the flow
         # could not acquire one and the entry is created with the pending flag.
         self._panel_ca_pem: str | None = None
@@ -204,12 +234,18 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             # v2 panels discovered via eBus / secure-mqtt service types
             # Read optional httpPort from mDNS TXT records (non-standard port)
             props = discovery_info.properties or {}
-            http_port_str = props.get("httpPort", props.get("httpport", ""))
-            try:
-                http_port = int(http_port_str) if http_port_str else 80
-            except (ValueError, TypeError):
-                http_port = 80
+            discovered_http_port = _discovered_port(props, "httpPort", "httpport")
+            http_port = 80 if discovered_http_port is None else discovered_http_port
             self._http_port = http_port
+
+            # A panel that moved its HTTP port has usually moved its TLS port
+            # too, and it is the only party that knows where. Taking the
+            # published value here is what keeps the reverse-proxy question off
+            # the screen of a user whose panel already answered it.
+            https_port = _discovered_port(props, "httpsPort", "httpsport")
+            if https_port is not None:
+                self._https_port = https_port
+                self._https_port_discovered = True
 
             detection = await detect_api_version(
                 discovery_info.host,
@@ -246,11 +282,21 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         """
         config = discovery_info.config
         host = str(config.get("host", ""))
-        port = int(config.get("port", 80))
+        discovered_port = _discovered_port(config, "port")
+        port = 80 if discovered_port is None else discovered_port
         serial = str(config.get("serial", ""))
 
         if not host:
             return self.async_abort(reason="no_host")
+
+        # The add-on serves TLS on a port it allocated and publishes here.
+        # Nobody else can tell the flow what it is, so being told is the
+        # difference between a silent setup and a prompt for a number the user
+        # would have to go read out of the add-on log.
+        https_port = _discovered_port(config, "https_port", "httpsPort")
+        if https_port is not None:
+            self._https_port = https_port
+            self._https_port_discovered = True
 
         # Validate panel is reachable and v2
         self._http_port = port
@@ -265,9 +311,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not panel_serial:
             return self.async_abort(reason="no_serial")
 
-        # Dedup by serial — multiple panels may share the same host IP
+        # Dedup by serial — multiple panels may share the same host IP. The
+        # ports go into the update because the add-on reallocates them across
+        # restarts: an entry left pointing at last run's ports is an entry that
+        # cannot reach its panel.
         await self.async_set_unique_id(panel_serial)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host, CONF_HTTP_PORT: port})
+        updates: dict[str, Any] = {CONF_HOST: host, CONF_HTTP_PORT: port}
+        if self._https_port_discovered:
+            updates[CONF_HTTPS_PORT] = self._https_port
+        self._abort_if_unique_id_configured(updates=updates)
 
         # Set up flow — same path as v2 zeroconf discovery
         self.api_version = "v2"
@@ -627,14 +679,19 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_panel_ca_start(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Enter CA acquisition, asking for the HTTPS port first when it is not 443.
+        """Enter CA acquisition, asking for the HTTPS port only when nothing knows it.
 
-        The port is only prompted for on an install that already moved the HTTP
-        port, because that is the install most likely to be reaching the panel
-        through something that also moved the TLS one. Asking everybody would put
-        a question about reverse proxies in front of users who have none.
+        The port is prompted for on an install that already moved the HTTP port,
+        because that is the install most likely to be reaching the panel through
+        something that also moved the TLS one. Asking everybody would put a
+        question about reverse proxies in front of users who have none.
+
+        Discovery outranks the prompt. A panel that published its TLS port has
+        already answered the question, and better than the user could: the
+        add-on allocates that port per panel and reallocates it across restarts,
+        so the only correct answer is the one it just gave.
         """
-        if self._http_port == 80:
+        if self._http_port == 80 or self._https_port_discovered:
             return await self.async_step_panel_ca()
         return await self.async_step_panel_https_port()
 
