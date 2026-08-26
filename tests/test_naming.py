@@ -86,3 +86,71 @@ def test_every_form_table_entry_has_a_new_wording_and_vice_versa() -> None:
         assert words.replace(" ", "_") in ENTITY_ID_SUFFIX_FORMS[suffix], (
             f"the default wording for {suffix} must itself be a known form"
         )
+
+
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+
+from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.naming import release_registry_name_written_by_older_release
+
+
+def _seed(hass: HomeAssistant, name: str | None) -> str:
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("sensor", DOMAIN, "uid-release-test")
+    registry.async_update_entity(entry.entity_id, name=name)
+    return entry.entity_id
+
+
+async def test_a_name_an_older_release_wrote_is_released(hass: HomeAssistant) -> None:
+    entity_id = _seed(hass, "Kitchen Outlets Consumed Energy")
+    registry = er.async_get(hass)
+
+    release_registry_name_written_by_older_release(
+        registry, entity_id, "Kitchen Outlets", ("Consumed Energy",)
+    )
+
+    assert registry.async_get(entity_id).name is None
+
+
+async def test_a_name_written_under_a_since_changed_label_is_released_too(
+    hass: HomeAssistant,
+) -> None:
+    """The label was "Energy Consumed" for a few betas; a legacy-names tuple covers it."""
+    entity_id = _seed(hass, "Kitchen Outlets Energy Consumed")
+    registry = er.async_get(hass)
+
+    release_registry_name_written_by_older_release(
+        registry, entity_id, "Kitchen Outlets", ("Consumed Energy", "Energy Consumed")
+    )
+
+    assert registry.async_get(entity_id).name is None
+
+
+async def test_a_name_the_user_set_is_left_alone(hass: HomeAssistant) -> None:
+    entity_id = _seed(hass, "Beer Fridge")
+    registry = er.async_get(hass)
+
+    release_registry_name_written_by_older_release(
+        registry, entity_id, "Kitchen Outlets", ("Consumed Energy",)
+    )
+
+    assert registry.async_get(entity_id).name == "Beer Fridge"
+
+
+async def test_no_name_is_a_no_op(hass: HomeAssistant) -> None:
+    entity_id = _seed(hass, None)
+    registry = er.async_get(hass)
+
+    release_registry_name_written_by_older_release(
+        registry, entity_id, "Kitchen Outlets", ("Consumed Energy",)
+    )
+
+    assert registry.async_get(entity_id).name is None
+
+
+async def test_an_unknown_entity_is_a_no_op(hass: HomeAssistant) -> None:
+    registry = er.async_get(hass)
+    release_registry_name_written_by_older_release(
+        registry, "sensor.does_not_exist", "Kitchen Outlets", ("Consumed Energy",)
+    )

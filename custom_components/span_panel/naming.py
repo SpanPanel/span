@@ -25,6 +25,9 @@ tables here govern entity ids only.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 ENTITY_ID_SUFFIX_FORMS: dict[str, frozenset[str]] = {
@@ -86,3 +89,27 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
     if slugify(identifier).endswith(slugify(words)):
         return identifier
     return f"{identifier} {words}"
+
+
+def release_registry_name_written_by_older_release(
+    registry: er.EntityRegistry,
+    entity_id: str,
+    circuit_name: str,
+    description_names: Iterable[str],
+) -> None:
+    """Hand the registry's `name` back to the user where 2.0.8 took it.
+
+    Circuit-numbers mode used to deliver the panel's name by writing the
+    registry's `name` -- the *user's* field, which Home Assistant reads ahead
+    of everything else when generating an entity id, so occupying it made
+    "Recreate entity IDs" propose a friendly-name id for a circuit-numbered
+    entity. Only a name this integration would have written is cleared:
+    `"{circuit_name} {description name}"` for the description's current name
+    and every name it has carried before. Anything else is the user's.
+    """
+    entry = registry.async_get(entity_id)
+    if entry is None or entry.name is None or not circuit_name:
+        return
+    ours = {f"{circuit_name} {description_name}" for description_name in description_names}
+    if entry.name in ours:
+        registry.async_update_entity(entity_id, name=None)
