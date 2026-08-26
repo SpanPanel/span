@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import logging
 from typing import Any, ClassVar
 
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -21,8 +20,6 @@ from .helpers import (
 )
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
-
-_LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 def _get_circuit_data_source(circuit_id: str, snapshot: SpanPanelSnapshot) -> SpanCircuitSnapshot:
@@ -160,30 +157,6 @@ class SpanCircuitPowerSensor(
         return construct_circuit_unique_id_for_entry(
             self.coordinator, snapshot, self.circuit_id, api_key, self._device_name
         )
-
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for circuit power sensors based on user preferences.
-
-        For sub-device sensors (EVSE), returns just the description name
-        since the device name already provides circuit context.
-        """
-        if self._is_sub_device:
-            return str(description.name or "Sensor")
-
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if not circuit:
-            return construct_unmapped_friendly_name(
-                self.circuit_id, str(description.name or "Sensor")
-            )
-
-        circuit_identifier = _resolve_circuit_identifier(
-            circuit, self.circuit_id, self.coordinator.config_entry.options
-        )
-        return f"{circuit_identifier} {description.name or 'Sensor'}"
 
     def _generate_panel_name(
         self,
@@ -346,28 +319,6 @@ class SpanCircuitEnergySensor(
             self.coordinator, snapshot, self.circuit_id, api_key, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for circuit energy sensors based on user preferences.
-
-        For sub-device sensors (EVSE), returns just the description name
-        since the device name already provides circuit context.
-        """
-        if self._is_sub_device:
-            return str(description.name)
-
-        circuit = snapshot.circuits.get(self.circuit_id)
-        if not circuit:
-            return f"Circuit {self.circuit_id} {description.name}"
-
-        circuit_identifier = _resolve_circuit_identifier(
-            circuit, self.circuit_id, self.coordinator.config_entry.options
-        )
-        return f"{circuit_identifier} {description.name}"
-
     def _generate_panel_name(
         self,
         snapshot: SpanPanelSnapshot,
@@ -498,14 +449,6 @@ class SpanUnmappedCircuitSensor(
             self.original_key,
             self._device_name,
         )
-
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelCircuitsSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for unmapped circuit sensors."""
-        return self._unmapped_name(description)
 
     def _generate_panel_name(
         self,

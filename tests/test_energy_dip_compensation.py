@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from homeassistant.components.sensor import SensorStateClass
+
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.energy_dip import PendingDip
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
@@ -62,9 +63,6 @@ class DummyDipSensor(SpanEnergySensorBase):
 
     def _generate_unique_id(self, snapshot, description):
         return "dummy_sensor"
-
-    def _generate_friendly_name(self, snapshot, description):
-        return "Dummy"
 
     def get_data_source(self, snapshot):
         return "dummy_data"

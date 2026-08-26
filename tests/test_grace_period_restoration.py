@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from homeassistant.components.sensor import SensorStateClass
+
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
@@ -407,9 +408,6 @@ class DummyEnergySensor(SpanEnergySensorBase):
         self._dip_compensation_enabled: bool = False
 
     def _generate_unique_id(self, snapshot, description):
-        return "dummy"
-
-    def _generate_friendly_name(self, snapshot, description):
         return "dummy"
 
     def get_data_source(self, snapshot):

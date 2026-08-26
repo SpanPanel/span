@@ -97,11 +97,11 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
 LEGACY_PRESET_DEVICE_NAME: Final = "Span Panel"
 """The device name the preset builder spelled every circuit id with.
 
-Not the panel's own name. `construct_single_circuit_entity_id` was called
-without one, so `snapshot_to_device_info` fell back to this literal on every
-install -- the second panel on a system is named "Span Panel 2" and its circuit
-entity ids still began `span_panel_`. An id being *kept* has to be spelled the
-way it actually is, so this is the string to keep spelling it with.
+Not the panel's own name. The builder was called without one, so
+`snapshot_to_device_info` fell back to this literal on every install -- the
+second panel on a system is named "Span Panel 2" and its circuit entity ids
+still began `span_panel_`. An id being *kept* has to be spelled the way it
+actually is, so this is the string to keep spelling it with.
 """
 
 

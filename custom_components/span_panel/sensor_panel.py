@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.typing import UNDEFINED
 from span_panel_api import (
     SpanBatterySnapshot,
     SpanMidSnapshot,
@@ -127,16 +126,6 @@ class SpanPanelPanelStatus(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             self.coordinator, snapshot, description.key, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelDataSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for panel data sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Sensor"
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the panel data status sensor."""
         return snapshot
@@ -206,16 +195,6 @@ class SpanShedForecastSensor(
         return construct_panel_unique_id_for_entry(
             self.coordinator, snapshot, description.key, self._device_name
         )
-
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanShedForecastSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for a shed-forecast sensor."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Shed Forecast"
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the shed-forecast sensor."""
@@ -294,16 +273,6 @@ class SpanPcsSensor(SpanSensorBase[SpanPcsSensorEntityDescription, SpanPcsSnapsh
             self.coordinator, snapshot, description.key, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPcsSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for a PCS sensor."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Power Control System"
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPcsSnapshot:
         """Get the data source for the PCS sensor.
 
@@ -365,16 +334,6 @@ class SpanPanelStatus(SpanSensorBase[SpanPanelStatusSensorEntityDescription, Spa
         return construct_panel_unique_id_for_entry(
             self.coordinator, snapshot, description.key, self._device_name
         )
-
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelStatusSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for panel status sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Status"
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the panel status sensor."""
@@ -445,16 +404,6 @@ class SpanPanelBattery(
             self.coordinator, snapshot, description.key, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelBatterySensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for battery sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Battery"
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanBatterySnapshot:
         """Get the data source for the battery sensor."""
         return snapshot.battery
@@ -518,16 +467,6 @@ class SpanPanelPowerSensor(SpanSensorBase[SpanPanelDataSensorEntityDescription, 
             self.coordinator, snapshot, entity_suffix, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelDataSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for panel power sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Power"
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the panel power sensor."""
         return snapshot
@@ -584,16 +523,6 @@ class SpanPanelEnergySensor(
             self.coordinator, snapshot, entity_suffix, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPanelDataSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for panel energy sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "Energy"
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the panel energy sensor."""
         return snapshot
@@ -637,16 +566,6 @@ class SpanBessMetadataSensor(
             self.coordinator, snapshot, description.key, self._device_name
         )
 
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanBessMetadataSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for BESS metadata sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "BESS Sensor"
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanBatterySnapshot:
         """Get the data source for the BESS metadata sensor."""
         return snapshot.battery
@@ -675,16 +594,6 @@ class SpanMidSensor(SpanSensorBase[SpanMidSensorEntityDescription, SpanMidSnapsh
         return build_mid_unique_id_for_entry(
             self.coordinator, snapshot, description.key, self._device_name
         )
-
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanMidSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for MID sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "MID Sensor"
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanMidSnapshot:
         """Get the data source for the MID sensor.
@@ -740,16 +649,6 @@ class SpanPVMetadataSensor(
         return construct_panel_unique_id_for_entry(
             self.coordinator, snapshot, description.key, self._device_name
         )
-
-    def _generate_friendly_name(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: SpanPVMetadataSensorEntityDescription,
-    ) -> str:
-        """Generate friendly name for PV metadata sensors."""
-        if description.name is not None and description.name is not UNDEFINED:
-            return str(description.name)
-        return "PV Sensor"
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
         """Get the data source for the PV metadata sensor."""

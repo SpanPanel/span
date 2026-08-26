@@ -217,21 +217,6 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    @abstractmethod
-    def _generate_friendly_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
-        """Generate friendly name for the sensor.
-
-        Subclasses must implement this to define their naming strategy.
-
-        Args:
-            snapshot: The panel snapshot data
-            description: The sensor description
-
-        Returns:
-            Friendly name string, or None to let HA use default behavior
-
-        """
-
     def _object_id_parts(
         self, snapshot: SpanPanelSnapshot, description: T
     ) -> tuple[str, str] | None:

@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.core import Context, Event, HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 from span_panel_api import ControlCommand, PublishOutcome, PublishState
 
 from custom_components.span_panel.const import DOMAIN, EVENT_CONTROL_COMMAND
@@ -23,10 +26,6 @@ from custom_components.span_panel.control_gate import (
     async_bind_caller,
     outcome_is_failure,
 )
-from homeassistant.core import Context, Event, HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
 RELAY = ControlCommand(
     device_id="sp3-test-001",
@@ -170,7 +169,7 @@ async def test_contextless_control_can_be_refused(hass: HomeAssistant) -> None:
 
 @pytest.mark.asyncio
 async def test_an_unbound_caller_is_treated_as_contextless(hass: HomeAssistant) -> None:
-    """This is the fail-closed default, and the reason the gate is not in the helper.
+    """The fail-closed default, and the reason the gate is not in the helper.
 
     A future control path that forgets `_async_guarded_control` arrives here with
     nothing bound. Permitting it would make the gate a suggestion.
@@ -248,9 +247,8 @@ async def test_a_second_relay_command_inside_the_window_is_refused(
 
     with patch(
         "custom_components.span_panel.control_gate.time.monotonic", return_value=101.0
-    ):
-        with pytest.raises(ServiceValidationError) as err:
-            await gate.before_publish(RELAY)
+    ), pytest.raises(ServiceValidationError) as err:
+        await gate.before_publish(RELAY)
 
     assert err.value.translation_key == "relay_debounced"
 
@@ -612,7 +610,7 @@ async def test_a_refused_relay_leaves_the_switch_where_it_was(
         side_effect=ServiceValidationError("refused")
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen", "SPAN Panel")
+    entity = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
@@ -658,7 +656,7 @@ async def test_an_undelivered_relay_command_does_not_move_the_switch(
         )
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen", "SPAN Panel")
+    entity = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
     before = entity.is_on
@@ -711,7 +709,7 @@ async def test_a_handed_over_relay_command_still_shows_the_requested_state(
         )
     )
 
-    entity = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen", "SPAN Panel")
+    entity = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
     entity.hass = hass
     entity.async_write_ha_state = MagicMock()
 

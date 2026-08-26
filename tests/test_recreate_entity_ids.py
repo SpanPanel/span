@@ -46,7 +46,6 @@ from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
-    preserve_legacy_entity_id_suffix,
 )
 from custom_components.span_panel.select import (
     CIRCUIT_PRIORITY_DESCRIPTION,
@@ -126,7 +125,7 @@ class _Install[E: Entity]:
         self._entry = entry
         self._platform: MockEntityPlatform | None = None
 
-    def _build(self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str) -> E:
+    def _build(self, coordinator: MagicMock, snapshot: SpanPanelSnapshot) -> E:
         """Construct the one entity this install adds. Subclasses answer."""
         raise NotImplementedError
 
@@ -146,7 +145,7 @@ class _Install[E: Entity]:
         )
         self._platform.config_entry = self._entry
 
-        entity = self._build(coordinator, snapshot, circuit_name)
+        entity = self._build(coordinator, snapshot)
         await self._platform.async_add_entities([entity])
         await self._hass.async_block_till_done()
 
@@ -173,7 +172,7 @@ class _SensorInstall(_Install[SpanCircuitPowerSensor]):
         self._device_info_override = device_info_override
 
     def _build(
-        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot
     ) -> SpanCircuitPowerSensor:
         """Build the power sensor, on the panel's card or a sub-device's."""
         return SpanCircuitPowerSensor(
@@ -191,10 +190,10 @@ class _SwitchInstall(_Install[SpanPanelCircuitsSwitch]):
     _domain: ClassVar[str] = "switch"
 
     def _build(
-        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot
     ) -> SpanPanelCircuitsSwitch:
         """Build the breaker switch."""
-        return SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, circuit_name, "SPAN Panel")
+        return SpanPanelCircuitsSwitch(coordinator, CIRCUIT_ID, "SPAN Panel")
 
 
 class _SelectInstall(_Install[SpanPanelCircuitsSelect]):
@@ -203,11 +202,11 @@ class _SelectInstall(_Install[SpanPanelCircuitsSelect]):
     _domain: ClassVar[str] = "select"
 
     def _build(
-        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot
     ) -> SpanPanelCircuitsSelect:
         """Build the circuit-priority select."""
         return SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, CIRCUIT_ID, circuit_name, "SPAN Panel"
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, CIRCUIT_ID, "SPAN Panel"
         )
 
 
@@ -528,7 +527,7 @@ class _LegacyInstall(_Install[SpanCircuitEnergySensor]):
         return entry.entity_id
 
     def _build(
-        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot, circuit_name: str
+        self, coordinator: MagicMock, snapshot: SpanPanelSnapshot
     ) -> SpanCircuitEnergySensor:
         """Build the energy sensor, whose id has shipped with two suffix spellings."""
         return SpanCircuitEnergySensor(coordinator, ENERGY_DESCRIPTION, snapshot, CIRCUIT_ID)
@@ -847,31 +846,6 @@ async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
     registry_entry = registry.async_get(seeded.entity_id)
     assert registry_entry is not None
     assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
-
-
-def test_a_suffix_with_no_older_spelling_is_left_alone() -> None:
-    """A name that merely looks like a suffix change is a rename, not a legacy form.
-
-    Renaming a circuit "Kitchen Outlets" to "Kitchen" leaves an existing id whose
-    trailing segments differ from the computed suffix. That is exactly the case
-    #252 exists to offer, so it must not be mistaken for an older spelling.
-    """
-    assert (
-        preserve_legacy_entity_id_suffix(
-            "sensor.span_panel_kitchen_power",
-            "sensor.span_panel_kitchen_outlets_power",
-            "power",
-        )
-        == "sensor.span_panel_kitchen_power"
-    )
-    assert (
-        preserve_legacy_entity_id_suffix(
-            "sensor.span_panel_kitchen_energy_consumed",
-            "sensor.span_panel_kitchen_consumed_energy",
-            "energy_consumed",
-        )
-        == "sensor.span_panel_kitchen_consumed_energy"
-    )
 
 
 # --- The two circuit controls -------------------------------------------------

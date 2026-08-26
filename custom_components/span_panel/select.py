@@ -115,15 +115,13 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         coordinator: SpanPanelCoordinator,
         description: SpanPanelSelectEntityDescriptionWrapper,
         circuit_id: str,
-        name: str,
         device_name: str,
     ) -> None:
         """Initialize the select.
 
-        `name` is the circuit's name as of platform setup and is deliberately
-        unused: both the display name and the id base are read from the circuit
-        in the current snapshot, so a circuit renamed on the panel reaches both
-        on the next reload. The parameter stays because every caller passes it.
+        The circuit's name is not passed in: both the display name and the id
+        base are read from the circuit in the current snapshot, so a circuit
+        renamed on the panel reaches both on the next reload.
         """
         super().__init__(coordinator)
         snapshot: SpanPanelSnapshot = coordinator.data
@@ -430,7 +428,6 @@ async def async_setup_entry(
                 coordinator,
                 CIRCUIT_PRIORITY_DESCRIPTION,
                 circuit_id,
-                circuit_data.name,
                 device_name,
             )
         )

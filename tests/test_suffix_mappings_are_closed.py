@@ -32,6 +32,7 @@ from custom_components.span_panel.id_builder import (
     get_panel_entity_suffix,
     get_user_friendly_suffix,
 )
+from custom_components.span_panel.naming import ENTITY_ID_SUFFIX_FORMS
 
 SERIAL = "sp3-001"
 CIRCUIT = "0dad2f16cd514812ae1807b0457d473e"
@@ -80,10 +81,32 @@ _PANEL_ENTITY_SUFFIXES = {
     "batteryPercentage": "battery_level",
 }
 
+# The entity-id table, closed for a related but distinct reason. The mappings
+# above translate a description key into a canonical suffix; this records every
+# *wording* of that suffix an entity id has ever shipped with, so an existing
+# entity can be proposed the id it already has. An added entry claims a spelling
+# shipped that never did, and Recreate then offers a rename nobody asked for.
+_ENTITY_ID_SUFFIX_FORMS = {
+    "power": frozenset({"power", "current_power"}),
+    "energy_produced": frozenset({"produced_energy", "energy_produced"}),
+    "energy_consumed": frozenset({"consumed_energy", "energy_consumed"}),
+    "energy_net": frozenset({"net_energy", "energy_net"}),
+    "current": frozenset({"current"}),
+    "breaker_rating": frozenset({"breaker_rating"}),
+    "breaker": frozenset({"breaker"}),
+    "circuit_priority": frozenset({"circuit_priority"}),
+}
+
 _CLOSED = (
     "This mapping is closed. Adding, removing or changing an entry moves a live "
     "unique_id and entity_id on every installed panel -- statistics and the user's "
     "templates both. A new description key needs no entry: it resolves verbatim."
+)
+
+_CLOSED_FORMS = (
+    "This table is historical fact, not a style. An entry is added only when "
+    "another wording is discovered to have shipped -- never to introduce one, "
+    "which would offer every circuit on the panel a rename."
 )
 
 
@@ -97,6 +120,17 @@ def test_the_panel_suffix_mapping_is_frozen() -> None:
 
 def test_the_panel_entity_suffix_mapping_is_frozen() -> None:
     assert PANEL_ENTITY_SUFFIX_MAPPING == _PANEL_ENTITY_SUFFIXES, _CLOSED
+
+
+def test_the_entity_id_suffix_forms_are_frozen() -> None:
+    """The wordings an entity id has shipped with, which R1 turns on.
+
+    `naming.circuit_object_id_base` reads an existing id's suffix back through
+    this table so the entity is proposed its own id. A wording missing from it
+    reads as unknown and the entity is offered the new spelling instead; a
+    wording invented into it is offered to entities that never had it.
+    """
+    assert ENTITY_ID_SUFFIX_FORMS == _ENTITY_ID_SUFFIX_FORMS, _CLOSED_FORMS
 
 
 def test_the_combined_mapping_is_exactly_its_two_halves() -> None:

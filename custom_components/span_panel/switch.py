@@ -74,15 +74,13 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         self,
         coordinator: SpanPanelCoordinator,
         circuit_id: str,
-        name: str,
         device_name: str,
     ) -> None:
         """Initialize the values.
 
-        `name` is the circuit's name as of platform setup and is deliberately
-        unused: both the display name and the id base are read from the circuit
-        in the current snapshot, so a circuit renamed on the panel reaches both
-        on the next reload. The parameter stays because every caller passes it.
+        The circuit's name is not passed in: both the display name and the id
+        base are read from the circuit in the current snapshot, so a circuit
+        renamed on the panel reaches both on the next reload.
         """
         snapshot: SpanPanelSnapshot = coordinator.data
 
@@ -473,9 +471,7 @@ async def async_setup_entry(
             and circuit_data.relative_position != "DOWNSTREAM"
         ):
             continue
-        entities.append(
-            SpanPanelCircuitsSwitch(coordinator, circuit_id, circuit_data.name, _device_name)
-        )
+        entities.append(SpanPanelCircuitsSwitch(coordinator, circuit_id, _device_name))
 
     # Settable properties on devices this integration models nothing for.
     # Disabled and diagnostic like every adopted entity: the panel authorises the

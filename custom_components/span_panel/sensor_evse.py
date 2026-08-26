@@ -65,12 +65,6 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
             self._device_name,
         )
 
-    def _generate_friendly_name(
-        self, snapshot: SpanPanelSnapshot, description: SpanEvseSensorEntityDescription
-    ) -> str:
-        """Generate friendly name for EVSE sensors."""
-        return str(description.name)
-
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanEvseSnapshot:
         """Get the EVSE snapshot for this sensor's charger."""
         return snapshot.evse.get(self._evse_id, _EMPTY_EVSE)

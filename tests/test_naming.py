@@ -88,6 +88,29 @@ def test_every_form_table_entry_has_a_new_wording_and_vice_versa() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("identifier", "suffix", "expected"),
+    [
+        ("Kitchen Outlets", "power", "Kitchen Outlets power"),
+        ("Circuit 15", "power", "Circuit 15 power"),
+        ("Circuit 15 17", "power", "Circuit 15 17 power"),
+        ("Circuit 30 32", "power", "Circuit 30 32 power"),
+    ],
+)
+def test_the_id_shapes_the_upgrade_scenarios_pinned(
+    identifier: str, suffix: str, expected: str
+) -> None:
+    """The four shapes the deleted preset builder's own tests pinned.
+
+    A friendly name, a single-pole breaker and both two-pole spellings. The
+    builder produced the whole id and so had to be told the device prefix and
+    the naming mode; here the caller has already resolved the identifier and
+    only the base is at stake, which is the same string with the device part
+    left to Home Assistant.
+    """
+    assert circuit_object_id_base(identifier, suffix, None) == expected
+
+
 # --- The id shape kept where composition would move one --------------------
 #
 # Two kinds of circuit entity are spelled differently by Home Assistant's
@@ -175,7 +198,7 @@ def test_the_suffix_words_come_from_the_id_the_entity_already_has(
 
 
 def test_the_preset_device_name_is_the_literal_the_old_builder_fell_back_to() -> None:
-    """Not the panel's own name: `construct_single_circuit_entity_id` passed none.
+    """Not the panel's own name: the preset builder passed none.
 
     A second panel on a system is named "Span Panel 2" and its circuit ids still
     began `span_panel_`, so the panel's name is the wrong thing to spell an

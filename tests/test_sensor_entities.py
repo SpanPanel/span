@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.core import State
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import SpanPVSnapshot
 
-from homeassistant.components.sensor import SensorDeviceClass
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
     ENABLE_ENERGY_DIP_COMPENSATION,
@@ -52,8 +56,6 @@ from custom_components.span_panel.sensor_panel import (
     SpanPanelStatus,
     SpanPVMetadataSensor,
 )
-from homeassistant.const import CONF_HOST, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import State
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -61,8 +63,6 @@ from .factories import (
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
 )
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 @pytest.fixture(autouse=True)
@@ -175,8 +175,16 @@ def test_only_the_grid_sensor_carries_the_topology_attribute() -> None:
     assert "at_service_entrance" not in (sensor.extra_state_attributes or {})
 
 
-def test_panel_sensor_default_friendly_names_cover_fallback_branches() -> None:
-    """Panel sensor classes should return fallback names when descriptions are unnamed."""
+def test_a_panel_sensor_with_a_translation_key_falls_back_to_the_neutral_label() -> None:
+    """Every panel sensor now takes its displayed name from one shared answer.
+
+    `_generate_panel_name` returns the description's own label, and a description
+    that declares a `translation_key` declares no name at all -- which is every
+    panel-level description this integration ships. Its real label reaches the UI
+    from `translations/en.json`, so the neutral word is what this layer can say.
+    The per-class fallbacks that used to answer here ("Battery", "Status", ...)
+    were never displayed and are gone.
+    """
     battery = SpanBatterySnapshotFactory.create(soe_percentage=77.0)
     snapshot = SpanPanelSnapshotFactory.create(
         battery=battery,
@@ -184,39 +192,24 @@ def test_panel_sensor_default_friendly_names_cover_fallback_branches() -> None:
     )
     coordinator = _make_coordinator(snapshot)
 
-    panel_data_desc = next(
-        desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state"
-    )
     status_desc = next(desc for desc in STATUS_SENSORS if desc.key == "software_version")
-    panel_power_desc = next(desc for desc in PANEL_POWER_SENSORS if desc.key == "instantGridPowerW")
-    panel_energy_desc = next(
-        desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
-    )
-    panel_data_sensor = SpanPanelPanelStatus(coordinator, panel_data_desc, snapshot)
-    status_sensor = SpanPanelStatus(coordinator, status_desc, snapshot)
-    battery_sensor = SpanPanelBattery(coordinator, BATTERY_SENSOR, snapshot)
-    power_sensor = SpanPanelPowerSensor(coordinator, panel_power_desc, snapshot)
-    energy_sensor = SpanPanelEnergySensor(coordinator, panel_energy_desc, snapshot)
-    bess_sensor = SpanBessMetadataSensor(
-        coordinator,
-        BESS_METADATA_SENSORS[0],
-        snapshot,
-        {"identifiers": {("span_panel", "bess")}},
-    )
-    pv_sensor = SpanPVMetadataSensor(
-        coordinator,
-        PV_METADATA_SENSORS[0],
-        snapshot,
-        {"identifiers": {("span_panel", "pv")}},
+    assert not isinstance(status_desc.name, str), (
+        "this case is only interesting for a description that declares no name"
     )
 
-    assert panel_data_sensor._generate_friendly_name(snapshot, panel_data_desc) == "Sensor"
-    assert status_sensor._generate_friendly_name(snapshot, status_desc) == "Status"
-    assert battery_sensor._generate_friendly_name(snapshot, BATTERY_SENSOR) == "Battery"
-    assert power_sensor._generate_friendly_name(snapshot, panel_power_desc) == "Power"
-    assert energy_sensor._generate_friendly_name(snapshot, panel_energy_desc) == "Energy"
-    assert bess_sensor._generate_friendly_name(snapshot, BESS_METADATA_SENSORS[0]) == "BESS Sensor"
-    assert pv_sensor._generate_friendly_name(snapshot, PV_METADATA_SENSORS[0]) == "PV Sensor"
+    status_sensor = SpanPanelStatus(coordinator, status_desc, snapshot)
+    assert status_sensor._generate_panel_name(snapshot, status_desc) == "Sensor"
+
+
+def test_a_panel_sensor_with_a_name_shows_it() -> None:
+    """The other half of the same answer, with the label spelled on the description."""
+    snapshot = SpanPanelSnapshotFactory.create()
+    coordinator = _make_coordinator(snapshot)
+    unnamed = next(desc for desc in PANEL_DATA_STATUS_SENSORS if desc.key == "main_relay_state")
+    described = replace(unnamed, name="Main Relay")
+
+    sensor = SpanPanelPanelStatus(coordinator, described, snapshot)
+    assert sensor._generate_panel_name(snapshot, described) == "Main Relay"
 
 
 def test_panel_metadata_sensors_return_expected_data_sources() -> None:
@@ -378,7 +371,6 @@ def test_circuit_power_sensor_subdevice_uses_short_name() -> None:
         device_info_override={"identifiers": {("span_panel", "evse")}},
     )
 
-    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Current"
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Current"
 
 
@@ -391,10 +383,6 @@ def test_circuit_power_sensor_missing_circuit_uses_unmapped_fallback_name() -> N
         coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "missing_circuit"
     )
 
-    assert (
-        sensor._generate_friendly_name(snapshot, sensor.entity_description)
-        == "Unmapped Tab missing_circuit Current"
-    )
     assert (
         sensor._generate_panel_name(snapshot, sensor.entity_description)
         == "Unmapped Tab missing_circuit Current"
@@ -464,10 +452,6 @@ def test_circuit_energy_sensor_missing_circuit_uses_fallback_names() -> None:
     sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c9")
 
     assert (
-        sensor._generate_friendly_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Consumed Energy"
-    )
-    assert (
         sensor._generate_panel_name(snapshot, sensor.entity_description)
         == "Circuit c9 Consumed Energy"
     )
@@ -488,7 +472,6 @@ def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
         device_info_override={"identifiers": {("span_panel", "evse")}},
     )
 
-    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Consumed Energy"
     assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Consumed Energy"
 
 
@@ -520,7 +503,7 @@ def test_unmapped_circuit_sensor_generates_unmapped_friendly_name() -> None:
     sensor = SpanUnmappedCircuitSensor(coordinator, UNMAPPED_SENSORS[0], snapshot, "unmapped_tab_7")
 
     assert (
-        sensor._generate_friendly_name(snapshot, sensor.entity_description)
+        sensor._generate_panel_name(snapshot, sensor.entity_description)
         == "Unmapped Tab 7 Power"
     )
 
