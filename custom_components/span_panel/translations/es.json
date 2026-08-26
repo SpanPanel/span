@@ -508,14 +508,23 @@
     "rotate_credentials_auth_failed": {
       "message": "El SPAN Panel rechazó el token de acceso almacenado. Vuelva a autenticar la integración antes de rotar las credenciales."
     },
+    "rotate_credentials_ca_unusable": {
+      "message": "No se puede leer la autoridad de certificación almacenada para este SPAN Panel, por lo que la rotación tendría que viajar sin cifrar. No se ha cambiado nada. Repare la autoridad de certificación del panel y vuelva a rotar."
+    },
     "rotate_credentials_failed": {
       "message": "El SPAN Panel en {host} no completó la rotación de credenciales. Las credenciales existentes no han cambiado."
+    },
+    "rotate_credentials_multiple_panels": {
+      "message": "Hay más de un SPAN Panel cargado. Elija en el campo de entrada de configuración el panel que desea rotar: al rotar, la contraseña anterior del broker deja de funcionar para todos los demás clientes de ese panel."
     },
     "rotate_credentials_no_entry": {
       "message": "No se encontró ningún SPAN Panel cargado que use la API v2."
     },
     "rotate_credentials_no_token": {
       "message": "Este SPAN Panel no tiene un token de acceso almacenado. Vuelva a autenticar la integración antes de rotar las credenciales."
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "Se guardó la nueva contraseña del broker, pero la integración de SPAN Panel no volvió a iniciarse con ella. El panel ya aceptó la nueva contraseña, así que no vuelva a rotar: revise los registros y recargue la integración."
     },
     "rotate_credentials_requires_admin": {
       "message": "Solo un administrador de Home Assistant puede rotar las credenciales del SPAN Panel."
@@ -860,7 +869,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuración",
-          "description": "Id de entrada de configuración opcional. Solo es necesario cuando hay más de un SPAN Panel configurado."
+          "description": "Qué panel rotar. Opcional con un solo panel; obligatorio cuando hay más de un SPAN Panel cargado."
         }
       }
     }

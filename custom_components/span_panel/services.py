@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from span_panel_api import regenerate_passphrase
 from span_panel_api.exceptions import (
@@ -18,7 +18,7 @@ from span_panel_api.exceptions import (
 )
 import voluptuous as vol
 
-from .config_flow_validation import panel_rest_transport
+from .config_flow_validation import PanelCaUnusableError, panel_rest_transport
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_PASSWORD,
@@ -693,9 +693,16 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
     """Register credential-rotation services."""
 
     def _get_v2_entry(config_entry_id: str | None) -> ConfigEntry:
-        """Return the loaded v2 entry to rotate, or explain why there isn't one."""
+        """Return the loaded v2 entry to rotate, or explain why there isn't one.
+
+        With the id omitted and more than one panel loaded there is no defensible
+        default: rotating invalidates the broker password every other local client
+        of that panel is using, so picking one and hoping is worse than asking.
+        A single loaded panel is unambiguous and the id stays optional there.
+        """
         from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
 
+        candidates: list[ConfigEntry] = []
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             if config_entry_id is not None and entry.entry_id != config_entry_id:
                 continue
@@ -705,13 +712,24 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
                 continue
             if entry.data.get(CONF_API_VERSION) != "v2":
                 continue
-            return entry
+            candidates.append(entry)
 
-        raise ServiceValidationError(
-            "No loaded SPAN panel using the v2 API was found.",
-            translation_domain=DOMAIN,
-            translation_key="rotate_credentials_no_entry",
-        )
+        if not candidates:
+            raise ServiceValidationError(
+                "No loaded SPAN panel using the v2 API was found.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_no_entry",
+            )
+
+        if config_entry_id is None and len(candidates) > 1:
+            raise ServiceValidationError(
+                "More than one SPAN panel is loaded. Name the panel to rotate "
+                "with the config entry field.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_multiple_panels",
+            )
+
+        return candidates[0]
 
     async def async_handle_rotate_credentials(call: ServiceCall) -> None:
         await _async_require_admin_caller(hass, call)
@@ -728,8 +746,21 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
 
         # Over the pinned CA where this entry has one. A credential-rotation
         # service that delivered fresh secrets over unverified HTTP would undo
-        # the point of pinning at the one moment it matters most.
-        transport = panel_rest_transport(hass, entry.data)
+        # the point of pinning at the one moment it matters most, so an entry
+        # whose stored CA no longer parses is refused rather than downgraded.
+        # (An entry that was never pinned is plaintext by design; that is the
+        # transport it has always used, and this service does not change it.)
+        try:
+            transport = panel_rest_transport(hass, entry.data, allow_plaintext_fallback=False)
+        except PanelCaUnusableError as err:
+            raise ServiceValidationError(
+                "The stored certificate authority for this SPAN panel cannot be "
+                "read, so the rotation would have to travel unencrypted. "
+                "Nothing was changed.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_ca_unusable",
+            ) from err
+
         try:
             new_password = await regenerate_passphrase(
                 host,
@@ -764,8 +795,23 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
 
         # Awaited rather than fired and forgotten: the running client still
         # holds the password the panel just invalidated, so the call should not
-        # report success until the entry is back up on the new one.
-        await hass.config_entries.async_reload(entry.entry_id)
+        # report success until the entry is back up on the new one. A reload
+        # that fails is reported as a failure of the call — the stored password
+        # stays, because it is the one the panel now accepts and re-rotating
+        # would only invalidate it again.
+        if not await hass.config_entries.async_reload(entry.entry_id):
+            _LOGGER.error(
+                "Stored a new MQTT broker credential for SPAN panel entry %s, "
+                "but the entry did not reload onto it",
+                entry.entry_id,
+            )
+            raise HomeAssistantError(
+                "The new broker password was stored, but the SPAN panel "
+                "integration did not come back up on it. Check the logs and "
+                "reload the entry.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_reload_failed",
+            )
 
         _LOGGER.info(
             "Rotated the MQTT broker credential for SPAN panel entry %s",

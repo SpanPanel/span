@@ -508,14 +508,23 @@
     "rotate_credentials_auth_failed": {
       "message": "O SPAN Panel rejeitou o token de acesso guardado. Volte a autenticar a integração antes de rodar as credenciais."
     },
+    "rotate_credentials_ca_unusable": {
+      "message": "A autoridade de certificação guardada para este SPAN Panel não pode ser lida, pelo que a rotação teria de viajar sem encriptação. Nada foi alterado. Repare a autoridade de certificação do painel e rode novamente."
+    },
     "rotate_credentials_failed": {
       "message": "O SPAN Panel em {host} não concluiu a rotação de credenciais. As credenciais existentes mantêm-se inalteradas."
+    },
+    "rotate_credentials_multiple_panels": {
+      "message": "Está carregado mais do que um SPAN Panel. Escolha o painel a rodar no campo da entrada de configuração: a rotação faz com que a palavra-passe anterior do broker deixe de funcionar para todos os outros clientes desse painel."
     },
     "rotate_credentials_no_entry": {
       "message": "Não foi encontrado nenhum SPAN Panel carregado que utilize a API v2."
     },
     "rotate_credentials_no_token": {
       "message": "Este SPAN Panel não tem um token de acesso guardado. Volte a autenticar a integração antes de rodar as credenciais."
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "A nova palavra-passe do broker foi guardada, mas a integração SPAN Panel não voltou a arrancar com ela. O painel já aceitou a nova palavra-passe, por isso não rode novamente: consulte os registos e recarregue a integração."
     },
     "rotate_credentials_requires_admin": {
       "message": "Apenas um administrador do Home Assistant pode rodar as credenciais do SPAN Panel."
@@ -860,7 +869,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuração",
-          "description": "Id da entrada de configuração, opcional. Apenas necessário quando existe mais do que um SPAN Panel configurado."
+          "description": "Que painel rodar. Opcional com um único painel; obrigatório quando está carregado mais do que um SPAN Panel."
         }
       }
     }

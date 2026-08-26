@@ -395,8 +395,19 @@ def as_port(value: object, default: int) -> int:
     return default if parsed is None else parsed
 
 
+class PanelCaUnusableError(Exception):
+    """An entry stores a panel CA that cannot be turned into a trust anchor.
+
+    Raised only for a caller that passed `allow_plaintext_fallback=False`; the
+    default path logs and downgrades, as it always has.
+    """
+
+
 def panel_rest_transport(
-    hass: HomeAssistant, entry_data: Mapping[str, object]
+    hass: HomeAssistant,
+    entry_data: Mapping[str, object],
+    *,
+    allow_plaintext_fallback: bool = True,
 ) -> PanelRestTransport:
     """Decide how this entry's REST calls should reach the panel.
 
@@ -405,12 +416,28 @@ def panel_rest_transport(
     somebody edits `.storage` by hand, which is a worse outcome than the
     transport this entry had before it was pinned — and the CA-changed repair is
     the path back to a good pin.
+
+    That trade is right for a caller whose alternative is not working at all. It
+    is wrong for one carrying a secret: a credential rotation sends the access
+    token out and a fresh broker password back, and doing that unverified undoes
+    the pin at the one moment it matters most. Such a caller passes
+    `allow_plaintext_fallback=False` and gets `PanelCaUnusableError` instead of a
+    quiet downgrade. An entry with no stored PEM at all is not pinned in the first
+    place and still gets the plaintext transport either way — the flag refuses a
+    downgrade, it does not invent a pin.
+
+    Raises:
+        PanelCaUnusableError: `allow_plaintext_fallback` is False and the stored
+            PEM is not a certificate this system accepts.
+
     """
     pem = entry_data.get(CONF_PANEL_CA_PEM)
     if pem:
         try:
             context = build_panel_ssl_context(str(pem))
-        except (ssl.SSLError, ValueError):
+        except (ssl.SSLError, ValueError) as err:
+            if not allow_plaintext_fallback:
+                raise PanelCaUnusableError(str(err)) from err
             _LOGGER.warning(
                 "The stored panel CA is not a certificate this system accepts; "
                 "falling back to plaintext HTTP for REST calls"

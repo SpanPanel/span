@@ -508,14 +508,23 @@
     "rotate_credentials_auth_failed": {
       "message": "Le SPAN Panel a rejeté le jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
     },
+    "rotate_credentials_ca_unusable": {
+      "message": "L'autorité de certification enregistrée pour ce SPAN Panel est illisible ; la rotation devrait donc circuler en clair. Rien n'a été modifié. Réparez l'autorité de certification du panneau, puis relancez la rotation."
+    },
     "rotate_credentials_failed": {
       "message": "Le SPAN Panel à l'adresse {host} n'a pas terminé le renouvellement des identifiants. Les identifiants existants sont inchangés."
+    },
+    "rotate_credentials_multiple_panels": {
+      "message": "Plusieurs SPAN Panel sont chargés. Choisissez le panneau à faire tourner dans le champ d'entrée de configuration : la rotation empêche l'ancien mot de passe du broker de fonctionner pour tous les autres clients de ce panneau."
     },
     "rotate_credentials_no_entry": {
       "message": "Aucun SPAN Panel chargé utilisant l'API v2 n'a été trouvé."
     },
     "rotate_credentials_no_token": {
       "message": "Ce SPAN Panel n'a aucun jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "Le nouveau mot de passe du broker a été enregistré, mais l'intégration SPAN Panel n'est pas revenue en service avec celui-ci. Le panneau a déjà accepté le nouveau mot de passe : ne relancez pas la rotation, consultez les journaux et rechargez l'intégration."
     },
     "rotate_credentials_requires_admin": {
       "message": "Seul un administrateur Home Assistant peut renouveler les identifiants du SPAN Panel."
@@ -860,7 +869,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Entrée de configuration",
-          "description": "Id d'entrée de configuration facultatif. Nécessaire uniquement lorsque plusieurs SPAN Panel sont configurés."
+          "description": "Le panneau à faire tourner. Facultatif avec un seul panneau ; obligatoire lorsque plusieurs SPAN Panel sont chargés."
         }
       }
     }

@@ -508,14 +508,23 @@
     "rotate_credentials_auth_failed": {
       "message": "SPAN Panel が保存済みのアクセストークンを拒否しました。認証情報をローテーションする前に、統合を再認証してください。"
     },
+    "rotate_credentials_ca_unusable": {
+      "message": "この SPAN Panel に保存されている認証局を読み取れないため、認証情報のローテーションは暗号化されない通信になります。変更は行われていません。パネルの認証局を修復してから、もう一度ローテーションしてください。"
+    },
     "rotate_credentials_failed": {
       "message": "{host} の SPAN Panel が認証情報のローテーションを完了しませんでした。既存の認証情報は変更されていません。"
+    },
+    "rotate_credentials_multiple_panels": {
+      "message": "複数の SPAN Panel が読み込まれています。ローテーションするパネルを設定エントリのフィールドで選択してください。ローテーションすると、そのパネルの他のすべてのクライアントで以前のブローカーパスワードが使用できなくなります。"
     },
     "rotate_credentials_no_entry": {
       "message": "v2 API を使用する読み込み済みの SPAN Panel が見つかりません。"
     },
     "rotate_credentials_no_token": {
       "message": "この SPAN Panel には保存済みのアクセストークンがありません。認証情報をローテーションする前に、統合を再認証してください。"
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "新しいブローカーパスワードは保存されましたが、SPAN Panel 統合はそのパスワードで再起動できませんでした。パネルはすでに新しいパスワードを受け入れているため、再度ローテーションしないでください。ログを確認して統合を再読み込みしてください。"
     },
     "rotate_credentials_requires_admin": {
       "message": "SPAN Panel の認証情報をローテーションできるのは Home Assistant の管理者だけです。"
@@ -860,7 +869,7 @@
       "fields": {
         "config_entry_id": {
           "name": "設定エントリ",
-          "description": "任意の設定エントリ id。SPAN Panel を複数設定している場合にのみ必要です。"
+          "description": "ローテーションするパネル。パネルが 1 台の場合は任意ですが、複数の SPAN Panel が読み込まれている場合は必須です。"
         }
       }
     }

@@ -17,12 +17,13 @@ from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_PASSWORD,
     CONF_EBUS_BROKER_PORT,
     CONF_EBUS_BROKER_USERNAME,
+    CONF_PANEL_CA_PEM,
     DOMAIN,
 )
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
@@ -288,3 +289,89 @@ async def test_entry_without_runtime_data_is_skipped(hass: HomeAssistant) -> Non
         await _call_rotate(hass, _admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_no_entry"
+
+
+@pytest.mark.asyncio
+async def test_two_panels_and_no_id_refuses_rather_than_picking_one(
+    hass: HomeAssistant,
+) -> None:
+    """With two panels loaded, an omitted id is ambiguous, not a default."""
+    first = _add_v2_entry(hass)
+    second = MockConfigEntry(
+        domain=DOMAIN,
+        version=7,
+        data=dict(first.data) | {CONF_HOST: "192.168.1.101"},
+        entry_id="span_entry_two",
+        unique_id="sp3-test-004",
+    )
+    second.add_to_hass(hass)
+    second.mock_state(hass, ConfigEntryState.LOADED)
+    second.runtime_data = SpanPanelRuntimeData(
+        coordinator=MagicMock(),
+        panel_device_id="panel-device-id-two",
+    )
+    _async_register_credential_services(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.regenerate_passphrase",
+            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        ) as rotate,
+        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
+        pytest.raises(ServiceValidationError) as err,
+    ):
+        await _call_rotate(hass, _admin_context(hass))
+
+    assert err.value.translation_key == "rotate_credentials_multiple_panels"
+    rotate.assert_not_awaited()
+    assert first.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
+    assert second.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
+
+
+@pytest.mark.asyncio
+async def test_a_reload_that_fails_is_reported_with_the_password_already_stored(
+    hass: HomeAssistant,
+) -> None:
+    """The panel did not come back on the new password; the caller must hear it."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.regenerate_passphrase",
+            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        ),
+        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=False)),
+        pytest.raises(HomeAssistantError) as err,
+    ):
+        await _call_rotate(hass, _admin_context(hass))
+
+    assert err.value.translation_key == "rotate_credentials_reload_failed"
+    # The panel has already issued it, so the entry must keep the new one.
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
+
+
+@pytest.mark.asyncio
+async def test_an_unusable_stored_ca_refuses_rather_than_rotating_in_the_clear(
+    hass: HomeAssistant,
+) -> None:
+    """A rotation carries the token out and the new password back; never unpinned."""
+    entry = _add_v2_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, data=dict(entry.data) | {CONF_PANEL_CA_PEM: "not a certificate"}
+    )
+    _async_register_credential_services(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.regenerate_passphrase",
+            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        ) as rotate,
+        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
+        pytest.raises(ServiceValidationError) as err,
+    ):
+        await _call_rotate(hass, _admin_context(hass))
+
+    assert err.value.translation_key == "rotate_credentials_ca_unusable"
+    rotate.assert_not_awaited()
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD

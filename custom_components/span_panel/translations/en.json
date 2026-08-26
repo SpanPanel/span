@@ -508,14 +508,23 @@
     "rotate_credentials_auth_failed": {
       "message": "The SPAN Panel rejected the stored access token. Reauthenticate the integration before rotating credentials."
     },
+    "rotate_credentials_ca_unusable": {
+      "message": "The certificate authority stored for this SPAN Panel cannot be read, so the rotation would have to travel unencrypted. Nothing was changed. Repair the panel's certificate authority, then rotate again."
+    },
     "rotate_credentials_failed": {
       "message": "The SPAN Panel at {host} did not complete the credential rotation. The existing credentials are unchanged."
     },
     "rotate_credentials_no_entry": {
       "message": "No loaded SPAN panel using the v2 API was found."
     },
+    "rotate_credentials_multiple_panels": {
+      "message": "More than one SPAN Panel is loaded. Choose the panel to rotate in the config entry field: rotating stops the previous broker password working for every other client of that panel."
+    },
     "rotate_credentials_no_token": {
       "message": "This SPAN panel has no stored access token. Reauthenticate the integration before rotating credentials."
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "The new broker password was stored, but the SPAN Panel integration did not come back up on it. The panel has already accepted the new password, so do not rotate again: check the logs and reload the integration."
     },
     "rotate_credentials_requires_admin": {
       "message": "Only a Home Assistant administrator can rotate SPAN Panel credentials."
@@ -610,7 +619,7 @@
         },
         "config_entry_id": {
           "name": "Config entry",
-          "description": "Optional config entry id. Only needed when more than one SPAN panel is configured."
+          "description": "Which panel to rotate. Optional with a single panel; required when more than one SPAN Panel is loaded."
         }
       }
     },
