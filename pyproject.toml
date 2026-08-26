@@ -145,7 +145,7 @@ exclude = [
 ]
 extraPaths = [
     "./custom_components",
-    "../../span/span-panel-api-security/src",
+    "../../span/span-panel-api/src",
     "../ha-synthetic-sensors/src"
 ]
 pythonPlatform = "Darwin"
