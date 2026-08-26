@@ -24,6 +24,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
@@ -49,6 +50,7 @@ from .tls_panel import (
     issue_ca,
     issue_leaf,
     resolving_to_loopback,
+    unrelated_ca_pem,
 )
 
 PASSPHRASE = "hunter2-synthetic"
@@ -655,3 +657,178 @@ async def test_reconfigure_refuses_a_name_the_pinned_certificate_does_not_cover(
     assert result["step_id"] == "reconfigure"
     assert result["errors"] == {"base": "ca_leaf_mismatch"}
     assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+
+
+# ---------- Case C: an already-configured entry follows a host only under its pin ----------
+
+#: Where the pinned entry already reaches its panel. RFC 5737 TEST-NET-1, so
+#: nothing routes there: the guard is about the *candidate* host, and the host
+#: the entry already holds is never dialled.
+PANEL_ADDRESS = "192.0.2.10"
+
+
+def _entry_reached_at_the_address(
+    hass: HomeAssistant, ca_pem: str | None, tls_port: int
+) -> MockConfigEntry:
+    """Add an entry for this panel at `PANEL_ADDRESS`, pinned to `ca_pem`.
+
+    `None` is the entry that never acquired an anchor. It is what proves the
+    guard leaves that install exactly as it was rather than freezing its host.
+    """
+    data: dict[str, Any] = {
+        CONF_HOST: PANEL_ADDRESS,
+        CONF_ACCESS_TOKEN: "synthetic-token",
+        CONF_API_VERSION: "v2",
+        CONF_HTTPS_PORT: tls_port,
+    }
+    if ca_pem is not None:
+        data[CONF_PANEL_CA_PEM] = ca_pem
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="SPAN Panel",
+        data=data,
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id=PANEL_SERIAL,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def _announce_from(hass: HomeAssistant, host: str) -> Any:
+    """Run an `_ebus._tcp` announcement claiming this panel's serial, from `host`."""
+    address = ipaddress.IPv4Address(host)
+    return await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=ZeroconfServiceInfo(
+            ip_address=address,
+            ip_addresses=[address],
+            hostname="span-panel.local.",
+            name="SPAN Panel._ebus._tcp.local.",
+            port=8883,
+            properties={},
+            type="_ebus._tcp.local.",
+        ),
+    )
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_zeroconf_will_not_move_a_pinned_entry_to_a_host_its_anchor_rejects(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """Anything on the LAN can announce this serial; only the pin decides who gets the entry.
+
+    The listener here is the impostor: it answers on the port the entry uses,
+    serves a perfectly valid leaf, and the certificate is signed by an authority
+    the entry is not pinned to. Following it would point the entry at a host its
+    own anchor rejects and hand the user a CA-changed repair inviting them to
+    accept the impostor's fingerprint.
+    """
+    entry = _entry_reached_at_the_address(hass, unrelated_ca_pem(), panel.port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(hass, PANEL_LOOPBACK)
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_ADDRESS
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_zeroconf_moves_a_pinned_entry_to_a_host_the_pin_validates(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """A panel that moved address is still the panel, and the entry has to follow it.
+
+    The whole point of the host update: DHCP hands the panel a new lease, mDNS
+    announces it, and the entry has to end up there. The pin is what tells the
+    two cases apart, so the check has to pass here or the guard has simply
+    turned discovery off.
+    """
+    entry = _entry_reached_at_the_address(hass, panel.ca_pem, panel.port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(hass, PANEL_LOOPBACK)
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_zeroconf_still_moves_an_unpinned_entry(hass: HomeAssistant, panel: Panel) -> None:
+    """An entry with no anchor has nothing to check against, and keeps what it had.
+
+    There is no pin to protect and no check that could be made, so refusing the
+    move would only stop an unpinned entry following its panel — a regression
+    against the behaviour that shipped, bought with no security at all.
+    """
+    entry = _entry_reached_at_the_address(hass, None, panel.port)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await _announce_from(hass, PANEL_LOOPBACK)
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_re_adding_a_pinned_panel_by_an_unserved_name_leaves_its_host_alone(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """Re-adding by hand goes through the same update, and reaches it before the CA step.
+
+    A user who types a single-label name for a panel already set up gets
+    `already_configured` either way — but the abort used to rewrite the entry's
+    host on the way out, to a name the panel's certificate does not carry. The
+    entry then could not connect to its own panel and there was no flow left to
+    correct it.
+    """
+    entry = _pinned_entry(hass, panel)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_SHORTNAME, CONF_HTTP_PORT: 8080}
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_re_adding_a_pinned_panel_by_a_name_it_serves_moves_the_entry(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The same path must still let a user correct the host to a name that works."""
+    panel.present(
+        [
+            x509.DNSName(PANEL_SHORTNAME),
+            x509.IPAddress(ipaddress.ip_address(PANEL_LOOPBACK)),
+        ]
+    )
+    entry = _pinned_entry(hass, panel)
+
+    with _plaintext_bootstrap_stubbed(panel):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_SHORTNAME, CONF_HTTP_PORT: 8080}
+        )
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == PANEL_SHORTNAME

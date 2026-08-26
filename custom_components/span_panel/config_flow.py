@@ -44,6 +44,7 @@ from .config_flow_options import (
 )
 from .config_flow_validation import (
     PanelRestTransport,
+    as_port,
     async_fetch_panel_ca,
     async_leaf_chains_to_ca,
     async_resolve_host,
@@ -291,7 +292,97 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # User-initiated flows pass raise_on_progress=False so they can
         # proceed when a zeroconf discovery flow is already running.
         await self.async_set_unique_id(self.serial_number, raise_on_progress=raise_on_progress)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: self.host})
+        self._abort_if_unique_id_configured(updates=await self._async_host_update())
+
+    async def _async_host_update(self) -> dict[str, Any] | None:
+        """Return the host update the already-configured abort should carry, or None.
+
+        The abort that follows is also how an entry follows its panel: a new
+        DHCP lease, a re-announcement on the new address, and the entry is
+        rewritten to point at it. Both routes into this reach it before anything
+        has been authenticated — an `_ebus._tcp` record is whatever the LAN
+        chose to broadcast, and the serial that matched came from the candidate
+        host's own unauthenticated `/api/v2/status` — so on its own, "claims to
+        be this serial" is a claim anything on the network can make.
+
+        A pinned entry has a better question available: does the candidate serve
+        a certificate this entry's own anchor validates? Nothing but the panel
+        holding the matching key can answer it, and it is precisely the check
+        the entry's own connections will apply afterwards. Moving a pinned entry
+        onto a host that fails it is not a recoverable mistake either way round:
+        an impostor gets the entry pointed at itself and the user a CA-changed
+        repair inviting them to accept its fingerprint, while an honest name the
+        panel simply does not serve — a single-label host, an FQDN never
+        registered — leaves the entry unable to reach its own panel with no flow
+        left to correct it.
+
+        Verified as the host would be *stored*, against the port the entry
+        already uses. The address fallback that `_async_choose_bootstrap_host`
+        applies is deliberately not repeated: that one exists to dial a panel
+        while a name is unverified, and accepting a name here because its
+        address validates would persist exactly the host that fallback refuses
+        to write.
+
+        An entry with no anchor keeps the behaviour it shipped with. There is no
+        pin to protect and no check to make, so refusing the move would cost an
+        unpinned install its panel and buy nothing.
+        """
+        host = self.host
+        if not host or self.unique_id is None:
+            return None
+        entry = self.hass.config_entries.async_entry_for_domain_unique_id(
+            self.handler, self.unique_id
+        )
+        if entry is None:
+            return {CONF_HOST: host}
+        ca_pem = entry.data.get(CONF_PANEL_CA_PEM)
+        if not ca_pem:
+            return {CONF_HOST: host}
+
+        tls_port = as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+        try:
+            chains = await async_leaf_chains_to_ca(host, tls_port, str(ca_pem))
+        except Exception:
+            # `async_leaf_chains_to_ca` answers False for every failure it
+            # anticipates, so reaching here at all is unexpected. Caught broadly
+            # rather than left to propagate because the two outcomes are not
+            # symmetric: an escaped error inside a discovery flow is an
+            # unhandled traceback, and what it would abandon is the one check
+            # standing between an unauthenticated claim and a pinned entry's
+            # host. Anything unrecognised is a refusal.
+            _LOGGER.exception("Could not verify %s against the pinned authority", host)
+            chains = False
+        if chains:
+            return {CONF_HOST: host}
+
+        _LOGGER.warning(
+            "Refusing to move the entry for panel %s to %s: the certificate served there on "
+            "port %s does not chain to the authority this entry is pinned to (SHA-256 %s)",
+            self.unique_id,
+            host,
+            tls_port,
+            self._pinned_fingerprint(str(ca_pem)),
+        )
+        return None
+
+    @staticmethod
+    def _pinned_fingerprint(ca_pem: str) -> str:
+        """Return the fingerprint of the anchor that refused a host, for the log line.
+
+        The anchor's, not the certificate the refused host served. This is the
+        value the install logged and diagnostics reports, so it is the one a
+        user can compare something against — and reading the other one would
+        mean opening a second, deliberately unverified connection to a host this
+        code has just decided not to trust, to obtain a number with nothing to
+        compare it to.
+
+        A PEM this system cannot read is not a reason to lose the warning, so it
+        degrades to a placeholder rather than raising.
+        """
+        try:
+            return ca_fingerprint(ca_pem)
+        except SpanPanelValidationError:
+            return "unreadable"
 
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """Handle a flow initiated by zeroconf discovery."""
