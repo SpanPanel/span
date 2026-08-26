@@ -39,6 +39,11 @@ from .grace_period import (  # noqa: F401
     handle_offline_grace_period,
     initialize_from_last_state,
 )
+from .id_builder import get_user_friendly_suffix
+from .naming import (
+    circuit_object_id_base,
+    release_registry_name_written_by_older_release,
+)
 from .options import ENERGY_REPORTING_GRACE_PERIOD
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -62,6 +67,20 @@ _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
         "voltage",
     }
 )
+
+
+def _description_label(description: SensorEntityDescription) -> str:
+    """Return the description's own label, or a neutral word where it declares none.
+
+    A description with a `translation_key` declares no `name` -- it declares
+    `None` or leaves the field `UNDEFINED` -- and a sensor that reaches here with
+    neither is a programming error rather than a user-visible state, so "Sensor"
+    keeps it readable instead of rendering a sentinel.
+    """
+    name = description.name
+    if isinstance(name, str) and name:
+        return name
+    return "Sensor"
 
 
 class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntity, ABC):
@@ -105,27 +124,28 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     "sensor", DOMAIN, self._attr_unique_id
                 )
 
-                if existing_entity_id:
-                    # Phase 2: the panel's name, in both modes. It reaches the UI
-                    # as `original_name`, which ranks below `suggested_object_id`
-                    # and so cannot decide what "Recreate entity IDs" proposes.
-                    self._attr_name = self._generate_panel_name(snapshot, description)
-                else:
-                    # Phase 1: the flag-based name the mode calls for.
-                    self._attr_name = self._generate_friendly_name(snapshot, description)
+                # One name path, in both naming modes: the panel's name, carried
+                # as `original_name`. That field ranks below the object-id base
+                # below, so what is displayed can no longer decide what
+                # "Recreate entity IDs" proposes.
+                self._attr_name = self._generate_panel_name(snapshot, description)
+
+                # The id itself is Home Assistant's to compose. This entity
+                # supplies only its base; `entity_id` is left unset so Core
+                # assembles the rest from the user's `entity_id_parts`.
+                identifier = self._object_id_identifier(snapshot, description)
+                if identifier is not None:
+                    self._span_object_id_base = circuit_object_id_base(
+                        identifier, self._object_id_suffix(description), existing_entity_id
+                    )
 
                 if existing_entity_id:
                     self._release_synced_registry_name(
                         snapshot, description, entity_registry, existing_entity_id
                     )
-
-                # Wire explicit entity_id via subclass helper
-                entity_id = self._construct_entity_id(snapshot, description, existing_entity_id)
-                if entity_id:
-                    self.entity_id = entity_id
         else:
             # Fallback for entities without unique_id
-            self._attr_name = self._generate_friendly_name(snapshot, description)
+            self._attr_name = self._generate_panel_name(snapshot, description)
 
         # Set entity registry defaults if they exist in the description
         if hasattr(description, "entity_registry_enabled_default"):
@@ -184,11 +204,36 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
-        """Generate panel name for the sensor (always uses panel circuit name).
+    def _object_id_identifier(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
+        """Return the naming-flag half of this entity's object-id base.
 
-        This method is used for name sync - it always uses the panel circuit name
-        regardless of user preferences.
+        `None` -- the default, and the answer for every entity that is not a
+        circuit -- leaves `_span_object_id_base` unset, so Home Assistant
+        composes the id from the display name exactly as it always has.
+
+        A circuit entity answers with `Circuit 15`, `Kitchen Outlets` or
+        `Unmapped Tab 32`, which is the one half of the id the naming flags
+        decide. `naming.circuit_object_id_base` supplies the other half.
+        """
+        return None
+
+    def _object_id_suffix(self, description: T) -> str:
+        """Return the canonical suffix `naming.circuit_object_id_base` keys on.
+
+        The description key is the right question for a description whose key
+        survives construction. Circuit entities overwrite theirs with the
+        circuit id and so answer from the key they were built from.
+        """
+        return get_user_friendly_suffix(description.key)
+
+    def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
+        """Generate the displayed name for the sensor, in either naming mode.
+
+        Circuit entities override this to prefix the panel's own circuit name,
+        which is what makes a circuit renamed in the SPAN app show through. Every
+        other sensor's name is its description's label -- and a description that
+        declares a `translation_key` instead is normally not asked at all, since
+        its name comes from `translations/en.json`.
 
         Args:
             snapshot: The panel snapshot data
@@ -198,9 +243,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             Panel name string
 
         """
-        # This should be implemented by subclasses that need name sync
-        # For now, fall back to friendly name
-        return self._generate_friendly_name(snapshot, description)
+        return _description_label(description)
 
     def _release_synced_registry_name(
         self,
@@ -221,39 +264,23 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         go of what the old scheme wrote. Only a name this integration would have
         written is cleared; anything else is the user's and is left exactly where
         it is, which is the same test the write used to gate on.
+
+        Every label the description has carried counts, not just its current one:
+        a label reworded between releases left installs holding the older string,
+        and a write we no longer recognise is a write we would never hand back.
         """
-        entity_entry = entity_registry.async_get(existing_entity_id)
-        if not entity_entry or entity_entry.name is None:
-            return
         circuit = snapshot.circuits.get(getattr(self, "circuit_id", ""))
         if not (circuit and circuit.name):
             return
-        description_suffix = str(getattr(description, "name", None) or "Sensor")
-        if entity_entry.name == f"{circuit.name} {description_suffix}":
-            entity_registry.async_update_entity(existing_entity_id, name=None)
-
-    def _construct_entity_id(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: T,
-        existing_entity_id: str | None = None,
-    ) -> str | None:
-        """Construct explicit entity_id for the sensor.
-
-        Subclasses may override to use entity_id helpers from helpers.py.
-        Returns None to let HA auto-generate from _attr_name.
-
-        The value is what current panel data and the naming flags produce; an
-        existing id is not consulted to decide *whether* to compute one, only so
-        that an id predating the suffix mapping keeps the suffix it shipped with.
-
-        Args:
-            snapshot: The panel snapshot data
-            description: The sensor description
-            existing_entity_id: This entity's id in the registry, or None if new
-
-        """
-        return None
+        # Declared by the circuit descriptions; a description type whose label
+        # has never been reworded carries none.
+        legacy_names: tuple[str, ...] = getattr(description, "legacy_names", ())
+        release_registry_name_written_by_older_release(
+            entity_registry,
+            existing_entity_id,
+            circuit.name,
+            (_description_label(description), *legacy_names),
+        )
 
     def _sync_circuit_name(self) -> None:
         """Follow a circuit renamed on the panel, by reloading so the name is rebuilt.

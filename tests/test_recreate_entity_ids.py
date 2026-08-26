@@ -25,7 +25,8 @@ from unittest.mock import MagicMock
 import pytest
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+from homeassistant.helpers.entity_registry import EntityNamePart
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     MockEntityPlatform,
@@ -140,6 +141,19 @@ def entry(hass: HomeAssistant) -> MockConfigEntry:
     return config_entry
 
 
+@pytest.fixture
+def device_and_entity_parts(hass: HomeAssistant) -> None:
+    """Compose ids from the device and the entity, as a user may globally choose to.
+
+    `entity_id_parts` is a registry-wide setting whose default also includes the
+    area. Cases about the suffix half of an id pin it here so the assertion is
+    about the suffix and not about whether an area happens to exist.
+    """
+    er.async_get(hass).async_update_settings(
+        entity_id_parts=[EntityNamePart.DEVICE, EntityNamePart.ENTITY]
+    )
+
+
 async def test_the_first_install_takes_its_entity_id_from_the_circuit_name(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
@@ -194,10 +208,12 @@ async def test_renaming_a_circuit_does_not_move_the_unique_id(
 async def test_renaming_a_circuit_refreshes_the_registrys_entity_id_suggestion(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """The stored suggestion has to track the panel, not the install date.
+    """The stored base has to track the panel, not the install date.
 
-    This is the field `async_regenerate_entity_id` reads when there is no user
-    `name` override, which in friendly-names mode is always.
+    This is what `async_regenerate_entity_id` composes from when there is no
+    user `name` override, which in friendly-names mode is always. It is the
+    *base*, not a whole object id: Core prefixes the device and, where the user
+    has assigned one, the area.
     """
     install = _Install(hass, entry)
     await install.load(ORIGINAL_NAME)
@@ -206,7 +222,8 @@ async def test_renaming_a_circuit_refreshes_the_registrys_entity_id_suggestion(
     registry = er.async_get(hass)
     registry_entry = registry.async_get(ORIGINAL_ENTITY_ID)
     assert registry_entry is not None
-    assert registry_entry.suggested_object_id == "span_panel_beer_fridge_power"
+    assert registry_entry.object_id_base == "Beer Fridge power"
+    assert registry_entry.suggested_object_id is None
 
 
 async def test_recreate_entity_ids_proposes_the_renamed_id(
@@ -380,19 +397,22 @@ async def test_circuit_numbers_mode_does_not_move_ids_across_the_change(
     assert registry.async_get(RENAMED_ENTITY_ID) is None
 
 
-# --- Entities that predate the suffix mapping reaching entity ids -------------
+# --- The two spellings a circuit energy id has shipped with -------------------
 #
-# Every case above builds its entities with the current code, so the preset and
-# the live id are the same string by construction and a suffix disagreement
-# cannot appear. A real install upgrading is the case that matters: those
-# entities took their id from the descriptor name ("Consumed Energy" ->
-# `..._consumed_energy`) where the mapping says `energy_consumed`, so their
-# entity id and their own unique id have always disagreed. Recomputing the
-# suggestion surfaces that, and on a measured panel it offered 74 renames.
+# Every case above builds its entities with the current code, so the base and
+# the live id agree by construction and a suffix disagreement cannot appear. A
+# real install upgrading is the case that matters, and there are two eras of
+# them. Before the integration preset an entity_id, Home Assistant composed one
+# from the descriptor name ("Consumed Energy" -> `..._consumed_energy`); the
+# preset era spelled the same sensor `..._energy_consumed`, after the unique-id
+# suffix mapping. Both are live on real panels, so the base an entity is given
+# has to read its own spelling back out of the id it already carries --
+# otherwise Recreate offers a rename for every circuit at once, which on a
+# measured panel was 74 of them.
 
 LEGACY_ENTITY_ID = "sensor.span_panel_refrigerator_consumed_energy"
-CANONICAL_ENTITY_ID = "sensor.span_panel_refrigerator_energy_consumed"
-RENAMED_LEGACY_ENTITY_ID = "sensor.span_panel_beer_fridge_energy_consumed"
+PRESET_ERA_ENTITY_ID = "sensor.span_panel_refrigerator_energy_consumed"
+RENAMED_LEGACY_ENTITY_ID = "sensor.span_panel_beer_fridge_consumed_energy"
 
 ENERGY_DESCRIPTION = next(
     desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_consumed"
@@ -463,9 +483,10 @@ async def test_a_legacy_entity_still_follows_a_circuit_rename(
 ) -> None:
     """Preserving the suffix must not cost the fix.
 
-    A renamed circuit differs in the name half, so the proposal is the computed
-    id -- carrying the canonical suffix, because there is no older spelling of
-    `beer_fridge` to preserve.
+    Only the half the user changed moves. The circuit's new name reaches the
+    proposal; the suffix keeps the spelling this entity has always carried,
+    because renormalising it is a rename the user did not ask for and would ride
+    along with the one they did.
     """
     install = _LegacyInstall(hass, entry)
     install._seed()
@@ -481,13 +502,138 @@ async def test_a_legacy_entity_still_follows_a_circuit_rename(
     assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_LEGACY_ENTITY_ID
 
 
-async def test_a_new_install_gets_the_canonical_suffix(
-    hass: HomeAssistant, entry: MockConfigEntry
+async def test_a_new_energy_sensor_gets_the_noun_last_suffix(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """Preservation is for ids that already exist; nothing new inherits the old form."""
+    """A new id uses the wording the panel level and the labels use.
+
+    Nothing is seeded, so there is no spelling to read back and the default
+    applies. It is the pre-preset wording, which is also what
+    `main_meter_consumed_energy` has always said.
+    """
     sensor = await _LegacyInstall(hass, entry).load(ORIGINAL_NAME)
 
-    assert sensor.entity_id == CANONICAL_ENTITY_ID
+    assert sensor.entity_id == "sensor.span_panel_refrigerator_consumed_energy"
+
+
+async def test_a_preset_era_energy_sensor_is_offered_its_own_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """An id spelled `..._energy_consumed` keeps that spelling in the proposal."""
+    registry = er.async_get(hass)
+    unique_id = build_circuit_unique_id(SERIAL, CIRCUIT_ID, "consumedEnergyWh")
+    seeded = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        unique_id,
+        suggested_object_id="span_panel_refrigerator_energy_consumed",
+        config_entry=entry,
+    )
+    assert seeded.entity_id == PRESET_ERA_ENTITY_ID
+
+    install = _LegacyInstall(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    registry_entry = registry.async_get(seeded.entity_id)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
+
+
+async def test_a_pre_preset_energy_sensor_is_offered_its_own_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """The other era: `..._consumed_energy` keeps its spelling too."""
+    install = _LegacyInstall(hass, entry)
+    install._seed()
+
+    sensor = await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(sensor.entity_id)
+    assert registry_entry is not None
+    assert sensor.entity_id == LEGACY_ENTITY_ID
+    assert registry.async_regenerate_entity_id(registry_entry) == sensor.entity_id
+
+
+async def test_circuit_numbers_mode_releases_the_energy_name_an_older_release_wrote(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """2.0.8 wrote "<circuit> Consumed Energy" into the registry, and it must be released."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    install = _LegacyInstall(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+    registry = er.async_get(hass)
+    registry.async_update_entity(sensor.entity_id, name=f"{ORIGINAL_NAME} Consumed Energy")
+
+    await install.load(ORIGINAL_NAME)
+
+    registry_entry = registry.async_get(sensor.entity_id)
+    assert registry_entry is not None
+    assert registry_entry.name is None
+    assert registry.async_regenerate_entity_id(registry_entry) == sensor.entity_id
+
+
+async def test_a_name_written_under_the_beta_label_is_released_as_well(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """The label read "Energy Consumed" for a few betas; that write is ours too."""
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    install = _LegacyInstall(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+    registry = er.async_get(hass)
+    registry.async_update_entity(sensor.entity_id, name=f"{ORIGINAL_NAME} Energy Consumed")
+
+    await install.load(ORIGINAL_NAME)
+
+    registry_entry = registry.async_get(sensor.entity_id)
+    assert registry_entry is not None
+    assert registry_entry.name is None
+
+
+async def test_an_area_the_user_assigned_reaches_the_proposal_under_default_parts(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """R2: the area is the user's global choice, and the integration does not exempt itself.
+
+    A preset id could not carry one. Handing Core a base instead means the area
+    part of `entity_id_parts` applies here exactly as it does to every other
+    integration -- and only where the user has actually assigned an area.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(CIRCUIT_NUMBERS))
+    install = _Install(hass, entry)
+    sensor = await install.load(ORIGINAL_NAME)
+    assert sensor.entity_id == CIRCUIT_NUMBERS_ENTITY_ID  # no area yet: identical to today
+
+    area = ar.async_get(hass).async_get_or_create("Basement")
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_device(identifiers={(DOMAIN, SERIAL)})
+    assert device is not None
+    device_registry.async_update_device(device.id, area_id=area.id)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(CIRCUIT_NUMBERS_ENTITY_ID)
+    assert registry_entry is not None
+    assert registry_entry.entity_id == CIRCUIT_NUMBERS_ENTITY_ID  # R5: nothing moved
+    assert (
+        registry.async_regenerate_entity_id(registry_entry)
+        == "sensor.basement_span_panel_circuit_15_power"
+    )
+
+
+async def test_an_unnamed_circuit_in_friendly_mode_still_gets_a_distinct_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """An unnamed circuit has no name half to compose from, so it falls back to its tabs.
+
+    Letting Core compose from the display name alone would give every unnamed
+    circuit on the panel `sensor.span_panel_power`, and the registry would
+    disambiguate them with `_2`, `_3`, ... in whatever order they were added.
+    """
+    sensor = await _Install(hass, entry).load("")
+
+    assert sensor.entity_id == "sensor.span_panel_circuit_15_power"
 
 
 def test_a_suffix_with_no_older_spelling_is_left_alone() -> None:

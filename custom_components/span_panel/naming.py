@@ -75,10 +75,12 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
     """Return the base for one circuit entity.
 
     `identifier` is the naming-flag half (`Circuit 15`, `Kitchen Outlets`,
-    `Unmapped Tab 32`); `suffix` is the canonical suffix from
-    `id_builder.get_user_friendly_suffix`. Words are omitted when the
-    identifier already ends with them, which is what the preset builder did
-    for a circuit named "Solar Power".
+    `Unmapped Tab 32`); `suffix` is this entity's canonical suffix, which the
+    sensors derive from their description key via
+    `id_builder.get_user_friendly_suffix` while the switch and the select --
+    which have no such key -- name theirs outright ("breaker",
+    "circuit_priority"). Words are omitted when the identifier already ends with
+    them, which is what the preset builder did for a circuit named "Solar Power".
     """
     form = _existing_suffix_form(existing_entity_id, suffix)
     words = (

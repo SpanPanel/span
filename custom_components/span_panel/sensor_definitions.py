@@ -63,6 +63,11 @@ class SpanPanelCircuitsSensorEntityDescription(
 ):
     """Describes a Span Panel circuit sensor entity."""
 
+    legacy_names: tuple[str, ...] = ()
+    """Labels this description carried before, which an older release may have
+    written into the registry's `name`. Consulted only to hand that field back --
+    never to name anything, so a label can be reworded without a migration."""
+
 
 @dataclass(frozen=True)
 class SpanPanelDataRequiredKeysMixin(FieldPathDeclarationMixin):
@@ -205,7 +210,8 @@ UNMAPPED_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="producedEnergyWh",
         field_path="circuit.produced_energy_wh",
-        name="Energy Produced",
+        name="Produced Energy",
+        legacy_names=("Energy Produced",),
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -217,7 +223,8 @@ UNMAPPED_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="consumedEnergyWh",
         field_path="circuit.consumed_energy_wh",
-        name="Energy Consumed",
+        name="Consumed Energy",
+        legacy_names=("Energy Consumed",),
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -1193,7 +1200,8 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_produced",
         field_path="circuit.produced_energy_wh",
-        name="Energy Produced",
+        name="Produced Energy",
+        legacy_names=("Energy Produced",),
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -1205,7 +1213,8 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_consumed",
         field_path="circuit.consumed_energy_wh",
-        name="Energy Consumed",
+        name="Consumed Energy",
+        legacy_names=("Energy Consumed",),
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
@@ -1217,7 +1226,8 @@ CIRCUIT_SENSORS: tuple[
     SpanPanelCircuitsSensorEntityDescription(
         key="circuit_energy_net",
         derived=DerivedReason.MULTIPLE_FIELDS,
-        name="Energy Net",
+        name="Net Energy",
+        legacy_names=("Energy Net",),
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,

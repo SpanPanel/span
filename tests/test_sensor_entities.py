@@ -332,15 +332,20 @@ def test_circuit_power_sensor_extra_attributes_include_circuit_metadata() -> Non
     }
 
 
-def test_circuit_power_sensor_returns_none_name_for_unnamed_friendly_mode() -> None:
-    """Unnamed circuits in friendly-name mode should let HA provide the default name."""
+def test_circuit_power_sensor_names_an_unnamed_circuit_after_its_tab() -> None:
+    """An unnamed circuit in friendly-name mode falls back to its breaker position.
+
+    Answering `None` here let Home Assistant name every unnamed circuit on the
+    panel alike, and the id followed: they collided and were disambiguated with
+    `_2`, `_3`, ... in whatever order they happened to be added.
+    """
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name=None, tabs=[7])
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot, options={"use_circuit_numbers": False})
 
     sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_BREAKER_RATING_SENSOR, snapshot, "c1")
 
-    assert sensor.name is None
+    assert sensor.name == "Circuit 7 Breaker Rating"
 
 
 def test_unnamed_circuit_fallback_uses_solar_and_evse_labels() -> None:
@@ -460,11 +465,11 @@ def test_circuit_energy_sensor_missing_circuit_uses_fallback_names() -> None:
 
     assert (
         sensor._generate_friendly_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Energy Consumed"
+        == "Circuit c9 Consumed Energy"
     )
     assert (
         sensor._generate_panel_name(snapshot, sensor.entity_description)
-        == "Circuit c9 Energy Consumed"
+        == "Circuit c9 Consumed Energy"
     )
 
 
@@ -483,8 +488,8 @@ def test_circuit_energy_sensor_subdevice_uses_description_only() -> None:
         device_info_override={"identifiers": {("span_panel", "evse")}},
     )
 
-    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Energy Consumed"
-    assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Energy Consumed"
+    assert sensor._generate_friendly_name(snapshot, sensor.entity_description) == "Consumed Energy"
+    assert sensor._generate_panel_name(snapshot, sensor.entity_description) == "Consumed Energy"
 
 
 def test_circuit_energy_sensor_extra_attributes_only_include_base_when_circuit_missing() -> None:
@@ -1215,7 +1220,8 @@ def test_circuit_sensor_takes_the_panel_name_in_circuit_numbers_mode() -> None:
         sensor = SpanCircuitPowerSensor(coordinator, CIRCUIT_CURRENT_SENSOR, snapshot, "c1")
 
     assert sensor._attr_name == "Kitchen Current"
-    assert sensor.entity_id == "sensor.span_panel_circuit_5_current"
+    assert sensor.suggested_object_id == "Circuit 5 current"
+    assert sensor.entity_id is None  # Core assigns it when the platform adds the entity
     assert sensor._previous_circuit_name == "Kitchen"
 
 
