@@ -41,6 +41,7 @@ _OUTCOME_PHRASES: dict[str, str] = {
 }
 
 _REFUSAL_PHRASES: dict[str, str] = {
+    "control_disabled": "but control of this panel is switched off",
     "control_locked": "but the control lock is armed",
     "contextless_control_refused": "but commands without a logged-in user are refused",
     "admin_only_control": "but only administrators may operate this panel",

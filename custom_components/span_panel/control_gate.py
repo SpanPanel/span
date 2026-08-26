@@ -345,9 +345,10 @@ class ControlGate:
         self._entry = entry
         self._policy = policy
         self._lock = lock
-        # Monotonic timestamp of the last relay command allowed through, per
-        # circuit. Keyed on the address the adapter produced rather than on an
-        # entity id, so it holds for a caller that never went through an entity.
+        # Monotonic timestamp of the last relay command that was handed to the
+        # broker, per circuit -- not of the last one that was attempted. Keyed on
+        # the address the adapter produced rather than on an entity id, so it
+        # holds for a caller that never went through an entity.
         self._last_relay: dict[tuple[str, str], float] = {}
 
     # -- ControlInterceptor -------------------------------------------------
@@ -362,6 +363,19 @@ class ControlGate:
         caller = CONTROL_CALLER.get()
         context = caller.context if caller is not None else None
         user_id = context.user_id if context is not None else None
+
+        # First, because it is the entry-wide answer and the most useful thing
+        # to be told. Not creating the entities is what a user sees, but it is
+        # not a choke point: a command arriving by any other route -- a service
+        # this integration grows later, a code path that forgets the helper --
+        # would otherwise be published by an entry whose owner switched control
+        # off. That is the promise this module opens with.
+        if self._policy.mode is ControlMode.DISABLED:
+            self._refuse(
+                "control_disabled",
+                "Control of this SPAN panel is switched off in its options. "
+                "Nothing was sent to the panel.",
+            )
 
         if self._lock.armed:
             self._refuse(
@@ -385,10 +399,13 @@ class ControlGate:
                 )
 
         if command.property_id == RELAY_PROPERTY:
-            self._check_relay_debounce(command)
+            self._refuse_a_debounced_relay(command)
 
     async def after_publish(self, command: ControlCommand, outcome: PublishOutcome) -> None:
         """Record what happened to every command, refusals included."""
+        if command.property_id == RELAY_PROPERTY and outcome.state is not PublishState.FAILED:
+            self._open_relay_debounce_window(command)
+
         caller = CONTROL_CALLER.get()
         context = caller.context if caller is not None else None
         reason = _REFUSAL_REASON.get()
@@ -421,27 +438,50 @@ class ControlGate:
 
     # -- internals ----------------------------------------------------------
 
-    def _check_relay_debounce(self, command: ControlCommand) -> None:
+    def _refuse_a_debounced_relay(self, command: ControlCommand) -> None:
         """Refuse a relay command that follows too closely on the last one.
 
         Refused, never queued. A queued relay command firing seconds later
         against a changed panel state is worse than a refusal the automation
         author can see and fix.
+
+        Only the check lives on this side. Opening the window is
+        `_open_relay_debounce_window`'s job and happens once the outcome is
+        known.
         """
         window = self._policy.relay_debounce_seconds
         if window <= 0:
             return
 
-        circuit = (command.device_id, command.node_id)
-        now = time.monotonic()
-        last = self._last_relay.get(circuit)
-        if last is not None and now - last < window:
+        last = self._last_relay.get((command.device_id, command.node_id))
+        if last is not None and time.monotonic() - last < window:
             self._refuse(
                 "relay_debounced",
                 f"That circuit's relay was operated less than {window:g} seconds ago. "
                 "The command was refused rather than queued.",
             )
-        self._last_relay[circuit] = now
+
+    def _open_relay_debounce_window(self, command: ControlCommand) -> None:
+        """Start the window for a relay command that was actually handed over.
+
+        Stamped from the outcome rather than from the attempt. A command that
+        was never delivered moved no contactor, and there is nothing to protect
+        from a second one -- while a bridge that is down is exactly the moment a
+        person presses the button again, so debouncing that retry with "operated
+        less than 2 seconds ago" is both false and unactionable.
+
+        `FAILED` is the one state that promises the command will not arrive
+        later, and it covers every refusal too, this gate's own vetoes included.
+        `ACCEPTED` and `UNCONFIRMED` were handed to the broker and may already
+        have moved the relay, so both open the window.
+
+        The library fires `after_publish` as a task rather than awaiting it, so
+        the stamp lands a tick after the publish returns. That is late only for
+        a caller issuing two relay commands without yielding to the event loop
+        in between, which a service call never does.
+        """
+        if self._policy.relay_debounce_seconds > 0:
+            self._last_relay[(command.device_id, command.node_id)] = time.monotonic()
 
     def _refuse(self, reason: str, message: str, parent_id: str | None = None) -> None:
         """Record the reason for `after_publish`, then veto."""

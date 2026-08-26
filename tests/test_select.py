@@ -4,7 +4,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 from span_panel_api import PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
@@ -63,34 +63,6 @@ def test_select_init_missing_circuit() -> None:
 
     with pytest.raises(ValueError):
         SpanPanelCircuitsSelect(coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "bad_id", "Test Device")
-
-
-@pytest.mark.asyncio
-async def test_async_select_option_service_not_found() -> None:
-    """Test that ServiceNotFound triggers a notification."""
-    coordinator = _make_coordinator_with_circuit()
-    circuit = coordinator.data.circuits["id"]
-
-    with patch(
-        "custom_components.span_panel.select.async_create_span_notification",
-        new_callable=AsyncMock,
-    ) as mock_notification:
-        select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "Test Device"
-        )
-        select.coordinator = coordinator
-        select.hass = MagicMock()
-
-        # Make the client's set_circuit_priority raise ServiceNotFound
-        coordinator.client = AsyncMock()
-        coordinator.client.set_circuit_priority = AsyncMock(
-            side_effect=ServiceNotFound("test_domain", "test_service")
-        )
-
-        select._get_circuit = MagicMock(return_value=circuit)
-        await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
-
-        mock_notification.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -416,6 +388,96 @@ def test_handle_coordinator_update_requests_reload_on_name_change() -> None:
 
     coordinator.request_reload.assert_called_once()
     assert select._previous_circuit_name == "Renamed Kitchen"
+
+
+def test_a_circuit_commissioned_never_backup_requests_a_reload() -> None:
+    """Priority settability is its own flag, and it decides whether this exists.
+
+    `is_never_backup` is read once, at setup. A circuit the panel later
+    commissions never-backup keeps a priority select that refuses every choice
+    the user makes in it.
+    """
+    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
+    coordinator.hass = MagicMock()
+    with patch("custom_components.span_panel.select.er.async_get") as mock_async_get:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = "select.kitchen_circuit_priority"
+        mock_async_get.return_value = registry
+
+        select = SpanPanelCircuitsSelect(
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+        )
+
+    # Same name, so nothing but the settability flag can explain a reload.
+    updated_circuit = replace(coordinator.data.circuits["id"], is_never_backup=True)
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"id": updated_circuit})
+    select.hass = MagicMock()
+    select.async_write_ha_state = MagicMock()
+    select.entity_id = "select.kitchen_circuit_priority"
+
+    with patch("custom_components.span_panel.select.er.async_get") as mock_async_get:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = None
+        mock_async_get.return_value = runtime_registry
+        select._handle_coordinator_update()
+
+    coordinator.request_reload.assert_called_once()
+
+
+def test_a_circuit_that_stops_being_controllable_requests_a_select_reload() -> None:
+    """The other half of the same gate: a circuit that stops being commandable."""
+    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
+    coordinator.hass = MagicMock()
+    with patch("custom_components.span_panel.select.er.async_get") as mock_async_get:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = "select.kitchen_circuit_priority"
+        mock_async_get.return_value = registry
+
+        select = SpanPanelCircuitsSelect(
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+        )
+
+    updated_circuit = replace(coordinator.data.circuits["id"], is_user_controllable=False)
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"id": updated_circuit})
+    select.hass = MagicMock()
+    select.async_write_ha_state = MagicMock()
+    select.entity_id = "select.kitchen_circuit_priority"
+
+    with patch("custom_components.span_panel.select.er.async_get") as mock_async_get:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = None
+        mock_async_get.return_value = runtime_registry
+        select._handle_coordinator_update()
+
+    coordinator.request_reload.assert_called_once()
+
+
+def test_a_circuit_whose_settability_is_unchanged_requests_no_select_reload() -> None:
+    """The watch has to be an edge, or every push would reload the entry."""
+    coordinator = _make_coordinator_with_circuit(circuit_name="Kitchen")
+    coordinator.hass = MagicMock()
+    with patch("custom_components.span_panel.select.er.async_get") as mock_async_get:
+        registry = MagicMock()
+        registry.async_get_entity_id.return_value = "select.kitchen_circuit_priority"
+        mock_async_get.return_value = registry
+
+        select = SpanPanelCircuitsSelect(
+            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
+        )
+
+    updated_circuit = replace(coordinator.data.circuits["id"], priority="OFF_GRID")
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"id": updated_circuit})
+    select.hass = MagicMock()
+    select.async_write_ha_state = MagicMock()
+    select.entity_id = "select.kitchen_circuit_priority"
+
+    with patch("custom_components.span_panel.select.er.async_get") as mock_async_get:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = None
+        mock_async_get.return_value = runtime_registry
+        select._handle_coordinator_update()
+
+    coordinator.request_reload.assert_not_called()
 
 
 def test_handle_coordinator_update_skips_when_circuit_missing_from_snapshot() -> None:

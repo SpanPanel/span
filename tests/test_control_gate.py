@@ -305,9 +305,9 @@ def test_an_unreadable_stored_deadline_is_reported_rather_than_guessed(
 ) -> None:
     """A hand-edited record says nothing usable, and says so.
 
-    Reported as None so the entity can fall back to its configured window;
-    inventing a deadline here would hide the difference from the one caller
-    that has to tell them apart.
+    Reported as None rather than as a guessed deadline, because the entity has
+    to be able to tell "no window was pending" from "the window is unreadable"
+    — it re-arms for the second and not the first.
     """
     from custom_components.span_panel.control_gate import ControlLockExtraStoredData
 
@@ -339,6 +339,7 @@ async def test_a_second_relay_command_inside_the_window_is_refused(
         "custom_components.span_panel.control_gate.time.monotonic", return_value=100.0
     ):
         await gate.before_publish(RELAY)
+        await gate.after_publish(RELAY, CONFIRMED)
 
     with patch(
         "custom_components.span_panel.control_gate.time.monotonic", return_value=101.0
@@ -364,7 +365,9 @@ async def test_the_debounce_is_per_circuit(hass: HomeAssistant) -> None:
         "custom_components.span_panel.control_gate.time.monotonic", return_value=100.0
     ):
         await gate.before_publish(RELAY)
+        await gate.after_publish(RELAY, CONFIRMED)
         await gate.before_publish(other)
+        await gate.after_publish(other, CONFIRMED)
 
 
 @pytest.mark.asyncio
@@ -372,10 +375,15 @@ async def test_the_debounce_does_not_touch_other_controls(hass: HomeAssistant) -
     """A priority write is not a relay actuation and has no contactor to protect."""
     gate = _gate(hass, debounce=2.0)
 
+    priority_confirmed = PublishOutcome(
+        state=PublishState.CONFIRMED, topic=PRIORITY.topic, value="OFF_GRID"
+    )
+
     with patch(
         "custom_components.span_panel.control_gate.time.monotonic", return_value=100.0
     ):
         await gate.before_publish(PRIORITY)
+        await gate.after_publish(PRIORITY, priority_confirmed)
         await gate.before_publish(PRIORITY)
 
 
@@ -385,7 +393,106 @@ async def test_a_zero_debounce_disables_it(hass: HomeAssistant) -> None:
     gate = _gate(hass, debounce=0.0)
 
     await gate.before_publish(RELAY)
+    await gate.after_publish(RELAY, CONFIRMED)
     await gate.before_publish(RELAY)
+
+
+@pytest.mark.asyncio
+async def test_a_command_that_was_never_delivered_does_not_debounce_the_retry(
+    hass: HomeAssistant,
+) -> None:
+    """The debounce protects a contactor, and a FAILED command never reached one.
+
+    The bridge being down is exactly when a person presses the button again, and
+    telling them the breaker "was operated less than 2 seconds ago" is both false
+    and unactionable.
+    """
+    gate = _gate(hass, debounce=2.0)
+    never_sent = PublishOutcome(
+        state=PublishState.FAILED,
+        topic=RELAY.topic,
+        value="CLOSED",
+        detail="broker not connected; refused rather than queued",
+    )
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=100.0):
+        await gate.before_publish(RELAY)
+        await gate.after_publish(RELAY, never_sent)
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=100.5):
+        await gate.before_publish(RELAY)
+
+
+@pytest.mark.asyncio
+async def test_a_delivered_command_debounces_the_next_one(hass: HomeAssistant) -> None:
+    """The window opens when the panel was actually told to move the relay."""
+    gate = _gate(hass, debounce=2.0)
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=100.0):
+        await gate.before_publish(RELAY)
+        await gate.after_publish(RELAY, CONFIRMED)
+
+    with (
+        patch("custom_components.span_panel.control_gate.time.monotonic", return_value=101.0),
+        pytest.raises(ServiceValidationError) as err,
+    ):
+        await gate.before_publish(RELAY)
+
+    assert err.value.translation_key == "relay_debounced"
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_does_not_open_a_debounce_window(hass: HomeAssistant) -> None:
+    """A vetoed command is a FAILED outcome too, and moved nothing."""
+    lock = ControlLock(armed=True)
+    gate = _gate(hass, debounce=2.0, lock=lock)
+
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=100.0):
+        with pytest.raises(ServiceValidationError):
+            await gate.before_publish(RELAY)
+        await gate.after_publish(RELAY, VETOED)
+
+    lock.disarm(0)
+    with patch("custom_components.span_panel.control_gate.time.monotonic", return_value=100.5):
+        await gate.before_publish(RELAY)
+
+
+# ---------- disabled ----------
+
+
+@pytest.mark.asyncio
+async def test_a_disabled_entry_refuses_a_command_that_reaches_the_gate(
+    hass: HomeAssistant,
+) -> None:
+    """`disabled` is a policy, not merely an absence of entities.
+
+    Not creating the entities is what a user sees; it is not a choke point. A
+    command that arrives by any other route -- a service this integration grows
+    later, a caller that forgets the helper -- has to be refused here, which is
+    what the module promises.
+    """
+    gate = _gate(hass, mode=ControlMode.DISABLED)
+
+    with pytest.raises(ServiceValidationError) as err:
+        await gate.before_publish(RELAY)
+
+    assert err.value.translation_key == "control_disabled"
+
+
+@pytest.mark.asyncio
+async def test_a_disabled_entry_refuses_an_administrator_too(hass: HomeAssistant) -> None:
+    """Nobody operates the panel through Home Assistant while control is off."""
+    gate = _gate(hass, mode=ControlMode.DISABLED)
+    admin = MockUser(is_owner=True).add_to_hass(hass)
+
+    token = async_bind_caller(Context(user_id=admin.id), "switch.span_panel_kitchen")
+    try:
+        with pytest.raises(ServiceValidationError) as err:
+            await gate.before_publish(RELAY)
+    finally:
+        CONTROL_CALLER.reset(token)
+
+    assert err.value.translation_key == "control_disabled"
 
 
 # ---------- the audit ----------
@@ -888,6 +995,23 @@ async def test_the_logbook_explains_a_refusal(hass: HomeAssistant) -> None:
     )
 
     assert "operated moments ago" in described["message"]
+
+
+@pytest.mark.asyncio
+async def test_the_logbook_explains_a_refusal_under_disabled(hass: HomeAssistant) -> None:
+    """Every reason the gate can refuse for has a sentence, or the audit is a code."""
+    described = _describe(
+        hass,
+        {
+            "user_id": None,
+            "parent_id": None,
+            "command": "circuit-1/relay",
+            "value": "CLOSED",
+            "outcome": "refused:control_disabled",
+        },
+    )
+
+    assert "switched off" in described["message"]
 
 
 # ---------- `disabled` keeps the entity_ids it stops creating ----------

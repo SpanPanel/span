@@ -245,6 +245,96 @@ def test_circuit_name_change_triggers_reload_request(hass: HomeAssistant) -> Non
     coordinator.request_reload.assert_called_once()
 
 
+def test_a_circuit_that_stops_being_controllable_requests_a_reload(
+    hass: HomeAssistant,
+) -> None:
+    """An entity can outlive its own controllability, and must not.
+
+    `is_user_controllable` is read once, at setup, to decide whether this switch
+    exists at all. When the panel withdraws it mid-session the switch stays on
+    the dashboard and every press is refused by the panel, which is a worse
+    experience than the entity going away on the reload the flag change earns.
+    """
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1",
+        name="Kitchen Outlets",
+        is_user_controllable=True,
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        init_registry = MagicMock()
+        init_registry.async_get_entity_id.return_value = "switch.kitchen_outlets_breaker"
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: init_registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+
+    switch.hass = hass
+    switch.entity_id = "switch.kitchen_outlets_breaker"
+    switch.async_write_ha_state = MagicMock()
+
+    # Same name, so nothing but the settability flag can explain a reload.
+    coordinator.data = SpanPanelSnapshotFactory.create(
+        circuits={"1": replace(circuit, is_user_controllable=False)}
+    )
+
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
+
+    coordinator.request_reload.assert_called_once()
+
+
+def test_a_circuit_that_stays_controllable_requests_no_reload(
+    hass: HomeAssistant,
+) -> None:
+    """The watch has to be an edge, or every push would reload the entry."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1",
+        name="Kitchen Outlets",
+        is_user_controllable=True,
+        relay_state="CLOSED",
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.hass = hass
+
+    with pytest.MonkeyPatch.context() as mp:
+        init_registry = MagicMock()
+        init_registry.async_get_entity_id.return_value = "switch.kitchen_outlets_breaker"
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: init_registry,
+        )
+        switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
+
+    switch.hass = hass
+    switch.entity_id = "switch.kitchen_outlets_breaker"
+    switch.async_write_ha_state = MagicMock()
+
+    coordinator.data = SpanPanelSnapshotFactory.create(
+        circuits={"1": replace(circuit, relay_state="OPEN")}
+    )
+
+    with pytest.MonkeyPatch.context() as mp:
+        runtime_registry = MagicMock()
+        runtime_registry.async_get.return_value = None
+        mp.setattr(
+            "custom_components.span_panel.switch.er.async_get",
+            lambda _hass: runtime_registry,
+        )
+        switch._handle_coordinator_update()
+
+    coordinator.request_reload.assert_not_called()
+
+
 def test_switch_unavailable_when_panel_offline() -> None:
     """Switches become unavailable when the panel is offline."""
     circuit = SpanCircuitSnapshotFactory.create(circuit_id="1")

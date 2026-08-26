@@ -263,6 +263,49 @@ async def test_a_window_that_closed_while_home_assistant_was_down_comes_back_arm
         assert state.state == STATE_ON
 
 
+@pytest.mark.asyncio
+async def test_a_disarm_with_no_readable_deadline_comes_back_armed(
+    hass: HomeAssistant,
+) -> None:
+    """An entry that auto-relocks cannot restore a window it cannot read.
+
+    A record written before this release, or edited by hand, says the lock was
+    open and says nothing about how much of its window was left. Granting a
+    fresh one would hand back more open time than the previous run had, on no
+    evidence at all — and a restart is not consent to operate the panel.
+    """
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(LOCK_ENTITY, STATE_OFF), {"relock_at": "not-a-time"}),),
+    )
+
+    async with _panel(hass, timeout=30) as entry:
+        assert _lock(entry).armed is True
+        state = hass.states.get(LOCK_ENTITY)
+        assert state is not None
+        assert state.state == STATE_ON
+
+
+@pytest.mark.asyncio
+async def test_a_disarm_with_no_countdown_configured_stays_open(
+    hass: HomeAssistant,
+) -> None:
+    """A zero timeout has no window to lose, so there is nothing to fail closed on.
+
+    "0 keeps the lock disarmed until someone arms it" is the option's own
+    promise, and re-arming across a restart would break it for every entry that
+    never asked for a countdown.
+    """
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(LOCK_ENTITY, STATE_OFF), {}),),
+    )
+
+    async with _panel(hass, timeout=0) as entry:
+        assert _lock(entry).armed is False
+        assert _lock(entry).relock_in_seconds is None
+
+
 # ---------- the auto-relock is visible when it happens ----------
 
 

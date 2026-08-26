@@ -445,6 +445,9 @@
     "contextless_control_refused": {
       "message": "この SPAN Panel は、ログインユーザーからではない操作コマンドを拒否します。"
     },
+    "control_disabled": {
+      "message": "この SPAN Panel の制御はオプションで無効になっています。パネルには何も送信されませんでした。"
+    },
     "control_lock_disarm_requires_admin": {
       "message": "SPAN Panel のコントロールロックを解除できるのは Home Assistant の管理者だけです。"
     },

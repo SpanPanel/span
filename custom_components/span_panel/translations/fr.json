@@ -445,6 +445,9 @@
     "contextless_control_refused": {
       "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté."
     },
+    "control_disabled": {
+      "message": "Le contrôle de ce SPAN Panel est désactivé dans ses options. Rien n'a été envoyé au panneau."
+    },
     "control_lock_disarm_requires_admin": {
       "message": "Seul un administrateur Home Assistant peut désarmer le verrou de contrôle du SPAN Panel."
     },

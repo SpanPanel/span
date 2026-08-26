@@ -58,6 +58,21 @@ def _unnamed_switch_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> s
     return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 
 
+def _circuit_has_a_breaker_switch(circuit: SpanCircuitSnapshot) -> bool:
+    """Whether this circuit gets a breaker switch at all.
+
+    One predicate, read by `async_setup_entry` when it decides what to create
+    and by the entity itself when it decides whether it should still exist. A
+    second copy would drift, and the drift would be invisible: a switch left on
+    the dashboard offering a control the panel refuses.
+    """
+    if not circuit.is_user_controllable:
+        return False
+    # PV/EVSE circuits only get switches if they have a physical breaker
+    # (relative_position == "DOWNSTREAM" means connected at a breaker slot).
+    return not (circuit.device_type in ("pv", "evse") and circuit.relative_position != "DOWNSTREAM")
+
+
 class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
     """Represent a switch entity."""
 
@@ -140,6 +155,13 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
         self._update_is_on()
 
+        # What the panel said about this circuit when the entity was created.
+        # `async_setup_entry` read the same predicate to decide this switch
+        # should exist; the library's own changelog names the case where the
+        # answer changes under a live entity, so the entity carries the answer
+        # forward and watches for it to move. See `_handle_coordinator_update`.
+        self._was_controllable = _circuit_has_a_breaker_switch(circuit)
+
         # Store initial circuit name for change detection in auto-sync
         if not existing_entity_id:
             self._previous_circuit_name: str | None | object = _NAME_UNSET
@@ -156,10 +178,17 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         await super().async_will_remove_from_hass()
 
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
+        """Handle updated data from the coordinator.
+
+        Two reload-worthy changes are watched on this one path: the circuit's
+        name, which the entity carries as `original_name` and can only refresh
+        by being rebuilt, and whether the panel still lets this circuit be
+        operated at all, which decided that this entity exists.
+        """
         snapshot: SpanPanelSnapshot = self.coordinator.data
         circuit = snapshot.circuits.get(self._circuit_id)
         if circuit:
+            self._watch_settability(circuit)
             current_circuit_name = circuit.name
 
             # One path for both modes: the name is carried by `original_name`,
@@ -193,6 +222,36 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
 
         self._update_is_on()
         super()._handle_coordinator_update()
+
+    def _watch_settability(self, circuit: SpanCircuitSnapshot) -> None:
+        """Ask for a reload when the panel changes its mind about this circuit.
+
+        An entity can outlive its own controllability: `is_user_controllable` is
+        read once, at setup, and a circuit the panel later declares
+        non-commandable keeps a switch that refuses every press.
+
+        The opposite edge -- a circuit that *becomes* commandable -- is picked up
+        only when the reload this asks for happens for some other reason, since
+        a circuit with no switch has nothing here to notice it. Watching for
+        that one needs a reader that sees every circuit rather than its own, and
+        the coordinator is where that belongs.
+
+        A reload rather than a quiet availability change, because the entity
+        should not exist at all under the new answer, and creating and removing
+        entities is what `async_setup_entry` is for. The edge is what triggers
+        it: comparing against the answer this entity was built with means a
+        steady state costs nothing on every push.
+        """
+        controllable = _circuit_has_a_breaker_switch(circuit)
+        if controllable == self._was_controllable:
+            return
+        _LOGGER.info(
+            "Circuit %s is %s user-controllable, requesting integration reload",
+            self._circuit_id,
+            "now" if controllable else "no longer",
+        )
+        self._was_controllable = controllable
+        self.coordinator.request_reload()
 
     @property
     def available(self) -> bool:
@@ -400,14 +459,19 @@ class SpanPanelControlLockSwitch(SpanPanelEntity, SwitchEntity, RestoreEntity):
         stored = None if extra is None else ControlLockExtraStoredData.from_dict(extra.as_dict())
         if stored is None or stored.relock_at is None:
             # Either the previous run had no deadline to record, or its record
-            # is unreadable — a store written before this release, say. Falling
-            # back to this entry's configured window rather than to "no
-            # deadline" is what keeps an upgrade from leaving a disarmed lock
-            # open forever, and it is also the right answer when the user has
-            # changed the option since: the window they configured is the one
-            # they asked for.
+            # is unreadable — a store written before this release, say.
             timeout = self._policy.lock_timeout_minutes
-            return None if timeout is None or timeout <= 0 else timeout * 60
+            if timeout is None or timeout <= 0:
+                # The entry asks for no countdown at all, so a disarm lasts
+                # until someone arms it. That is what the option promises and
+                # the restore has nothing to add to it.
+                return None
+            # This entry does auto-relock, and how much of the window was left
+            # is exactly what could not be read. Granting a fresh one would hand
+            # back more open time than the previous run had, on evidence that
+            # says nothing — and a restart is not consent to operate the panel.
+            # Treated as closed, which arms the lock and costs a user one click.
+            return 0.0
         return (stored.relock_at - datetime.now(tz=UTC)).total_seconds()
 
     @property
@@ -526,14 +590,7 @@ async def async_setup_entry(
         return
 
     for circuit_id, circuit_data in snapshot.circuits.items():
-        if not circuit_data.is_user_controllable:
-            continue
-        # PV/EVSE circuits only get switches if they have a physical breaker
-        # (relative_position == "DOWNSTREAM" means connected at a breaker slot)
-        if (
-            circuit_data.device_type in ("pv", "evse")
-            and circuit_data.relative_position != "DOWNSTREAM"
-        ):
+        if not _circuit_has_a_breaker_switch(circuit_data):
             continue
         entities.append(SpanPanelCircuitsSwitch(coordinator, circuit_id, _device_name))
 

@@ -166,6 +166,12 @@ working entirely in 2027.8.
   debounce — every one defaulting to what your panel already does.
 - **The control lock arrives armed and stays where you left it**, so turning the option on locks control straight away and a restart or a settings save no
   longer quietly unlocks the panel; a pending auto-relock comes back with the time it had left rather than starting its countdown over.
+- **A control lock whose pending countdown cannot be read comes back armed** rather than opening a fresh window nobody asked for — which is what a record
+  written by an older release looks like on the first restart after upgrading.
+- **The relay debounce counts only commands the panel was actually sent**, so a breaker command the broker never took no longer refuses your immediate retry
+  with "operated less than 2 seconds ago".
+- **A circuit the panel stops letting you operate loses its breaker switch and its priority control** on the next update rather than at the next restart,
+  instead of leaving you a control the panel refuses every press of.
 - **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
   issued it rather than to nobody.
 - **Every control now reports what happened to it**, adopted devices' controls included, so a command that was refused or never handed to the broker no longer

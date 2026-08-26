@@ -95,6 +95,18 @@ from .websocket import async_register_commands
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+def _default_control_lock() -> ControlLock:
+    """Return the lock that belongs to the default control policy.
+
+    Derived from the policy rather than written down again, so the two cannot
+    say different things about whether the feature is on. `async_setup_entry`
+    builds the pair the same way (`ControlLock(armed=policy.lock_enabled)`): a
+    lock that exists as a user-facing thing starts armed, and one the entry has
+    not enabled starts disarmed because there is no switch to open it with.
+    """
+    return ControlLock(armed=ControlPolicy.default().lock_enabled)
+
+
 @dataclass
 class SpanPanelRuntimeData:
     """Runtime data for a Span Panel config entry."""
@@ -112,8 +124,10 @@ class SpanPanelRuntimeData:
     # with no control options has, and that is most of them.
     control_policy: ControlPolicy = field(default_factory=ControlPolicy.default)
     # Shared with the gate, and mutated by the lock entity. One object per entry:
-    # the gate reads it on every publish and the entity writes it.
-    control_lock: ControlLock = field(default_factory=ControlLock)
+    # the gate reads it on every publish and the entity writes it. The default
+    # is the default policy's lock rather than a bare `ControlLock()`, whose
+    # disarmed state would be a promise this class is in no position to make.
+    control_lock: ControlLock = field(default_factory=_default_control_lock)
 
 
 type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]

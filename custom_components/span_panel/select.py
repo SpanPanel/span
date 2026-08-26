@@ -6,7 +6,6 @@ from typing import Any, ClassVar, Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -19,7 +18,6 @@ from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
-    async_create_span_notification,
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
     construct_circuit_label,
@@ -40,6 +38,27 @@ def _unnamed_select_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> s
     if getattr(circuit, "device_type", "circuit") in _SOLAR_DEVICE_TYPES:
         return "Solar"
     return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+
+
+def _circuit_has_a_priority_select(circuit: SpanCircuitSnapshot) -> bool:
+    """Whether this circuit gets a shed-priority select at all.
+
+    One predicate, read by `async_setup_entry` when it decides what to create
+    and by the entity itself when it decides whether it should still exist. A
+    second copy would drift, and the drift would be invisible: a select left on
+    the dashboard offering a choice the panel refuses.
+
+    Priority settability is its own commissioning flag, not the relay's. v1.0
+    expresses never-backup as the absence of `$settable` on
+    `load-shed/priority`, which the adapter carries here.
+    """
+    if not circuit.is_user_controllable:
+        return False
+    if circuit.is_never_backup:
+        return False
+    # PV/EVSE circuits only get selects if they have a physical breaker
+    # (relative_position == "DOWNSTREAM" means connected at a breaker slot).
+    return not (circuit.device_type in ("pv", "evse") and circuit.relative_position != "DOWNSTREAM")
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -182,6 +201,13 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)
 
+        # What the panel said about this circuit when the entity was created.
+        # `async_setup_entry` read the same predicate to decide this select
+        # should exist; the library's own changelog names the case where the
+        # answer changes under a live entity, so the entity carries the answer
+        # forward and watches for it to move. See `_handle_coordinator_update`.
+        self._was_settable = _circuit_has_a_priority_select(circuit)
+
         # Store initial circuit name for change detection in auto-sync
         if not existing_entity_id:
             self._previous_circuit_name: str | None | object = _NAME_UNSET
@@ -216,12 +242,6 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         resolved an address and was never handed to the broker, which the
         library promises means it will not arrive later either. Both live in
         `_async_control`, which every control in this integration shares.
-
-        The `ServiceNotFound` branch is this platform's alone. Nothing on the
-        publish path calls a Home Assistant service -- the library does not
-        import Home Assistant at all -- so it survives as a guard against a
-        transport that one day does, and stays out of the shared helper rather
-        than being offered to controls that have never needed it.
         """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
@@ -231,27 +251,13 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         priority = CircuitPriority(option)
 
-        try:
-            await self._async_control(
-                client.set_circuit_priority(self.id, priority.name),
-                command=f"a priority change for {self.entity_id}",
-                failed_key="circuit_priority_failed",
-                not_delivered_key="circuit_priority_not_delivered",
-                placeholders={"circuit": construct_circuit_label(self._get_circuit(), self.id)},
-            )
-        except ServiceNotFound as snf:
-            _LOGGER.warning(
-                "Service not found when setting priority: %s.%s",
-                snf.domain,
-                snf.service,
-            )
-            await async_create_span_notification(
-                self.hass,
-                message="The requested service is not available in the SPAN API.",
-                title="Service Not Found",
-                notification_id=f"span_panel_service_not_found_{self.id}",
-            )
-            return
+        await self._async_control(
+            client.set_circuit_priority(self.id, priority.name),
+            command=f"a priority change for {self.entity_id}",
+            failed_key="circuit_priority_failed",
+            not_delivered_key="circuit_priority_not_delivered",
+            placeholders={"circuit": construct_circuit_label(self._get_circuit(), self.id)},
+        )
 
         await self.coordinator.async_request_refresh()
 
@@ -298,10 +304,17 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         return attributes or None
 
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
+        """Handle updated data from the coordinator.
+
+        Two reload-worthy changes are watched on this one path: the circuit's
+        name, which the entity carries as `original_name` and can only refresh
+        by being rebuilt, and whether the panel still lets this circuit's shed
+        priority be set at all, which decided that this entity exists.
+        """
         snapshot: SpanPanelSnapshot = self.coordinator.data
         circuit = snapshot.circuits.get(self.id)
         if circuit:
+            self._watch_settability(circuit)
             current_circuit_name = circuit.name
 
             # One path for both modes: the name is carried by `original_name`,
@@ -348,6 +361,37 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         self._attr_current_option = self.description_wrapper.current_option_fn(circuit)
         super()._handle_coordinator_update()
 
+    def _watch_settability(self, circuit: SpanCircuitSnapshot) -> None:
+        """Ask for a reload when the panel changes its mind about this circuit.
+
+        An entity can outlive its own settability: `is_user_controllable` and
+        `is_never_backup` are read once, at setup, and a circuit the panel later
+        commissions never-backup keeps a select that refuses every choice made
+        in it.
+
+        The opposite edge -- a circuit that *becomes* settable -- is picked up
+        only when the reload this asks for happens for some other reason, since
+        a circuit with no select has nothing here to notice it. Watching for
+        that one needs a reader that sees every circuit rather than its own, and
+        the coordinator is where that belongs.
+
+        A reload rather than a quiet availability change, because the entity
+        should not exist at all under the new answer, and creating and removing
+        entities is what `async_setup_entry` is for. The edge is what triggers
+        it: comparing against the answer this entity was built with means a
+        steady state costs nothing on every push.
+        """
+        settable = _circuit_has_a_priority_select(circuit)
+        if settable == self._was_settable:
+            return
+        _LOGGER.info(
+            "Circuit %s shed priority is %s settable, requesting integration reload",
+            self.id,
+            "now" if settable else "no longer",
+        )
+        self._was_settable = settable
+        self.coordinator.request_reload()
+
     def _construct_select_unique_id(
         self,
         coordinator: SpanPanelCoordinator,
@@ -381,20 +425,7 @@ async def async_setup_entry(
     entities: list[SpanPanelCircuitsSelect | AdoptedSelect] = []
 
     for circuit_id, circuit_data in snapshot.circuits.items():
-        if not circuit_data.is_user_controllable:
-            continue
-        # Priority settability is its own commissioning flag, not the relay's.
-        # v1.0 expresses never-backup as the absence of `$settable` on
-        # `load-shed/priority`, which the adapter carries here; offering the
-        # control without checking it means offering a write the panel refuses.
-        if circuit_data.is_never_backup:
-            continue
-        # PV/EVSE circuits only get selects if they have a physical breaker
-        # (relative_position == "DOWNSTREAM" means connected at a breaker slot)
-        if (
-            circuit_data.device_type in ("pv", "evse")
-            and circuit_data.relative_position != "DOWNSTREAM"
-        ):
+        if not _circuit_has_a_priority_select(circuit_data):
             continue
         entities.append(
             SpanPanelCircuitsSelect(
