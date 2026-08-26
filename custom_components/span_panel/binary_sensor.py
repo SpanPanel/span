@@ -20,7 +20,6 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
 
-from . import SpanPanelConfigEntry
 from .adoption import create_adopted_binary_sensors
 from .const import (
     CONF_DEVICE_NAME,
@@ -44,6 +43,7 @@ from .helpers import (
     has_pcs,
     resolve_evse_display_suffix,
 )
+from .runtime import SpanPanelConfigEntry
 from .util import bess_device_info, evse_device_info, pv_device_info
 
 # pylint: disable=invalid-overridden-method

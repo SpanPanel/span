@@ -508,8 +508,9 @@ def platform_descriptions() -> tuple[EntityDescription, ...]:
     not the other.
     """
     # Deferred: the platform modules import `FieldPathDeclarationMixin` from
-    # here, and `binary_sensor` reaches the package root for its config-entry
-    # type. Importing them at module scope would close both loops.
+    # here, so importing them at module scope would close that loop. (They no
+    # longer reach the package root for the config-entry type -- that lives in
+    # the leaf `runtime` module -- but this loop is the module's own and stays.)
     from .binary_sensor import (  # pylint: disable=import-outside-toplevel
         BESS_CONNECTED_SENSOR,
         BINARY_SENSORS,

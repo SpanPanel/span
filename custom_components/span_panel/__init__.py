@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
 import logging
 
 from homeassistant.components.frontend import async_remove_panel as async_remove_panel
 from homeassistant.components.panel_custom import async_register_panel as async_register_panel
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import CoreState, HomeAssistant, callback
 from homeassistant.exceptions import (
@@ -72,6 +70,15 @@ from .graph_horizon import GraphHorizonManager
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
 from .options import SNAPSHOT_UPDATE_INTERVAL
+
+# Re-exported: the types themselves live in a leaf module (see `runtime.py`), but
+# `custom_components.span_panel.SpanPanelRuntimeData` is the name the tests and
+# the rest of the integration have always used, so the package root keeps
+# answering to it.
+from .runtime import (
+    SpanPanelConfigEntry as SpanPanelConfigEntry,
+    SpanPanelRuntimeData as SpanPanelRuntimeData,
+)
 from .schema_repairs import (
     async_clear_retired_new_entity_notices,
     async_clear_retired_upgrade_notice,
@@ -94,43 +101,6 @@ from .websocket import async_register_commands
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-
-def _default_control_lock() -> ControlLock:
-    """Return the lock that belongs to the default control policy.
-
-    Derived from the policy rather than written down again, so the two cannot
-    say different things about whether the feature is on. `async_setup_entry`
-    builds the pair the same way (`ControlLock(armed=policy.lock_enabled)`): a
-    lock that exists as a user-facing thing starts armed, and one the entry has
-    not enabled starts disarmed because there is no switch to open it with.
-    """
-    return ControlLock(armed=ControlPolicy.default().lock_enabled)
-
-
-@dataclass
-class SpanPanelRuntimeData:
-    """Runtime data for a Span Panel config entry."""
-
-    coordinator: SpanPanelCoordinator
-    # Registry id of the panel device, which every sub-device (BESS, MID, EVSE)
-    # hangs off with `via_device_id`. Resolved once during setup rather than
-    # per platform: sub-devices are only ever built after the panel device
-    # exists, so an id looked up here is one no caller has to handle the absence
-    # of. See `ensure_device_registered`.
-    panel_device_id: str
-    # Resolved once at setup and read by every control platform, so a single
-    # answer decides which entities exist and which callers may operate them.
-    # Defaulted rather than required because the default *is* the policy an entry
-    # with no control options has, and that is most of them.
-    control_policy: ControlPolicy = field(default_factory=ControlPolicy.default)
-    # Shared with the gate, and mutated by the lock entity. One object per entry:
-    # the gate reads it on every publish and the entity writes it. The default
-    # is the default policy's lock rather than a bare `ControlLock()`, whose
-    # disarmed state would be a promise this class is in no position to make.
-    control_lock: ControlLock = field(default_factory=_default_control_lock)
-
-
-type SpanPanelConfigEntry = ConfigEntry[SpanPanelRuntimeData]
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,

@@ -8,9 +8,9 @@ from decimal import Decimal
 import logging
 from typing import Any, Self
 
+from homeassistant.components.sensor import SensorExtraStoredData
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import State
-from homeassistant.helpers.restore_state import ExtraStoredData
 
 # Matches SensorEntity.native_value: the broadest concrete union that the
 # HA sensor platform can hand us. We accept it verbatim so sensor_base can
@@ -49,16 +49,26 @@ def _parse_numeric_state(state: State | None) -> tuple[float | None, datetime | 
 
 
 @dataclass
-class SpanEnergyExtraStoredData(ExtraStoredData):
+class SpanEnergyExtraStoredData(SensorExtraStoredData):
     """Extra stored data for Span energy sensors with grace period tracking.
 
     This data is persisted across Home Assistant restarts to maintain
     grace period state for energy sensors, preventing statistics spikes
     when the panel is offline at startup.
+
+    It extends the sensor platform's own stored data rather than
+    `ExtraStoredData` directly, because that is what it is: `native_value` and
+    `native_unit_of_measurement` were restated copies of
+    `SensorExtraStoredData`'s two fields, which is what made
+    `RestoreSensor.extra_restore_state_data` -- declared to return a
+    `SensorExtraStoredData` -- need a `cast` to return one of these. Inheriting
+    them says the relationship instead of asserting it.
+
+    The stored keys are unchanged by that: the same twelve names are written
+    and read as before, so records written by earlier versions restore
+    identically. See `as_dict` for why it does not delegate to the base.
     """
 
-    native_value: float | None
-    native_unit_of_measurement: str | None
     last_valid_state: float | None
     last_valid_changed: str | None  # ISO format datetime string
     energy_offset: float | None = None
@@ -81,7 +91,17 @@ class SpanEnergyExtraStoredData(ExtraStoredData):
     confirmed_dip_ticks_left: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        """Return a dict representation of the extra data."""
+        """Return a dict representation of the extra data.
+
+        Every key is written here, the two inherited ones included, rather than
+        starting from `super().as_dict()`. The base encodes a `date`, `datetime`
+        or `Decimal` native value as a tagged dict that its own `from_dict`
+        decodes again, and `from_dict` below does not decode -- it reads each
+        key back as it was written. Since `extra_restore_state_data` coerces
+        this sensor's value to `float | None` before it ever gets here, writing
+        the value plainly keeps the pair symmetric instead of adding a decoder
+        for a shape these sensors cannot produce.
+        """
         return {
             "native_value": self.native_value,
             "native_unit_of_measurement": self.native_unit_of_measurement,

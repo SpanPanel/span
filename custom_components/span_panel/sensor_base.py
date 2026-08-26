@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 import logging
-from typing import Any, cast
+from typing import Any
 
 from homeassistant.components.sensor import (
     RestoreSensor,
@@ -755,35 +755,32 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         integration is unloaded or HA shuts down, and restored when
         the entity is added back to HA.
         """
-        return cast(
-            SensorExtraStoredData,
-            SpanEnergyExtraStoredData(
-                native_value=(
-                    float(self._attr_native_value)
-                    if isinstance(self._attr_native_value, int | float)
-                    else None
-                ),
-                native_unit_of_measurement=self.native_unit_of_measurement,
-                last_valid_state=self._last_valid_state,
-                last_valid_changed=(
-                    self._last_valid_changed.isoformat() if self._last_valid_changed else None
-                ),
-                energy_offset=self._energy_offset or None,
-                last_panel_reading=self._last_panel_reading,
-                last_dip_delta=self._last_dip_delta,
-                pending_dip_baseline=self._pending_dip.baseline if self._pending_dip else None,
-                pending_dip_delta=self._pending_dip.delta if self._pending_dip else None,
-                confirmed_dip_baseline=(
-                    self._recently_confirmed_dip.baseline if self._recently_confirmed_dip else None
-                ),
-                confirmed_dip_delta=(
-                    self._recently_confirmed_dip.delta if self._recently_confirmed_dip else None
-                ),
-                confirmed_dip_ticks_left=(
-                    self._recently_confirmed_dip.confirmed_ticks_left
-                    if self._recently_confirmed_dip
-                    else None
-                ),
+        return SpanEnergyExtraStoredData(
+            native_value=(
+                float(self._attr_native_value)
+                if isinstance(self._attr_native_value, int | float)
+                else None
+            ),
+            native_unit_of_measurement=self.native_unit_of_measurement,
+            last_valid_state=self._last_valid_state,
+            last_valid_changed=(
+                self._last_valid_changed.isoformat() if self._last_valid_changed else None
+            ),
+            energy_offset=self._energy_offset or None,
+            last_panel_reading=self._last_panel_reading,
+            last_dip_delta=self._last_dip_delta,
+            pending_dip_baseline=self._pending_dip.baseline if self._pending_dip else None,
+            pending_dip_delta=self._pending_dip.delta if self._pending_dip else None,
+            confirmed_dip_baseline=(
+                self._recently_confirmed_dip.baseline if self._recently_confirmed_dip else None
+            ),
+            confirmed_dip_delta=(
+                self._recently_confirmed_dip.delta if self._recently_confirmed_dip else None
+            ),
+            confirmed_dip_ticks_left=(
+                self._recently_confirmed_dip.confirmed_ticks_left
+                if self._recently_confirmed_dip
+                else None
             ),
         )
 

@@ -30,6 +30,21 @@ _LOGGER = logging.getLogger(__name__)
 class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
     """Base entity for all Span Panel platforms."""
 
+    coordinator: SpanPanelCoordinator
+    """Restated so that reading it is typed, which the generic base does not give us.
+
+    `CoordinatorEntity[SpanPanelCoordinator]` binds the type parameter correctly
+    -- `__init__` is checked against `SpanPanelCoordinator` either way -- but the
+    attribute itself is only ever created by `BaseCoordinatorEntity.__init__`'s
+    unannotated `self.coordinator = coordinator`. mypy does not run its inference
+    pass over installed packages, so an attribute whose type is inferred from a
+    parameter there comes back as `Any` no matter what the type argument says,
+    and every `self.coordinator.…` read in this integration was unchecked. (An
+    attribute the same `__init__` assigns a literal to, like
+    `last_update_success`, is unaffected; the difference is inference, not the
+    generic.) One line here types every subclass's reads.
+    """
+
     _attr_has_entity_name = True
 
     _span_object_id_base: str | None = None

@@ -51,7 +51,6 @@ from span_panel_api import (
     SpanPanelSnapshot,
 )
 
-from . import SpanPanelConfigEntry
 from .adoption import create_adopted_numbers
 from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
 from .control_gate import ControlMode
@@ -59,6 +58,7 @@ from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .field_paths import DerivedReason, FieldPathDeclarationMixin
 from .helpers import build_evse_unique_id_for_entry, resolve_evse_display_suffix
+from .runtime import SpanPanelConfigEntry
 from .util import evse_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import CONF_API_VERSION, CONF_HOP_PASSPHRASE, PANEL_CA_PENDING
 
 if TYPE_CHECKING:
-    from . import SpanPanelConfigEntry
+    from .runtime import SpanPanelConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -9,9 +9,9 @@ from time import time as _epoch_time
 from typing import TYPE_CHECKING, Final, Protocol
 
 if TYPE_CHECKING:
-    from . import SpanPanelConfigEntry
     from .current_monitor import CurrentMonitor
     from .graph_horizon import GraphHorizonManager
+    from .runtime import SpanPanelConfigEntry
 
 from homeassistant.components.persistent_notification import async_create
 from homeassistant.core import HomeAssistant, callback

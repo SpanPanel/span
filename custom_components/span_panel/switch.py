@@ -16,7 +16,6 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.restore_state import RestoreEntity
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
 from .control_gate import (
@@ -38,6 +37,7 @@ from .naming import (
     circuit_object_id_base,
     release_registry_name_written_by_older_release,
 )
+from .runtime import SpanPanelConfigEntry
 from .util import snapshot_to_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)

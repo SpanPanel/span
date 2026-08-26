@@ -8,12 +8,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 
-from . import SpanPanelConfigEntry
 from .const import CONF_DEVICE_NAME
 from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import construct_panel_unique_id_for_entry, has_bess
+from .runtime import SpanPanelConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 

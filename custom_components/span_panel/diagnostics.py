@@ -11,7 +11,6 @@ from homeassistant.helpers import entity_registry as er
 from span_panel_api import SpanPanelSnapshot, ca_fingerprint
 from span_panel_api.exceptions import SpanPanelValidationError
 
-from . import SpanPanelConfigEntry
 from .adoption import adopted_control_count, classify
 from .const import (
     CONF_EBUS_BROKER_PASSWORD,
@@ -20,6 +19,7 @@ from .const import (
     CONF_PANEL_CA_PEM,
     PANEL_CA_PENDING,
 )
+from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
 TO_REDACT = {

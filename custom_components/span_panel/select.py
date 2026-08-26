@@ -11,7 +11,6 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
-from . import SpanPanelConfigEntry
 from .adoption import AdoptedSelect, create_adopted_selects
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
 from .control_gate import ControlMode
@@ -28,6 +27,7 @@ from .naming import (
     circuit_object_id_base,
     release_registry_name_written_by_older_release,
 )
+from .runtime import SpanPanelConfigEntry
 
 # Device types that use "Solar" as the fallback identifier when unnamed.
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})

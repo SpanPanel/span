@@ -83,7 +83,7 @@ from .options import (
 )
 
 if TYPE_CHECKING:
-    from . import SpanPanelConfigEntry
+    from .runtime import SpanPanelConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 

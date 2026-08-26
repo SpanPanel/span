@@ -11,7 +11,6 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanPanelSnapshot
 
-from . import SpanPanelConfigEntry
 from .adoption import create_adopted_sensors
 from .const import (
     CONF_DEVICE_NAME,
@@ -33,6 +32,7 @@ from .helpers import (
     has_shed_forecast,
     resolve_evse_display_suffix,
 )
+from .runtime import SpanPanelConfigEntry
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
 from .sensor_circuit import (
     SpanCircuitEnergySensor,

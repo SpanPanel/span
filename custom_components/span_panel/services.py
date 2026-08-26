@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util.json import JsonObjectType, JsonValueType
 from span_panel_api import regenerate_passphrase
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
@@ -36,16 +37,34 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-
-if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
-
-    from . import SpanPanelRuntimeData
+from .runtime import SpanPanelRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
 # Map internal device_type values to external manifest format
 _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
+
+
+def _loaded_runtime_data(entry: ConfigEntry) -> SpanPanelRuntimeData | None:
+    """Return this entry's runtime data, or None if it is not one of ours.
+
+    Every service here is registered domain-wide and walks
+    `async_loaded_entries(DOMAIN)`, so each of them has to answer the same
+    question before touching an entry: does this entry carry runtime data of
+    ours? Both halves of that are real. `ConfigEntry.runtime_data` is a bare
+    annotation that core deletes on unload (`config_entries.py:1044-1045`), so
+    the attribute is genuinely absent on an entry that has not finished setting
+    up -- hence `getattr` with a default rather than an attribute read. And what
+    is there is whatever the owning integration put there, so `isinstance` is
+    what says it is ours; a test double may put anything at all in it.
+
+    One helper, one answer: this used to be five copies of the same two lines,
+    each preceded by its own deferred import of the runtime-data type.
+    """
+    runtime_data = getattr(entry, "runtime_data", None)
+    if isinstance(runtime_data, SpanPanelRuntimeData):
+        return runtime_data
+    return None
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
@@ -55,8 +74,6 @@ def _async_register_services(hass: HomeAssistant) -> None:
         _call: ServiceCall,
     ) -> ServiceResponse:
         """Export circuit topology manifest for all configured SPAN panels."""
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         if not hass.config_entries.async_loaded_entries(DOMAIN):
             raise ServiceValidationError(
                 "No SPAN panel configuration entries are loaded. "
@@ -66,19 +83,18 @@ def _async_register_services(hass: HomeAssistant) -> None:
             )
 
         entity_reg = er.async_get(hass)
-        panels = []
+        panels: list[JsonValueType] = []
 
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = _loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
 
-            snapshot = entry.runtime_data.coordinator.data
+            snapshot = runtime_data.coordinator.data
             if snapshot is None:
                 continue
             serial = snapshot.serial_number
-            circuits = []
+            circuits: list[JsonValueType] = []
 
             for circuit_id, circuit in snapshot.circuits.items():
                 if circuit_id.startswith("unmapped_tab_"):
@@ -113,7 +129,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
                     }
                 )
 
-        return cast(ServiceResponse, {"panels": panels})
+        return {"panels": panels}
 
     hass.services.async_register(
         DOMAIN,
@@ -205,15 +221,12 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         When config_entry_id is provided, returns that specific entry.
         Otherwise falls back to the first loaded entry.
         """
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = _loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
             if config_entry_id is None or entry.entry_id == config_entry_id:
-                return entry.runtime_data, entry
+                return runtime_data, entry
         return None
 
     def _get_monitor(
@@ -292,15 +305,20 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         entry_id = call.data.get("config_entry_id")
         result = _get_runtime_data(entry_id)
         if result is None:
-            return cast(ServiceResponse, {"enabled": False})
+            return {"enabled": False}
         runtime_data, _entry = result
         monitor = runtime_data.coordinator.current_monitor
         if monitor is None:
-            return cast(ServiceResponse, {"enabled": False})
-        status = monitor.get_monitoring_status()
+            return {"enabled": False}
+        status: JsonObjectType = monitor.get_monitoring_status()
         status["enabled"] = True
-        status["global_settings"] = monitor.get_global_settings()
-        return cast(ServiceResponse, status)
+        # `MonitoringSettings` is `dict[str, int | bool | str]`, which `dict` is
+        # invariant in, so it needs widening rather than casting to sit in a
+        # JSON response. `get_global_settings` builds a fresh dict per call, so
+        # the copy costs nothing.
+        global_settings: JsonObjectType = dict(monitor.get_global_settings())
+        status["global_settings"] = global_settings
+        return status
 
     hass.services.async_register(
         DOMAIN,
@@ -385,16 +403,13 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         call: ServiceCall,
     ) -> GraphHorizonManager:
         """Find the GraphHorizonManager for the given entry."""
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = _loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
             if entry_id is None or entry.entry_id == entry_id:
-                mgr = entry.runtime_data.coordinator.graph_horizon_manager
+                mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
                     return mgr
         raise ServiceValidationError(
@@ -433,19 +448,17 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
     async def async_handle_get_graph_settings(
         call: ServiceCall,
     ) -> ServiceResponse:
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = _loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
             if entry_id is None or entry.entry_id == entry_id:
-                mgr = entry.runtime_data.coordinator.graph_horizon_manager
+                mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
-                    return cast(ServiceResponse, mgr.get_all_settings())
-        return cast(ServiceResponse, {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}})
+                    settings: JsonObjectType = mgr.get_all_settings()
+                    return settings
+        return {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}}
 
     hass.services.async_register(
         DOMAIN,
@@ -619,21 +632,37 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             translation_placeholders={"entity_id": entity_id},
         )
 
+    def _favorites_response(favorites: dict[str, dict[str, list[str]]]) -> ServiceResponse:
+        """Wrap the favorites map in the shape all three favorites services return.
+
+        The map is rebuilt rather than handed over as-is because `dict` and
+        `list` are invariant: the storage type says exactly `list[str]`, and a
+        JSON response value says `list[JsonValueType]`, so the two are not the
+        same type however identical the contents. Rebuilding also means the
+        response cannot alias the caller's map.
+        """
+        payload: JsonObjectType = {
+            panel_device_id: {kind: list(target_ids) for kind, target_ids in kinds.items()}
+            for panel_device_id, kinds in favorites.items()
+        }
+        return {"favorites": payload}
+
     async def async_handle_get_favorites(_call: ServiceCall) -> ServiceResponse:
-        favorites = await async_get_favorites(hass)
-        return cast(ServiceResponse, {"favorites": favorites})
+        return _favorites_response(await async_get_favorites(hass))
 
     async def async_handle_add_favorite(call: ServiceCall) -> ServiceResponse:
         entity_id = call.data["entity_id"]
         panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
-        favorites = await async_set_favorite(hass, panel_device_id, kind, target_id, True)
-        return cast(ServiceResponse, {"favorites": favorites})
+        return _favorites_response(
+            await async_set_favorite(hass, panel_device_id, kind, target_id, True)
+        )
 
     async def async_handle_remove_favorite(call: ServiceCall) -> ServiceResponse:
         entity_id = call.data["entity_id"]
         panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
-        favorites = await async_set_favorite(hass, panel_device_id, kind, target_id, False)
-        return cast(ServiceResponse, {"favorites": favorites})
+        return _favorites_response(
+            await async_set_favorite(hass, panel_device_id, kind, target_id, False)
+        )
 
     _favorite_mutation_schema = vol.Schema({vol.Required("entity_id"): str})
 
@@ -700,15 +729,11 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
         of that panel is using, so picking one and hoping is worse than asking.
         A single loaded panel is unambiguous and the id stays optional there.
         """
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         candidates: list[ConfigEntry] = []
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
             if config_entry_id is not None and entry.entry_id != config_entry_id:
                 continue
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            if _loaded_runtime_data(entry) is None:
                 continue
             if entry.data.get(CONF_API_VERSION) != "v2":
                 continue
