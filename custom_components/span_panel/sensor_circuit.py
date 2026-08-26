@@ -92,8 +92,6 @@ class SpanCircuitPowerSensor(
 ):
     """Circuit power/current/breaker-rating sensor with extra state attributes."""
 
-    _id_was_preset_by_this_integration = True
-
     # Beyond the value the description declares: `name` and `tabs` build the
     # entity's identity (~56-83), and `tabs`, `relay_state`, `relay_requester`
     # and `priority` are republished as state attributes (~231-243).
@@ -253,8 +251,6 @@ class SpanCircuitEnergySensor(
     SpanEnergySensorBase[SpanPanelCircuitsSensorEntityDescription, SpanCircuitSnapshot]
 ):
     """Circuit energy sensor with grace period tracking."""
-
-    _id_was_preset_by_this_integration = True
 
     # Naming only; this sensor publishes no circuit attributes.
     _residual_field_paths: ClassVar[tuple[str, ...]] = ("circuit.name", "circuit.tabs")

@@ -610,6 +610,12 @@ The integration supplies only the circuit half of the ID shown above — `Kitche
 own entity ID settings (`entity_id_parts`, Home Assistant 2026.8 and newer), which decide whether the device name and the area are prefixed; entities you
 already have keep the IDs they have until you press **Recreate entity IDs**.
 
+For an entity that already exists, the suffix wording in that half is read back from the ID the entity has rather than reworded. Circuit energy IDs have shipped
+in two spellings — `consumed_energy` and `energy_consumed` — so an installation is offered whichever one it is already using, and never the other; only new
+sensors get the `consumed_energy` word order that the panel-level sensors use. Because your entity ID settings decide the rest of the ID, an installation whose
+circuits were named before those settings existed — a SPAN Drive feed circuit, a second panel, or an installation predating the device prefix — may be offered
+an ID with a different device half. Nothing moves until you accept the offer.
+
 ### Energy Dip Compensation
 
 SPAN panels occasionally report lower energy readings for cumulative energy sensors after firmware updates or resets. Home Assistant's statistics engine

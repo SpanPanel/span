@@ -390,23 +390,22 @@ parts, and files a preset `entity_id` as `suggested_object_id`, which outranks t
 base would therefore ship the base as the whole id. The three circuit platforms reach the base by the same route: the sensors through `_object_id_parts`, and
 the switch and the select directly.
 
-### The legacy preset, and why two populations keep one
+### What R1 bounds, and what it does not
 
-R1 — "Recreate entity IDs" must never propose a change the user did not cause — bounds what may be composed. Two shapes Core cannot reproduce, for reasons that
-belong to this integration rather than to the user:
+R1 — "Recreate entity IDs" must never propose a change the user did not cause — bounds the _base_ and nothing else. Read exactly: the base must reproduce an
+existing entity's id **where Home Assistant composes it under the entity-id options that match how that install was built**. That is why the suffix wording is
+read back and why the name half is anchored on the circuit's own name: two spellings of ours, or a relabel, must never produce an offer.
 
-- a circuit sensor shown on a **sub-device** card, whose id names the panel because the preset builder always did, where composition names the charger, that
-  being the entity's device;
-- any circuit entity on an install with **`USE_DEVICE_PREFIX` off**, whose id carries no device at all, where `has_entity_name` prefixes one regardless.
+It is **not** a licence to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
+device is the charger and not the panel; a second panel the config flow named "Span Panel 2", whose circuit ids all say `span_panel_` because the old builder
+was never told the panel's name; an install with `USE_DEVICE_PREFIX` off, whose ids carry no device at all where `has_entity_name` prefixes one — that is the
+user's own configuration at work, and the offer is legitimate. Recreate offers it; nothing moves until the user presses the button (R5). The "legacy preset"
+exceptions written for those three shapes were withdrawn by the maintainer on 2026-08-26, and there is no `self.entity_id = …` left in any of the four
+platforms.
 
-`naming.legacy_preset_for_existing` is that whole exception, asked by all three circuit platforms so a copy per platform cannot drift. It answers `None` for
-anything new — an entity with no id yet has none to protect — and `None` for the ordinary existing entity, whose id composition reproduces exactly. A third gate
-sits in front of it on the sensor side, `_id_was_preset_by_this_integration` (`sensor_base.py`, set to `True` only by the circuit sensor classes): the hidden
-unmapped-tab sensors have had their ids composed by Home Assistant all along, and an id Core already composes cannot be moved by handing Core the job, so they
-never reach the preset path. Only an _existing_ entity in one of the two shapes goes on being preset, and the kept id is **computed from current panel data**
-rather than read back from the registry, so a circuit renamed in the SPAN app still refreshes the name half. That is issue #252, which the preset must not undo.
-`LEGACY_PRESET_DEVICE_NAME` is the literal `Span Panel` the old builder spelled every circuit id with — not the panel's own name, which is why a second panel's
-circuits are `span_panel_…` too, and why keeping an id means keeping that spelling.
+One consequence worth naming: a circuit sensor on a sub-device card supplies **no base at all**. Its label there is the bare description name (`Power`), so it
+composes as `sensor.<charger>_power` like the charger's own sensors, and a rename on the panel cannot reach its id. Every other circuit entity sets its base
+whenever `_object_id_parts` answers.
 
 ### Releasing the registry name
 

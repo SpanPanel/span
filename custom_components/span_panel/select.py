@@ -15,7 +15,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSelect, create_adopted_selects
-from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX, CircuitPriority
+from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
 from .control_gate import ControlMode, outcome_failure_reason, outcome_is_failure
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
@@ -29,7 +29,6 @@ from .helpers import (
 )
 from .naming import (
     circuit_object_id_base,
-    legacy_preset_for_existing,
     release_registry_name_written_by_older_release,
 )
 
@@ -146,7 +145,6 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         )
 
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        use_device_prefix: bool = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
         desc_name = description.name
         circuit_name = circuit.name or _unnamed_select_fallback(circuit, circuit_id)
 
@@ -168,21 +166,7 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
             if use_circuit_numbers
             else circuit_name
         )
-        preset = legacy_preset_for_existing(
-            "select",
-            identifier=identifier,
-            suffix=suffix,
-            existing_entity_id=existing_entity_id,
-            use_device_prefix=use_device_prefix,
-            is_sub_device=False,
-            device_name=self._generated_panel_device_name(coordinator, snapshot),
-        )
-        if preset is not None:
-            self.entity_id = preset
-        else:
-            self._span_object_id_base = circuit_object_id_base(
-                identifier, suffix, existing_entity_id
-            )
+        self._span_object_id_base = circuit_object_id_base(identifier, suffix, existing_entity_id)
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant

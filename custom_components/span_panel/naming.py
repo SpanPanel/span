@@ -6,15 +6,15 @@ an `entity_id`; it supplies one *base* per circuit entity -- `Circuit 15 power`
 or `Kitchen Outlets power` -- and Core assembles the rest from the user's
 settings. `SpanPanelEntity.suggested_object_id` hands the base to Core.
 
-Two rules bound what the base may be:
-
-- An existing entity must be proposed its own id when nothing changed. Its
-  suffix wording is therefore read back from the id it already has, because
-  this integration has shipped two spellings (`consumed_energy` before it
-  preset ids, `energy_consumed` after). Recreate must never offer a rename
-  the user did not cause.
-- A new entity gets the noun-last wording, which is what the panel-level ids
-  (`main_meter_consumed_energy`) and the display labels use.
+The base must reproduce an existing entity's id *where Home Assistant composes
+it under the entity-id options that match how that install was built*: it
+carries the circuit's own name and the install's own suffix wording, read back
+from the id the entity already has, because this integration has shipped two
+spellings (`consumed_energy` before it preset ids, `energy_consumed` after). It
+never bypasses `entity_id_parts` with a hard-coded id -- where composition
+yields a different device part, that is the user's configuration at work and
+the offer is legitimate. A new entity gets the noun-last wording, which is what
+the panel-level ids (`main_meter_consumed_energy`) and the display labels use.
 
 The base is *not* the display name. The two are decoupled on purpose, so a
 label can be reworded without touching a single id.
@@ -26,13 +26,9 @@ tables here govern entity ids only.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Final
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
-
-from .const import DOMAIN
 
 ENTITY_ID_SUFFIX_FORMS: dict[str, frozenset[str]] = {
     "power": frozenset({"power", "current_power"}),
@@ -145,142 +141,6 @@ def circuit_object_id_base(identifier: str, suffix: str, existing_entity_id: str
     if identifier_slug.endswith(f"_{slugify(words)}"):
         return identifier
     return f"{identifier} {words}"
-
-
-LEGACY_PRESET_DEVICE_NAME: Final = "Span Panel"
-"""The device name the preset builder spelled every circuit id with.
-
-Not the panel's own name. The builder was called without one, so
-`snapshot_to_device_info` fell back to this literal on every install -- the
-second panel on a system is named "Span Panel 2" and its circuit entity ids
-still began `span_panel_`. An id being *kept* has to be spelled the way it
-actually is, so this is the string to keep spelling it with.
-"""
-
-
-def generated_panel_device_name(
-    hass: HomeAssistant, entry_id: str, serial_number: str
-) -> str | None:
-    """Return the panel device's registered name, where this integration generated it.
-
-    Nobody types "Span Panel 2": the config flow invents it for the second panel
-    on a system (`config_flow.get_unique_device_name`) and stores it as the
-    entry's `device_name`, which is what reaches the device registry. So a name
-    in `name` is ours and a name in `name_by_user` is the user's, and only the
-    first is a reason to keep an id from moving -- Home Assistant composes the
-    device half from `name_by_user or name`, so following a rename the user made
-    is following the user.
-
-    `None` where the device is not registered yet, which is the first setup of a
-    panel: entities are built before the platform creates it, and an install
-    with no device has no existing id to protect either.
-
-    Scoped to the config entry rather than searched across every one, because
-    identifiers are unique only within an entry -- and a system with two panels
-    is exactly the case this answers for.
-    """
-    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, serial_number), entry_id)
-    if device is None or device.name_by_user is not None:
-        return None
-    return device.name
-
-
-def legacy_preset_entity_id(
-    platform: str,
-    device_slug: str | None,
-    identifier: str,
-    suffix: str,
-    existing_entity_id: str,
-) -> str:
-    """Return the id an existing entity keeps, where composing one would move it.
-
-    Three shapes Home Assistant's composition cannot reproduce, for reasons that
-    belong to this integration rather than to the user:
-
-    - a circuit sensor shown on a **sub-device** card, whose id names the panel
-      because the preset builder always did, where composition names the charger
-      -- that being the entity's device;
-    - any circuit entity on an install with **`USE_DEVICE_PREFIX` off**, whose id
-      carries no device at all, where `has_entity_name` prefixes one regardless;
-    - any circuit entity on a panel whose device name **this integration
-      generated** as something other than "Span Panel" -- the second panel on a
-      system -- whose id says `span_panel_` all the same, where composition says
-      `span_panel_2_`.
-
-    R1 forbids offering any of those moves, so those entities go on being preset.
-    Only those: `device_slug` is `None` for the prefix-less case and everything
-    else composes, which is the whole point of the release.
-
-    The id is *computed* from current panel data and never read back from the
-    registry, so a circuit renamed in the SPAN app still refreshes the name half
-    -- issue #252, which the preset must not undo. Only the suffix half is read
-    back, by `circuit_object_id_base`, since this integration has shipped two
-    spellings of it.
-    """
-    object_id = slugify(circuit_object_id_base(identifier, suffix, existing_entity_id))
-    if device_slug:
-        object_id = f"{slugify(device_slug)}_{object_id}"
-    return f"{platform}.{object_id}"
-
-
-def _names_another_device(device_name: str | None) -> bool:
-    """Report whether composition would spell the device half some other way.
-
-    Only a name this integration generated reaches here, so a name that is not
-    "Span Panel" is one no user chose -- and every existing circuit id on that
-    panel says `span_panel_` regardless, because the preset builder was never
-    told the panel's name. `None` is the panel whose device is not registered
-    yet, or one the user renamed, and neither is ours to hold still.
-    """
-    if device_name is None:
-        return False
-    return slugify(device_name) != slugify(LEGACY_PRESET_DEVICE_NAME)
-
-
-def legacy_preset_for_existing(
-    platform: str,
-    *,
-    identifier: str,
-    suffix: str,
-    existing_entity_id: str | None,
-    use_device_prefix: bool,
-    is_sub_device: bool,
-    device_name: str | None,
-) -> str | None:
-    """Return the id this entity keeps, or None to let Home Assistant compose one.
-
-    The whole R1 exception in one place, asked by all three circuit platforms --
-    the sensors, the breaker switch and the priority select. Each used to preset
-    its id through the same builder, so each faces the same shapes composition
-    spells differently; a copy of this decision per platform is how three
-    platforms drift apart on which entities the release moves.
-
-    `device_name` is what `generated_panel_device_name` answers: the panel
-    device's name where this integration generated it, and `None` where the user
-    renamed it or it is not registered yet. A generated name that is not "Span
-    Panel" is the third shape -- the second panel on a system, called "Span
-    Panel 2" by the config flow, whose circuit ids nonetheless all say
-    `span_panel_` because the preset builder was never told the panel's name.
-    Composition would offer that whole panel `sensor.span_panel_2_...`, a move
-    nobody asked for.
-
-    `None` for anything new: an entity with no id yet has none to protect, and
-    composing one is the point of the release. `None` too for the ordinary
-    existing entity, whose id composition reproduces exactly. What is left is
-    `legacy_preset_entity_id`'s shapes -- see it for why each is kept and for
-    why the kept id is computed from current panel data rather than read back.
-    """
-    if existing_entity_id is None:
-        return None
-    if not (is_sub_device or not use_device_prefix or _names_another_device(device_name)):
-        return None
-    return legacy_preset_entity_id(
-        platform,
-        LEGACY_PRESET_DEVICE_NAME if use_device_prefix else None,
-        identifier,
-        suffix,
-        existing_entity_id,
-    )
 
 
 def release_registry_name_written_by_older_release(

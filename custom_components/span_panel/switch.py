@@ -15,7 +15,7 @@ from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
-from .const import DOMAIN, USE_CIRCUIT_NUMBERS, USE_DEVICE_PREFIX, CircuitRelayState
+from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitRelayState
 from .control_gate import (
     ControlLock,
     ControlMode,
@@ -34,7 +34,6 @@ from .helpers import (
 )
 from .naming import (
     circuit_object_id_base,
-    legacy_preset_for_existing,
     release_registry_name_written_by_older_release,
 )
 from .util import snapshot_to_device_info
@@ -101,7 +100,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         )
 
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
-        use_device_prefix: bool = coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
         circuit_name = circuit.name or _unnamed_switch_fallback(circuit, circuit_id)
 
         # One name path, in both naming modes: the panel's name, carried as
@@ -120,21 +118,9 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
             if use_circuit_numbers
             else circuit_name
         )
-        preset = legacy_preset_for_existing(
-            "switch",
-            identifier=identifier,
-            suffix="breaker",
-            existing_entity_id=existing_entity_id,
-            use_device_prefix=use_device_prefix,
-            is_sub_device=False,
-            device_name=self._generated_panel_device_name(coordinator, snapshot),
+        self._span_object_id_base = circuit_object_id_base(
+            identifier, "breaker", existing_entity_id
         )
-        if preset is not None:
-            self.entity_id = preset
-        else:
-            self._span_object_id_base = circuit_object_id_base(
-                identifier, "breaker", existing_entity_id
-            )
 
         # Circuit-numbers mode used to deliver the panel's name by writing the
         # registry's `name`. That field is the user's override, and Home Assistant

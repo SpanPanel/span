@@ -14,7 +14,6 @@ from .const import CONF_DEVICE_NAME
 from .control_gate import CONTROL_CALLER, async_bind_caller
 from .coordinator import SpanPanelCoordinator
 from .field_paths import FieldPathDeclarationMixin
-from .naming import generated_panel_device_name
 from .util import snapshot_to_device_info
 
 
@@ -184,24 +183,3 @@ class SpanPanelEntity(CoordinatorEntity[SpanPanelCoordinator]):
         )
         host = coordinator.config_entry.data.get(CONF_HOST)
         return snapshot_to_device_info(snapshot, device_name, host=host)
-
-    @staticmethod
-    def _generated_panel_device_name(
-        coordinator: SpanPanelCoordinator,
-        snapshot: SpanPanelSnapshot,
-    ) -> str | None:
-        """Return the panel device's name where this integration generated it.
-
-        The registry's answer, not the config entry's: the rule turns on which
-        registry field the name sits in, `name` being ours and `name_by_user`
-        the user's, and a `DeviceInfo` cannot tell the two apart. Read from the
-        panel's own device even for an entity shown on a sub-device card, since
-        the ids at stake are the ones the preset builder spelled with the panel.
-
-        Static, and taking the coordinator, so the three circuit platforms can
-        ask before `super().__init__` has run -- which is where the switch
-        decides its id, and so where `self.coordinator` does not exist yet.
-        """
-        return generated_panel_device_name(
-            coordinator.hass, coordinator.config_entry.entry_id, snapshot.serial_number
-        )

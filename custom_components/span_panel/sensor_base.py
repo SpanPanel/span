@@ -22,7 +22,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from span_panel_api import SpanPanelSnapshot
 
-from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION, USE_DEVICE_PREFIX
+from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
 from .energy_dip import (
     DipEvent,
@@ -41,7 +41,6 @@ from .grace_period import (  # noqa: F401
 )
 from .naming import (
     circuit_object_id_base,
-    legacy_preset_for_existing,
     release_registry_name_written_by_older_release,
 )
 from .options import ENERGY_REPORTING_GRACE_PERIOD
@@ -92,19 +91,9 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
     _is_sub_device: bool = False
     """True when this entity is shown on a sub-device's card rather than the panel's.
 
-    Set by the circuit classes when they are handed a `device_info_override`. It
-    decides the id policy twice over: Core would compose a *new* one of these
-    from the sub-device, which is the shape its own sensors have and so the shape
-    wanted; an *existing* one carries the panel's name and keeps it.
-    """
-
-    _id_was_preset_by_this_integration: bool = False
-    """True for entities whose id this integration used to spell out in full.
-
-    Only those can be moved by handing composition the job, so only those are
-    kept preset where composition disagrees. The hidden unmapped-tab sensors set
-    it False deliberately: Home Assistant has always composed their ids, so they
-    already carry a device prefix that no naming flag ever removed.
+    Set by the circuit classes when they are handed a `device_info_override`.
+    Such a sensor supplies no base at all: it composes from its label on the
+    sub-device's card, which is the shape the sub-device's own sensors have.
     """
 
     def __init__(
@@ -151,21 +140,15 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
                 # The id itself is Home Assistant's to compose. This entity
                 # supplies only its base; `entity_id` is left unset so Core
-                # assembles the rest from the user's `entity_id_parts` -- except
-                # where composing one would move an id this integration spelled
-                # its own way, which R1 forbids offering.
+                # assembles the rest from the user's `entity_id_parts`. A
+                # sub-device sensor supplies no base either, composing from its
+                # label on the sub-device's card like that device's own sensors.
                 parts = self._object_id_parts(snapshot, description)
-                if parts is not None:
+                if parts is not None and not self._is_sub_device:
                     identifier, suffix = parts
-                    preset = self._preset_composition_would_move(
-                        snapshot, identifier, suffix, existing_entity_id
+                    self._span_object_id_base = circuit_object_id_base(
+                        identifier, suffix, existing_entity_id
                     )
-                    if preset is not None:
-                        self.entity_id = preset
-                    elif not self._is_sub_device:
-                        self._span_object_id_base = circuit_object_id_base(
-                            identifier, suffix, existing_entity_id
-                        )
 
                 if existing_entity_id:
                     self._release_synced_registry_name(
@@ -234,39 +217,6 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         there is no suffix a default could compute.
         """
         return None
-
-    def _preset_composition_would_move(
-        self,
-        snapshot: SpanPanelSnapshot,
-        identifier: str,
-        suffix: str,
-        existing_entity_id: str | None,
-    ) -> str | None:
-        """Return the id to go on presetting, or None to let Core compose one.
-
-        The decision itself belongs to `naming.legacy_preset_for_existing`, which
-        the switch and the select ask the same question of. What is added here is
-        the one fact only a sensor class knows: whether this integration ever
-        preset this entity's id at all. The hidden unmapped-tab sensors say no,
-        and an id Home Assistant has always composed cannot be moved by handing
-        Home Assistant the job.
-
-        `snapshot` is taken rather than read off the coordinator because it is
-        the snapshot this entity is being built from, and it carries the serial
-        the panel's device is registered under.
-        """
-        if not self._id_was_preset_by_this_integration:
-            return None
-        use_device_prefix: bool = self.coordinator.config_entry.options.get(USE_DEVICE_PREFIX, True)
-        return legacy_preset_for_existing(
-            "sensor",
-            identifier=identifier,
-            suffix=suffix,
-            existing_entity_id=existing_entity_id,
-            use_device_prefix=use_device_prefix,
-            is_sub_device=self._is_sub_device,
-            device_name=self._generated_panel_device_name(self.coordinator, snapshot),
-        )
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
         """Generate the displayed name for the sensor, in either naming mode.

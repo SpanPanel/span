@@ -779,14 +779,17 @@ async def test_an_unnamed_circuit_in_friendly_mode_still_gets_a_distinct_id(
     assert sensor.entity_id == "sensor.span_panel_circuit_15_power"
 
 
-# --- Entities composition would spell differently than the preset did ---------
+# --- Entities composition spells differently than the deleted preset did ------
 #
-# Two shapes disagree with what Home Assistant composes, for reasons belonging to
-# this integration and not to the user: a circuit sensor shown on a sub-device
-# card, where the DEVICE part is the charger rather than the panel, and any
-# entity on an install that turned the device prefix off, which `has_entity_name`
-# prefixes anyway. R1 says Recreate must not offer either move, so these keep
-# being preset -- from current panel data, so #252 still holds.
+# Two shapes disagree with what the old preset builder wrote: a circuit sensor
+# shown on a sub-device card, where the DEVICE part is the charger rather than
+# the panel, and any entity on an install that turned the device prefix off,
+# which `has_entity_name` prefixes anyway. Neither is bypassed. R1 (clarified)
+# asks the base to reproduce an existing id *where Home Assistant composes it
+# under the options the install was built with*; where composition yields a
+# different device part, that is the user's `entity_id_parts` at work and the
+# offer is legitimate. R5 still holds throughout: nothing moves until Recreate
+# is pressed.
 
 EVSE_DEVICE_INFO = DeviceInfo(
     identifiers={(DOMAIN, f"{SERIAL}_evse_node-1")},
@@ -810,28 +813,44 @@ def _seed_power_entity(hass: HomeAssistant, entry: MockConfigEntry, object_id: s
     return seeded.entity_id
 
 
-async def test_an_existing_sub_device_sensor_is_offered_its_own_id(
-    hass: HomeAssistant, entry: MockConfigEntry
+async def test_an_existing_sub_device_sensor_is_offered_the_composed_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """An EVSE feed circuit's sensor is spelled with the panel, and stays so."""
+    """An EVSE feed circuit's sensor lives on the charger, and composes from it.
+
+    Its id says the panel because the deleted preset builder always did. Under
+    the user's parts the DEVICE half is the entity's own device -- the charger --
+    and the ENTITY half is the label it carries there, which on a sub-device card
+    is the bare description name. So Recreate offers `sensor.<charger>_power`,
+    the shape the charger's own sensors already have. Nothing moves until the
+    user accepts it (R5).
+    """
     seeded = _seed_power_entity(hass, entry, "span_panel_refrigerator_power")
 
     install = _SensorInstall(hass, entry, device_info_override=EVSE_DEVICE_INFO)
     sensor = await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
-    assert sensor.entity_id == seeded
+    assert sensor.entity_id == seeded  # R5: two reloads, nothing moved
 
     registry = er.async_get(hass)
     registry_entry = registry.async_get(seeded)
     assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == seeded
+    assert registry_entry.entity_id == seeded
+    assert (
+        registry.async_regenerate_entity_id(registry_entry) == "sensor.span_panel_ev_charger_power"
+    )
 
 
-async def test_an_existing_sub_device_sensor_still_follows_a_rename(
-    hass: HomeAssistant, entry: MockConfigEntry
+async def test_a_rename_does_not_change_what_a_sub_device_sensor_composes(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """Keeping the shape must not cost #252: the name half still tracks the panel."""
+    """The circuit's name is not in this sensor's label, so #252 cannot reach its id.
+
+    A feed sensor on the charger's card is labelled "Power", not "<circuit>
+    Power" -- the card already says which device it belongs to. Renaming the
+    circuit on the panel therefore leaves both the live id and the offer alone.
+    """
     seeded = _seed_power_entity(hass, entry, "span_panel_refrigerator_power")
 
     install = _SensorInstall(hass, entry, device_info_override=EVSE_DEVICE_INFO)
@@ -841,13 +860,22 @@ async def test_an_existing_sub_device_sensor_still_follows_a_rename(
     registry = er.async_get(hass)
     registry_entry = registry.async_get(seeded)
     assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == RENAMED_ENTITY_ID
+    assert registry_entry.entity_id == seeded  # R5: nothing moved
+    assert (
+        registry.async_regenerate_entity_id(registry_entry) == "sensor.span_panel_ev_charger_power"
+    )
 
 
-async def test_an_existing_sensor_on_a_no_prefix_install_is_offered_its_own_id(
-    hass: HomeAssistant, entry: MockConfigEntry
+async def test_an_existing_sensor_on_a_no_prefix_install_is_offered_the_composed_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """The pre-1.0.4 shape: no device prefix at all, which composition cannot produce."""
+    """The pre-1.0.4 shape: no device prefix at all, which `has_entity_name` re-adds.
+
+    The base still reads the suffix back off the bare id, so the ENTITY half is
+    the entity's own `refrigerator_power`; the DEVICE half is the user's
+    `entity_id_parts` asking for one. The offer is theirs to accept, and the live
+    id does not move on its own (R5).
+    """
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
     seeded = _seed_power_entity(hass, entry, "refrigerator_power")
 
@@ -855,18 +883,19 @@ async def test_an_existing_sensor_on_a_no_prefix_install_is_offered_its_own_id(
     sensor = await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
-    assert sensor.entity_id == seeded
+    assert sensor.entity_id == seeded  # R5: two reloads, nothing moved
 
     registry = er.async_get(hass)
     registry_entry = registry.async_get(seeded)
     assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == seeded
+    assert registry_entry.entity_id == seeded
+    assert registry.async_regenerate_entity_id(registry_entry) == ORIGINAL_ENTITY_ID
 
 
 async def test_a_new_sensor_on_a_no_prefix_install_composes_like_every_other_entity(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """The preset is for ids that exist. Nothing new inherits the prefix-less shape."""
+    """`USE_DEVICE_PREFIX` off cannot take the device out of a composed id."""
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
 
     sensor = await _SensorInstall(hass, entry).load(ORIGINAL_NAME)
@@ -877,12 +906,11 @@ async def test_a_new_sensor_on_a_no_prefix_install_composes_like_every_other_ent
 async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:
-    """The exception is for ids this integration spelled, and it never spelled these.
+    """The hidden unmapped-tab sensors were always composed, and are unaffected.
 
-    The hidden unmapped-tab sensors have always had their ids composed by Home
-    Assistant from the display name, so they carry a device prefix that the
-    naming flag never reached. Applying the prefix-less shape to them would
-    invent a move rather than prevent one.
+    Home Assistant has always built their ids from the display name, so they
+    carry a device prefix that the naming flag never reached. Turning the flag
+    off does not take it away.
     """
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
 
@@ -923,10 +951,11 @@ async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
 # The config flow names the device: the second panel on a system becomes "Span
 # Panel 2" without anyone typing it (`get_unique_device_name`). Composition
 # spells the DEVICE part from that name, while every circuit id already on that
-# panel says `span_panel_` -- the literal the preset builder fell back to on
-# every install. Offering `sensor.span_panel_2_...` would be offering a move
-# this integration caused, which R1 forbids. A name the *user* gave the device
-# is theirs, and an id that follows it is one they asked for.
+# panel says `span_panel_` -- the literal the deleted preset builder fell back to
+# on every install. Recreate therefore offers `sensor.span_panel_2_...`: that is
+# the device the entity is on and the parts the user chose, and the offer stands
+# until they accept it. The same holds for a name the user gave the device
+# themselves, which Home Assistant composes from ahead of the generated one.
 
 SECOND_PANEL_NAME = "Span Panel 2"
 
@@ -946,25 +975,29 @@ def second_panel_entry(hass: HomeAssistant) -> MockConfigEntry:
     return config_entry
 
 
-async def test_an_existing_sensor_on_a_generated_second_panel_is_offered_its_own_id(
+async def test_an_existing_sensor_on_a_generated_second_panel_is_offered_the_composed_id(
     hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """The whole panel's worth of ids the generated name would otherwise move."""
+    """The DEVICE half is the device's name, whoever wrote it."""
     seeded = _seed_power_entity(hass, second_panel_entry, "span_panel_refrigerator_power")
 
     install = _SensorInstall(hass, second_panel_entry)
     await install.load(ORIGINAL_NAME)
     sensor = await install.load(ORIGINAL_NAME)
 
-    assert sensor.entity_id == seeded
+    assert sensor.entity_id == seeded  # R5: two reloads, nothing moved
 
     registry = er.async_get(hass)
     registry_entry = registry.async_get(seeded)
     assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == seeded
+    assert registry_entry.entity_id == seeded
+    assert (
+        registry.async_regenerate_entity_id(registry_entry)
+        == "sensor.span_panel_2_refrigerator_power"
+    )
 
 
-async def test_the_controls_on_a_generated_second_panel_are_offered_their_own_ids(
+async def test_the_controls_on_a_generated_second_panel_are_offered_the_composed_ids(
     hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
     """The breaker switch and the priority select carry the same ids and the same rule."""
@@ -991,22 +1024,29 @@ async def test_the_controls_on_a_generated_second_panel_are_offered_their_own_id
     await selects.load(ORIGINAL_NAME)
     select = await selects.load(ORIGINAL_NAME)
 
+    # R5: two reloads each, and neither live id moved.
     assert switch.entity_id == seeded_switch.entity_id
     assert select.entity_id == seeded_select.entity_id
 
     switch_entry = registry.async_get(seeded_switch.entity_id)
     assert switch_entry is not None
-    assert registry.async_regenerate_entity_id(switch_entry) == seeded_switch.entity_id
+    assert (
+        registry.async_regenerate_entity_id(switch_entry)
+        == "switch.span_panel_2_refrigerator_breaker"
+    )
 
     select_entry = registry.async_get(seeded_select.entity_id)
     assert select_entry is not None
-    assert registry.async_regenerate_entity_id(select_entry) == seeded_select.entity_id
+    assert (
+        registry.async_regenerate_entity_id(select_entry)
+        == "select.span_panel_2_refrigerator_circuit_priority"
+    )
 
 
 async def test_a_new_sensor_on_a_generated_second_panel_composes_with_that_name(
     hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """The exception is for ids that exist. A new entity is spelled with its own device."""
+    """A new entity is spelled with its own device, as an existing one is offered."""
     sensor = await _SensorInstall(hass, second_panel_entry).load(ORIGINAL_NAME)
 
     assert sensor.entity_id == "sensor.span_panel_2_refrigerator_power"
@@ -1015,11 +1055,11 @@ async def test_a_new_sensor_on_a_generated_second_panel_composes_with_that_name(
 async def test_a_panel_device_the_user_renamed_is_offered_the_renamed_id(
     hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """R1 cuts both ways: a device the user named is a change the user made.
+    """A device the user renamed is composed from the name they gave it.
 
-    The generated name is still "Span Panel 2" underneath, so this is the case
-    that separates the two fields. Home Assistant composes from `name_by_user`
-    ahead of `name`, and so does the offer.
+    The generated name is still "Span Panel 2" underneath. Home Assistant
+    composes the DEVICE half from `name_by_user` ahead of `name`, and the offer
+    follows it -- the integration does not read either field itself.
     """
     seeded = _seed_power_entity(hass, second_panel_entry, "span_panel_refrigerator_power")
 
@@ -1047,8 +1087,7 @@ async def test_a_panel_device_the_user_renamed_is_offered_the_renamed_id(
 #
 # The breaker switch and the priority select are the other two circuit entities
 # whose ids this integration used to spell out in full. They take the same route
-# as the sensors: one base, Core composes, and the only exception is the id shape
-# composition cannot reproduce.
+# as the sensors, without exception: one base, and Core composes the rest.
 
 SWITCH_ENTITY_ID = "switch.span_panel_circuit_15_breaker"
 SELECT_ENTITY_ID = "select.span_panel_circuit_15_circuit_priority"
@@ -1139,10 +1178,10 @@ async def test_a_name_the_user_set_on_a_control_is_never_released(
     assert switch_entry.name == "Beverage Cooling"
 
 
-async def test_an_existing_switch_on_a_no_prefix_install_is_offered_its_own_id(
-    hass: HomeAssistant, entry: MockConfigEntry
+async def test_an_existing_switch_on_a_no_prefix_install_is_offered_the_composed_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """The pre-1.0.4 shape reaches the controls too, and composition cannot produce it."""
+    """The pre-1.0.4 shape reaches the controls too, and composition re-adds a device."""
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
     registry = er.async_get(hass)
     seeded = registry.async_get_or_create(
@@ -1158,17 +1197,21 @@ async def test_an_existing_switch_on_a_no_prefix_install_is_offered_its_own_id(
     switch = await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
-    assert switch.entity_id == seeded.entity_id
+    assert switch.entity_id == seeded.entity_id  # R5: two reloads, nothing moved
 
     registry_entry = registry.async_get(seeded.entity_id)
     assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
+    assert registry_entry.entity_id == seeded.entity_id
+    assert (
+        registry.async_regenerate_entity_id(registry_entry)
+        == "switch.span_panel_refrigerator_breaker"
+    )
 
 
-async def test_an_existing_select_on_a_no_prefix_install_is_offered_its_own_id(
-    hass: HomeAssistant, entry: MockConfigEntry
+async def test_an_existing_select_on_a_no_prefix_install_is_offered_the_composed_id(
+    hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """The same shape, kept for the same reason."""
+    """The same shape, composed the same way."""
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
     registry = er.async_get(hass)
     seeded = registry.async_get_or_create(
@@ -1184,17 +1227,21 @@ async def test_an_existing_select_on_a_no_prefix_install_is_offered_its_own_id(
     select = await install.load(ORIGINAL_NAME)
     await install.load(ORIGINAL_NAME)
 
-    assert select.entity_id == seeded.entity_id
+    assert select.entity_id == seeded.entity_id  # R5: two reloads, nothing moved
 
     registry_entry = registry.async_get(seeded.entity_id)
     assert registry_entry is not None
-    assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
+    assert registry_entry.entity_id == seeded.entity_id
+    assert (
+        registry.async_regenerate_entity_id(registry_entry)
+        == "select.span_panel_refrigerator_circuit_priority"
+    )
 
 
 async def test_a_new_control_on_a_no_prefix_install_composes_like_every_other_entity(
     hass: HomeAssistant, entry: MockConfigEntry, device_and_entity_parts: None
 ) -> None:
-    """The exception is for ids that exist; nothing new inherits the prefix-less shape."""
+    """`USE_DEVICE_PREFIX` off cannot take the device out of a composed id."""
     hass.config_entries.async_update_entry(entry, options=dict(LEGACY_NAMES))
 
     switch = await _SwitchInstall(hass, entry).load(ORIGINAL_NAME)
