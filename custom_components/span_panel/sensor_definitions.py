@@ -240,6 +240,50 @@ BATTERY_SENSOR: SpanPanelBatterySensorEntityDescription = SpanPanelBatterySensor
     value_fn=lambda b: b.soe_percentage,
 )
 
+
+# ---------------------------------------------------------------------------
+# Composing readings that may not have been reported
+# ---------------------------------------------------------------------------
+#
+# `span-panel-api` reports a reading the panel has not sent as `None` rather
+# than fabricating `0.0`, because on a cumulative counter the two are not
+# interchangeable: a consumer compensating for firmware counter resets reads a
+# fabricated zero as a reset and books the whole counter as an offset
+# (`SpanPanel/span#259`).
+#
+# A derived sensor has to carry that distinction rather than flatten it. These
+# were written as `(a or 0) - (b or 0)`, which answers `0` for a circuit that
+# has reported nothing — reintroducing exactly the fabrication the library
+# stopped making, one layer further out and past the point where anything can
+# tell. Returning `None` instead reaches `_process_raw_value`, which renders the
+# sensor unknown and, on a `TOTAL_INCREASING` sensor, skips dip compensation so
+# the absent reading never becomes a baseline.
+
+
+def _difference(minuend: float | None, subtrahend: float | None) -> float | None:
+    """`minuend - subtrahend`, or `None` while either side is unreported.
+
+    Half a difference is not a smaller difference, it is no answer: a circuit
+    that has published its consumed counter and not its produced one knows
+    nothing yet about the net of the two.
+    """
+    if minuend is None or subtrahend is None:
+        return None
+    return minuend - subtrahend
+
+
+def _negated(value: float | None) -> float | None:
+    """Flip the sign of a reading, preserving `None` and avoiding `-0.0`.
+
+    Negative zero compares equal to `0.0` and renders as "-0.0", which is the
+    reason the original expression ended in `or 0.0`. That guard could not also
+    survive `None`, because `-None` raises before it is reached.
+    """
+    if value is None:
+        return None
+    return -value or 0.0
+
+
 # ---------------------------------------------------------------------------
 # Panel diagnostic sensors (promoted from attributes)
 # ---------------------------------------------------------------------------
@@ -1106,8 +1150,8 @@ PANEL_ENERGY_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         entity_registry_enabled_default=False,
-        value_fn=lambda s: (
-            (s.main_meter_energy_consumed_wh or 0) - (s.main_meter_energy_produced_wh or 0)
+        value_fn=lambda s: _difference(
+            s.main_meter_energy_consumed_wh, s.main_meter_energy_produced_wh
         ),
     ),
     SpanPanelDataSensorEntityDescription(
@@ -1119,8 +1163,8 @@ PANEL_ENERGY_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         entity_registry_enabled_default=False,
-        value_fn=lambda s: (
-            (s.feedthrough_energy_consumed_wh or 0) - (s.feedthrough_energy_produced_wh or 0)
+        value_fn=lambda s: _difference(
+            s.feedthrough_energy_consumed_wh, s.feedthrough_energy_produced_wh
         ),
     ),
 )
@@ -1141,7 +1185,7 @@ CIRCUIT_SENSORS: tuple[
         suggested_display_precision=0,
         device_class=SensorDeviceClass.POWER,
         value_fn=lambda c: (
-            (-c.instant_power_w or 0.0) if c.device_type == "pv" else c.instant_power_w
+            _negated(c.instant_power_w) if c.device_type == "pv" else c.instant_power_w
         ),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
@@ -1179,9 +1223,9 @@ CIRCUIT_SENSORS: tuple[
         suggested_display_precision=2,
         device_class=SensorDeviceClass.ENERGY,
         value_fn=lambda c: (
-            (c.produced_energy_wh or 0) - (c.consumed_energy_wh or 0)
+            _difference(c.produced_energy_wh, c.consumed_energy_wh)
             if c.device_type == "pv"
-            else (c.consumed_energy_wh or 0) - (c.produced_energy_wh or 0)
+            else _difference(c.consumed_energy_wh, c.produced_energy_wh)
         ),
         entity_registry_enabled_default=True,
         entity_registry_visible_default=True,
