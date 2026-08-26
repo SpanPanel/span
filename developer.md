@@ -162,6 +162,55 @@ python -m pytest tests/test_current_monitor.py -q
 python -m pytest tests/ --cov=custom_components/span_panel --cov-report=term-missing
 ```
 
+## The vendored adapter captures
+
+`tests/fixtures/schema_one_tree.json` and `tests/fixtures/schema_zero_types.json` are byte copies of payloads that live in `span-panel-api`. Committing them is
+what keeps this suite free of a cross-repo dependency: the tests run with no sibling checkout, and no runtime wheel has to keep shipping test data.
+
+### Refreshing the parent/child capture
+
+```bash
+# SPAN_PANEL_API_DIR names the checkout; see .env.example
+uv run python scripts/refresh-vendored-capture.py
+```
+
+The script copies the capture byte for byte and writes the release it came from into `tests/fixtures/schema_one_tree.source`, in one action. **That is the
+reason it exists.** Those two facts — the bytes, and the claim about which release they are — were previously updated by two different actions, so doing one and
+not the other was a single missed keystroke; doing both from one command makes them incapable of disagreeing.
+
+It refuses more than it accepts, deliberately. No `SPAN_PANEL_API_DIR`, a path that does not resolve, a directory that is not a checkout, a checkout whose
+schema-1 release is not the one installed, a checkout that has the file at neither known location, or a checkout that is not standing on the release's tag — all
+of these stop before anything is written. The last one matters most: the refresh that went wrong copied from a worktree that _declared_ the installed release
+while sitting on unreleased work behind `main`, so the declaration and the pin agreed while the bytes were a release old. A version in a working tree is intent;
+a tag is a fact. Copying from unreleased work is still possible with `--allow-unreleased`, because it is occasionally correct — it is how the capture was
+corrected while the fix was only on `main` — but it has to be said out loud rather than warned about and ignored.
+
+Commit both files together. They are one fact in two files.
+
+### Which guard tells you to run it
+
+| Guard                                                       | Compares                                                    | Catches                                                                              | Needs a checkout |
+| ----------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------- |
+| `test_the_vendored_capture_matches_the_installed_adapter`   | `schema_one_tree.source` against the installed distribution | a pin that moved while the copy stayed put                                           | no               |
+| `test_the_vendored_capture_is_byte_identical_to_its_source` | the capture against the copy in that release                | a copy refreshed **wrongly** — reformatted, edited, or taken from the wrong checkout | yes              |
+
+The first fails everywhere, including CI, the moment `manifest.json` moves and nobody refreshes. The second needs `SPAN_PANEL_API_DIR`, so it **skips** locally
+when no checkout is configured or the configured one is on another release, and **fails** under `CI`, where the workflow clones `span-panel-api` at the release
+the pin names. That asymmetry is deliberate and should not be "fixed": `span-panel-api` paid for it and records the reason in its `DEVELOPMENT.md`, under "A
+skip here is not a pass" — _"A skip reads in a summary line exactly like a pass, and that is how a stale vendored capture went unnoticed for nine days."_
+
+Either failure names the refresh. Run the script.
+
+### Why the capture is not copied at test time
+
+Someone will eventually propose having the suite copy the fixture from `SPAN_PANEL_API_DIR` on every run, so it can never be stale. It would undo both things
+vendoring bought.
+
+It puts the cross-repo dependency back — every test run needing a `span-panel-api` checkout, which is exactly what committing the bytes removed. And it makes
+the byte comparison vacuous: a copy compared against the thing it was just copied from can only ever pass. **Committed bytes that are allowed to disagree with
+their source are the whole mechanism.** That freedom to disagree is what let the comparison find a capture vendored from a stale path override, which nothing
+else in either repository could see. A fixture that silently re-syncs itself cannot report anything.
+
 ## Knowing what the panel publishes that nothing reads
 
 The panel declares more than this integration surfaces, and the gap is tracked mechanically rather than by memory.

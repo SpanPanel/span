@@ -45,40 +45,16 @@ from typing import NoReturn
 
 import pytest
 
-from .adapter_fixtures import SCHEMA_ONE_TREE, SCHEMA_ONE_TREE_SOURCE, schema_one_source
-
-CHECKOUT_VARIABLE = "SPAN_PANEL_API_DIR"
-"""Names a `span-panel-api` checkout. Already defined in `.env.example` for editable installs."""
+from .adapter_fixtures import (
+    CHECKOUT_VARIABLE,
+    SCHEMA_ONE_RELEASE_DECLARATION as _RELEASE_DECLARATION,
+    SCHEMA_ONE_SOURCE_PATHS as _SOURCE_PATHS,
+    SCHEMA_ONE_TREE,
+    SCHEMA_ONE_TREE_SOURCE,
+    schema_one_source,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-
-_SOURCE_PATHS = (
-    Path("tests") / "reference_payloads" / "parent_child_tree.json",
-    Path("packages")
-    / "schema-1"
-    / "src"
-    / "span_panel_api_schema_1"
-    / "reference_payloads"
-    / "parent_child_tree.json",
-)
-"""Where the capture lives in `span-panel-api`, newest location first.
-
-Two of them because the file is moving. `span-panel-api#162` takes the reference
-payloads out of the schema_1 wheel and makes them ordinary test fixtures, which
-is the whole reason this repository vendors a copy rather than importing one --
-but that change is unmerged, so a checkout on `main` today still holds the file
-under `packages/schema-1/`. Checking the new path first means the comparison
-follows the file rather than the merge, and works against a checkout on either
-side of it.
-
-Delete the second entry once #162 is merged **and** no release this repository
-can pin still predates it -- the CI clone is positioned at the release
-`schema_one_tree.source` records, so the old path stays reachable for as long as
-that pin can name a pre-#162 release.
-"""
-
-_RELEASE_DECLARATION = Path("packages") / "schema-1" / "pyproject.toml"
-"""Where the checkout declares which release it is. Read only to explain a failure."""
 
 _VERSION = re.compile(r'^version = "([^"]+)"', re.MULTILINE)
 

@@ -97,16 +97,45 @@ so one aimed at a stale checkout quietly tests against a producer that no longer
 
 ### Refreshing
 
-In one commit:
+Either guard failing names the refresh, and the refresh is one command:
 
-1. Copy `tests/reference_payloads/parent_child_tree.json` from `$SPAN_PANEL_API_DIR` over `schema_one_tree.json`, with no reformatting.
-2. Set the version in `schema_one_tree.source` to the release it came from.
+```bash
+# SPAN_PANEL_API_DIR names the checkout; see .env.example
+uv run python scripts/refresh-vendored-capture.py
+```
 
-Copy from a checkout positioned on the release `schema_one_tree.source` names, and prefer a released tag. The current copy is an exception made knowingly: it
-comes from `main`, because `schema-1-v1.1.0` is not cut yet and the alternative was to keep shipping a capture that records a producer defect. It verifies
-against a `main` checkout today and will verify against the tag once 1.1.0 is released from these bytes; if `main` moves the capture again first, the guard says
-so, which is the whole point. What is never acceptable is a capture taken from a checkout that is _behind_ the recorded release — that is how this one went
-wrong.
+Commit both files it touches together — they are one fact in two files.
+
+What it does, for anyone reading this without the checkout to hand:
+
+1. Copies `tests/reference_payloads/parent_child_tree.json` from `$SPAN_PANEL_API_DIR` over `schema_one_tree.json`, byte for byte — `shutil.copyfile`, never a
+   `json.load`/`json.dump` round trip, which would rewrite indentation, key order and float spelling and produce exactly what the byte comparison rejects. It
+   checks the pre-#162 package-data path as a fallback, so it works against a checkout on either side of that merge.
+2. Writes `schema_one_tree.source` from the **installed** distribution's version, rather than from anything typed in.
+
+**Doing both from one command is the point, not the convenience.** The bytes and the recorded release used to be updated by two different actions, so doing one
+and not the other was a single missed keystroke — and the result was a capture whose claim about itself was wrong, which every conformance test then passed
+against. One command cannot do half of it.
+
+It refuses rather than guesses: no `SPAN_PANEL_API_DIR`, a path that does not resolve, a directory that is not a checkout, a checkout whose schema-1 release is
+not the one installed, a checkout with the file at neither location, or a checkout that is not standing on the release's tag. That last one is the one that
+matters: the refresh that went wrong copied from a worktree that _declared_ the installed release while sitting on unreleased work behind `main`, so the
+declaration and the pin agreed while the bytes were a release old. A version in a working tree is intent; a tag is a fact, and only a tag can be checked.
+
+Copying from unreleased work is still possible with `--allow-unreleased`, because it is occasionally correct — the current copy is exactly that case, taken from
+`main` because `schema-1-v1.1.0` is not cut and the alternative was to keep shipping a capture that records a producer defect. It verifies against a `main`
+checkout today and will verify against the tag once 1.1.0 is released from these bytes; if `main` moves the capture again first, the guard says so, which is the
+whole point. What is never acceptable is a capture taken from a checkout _behind_ the recorded release — that is how this one went wrong.
+
+### Why the capture is not copied at test time
+
+Someone will eventually propose having the suite copy the fixture from `$SPAN_PANEL_API_DIR` on every run, so it can never be stale. It would undo both things
+vendoring bought.
+
+It puts the cross-repo dependency back — every test run needing a `span-panel-api` checkout, which is exactly what committing the bytes removed. And it makes
+the byte comparison vacuous: a copy compared against the thing it was just copied from can only ever pass. **Committed bytes that are allowed to disagree with
+their source are the whole mechanism.** That freedom to disagree is what let the comparison find a capture vendored from a stale path override, which nothing
+else in either repository could see. A fixture that silently re-syncs itself cannot report anything.
 
 ## These files are exempt from formatting
 

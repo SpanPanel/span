@@ -30,6 +30,43 @@ SCHEMA_ONE_TREE = _FIXTURES / "schema_one_tree.json"
 SCHEMA_ONE_TREE_SOURCE = _FIXTURES / "schema_one_tree.source"
 """The release `SCHEMA_ONE_TREE` was copied from, checked by `test_fixture_provenance.py`."""
 
+SCHEMA_ONE_DISTRIBUTION = "span-panel-api-schema-1"
+"""The distribution that publishes the capture, and whose installed version the claim names."""
+
+CHECKOUT_VARIABLE = "SPAN_PANEL_API_DIR"
+"""Names a `span-panel-api` checkout. Already in `.env.example` for editable installs."""
+
+SCHEMA_ONE_SOURCE_PATHS = (
+    pathlib.Path("tests") / "reference_payloads" / "parent_child_tree.json",
+    pathlib.Path("packages")
+    / "schema-1"
+    / "src"
+    / "span_panel_api_schema_1"
+    / "reference_payloads"
+    / "parent_child_tree.json",
+)
+"""Where the capture lives inside a `span-panel-api` checkout, newest location first.
+
+Two of them because the file is moving. `span-panel-api#162` takes the reference
+payloads out of the schema_1 wheel and makes them ordinary test fixtures -- which
+is the whole reason this repository vendors a copy rather than importing one --
+but that change is unmerged, so a checkout on `main` today still holds the file
+under `packages/schema-1/`. Checking the new path first follows the file rather
+than the merge, and works against a checkout on either side of it.
+
+Delete the second entry once #162 is merged **and** no release this repository can
+pin still predates it: the CI clone and `scripts/refresh-vendored-capture.py` both
+position themselves at a recorded release, so the old path stays reachable for as
+long as that release can be a pre-#162 one.
+
+Here rather than in `test_fixture_provenance.py` because the refresh script needs
+the same two paths. A second copy of this list is how the fallback silently
+outlives the merge in one place and not the other.
+"""
+
+SCHEMA_ONE_RELEASE_DECLARATION = pathlib.Path("packages") / "schema-1" / "pyproject.toml"
+"""Where a checkout declares which schema-1 release it is."""
+
 
 class VendoredSource(NamedTuple):
     """The distribution and release a vendored fixture was copied from."""
