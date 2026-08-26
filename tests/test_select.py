@@ -14,7 +14,7 @@ from custom_components.span_panel.select import (
     async_setup_entry,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceNotFound
+from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -95,30 +95,39 @@ async def test_async_select_option_service_not_found() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_select_option_server_error() -> None:
-    """Test that SpanPanelServerError triggers a notification."""
+async def test_async_select_option_refusal_is_raised_at_the_caller() -> None:
+    """A refused priority reaches the person who chose it, carrying the reason.
+
+    The panel refuses this for two different situations -- the circuit is
+    commissioned never-backup, or the panel could not carry the change out --
+    and the exception distinguishes them only in its message. So the message is
+    passed through rather than diagnosed here, and the entity contributes the
+    name the user knows the circuit by.
+    """
     coordinator = _make_coordinator_with_circuit()
     circuit = coordinator.data.circuits["id"]
 
-    with patch(
-        "custom_components.span_panel.select.async_create_span_notification",
-        new_callable=AsyncMock,
-    ) as mock_notification:
-        select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name", "Test Device"
-        )
-        select.coordinator = coordinator
-        select.hass = MagicMock()
+    select = SpanPanelCircuitsSelect(
+        coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "name", "Test Device"
+    )
+    select.coordinator = coordinator
+    select.hass = MagicMock()
 
-        coordinator.client = AsyncMock()
-        coordinator.client.set_circuit_priority = AsyncMock(
-            side_effect=SpanPanelServerError("test error")
-        )
+    coordinator.client = AsyncMock()
+    coordinator.client.set_circuit_priority = AsyncMock(
+        side_effect=SpanPanelServerError("Circuit 'id' declares its shed priority not settable")
+    )
 
-        select._get_circuit = MagicMock(return_value=circuit)
+    select._get_circuit = MagicMock(return_value=circuit)
+    with pytest.raises(HomeAssistantError) as raised:
         await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
 
-        mock_notification.assert_called_once()
+    assert raised.value.translation_key == "circuit_priority_failed"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["circuit"] == "name"
+    assert placeholders["reason"] == "Circuit 'id' declares its shed priority not settable"
+    coordinator.async_request_refresh.assert_not_called()
 
 
 @pytest.mark.asyncio

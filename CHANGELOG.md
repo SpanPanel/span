@@ -131,6 +131,13 @@ working entirely in 2027.8.
   "Possible states: Unknown".
 - **The README described Battery Power's sign backwards.** The sensor reports **discharging** as positive and always has, as release 2.0.5 established (#184)
   and a measured panel confirms — **no entity changed and no reading moved**, only the documentation was ever wrong.
+- **A breaker your panel refuses to operate now says so.** The switch had no handling for a refused relay command at all, so the failure surfaced as a traceback
+  in the log and a toggle that quietly sprang back. It now reports the panel's own reason where you pressed it, and the switch stays where the relay actually
+  is.
+- **A refused circuit priority no longer blames your firmware.** The old message said the panel's firmware did not support the operation, which stopped being
+  the only explanation once your panel could also declare an individual circuit's priority fixed. The priority select and the GFE override button now carry the
+  panel's reason instead of guessing at one, and report it as an error on the control you used rather than as a notification that sits in the sidebar until you
+  dismiss it by hand.
 
 ### Security
 

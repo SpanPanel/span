@@ -6,11 +6,12 @@ from typing import Any, ClassVar
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
 from .adoption import AdoptedSwitch, create_adopted_switches
@@ -21,6 +22,7 @@ from .entity import SpanPanelEntity
 from .helpers import (
     build_switch_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
+    construct_circuit_label,
     construct_single_circuit_entity_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
@@ -284,15 +286,38 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         and may already have been acted on; `UNCONFIRMED` most often means the
         relay was already in the requested position. Neither is a failure and
         neither should discard the requested state.
+
+        A refusal is the third thing that can happen, and it is raised rather
+        than logged. The library refuses a relay command the panel declares
+        non-commandable before anything reaches the broker, so there is no
+        publish to report on and no coordinator update coming; swallowing it
+        would leave the person who pressed the switch with a control that
+        silently does nothing.
         """
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_relay"):
             _LOGGER.warning("Client does not support relay control")
             return
 
-        outcome = await self._async_guarded_control(
-            client.set_circuit_relay(self._circuit_id, state)
-        )
+        try:
+            outcome = await self._async_guarded_control(
+                client.set_circuit_relay(self._circuit_id, state)
+            )
+        except SpanPanelServerError as err:
+            _LOGGER.warning(
+                "SPAN panel did not accept a relay command for %s: %s", self.entity_id, err
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="circuit_relay_failed",
+                translation_placeholders={
+                    "circuit": construct_circuit_label(
+                        self.coordinator.data.circuits.get(self._circuit_id),
+                        self._circuit_id,
+                    ),
+                    "reason": str(err),
+                },
+            ) from err
         if outcome_is_failure(outcome):
             _LOGGER.warning(
                 "Relay command for %s was not delivered: %s",

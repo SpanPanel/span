@@ -6,7 +6,7 @@ from typing import Any, ClassVar, Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceNotFound
+from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -23,6 +23,7 @@ from .helpers import (
     async_create_span_notification,
     build_select_unique_id_for_entry,
     construct_circuit_identifier_from_tabs,
+    construct_circuit_label,
     construct_single_circuit_entity_id,
     construct_tabs_attribute,
     construct_voltage_attribute,
@@ -204,7 +205,15 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         await super().async_will_remove_from_hass()
 
     async def async_select_option(self, option: str) -> None:
-        """Change the selected option."""
+        """Change the selected option.
+
+        A refusal is raised at the caller rather than filed as a persistent
+        notification. The library refuses a priority the panel declares
+        unsettable before anything is published, so there is nothing to correct
+        later and nobody to tell but the person who just made the choice -- and
+        a notification keyed on the circuit would outlive the failure and sit in
+        the sidebar until someone dismissed it by hand.
+        """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
         if not hasattr(client, "set_circuit_priority"):
@@ -228,20 +237,18 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
                 title="Service Not Found",
                 notification_id=f"span_panel_service_not_found_{self.id}",
             )
-        except SpanPanelServerError:
-            warning_msg = (
-                f"SPAN API returned a server error attempting "
-                f"to change the circuit priority for {self._attr_name}. "
-                f"This typically indicates panel firmware doesn't support "
-                f"this operation."
+        except SpanPanelServerError as err:
+            _LOGGER.warning(
+                "SPAN panel did not accept a priority change for %s: %s", self.entity_id, err
             )
-            _LOGGER.warning("SPAN API may not support setting priority")
-            await async_create_span_notification(
-                self.hass,
-                message=warning_msg,
-                title="SPAN API Error",
-                notification_id=f"span_panel_api_error_{self.id}",
-            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="circuit_priority_failed",
+                translation_placeholders={
+                    "circuit": construct_circuit_label(self._get_circuit(), self.id),
+                    "reason": str(err),
+                },
+            ) from err
 
     def select_option(self, option: str) -> None:
         """Select an option synchronously."""

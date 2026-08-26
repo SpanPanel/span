@@ -429,10 +429,10 @@
       "message": "Only a Home Assistant administrator may operate this SPAN panel."
     },
     "circuit_priority_failed": {
-      "message": "Failed to set circuit priority for {circuit}."
+      "message": "The priority change for {circuit} was refused: {reason}. Nothing was sent to the panel, so the priority is unchanged."
     },
     "circuit_relay_failed": {
-      "message": "Failed to set circuit relay state for {circuit}."
+      "message": "The breaker command for {circuit} was refused: {reason}. Nothing was sent to the panel, so the breaker has not moved."
     },
     "contextless_control_refused": {
       "message": "This SPAN panel refuses control commands that do not come from a logged-in user."
@@ -471,7 +471,7 @@
       "message": "Sub-device {entity_id} has no SPAN Panel parent device — its via_device_id does not point at a SPAN panel."
     },
     "gfe_override_failed": {
-      "message": "Failed to send GFE override to the panel."
+      "message": "The GFE override to {value} was refused: {reason}. Nothing was sent to the panel."
     },
     "graph_horizon_not_available": {
       "message": "Graph horizon manager is not available for the selected SPAN panel."

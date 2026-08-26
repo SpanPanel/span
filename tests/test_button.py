@@ -15,6 +15,7 @@ from custom_components.span_panel.button import (
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlPolicy
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from .factories import SpanBatterySnapshotFactory, SpanPanelSnapshotFactory
 
@@ -77,8 +78,8 @@ async def test_gfe_override_button_logs_when_client_lacks_support(
 
 
 @pytest.mark.asyncio
-async def test_gfe_override_button_server_error_creates_notification() -> None:
-    """Server errors should notify the user that override failed."""
+async def test_gfe_override_button_refusal_is_raised_at_the_caller() -> None:
+    """A refused override reaches the person who pressed the button."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
         dominant_power_source="BATTERY",
@@ -86,18 +87,19 @@ async def test_gfe_override_button_server_error_creates_notification() -> None:
     coordinator = _make_button_coordinator(snapshot)
     coordinator.client = MagicMock()
     coordinator.client.set_dominant_power_source = AsyncMock(
-        side_effect=SpanPanelServerError("unsupported")
+        side_effect=SpanPanelServerError("Core node not found in panel topology")
     )
     button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
     button.hass = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.button.async_create_span_notification",
-        new=AsyncMock(),
-    ) as mock_notification:
+    with pytest.raises(HomeAssistantError) as raised:
         await button.async_press()
 
-    mock_notification.assert_awaited_once()
+    assert raised.value.translation_key == "gfe_override_failed"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["value"] == "GRID"
+    assert placeholders["reason"] == "Core node not found in panel topology"
     coordinator.async_request_refresh.assert_not_awaited()
 
 

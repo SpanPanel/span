@@ -76,6 +76,7 @@ __all__ = [
     "build_switch_unique_id_for_entry",
     "construct_binary_sensor_unique_id",
     "construct_circuit_identifier_from_tabs",
+    "construct_circuit_label",
     "construct_circuit_unique_id",
     "construct_circuit_unique_id_for_entry",
     "construct_multi_circuit_entity_id",
@@ -160,6 +161,21 @@ def construct_circuit_identifier_from_tabs(tabs: list[int], circuit_id: str = ""
     if tabs:
         return "Circuit " + " ".join(str(tab) for tab in sorted(tabs))
     return f"Circuit {circuit_id}"
+
+
+def construct_circuit_label(circuit: SpanCircuitSnapshot | None, circuit_id: str) -> str:
+    """Name a circuit the way its owner knows it, for a message addressed to them.
+
+    The panel's own name where there is one, and the tab identifier otherwise --
+    which is what the entity itself was named from, so an error names the thing
+    the user is looking at rather than a wire UUID. `None` is accepted because a
+    circuit can drop out of a snapshot between a command and its failure, and an
+    error message is the worst possible place to raise a second error.
+    """
+    if circuit is not None and circuit.name:
+        return circuit.name
+    tabs = circuit.tabs if circuit is not None else []
+    return construct_circuit_identifier_from_tabs(tabs, circuit_id)
 
 
 def construct_tabs_attribute(circuit: SpanCircuitSnapshot) -> str | None:

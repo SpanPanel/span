@@ -429,10 +429,10 @@
       "message": "Apenas um administrador do Home Assistant pode operar este SPAN Panel."
     },
     "circuit_priority_failed": {
-      "message": "Falha ao definir a prioridade do circuito para {circuit}."
+      "message": "A alteração de prioridade para {circuit} foi recusada: {reason}. Nada foi enviado ao painel, portanto a prioridade permanece inalterada."
     },
     "circuit_relay_failed": {
-      "message": "Falha ao definir o estado do relé do circuito para {circuit}."
+      "message": "O comando do disjuntor para {circuit} foi recusado: {reason}. Nada foi enviado ao painel, portanto o disjuntor não mudou de posição."
     },
     "contextless_control_refused": {
       "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada."
@@ -471,7 +471,7 @@
       "message": "O sub-dispositivo {entity_id} não tem um painel SPAN pai — o seu via_device_id não aponta para um painel SPAN."
     },
     "gfe_override_failed": {
-      "message": "Falha ao enviar substituição GFE para o painel."
+      "message": "A substituição GFE para {value} foi recusada: {reason}. Nada foi enviado ao painel."
     },
     "graph_horizon_not_available": {
       "message": "O gerenciador de horizonte do gráfico não está disponível para o painel SPAN selecionado."

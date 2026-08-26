@@ -429,10 +429,10 @@
       "message": "この SPAN Panel を操作できるのは Home Assistant の管理者だけです。"
     },
     "circuit_priority_failed": {
-      "message": "{circuit}の回路優先度の設定に失敗しました。"
+      "message": "{circuit}の優先度変更は拒否されました: {reason}。パネルには何も送信されていないため、優先度は変わっていません。"
     },
     "circuit_relay_failed": {
-      "message": "{circuit}の回路リレー状態の設定に失敗しました。"
+      "message": "{circuit}のブレーカー操作は拒否されました: {reason}。パネルには何も送信されていないため、ブレーカーの状態は変わっていません。"
     },
     "contextless_control_refused": {
       "message": "この SPAN Panel は、ログインユーザーからではない操作コマンドを拒否します。"
@@ -471,7 +471,7 @@
       "message": "サブデバイス {entity_id} に親のSPAN Panelデバイスがありません。via_device_id がSPANパネルを指していません。"
     },
     "gfe_override_failed": {
-      "message": "パネルへのGFEオーバーライドの送信に失敗しました。"
+      "message": "{value}へのGFEオーバーライドは拒否されました: {reason}。パネルには何も送信されていません。"
     },
     "graph_horizon_not_available": {
       "message": "選択されたSPANパネルではグラフホライズンマネージャーが利用できません。"

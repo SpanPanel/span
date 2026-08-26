@@ -5,20 +5,17 @@ from typing import Final
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import SpanPanelServerError
 
 from . import SpanPanelConfigEntry
-from .const import CONF_DEVICE_NAME
+from .const import CONF_DEVICE_NAME, DOMAIN
 from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
-from .helpers import (
-    async_create_span_notification,
-    construct_panel_unique_id_for_entry,
-    has_bess,
-)
+from .helpers import construct_panel_unique_id_for_entry, has_bess
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +61,13 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         )
 
     async def async_press(self) -> None:
-        """Publish the GFE override to the panel."""
+        """Publish the GFE override to the panel.
+
+        A refusal is raised at the caller rather than filed as a persistent
+        notification, the same way the circuit controls report one: nothing was
+        published, so there is nothing to correct later, and the person who
+        pressed the button is the one who needs to hear about it.
+        """
         client = self.coordinator.client
         if not hasattr(client, "set_dominant_power_source"):
             _LOGGER.warning("Client does not support GFE override")
@@ -74,19 +77,19 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
             await self._async_guarded_control(
                 client.set_dominant_power_source(self._override_value)
             )
-            await self.coordinator.async_request_refresh()
-        except SpanPanelServerError:
-            warning_msg = (
-                f"SPAN API returned a server error attempting "
-                f"to override GFE to {self._override_value}."
+        except SpanPanelServerError as err:
+            _LOGGER.warning(
+                "SPAN panel did not accept a GFE override to %s: %s", self._override_value, err
             )
-            _LOGGER.warning(warning_msg)
-            await async_create_span_notification(
-                self.hass,
-                message=warning_msg,
-                title="SPAN API Error",
-                notification_id="span_panel_gfe_override_error",
-            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="gfe_override_failed",
+                translation_placeholders={
+                    "value": self._override_value,
+                    "reason": str(err),
+                },
+            ) from err
+        await self.coordinator.async_request_refresh()
 
     @property
     def available(self) -> bool:

@@ -15,6 +15,7 @@ from custom_components.span_panel.button import (
 from custom_components.span_panel.helpers import has_bess
 from custom_components.span_panel.sensor_definitions import BESS_METADATA_SENSORS
 from custom_components.span_panel.sensor_panel import _grid_forming_device_name
+from homeassistant.exceptions import HomeAssistantError
 
 from .factories import SpanPanelSnapshotFactory
 
@@ -141,26 +142,21 @@ class TestGFEOverrideButtons:
 
     @pytest.mark.asyncio
     async def test_button_server_error(self) -> None:
-        """SpanPanelServerError triggers a notification."""
+        """SpanPanelServerError surfaces as a translated Home Assistant error."""
         coordinator = _make_gfe_coordinator()
 
-        with patch(
-            "custom_components.span_panel.button.async_create_span_notification",
-            new_callable=AsyncMock,
-        ) as mock_notification:
-            button = SpanPanelGFEOverrideButton(
-                coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
-            )
-            button.hass = MagicMock()
+        button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
+        button.hass = MagicMock()
 
-            coordinator.client = AsyncMock()
-            coordinator.client.set_dominant_power_source = AsyncMock(
-                side_effect=SpanPanelServerError("test error")
-            )
+        coordinator.client = AsyncMock()
+        coordinator.client.set_dominant_power_source = AsyncMock(
+            side_effect=SpanPanelServerError("test error")
+        )
 
+        with pytest.raises(HomeAssistantError) as raised:
             await button.async_press()
 
-            mock_notification.assert_called_once()
+        assert raised.value.translation_key == "gfe_override_failed"
 
     def test_available_when_bess_offline_and_not_grid(self) -> None:
         """Button is available when BESS is offline and the panel is not on grid."""

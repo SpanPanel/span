@@ -5,6 +5,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
+from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.switch import (
@@ -12,6 +13,7 @@ from custom_components.span_panel.switch import (
     async_setup_entry,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
@@ -104,6 +106,66 @@ async def test_switch_turn_off_operation() -> None:
 
     coordinator.client.set_circuit_relay.assert_called_once_with("1", "OPEN")
     assert switch.is_on is False
+
+
+@pytest.mark.asyncio
+async def test_a_refused_relay_command_is_raised_and_leaves_the_switch_alone() -> None:
+    """The panel declares this circuit's relay non-commandable.
+
+    Nothing is published, so no coordinator update is coming to correct an
+    optimistic write -- which is why `_async_set_relay` writes its state only
+    after the publish, and why the refusal has to reach the caller instead of
+    being logged and swallowed.
+    """
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="1",
+        name="Kitchen Outlets",
+        relay_state="CLOSED",
+    )
+    coordinator = _make_coordinator({"1": circuit})
+    coordinator.client.set_circuit_relay = AsyncMock(
+        side_effect=SpanPanelServerError("Circuit '1' declares its relay non-commandable")
+    )
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "1", "Kitchen Outlets", "SPAN Panel")
+    switch.async_write_ha_state = MagicMock()
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await switch.async_turn_off()
+
+    assert raised.value.translation_key == "circuit_relay_failed"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["circuit"] == "Kitchen Outlets"
+    assert placeholders["reason"] == "Circuit '1' declares its relay non-commandable"
+    # The relay never moved, so neither did the switch.
+    assert switch.is_on is True
+    switch.async_write_ha_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_names_an_unnamed_circuit_by_its_panel_positions() -> None:
+    """The identifier the entity was named from, not the wire id."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="abc123",
+        name="",
+        relay_state="OPEN",
+        tabs=[30, 32],
+    )
+    coordinator = _make_coordinator({"abc123": circuit})
+    coordinator.client.set_circuit_relay = AsyncMock(
+        side_effect=SpanPanelServerError("Circuit 'abc123' declares its relay non-commandable")
+    )
+
+    switch = SpanPanelCircuitsSwitch(coordinator, "abc123", "", "SPAN Panel")
+    switch.async_write_ha_state = MagicMock()
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await switch.async_turn_on()
+
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["circuit"] == "Circuit 30 32"
 
 
 def test_switch_state_reflects_relay_state() -> None:
