@@ -40,4 +40,16 @@ poetry.lock
 # Test files (optional - remove if you want to format test files)
 # tests/
 
+# Vendored adapter captures: byte copies of files span-panel-api owns, held to
+# their source byte for byte by tests/test_fixture_provenance.py. A formatter and
+# a byte-identical vendored fixture cannot both be unconditional, and it is the
+# formatter that has to yield -- the bytes are the artifact.
+#
+# Prophylactic today: nothing here runs Prettier over JSON (scripts/fix-markdown.sh
+# passes only *.md globs, and prek.toml has no Prettier hook). But .prettierrc sets
+# tabWidth 2 and these captures are 1-space indented as their producer wrote them,
+# so the day a JSON glob is added they would be silently reindented and the guard
+# would start failing with nobody knowing why.
+tests/fixtures/schema_*.json
+
 # Keep docs directory included for formatting
