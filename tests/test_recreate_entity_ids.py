@@ -27,7 +27,6 @@ from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_registry import EntityNamePart
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -42,6 +41,7 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
+from custom_components.span_panel.entity import SpanPanelEntity
 from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
     build_select_unique_id,
@@ -100,7 +100,7 @@ def _coordinator(
     return coordinator
 
 
-class _Install[E: Entity]:
+class _Install[E: SpanPanelEntity]:
     """One install of one platform's circuit entity, reloadable.
 
     `load` a second time is what a reload is: the entry's entities are torn down
@@ -124,10 +124,36 @@ class _Install[E: Entity]:
         self._hass = hass
         self._entry = entry
         self._platform: MockEntityPlatform | None = None
+        self._coordinator: MagicMock | None = None
+        self._entity: E | None = None
+
+    @property
+    def coordinator(self) -> MagicMock:
+        """The coordinator behind the entity this install last loaded."""
+        assert self._coordinator is not None, "nothing has been loaded yet"
+        return self._coordinator
 
     def _build(self, coordinator: MagicMock, snapshot: SpanPanelSnapshot) -> E:
         """Construct the one entity this install adds. Subclasses answer."""
         raise NotImplementedError
+
+    async def rename_on_the_panel(self, new_name: str) -> None:
+        """Deliver a snapshot in which the circuit was renamed, as a push does.
+
+        The real phase 2 path and not a stand-in for it: a poll finds a changed
+        `circuit.name` and the coordinator notifies its listeners, which is
+        `_handle_coordinator_update` -- the method each of the three platforms
+        hangs its name sync off. Nothing else about the entity is touched, so
+        what happens next is the platform's own decision.
+
+        The install pushes to the entity it loaded rather than being handed one,
+        because those two must be the same object for the push to reach the
+        platform whose coordinator this is.
+        """
+        assert self._entity is not None, "nothing has been loaded yet"
+        self.coordinator.data = _snapshot(new_name)
+        self._entity._handle_coordinator_update()
+        await self._hass.async_block_till_done()
 
     async def load(self, circuit_name: str) -> E:
         """Tear down any previous platform, then set one up from fresh panel data."""
@@ -136,6 +162,7 @@ class _Install[E: Entity]:
 
         snapshot = _snapshot(circuit_name)
         coordinator = _coordinator(self._hass, snapshot, self._entry)
+        self._coordinator = coordinator
         self._entry.runtime_data = SpanPanelRuntimeData(
             coordinator=coordinator, panel_device_id="panel-device-id"
         )
@@ -150,6 +177,7 @@ class _Install[E: Entity]:
         await self._hass.async_block_till_done()
 
         assert entity.hass is not None, "entity was rejected before it reached the registry"
+        self._entity = entity
         return entity
 
 
@@ -1078,3 +1106,142 @@ async def test_an_area_reaches_the_proposal_for_a_control_too(
         registry.async_regenerate_entity_id(registry_entry)
         == "switch.basement_span_panel_circuit_15_breaker"
     )
+
+
+# --- Phase 2: a rename in the SPAN app still reaches the display name ---------
+#
+# The README promises it in both modes (:594, :602): friendly names
+# "automatically updates when you rename circuits in the SPAN panel", and
+# circuit-numbers mode keeps ids stable while "friendly names still sync from
+# SPAN panel for display". One mechanism serves both. A coordinator push
+# carrying a changed circuit name asks the entry to reload, and the reload is
+# what rebuilds `_attr_name` -- which Home Assistant stores as `original_name`.
+# The shortcut the old scheme took, writing the registry's `name` in place, is
+# exactly what made Recreate propose a friendly-name id for a circuit-numbered
+# entity, so the mechanism has to keep costing a reload.
+#
+# The per-platform unit tests drive this against a `MagicMock` registry, which
+# cannot see where the name landed. These drive it through a real
+# `EntityPlatform` and the real registry, for all three circuit platforms in
+# both modes, because handing composition the id moved where the name is
+# written.
+
+type _CircuitInstall = type[_SensorInstall] | type[_SwitchInstall] | type[_SelectInstall]
+
+CIRCUIT_INSTALLS: list[_CircuitInstall] = [_SensorInstall, _SwitchInstall, _SelectInstall]
+PLATFORM_IDS = ["sensor", "switch", "select"]
+
+
+@pytest.mark.parametrize(
+    "mode", [FRIENDLY_NAMES, CIRCUIT_NUMBERS], ids=["friendly", "circuit_numbers"]
+)
+@pytest.mark.parametrize("make_install", CIRCUIT_INSTALLS, ids=PLATFORM_IDS)
+async def test_a_rename_in_the_span_app_reaches_the_display_name_after_the_reload_it_requests(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    device_and_entity_parts: None,
+    mode: dict[str, bool],
+    make_install: _CircuitInstall,
+) -> None:
+    """The whole promise in one case: push, reload, and the name has followed.
+
+    Two loads before the push, because that is what a real install has done by
+    the time a rename arrives: the first add finds no registry entry and asks
+    for a reload on its first update regardless, and after the reload the entity
+    is on file and its remembered name is the panel's. Asserting on a
+    freshly-added entity would let that first-update reload stand in for the one
+    the rename is supposed to cause.
+
+    So the unchanged push comes first and must ask for nothing. Only then does
+    the rename, and only it, buy a reload.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    install = make_install(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    entity = await install.load(ORIGINAL_NAME)
+    original_entity_id = entity.entity_id
+
+    registry = er.async_get(hass)
+    before = registry.async_get(original_entity_id)
+    assert before is not None
+    assert before.original_name is not None
+    assert before.original_name.startswith(ORIGINAL_NAME)
+
+    await install.rename_on_the_panel(ORIGINAL_NAME)
+    install.coordinator.request_reload.assert_not_called()
+
+    await install.rename_on_the_panel(RENAMED)
+    install.coordinator.request_reload.assert_called_once()
+
+    reloaded = await install.load(RENAMED)
+
+    after = registry.async_get(original_entity_id)
+    assert after is not None
+    assert after.original_name is not None
+    assert after.original_name.startswith(RENAMED)
+    assert reloaded.entity_id == original_entity_id  # R5: the id did not move
+    assert after.name is None  # R4: the registry's `name` was never written
+
+
+@pytest.mark.parametrize("make_install", CIRCUIT_INSTALLS, ids=PLATFORM_IDS)
+async def test_a_name_the_user_set_is_not_overridden_by_a_span_app_rename(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    device_and_entity_parts: None,
+    make_install: _CircuitInstall,
+) -> None:
+    """A user who named an entity has said what it is called, and the panel has not.
+
+    The reload is skipped as well as the name: reloading could not change what
+    is displayed while the registry holds a `name`, so asking for one would be a
+    whole-entry teardown that no user could see the point of.
+    """
+    install = make_install(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    entity = await install.load(ORIGINAL_NAME)
+
+    registry = er.async_get(hass)
+    registry.async_update_entity(entity.entity_id, name="Beverage Cooling")
+
+    await install.rename_on_the_panel(RENAMED)
+    install.coordinator.request_reload.assert_not_called()
+
+    await install.load(RENAMED)
+
+    after = registry.async_get(entity.entity_id)
+    assert after is not None
+    assert after.name == "Beverage Cooling"
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [(FRIENDLY_NAMES, RENAMED_ENTITY_ID), (CIRCUIT_NUMBERS, CIRCUIT_NUMBERS_ENTITY_ID)],
+    ids=["friendly", "circuit_numbers"],
+)
+async def test_what_recreate_offers_after_a_pushed_rename_depends_on_the_mode(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    device_and_entity_parts: None,
+    mode: dict[str, bool],
+    expected: str,
+) -> None:
+    """The two modes part company at the offer, and nowhere earlier.
+
+    Both followed the same push and the same reload, and both display the new
+    name. What differs is what Recreate proposes: friendly names offers the
+    renamed id, which is issue #252; circuit numbers offers the entity its own
+    id, because an id that follows the breaker position is the point of the
+    mode and a whole-panel rename would undo it.
+    """
+    hass.config_entries.async_update_entry(entry, options=dict(mode))
+    install = _SensorInstall(hass, entry)
+    await install.load(ORIGINAL_NAME)
+    await install.load(ORIGINAL_NAME)
+
+    await install.rename_on_the_panel(RENAMED)
+    sensor = await install.load(RENAMED)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(sensor.entity_id)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == expected
