@@ -918,6 +918,131 @@ async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
     assert registry.async_regenerate_entity_id(registry_entry) == seeded.entity_id
 
 
+# --- A panel device name this integration generated ---------------------------
+#
+# The config flow names the device: the second panel on a system becomes "Span
+# Panel 2" without anyone typing it (`get_unique_device_name`). Composition
+# spells the DEVICE part from that name, while every circuit id already on that
+# panel says `span_panel_` -- the literal the preset builder fell back to on
+# every install. Offering `sensor.span_panel_2_...` would be offering a move
+# this integration caused, which R1 forbids. A name the *user* gave the device
+# is theirs, and an id that follows it is one they asked for.
+
+SECOND_PANEL_NAME = "Span Panel 2"
+
+
+@pytest.fixture
+def second_panel_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Return the config entry of a second panel, whose device name was generated."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_HOST: "192.168.1.51", "device_name": SECOND_PANEL_NAME},
+        options=dict(FRIENDLY_NAMES),
+        title=SECOND_PANEL_NAME,
+        unique_id=SERIAL,
+        entry_id="entry-recreate-second",
+    )
+    config_entry.add_to_hass(hass)
+    return config_entry
+
+
+async def test_an_existing_sensor_on_a_generated_second_panel_is_offered_its_own_id(
+    hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """The whole panel's worth of ids the generated name would otherwise move."""
+    seeded = _seed_power_entity(hass, second_panel_entry, "span_panel_refrigerator_power")
+
+    install = _SensorInstall(hass, second_panel_entry)
+    await install.load(ORIGINAL_NAME)
+    sensor = await install.load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == seeded
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(seeded)
+    assert registry_entry is not None
+    assert registry.async_regenerate_entity_id(registry_entry) == seeded
+
+
+async def test_the_controls_on_a_generated_second_panel_are_offered_their_own_ids(
+    hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """The breaker switch and the priority select carry the same ids and the same rule."""
+    registry = er.async_get(hass)
+    seeded_switch = registry.async_get_or_create(
+        "switch",
+        DOMAIN,
+        build_switch_unique_id(SERIAL, CIRCUIT_ID),
+        suggested_object_id="span_panel_refrigerator_breaker",
+        config_entry=second_panel_entry,
+    )
+    seeded_select = registry.async_get_or_create(
+        "select",
+        DOMAIN,
+        build_select_unique_id(SERIAL, CIRCUIT_ID),
+        suggested_object_id="span_panel_refrigerator_circuit_priority",
+        config_entry=second_panel_entry,
+    )
+
+    switches = _SwitchInstall(hass, second_panel_entry)
+    await switches.load(ORIGINAL_NAME)
+    switch = await switches.load(ORIGINAL_NAME)
+    selects = _SelectInstall(hass, second_panel_entry)
+    await selects.load(ORIGINAL_NAME)
+    select = await selects.load(ORIGINAL_NAME)
+
+    assert switch.entity_id == seeded_switch.entity_id
+    assert select.entity_id == seeded_select.entity_id
+
+    switch_entry = registry.async_get(seeded_switch.entity_id)
+    assert switch_entry is not None
+    assert registry.async_regenerate_entity_id(switch_entry) == seeded_switch.entity_id
+
+    select_entry = registry.async_get(seeded_select.entity_id)
+    assert select_entry is not None
+    assert registry.async_regenerate_entity_id(select_entry) == seeded_select.entity_id
+
+
+async def test_a_new_sensor_on_a_generated_second_panel_composes_with_that_name(
+    hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """The exception is for ids that exist. A new entity is spelled with its own device."""
+    sensor = await _SensorInstall(hass, second_panel_entry).load(ORIGINAL_NAME)
+
+    assert sensor.entity_id == "sensor.span_panel_2_refrigerator_power"
+
+
+async def test_a_panel_device_the_user_renamed_is_offered_the_renamed_id(
+    hass: HomeAssistant, second_panel_entry: MockConfigEntry, device_and_entity_parts: None
+) -> None:
+    """R1 cuts both ways: a device the user named is a change the user made.
+
+    The generated name is still "Span Panel 2" underneath, so this is the case
+    that separates the two fields. Home Assistant composes from `name_by_user`
+    ahead of `name`, and so does the offer.
+    """
+    seeded = _seed_power_entity(hass, second_panel_entry, "span_panel_refrigerator_power")
+
+    install = _SensorInstall(hass, second_panel_entry)
+    await install.load(ORIGINAL_NAME)
+
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_device(identifiers={(DOMAIN, SERIAL)})
+    assert device is not None
+    device_registry.async_update_device(device.id, name_by_user="Garage Panel")
+
+    await install.load(ORIGINAL_NAME)
+
+    registry = er.async_get(hass)
+    registry_entry = registry.async_get(seeded)
+    assert registry_entry is not None
+    assert registry_entry.entity_id == seeded  # R5: nothing moved
+    assert (
+        registry.async_regenerate_entity_id(registry_entry)
+        == "sensor.garage_panel_refrigerator_power"
+    )
+
+
 # --- The two circuit controls -------------------------------------------------
 #
 # The breaker switch and the priority select are the other two circuit entities

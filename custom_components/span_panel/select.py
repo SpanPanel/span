@@ -175,6 +175,7 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
             existing_entity_id=existing_entity_id,
             use_device_prefix=use_device_prefix,
             is_sub_device=False,
+            device_name=self._generated_panel_device_name(coordinator, snapshot),
         )
         if preset is not None:
             self.entity_id = preset

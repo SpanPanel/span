@@ -108,6 +108,41 @@ def test_a_renamed_circuit_takes_the_new_name_and_reads_the_suffix_from_its_id()
     )
 
 
+@pytest.mark.parametrize(
+    ("identifier", "suffix", "existing", "expected"),
+    [
+        # A circuit named "Current". The id's trailing `_current_power` is the
+        # identifier followed by `power`, not the `current_power` spelling of the
+        # suffix -- reading it as the latter proposed `..._current_current_power`.
+        ("Current", "power", "sensor.span_panel_current_power", "Current power"),
+        # A circuit named "Solar Power" whose id kept both halves. The omission
+        # rule looks only at the identifier, so it proposed `..._solar_power` and
+        # offered every such circuit a rename.
+        ("Solar Power", "power", "sensor.span_panel_solar_power_power", "Solar Power power"),
+        # The same circuit on an install whose id did omit them.
+        ("Solar Power", "power", "sensor.span_panel_solar_power", "Solar Power"),
+        # Both, on an install with no device prefix: the identifier opens the
+        # object id rather than following an underscore.
+        ("Solar Power", "power", "sensor.solar_power_power", "Solar Power power"),
+        ("Solar Power", "power", "sensor.solar_power", "Solar Power"),
+        # A circuit named exactly "Power", which never omitted anything.
+        ("Power", "power", "sensor.span_panel_power_power", "Power power"),
+    ],
+)
+def test_the_suffix_is_read_back_from_what_follows_the_identifier(
+    identifier: str, suffix: str, existing: str, expected: str
+) -> None:
+    """Where the id names this circuit, what follows the name settles both halves.
+
+    Both halves, because they are one question: an id that spells the identifier
+    and then a known form carries that form and omitted nothing, and an id that
+    stops at the identifier omitted the form. Reading the suffix by a plain
+    `endswith` and then deciding omission from the identifier alone answered
+    each half without the other, and disagreed with the id in both directions.
+    """
+    assert circuit_object_id_base(identifier, suffix, existing) == expected
+
+
 def test_every_form_table_entry_has_a_new_wording_and_vice_versa() -> None:
     assert set(ENTITY_ID_SUFFIX_FORMS) == set(NEW_ENTITY_ID_SUFFIX_WORDS)
     for suffix, words in NEW_ENTITY_ID_SUFFIX_WORDS.items():
@@ -252,6 +287,7 @@ def test_a_new_entity_composes_whatever_the_install_looks_like() -> None:
             existing_entity_id=None,
             use_device_prefix=False,
             is_sub_device=True,
+            device_name=LEGACY_PRESET_DEVICE_NAME,
         )
         is None
     )
@@ -267,6 +303,7 @@ def test_an_ordinary_existing_entity_composes_too() -> None:
             existing_entity_id="switch.span_panel_kitchen_outlets_breaker",
             use_device_prefix=True,
             is_sub_device=False,
+            device_name=LEGACY_PRESET_DEVICE_NAME,
         )
         is None
     )
@@ -282,6 +319,7 @@ def test_an_existing_entity_on_a_no_prefix_install_keeps_its_bare_id() -> None:
             existing_entity_id="select.kitchen_outlets_circuit_priority",
             use_device_prefix=False,
             is_sub_device=False,
+            device_name=LEGACY_PRESET_DEVICE_NAME,
         )
         == "select.kitchen_outlets_circuit_priority"
     )
@@ -297,6 +335,7 @@ def test_an_existing_sub_device_entity_keeps_the_panel_prefix() -> None:
             existing_entity_id="sensor.span_panel_kitchen_outlets_power",
             use_device_prefix=True,
             is_sub_device=True,
+            device_name=LEGACY_PRESET_DEVICE_NAME,
         )
         == "sensor.span_panel_kitchen_outlets_power"
     )
@@ -312,8 +351,99 @@ def test_the_kept_id_still_follows_a_circuit_rename() -> None:
             existing_entity_id="switch.kitchen_outlets_breaker",
             use_device_prefix=False,
             is_sub_device=False,
+            device_name=LEGACY_PRESET_DEVICE_NAME,
         )
         == "switch.beer_fridge_breaker"
+    )
+
+
+# --- A panel device this integration named, rather than the user ---------------
+#
+# The config flow generates the device name: the second panel on a system is
+# called "Span Panel 2" without anyone typing it. Composition spells the DEVICE
+# part from that name, while every existing circuit id on that panel says
+# `span_panel_` -- the literal the preset builder fell back to. That difference
+# is ours, so those ids are kept. A name the *user* gave the device is theirs,
+# and an id following it is one they caused.
+
+
+def test_a_generated_panel_device_name_keeps_an_existing_id() -> None:
+    """Nobody typed "Span Panel 2", so nobody asked for `sensor.span_panel_2_...`."""
+    assert (
+        legacy_preset_for_existing(
+            "sensor",
+            identifier="Kitchen Outlets",
+            suffix="power",
+            existing_entity_id="sensor.span_panel_kitchen_outlets_power",
+            use_device_prefix=True,
+            is_sub_device=False,
+            device_name="Span Panel 2",
+        )
+        == "sensor.span_panel_kitchen_outlets_power"
+    )
+
+
+def test_the_first_panels_generated_name_composes_because_it_agrees() -> None:
+    """The first panel is named "Span Panel", which is what its ids already say."""
+    assert (
+        legacy_preset_for_existing(
+            "sensor",
+            identifier="Kitchen Outlets",
+            suffix="power",
+            existing_entity_id="sensor.span_panel_kitchen_outlets_power",
+            use_device_prefix=True,
+            is_sub_device=False,
+            device_name=LEGACY_PRESET_DEVICE_NAME,
+        )
+        is None
+    )
+
+
+def test_a_device_not_in_the_registry_yet_composes() -> None:
+    """No device means a first-ever setup, and nothing existing to protect."""
+    assert (
+        legacy_preset_for_existing(
+            "sensor",
+            identifier="Kitchen Outlets",
+            suffix="power",
+            existing_entity_id="sensor.span_panel_kitchen_outlets_power",
+            use_device_prefix=True,
+            is_sub_device=False,
+            device_name=None,
+        )
+        is None
+    )
+
+
+def test_a_generated_panel_device_name_does_not_reach_a_new_entity() -> None:
+    """A new entity composes on every install; the exception is for ids that exist."""
+    assert (
+        legacy_preset_for_existing(
+            "sensor",
+            identifier="Kitchen Outlets",
+            suffix="power",
+            existing_entity_id=None,
+            use_device_prefix=True,
+            is_sub_device=False,
+            device_name="Span Panel 2",
+        )
+        is None
+    )
+
+
+def test_a_generated_name_that_slugifies_the_same_composes() -> None:
+    """The config entry spells it "SPAN Panel"; the id says `span_panel` either way."""
+    assert (
+        legacy_preset_for_existing(
+            "sensor",
+            identifier="Kitchen Outlets",
+            suffix="power",
+            existing_entity_id="sensor.span_panel_kitchen_outlets_power",
+            use_device_prefix=True,
+            is_sub_device=False,
+            device_name="SPAN Panel",
+        )
+        is None
     )
 
 
@@ -408,3 +538,56 @@ def test_without_a_base_core_gets_the_stock_answer() -> None:
     """Panel, BESS, EVSE and MID entities keep composing from their name."""
     probe = _Probe()
     assert probe.suggested_object_id == "Display Name"
+
+
+# --- Which panel device names this integration generated ----------------------
+
+from homeassistant.helpers import device_registry as dr
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.span_panel.naming import generated_panel_device_name
+
+_DEVICE_SERIAL = "sp3-naming-001"
+
+
+def _register_panel(
+    hass: HomeAssistant, name: str, *, name_by_user: str | None = None
+) -> MockConfigEntry:
+    """Register a panel device under a config entry, optionally renamed by the user."""
+    config_entry = MockConfigEntry(domain=DOMAIN, entry_id="entry-naming", unique_id=_DEVICE_SERIAL)
+    config_entry.add_to_hass(hass)
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(DOMAIN, _DEVICE_SERIAL)},
+        name=name,
+    )
+    if name_by_user is not None:
+        device_registry.async_update_device(device.id, name_by_user=name_by_user)
+    return config_entry
+
+
+async def test_the_name_the_config_flow_generated_is_reported(hass: HomeAssistant) -> None:
+    """The config flow invented "Span Panel 2" for the second panel; nobody typed it."""
+    config_entry = _register_panel(hass, "Span Panel 2")
+
+    assert (
+        generated_panel_device_name(hass, config_entry.entry_id, _DEVICE_SERIAL) == "Span Panel 2"
+    )
+
+
+async def test_a_device_the_user_renamed_has_no_generated_name(hass: HomeAssistant) -> None:
+    """`name_by_user` is the user's field, and Home Assistant composes ids from it first."""
+    config_entry = _register_panel(hass, "Span Panel 2", name_by_user="Garage Panel")
+
+    assert generated_panel_device_name(hass, config_entry.entry_id, _DEVICE_SERIAL) is None
+
+
+async def test_a_panel_with_no_device_registered_yet_has_no_name(hass: HomeAssistant) -> None:
+    """The first-ever setup, where entities are built before the device exists."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN, entry_id="entry-naming-empty", unique_id=_DEVICE_SERIAL
+    )
+    config_entry.add_to_hass(hass)
+
+    assert generated_panel_device_name(hass, config_entry.entry_id, _DEVICE_SERIAL) is None

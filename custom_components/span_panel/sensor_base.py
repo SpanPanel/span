@@ -158,7 +158,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                 if parts is not None:
                     identifier, suffix = parts
                     preset = self._preset_composition_would_move(
-                        identifier, suffix, existing_entity_id
+                        snapshot, identifier, suffix, existing_entity_id
                     )
                     if preset is not None:
                         self.entity_id = preset
@@ -236,7 +236,11 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         return None
 
     def _preset_composition_would_move(
-        self, identifier: str, suffix: str, existing_entity_id: str | None
+        self,
+        snapshot: SpanPanelSnapshot,
+        identifier: str,
+        suffix: str,
+        existing_entity_id: str | None,
     ) -> str | None:
         """Return the id to go on presetting, or None to let Core compose one.
 
@@ -246,6 +250,10 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         preset this entity's id at all. The hidden unmapped-tab sensors say no,
         and an id Home Assistant has always composed cannot be moved by handing
         Home Assistant the job.
+
+        `snapshot` is taken rather than read off the coordinator because it is
+        the snapshot this entity is being built from, and it carries the serial
+        the panel's device is registered under.
         """
         if not self._id_was_preset_by_this_integration:
             return None
@@ -257,6 +265,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             existing_entity_id=existing_entity_id,
             use_device_prefix=use_device_prefix,
             is_sub_device=self._is_sub_device,
+            device_name=self._generated_panel_device_name(self.coordinator, snapshot),
         )
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:

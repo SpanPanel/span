@@ -109,16 +109,20 @@ working entirely in 2027.8.
 - **Nothing you already have moves**: an entity keeps the id it has until you press **Recreate entity IDs**, which offers an entity its own id back where
   nothing changed, and an id reflecting your own configuration where something did — a circuit you renamed, an area you assigned, or the name you gave the panel
   device.
-- **A panel whose device is not named "Span Panel"** — a second panel, or one you renamed — is now offered ids carrying that real device name, because the old
-  scheme spelled every circuit id `span_panel_` no matter what the device was called.
+- **A second panel keeps the ids it has.** Its device is called "Span Panel 2" because this integration named it that, not because you did, so the circuit
+  entities already on it are still offered their own `span_panel_` ids; only circuits added from this release on are spelled `span_panel_2_`.
+- **A panel device you renamed yourself is offered ids carrying that name**, since that is a change you made — the old scheme spelled every circuit id
+  `span_panel_` no matter what the device was called.
 - **New circuit energy sensors get `consumed_energy`, `produced_energy` and `net_energy`**, the same word order as the panel-level energy sensors; existing
   sensors keep the spelling they have, whichever of the two it is, and are never offered the other one.
 - **Circuit sensors on a SPAN Drive's feed circuit are named for the charger alone**, for sensors created from this release on — `sensor.<charger>_power`,
   matching the charger's other sensors — while the ones you already have go on naming the panel.
 - **The legacy `use_device_prefix` option can no longer keep the device out of a _new_ entity's id**, since Home Assistant includes the device unless your own
   entity-id settings exclude it; the entities such an installation already has are untouched.
-- **An unnamed circuit in friendly-names mode is now named for the tab it occupies** (`Circuit 7 Power`) instead of taking Home Assistant's generic default, so
-  two unnamed circuits no longer collide.
+- **An unnamed circuit in friendly-names mode is now named for the tab it occupies** (`Circuit 7 Power`), so two unnamed circuits no longer collide — the old
+  scheme called every one of them `single_circuit` and let the registry tell them apart with `_2`, `_3`.
+- **An unnamed circuit you already have may be offered a `circuit_7` id** if you press **Recreate entity IDs**, which is the one place this release proposes a
+  new id for a circuit you did not rename. Its current id keeps working until you accept.
 - **Circuit-numbers installations now show the device in the displayed name** — `Span Panel Kitchen Outlets Power`, as friendly-names installations always have
   — so a template or a voice alias matching the old exact string needs updating.
 - **A name you set in an entity's own settings still outranks the panel's**, and this integration no longer writes that field, clearing only the value an older
