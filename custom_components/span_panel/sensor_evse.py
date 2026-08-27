@@ -11,12 +11,9 @@ from .coordinator import SpanPanelCoordinator
 from .helpers import build_evse_unique_id_for_entry, resolve_evse_display_suffix
 from .sensor_base import SpanSensorBase
 from .sensor_definitions import SpanEvseSensorEntityDescription
-from .util import evse_device_info
+from .util import EMPTY_EVSE, evse_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
-
-# Fallback EVSE snapshot used when the EVSE disappears mid-session
-_EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
 
 
 class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSnapshot]):
@@ -42,7 +39,7 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
         )
         panel_identifier = snapshot.serial_number
 
-        evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
+        evse = snapshot.evse.get(evse_id, EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
         self._attr_device_info = evse_device_info(
@@ -67,4 +64,4 @@ class SpanEvseSensor(SpanSensorBase[SpanEvseSensorEntityDescription, SpanEvseSna
 
     def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanEvseSnapshot:
         """Get the EVSE snapshot for this sensor's charger."""
-        return snapshot.evse.get(self._evse_id, _EMPTY_EVSE)
+        return snapshot.evse.get(self._evse_id, EMPTY_EVSE)

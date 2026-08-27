@@ -44,7 +44,7 @@ from .helpers import (
     resolve_evse_display_suffix,
 )
 from .runtime import SpanPanelConfigEntry
-from .util import bess_device_info, evse_device_info, pv_device_info
+from .util import EMPTY_EVSE, bess_device_info, evse_device_info, pv_device_info
 
 # pylint: disable=invalid-overridden-method
 
@@ -522,9 +522,6 @@ This one is created per charger and only where the record exists, following
 `bess_connected` and `pcs_active` rather than its two neighbours.
 """
 
-# Fallback EVSE snapshot used when the EVSE disappears mid-session
-_EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
-
 
 class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
     """EVSE (EV charger) binary sensor entity."""
@@ -552,7 +549,7 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
         )
         panel_identifier = snapshot.serial_number
 
-        evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
+        evse = snapshot.evse.get(evse_id, EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
         self._attr_device_info = evse_device_info(
@@ -578,7 +575,7 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
             return
 
         snapshot = self.coordinator.data
-        evse = snapshot.evse.get(self._evse_id, _EMPTY_EVSE)
+        evse = snapshot.evse.get(self._evse_id, EMPTY_EVSE)
         self._attr_is_on = self._value_fn(evse)
         super()._handle_coordinator_update()
 

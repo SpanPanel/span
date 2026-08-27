@@ -59,14 +59,11 @@ from .entity import SpanPanelEntity
 from .field_paths import DerivedReason, FieldPathDeclarationMixin
 from .helpers import build_evse_unique_id_for_entry, resolve_evse_display_suffix
 from .runtime import SpanPanelConfigEntry
-from .util import evse_device_info
+from .util import EMPTY_EVSE, evse_device_info
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
-
-_EMPTY_EVSE = SpanEvseSnapshot(node_id="", feed_circuit_id="")
-"""Fallback for a charger that disappears mid-session, as the other EVSE platforms use."""
 
 
 @dataclass(frozen=True)
@@ -163,7 +160,7 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
             )
             or "Span Panel"
         )
-        evse = snapshot.evse.get(evse_id, _EMPTY_EVSE)
+        evse = snapshot.evse.get(evse_id, EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
         self._attr_device_info = evse_device_info(
             snapshot.serial_number,
@@ -186,8 +183,8 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
     def _evse(self) -> SpanEvseSnapshot:
         snapshot: SpanPanelSnapshot | None = self.coordinator.data
         if snapshot is None:
-            return _EMPTY_EVSE
-        return snapshot.evse.get(self._evse_id, _EMPTY_EVSE)
+            return EMPTY_EVSE
+        return snapshot.evse.get(self._evse_id, EMPTY_EVSE)
 
     def _apply(self, evse: SpanEvseSnapshot) -> None:
         """Take the reading and the bound the panel currently publishes.

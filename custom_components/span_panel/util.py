@@ -188,6 +188,18 @@ def mid_device_info(
     )
 
 
+EMPTY_EVSE: Final = SpanEvseSnapshot(node_id="", feed_circuit_id="")
+"""Stand-in for a charger that has left the snapshot mid-session.
+
+One instance rather than one per platform: the binary sensor, the number and the
+sensor each carried their own, and a fallback that differs between platforms is
+one charger rendering three ways. Safe to share because `SpanEvseSnapshot` is
+frozen -- every field below the two ids is the `None` the library gives an
+unpublished property, so a charger that has gone away reads exactly like one that
+never published, which is what the builder below already handles.
+"""
+
+
 def evse_device_info(
     panel_identifier: str,
     evse: SpanEvseSnapshot,
