@@ -25,7 +25,7 @@
   "requirements": [
     "span-panel-api==3.1.1",
     "span-panel-api-schema-0==1.1.1",
-    "span-panel-api-schema-1==1.1.1"
+    "span-panel-api-schema-1==1.1.2"
   ],
   "version": "2.1.0b19",
   "zeroconf": [

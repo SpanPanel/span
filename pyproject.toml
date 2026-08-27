@@ -14,7 +14,7 @@ dependencies = [
     # to be installed for discovery to see it. manifest.json carries the same three,
     # and that is the list Home Assistant actually reads.
     "span-panel-api-schema-0==1.1.1",
-    "span-panel-api-schema-1==1.1.1",
+    "span-panel-api-schema-1==1.1.2",
 ]
 
 [dependency-groups]

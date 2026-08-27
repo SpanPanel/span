@@ -244,7 +244,7 @@ def _evse_links_by_feed(
 # ---------------------------------------------------------------------------
 
 
-def test_the_capture_publishes_a_link_record_for_three_ders_and_two_bare_circuits() -> None:
+def test_the_capture_publishes_a_link_record_for_three_ders_and_three_bare_circuits() -> None:
     """Guard every expectation below, and the negative case with them.
 
     Three DER-feeding circuits publish the record; the remaining circuits
@@ -264,7 +264,7 @@ def test_the_capture_publishes_a_link_record_for_three_ders_and_two_bare_circuit
         assert tree[circuit][FEEDS_STATUS_TOPIC] in _status_options()
 
     bare = circuits - feeding
-    assert len(bare) == 2, f"expected two circuits feeding no DER, found {len(bare)}"
+    assert len(bare) == 3, f"expected three circuits feeding no DER, found {len(bare)}"
     for circuit in bare:
         declared = json.loads(tree[circuit]["$description"])["nodes"]
         assert CONNECTION_NODE in declared, (
@@ -388,7 +388,7 @@ async def test_a_charger_whose_circuit_publishes_no_record_gets_no_entity(
 
 
 async def test_the_circuits_that_feed_no_der_create_nothing(hass: HomeAssistant) -> None:
-    """The capture's two bare circuits, asserted as producing no entity.
+    """The capture's three bare circuits, asserted as producing no entity.
 
     The `feeds-*` triple is absent from a mixed-load circuit by design, so the
     count of link sensors must equal the count of DER the capture claims — three

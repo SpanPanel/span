@@ -2602,7 +2602,7 @@ requires-dist = [{ name = "span-panel-api", editable = "../../span/span-panel-ap
 
 [[package]]
 name = "span-panel-api-schema-1"
-version = "1.1.1"
+version = "1.1.2"
 source = { editable = "../../span/span-panel-api/packages/schema-1" }
 dependencies = [
     { name = "ebus-sdk" },
