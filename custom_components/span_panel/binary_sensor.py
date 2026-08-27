@@ -299,18 +299,15 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
             return False
 
         # Panel status sensor should always be available to show online/offline state
-        if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
+        if self.entity_description.key == PANEL_STATUS:
             return True
 
         if not self._transport_available:
             return False
 
         # Hardware status sensors should remain available when offline to show Unknown
-        if (
-            hasattr(self.entity_description, "key")
-            and self.entity_description.key in _HARDWARE_STATUS_SENSORS
-        ):
-            if getattr(self.coordinator, "panel_offline", False):
+        if self.entity_description.key in _HARDWARE_STATUS_SENSORS:
+            if self.coordinator.panel_offline:
                 return True
 
         if getattr(self, "_attr_available", True) is False:
@@ -321,7 +318,7 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         # Special handling for panel_status sensor
-        if hasattr(self.entity_description, "key") and self.entity_description.key == PANEL_STATUS:
+        if self.entity_description.key == PANEL_STATUS:
             # Both flags, because both mean "no panel at the other end". A dead
             # transport is deliberately not marked offline -- that flag makes
             # the other entities hold their last reading -- and reading it here
@@ -336,10 +333,7 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
 
         # Check for panel offline status first to prevent accessing None data
         if self.coordinator.panel_offline or self.coordinator.data is None:
-            if (
-                hasattr(self.entity_description, "key")
-                and self.entity_description.key in _HARDWARE_STATUS_SENSORS
-            ):
+            if self.entity_description.key in _HARDWARE_STATUS_SENSORS:
                 self._attr_is_on = None
                 self._attr_available = True
                 _LOGGER.debug(

@@ -46,10 +46,9 @@ def _unnamed_circuit_fallback(circuit: SpanCircuitSnapshot, circuit_id: str) -> 
     PV circuits use "Solar" (matching v1 naming), EVSE circuits use "EV Charger",
     all others use tab-based naming.
     """
-    device_type = getattr(circuit, "device_type", "circuit")
-    if device_type in _SOLAR_DEVICE_TYPES:
+    if circuit.device_type in _SOLAR_DEVICE_TYPES:
         return "Solar"
-    if device_type in _EVSE_DEVICE_TYPES:
+    if circuit.device_type in _EVSE_DEVICE_TYPES:
         return "EV Charger"
     return construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
 

@@ -22,7 +22,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from span_panel_api import SpanMqttClient, SpanPanelClientProtocol, SpanPanelSnapshot
+from span_panel_api import SpanMqttClient, SpanPanelSnapshot
 from span_panel_api.exceptions import (
     SpanPanelAuthError,
     SpanPanelCAChangedError,
@@ -521,15 +521,9 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     def _run_schema_validation(self) -> None:
         """Classify the adapter's field metadata once at startup.
 
-        Reads the metadata through ``SpanPanelClientProtocol`` so this module
-        never names a transport class, and stores the result for the platforms
-        and the Repairs reconciler to read.
+        Stores the result for the platforms and the Repairs reconciler to read.
         """
-        field_metadata = (
-            self._client.field_metadata
-            if isinstance(self._client, SpanPanelClientProtocol)
-            else None
-        )
+        field_metadata = self._client.field_metadata
 
         if field_metadata is None:
             # "Unknown", NOT "nothing is wrong". `field_metadata` is None for the

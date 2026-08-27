@@ -351,15 +351,8 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             return False
         if not self._transport_available:
             return False
-        try:
-            if getattr(self.coordinator, "panel_offline", False):
-                return True
-        except AttributeError as err:
-            # If coordinator is missing expected attribute, log and fall back
-            _LOGGER.debug("Availability check: missing coordinator attribute: %s", err)
-        except Exception as err:  # noqa: BLE001  # pragma: no cover - defensive
-            # Any unexpected error shouldn't crash the availability check
-            _LOGGER.debug("Availability check: unexpected error: %s", err)
+        if self.coordinator.panel_offline:
+            return True
         return super().available
 
     @property
@@ -856,7 +849,7 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 attributes["grace_period_remaining"] = str(remaining_minutes)
 
                 # Indicate if we're currently using grace period
-                panel_offline = getattr(self.coordinator, "panel_offline", False)
+                panel_offline = self.coordinator.panel_offline
                 if panel_offline and remaining_seconds > 0:
                     attributes["using_grace_period"] = "True"
 

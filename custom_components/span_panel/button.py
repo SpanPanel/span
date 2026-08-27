@@ -98,7 +98,7 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         """
         if not self._transport_available:
             return False
-        if getattr(self.coordinator, "panel_offline", False):
+        if self.coordinator.panel_offline:
             return False
         if not super().available:
             return False
