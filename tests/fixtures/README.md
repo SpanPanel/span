@@ -28,7 +28,7 @@ Both payloads shipped as package data until recently, and this repository import
 | File here                | Path before `span-panel-api#162`                                                          |
 | ------------------------ | ----------------------------------------------------------------------------------------- |
 | `schema_zero_types.json` | `src/span_panel_api/reference_payloads/homie_schema.json`                                 |
-| `schema_one_tree.json`   | `packages/schema-1/src/span_panel_api_schema_1/reference_payloads/parent_child_tree.json` |
+| `schema_one_tree.json`   | `tests/reference_payloads/parent_child_tree.json` |
 
 `span-panel-api#162` takes both back out of the wheels and moves them to `tests/reference_payloads/`, so the paths in the first table are the ones to copy from
 now. The byte comparison below checks both locations for the tree, newest first, so it works against a checkout on either side of that merge; the older path can
@@ -55,7 +55,7 @@ They catch different failures, and neither one substitutes for the other.
 `schema_one_tree.source` records the release the capture was copied from, as a pinned requirement:
 
 ```text
-span-panel-api-schema-1==1.1.0
+span-panel-api-schema-1==1.1.1
 ```
 
 `tests/test_fixture_provenance.py` holds that against `importlib.metadata.version("span-panel-api-schema-1")` — the release actually installed. When the pin in
