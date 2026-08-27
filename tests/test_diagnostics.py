@@ -6,6 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from homeassistant.components.diagnostics import REDACTED
+from homeassistant.const import CONF_ACCESS_TOKEN
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_PASSWORD,
@@ -16,9 +21,6 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
-from homeassistant.const import CONF_ACCESS_TOKEN
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -26,8 +28,6 @@ from .factories import (
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
 )
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 async def test_config_entry_diagnostics_includes_redacted_runtime_data(

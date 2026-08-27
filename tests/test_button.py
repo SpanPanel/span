@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
 
@@ -15,12 +18,8 @@ from custom_components.span_panel.button import (
 )
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.control_gate import ControlPolicy
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 
 from .factories import SpanBatterySnapshotFactory, SpanPanelSnapshotFactory
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _make_button_coordinator(snapshot) -> MagicMock:

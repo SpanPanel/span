@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 from span_panel_api import SpanBatterySnapshot
 from span_panel_api.exceptions import SpanPanelServerError
@@ -15,7 +16,6 @@ from custom_components.span_panel.button import (
 from custom_components.span_panel.helpers import has_bess
 from custom_components.span_panel.sensor_definitions import BESS_METADATA_SENSORS
 from custom_components.span_panel.sensor_panel import _grid_forming_device_name
-from homeassistant.exceptions import HomeAssistantError
 
 from .factories import SpanPanelSnapshotFactory
 
