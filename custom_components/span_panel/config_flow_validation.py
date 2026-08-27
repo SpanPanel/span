@@ -113,13 +113,33 @@ def is_fqdn(host: str) -> bool:
     return "." in host
 
 
-async def check_fqdn_tls_ready(
-    hass: HomeAssistant,
-    fqdn: str,
-    mqtts_port: int,
-    ca_pem: str | None,
-    http_port: int = 80,
-) -> bool:
+async def async_download_ca_or_none(
+    hass: HomeAssistant, fqdn: str, http_port: int = 80
+) -> str | None:
+    """Fetch the panel's CA over plain HTTP, or None when it cannot be had.
+
+    Plaintext, and only for the caller that genuinely holds no anchor -- a
+    reconfigure of an entry whose CA fetch never succeeded -- where this is the
+    only channel there is and is no weaker than the unpinned entry it belongs to.
+
+    Separate from the check below because acquiring an anchor and testing a leaf
+    against one are different jobs on different schedules: the leaf changes while
+    the panel regenerates it, the anchor does not. Only a caller knows whether it
+    is polling, so only a caller can decide how often to pay for this.
+    """
+    client = get_async_client(hass, verify_ssl=False)
+    try:
+        return await download_ca_cert(fqdn, port=http_port, httpx_client=client)
+    except (
+        OSError,
+        SpanPanelAPIError,
+        SpanPanelConnectionError,
+        SpanPanelTimeoutError,
+    ):
+        return None
+
+
+async def check_fqdn_tls_ready(fqdn: str, mqtts_port: int, ca_pem: str) -> bool:
     """Whether the panel now serves a certificate that names `fqdn`.
 
     A TLS connection is made to the MQTTS port with the FQDN as
@@ -127,31 +147,14 @@ async def check_fqdn_tls_ready(
     means the panel has regenerated its leaf to include the FQDN, which is what
     this is polling for.
 
-    `ca_pem` is the anchor the caller already pinned, and passing it is the
-    point: this used to refetch the CA over plain HTTP on every poll, which
-    means a fresh trust decision every two seconds against whatever answered,
-    made against a panel the caller had already anchored. Anything that can
-    answer that fetch can also serve a leaf signed by the CA it just handed
-    over, so the poll would have reported the FQDN ready on a certificate the
-    pinned anchor does not sign.
-
-    `None` is for the one caller that genuinely holds no anchor -- a
-    reconfigure of an entry whose CA fetch never succeeded -- where the
-    plaintext fetch is the only channel there is and is no weaker than the
-    unpinned entry it belongs to.
+    `ca_pem` is the anchor the caller already holds, and requiring it is the
+    point: this used to refetch the CA over plain HTTP whenever it was not
+    given, which means a fresh trust decision every two seconds against whatever
+    answered. Anything that can answer that fetch can also serve a leaf signed by
+    the CA it just handed over, so the poll would have reported the FQDN ready on
+    a certificate the real anchor does not sign. A caller with no anchor of its
+    own gets one from `async_download_ca_or_none`, once.
     """
-    if ca_pem is None:
-        client = get_async_client(hass, verify_ssl=False)
-        try:
-            ca_pem = await download_ca_cert(fqdn, port=http_port, httpx_client=client)
-        except (
-            OSError,
-            SpanPanelAPIError,
-            SpanPanelConnectionError,
-            SpanPanelTimeoutError,
-        ):
-            return False
-
     return await async_leaf_chains_to_ca(fqdn, mqtts_port, ca_pem)
 
 

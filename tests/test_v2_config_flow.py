@@ -7,13 +7,13 @@ import logging
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
-import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
@@ -26,6 +26,7 @@ from custom_components.span_panel.config_flow import (
     SpanPanelConfigFlow,
     TriggerFlowType,
 )
+from custom_components.span_panel.config_flow_validation import PanelRestTransport
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -2655,6 +2656,46 @@ async def test_user_flow_fqdn_registration_progress_then_naming(
     assert result3["data"][CONF_PANEL_CA_PEM] == FAKE_CA_PEM
 
 
+@pytest.mark.asyncio
+async def test_an_anchorless_readiness_wait_fetches_the_ca_once(
+    hass: HomeAssistant,
+) -> None:
+    """The leaf changes while the panel regenerates it; the anchor does not.
+
+    An entry whose CA fetch never succeeded has no anchor of its own, so the
+    wait has to fetch one. It used to fetch a fresh one on every poll -- thirty
+    plaintext trust decisions, two seconds apart, each against whatever
+    answered. One fetch, held for the rest of the wait.
+    """
+    flow = SpanPanelConfigFlow()
+    flow.hass = hass
+    flow.host = "panel.example.com"
+    flow.access_token = "token"
+    flow._http_port = 80
+    flow._rest_transport = PanelRestTransport(
+        port=80, ssl_context=None, httpx_client=None, ca_pem=None
+    )
+
+    # False twice, then ready: the poll runs more than once, which is the only
+    # way a per-poll fetch would show up.
+    ready = AsyncMock(side_effect=[False, False, True])
+    download = AsyncMock(return_value="fetched-pem")
+
+    with (
+        patch("custom_components.span_panel.config_flow.register_fqdn", new=AsyncMock()),
+        patch("custom_components.span_panel.config_flow.async_download_ca_or_none", new=download),
+        patch("custom_components.span_panel.config_flow.check_fqdn_tls_ready", new=ready),
+        patch("custom_components.span_panel.config_flow.asyncio.sleep", new=AsyncMock()),
+        patch.object(flow, "_async_verify_host_over_pin", new=AsyncMock()),
+    ):
+        await flow._async_register_fqdn_and_wait()
+
+    assert ready.await_count == 3
+    download.assert_awaited_once()
+    # Every poll checked against the anchor that single fetch produced.
+    assert [call.args[2] for call in ready.await_args_list] == ["fetched-pem"] * 3
+
+
 @pytest.mark.usefixtures("socket_enabled")
 @pytest.mark.asyncio
 async def test_user_flow_fqdn_registration_failure_can_continue(
@@ -2829,6 +2870,11 @@ async def test_reconfigure_to_fqdn_registers_and_updates_registered_fqdn(
             "custom_components.span_panel.config_flow.register_fqdn",
             new=AsyncMock(),
         ),
+        # This entry pins no CA, so the readiness wait fetches one itself.
+        patch(
+            "custom_components.span_panel.config_flow.async_download_ca_or_none",
+            new=AsyncMock(return_value=FAKE_CA_PEM),
+        ),
         patch(
             "custom_components.span_panel.config_flow.check_fqdn_tls_ready",
             new=AsyncMock(return_value=True),
@@ -2881,6 +2927,11 @@ async def test_reconfigure_fqdn_failure_can_continue_without_registration(
         patch(
             "custom_components.span_panel.config_flow.register_fqdn",
             new=AsyncMock(),
+        ),
+        # This entry pins no CA, so the readiness wait fetches one itself.
+        patch(
+            "custom_components.span_panel.config_flow.async_download_ca_or_none",
+            new=AsyncMock(return_value=FAKE_CA_PEM),
         ),
         patch(
             "custom_components.span_panel.config_flow.check_fqdn_tls_ready",

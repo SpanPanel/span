@@ -46,6 +46,7 @@ from .config_flow_validation import (
     PanelCaUnusableError,
     PanelRestTransport,
     as_port,
+    async_download_ca_or_none,
     async_fetch_panel_ca,
     async_leaf_chains_to_ca,
     async_panel_leaf_host,
@@ -848,15 +849,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         mqtts_port = self._v2_broker_port or DEFAULT_MQTTS_PORT
         max_attempts = 30
+
+        # The leaf is what changes during this wait; the anchor is not. An entry
+        # that holds no CA of its own therefore fetches one once and keeps it,
+        # rather than making a fresh plaintext trust decision on each of thirty
+        # polls. Kept inside the loop so a fetch that fails while the panel is
+        # still coming back is retried rather than ending the wait.
+        ca_pem = transport.ca_pem
         for attempt in range(max_attempts):
             await asyncio.sleep(2)
-            if await check_fqdn_tls_ready(
-                self.hass,
-                self.host,
-                mqtts_port,
-                transport.ca_pem,
-                http_port=self._http_port,
-            ):
+            if ca_pem is None:
+                ca_pem = await async_download_ca_or_none(
+                    self.hass, self.host, http_port=self._http_port
+                )
+                if ca_pem is None:
+                    continue
+            if await check_fqdn_tls_ready(self.host, mqtts_port, ca_pem):
                 _LOGGER.debug(
                     "FQDN %s found in TLS cert SAN after %d attempts",
                     self.host,

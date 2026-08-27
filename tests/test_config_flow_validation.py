@@ -12,6 +12,7 @@ from span_panel_api.exceptions import SpanPanelConnectionError
 
 from custom_components.span_panel.config_flow_validation import (
     PanelRestTransport,
+    async_download_ca_or_none,
     async_leaf_chains_to_ca,
     async_resolve_host,
     check_fqdn_tls_ready,
@@ -183,7 +184,7 @@ async def test_validate_v2_helpers_send_credentials_over_the_given_transport() -
 
 
 @pytest.mark.asyncio
-async def test_check_fqdn_tls_ready_returns_false_when_ca_download_fails() -> None:
+async def test_the_ca_fetch_returns_none_when_the_panel_will_not_serve_one() -> None:
     """An unpinned caller that cannot fetch a CA has nothing to check against."""
     hass = MagicMock()
     fake_client = MagicMock()
@@ -197,7 +198,7 @@ async def test_check_fqdn_tls_ready_returns_false_when_ca_download_fails() -> No
             side_effect=SpanPanelConnectionError("no cert"),
         ) as mock_download,
     ):
-        assert await check_fqdn_tls_ready(hass, "panel.example.com", 8883, None) is False
+        assert await async_download_ca_or_none(hass, "panel.example.com") is None
 
     mock_download.assert_awaited_once_with(
         "panel.example.com", port=80, httpx_client=fake_client
@@ -205,7 +206,7 @@ async def test_check_fqdn_tls_ready_returns_false_when_ca_download_fails() -> No
 
 
 @pytest.mark.asyncio
-async def test_check_fqdn_tls_ready_forwards_custom_http_port() -> None:
+async def test_the_ca_fetch_forwards_a_custom_http_port() -> None:
     """The unpinned fetch honours the panel's HTTP port."""
     hass = MagicMock()
     fake_client = MagicMock()
@@ -219,12 +220,7 @@ async def test_check_fqdn_tls_ready_forwards_custom_http_port() -> None:
             side_effect=SpanPanelConnectionError("no cert"),
         ) as mock_download,
     ):
-        assert (
-            await check_fqdn_tls_ready(
-                hass, "panel.example.com", 8883, None, http_port=8080
-            )
-            is False
-        )
+        assert await async_download_ca_or_none(hass, "panel.example.com", http_port=8080) is None
 
     mock_download.assert_awaited_once_with(
         "panel.example.com", port=8080, httpx_client=fake_client
@@ -257,7 +253,6 @@ async def test_check_fqdn_tls_ready_uses_the_pinned_anchor_without_refetching() 
             assert server_hostname == "panel.example.com"
             return FakeSocket()
 
-    hass = MagicMock()
     with (
         patch(
             "custom_components.span_panel.config_flow_validation.download_ca_cert",
@@ -276,9 +271,7 @@ async def test_check_fqdn_tls_ready_uses_the_pinned_anchor_without_refetching() 
             return_value=FakeSocket(),
         ),
     ):
-        assert (
-            await check_fqdn_tls_ready(hass, "panel.example.com", 8883, "pinned-pem") is True
-        )
+        assert await check_fqdn_tls_ready("panel.example.com", 8883, "pinned-pem") is True
 
     mock_download.assert_not_awaited()
     build_context.assert_called_once_with("pinned-pem")
@@ -304,17 +297,7 @@ async def test_check_fqdn_tls_ready_returns_true_on_success() -> None:
             assert server_hostname == "panel.example.com"
             return FakeSocket()
 
-    hass = MagicMock()
-    fake_client = MagicMock()
     with (
-        patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
-            return_value=fake_client,
-        ),
-        patch(
-            "custom_components.span_panel.config_flow_validation.download_ca_cert",
-            new=AsyncMock(return_value="pem-data"),
-        ),
         patch(
             "custom_components.span_panel.config_flow_validation.asyncio.get_running_loop",
             return_value=FakeLoop(),
@@ -328,7 +311,7 @@ async def test_check_fqdn_tls_ready_returns_true_on_success() -> None:
             return_value=FakeSocket(),
         ),
     ):
-        assert await check_fqdn_tls_ready(hass, "panel.example.com", 8883, None) is True
+        assert await check_fqdn_tls_ready("panel.example.com", 8883, "pem-data") is True
 
     # The library's builder, not a hand-rolled context: it is the one that clears
     # VERIFY_X509_STRICT, which the panel's AKI-less CA fails without.
@@ -354,17 +337,7 @@ async def test_check_fqdn_tls_ready_returns_false_on_ssl_error() -> None:
         def wrap_socket(self, _sock, server_hostname: str):
             raise ssl.SSLError(f"bad cert for {server_hostname}")
 
-    hass = MagicMock()
-    fake_client = MagicMock()
     with (
-        patch(
-            "custom_components.span_panel.config_flow_validation.get_async_client",
-            return_value=fake_client,
-        ),
-        patch(
-            "custom_components.span_panel.config_flow_validation.download_ca_cert",
-            new=AsyncMock(return_value="pem-data"),
-        ),
         patch(
             "custom_components.span_panel.config_flow_validation.asyncio.get_running_loop",
             return_value=FakeLoop(),
@@ -378,7 +351,7 @@ async def test_check_fqdn_tls_ready_returns_false_on_ssl_error() -> None:
             return_value=FakeSocket(),
         ),
     ):
-        assert await check_fqdn_tls_ready(hass, "panel.example.com", 8883, None) is False
+        assert await check_fqdn_tls_ready("panel.example.com", 8883, "pem-data") is False
 
 
 @pytest.mark.asyncio
