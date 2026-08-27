@@ -633,23 +633,6 @@ async def test_the_range_home_assistant_checks_is_the_commissioned_one(hass: Hom
     assert entity.native_min_value == 0
 
 
-async def test_a_client_with_no_evse_control_is_reported_rather_than_ignored(
-    hass: HomeAssistant,
-) -> None:
-    """A transport that does not implement the control at all — a flat panel's."""
-
-    class _NoEvseControl:
-        """Everything but `set_evse_charge_limit`."""
-
-    tree = schema_one_tree()
-    created = await _created(hass, schema_one_snapshot(tree), _NoEvseControl())
-
-    with pytest.raises(HomeAssistantError) as raised:
-        await _for(created, tree, EVSE).async_set_native_value(16.0)
-
-    assert raised.value.translation_key == "evse_charge_limit_unsupported"
-
-
 # ---------------------------------------------------------------------------
 # The declarations this entity makes about itself
 # ---------------------------------------------------------------------------

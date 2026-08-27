@@ -464,9 +464,6 @@
     "evse_charge_limit_not_delivered": {
       "message": "The charge-current limit for charger {charger} could not be delivered to the panel: {reason}. It was refused rather than queued, so the limit is unchanged."
     },
-    "evse_charge_limit_unsupported": {
-      "message": "This SPAN panel offers no charge-current control for charger {charger}."
-    },
     "export_manifest_no_entries": {
       "message": "No SPAN panel configuration entries are loaded. Add and configure a SPAN panel before calling this service."
     },

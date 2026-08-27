@@ -464,9 +464,6 @@
     "evse_charge_limit_not_delivered": {
       "message": "La limite de courant de charge du chargeur {charger} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la limite est donc inchangée."
     },
-    "evse_charge_limit_unsupported": {
-      "message": "Ce panneau SPAN n'offre aucun contrôle du courant de charge pour le chargeur {charger}."
-    },
     "export_manifest_no_entries": {
       "message": "Aucune entrée de configuration SPAN Panel n'est chargée. Ajoutez et configurez un panneau SPAN avant d'appeler ce service."
     },

@@ -218,10 +218,6 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
-        if not hasattr(client, "set_circuit_priority"):
-            _LOGGER.warning("Client does not support priority control")
-            return
-
         priority = CircuitPriority(option)
 
         await self._async_control(

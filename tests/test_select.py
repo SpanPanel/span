@@ -156,35 +156,6 @@ async def test_async_select_option_success_refreshes_coordinator() -> None:
     coordinator.async_request_refresh.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-async def test_async_select_option_without_priority_support_returns_early(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Clients without priority support should log and return without refresh."""
-    coordinator = _make_coordinator_with_circuit()
-    coordinator.hass = MagicMock()
-    coordinator.async_request_refresh = AsyncMock()
-
-    with patch(
-        "custom_components.span_panel.select.er.async_get"
-    ) as mock_async_get:
-        registry = MagicMock()
-        registry.async_get_entity_id.return_value = None
-        mock_async_get.return_value = registry
-        select = SpanPanelCircuitsSelect(
-            coordinator, CIRCUIT_PRIORITY_DESCRIPTION, "id", "SPAN Panel"
-        )
-
-    coordinator.client = object()
-    select.hass = MagicMock()
-    caplog.set_level("WARNING")
-
-    await select.async_select_option(CircuitPriority.SOC_THRESHOLD.value)
-
-    assert "Client does not support priority control" in caplog.text
-    coordinator.async_request_refresh.assert_not_awaited()
-
-
 def test_select_uses_circuit_numbers_for_the_base_when_the_option_is_enabled() -> None:
     """The option decides the id base; the displayed name is the panel's regardless.
 

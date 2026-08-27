@@ -1,12 +1,11 @@
 """Button entities for the Span Panel."""
 
-import logging
 from typing import Final
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot
+from span_panel_api import SpanPanelSnapshot
 
 from .const import CONF_DEVICE_NAME
 from .control_gate import ControlMode
@@ -14,8 +13,6 @@ from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import construct_panel_unique_id_for_entry, has_bess
 from .runtime import SpanPanelConfigEntry
-
-_LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
 
@@ -70,10 +67,6 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         live in `_async_control`, which every control here shares.
         """
         client = self.coordinator.client
-        if not hasattr(client, "set_dominant_power_source"):
-            _LOGGER.warning("Client does not support GFE override")
-            return
-
         await self._async_control(
             client.set_dominant_power_source(self._override_value),
             command=f"a GFE override to {self._override_value}",
@@ -134,7 +127,7 @@ async def async_setup_entry(
     entities: list[SpanPanelGFEOverrideButton] = []
 
     snapshot: SpanPanelSnapshot = coordinator.data
-    if isinstance(coordinator.client, SpanMqttClient) and has_bess(snapshot):
+    if has_bess(snapshot):
         entities.append(SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"))
 
     async_add_entities(entities)

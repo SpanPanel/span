@@ -40,7 +40,6 @@ from homeassistant.components.number import (
 )
 from homeassistant.const import UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -52,7 +51,7 @@ from span_panel_api import (
 )
 
 from .adoption import create_adopted_numbers
-from .const import CONF_DEVICE_NAME, DOMAIN, USE_CIRCUIT_NUMBERS
+from .const import CONF_DEVICE_NAME, USE_CIRCUIT_NUMBERS
 from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
@@ -258,12 +257,6 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         handed over, which the library promises means it will not arrive later.
         """
         client = self.coordinator.client
-        if not isinstance(client, EvseControlProtocol):
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="evse_charge_limit_unsupported",
-                translation_placeholders={"charger": self._evse_id},
-            )
         await self._async_control(
             self._description.set_fn(client, self._evse_id, int(value)),
             command=f"a charge-current limit for {self._evse_id}",

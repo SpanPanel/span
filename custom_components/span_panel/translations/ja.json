@@ -464,9 +464,6 @@
     "evse_charge_limit_not_delivered": {
       "message": "充電器 {charger} の充電電流上限をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、上限は変わっていません。"
     },
-    "evse_charge_limit_unsupported": {
-      "message": "このSPANパネルは充電器 {charger} の充電電流制御に対応していません。"
-    },
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"
     },

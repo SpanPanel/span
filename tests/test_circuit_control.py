@@ -263,21 +263,6 @@ def test_switch_extra_state_attributes_include_tabs_and_voltage() -> None:
     assert switch.extra_state_attributes == {"tabs": "tabs [1]", "voltage": 120}
 
 
-@pytest.mark.asyncio
-async def test_switch_turn_on_without_relay_support_logs_and_returns(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Switches should no-op when the client lacks relay control."""
-    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", relay_state="OPEN")
-    coordinator = _make_coordinator({"1": circuit})
-    coordinator.client = MagicMock(spec=[])
-
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
-    await switch.async_turn_on()
-
-    assert "Client does not support relay control" in caplog.text
-
-
 def test_switch_relay_state_target_shows_pending_state() -> None:
     """Switch should show the target state while a relay command is pending."""
     # Panel reports OPEN but has a pending target of CLOSED
@@ -553,21 +538,6 @@ def test_switch_update_is_on_clears_state_when_circuit_disappears(
     switch._update_is_on()
 
     assert switch.is_on is None
-
-
-@pytest.mark.asyncio
-async def test_switch_turn_off_without_relay_support_logs_and_returns(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Turning off should no-op when the client lacks relay control."""
-    circuit = SpanCircuitSnapshotFactory.create(circuit_id="1", relay_state="CLOSED")
-    coordinator = _make_coordinator({"1": circuit})
-    coordinator.client = MagicMock(spec=[])
-
-    switch = SpanPanelCircuitsSwitch(coordinator, "1", "SPAN Panel")
-    await switch.async_turn_off()
-
-    assert "Client does not support relay control" in caplog.text
 
 
 def test_switch_turn_on_off_schedule_async_tasks(hass: HomeAssistant) -> None:

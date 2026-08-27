@@ -1,7 +1,7 @@
 """Tests for GFE override buttons and BESS connected binary sensor."""
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from span_panel_api import SpanBatterySnapshot
@@ -123,23 +123,6 @@ class TestGFEOverrideButtons:
 
         coordinator.client.set_dominant_power_source.assert_called_once_with("GRID")
         coordinator.async_request_refresh.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_button_missing_control_method(self) -> None:
-        """Client without set_dominant_power_source method logs warning."""
-        coordinator = _make_gfe_coordinator()
-        button = SpanPanelGFEOverrideButton(
-            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
-        )
-        button.hass = MagicMock()
-
-        # Client without set_dominant_power_source
-        coordinator.client = MagicMock(spec=[])
-
-        await button.async_press()
-
-        # Should not raise, just log
-        coordinator.async_request_refresh.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_button_server_error(self) -> None:

@@ -303,10 +303,6 @@ class SpanPanelCircuitsSwitch(SpanPanelEntity, SwitchEntity):
         integration shares.
         """
         client = self.coordinator.client
-        if not hasattr(client, "set_circuit_relay"):
-            _LOGGER.warning("Client does not support relay control")
-            return
-
         await self._async_control(
             client.set_circuit_relay(self._circuit_id, state),
             command=f"a relay command for {self.entity_id}",
