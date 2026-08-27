@@ -280,10 +280,11 @@ def prominence_hint(row: ExtensionProperty) -> str:
        a `%` state of charge, and `%` is deliberately absent from
        `DEVICE_CLASS_BY_UNIT` because it is equally a confidence or a duty cycle.
        So this signal may promote and never demote.
-    3. **Everything else → `detail`**, with `node_has_curated_siblings` recorded
-       beside it as corroboration rather than as a decision. Homie nodes are
-       organisational rather than editorial: vendors hang configuration knobs off
-       `meter` because that is where the code was.
+    3. **Everything else → `detail`**, by fall-through rather than by a third
+       signal. The node a property hangs off is the obvious candidate for one and
+       is deliberately not consulted: Homie nodes are organisational rather than
+       editorial, and vendors hang configuration knobs off `meter` because that
+       is where the code was.
 
     The upstream `role` declaration proposed alongside this design would retire
     all three for compliant publishers, which is why it is worth asking for.

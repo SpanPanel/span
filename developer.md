@@ -809,8 +809,8 @@ confidence, and the ranking is the argument:
    firmware build is device description.
 2. **A unit in `DEVICE_CLASS_BY_UNIT` → reading.** Moderate, and it may promote but never demote, because it fails systematically in one direction: the most
    headline-worthy number a battery publishes is a `%` state of charge, and `%` is absent from that map on purpose, being equally a confidence or a duty cycle.
-3. **Everything else → detail**, with `node_has_curated_siblings` recorded as corroboration rather than as a decision. Homie nodes are organisational, not
-   editorial.
+3. **Everything else → detail**, by fall-through rather than a third signal. The node a property hangs off is the obvious candidate for one and is deliberately
+   not consulted: Homie nodes are organisational, not editorial.
 
 The real fix is upstream: a declared `role` on the property, proposed in `SpanPanel_Docs/span/docs/dev/ebus-property-role-proposal.md`. Until then the ranking
 is the shipping plan, and `entity_category` being free to revise is what makes a conservative default cheap.

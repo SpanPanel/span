@@ -34,8 +34,10 @@ list, and why the classes below declare no `_residual_field_paths`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from math import isfinite
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
@@ -108,20 +110,22 @@ def clamp_state(published: str, wire_path: str) -> str:
     return published[:MAX_STATE_LENGTH]
 
 
-DEVICE_CLASS_BY_UNIT: dict[str, SensorDeviceClass] = {
-    "W": SensorDeviceClass.POWER,
-    "kW": SensorDeviceClass.POWER,
-    "Wh": SensorDeviceClass.ENERGY,
-    "kWh": SensorDeviceClass.ENERGY,
-    "V": SensorDeviceClass.VOLTAGE,
-    "A": SensorDeviceClass.CURRENT,
-    "Hz": SensorDeviceClass.FREQUENCY,
-    "VA": SensorDeviceClass.APPARENT_POWER,
-    "var": SensorDeviceClass.REACTIVE_POWER,
-    "°C": SensorDeviceClass.TEMPERATURE,
-    "°F": SensorDeviceClass.TEMPERATURE,
-    "s": SensorDeviceClass.DURATION,
-}
+DEVICE_CLASS_BY_UNIT: Mapping[str, SensorDeviceClass] = MappingProxyType(
+    {
+        "W": SensorDeviceClass.POWER,
+        "kW": SensorDeviceClass.POWER,
+        "Wh": SensorDeviceClass.ENERGY,
+        "kWh": SensorDeviceClass.ENERGY,
+        "V": SensorDeviceClass.VOLTAGE,
+        "A": SensorDeviceClass.CURRENT,
+        "Hz": SensorDeviceClass.FREQUENCY,
+        "VA": SensorDeviceClass.APPARENT_POWER,
+        "var": SensorDeviceClass.REACTIVE_POWER,
+        "°C": SensorDeviceClass.TEMPERATURE,
+        "°F": SensorDeviceClass.TEMPERATURE,
+        "s": SensorDeviceClass.DURATION,
+    }
+)
 """Units this integration is willing to claim a device class for, enumerated.
 
 Enumerated rather than inferred, and the omissions are the point. `%` is absent
