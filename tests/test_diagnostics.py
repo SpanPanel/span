@@ -148,16 +148,20 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         eth0_link=None,
         wlan_link=None,
         circuits={
-            "uuid_minimal": SimpleNamespace(
-                name=None,
+            # The real model, not a namespace: every field the diagnostics dump
+            # reads off a circuit is present on `SpanCircuitSnapshot`, and a hand
+            # -rolled double that omitted two of them is what kept a pair of
+            # unreachable `hasattr` guards alive in the dump.
+            "uuid_minimal": SpanCircuitSnapshotFactory.create(
+                circuit_id="uuid_minimal",
+                name="",
                 relay_state="OPEN",
-                relay_state_target=None,
                 priority="NEVER",
-                priority_target=None,
                 is_user_controllable=False,
                 instant_power_w=0.0,
                 produced_energy_wh=0.0,
                 consumed_energy_wh=0.0,
+                tabs=[],
             )
         },
         evse={},
@@ -187,7 +191,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "power_flow_grid": None,
     }
     assert result["circuits"]["uuid_minimal"] == {
-        "name": None,
+        "name": "",
         "relay_state": "OPEN",
         "relay_state_target": None,
         "priority": "NEVER",
@@ -196,6 +200,8 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "instant_power_w": 0.0,
         "produced_energy_wh": 0.0,
         "consumed_energy_wh": 0.0,
+        "device_type": "circuit",
+        "tabs": [],
     }
     assert result["evse"] == {}
     assert result["battery"] == {}

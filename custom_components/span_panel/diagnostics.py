@@ -298,11 +298,9 @@ async def async_get_config_entry_diagnostics(
             "instant_power_w": circuit.instant_power_w,
             "produced_energy_wh": circuit.produced_energy_wh,
             "consumed_energy_wh": circuit.consumed_energy_wh,
+            "device_type": circuit.device_type,
+            "tabs": circuit.tabs,
         }
-        if hasattr(circuit, "device_type"):
-            circuit_data[circuit_id]["device_type"] = circuit.device_type
-        if hasattr(circuit, "tabs"):
-            circuit_data[circuit_id]["tabs"] = circuit.tabs
 
     evse_data: dict[str, dict[str, Any]] = {}
     if snapshot.evse:
