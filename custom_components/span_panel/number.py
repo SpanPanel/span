@@ -58,7 +58,7 @@ from .entity import SpanPanelEntity
 from .field_paths import DerivedReason, FieldPathDeclarationMixin
 from .helpers import build_evse_unique_id_for_entry, resolve_evse_display_suffix
 from .runtime import SpanPanelConfigEntry
-from .util import EMPTY_EVSE, evse_device_info
+from .util import EMPTY_EVSE, evse_device_info, evse_display_name
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -161,11 +161,18 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         )
         evse = snapshot.evse.get(evse_id, EMPTY_EVSE)
         use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        display_suffix = resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers)
+
+        # The charger's own name, kept because both ways this control can fail
+        # are reported to a person. `_evse_id` is the node id the wire uses; it
+        # names nothing the user can see on their dashboard.
+        self._charger_name = evse_display_name(evse, panel_name, display_suffix)
+
         self._attr_device_info = evse_device_info(
             snapshot.serial_number,
             evse,
             panel_name,
-            resolve_evse_display_suffix(evse, snapshot, use_circuit_numbers),
+            display_suffix,
             panel_device_id=data_coordinator.config_entry.runtime_data.panel_device_id,
         )
         self._attr_unique_id = build_evse_unique_id_for_entry(
@@ -259,10 +266,10 @@ class SpanEvseNumber(SpanPanelEntity, NumberEntity):
         client = self.coordinator.client
         await self._async_control(
             self._description.set_fn(client, self._evse_id, int(value)),
-            command=f"a charge-current limit for {self._evse_id}",
+            command=f"a charge-current limit for {self._charger_name}",
             failed_key="evse_charge_limit_failed",
             not_delivered_key="evse_charge_limit_not_delivered",
-            placeholders={"charger": self._evse_id},
+            placeholders={"charger": self._charger_name},
         )
 
         await self.coordinator.async_request_refresh()

@@ -200,6 +200,24 @@ never published, which is what the builder below already handles.
 """
 
 
+def evse_display_name(
+    evse: SpanEvseSnapshot,
+    panel_name: str,
+    display_suffix: str | None = None,
+) -> str:
+    """Return what this charger is called wherever a person reads about it.
+
+    Separate from the builder below because a charger is named in two places
+    that have to agree: its device card, and any message about it. The wire
+    calls a charger by its node id, which is what the panel needs and what
+    nobody reading a notification can act on -- so anything user-facing asks
+    here instead.
+    """
+    base_name = evse.model or "EV Charger"
+    name = f"{base_name} ({display_suffix})" if display_suffix else base_name
+    return f"{panel_name} {name}"
+
+
 def evse_device_info(
     panel_identifier: str,
     evse: SpanEvseSnapshot,
@@ -209,12 +227,9 @@ def evse_device_info(
     panel_device_id: str,
 ) -> DeviceInfo:
     """Create DeviceInfo for an EVSE sub-device linked to the parent panel."""
-    base_name = evse.model or "EV Charger"
-    name = f"{base_name} ({display_suffix})" if display_suffix else base_name
-    name = f"{panel_name} {name}"
     return DeviceInfo(
         identifiers={(DOMAIN, f"{panel_identifier}_{SUB_DEVICE_EVSE}_{evse.node_id}")},
-        name=name,
+        name=evse_display_name(evse, panel_name, display_suffix),
         manufacturer=evse.vendor_name or "SPAN",
         model=evse.model or "SPAN Drive",
         serial_number=evse.serial_number,

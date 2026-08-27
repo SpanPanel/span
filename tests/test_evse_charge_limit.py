@@ -615,6 +615,31 @@ async def test_a_command_the_transport_never_handed_over_is_reported(
     entity.coordinator.async_request_refresh.assert_not_awaited()
 
 
+async def test_a_failure_names_the_charger_the_user_sees(hass: HomeAssistant) -> None:
+    """`charger` reaches a person, so it carries the name on the device card.
+
+    The wire addresses a charger by node id and the snapshot keys it by a
+    serial-harmonised id. Neither string appears anywhere the user looks, so a
+    notification carrying one names a charger they cannot find.
+    """
+    tree = schema_one_tree()
+    client, bridge = _live_client()
+    bridge.publish.return_value = None
+    created = await _created(hass, schema_one_snapshot(tree), client)
+    entity = _for(created, tree, EVSE)
+    asked = _published(tree, EVSE, CEILING_TOPIC) - 8
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await entity.async_set_native_value(float(asked))
+
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    device_info = entity._attr_device_info
+    assert device_info is not None
+    assert placeholders["charger"] == device_info["name"]
+    assert placeholders["charger"] != entity._evse_id
+
+
 async def test_the_range_home_assistant_checks_is_the_commissioned_one(hass: HomeAssistant) -> None:
     """The first of the two checks, asserted through the range the entity reports.
 
