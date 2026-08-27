@@ -228,6 +228,18 @@ panel stops resolving the property.
 """
 
 
+_HARDWARE_STATUS_SENSORS: frozenset[str] = frozenset(
+    {SYSTEM_DOOR_STATE, SYSTEM_ETHERNET_LINK, SYSTEM_WIFI_LINK}
+)
+"""The sensors that stay available while the panel is offline, reading unknown.
+
+Read by `available` and by `_handle_coordinator_update`, which is why it is named
+once here: the two have to agree, and a set restated in each is a set that can be
+extended in one and not the other -- leaving a sensor that reports unknown while
+offline but drops out of the registry's availability, or the reverse.
+"""
+
+
 class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
     SpanPanelEntity, BinarySensorEntity
 ):
@@ -294,15 +306,9 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
             return False
 
         # Hardware status sensors should remain available when offline to show Unknown
-        hardware_status_sensors = {
-            SYSTEM_DOOR_STATE,
-            SYSTEM_ETHERNET_LINK,
-            SYSTEM_WIFI_LINK,
-        }
-
         if (
             hasattr(self.entity_description, "key")
-            and self.entity_description.key in hardware_status_sensors
+            and self.entity_description.key in _HARDWARE_STATUS_SENSORS
         ):
             if getattr(self.coordinator, "panel_offline", False):
                 return True
@@ -330,15 +336,9 @@ class SpanPanelBinarySensor[T: SpanPanelBinarySensorEntityDescription](
 
         # Check for panel offline status first to prevent accessing None data
         if self.coordinator.panel_offline or self.coordinator.data is None:
-            hardware_status_sensors = {
-                SYSTEM_DOOR_STATE,
-                SYSTEM_ETHERNET_LINK,
-                SYSTEM_WIFI_LINK,
-            }
-
             if (
                 hasattr(self.entity_description, "key")
-                and self.entity_description.key in hardware_status_sensors
+                and self.entity_description.key in _HARDWARE_STATUS_SENSORS
             ):
                 self._attr_is_on = None
                 self._attr_available = True
