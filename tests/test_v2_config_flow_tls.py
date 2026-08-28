@@ -1022,8 +1022,19 @@ async def test_a_moved_panel_whose_registration_fails_has_nothing_to_continue_to
         await hass.async_block_till_done()
 
     assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "reconfigure"
     assert result["errors"] == {"base": "ca_name_mismatch"}
     # Untouched: the entry still points where it did, and is still pinned.
     assert entry.data[CONF_HOST] == PANEL_LOOPBACK
     assert CONF_REGISTERED_FQDN not in entry.data
     assert entry.data[CONF_PANEL_CA_PEM] == moved_panel.ca_pem
+
+    # And the form it lands on is live, not a dead end: submitting it re-enters
+    # the reconfigure step and is judged again, rather than wedging the flow.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: PANEL_LOOPBACK}
+    )
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "ca_name_mismatch"}
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
