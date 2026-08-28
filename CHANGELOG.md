@@ -4,45 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [2.1.0] - 8/2026
 
+### In short
+
+- **Install this before SPAN pushes firmware `r202633`** — it replaces the panel's wire model, and 2.0.8 cannot read a panel that has taken it. Requires Home
+  Assistant 2026.8.
+- **The Microgrid Interconnect Device and the solar inverter become devices of their own**, carrying grid health and whether Grid Power is really measuring the
+  grid.
+- **EVSE Charge Current Limit** is the first control here that changes something on a SPAN Drive rather than on the panel.
+- **The battery says when things run out** — Time to Priority Shed and Backup Time Remaining, beside its own power and link state.
+- **Vendor extensions are adopted on a reload**, so a device type or reading nobody has modelled no longer waits for a release.
+- **Your passphrase is no longer stored and the panel's certificate is pinned before credentials cross the network**, with control lockable or admin-only.
+- **Nothing you have moves** — entity ids, unique ids and history survive the upgrade.
+
 ### You will need this release before SPAN updates your panel
 
-SPAN firmware `r202633` replaces the way the panel publishes its data — the wire model every release up to 2.0.8 is retired in the same update that introduces
-the new one. There is no wire overlap and no setting to keep the old behaviour. **2.0.8 cannot read a panel on `r202633`**: it stays connected, reports every
-circuit as missing, and shows nothing useful.
-
-**The transition itself is seamless.** Install 2.1.0 early and your only outage is the firmware update itself. A log line and a one-time notification tell you
-exactly what happened, so take a screenshot.
-
-**A panel that is still rebooting is waited out, for as long as your panel takes.** Taking the firmware upgrade drops the panel's connection for several minutes
-— four or more is not uncommon once the panel receives its upgrade file. If you experience an extended delay (over 5 minutes), reload the integration (reload is
-a menu item, not a reinstallation).
+SPAN firmware `r202633` replaces the wire model and introduces the new one on reboot. **2.0.8 cannot read a panel on `r202633`.**
 
 ### Requires Home Assistant 2026.8.0 or newer
 
-This release raises the minimum from 2026.5.4. Home Assistant 2026.8 replaced the two device-registry calls this integration relies on — the old forms stop
-working entirely in 2027.8.
+This release requires Home Assistant 2026.8 to avoid a deprecated API — the old API stops working entirely in 2027.8.
 
-### Added
+**The transition is uneventful** — the integration boots with the right wire library based on which firmware it sees. Your devices and entities are intact.
 
-- **Your panel's Microgrid Interconnect Device appears as its own device**, carrying **Grid State** — the health of the utility supply itself, which your panel
+### Added (Subject to Firmware Support)
+
+- **The panel's Microgrid Interconnect Device appears as its own device**, carrying **Grid State** — the health of the utility supply itself, which your panel
   never reported before.
-- **Grid Power now says whether it is really measuring the grid**, through a new `at_service_entrance` attribute: false where a battery or another panel sits
+- **Grid Power now reports whether it sits at the service entrance**, through an `at_service_entrance` attribute: false where a battery or another panel sits
   between the utility and your main lugs, which is when it and **Grid Power Flow** legitimately disagree.
-- **The attribute is present only where your panel publishes the topology it is read from** — the parent/child data model — so a panel on the flat one has no
-  `at_service_entrance` row at all rather than a `true` that nothing measured.
+- **The attribute is present only where your panel publishes the topology it is read from.**
 
-- **Your solar inverter gets a device of its own** rather than rendering as diagnostic sensors on the panel's card; the five PV entities keep the entity ids,
+- **The solar inverter gets a device of its own** rather than rendering as diagnostic sensors on the panel's card; the five PV entities keep the entity ids,
   unique ids and history they have today.
 - **Assign the new Solar device to an area** — those five no longer inherit the panel's area, which quietly drops them from area-scoped dashboards, automations
   and voice commands until you do.
 - New installations get `sensor.span_panel_solar_pv_vendor` and friends where existing ones keep `sensor.span_panel_pv_vendor`; both are correct and neither
   will change again.
 
-- **EVSE Charge Current Limit** — a settable ceiling on each commissioned SPAN Drive, the first control this integration has that changes something on a charger
-  rather than on the panel.
-- The maximum is the one your installer commissioned, read from the panel: a higher value is refused rather than quietly rounded down, and the control is
-  unavailable rather than invented where the rating is not published.
-- The control appears only where the panel says the limit can be changed, and reports a change still in flight as a `charge_current_limit_target` attribute.
+- **EVSE Charge Current Limit** — a settable ceiling on each commissioned SPAN Drive.
+- The maximum is the one your installer commissioned; the control is unavailable where the rating is not published.
+- The control appears only where the panel says the limit can be changed and reports a change still in flight as a `charge_current_limit_target` attribute.
 
 - **PV Panel Link and EVSE Panel Link** — the panel's own report of the link to your inverter and to each charger, which is the fact **BESS Connected** has
   always shown for the battery.
@@ -60,19 +61,14 @@ working entirely in 2027.8.
 - Each forecast carries its full-charge equivalent and the panel's own `forecast_confidence` as attributes, rather than as two more near-constant entities.
 
 - **Import Limit, Binding Constraint and PCS Active** — the current limit your panel enforces, which rule set it, and whether anything is being throttled right
-  now. Filed under Diagnostics with the panel's other electrical characteristics. Import Limit carries the whole arbitration as attributes.
+  now. Filed under Diagnostics. Import Limit carries the arbitration as attributes.
 - **Every circuit's power sensor gains `pcs_managed` and `pcs_priority`** where the circuit reports them — the shed order when an import limit binds, which is
   not the backup tier the existing `shed_priority` names.
 
-- **Devices and readings your panel gains no longer wait for a release.** SPAN's data model is vendor-extensible, so a device type nobody has modelled gets a
-  card of its own hanging off the panel, and a new reading on a device you already have — the battery, the Microgrid Interconnect Device, a SPAN Drive, the
-  solar inverter, a circuit or the lugs — lands on the card that device already has, both picked up on a reload rather than at the next restart. They arrive
-  switched off, filed as diagnostics and under the panel's own plainer wording, and a property the device accepts writes to becomes a switch, a select or a
-  number box constrained to what the device declared and nothing invented. Nothing adopted enters long-term statistics because `state_class` is not published on
-  the wire, and at most 60 readings are adopted per device as a backstop against a misbehaving publisher.
+- **Vendor extensions** — new device types and readings are picked up on a reload. They arrive disabled and filed as diagnostics. Nothing adopted enters
+  long-term statistics, because `state_class` is not published on the wire.
 
-- **Your panel's own card shows what the panel says it is** — manufacturer, model and hardware revision read from the enclosure rather than assumed, once your
-  panel publishes them.
+- **Your panel's own card shows metadata** — manufacturer, model and hardware revision read from the enclosure once your panel publishes them.
 - **Part Number** diagnostic sensor on every SPAN Drive, matching the one the battery already has. Off by default.
 - **Circuit Priority's shed policy is readable**: `dsm_state` gains `shed_algorithm` and the two state-of-charge thresholds that decide when circuits shed and
   when they come back.
@@ -80,7 +76,7 @@ working entirely in 2027.8.
 - **Diagnostics include your entity registry** — every entity this integration owns, its unique id, and what disabled it, which Home Assistant will not
   otherwise tell you.
 
-### Changed
+### Changed (Subject to Firmware Update)
 
 - **`DSM Grid State` is now more trustworthy**, reading the islanding state the Microgrid Interconnect Device actually senses rather than inferring it from the
   battery and the dominant power source, and keeping its entity id and its history.
@@ -93,7 +89,7 @@ working entirely in 2027.8.
 - **Existing installations keep those five exactly where they are**, with their history and entity ids, because Home Assistant consults the enabled-by-default
   setting only when an entity is first created.
 - **Your other panel readings are unaffected**, checked against a capture from a live upgraded panel rather than assumed.
-- **New entities are now announced in a notification** that splits what arrived into ready to use and switched off and names each one.
+- **New entities are now announced in a notification** that splits what arrived into ready to use and switched off, and names each one.
 - **A damaged record of what has already been announced is re-seeded rather than failing setup**, so a truncated or hand-edited store costs you one repeated
   notification instead of an integration that will not start.
 - **The Wi-Fi network name moved to the Wi-Fi Link sensor** as a `wifi_ssid` attribute, absent rather than blank on a panel that publishes no SSID.
@@ -106,26 +102,20 @@ working entirely in 2027.8.
   nothing changed, and an id reflecting your own configuration where something did — a circuit you renamed, an area you assigned, or the name you gave the panel
   device.
 - **Three kinds of installation may be offered a different id when you press Recreate entity IDs**: a sensor on a SPAN Drive's feed circuit (offered the
-  charger's name, the device it is actually on), a second panel whose device this integration called "Span Panel 2" (offered `span_panel_2_`), and an
-  installation predating the `use_device_prefix` option whose circuit ids carry no device at all (offered one). Each is your own entity-id settings composing
-  the id, and no id moves until you accept the offer.
+  charger's name, the device it is actually on), a second panel whose device this integration called "Span Panel 2" (offered `span_panel_2_`), and an older
+  installation whose circuit ids carry no device name at all (offered one). Each is your own entity-id settings composing the id, and no id moves until you
+  accept the offer.
 - **A panel device you renamed yourself is offered ids carrying that name**, since Home Assistant composes from the name you gave the device ahead of the one
   this integration generated.
-- **New circuit energy sensors get `consumed_energy`, `produced_energy` and `net_energy`**, the same word order as the panel-level energy sensors; existing
-  sensors keep the spelling they have, whichever of the two it is, and are never offered the other one.
-- **Circuit sensors on a SPAN Drive's feed circuit are named for the charger alone** — `sensor.<charger>_power`, matching the charger's other sensors.
-- **The legacy `use_device_prefix` option can no longer keep the device out of a composed entity id**, since Home Assistant includes the device unless your own
-  entity-id settings exclude it.
+- **New installations provide uniform circuit energy sensor ids — `consumed_energy`, `produced_energy` and `net_energy`**, in line with the panel-level energy
+  sensors.
+- **A newly commissioned SPAN Drive's feed-circuit sensors are named for the charger** — `sensor.<charger>_power`, matching the charger's other sensors; the
+  ones you already have keep their ids.
 - **An unnamed circuit in friendly-names mode is now named for the tab it occupies** (`Circuit 7 Power`), so two unnamed circuits no longer collide — the old
   scheme called every one of them `single_circuit` and let the registry tell them apart with `_2`, `_3`.
-- **An unnamed circuit you already have may be offered a `circuit_7` id** if you press **Recreate entity IDs**, which is the one place this release proposes a
-  new id for a circuit you did not rename. Its current id keeps working until you accept.
+- **If you recreate entity IDs, an unnamed circuit you already have may be offered a `circuit_7` id.** Its current id keeps working if you decline.
 - **Circuit-numbers installations now show the device in the displayed name** — `Span Panel Kitchen Outlets Power`, as friendly-names installations always have
   — so a template or a voice alias matching the old exact string needs updating.
-- **A name you set in an entity's own settings still outranks the panel's**, and this integration no longer writes that field, clearing only the value an older
-  release of its own put there.
-- **Renaming a circuit in the SPAN app now reaches the displayed name through a reload**, which the integration requests for itself when it sees the new name —
-  the name travels as the entity's original name, which is written when the entity is created, so a rebuild is what refreshes it.
 
 ### Fixed
 
