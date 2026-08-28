@@ -1,7 +1,7 @@
 """The backup-planning forecast, surfaced as two sensors and three attributes.
 
 Every assertion here runs against a real snapshot built by the real schema_1
-adapter over the vendored capture, and every expected value is read out of that
+adapter over the reference capture, and every expected value is read out of that
 capture rather than written as a literal. That is deliberate and it is the whole
 design of this module: a test that pins the same constant the code pins passes
 whether or not the wire is ever read, so each reading is proved by republishing

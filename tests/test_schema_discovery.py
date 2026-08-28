@@ -1,6 +1,6 @@
 """What the panel declares that nothing here reads, surfaced to a maintainer.
 
-`test_declared_but_unread` asks this question of the vendored capture and
+`test_declared_but_unread` asks this question of the reference capture and
 answers it by experiment. It is the right check and it is fixture-bound: a real
 panel that starts publishing a property fails nothing until somebody recaptures.
 The adapter answers the same question at runtime, for the panel in front of the
@@ -80,7 +80,7 @@ def test_the_adapter_emits_discovered_rows_at_all() -> None:
     raw = schema_one_metadata_raw()
     namespaced = {path for path in raw if is_discovery_path(path)}
     assert namespaced, (
-        "schema_1 emitted no discovered rows for the vendored tree, so nothing "
+        "schema_1 emitted no discovered rows for the reference tree, so nothing "
         "below is being tested. If that is real, the adapter stopped emitting them."
     )
     assert all(isinstance(raw[path], DiscoveredMetadata) for path in namespaced)

@@ -60,9 +60,6 @@ cp .env.example .env
 The defaults assume the standard workspace layout:
 
 ```dotenv
-# Path to span-panel-api repo (for editable pip install)
-export SPAN_PANEL_API_DIR=../span-panel-api
-
 # Path to span-card frontend repo (for build-frontend.sh)
 export SPAN_CARD_DIR=../cards/span-card
 
@@ -137,8 +134,8 @@ fails everywhere; that one is never intentional.
 ### Why the version alone is not enough
 
 `3cbf02a` pointed both `[tool.uv.sources]` and `[tool.pyright].extraPaths` at a scratch worktree and committed it. It survived several commits and hours of
-other work. While it stood, a test fixture was vendored through that resolution and captured a producer defect the library had already fixed — and every
-version-based check passed, because the stale worktree declared the same version number as the corrected code. Only a byte comparison caught it.
+other work. While it stood, the conformance tests ran against a producer defect the library had already fixed — and every version-based check passed, because
+the stale worktree declared the same version number as the corrected code.
 
 **A version string does not identify content. Only a filesystem location does.** That is what both guards check and why neither of them checks a version on its
 own.
@@ -227,54 +224,20 @@ python -m pytest tests/test_current_monitor.py -q
 python -m pytest tests/ --cov=custom_components/span_panel --cov-report=term-missing
 ```
 
-## The vendored adapter captures
+## The adapter reference payloads
 
-`tests/fixtures/schema_one_tree.json` and `tests/fixtures/schema_zero_types.json` are byte copies of payloads that live in `span-panel-api`. Committing them is
-what keeps this suite free of a cross-repo dependency: the tests run with no sibling checkout, and no runtime wheel has to keep shipping test data.
+The conformance tests replay two real schema-adapter inputs: a full parent/child device tree and a flat `GET /api/v2/homie/schema` response. Neither is
+committed here. Both are package data of the adapter distributions — `span_panel_api_schema_1/reference/parent_child_tree.json` and
+`span_panel_api_schema_0/reference/homie_schema.json` — and `tests/adapter_fixtures.py` reads them through `importlib.resources`, exactly as the library's own
+suite does.
 
-### Refreshing the parent/child capture
+So the payload the suite replays is whichever one the pinned wheel ships, and the pin in `custom_components/span_panel/manifest.json` is the record of which
+that is. **Moving to a newer capture is a pin bump and nothing else**: bump the adapter version there, let `scripts/sync-dependencies.py` carry it into
+`pyproject.toml` and `requirements_test.txt`, then `uv sync`. There is no copy to refresh and nothing to keep honest — a claim about which release the bytes
+came from cannot disagree with the bytes when the bytes are the release's.
 
-```bash
-# SPAN_PANEL_API_DIR names the checkout; see .env.example
-uv run python scripts/refresh-vendored-capture.py
-```
-
-The script copies the capture byte for byte and writes the release it came from into `tests/fixtures/schema_one_tree.source`, in one action. **That is the
-reason it exists.** Those two facts — the bytes, and the claim about which release they are — were previously updated by two different actions, so doing one and
-not the other was a single missed keystroke; doing both from one command makes them incapable of disagreeing.
-
-It refuses more than it accepts, deliberately. No `SPAN_PANEL_API_DIR`, a path that does not resolve, a directory that is not a checkout, a checkout whose
-schema-1 release is not the one installed, a checkout that has the file at neither known location, or a checkout that is not standing on the release's tag — all
-of these stop before anything is written. The last one matters most: the refresh that went wrong copied from a worktree that _declared_ the installed release
-while sitting on unreleased work behind `main`, so the declaration and the pin agreed while the bytes were a release old. A version in a working tree is intent;
-a tag is a fact. Copying from unreleased work is still possible with `--allow-unreleased`, because it is occasionally correct — it is how the capture was
-corrected while the fix was only on `main` — but it has to be said out loud rather than warned about and ignored.
-
-Commit both files together. They are one fact in two files.
-
-### Which guard tells you to run it
-
-| Guard                                                       | Compares                                                    | Catches                                                                              | Needs a checkout |
-| ----------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------- |
-| `test_the_vendored_capture_matches_the_installed_adapter`   | `schema_one_tree.source` against the installed distribution | a pin that moved while the copy stayed put                                           | no               |
-| `test_the_vendored_capture_is_byte_identical_to_its_source` | the capture against the copy in that release                | a copy refreshed **wrongly** — reformatted, edited, or taken from the wrong checkout | yes              |
-
-The first fails everywhere, including CI, the moment `manifest.json` moves and nobody refreshes. The second needs `SPAN_PANEL_API_DIR`, so it **skips** locally
-when no checkout is configured or the configured one is on another release, and **fails** under `CI`, where the workflow clones `span-panel-api` at the release
-the pin names. That asymmetry is deliberate and should not be "fixed": `span-panel-api` paid for it and records the reason in its `DEVELOPMENT.md`, under "A
-skip here is not a pass" — _"A skip reads in a summary line exactly like a pass, and that is how a stale vendored capture went unnoticed for nine days."_
-
-Either failure names the refresh. Run the script.
-
-### Why the capture is not copied at test time
-
-Someone will eventually propose having the suite copy the fixture from `SPAN_PANEL_API_DIR` on every run, so it can never be stale. It would undo both things
-vendoring bought.
-
-It puts the cross-repo dependency back — every test run needing a `span-panel-api` checkout, which is exactly what committing the bytes removed. And it makes
-the byte comparison vacuous: a copy compared against the thing it was just copied from can only ever pass. **Committed bytes that are allowed to disagree with
-their source are the whole mechanism.** That freedom to disagree is what let the comparison find a capture vendored from a stale path override, which nothing
-else in either repository could see. A fixture that silently re-syncs itself cannot report anything.
+`tests/test_library_resolution.py` is what makes the pin mean something: it checks that the `span_panel_api` actually imported is the one the pins name, rather
+than a worktree an override is pointing at.
 
 ## Knowing what the panel publishes that nothing reads
 
@@ -314,8 +277,8 @@ opt-in disabled entity does only if the user asks for it.
 
 ### What it does not cover
 
-The gate reads the **vendored fixture**, so it answers "what does our capture declare that we do not read". It cannot see a property a real panel starts
-publishing in the field. The runtime half below is what answers that.
+The gate reads the **adapter's reference capture**, so it answers "what does that capture declare that we do not read". It cannot see a property a real panel
+starts publishing in the field. The runtime half below is what answers that.
 
 Note also that a property can be _read on one device and not another_ and the gate will not see it — it asks whether anything moved, not whether everything did.
 `snapshot.pv` keeps the first `energy.ebus.device.pv` child and discards the rest, so a second inverter is invisible while the property still counts as read.

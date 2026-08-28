@@ -5,7 +5,7 @@ and read by nobody. They are the battery's own view of its power and its own vie
 of its link, as opposed to the enclosure's view of both.
 
 Every assertion runs against a real snapshot built by the real schema_1 adapter
-over the vendored capture, and every expected value is read out of that capture
+over the reference capture, and every expected value is read out of that capture
 rather than written as a literal — a test that pins the same constant the code
 pins passes whether or not the wire is ever read. Each reading is proved by
 republishing it, deleting it, or dropping the node that carries it.
@@ -29,7 +29,7 @@ independently of which way is charging. Neither negation changed here:
 `BATTERY_POWER_SENSOR` is the single negation it has been since 2.0.8, and what a
 real panel displays depends on what that panel publishes, not on this fixture.
 
-Which way *is* charging is read off the vendored capture, and the capture now
+Which way *is* charging is read off the reference capture, and the capture now
 carries the post-`distribution-enclosure-simulator#39` frame: `power-flows` 0.3
 defines the node balance as every term positive when power flows into the thing
 it names, so `pv` is negative while producing and the four terms sum to zero.

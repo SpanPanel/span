@@ -5,7 +5,7 @@ than a feature. Grouped because they share a proof obligation: each is a value
 the panel has published all along that nothing rendered, so a test asserting a
 constant the code also holds would pass whether or not the wire is ever read.
 
-Every expectation below is therefore read out of the vendored capture, and every
+Every expectation below is therefore read out of the reference capture, and every
 reading is proved by republishing it, unpublishing it, or both. The device-card
 assertions go through the real device registry after a real registration rather
 than through the `DeviceInfo` dict, because the dict is what the code returns and

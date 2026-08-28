@@ -13,8 +13,8 @@ dependencies = [
     # through the `span_panel_api.schema_adapters` entry-point group, so each one has
     # to be installed for discovery to see it. manifest.json carries the same three,
     # and that is the list Home Assistant actually reads.
-    "span-panel-api-schema-0==1.1.1",
-    "span-panel-api-schema-1==1.1.2",
+    "span-panel-api-schema-0==1.1.2",
+    "span-panel-api-schema-1==1.1.3",
 ]
 
 [dependency-groups]
@@ -45,24 +45,25 @@ dev = [
 package = false
 
 [tool.uv.sources]
-# The primary checkout, which is where 3.1.0 and both 1.1.0 adapters now live.
+# The primary checkout, which is where the pinned releases are developed.
 #
 # These pointed at a `-security` worktree while that work was unmerged. That
 # outlived its reason and became actively harmful: the worktree never received
-# span-panel-api#161, so `span_panel_api_schema_1.reference_payloads` resolved to
-# a parent/child capture that still recorded the emitter's `$settable` defect on
-# a locked relay, and `tests/fixtures/schema_one_tree.json` was vendored from it.
-# A path override is a redirection of what every import in the suite resolves to;
-# leaving one aimed at a stale checkout silently tests against a producer that no
-# longer exists. Point these at a checkout that tracks `main`, and move them only
-# for as long as an unmerged branch is actually under test.
+# span-panel-api#161, so the adapters' reference payloads resolved to a
+# parent/child capture that still recorded the emitter's `$settable` defect on a
+# locked relay, and the conformance tests asserted against it. A path override is
+# a redirection of what every import in the suite resolves to -- including the
+# reference payloads the tests replay -- so leaving one aimed at a stale checkout
+# silently tests against a producer that no longer exists. Point these at a
+# checkout that tracks `main`, and move them only for as long as an unmerged
+# branch is actually under test.
 #
 # A path that does not exist is not a soft failure: `uv run` cannot build the
 # environment at all, so nothing in this repo runs until it is corrected.
 #
 # CI never reads this block -- it deletes it and re-locks from PyPI (.github/
 # workflows/ci.yml) -- so a stale path here breaks only local work. It does mean
-# CI cannot pass until 3.1.0 and both 1.1.0 adapters are on PyPI.
+# CI cannot pass until the pinned releases are on PyPI.
 span-panel-api = { path = "../../span/span-panel-api", editable = true }
 span-panel-api-schema-0 = { path = "../../span/span-panel-api/packages/schema-0", editable = true }
 span-panel-api-schema-1 = { path = "../../span/span-panel-api/packages/schema-1", editable = true }

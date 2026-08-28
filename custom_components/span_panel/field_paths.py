@@ -379,7 +379,7 @@ Exempt is not the same as derived: these are read straight off a snapshot field,
 that field just is not on both schemas.
 
 The annotations are not documentation. `tests/test_field_path_conformance.py`
-builds both adapters' metadata from the vendored fixtures and asserts every
+builds both adapters' metadata from their reference payloads and asserts every
 entry's annotation against what those adapters actually produce, so a stale
 reason fails the build instead of misleading a reader. A path that becomes
 producible by both fails there too, demanding promotion to a declaration.

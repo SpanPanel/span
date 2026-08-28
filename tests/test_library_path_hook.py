@@ -265,16 +265,15 @@ def test_the_vendored_copies_are_the_commits_they_name(name: str) -> None:
     obvious way to make a failing case pass is to edit the fixture.
 
     **A skip here is genuinely not the pass that a skip usually hides**, and the
-    difference is worth stating because this repository's other provenance guard
-    refuses exactly this exit. That one tracks a moving target -- a library
-    release that can be re-cut, re-tagged, or drift -- so skipping means not
-    looking at something that changes. A commit is content-addressed: the bytes at
-    `3cbf02a:pyproject.toml` cannot become different bytes. The only way this
-    comparison can fail is a copy that was wrong when it was vendored, and that is
-    caught wherever the history is reachable, which is every developer machine and
-    any CI checkout with depth. A shallow clone does not have the object to
-    compare against, and asserting against an object that is not there would fail
-    on the clone rather than on the fixture.
+    difference is worth stating because a guard over anything that can move must
+    refuse exactly this exit: skipping there means not looking at something that
+    changes. A commit is content-addressed: the bytes at `3cbf02a:pyproject.toml`
+    cannot become different bytes. The only way this comparison can fail is a copy
+    that was wrong when it was taken, and that is caught wherever the history is
+    reachable, which is every developer machine and any CI checkout with depth. A
+    shallow clone does not have the object to compare against, and asserting
+    against an object that is not there would fail on the clone rather than on the
+    fixture.
     """
     recorded = _recorded_commit(name)
     blob = subprocess.run(

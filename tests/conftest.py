@@ -1,7 +1,6 @@
 """Configure test framework."""
 
 import logging
-import os
 from pathlib import Path
 import sys
 import types
@@ -14,49 +13,6 @@ import pytest
 
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 _CC_DIR = str(Path(_PROJECT_ROOT) / "custom_components")
-
-_DOTENV = Path(_PROJECT_ROOT) / ".env"
-
-
-def _load_dotenv() -> None:
-    """Populate the environment from `.env`, without overriding what is set.
-
-    Read directly rather than through python-dotenv. Until now `.env` was only
-    ever consumed by shell scripts, which source it; the fixture provenance
-    comparison in `test_fixture_provenance.py` is the first thing inside the
-    suite that needs `SPAN_PANEL_API_DIR`, and taking a dependency to parse a
-    handful of `export KEY=value` lines would put a package on the test path to
-    save nothing. `span-panel-api` reads its own `.env` the same way and for the
-    same reason.
-
-    `setdefault`, never assignment. An exported value is a deliberate choice for
-    this run -- pointing at a different checkout to reproduce something -- and a
-    file silently winning over it is the kind of surprise that costs an
-    afternoon.
-
-    The `export ` prefix is stripped because this repository's `.env.example`
-    writes it, so a loader that took the line verbatim would define a variable
-    named `export SPAN_PANEL_API_DIR` and the checks that read it would go on
-    skipping, which is the failure mode they exist to remove.
-
-    Absence is fine; the checks that need a checkout skip themselves. See
-    `.env.example`.
-    """
-    if not _DOTENV.is_file():
-        return
-    for raw in _DOTENV.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export "):
-            line = line[len("export ") :].strip()
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
-_load_dotenv()
 
 
 def _ensure_span_panel_importable() -> None:

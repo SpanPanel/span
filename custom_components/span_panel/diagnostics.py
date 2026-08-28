@@ -131,7 +131,7 @@ def _discovery(findings: SchemaFindings | None) -> DiscoveryBlock:
     diagnostics payload leaves the house into issues and forum posts, and
     `TO_REDACT` above is key-based over the config entry — it could not protect a
     wire value put here, so no wire value is put here. `test_diagnostics` asserts
-    that against the vendored capture rather than leaving it to review.
+    that against the adapter's reference capture rather than leaving it to review.
 
     `available` is False while the adapter has not reported metadata yet, which
     is a real state on a reconnect. It is not the same as an empty report: an

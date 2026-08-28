@@ -38,7 +38,7 @@ installation an entity id derived from the wrong device.
 `test_a_fresh_install_and_a_migrated_one_differ_only_in_entity_id` is the record
 of the decision.
 
-Every expectation about what the card shows is read out of the vendored capture
+Every expectation about what the card shows is read out of the reference capture
 and proved by republishing or unpublishing the property, never by a literal. The
 registry-shape expectations *are* literals, on purpose: they record what a
 released installation carries, and deriving them from the code under test would

@@ -265,7 +265,7 @@ def test_gate_is_one_directional(
 
 
 def _adapter_paths() -> tuple[frozenset[str], frozenset[str]]:
-    """Return the paths each adapter actually produces, from the vendored fixtures."""
+    """Return the paths each adapter actually produces, from the reference payloads."""
     return frozenset(schema_zero_metadata()), frozenset(schema_one_metadata())
 
 

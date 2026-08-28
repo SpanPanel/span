@@ -1,8 +1,14 @@
-"""Build real adapter field metadata from vendored fixtures.
+"""Build real adapter field metadata from the adapters' own reference payloads.
 
 The library's own harness compares wire-level deltas between schemas; it cannot
 know what this integration declares it reads. These helpers give the
 integration's tests real adapter output to check declarations against.
+
+The payloads are package data of the two adapter distributions, read through
+`importlib.resources` exactly as the library's own suite reads them, so the bytes
+replayed here are the bytes shipped by the wheel `manifest.json` pins. The pin is
+the provenance: bumping it is what moves the capture, and nothing has to keep a
+copy of it honest.
 
 Uses the real `ebus_sdk.DiscoveredDevice` rather than a stand-in. A
 description-only stand-in is not sufficient: `_downstream_lugs_metadata` ->
@@ -13,92 +19,32 @@ arrives transitively with span-panel-api-schema-1, so the import is free.
 
 from __future__ import annotations
 
+from importlib.resources import files
 import json
-import pathlib
-from typing import NamedTuple
 
 from ebus_sdk.homie import DiscoveredDevice
-from span_panel_api.models import FieldMetadata, SpanPanelSnapshot, V2HomieSchema
+from span_panel_api.models import FieldMetadata, HomieSchemaTypes, SpanPanelSnapshot, V2HomieSchema
 
 from custom_components.span_panel.schema_validation import DiscoveredProperty
 
-_FIXTURES = pathlib.Path(__file__).parent / "fixtures"
+SCHEMA_ONE_TREE = files("span_panel_api_schema_1") / "reference" / "parent_child_tree.json"
+"""The parent/child capture, as `span-panel-api-schema-1` ships it."""
 
-SCHEMA_ONE_TREE = _FIXTURES / "schema_one_tree.json"
-"""The vendored parent/child capture. See `tests/fixtures/README.md` for provenance."""
-
-SCHEMA_ONE_TREE_SOURCE = _FIXTURES / "schema_one_tree.source"
-"""The release `SCHEMA_ONE_TREE` was copied from, checked by `test_fixture_provenance.py`."""
-
-SCHEMA_ONE_DISTRIBUTION = "span-panel-api-schema-1"
-"""The distribution that publishes the capture, and whose installed version the claim names."""
-
-CHECKOUT_VARIABLE = "SPAN_PANEL_API_DIR"
-"""Names a `span-panel-api` checkout. Already in `.env.example` for editable installs."""
-
-SCHEMA_ONE_SOURCE_PATHS = (
-    pathlib.Path("tests") / "reference_payloads" / "parent_child_tree.json",
-    pathlib.Path("packages")
-    / "schema-1"
-    / "src"
-    / "span_panel_api_schema_1"
-    / "reference_payloads"
-    / "parent_child_tree.json",
-)
-"""Where the capture lives inside a `span-panel-api` checkout, newest location first.
-
-Two of them because the file is moving. `span-panel-api#162` takes the reference
-payloads out of the schema_1 wheel and makes them ordinary test fixtures -- which
-is the whole reason this repository vendors a copy rather than importing one --
-but that change is unmerged, so a checkout on `main` today still holds the file
-under `packages/schema-1/`. Checking the new path first follows the file rather
-than the merge, and works against a checkout on either side of it.
-
-Delete the second entry once #162 is merged **and** no release this repository can
-pin still predates it: the CI clone and `scripts/refresh-vendored-capture.py` both
-position themselves at a recorded release, so the old path stays reachable for as
-long as that release can be a pre-#162 one.
-
-Here rather than in `test_fixture_provenance.py` because the refresh script needs
-the same two paths. A second copy of this list is how the fallback silently
-outlives the merge in one place and not the other.
-"""
-
-SCHEMA_ONE_RELEASE_DECLARATION = pathlib.Path("packages") / "schema-1" / "pyproject.toml"
-"""Where a checkout declares which schema-1 release it is."""
+SCHEMA_ZERO_SCHEMA = files("span_panel_api_schema_0") / "reference" / "homie_schema.json"
+"""The `GET /api/v2/homie/schema` capture, as `span-panel-api-schema-0` ships it."""
 
 
-class VendoredSource(NamedTuple):
-    """The distribution and release a vendored fixture was copied from."""
+def _schema_zero_types() -> HomieSchemaTypes:
+    """The flat capture's `types` map, which is the shape a schema_0 build takes.
 
-    distribution: str
-    version: str
-
-
-def schema_one_source() -> VendoredSource:
-    """Read the release recorded beside the vendored capture.
-
-    Recorded as a pinned requirement -- `span-panel-api-schema-1==1.1.0` -- rather
-    than a bare version, for two reasons. It names *which* distribution the claim
-    is about, and this repository pins three of them; and it is written in the
-    same vocabulary as the `manifest.json` requirement it has to agree with, so
-    the two can be compared by eye during a bump as well as by
-    `test_fixture_provenance.py`.
-
-    It lives in its own file rather than inside the payload because the refresh
-    procedure is a byte-for-byte copy: a key added to the JSON would be
-    overwritten by every refresh, and a payload that differs from its source is
-    exactly what the README forbids.
+    The whole `GET /api/v2/homie/schema` response is what the adapter ships;
+    `types` is the half both flat fixtures need, so it is unwrapped once here
+    rather than at each of them.
     """
-    recorded = SCHEMA_ONE_TREE_SOURCE.read_text().strip()
-    distribution, separator, version = recorded.partition("==")
-    if not (separator and distribution and version):
-        raise ValueError(
-            f"{SCHEMA_ONE_TREE_SOURCE} must hold one pinned requirement naming the "
-            f"release the vendored capture was copied from, such as "
-            f"'span-panel-api-schema-1==1.1.0'. It holds {recorded!r}."
-        )
-    return VendoredSource(distribution, version)
+    document: dict[str, HomieSchemaTypes] = json.loads(
+        SCHEMA_ZERO_SCHEMA.read_text(encoding="utf-8")
+    )
+    return document["types"]
 
 
 SCHEMA_ONE_PANEL = "example-40t-001"
@@ -137,13 +83,11 @@ def _devices_from(tree: dict[str, dict[str, str]]) -> list[DiscoveredDevice]:
 def schema_one_tree(without: str | None = None) -> dict[str, dict[str, str]]:
     """A mutable copy of the parent/child capture, ready to be rewritten.
 
-    **Vendored here, not read from the library's package data.** The capture is
-    test data; carrying it in the runtime wheel put 56 KB of it on every user's
-    disk, and reading it by import made this suite depend on a distribution
-    continuing to ship files nothing at runtime reads. The objection to a copy was
-    that it goes stale in silence -- answered by `schema_one_source()` and
-    `test_fixture_provenance.py`, which hold the recorded release against the one
-    actually installed, so a moved pin with an unrefreshed copy fails CI by name.
+    **Read from the library's package data, not copied into this repository.**
+    `span-panel-api-schema-1` publishes the capture beside the adapter that parses
+    it, so the pinned wheel is both the payload and the record of which release it
+    came from; a copy here would need a guard to keep it honest, and the pin needs
+    none.
 
     Copied per call, and one level deep, which is as deep as a topic goes: a test
     proves a reading came off the wire by republishing it and asserting the entity
@@ -154,7 +98,7 @@ def schema_one_tree(without: str | None = None) -> dict[str, dict[str, str]]:
     from the base by construction -- the only difference each ever had was the one
     missing device.
     """
-    capture: dict[str, dict[str, str]] = json.loads(SCHEMA_ONE_TREE.read_text())
+    capture: dict[str, dict[str, str]] = json.loads(SCHEMA_ONE_TREE.read_text(encoding="utf-8"))
     tree = {device_id: dict(topics) for device_id, topics in capture.items()}
     if without is not None:
         assert without in tree, f"{without!r} is not in the capture; nothing to drop"
@@ -192,8 +136,7 @@ def schema_zero_metadata() -> dict[str, FieldMetadata]:
     """
     from span_panel_api_schema_0.field_metadata import build_field_metadata
 
-    raw = json.loads((_FIXTURES / "schema_zero_types.json").read_text())
-    return _curated(build_field_metadata(raw["types"]))
+    return _curated(build_field_metadata(_schema_zero_types()))
 
 
 SCHEMA_ZERO_SERIAL = "sp3-synthetic-0001"
@@ -224,11 +167,10 @@ def schema_zero_snapshot() -> SpanPanelSnapshot:
     """
     from span_panel_api_schema_0.adapter import SchemaZeroAdapter
 
-    raw = json.loads((_FIXTURES / "schema_zero_types.json").read_text())
     schema = V2HomieSchema(
         firmware_version=SCHEMA_ZERO_FIRMWARE,
         types_schema_hash="0" * 16,
-        types=raw["types"],
+        types=_schema_zero_types(),
     )
     return SchemaZeroAdapter(SCHEMA_ZERO_SERIAL, schema).build_snapshot()
 
@@ -272,7 +214,7 @@ def schema_one_metadata_raw() -> dict[str, FieldMetadata]:
 
 
 def schema_one_discovery() -> tuple[DiscoveredProperty, ...]:
-    """What schema_1 declares in the vendored tree that it reads nothing from.
+    """What schema_1 declares in the reference tree that it reads nothing from.
 
     The other half of the same map. Held apart from `schema_one_metadata` so a
     test has to ask for it by name — a discovered path arriving unannounced in a

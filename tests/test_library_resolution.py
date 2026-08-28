@@ -1,19 +1,20 @@
 """The `span_panel_api` under test must be the one the pins name.
 
 Every other guard in this suite reads a version. `manifest.json` pins one,
-`scripts/sync-dependencies.py` holds the copies to it, `test_fixture_provenance.py`
-compares the vendored capture against it. All of that assumes the version string
-identifies the code, and it does not: a checkout sitting on unreleased work
+`scripts/sync-dependencies.py` holds the copies to it, and the reference payloads
+the conformance tests replay are whatever the pinned wheels ship. All of that
+assumes the version string identifies the code, and it does not: a checkout
+sitting on unreleased work
 declares the same version as the release it is ahead of, and a scratch worktree
 declares the same version as the checkout it was branched from. A version is a
 claim; a filesystem location is a fact.
 
 That gap is not hypothetical here. `3cbf02a` pointed `[tool.uv.sources]` at a
 scratch worktree and committed it, so every import in the suite resolved through
-a checkout that had never received span-panel-api#161. A fixture was vendored
-through it while it stood, capturing an emitter defect that had already been
-fixed. Every version check in both repositories passed. Only a byte comparison
-saw it, and only because that comparison had a real second copy to look at.
+a checkout that had never received span-panel-api#161. The conformance tests ran
+against an emitter defect that had already been fixed, for as long as it stood.
+Every version check in both repositories passed, because the stale worktree
+declared the same version number as the corrected code.
 
 So this file checks the one thing no version can: **where the module actually came
 from**. It reads `span_panel_api.__file__`, not metadata, because those two can
@@ -33,10 +34,9 @@ against unreleased library code" -- and a guard that punishes the workflow it is
 protecting gets deleted. Under `CI` there is no such thing as a legitimate
 override: the workflow deletes `[tool.uv.sources]` and resolves from PyPI, so
 anything but the pinned distribution in the environment's own site-packages means
-the wiring has come undone. The asymmetry, and the reason a skip is not a pass,
-are `test_fixture_provenance.py`'s -- "A skip reads in a summary line exactly like
-a pass, and that is how a stale vendored capture went unnoticed for nine days"
-(`span-panel-api`, DEVELOPMENT.md).
+the wiring has come undone. The reason a skip is not a pass is `span-panel-api`'s,
+stated in its DEVELOPMENT.md -- "A skip reads in a summary line exactly like a
+pass, and that is how a stale vendored capture went unnoticed for nine days".
 """
 
 from __future__ import annotations

@@ -73,8 +73,8 @@ class DiscoveredProperty:
     """A property the panel declares that the running adapter reads nothing from.
 
     The runtime half of `tests/test_declared_but_unread`, which asks the same
-    question of a vendored capture and therefore cannot see a panel that starts
-    publishing something in the field.
+    question of the adapter's reference capture and therefore cannot see a panel
+    that starts publishing something in the field.
 
     Maintainer-facing only. Nothing creates an entity, a Repair or a
     notification from one of these — it is carried in diagnostics so that

@@ -221,7 +221,7 @@ def test_flat_firmware_publishes_no_topology_it_was_never_told() -> None:
 def test_the_topology_attribute_reports_what_the_parent_child_panel_published() -> None:
     """schema_1 resolves the field, so the attribute is a reading and is published.
 
-    The vendored capture's upstream lugs carry `connection/fed-by-device-id =
+    The reference capture's upstream lugs carry `connection/fed-by-device-id =
     bess`: a real panel with a battery ahead of the main lugs, which is the case
     the flat adapter cannot see and this one can.
     """
