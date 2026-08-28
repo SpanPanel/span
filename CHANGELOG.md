@@ -18,7 +18,8 @@ All notable changes to this project will be documented in this file.
 
 ### You will need this release before SPAN updates your panel
 
-SPAN firmware `r202633` replaces the wire model and introduces the new one on reboot. **2.0.8 cannot read a panel on `r202633`.**
+SPAN firmware `r202633` retires the wire model every release up to 2.0.8 reads, and serves its replacement from the reboot onwards. **2.0.8 cannot read a panel
+on `r202633`.**
 
 ### Requires Home Assistant 2026.8.0 or newer
 
@@ -26,7 +27,7 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
 
 **The transition is uneventful** — the integration boots with the right wire library based on which firmware it sees. Your devices and entities are intact.
 
-### Added (Subject to Firmware Support)
+### Added (subject to firmware support)
 
 - **The panel's Microgrid Interconnect Device appears as its own device**, carrying **Grid State** — the health of the utility supply itself, which your panel
   never reported before.
@@ -38,8 +39,7 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   unique ids and history they have today.
 - **Assign the new Solar device to an area** — those five no longer inherit the panel's area, which quietly drops them from area-scoped dashboards, automations
   and voice commands until you do.
-- New installations get `sensor.span_panel_solar_pv_vendor` and friends where existing ones keep `sensor.span_panel_pv_vendor`; both are correct and neither
-  will change again.
+- New installations get `sensor.span_panel_solar_pv_vendor` and friends where existing ones keep `sensor.span_panel_pv_vendor`; both are correct.
 
 - **EVSE Charge Current Limit** — a settable ceiling on each commissioned SPAN Drive.
 - The maximum is the one your installer commissioned; the control is unavailable where the rating is not published.
@@ -57,8 +57,8 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   Power Flow importing.
 
 - **Time to Priority Shed and Backup Time Remaining** — how long before the panel starts shedding circuits and how long before the battery is spent. Enabled by
-  default.
-- Each forecast carries its full-charge equivalent and the panel's own `forecast_confidence` as attributes, rather than as two more near-constant entities.
+  default. Each forecast carries its full-charge equivalent and the panel's own `forecast_confidence` as attributes, rather than as two more near-constant
+  entities.
 
 - **Import Limit, Binding Constraint and PCS Active** — the current limit your panel enforces, which rule set it, and whether anything is being throttled right
   now. Filed under Diagnostics. Import Limit carries the arbitration as attributes.
@@ -73,10 +73,10 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
 - **Circuit Priority's shed policy is readable**: `dsm_state` gains `shed_algorithm` and the two state-of-charge thresholds that decide when circuits shed and
   when they come back.
 - **Grid-forming device name** as an attribute on the Grid Forming Entity sensor.
-- **Diagnostics include your entity registry** — every entity this integration owns, its unique id, and what disabled it, which Home Assistant will not
-  otherwise tell you.
+- **The diagnostics download includes your entity registry** — every entity this integration owns, its unique id, and what disabled it, which Home Assistant
+  will not otherwise tell you.
 
-### Changed (Subject to Firmware Update)
+### Changed (subject to firmware support)
 
 - **`DSM Grid State` is now more trustworthy**, reading the islanding state the Microgrid Interconnect Device actually senses rather than inferring it from the
   battery and the dominant power source, and keeping its entity id and its history.
@@ -86,128 +86,53 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   sides of the upgrade so it lands once at this release.
 - **Five panel sensors are switched off for new installations** (#234) because of three SPAN-documented defects predating firmware r202633: **Feedthrough
   Produced Energy**, **Feedthrough Consumed Energy**, **Feedthrough Power**, and the two **Downstream** current sensors.
-- **Existing installations keep those five exactly where they are**, with their history and entity ids, because Home Assistant consults the enabled-by-default
-  setting only when an entity is first created.
-- **Your other panel readings are unaffected**, checked against a capture from a live upgraded panel rather than assumed.
 - **New entities are now announced in a notification** that splits what arrived into ready to use and switched off, and names each one.
-- **A damaged record of what has already been announced is re-seeded rather than failing setup**, so a truncated or hand-edited store costs you one repeated
-  notification instead of an integration that will not start.
-- **The Wi-Fi network name moved to the Wi-Fi Link sensor** as a `wifi_ssid` attribute, absent rather than blank on a panel that publishes no SSID.
-- **It is no longer an attribute of the Software Version sensor**, so a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` should
-  point at the Wi-Fi Link binary sensor instead.
-- **Circuit entity ids are now composed by Home Assistant from your own entity-id settings**, the way every other entity this integration creates already was:
-  the integration supplies the circuit half — `Circuit 15 Power` or `Kitchen Outlets Power`, as your naming option says — and Home Assistant adds the device
-  name, and the area as well if your entity-id settings (`entity_id_parts`) include it.
-- **Nothing you already have moves**: an entity keeps the id it has until you press **Recreate entity IDs**, which offers an entity its own id back where
-  nothing changed, and an id reflecting your own configuration where something did — a circuit you renamed, an area you assigned, or the name you gave the panel
-  device.
-- **Three kinds of installation may be offered a different id when you press Recreate entity IDs**: a sensor on a SPAN Drive's feed circuit (offered the
-  charger's name, the device it is actually on), a second panel whose device this integration called "Span Panel 2" (offered `span_panel_2_`), and an older
-  installation whose circuit ids carry no device name at all (offered one). Each is your own entity-id settings composing the id, and no id moves until you
-  accept the offer.
+- **The Wi-Fi network name moved to the Wi-Fi Link sensor** as a `wifi_ssid` attribute, absent rather than blank on a panel that publishes no SSID. It is no
+  longer an attribute of the Software Version sensor, so a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` should point at the
+  Wi-Fi Link binary sensor instead.
 - **A panel device you renamed yourself is offered ids carrying that name**, since Home Assistant composes from the name you gave the device ahead of the one
   this integration generated.
 - **New installations provide uniform circuit energy sensor ids — `consumed_energy`, `produced_energy` and `net_energy`**, in line with the panel-level energy
   sensors.
 - **A newly commissioned SPAN Drive's feed-circuit sensors are named for the charger** — `sensor.<charger>_power`, matching the charger's other sensors; the
   ones you already have keep their ids.
-- **An unnamed circuit in friendly-names mode is now named for the tab it occupies** (`Circuit 7 Power`), so two unnamed circuits no longer collide — the old
-  scheme called every one of them `single_circuit` and let the registry tell them apart with `_2`, `_3`.
-- **If you recreate entity IDs, an unnamed circuit you already have may be offered a `circuit_7` id.** Its current id keeps working if you decline.
-- **Circuit-numbers installations now show the device in the displayed name** — `Span Panel Kitchen Outlets Power`, as friendly-names installations always have
-  — so a template or a voice alias matching the old exact string needs updating.
 
 ### Fixed
 
 - **Energy dip compensation no longer books a dip that never happened** (#259), where a partial reading at startup looked like a counter reset and every restart
   added each circuit's whole lifetime counter to its offset.
-- **A compensated dip stays provisional until it settles, and is only reported then**: it is compensated the moment it is seen, corroborated by a reading that
-  climbs from the new low base, held for three further readings during which the counter returning to where it started takes that dip's whole compensation back,
-  and named in a notification once that window closes — so a burst of stale samples cannot leave a permanent step in your energy statistics or a notice for an
-  event that did not happen.
 - **A panel this integration can no longer reach makes its entities unavailable instead of reporting 0 W** — a certificate authority that changes mid-session
   used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
   untouched.
-- **The registry `Name` an older release wrote on circuit-numbers installations is handed back to you** at the first start after upgrading, for every label
-  those sensors have ever carried, so that field is yours again and no longer decides what Recreate proposes.
-- **Enum sensors advertise the states they can actually report**, where nine sensors declared only `unknown` and `DSM Grid State` sitting at `On Grid` showed
-  "Possible states: Unknown".
 - **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
   ever wrong.
 - **A breaker your panel refuses to operate now says so**, reporting the panel's own reason where you pressed it instead of a traceback in the log and a toggle
   that quietly springs back.
 - **A control command that never reached your panel now says so**, reported where you issued it rather than only in the log and stating plainly that nothing was
   queued.
-- **A refused circuit priority no longer blames your firmware**, carrying the panel's own reason on the control you used rather than as a notification you
-  dismiss by hand.
 
 ### Security
 
-- **New admin-only action `span_panel.rotate_credentials`** replaces the eBus MQTT broker password on demand, which immediately breaks any other local client
-  using the old one.
 - **The panel's certificate authority is pinned before your passphrase is ever sent**, so the registration exchange that carries it — and everything after — no
   longer crosses your network in the clear.
-- **Re-authenticating an entry that was never pinned pins it first**, so an entry that arrived from an older release sends its new credentials over a verified
-  connection and keeps the authority afterwards.
-- **A pinned entry is never left holding an address its own certificate does not name**, which would have produced an entry unable to reach the panel it was
-  just set up against, with no flow left to correct it.
-- **Continuing past a failed domain registration now keeps the panel rather than the name**, recording the address that got that far and claiming no registered
-  domain, so the entry works and the domain can be tried again from **Reconfigure** once whatever blocked it is fixed.
-- **An entry upgraded from before pinning checks the authority it fetched against the certificate the panel serves on the broker port before storing it**, so a
-  reverse proxy or anything else answering that fetch cannot become the authority the integration then trusts forever.
-- **The same check now guards the repair that asks you to accept a changed authority**, and a value that fails it is refused rather than offered to you as a
-  fingerprint to approve.
-- **An mDNS announcement or a re-added panel only moves a pinned entry's address when the new address serves a certificate that entry's authority validates** —
-  previously any device on your network could claim your panel's serial and have the entry pointed at itself, after which the changed-authority repair invited
-  you to accept the impostor's fingerprint.
 - **A changed authority stops the integration and raises a repair** carrying both fingerprints, because a legitimate rotation and an impersonated panel look
   identical from here.
-- **`span_panel.rotate_credentials` asks which panel when more than one is loaded** instead of rotating the first it finds, since the previous broker password
-  stops working for every other local client of whichever panel it picked.
-- **It reports a reload that did not come back** rather than logging success, and says the new password was already stored so nobody rotates a second time and
-  invalidates the one the panel has accepted.
-- **It refuses to run at all when the stored authority cannot be read**, rather than carrying the access token out and the new broker password back over an
-  unverified connection; repair the authority first.
 - **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay
   debounce — every one defaulting to what your panel already does.
 - **`Administrators only` does not cover an automation a non-admin triggered**, because Home Assistant gives an automation a fresh context with no user on it
   and there is then nothing to hold to the admin test; switch off **Allow control without a logged-in user** if you want those refused too.
-- **Choosing `Nobody` now refuses control commands as well as creating no controls**, so the option is enforced where commands are published rather than only by
-  the absence of entities to press.
-- **The control lock arrives armed and stays where you left it**, so turning the option on locks control straight away and a restart or a settings save no
-  longer quietly unlocks the panel; a pending auto-relock comes back with the time it had left rather than starting its countdown over.
-- **A control lock whose pending countdown cannot be read comes back armed** rather than opening a fresh window nobody asked for — which is what a record
-  written by an older release looks like on the first restart after upgrading.
-- **The relay debounce counts only commands the panel was actually sent**, so a breaker command the broker never took no longer refuses your immediate retry
-  with "operated less than 2 seconds ago".
-- **A circuit the panel starts or stops letting you operate gains or loses its breaker switch and its priority control on the next reload**, which the
-  integration asks for as soon as it notices — both directions, rather than leaving you a control the panel refuses every press of or no control where the panel
-  now allows one.
 - **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
   issued it rather than to nobody.
-- **Every control now reports what happened to it**, adopted devices' controls included, so a command that was refused or never handed to the broker no longer
-  looks like one the panel confirmed.
-- **A new [Security](README.md#security) section in the README** covers what the integration stores, what rotation costs, and the deployment choices that
-  actually bound the panel's exposure.
+- **A new [Security](README.md#security) section in the README** covers what rotation costs and the deployment choices that actually bound the panel's exposure.
 
 ### Known limitations
 
-- **A panel reachable only by a single-label name cannot complete a pinned setup by that name** — the SPAN simulator add-on and anything else whose certificate
-  names only its IP address — because nothing registers a name that is not a fully qualified domain, so the certificate never comes to name it; set the panel up
-  by its IP address instead.
-- **An upgraded entry whose broker port does not serve a certificate the panel's own authority signs stays unpinned** — a proxy terminating TLS with a
-  certificate of its own, say — logging a warning at every start and raising no repair. **Reauthenticate** is the route that does the check on screen: it asks
-  for the TLS port and refuses with an error if the authority does not sign what the panel serves. Reconfiguring the entry to the panel's own address instead
-  leaves the pin to the reload that follows, which happens silently — watch the log for "Pinned the CA advertised by…". The reverse arrangement — a proxy
-  terminating only port 443, so that the panel's own authority signs the broker's certificate but not the one served on the HTTPS port — does pin at that
-  reload, and every path that then talks to the panel over HTTPS (**Reauthenticate**, **Reconfigure**, **Rotate credentials**) refuses rather than sending your
-  token unencrypted, until port 443 also serves the panel's own certificate.
+- **A panel reachable only by a single-label name — one with no dot and no domain — cannot complete a pinned setup by that name**, because nothing registers a
+  name that is not a fully qualified domain, so the certificate never comes to name it. Set that panel up by its IP address, or by the `.local` name shown in
+  the mobile app.
 - **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved, use **Reconfigure** on
   the entry, which checks the new address against the standing pin before storing it.
-- **A panel discovered through the Supervisor is deliberately not held to the address check** the other discovery routes are, because a Home Assistant add-on
-  arrives over the authenticated Supervisor API and legitimately reallocates its own ports; an add-on with Supervisor privileges can therefore move a pinned
-  entry.
 
 ## [2.0.8] - 5/2026
 
