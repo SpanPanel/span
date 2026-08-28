@@ -144,16 +144,12 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
 
 ### Security
 
-- **The panel passphrase is no longer stored** — upgrading migrates the config entry to version 7 and removes it, after which an older build of the integration
-  will refuse to load that entry, so roll back from a backup rather than by reinstalling.
 - **New admin-only action `span_panel.rotate_credentials`** replaces the eBus MQTT broker password on demand, which immediately breaks any other local client
   using the old one.
 - **The panel's certificate authority is pinned before your passphrase is ever sent**, so the registration exchange that carries it — and everything after — no
   longer crosses your network in the clear.
 - **Re-authenticating an entry that was never pinned pins it first**, so an entry that arrived from an older release sends its new credentials over a verified
   connection and keeps the authority afterwards.
-- **Setting up or moving a panel to a hostname works with pinning on**, because the panel is set up over the address its certificate already names and the
-  hostname is verified after the panel has added it.
 - **A pinned entry is never left holding an address its own certificate does not name**, which would have produced an entry unable to reach the panel it was
   just set up against, with no flow left to correct it.
 - **Continuing past a failed domain registration now keeps the panel rather than the name**, recording the address that got that far and claiming no registered

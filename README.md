@@ -663,51 +663,22 @@ and select your preferred precision from the "Display Precision" menu.
 
 ## Security
 
-### What the integration stores
-
-Setting up a v2 panel exchanges your panel passphrase for two long-lived secrets, which are kept in the config entry (`.storage/core.config_entries`):
-
-- the **eBus MQTT broker password**, which grants control of every relay, circuit priority, islanding state and EVSE limit on the panel and its sub-devices, and
-- the **REST access token**, which grants panel management — client registration, FQDN registration and credential rotation.
-
-The **panel passphrase itself is no longer stored.** It is an input to registration and nothing afterwards reads it, but a stored copy could mint fresh
-credentials at any time. Upgrading migrates the config entry to version 7 and removes it; nothing else in the entry changes and no entity is affected. If you
-have not yet upgraded, reauthenticating also removes it.
-
-> **Downgrade note.** Once an entry has reached version 7, installing an older build of the integration will fail to set it up — Home Assistant refuses to load
-> a config entry whose version is newer than the installed integration supports. Restore a backup taken before the upgrade if you need to roll back.
-
 These are the limits of what the integration can enforce. Anything that already holds the broker password — including another integration running in the same
 Home Assistant process — talks to the panel directly and is not subject to Home Assistant's permission model at all.
-
-### The panel's certificate authority
-
-The panel issues its own certificate authority and signs its TLS certificate with it. **Before you are asked for your passphrase**, setup fetches that
-authority, checks that the certificate the panel actually serves is signed by it, and pins it. Everything after that — registration itself, and every later
-connection — runs over that authority, and the integration stops rather than accepting a different one.
-
-The ordering is the point. Registration is the exchange that sends your passphrase and returns both the access token and the broker password, so it is the
-single most valuable message on your network. It now travels over a verified connection instead of in the clear.
 
 **What that does and does not buy you.** The authority is fetched over your local network on a connection that has nothing to verify itself against — it is the
 anchor everything else is checked against. So:
 
-- Anyone merely **listening** on your network can no longer read your passphrase or the credentials the panel returns for it. That is the common case, and it is
-  closed.
+- Anyone merely **listening** on your network cannot read your passphrase or the credentials the panel returns for it.
 - A device **actively standing between** Home Assistant and your panel at that first fetch could answer with an authority of its own, sign a certificate with
   it, and still see them. Pinning cannot detect that on its own.
 
-Comparing the fingerprint against another source is what closes the second case. Setup does not stop to ask you to do that, because at first contact there is
-nothing to compare against: SPAN does not publish the value, so the question could only be answered by pressing Submit. The fingerprint is put where it can
-actually be used instead — diagnostics report it under `panel_ca`, it is logged at setup, and another install of this integration on the same panel reports the
-same value.
+Comparing the fingerprint against another source is what closes the second case. At first contact there is nothing to compare against: SPAN does not publish the
+value, so the question could only be answered by pressing Submit. The fingerprint is put where it can actually be used instead — diagnostics report it under
+`panel_ca`, it is logged at setup, and another install of this integration on the same panel reports the same value.
 
-After the first pin, nothing can change the authority without stopping and asking you — and _that_ is a question you can answer, because there is a prior value
-to compare against. See the certificate-authority-changed entry in Troubleshooting.
-
-**There is no "continue without pinning" for a new panel.** If the authority cannot be read, or the certificate the panel serves is not signed by it, setup
-shows an error and stops. Submitting the form again retries the fetch, which is what a panel that was briefly unreachable needs. An opt-out would quietly
-restore the plaintext credential exchange this ordering exists to remove, at the moment you are least likely to weigh it.
+After the first pin, nothing can change the authority without stopping and asking you — there is a prior value to compare against. See the
+certificate-authority-changed entry in Troubleshooting.
 
 **Re-authenticating an entry that has no anchor acquires one first.** Reauth is a registration, so it carries the passphrase out and the broker password back —
 the same exchange setup performs. An entry that arrived from before pinning, or one whose stored authority will no longer load, goes through the
@@ -717,8 +688,6 @@ connection.
 **Setting a panel up by hostname works, and the hostname is verified.** A panel's certificate names the addresses it already knows itself by; a domain joins
 that list only when the integration asks the panel to regenerate its certificate, which happens after you have authenticated. Everything before that runs
 against the address the certificate already names, hostname verification never relaxed, and the domain is checked once the panel reports the new certificate.
-Only a fully qualified domain is registered, so a single-label name — the hostname an add-on or the simulator is reached by — never joins the certificate, and a
-name the certificate does not already carry cannot be stored on a pinned entry; set that panel up by its address instead.
 
 **A pinned entry follows its panel to a new address only when the new address proves itself.** An entry moves when your panel announces itself over mDNS at a
 new address, and when you add the same panel again by hand. Both used to be decided by a serial read from an unauthenticated endpoint, which anything on your
