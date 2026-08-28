@@ -11,11 +11,10 @@ Working against unreleased library code needs those paths aimed somewhere else
 for a while, and the obvious way to do that is to edit them. That is what
 happened in `3cbf02a`: both blocks were pointed at a scratch worktree and
 committed. It stood for several commits and a few hours of other people's work,
-and while it stood a test fixture was vendored through it from a checkout that
-still recorded a producer defect the library had already fixed. Every
-version-based check passed -- the stale worktree declared the same version number
-as the corrected code -- and only a byte comparison caught it. A version string
-does not identify content; only a filesystem location does.
+and while it stood the conformance tests ran against a producer defect the
+library had already fixed. Every version-based check passed -- the stale worktree
+declared the same version number as the corrected code. A version string does
+not identify content; only a filesystem location does.
 
 So the redirection does not belong in a committed file at all. It belongs in the
 virtual environment, where it affects one developer's next command and nothing

@@ -35,16 +35,21 @@ SCHEMA_ZERO_SCHEMA = files("span_panel_api_schema_0") / "reference" / "homie_sch
 
 
 def _schema_zero_types() -> HomieSchemaTypes:
-    """The flat capture's `types` map, which is the shape a schema_0 build takes.
+    """Unwrap the flat capture's `types` map, the shape a schema_0 build takes.
 
     The whole `GET /api/v2/homie/schema` response is what the adapter ships;
     `types` is the half both flat fixtures need, so it is unwrapped once here
-    rather than at each of them.
+    rather than at each of them. Narrowed rather than annotated: the document's
+    other top-level values are strings, and `json.loads` would let a wrong
+    annotation stand.
     """
-    document: dict[str, HomieSchemaTypes] = json.loads(
-        SCHEMA_ZERO_SCHEMA.read_text(encoding="utf-8")
-    )
-    return document["types"]
+    document: object = json.loads(SCHEMA_ZERO_SCHEMA.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise TypeError(f"{SCHEMA_ZERO_SCHEMA.name} is not a JSON object")
+    types = document["types"]
+    if not isinstance(types, dict):
+        raise TypeError(f"{SCHEMA_ZERO_SCHEMA.name} has no `types` object")
+    return types
 
 
 SCHEMA_ONE_PANEL = "example-40t-001"

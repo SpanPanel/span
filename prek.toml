@@ -36,8 +36,8 @@ hooks = [
 # The library path override in pyproject.toml must name the checkout, not a
 # worktree. `3cbf02a` committed a scratch worktree into `[tool.uv.sources]` and
 # `[tool.pyright].extraPaths`; it redirected every import in the suite for
-# several commits, and a fixture vendored through it captured a producer defect
-# the library had already fixed. Runs early -- it is a read of one small file, and
+# several commits, and the conformance tests ran against a producer defect the
+# library had already fixed. Runs early -- it is a read of one small file, and
 # a run that resolves the wrong library has nothing useful to say afterwards.
 [[repos]]
 repo = "local"

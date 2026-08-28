@@ -63,29 +63,13 @@ working entirely in 2027.8.
   now. Filed under Diagnostics with the panel's other electrical characteristics. Import Limit carries the whole arbitration as attributes.
 - **Every circuit's power sensor gains `pcs_managed` and `pcs_priority`** where the circuit reports them — the shed order when an import limit binds, which is
   not the backup tier the existing `shed_priority` names.
-- **New kinds of device your panel gains no longer wait for a release.** SPAN's data model is vendor-extensible, so a device type nobody has modelled can turn
-  up at any time; one now gets a card of its own hanging off the panel, with whatever it publishes as entities beneath it, all disabled and diagnostic.
-- **A property an adopted device accepts writes to becomes a control**: a boolean becomes a switch, an enum a select, a bounded number a number entity,
-  constrained to what the device declared and nothing invented.
-- **A number box appears only where the declared range can actually be read** — a range this integration cannot parse, one whose bounds are the wrong way round,
-  or one with a zero step surfaces as a plain reading instead of a control admitting no value.
-- **Two vendor readings that would land on the same entity id no longer silently cost you one of them**: the lexically first wire path keeps the id and the
-  other is named in a warning in the log, rather than being dropped by Home Assistant under an id you cannot map back to anything.
-- **A vendor device or reading that turns up hours after setup reaches you on its own**, through the same reload a new battery or charger triggers, instead of
-  waiting for the next restart.
-- **Nothing adopted enters long-term statistics** — `state_class` is not declared on the wire and a wrong guess writes corrupt statistics; wrap an adopted
-  reading in a template sensor or utility meter if you want them.
-- **A new reading a vendor adds to a device you already have now appears too**, on the card that device already has — the battery, the Microgrid Interconnect
-  Device, a SPAN Drive or the solar inverter, with circuit and lugs readings landing on the panel's own card. Previously only whole new _devices_ were picked
-  up, so a battery vendor adding a field reached you nowhere.
-- These new readings arrive switched off and filed as diagnostics, like everything else adopted, and they are readings only — never switches or number boxes,
-  because a control here would sit beside the curated ones without their limits and translations.
-- **They keep the panel's own wording** (`Battery 2 Cell Temperature`), which is deliberately plainer than a curated entity's name so you can tell at a glance
-  which is which.
-- **Deleting one hides it until the next reload while your panel is still publishing it, and removes it for good once your panel stops.** There is no setting to
-  suppress one, because the delete button already does both jobs, decided by what your panel is actually sending.
-- **At most 60 vendor readings are adopted per device**, a backstop against a misbehaving publisher rather than a policy on a real one, and the notification
-  naming what was declined is now raised once and stays dismissed until that set changes.
+
+- **Devices and readings your panel gains no longer wait for a release.** SPAN's data model is vendor-extensible, so a device type nobody has modelled gets a
+  card of its own hanging off the panel, and a new reading on a device you already have — the battery, the Microgrid Interconnect Device, a SPAN Drive, the
+  solar inverter, a circuit or the lugs — lands on the card that device already has, both picked up on a reload rather than at the next restart. They arrive
+  switched off, filed as diagnostics and under the panel's own plainer wording, and a property the device accepts writes to becomes a switch, a select or a
+  number box constrained to what the device declared and nothing invented. Nothing adopted enters long-term statistics because `state_class` is not published on
+  the wire, and at most 60 readings are adopted per device as a backstop against a misbehaving publisher.
 
 - **Your panel's own card shows what the panel says it is** — manufacturer, model and hardware revision read from the enclosure rather than assumed, once your
   panel publishes them.

@@ -2491,7 +2491,7 @@ wheels = [
 
 [[package]]
 name = "span"
-version = "2.1.0b20"
+version = "2.1.0b21"
 source = { virtual = "." }
 dependencies = [
     { name = "homeassistant" },
