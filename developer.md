@@ -793,6 +793,36 @@ rather than in `services`. Both halves of the check are real, which is why the h
 that core _deletes_ on unload, so the attribute is genuinely absent on an entry that has not finished setting up (hence `getattr` with a default), and what is
 there is whatever the owning integration put there, so `isinstance` is what says it is ours. AGENTS.md service point 6 names this helper.
 
+## Why the CA pinning behaves as it does
+
+The README says what the pinning does; this is why each of those choices was made rather than the obvious alternative. All of it was written for the README and
+moved here, because it answers "why is it like that" rather than "what do I do".
+
+**The fingerprint is not shown at first contact, on purpose.** Comparing it against another source is what closes the active-in-path case, and at first contact
+there is nothing to compare against — SPAN does not publish the value, so the question could only ever be answered by pressing Submit. A dialog that asks a
+question the user cannot answer trains them to dismiss it, which costs the one time it matters. So the value is put where it can actually be used instead:
+diagnostics under `panel_ca`, the setup log, and any other install of this integration on the same panel.
+
+**Diagnostics carry the fingerprint and not the certificate.** The certificate is public, so withholding it buys no secrecy — it is omitted because it is
+multi-KB and the fingerprint is the part anyone reads.
+
+**An unreachable panel does not stop setup.** The integration starts anyway and retries on the next startup. The exposure in the meantime is exactly the one the
+entry already had before pinning existed, and refusing to start would not remove it — it would remove the integration, leaving the credential no safer while
+guaranteeing an outage. Retrying closes the window at the first opportunity instead.
+
+**Reauth keeps the anchor it acquires.** An entry that predates pinning, or whose stored authority no longer loads, goes through the certificate-authority step
+before either sign-in method is offered, and keeps the anchor afterwards rather than falling back to a plaintext fetch on every connection. Reauth is a
+registration — it carries the passphrase out and the broker password back, the same exchange setup performs — so it is the one flow where acquiring an anchor
+first is worth a step in front of the user.
+
+**Reauthenticate is the route that pins on screen; Reconfigure pins silently.** The certificate-authority step asks for the TLS port where the HTTP port has
+been moved — the install most likely to be behind a proxy — and errors if the authority does not sign what the panel serves. Reconfiguring the entry to the
+panel's own address reaches the same place, but the pin then happens during the reload that follows, announced only by a `WARNING` reading "Pinned the CA
+advertised by SPAN panel …" with the fingerprint.
+
+**A registered domain is checked once the panel reports the new certificate**, not when registration is requested. The panel regenerates its certificate around
+the FQDN asynchronously, so the flow polls for the name to appear in the SAN rather than assuming the call took effect.
+
 ## The Supervisor discovery path is deliberately unguarded
 
 A pinned entry only follows a discovered host when that host serves a certificate the entry's anchor validates — `async_step_zeroconf` and the by-hand re-add
@@ -801,7 +831,7 @@ both go through that check, because the serial they match on comes from an unaut
 `async_step_hassio` deliberately does not. A Supervisor discovery arrives over the authenticated Supervisor API from an add-on the user installed, and add-ons
 legitimately reallocate their own ports, so applying the stored-address guard would freeze the entry against its own add-on. The cost is stated rather than
 hidden: an add-on that already holds Supervisor privileges can move a pinned entry. If that trade is ever revisited, the guard is the same helper the other two
-routes call, and README's Security section carries the user-facing note.
+routes call.
 
 ## Linting and Type Checking
 
