@@ -291,7 +291,14 @@ async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdi
 
         # The handshake completed under the pinned anchor, so the peer holds a
         # key that anchor signed. Only the name is left in question.
-        if peer and leaf_names_host(peer, host):
+        if not peer:
+            # `CERT_REQUIRED` should make this unreachable. It fails to
+            # UNTRUSTED rather than to NAME_MISMATCH because NAME_MISMATCH is
+            # the verdict that unlocks the relaxed transport, and "the handshake
+            # completed but no validated certificate came back" is not evidence
+            # that anything holds a key the anchor signed.
+            return LeafVerdict.UNTRUSTED
+        if leaf_names_host(peer, host):
             return LeafVerdict.TRUSTED
         return LeafVerdict.NAME_MISMATCH
 

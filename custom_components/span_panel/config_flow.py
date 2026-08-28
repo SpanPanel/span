@@ -936,6 +936,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         so this is the point where an unusable name is traded for the address
         that got this far — and the invariant is restored, because the host
         being recorded is now one the anchor accepts.
+
+        That restoration depends on there being an address to trade for. On the
+        moved-panel path there is not: the leaf names nothing this flow could
+        reach the panel by, so `_bootstrap_host` is None and this returns having
+        changed nothing. A caller must not read that as permission to store
+        `self.host` — see `async_step_reconfigure_fqdn_failed`, which refuses
+        rather than record a name the panel does not serve.
         """
         if self._bootstrap_host is None:
             return
@@ -1523,6 +1530,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         that is what the next reconfigure needs in order to clean it up.
         """
         if user_input is not None:
+            if not self._leaf_names_host and self._bootstrap_host is None:
+                # There is nothing to continue to. This is the moved-panel path:
+                # the certificate names neither the name asked for nor any
+                # address this flow could reach the panel by, and registration —
+                # the one thing that would have made the panel serve the name —
+                # is what just failed. Falling back has no address to fall back
+                # to, so continuing would store the unserved name and report
+                # success, stranding every later connection on the hostname
+                # check this flow relaxed only for itself.
+                _LOGGER.warning(
+                    "Registration failed and panel %s serves a certificate naming neither %s "
+                    "nor an address this flow reached it by, so there is no host to store. "
+                    "Try the panel's .local name, which its certificate already covers",
+                    self._get_reconfigure_entry().title,
+                    self.host,
+                )
+                return self.async_show_form(
+                    step_id="reconfigure",
+                    data_schema=vol.Schema({vol.Required(CONF_HOST, default=self.host or ""): str}),
+                    errors={"base": "ca_name_mismatch"},
+                )
             # User chose to continue anyway — update host without FQDN registration
             self._fall_back_to_the_bootstrap_address()
             reconfigure_entry = self._get_reconfigure_entry()

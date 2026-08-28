@@ -983,3 +983,47 @@ def _closed_port() -> int:
     with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_a_moved_panel_whose_registration_fails_has_nothing_to_continue_to(
+    hass: HomeAssistant, moved_panel: Panel
+) -> None:
+    """"Continue anyway" must not store a name the panel never started serving.
+
+    On every other path there is a verified address to fall back to -- the one
+    the flow reached the panel by. On this one there is not: the certificate
+    names neither the FQDN nor anything reachable, which is why the flow relaxed
+    the name binding for its own probe in the first place, and registration was
+    the single thing that would have fixed that. It failed.
+
+    Falling back therefore has nowhere to fall back to, and continuing would
+    write the unserved name and report success -- stranding every runtime
+    connection on the hostname check, which the coordinator and the broker apply
+    and cannot relax. The entry is left exactly as it was.
+    """
+    entry = _pinned_entry(hass, moved_panel)
+
+    with (
+        # The panel accepts the call and regenerates nothing, so its leaf still
+        # names the address it no longer has.
+        patch("custom_components.span_panel.config_flow.register_fqdn", new=AsyncMock()),
+        patch("custom_components.span_panel.config_flow.asyncio.sleep", new=AsyncMock()),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_FQDN}
+        )
+        result = await _finish_progress(hass, result)
+        assert result["step_id"] == "reconfigure_fqdn_failed", result
+
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["errors"] == {"base": "ca_name_mismatch"}
+    # Untouched: the entry still points where it did, and is still pinned.
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+    assert CONF_REGISTERED_FQDN not in entry.data
+    assert entry.data[CONF_PANEL_CA_PEM] == moved_panel.ca_pem
