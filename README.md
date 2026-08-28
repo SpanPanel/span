@@ -663,11 +663,11 @@ and select your preferred precision from the "Display Precision" menu.
 
 ## Security
 
-These are the limits of what the integration can enforce. Anything that already holds the broker password — including another integration running in the same
-Home Assistant process — talks to the panel directly and is not subject to Home Assistant's permission model at all.
+There are limits to what the integration can enforce. Anything that already holds the eBus MQTT broker password — including another integration running in the
+same Home Assistant process — talks to the panel directly and is not subject to Home Assistant's permission model at all.
 
-**What that does and does not buy you.** The authority is fetched over your local network on a connection that has nothing to verify itself against — it is the
-anchor everything else is checked against. So:
+**What pinning the panel's certificate authority does and does not buy you.** The authority is fetched over your local network on a connection that has nothing
+to verify itself against — it is the anchor everything else is checked against. So:
 
 - Anyone merely **listening** on your network cannot read your passphrase or the credentials the panel returns for it.
 - A device **actively standing between** Home Assistant and your panel at that first fetch could answer with an authority of its own, sign a certificate with
