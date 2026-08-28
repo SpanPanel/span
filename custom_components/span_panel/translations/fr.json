@@ -14,6 +14,7 @@
     },
     "error": {
       "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
+      "ca_name_mismatch": "Le panneau a répondu à cette adresse mais son certificat ne la nomme pas, de sorte que toute connexion ultérieure la rejetterait. Reconfigurez avec un nom de domaine pleinement qualifié, ce qui demande au panneau de régénérer son certificat pour l'inclure, ou avec le nom .local du panneau, que son certificat couvre déjà.",
       "ca_unavailable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et sous tension, puis réessayez. La configuration ne peut pas continuer sans elle, car votre mot de passe serait sinon envoyé en clair.",
       "ca_unusable": "L'autorité de certification enregistrée pour ce panneau ne peut pas être lue, ce changement devrait donc être envoyé sans chiffrement. Rien n'a été modifié. Réauthentifiez le panneau pour enregistrer une autorité utilisable, puis réessayez.",
       "cannot_connect": "Échec de la connexion au Span Panel",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 import ipaddress
 import logging
 import socket
@@ -19,6 +20,7 @@ from span_panel_api import (
     ca_fingerprint,
     detect_api_version,
     download_ca_cert,
+    leaf_names_host,
     register_v2,
 )
 from span_panel_api.exceptions import (
@@ -211,43 +213,102 @@ async def async_fetch_panel_ca(hass: HomeAssistant, host: str, http_port: int = 
     )
 
 
-async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool:
-    """Whether the certificate served on `tls_port` validates against `ca_pem` alone.
+class LeafVerdict(StrEnum):
+    """What the certificate on a host says about that host.
 
-    A CA that cannot validate the certificate the panel actually serves is not
-    the panel's CA. That does not make a fetched PEM trustworthy — an attacker
-    who can substitute the CA can serve a leaf signed by it — but it does catch
-    the fetch that returned something unrelated, and it is the only check
-    available without a fingerprint from another channel.
+    One boolean used to answer three different questions, and the answers call
+    for opposite responses. Splitting them is the whole point:
 
-    Hostname verification stays on, so this also fails when the panel's
-    certificate does not name the address being used, which is the condition
-    `check_fqdn_tls_ready` is polling for.
+    - `TRUSTED` — the leaf chains to the anchor *and* names this host. The only
+      verdict that authorises storing the host or carrying traffic to it.
+    - `NAME_MISMATCH` — the leaf chains to the anchor but does not name this
+      host. Only the panel can produce this, because only the panel holds a key
+      the anchor signed; what it means is that the panel's certificate has not
+      caught up with the address it is being reached at, which is what a DHCP
+      move looks like from here.
+    - `UNTRUSTED` — something answered and its certificate does not chain to the
+      anchor. The interception case, and the only one worth alarming a user
+      about.
+    - `UNREACHABLE` — nothing answered at all. Distinct from `UNTRUSTED`
+      because it had been collapsed into it, so an unplugged cable was reported
+      to users as "the certificate this panel serves is not signed by the
+      authority it published" — an accusation of interception for a network
+      timeout.
+    """
+
+    TRUSTED = "trusted"
+    NAME_MISMATCH = "name_mismatch"
+    UNTRUSTED = "untrusted"
+    UNREACHABLE = "unreachable"
+
+
+async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdict:
+    """Classify the certificate served on `tls_port` against `ca_pem`.
+
+    One handshake, with hostname checking off, which establishes the chain; the
+    name binding is then evaluated separately from the certificate the
+    handshake returned. Both halves come from the library rather than being
+    written here, for the reason its `_ssl` module gives about the fingerprint:
+    a security primitive with two implementations drifts, and a hand-written
+    hostname matcher is the most error-prone of the three now that
+    `ssl.match_hostname` no longer exists to defer to.
+
+    Relaxing the hostname check does not relax trust. The chain, the signature
+    and the expiry are all still verified against the pinned anchor, so a peer
+    without a key that anchor signed fails here exactly as it did before; what
+    changes is only that failing the *name* is now reported as a different
+    thing from failing the *chain*.
     """
     loop = asyncio.get_running_loop()
 
-    def _check() -> bool:
+    def _check() -> LeafVerdict:
         try:
             # The library's builder, not a hand-rolled context: the panel's CA
             # omits the Authority Key Identifier extension, which Python's
             # default-on VERIFY_X509_STRICT rejects outright. A context built
             # here without clearing that flag fails against a healthy panel.
-            ctx = build_panel_ssl_context(ca_pem)
+            ctx = build_panel_ssl_context(ca_pem, check_hostname=False)
         except (ssl.SSLError, ValueError):
-            return False
+            # An anchor that will not load cannot validate anything. Nothing was
+            # reached, so this is not an accusation against the host.
+            return LeafVerdict.UNTRUSTED
         try:
             with (
                 socket.create_connection((host, tls_port), timeout=5) as sock,
-                ctx.wrap_socket(sock, server_hostname=host),
+                ctx.wrap_socket(sock, server_hostname=host) as tls,
             ):
-                return True
-        except (ssl.SSLCertVerificationError, ssl.SSLError, OSError, TimeoutError, UnicodeError):
+                peer = tls.getpeercert()
+        except ssl.SSLCertVerificationError:
+            return LeafVerdict.UNTRUSTED
+        except (OSError, TimeoutError, UnicodeError):
             # `UnicodeError` for the same reason as in `async_resolve_host`: the
             # connect resolves the name, and an over-long label raises out of
-            # IDNA encoding rather than as a lookup failure.
-            return False
+            # IDNA encoding rather than as a lookup failure. `ssl.SSLError` is a
+            # subclass of `OSError` and lands here too -- a handshake that broke
+            # without a verification failure says nothing about the peer's
+            # certificate, so it is a failure to reach, not a failure to trust.
+            return LeafVerdict.UNREACHABLE
+
+        # The handshake completed under the pinned anchor, so the peer holds a
+        # key that anchor signed. Only the name is left in question.
+        if peer and leaf_names_host(peer, host):
+            return LeafVerdict.TRUSTED
+        return LeafVerdict.NAME_MISMATCH
 
     return await loop.run_in_executor(None, _check)
+
+
+async def async_leaf_chains_to_ca(host: str, tls_port: int, ca_pem: str) -> bool:
+    """Whether the panel at `host` serves a certificate that chains *and* names it.
+
+    The question every existing caller was already asking, kept as its own name
+    so that the answer does not quietly widen underneath them. A caller that
+    wants to act on *why* the answer is no asks `async_leaf_verdict` instead;
+    the two must not be confused, because a `NAME_MISMATCH` host is one this
+    function has always refused and must keep refusing -- storing it would
+    strand every later connection, all of which verify the hostname.
+    """
+    return await async_leaf_verdict(host, tls_port, ca_pem) is LeafVerdict.TRUSTED
 
 
 async def async_panel_leaf_host(
@@ -443,8 +504,25 @@ def panel_rest_transport(
     entry_data: Mapping[str, object],
     *,
     allow_plaintext_fallback: bool = True,
+    verify_hostname: bool = True,
 ) -> PanelRestTransport:
     """Decide how this entry's REST calls should reach the panel.
+
+    `verify_hostname=False` keeps the pin and drops only the name binding, for
+    the single case that needs it: a reconfigure of a pinned entry whose panel
+    is answering at an address its certificate does not yet name. Such a panel
+    has proven it holds a key the pinned anchor signed -- nothing else can
+    complete the handshake -- but every call to it still fails hostname
+    verification, so without this the flow cannot probe the panel, cannot ask
+    it to regenerate its certificate, and cannot repair the situation it
+    exists to repair.
+
+    It is for a flow deciding *which* host to talk to, and for nothing else. It
+    must never reach a transport that gets stored on the entry or used at
+    runtime: the name binding is what stops a validated certificate being
+    replayed by a host it was not issued to, and a coordinator carrying data
+    over a relaxed context would give that up permanently rather than for the
+    length of one flow.
 
     A malformed stored PEM falls back to plaintext rather than raising. The
     alternative is a config entry that cannot make a single REST call until
@@ -469,7 +547,7 @@ def panel_rest_transport(
     pem = entry_data.get(CONF_PANEL_CA_PEM)
     if pem:
         try:
-            context = build_panel_ssl_context(str(pem))
+            context = build_panel_ssl_context(str(pem), check_hostname=verify_hostname)
         except (ssl.SSLError, ValueError) as err:
             if not allow_plaintext_fallback:
                 raise PanelCaUnusableError(str(err)) from err

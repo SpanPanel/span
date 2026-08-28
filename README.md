@@ -692,11 +692,14 @@ against the address the certificate already names, hostname verification never r
 **A pinned entry follows its panel to a new address only when the new address proves itself.** An entry moves when your panel announces itself over mDNS at a
 new address, and when you add the same panel again by hand. Both used to be decided by a serial read from an unauthenticated endpoint, which anything on your
 network can claim. The entry now asks whether the candidate serves a certificate its own anchor validates, on the port the entry uses, and refuses the move —
-logging at `WARNING` — otherwise. If the panel really has moved and its certificate really has changed, use **Reconfigure** on the entry.
+logging at `WARNING` — otherwise. If the panel really has moved, use **Reconfigure** on the entry.
 
-A panel that arrives through the **Supervisor** — a Home Assistant add-on — is the one exception to that check, and deliberately so: it announces itself over
-the authenticated Supervisor API and legitimately reallocates its own ports, so holding it to the stored address would freeze the entry. An add-on already
-holding Supervisor privileges can therefore move a pinned entry.
+**Reconfigure tells a moved panel apart from an impersonated one.** A panel that changed address serves a perfectly good certificate that does not yet name
+where it now answers, and something impersonating your panel serves one that chains to nothing — the same failure, until you ask which. Reconfigure asks. A host
+that does not chain to the pinned authority is refused as before, and one that does not answer at all is now reported as unreachable rather than as an unsigned
+certificate. A host that chains but is not named is your panel, and the way through is to reconfigure to a **fully qualified domain name**, which asks the panel
+to regenerate its certificate around that name, or to the panel's **`.local` name**, which its certificate already covers. Reconfiguring to a bare new IP
+address the certificate does not name is refused, because the entry would then be pointed at an address every later connection rejects.
 
 **Panels configured before this release are pinned differently, and are not risk-free until they are.** They are pinned on the first startup that reaches the
 panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. What was fetched is checked against the certificate the panel serves on

@@ -132,7 +132,9 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   name that is not a fully qualified domain, so the certificate never comes to name it. Set that panel up by its IP address, or by the `.local` name shown in
   the mobile app.
 - **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved, use **Reconfigure** on
-  the entry, which checks the new address against the standing pin before storing it.
+  the entry, which checks the new address against the standing pin before storing it. A panel whose certificate does not yet name where it now answers is moved
+  by reconfiguring to a fully qualified domain name, which asks the panel to regenerate its certificate around it, or to the `.local` name its certificate
+  already covers; a bare new IP address the certificate does not name is refused, because every connection after the flow would reject it too.
 
 ## [2.0.8] - 5/2026
 

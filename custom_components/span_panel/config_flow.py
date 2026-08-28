@@ -43,12 +43,14 @@ from .config_flow_options import (
     process_general_options_input,
 )
 from .config_flow_validation import (
+    LeafVerdict,
     PanelCaUnusableError,
     PanelRestTransport,
     as_port,
     async_download_ca_or_none,
     async_fetch_panel_ca,
     async_leaf_chains_to_ca,
+    async_leaf_verdict,
     async_panel_leaf_host,
     check_fqdn_tls_ready,
     is_fqdn,
@@ -208,6 +210,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # would reject", and refuse rather than write an entry that cannot
         # connect to its own panel.
         self._bootstrap_host: str | None = None
+        # Whether the host this flow is about to store is one the pinned
+        # certificate names. Only reconfigure sets it false, and only to
+        # refuse -- see `async_step_reconfigure`.
+        self._leaf_names_host: bool = True
         # Whether the panel accepted the FQDN and now serves it. Recorded rather
         # than re-derived from `is_fqdn(host)` at entry creation, because that
         # question is "does this look like a domain name" and the one that
@@ -1312,21 +1318,62 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
                 errors={"base": "ca_unusable"},
             )
-        # The new host may be a name the panel has never heard of, and this
-        # entry is pinned: probing it by name would fail hostname verification
-        # and report the panel unreachable. Settle the address first, so the
-        # probe reaches the panel and `_bootstrap_host` records whether the new
-        # name is one the pinned certificate already covers.
+        # The new host may be one the panel's certificate does not name -- a new
+        # DHCP lease, or an FQDN it has not been told about yet -- and this entry
+        # is pinned. Ask what is actually true of it before deciding, because
+        # "not your panel" and "your panel, under a name it has not caught up
+        # with" have opposite remedies and used to be the same answer.
         self.host = host
+        self._leaf_names_host = True
         pinned_pem = self._rest_transport.ca_pem
-        if pinned_pem is not None and not await self._async_choose_bootstrap_host(
-            pinned_pem, self._rest_transport.port
-        ):
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "ca_leaf_mismatch"},
-            )
+        if pinned_pem is not None:
+            if await self._async_choose_bootstrap_host(pinned_pem, self._rest_transport.port):
+                # Something under the pin both validates and names itself. The
+                # host is storable only when that something was the host: a
+                # substituted address reaches the panel but says nothing about
+                # the name the user asked to store.
+                self._leaf_names_host = self._bootstrap_host is None
+            else:
+                # Nothing the anchor both validates and names, which used to end
+                # the flow here. Three different things produce that, and only
+                # one of them is the panel being absent.
+                verdict = await async_leaf_verdict(host, self._rest_transport.port, pinned_pem)
+                if verdict is LeafVerdict.UNREACHABLE:
+                    return self.async_show_form(
+                        step_id="reconfigure",
+                        data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                        errors={"base": "cannot_connect"},
+                    )
+                if verdict is not LeafVerdict.NAME_MISMATCH:
+                    _LOGGER.warning(
+                        "Refusing to reconfigure panel %s to %s: the certificate served there on "
+                        "port %s does not chain to the authority this entry is pinned to "
+                        "(SHA-256 %s)",
+                        reconfigure_entry.title,
+                        host,
+                        self._rest_transport.port,
+                        pem_fingerprint_or_reason(pinned_pem),
+                    )
+                    return self.async_show_form(
+                        step_id="reconfigure",
+                        data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
+                        errors={"base": "ca_leaf_mismatch"},
+                    )
+                # The panel is there -- only it holds a key the pinned anchor
+                # signed -- but its certificate names neither this address nor
+                # anything this flow could reach it by. Every call over the
+                # strict transport would fail and report it unreachable, so this
+                # flow's own calls keep the pin and drop only the name binding.
+                # That is what lets the FQDN branch below ask the panel to
+                # regenerate the certificate that fixes this. The relaxed
+                # transport never leaves this flow and is never stored.
+                self._leaf_names_host = False
+                self._rest_transport = panel_rest_transport(
+                    self.hass,
+                    reconfigure_entry.data,
+                    allow_plaintext_fallback=False,
+                    verify_hostname=False,
+                )
         try:
             detection = await detect_api_version(
                 self._rest_host,
@@ -1376,17 +1423,26 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # New host is not an FQDN — simple update. Nothing on this branch will
         # ask the panel to start naming it, so a host the pinned certificate
         # does not cover is refused here rather than written into the entry.
-        if self._bootstrap_host is not None:
+        #
+        # Refused even though the panel demonstrably answered here, because
+        # storing it would not help: this flow can relax the name binding for
+        # its own probe, but the coordinator and the broker cannot, so every
+        # connection after the flow ends would fail hostname verification
+        # against the same certificate. The entry would be pointed at an address
+        # it cannot use. The remedies are real ones and the message names them.
+        if not self._leaf_names_host:
             _LOGGER.warning(
-                "Panel %s does not name %s in the certificate it serves; refusing to "
-                "point a pinned entry at a host its own certificate authority rejects",
-                self._bootstrap_host,
+                "Panel %s answered at %s but does not name it in the certificate it serves; "
+                "refusing to store an address every later connection would reject. Reconfigure "
+                "to an FQDN, which asks the panel to regenerate its certificate, or to the "
+                "panel's .local name, which its certificate already covers",
+                reconfigure_entry.title,
                 host,
             )
             return self.async_show_form(
                 step_id="reconfigure",
                 data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "ca_leaf_mismatch"},
+                errors={"base": "ca_name_mismatch"},
             )
 
         data_updates: dict[str, Any] = {CONF_HOST: host}

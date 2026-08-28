@@ -1038,7 +1038,9 @@ async def test_replacing_an_unusable_stored_anchor_says_what_it_is_now_pinned_to
     )
     entry.add_to_hass(hass)
 
-    def _build(pem: str) -> MagicMock:
+    def _build(pem: str, *, check_hostname: bool = True) -> MagicMock:
+        # `check_hostname` is accepted and ignored: an anchor that will not load
+        # fails the same way whichever question the caller was going to ask of it.
         if pem == "not-a-certificate":
             raise ssl.SSLError("not a certificate")
         return MagicMock()
