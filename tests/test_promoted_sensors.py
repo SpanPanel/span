@@ -161,9 +161,30 @@ class TestGridIslandableBinarySensor:
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=False)
         assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
 
-    def test_value_function_none(self):
+    def test_absent_flat_property_falls_back_to_mid_presence(self):
+        """v1.0 publishes no `grid-islandable`, and that is not "unknown".
+
+        `devices/bess.md` retires the panel-level boolean deliberately -- "there is no
+        single 'islanded?' bit to reconcile" -- and nominates the capability set as the
+        classifier: "a MID `grid` child means premises-segment backup ... neither means
+        no backup". So an absent property with no MID is a definite *no*, not a
+        missing reading.
+
+        This used to return None, which reached a user as the sensor going
+        `unavailable` with `restored: true` after a firmware upgrade -- indistinguishable
+        from a sensor that broke.
+        """
         snapshot = SpanPanelSnapshotFactory.create(grid_islandable=None)
-        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is None
+        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is False
+
+    def test_a_published_flat_value_still_wins(self):
+        """Flat firmware keeps answering for itself.
+
+        DUAL-SCHEMA: a flat panel publishes the property and has no MID, so reading MID
+        presence first would invert the answer for every panel not yet upgraded.
+        """
+        snapshot = SpanPanelSnapshotFactory.create(grid_islandable=True)
+        assert GRID_ISLANDABLE_SENSOR.value_fn(snapshot) is True
 
 
 # ---------------------------------------------------------------------------
@@ -201,22 +222,24 @@ class TestBessDeviceInfo:
     def test_bess_device_info_basic(self):
         battery = SpanBatterySnapshotFactory.create(
             vendor_name="Tesla",
-            product_name="Powerwall 2",
+            model="Powerwall 2",
             serial_number="TW-001",
             software_version="2.1.0",
         )
-        info = bess_device_info("sp3-242424-001", battery, "My Panel")
+        info = bess_device_info(
+            "sp3-242424-001", battery, "My Panel", panel_device_id="panel-device-id"
+        )
         assert info.get("identifiers") == {(DOMAIN, "sp3-242424-001_bess")}
         assert info.get("name") == "My Panel Battery"
         assert info.get("manufacturer") == "Tesla"
         assert info.get("model") == "Powerwall 2"
         assert info.get("serial_number") == "TW-001"
         assert info.get("sw_version") == "2.1.0"
-        assert info.get("via_device") == (DOMAIN, "sp3-242424-001")
+        assert info.get("via_device_id") == "panel-device-id"
 
     def test_bess_device_info_defaults_when_none(self):
         battery = SpanBatterySnapshotFactory.create()
-        info = bess_device_info("serial", battery, "Panel")
+        info = bess_device_info("serial", battery, "Panel", panel_device_id="pd")
         assert info.get("manufacturer") == "Unknown"
         assert info.get("model") == "Battery Storage"
         assert info.get("serial_number") is None
@@ -227,7 +250,7 @@ class TestBessMetadataSensorDefinitions:
     """Test BESS metadata sensor definitions."""
 
     def test_sensor_count(self):
-        assert len(BESS_METADATA_SENSORS) == 6
+        assert len(BESS_METADATA_SENSORS) == 7
 
     def test_all_have_translation_keys(self):
         for desc in BESS_METADATA_SENSORS:
@@ -247,9 +270,23 @@ class TestBessMetadataSensorDefinitions:
         assert desc.value_fn(battery) == "Enphase"
 
     def test_model_value_function(self):
-        battery = SpanBatterySnapshotFactory.create(product_name="IQ Battery 10")
+        battery = SpanBatterySnapshotFactory.create(model="IQ Battery 10")
         desc = next(d for d in BESS_METADATA_SENSORS if d.key == "model")
         assert desc.value_fn(battery) == "IQ Battery 10"
+
+    def test_part_number_value_function(self):
+        battery = SpanBatterySnapshotFactory.create(part_number="830-01234-01")
+        desc = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
+        assert desc.value_fn(battery) == "830-01234-01"
+
+    def test_part_number_is_disabled_by_default(self):
+        """A new entity on an existing install must not appear uninvited.
+
+        Asserted separately from the value function so a flip of this flag names
+        itself in the failure rather than hiding inside a value test.
+        """
+        desc = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
+        assert desc.entity_registry_enabled_default is False
 
     def test_serial_number_value_function(self):
         battery = SpanBatterySnapshotFactory.create(serial_number="BESS-12345")
@@ -293,6 +330,7 @@ class TestBessUniqueId:
         for key in (
             "vendor",
             "model",
+            "part_number",
             "serial_number",
             "firmware_version",
             "nameplate_capacity",
@@ -334,7 +372,7 @@ class TestPVMetadataSensorDefinitions:
 
     def test_pv_product_value_function(self):
         snapshot = SpanPanelSnapshotFactory.create(
-            pv=SpanPVSnapshot(product_name="SE7600H")
+            pv=SpanPVSnapshot(model="SE7600H")
         )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_product")
         assert desc.value_fn(snapshot) == "SE7600H"
@@ -363,7 +401,7 @@ class TestEvseSensorDefinitions:
     """Test EVSE sensor definitions."""
 
     def test_sensor_count(self):
-        assert len(EVSE_SENSORS) == 3
+        assert len(EVSE_SENSORS) == 4
 
     def test_all_have_translation_keys(self):
         for desc in EVSE_SENSORS:

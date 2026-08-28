@@ -1,5 +1,23 @@
 default_stages = ["pre-commit"]
 
+# `tests/fixtures/pyproject_*.toml` are byte copies of this file's own pyproject.toml
+# at the commits where the library path override went wrong, held to those commits
+# by tests/test_library_path_hook.py -- they are what proves the library-path gate
+# fires, so they have to stay the real files rather than approximations of them.
+#
+# The three hooks below that *rewrite* files -- trailing-whitespace,
+# end-of-file-fixer and mixed-line-ending -- are excluded from them, because a
+# formatter and a byte-identical copy cannot both be unconditional and it is the
+# formatter that has to yield: the bytes are the artifact.
+#
+# Not hypothetical, merely not yet triggered. Those three cover tests/ today, and
+# they leave the current copies alone only because both happen to be
+# newline-terminated with LF endings and no trailing whitespace. The first one
+# taken without a final newline would be rewritten on commit, and the guard would
+# then fail against a commit the copy had genuinely matched when it was made.
+#
+# The read-only hooks keep covering them. check-toml in particular should: a copy
+# that does not parse is worth hearing about wherever it came from.
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v5.0.0"
@@ -10,9 +28,27 @@ hooks = [
   { id = "check-added-large-files" },
   { id = "check-merge-conflict", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "debug-statements", exclude = '^tests/.*|\.\S*_cache/.*|dist/.*|venv/.*', language_version = "python3.14" },
-  { id = "trailing-whitespace", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "end-of-file-fixer", exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
-  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "trailing-whitespace", exclude = '^tests/fixtures/pyproject_.*\.toml$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "end-of-file-fixer", exclude = '^tests/fixtures/pyproject_.*\.toml$|\.\S*_cache/.*|dist/.*|venv/.*' },
+  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = '^tests/fixtures/pyproject_.*\.toml$|\.\S*_cache/.*|dist/.*|venv/.*' },
+]
+
+# The library path override in pyproject.toml must name the checkout, not a
+# worktree. `3cbf02a` committed a scratch worktree into `[tool.uv.sources]` and
+# `[tool.pyright].extraPaths`; it redirected every import in the suite for
+# several commits, and the conformance tests ran against a producer defect the
+# library had already fixed. Runs early -- it is a read of one small file, and
+# a run that resolves the wrong library has nothing useful to say afterwards.
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "library-path",
+    name = "span-panel-api paths name the checkout, not a worktree",
+    entry = "python scripts/check-library-path.py",
+    language = "system",
+    files = '^pyproject\.toml$',
+  },
 ]
 
 # Sync translations/en.json from strings.json and validate translation files
@@ -49,7 +85,7 @@ hooks = [
 # Ruff for linting, import sorting, and primary formatting
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.15.1"
+rev = "v0.15.12"
 hooks = [
   { id = "ruff-format", exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },
   { id = "ruff-check", args = ["--fix"], exclude = '^tests/.*|scripts/.*|\.\S*_cache/.*|dist/.*|venv/.*' },

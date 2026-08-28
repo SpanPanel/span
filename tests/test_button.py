@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api import PublishOutcome, PublishState
 from span_panel_api.exceptions import SpanPanelServerError
 
 from custom_components.span_panel.button import (
@@ -13,11 +17,9 @@ from custom_components.span_panel.button import (
     async_setup_entry,
 )
 from custom_components.span_panel.const import DOMAIN
-from homeassistant.core import HomeAssistant
+from custom_components.span_panel.control_gate import ControlPolicy
 
 from .factories import SpanBatterySnapshotFactory, SpanPanelSnapshotFactory
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _make_button_coordinator(snapshot) -> MagicMock:
@@ -25,6 +27,7 @@ def _make_button_coordinator(snapshot) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.config_entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
@@ -55,29 +58,8 @@ async def test_gfe_override_button_success_refreshes_coordinator() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gfe_override_button_logs_when_client_lacks_support(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Buttons should return early when the client cannot publish overrides."""
-    snapshot = SpanPanelSnapshotFactory.create(
-        battery=SpanBatterySnapshotFactory.create(connected=False),
-        dominant_power_source="BATTERY",
-    )
-    coordinator = _make_button_coordinator(snapshot)
-    coordinator.client = object()
-    button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
-
-    caplog.set_level("WARNING")
-
-    await button.async_press()
-
-    assert "Client does not support GFE override" in caplog.text
-    coordinator.async_request_refresh.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_gfe_override_button_server_error_creates_notification() -> None:
-    """Server errors should notify the user that override failed."""
+async def test_gfe_override_button_refusal_is_raised_at_the_caller() -> None:
+    """A refused override reaches the person who pressed the button."""
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
         dominant_power_source="BATTERY",
@@ -85,26 +67,62 @@ async def test_gfe_override_button_server_error_creates_notification() -> None:
     coordinator = _make_button_coordinator(snapshot)
     coordinator.client = MagicMock()
     coordinator.client.set_dominant_power_source = AsyncMock(
-        side_effect=SpanPanelServerError("unsupported")
+        side_effect=SpanPanelServerError("Core node not found in panel topology")
     )
     button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
     button.hass = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.button.async_create_span_notification",
-        new=AsyncMock(),
-    ) as mock_notification:
+    with pytest.raises(HomeAssistantError) as raised:
         await button.async_press()
 
-    mock_notification.assert_awaited_once()
+    assert raised.value.translation_key == "gfe_override_failed"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["value"] == "GRID"
+    assert placeholders["reason"] == "Core node not found in panel topology"
+    coordinator.async_request_refresh.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gfe_override_button_undelivered_is_raised_at_the_caller() -> None:
+    """A `FAILED` outcome is the promise this override will not arrive later."""
+    snapshot = SpanPanelSnapshotFactory.create(
+        battery=SpanBatterySnapshotFactory.create(connected=False),
+        dominant_power_source="BATTERY",
+    )
+    coordinator = _make_button_coordinator(snapshot)
+    coordinator.client = MagicMock()
+    coordinator.client.set_dominant_power_source = AsyncMock(
+        return_value=PublishOutcome(
+            state=PublishState.FAILED,
+            topic=None,
+            value="GRID",
+            detail="broker not connected; refused rather than queued",
+        )
+    )
+    button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
+    button.hass = MagicMock()
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await button.async_press()
+
+    assert raised.value.translation_key == "gfe_override_not_delivered"
+    placeholders = raised.value.translation_placeholders
+    assert placeholders is not None
+    assert placeholders["reason"] == "broker not connected; refused rather than queued"
     coordinator.async_request_refresh.assert_not_awaited()
 
 
 def test_gfe_override_button_available_only_when_override_is_relevant() -> None:
-    """Availability should reflect panel state and whether firmware already has control."""
+    """Availability should reflect panel state and whether firmware already has control.
+
+    Keyed on `dsm_state` rather than `dominant_power_source`: the guard asks "are we
+    already on the grid", and that is populated on both wire schemas where the GFE is
+    not — under v1.0 it is `None`, so the old comparison never fired.
+    """
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
-        dominant_power_source="BATTERY",
+        dsm_state="DSM_OFF_GRID",
     )
     coordinator = _make_button_coordinator(snapshot)
     button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
@@ -114,43 +132,37 @@ def test_gfe_override_button_available_only_when_override_is_relevant() -> None:
     coordinator.panel_offline = True
     assert button.available is False
 
+    # BESS reachable: firmware sets the grid state itself, so there is nothing to assert.
     coordinator.panel_offline = False
     coordinator.data = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=True),
-        dominant_power_source="BATTERY",
+        dsm_state="DSM_OFF_GRID",
     )
     assert button.available is False
 
+    # Already on grid: the assertion would be a no-op, and firmware would reject it.
     coordinator.data = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
-        dominant_power_source="GRID",
+        dsm_state="DSM_ON_GRID",
     )
     assert button.available is False
 
 
 @pytest.mark.asyncio
-async def test_button_async_setup_entry_only_adds_button_for_mqtt_with_bess(
+async def test_button_async_setup_entry_only_adds_button_when_the_panel_has_bess(
     hass: HomeAssistant,
 ) -> None:
     """Button platform should only expose the override when it can work."""
-
-    class FakeSpanMqttClient:
-        """Minimal client type used for isinstance checks."""
-
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(connected=False),
         dominant_power_source="BATTERY",
     )
     coordinator = _make_button_coordinator(snapshot)
-    coordinator.client = FakeSpanMqttClient()
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    config_entry.runtime_data = MagicMock(coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
     async_add_entities = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.button.SpanMqttClient", FakeSpanMqttClient
-    ):
-        await async_setup_entry(hass, config_entry, async_add_entities)
+    await async_setup_entry(hass, config_entry, async_add_entities)
 
     entities = async_add_entities.call_args.args[0]
     assert len(entities) == 1
@@ -161,13 +173,9 @@ async def test_button_async_setup_entry_only_adds_button_for_mqtt_with_bess(
             battery=SpanBatterySnapshotFactory.create(soe_percentage=None)
         )
     )
-    coordinator_no_bess.client = FakeSpanMqttClient()
-    config_entry.runtime_data = MagicMock(coordinator=coordinator_no_bess)
+    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator_no_bess)
     async_add_entities = MagicMock()
 
-    with patch(
-        "custom_components.span_panel.button.SpanMqttClient", FakeSpanMqttClient
-    ):
-        await async_setup_entry(hass, config_entry, async_add_entities)
+    await async_setup_entry(hass, config_entry, async_add_entities)
 
     assert async_add_entities.call_args.args[0] == []

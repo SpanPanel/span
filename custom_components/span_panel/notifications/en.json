@@ -1,0 +1,19 @@
+{
+  "panel_upgraded": {
+    "title": "SPAN Panel firmware upgraded",
+    "body": "Your SPAN Panel reported a new eBus data model (**{previous} → {current}**), which happens after a firmware upgrade. The integration reloaded so its devices and entities match what the panel now publishes.\n\nNothing you rely on has gone away, and no automation changes are required — this is a note about what changed.\n\n**DSM Grid State** keeps its entity ID and its history, and is now more trustworthy. On the previous firmware it was *inferred* — from the battery when one was fitted, otherwise from the dominant power source and whether any power was crossing the grid connection. It now reads the islanding state the Microgrid Interconnect Device (MID) actually senses.\n\n**Grid Islandable** also keeps working. The new data model publishes no panel-level `grid-islandable` property, so it now reflects whether a MID is present, which is how backup capability is detected.\n\n**New:** a Microgrid Interconnect Device appears among your devices, carrying **Grid State** — the health of the utility supply itself, which the previous firmware did not report. Any entities the upgrade added are listed in their own notification.\n\nEntities that were renamed or replaced by the upgrade may need to be removed manually if they remain unavailable.\n\nDismiss this once you have had a look."
+  },
+  "new_entities": {
+    "title": "SPAN Panel added new entities",
+    "intro_one": "This update added 1 new entity to your SPAN Panel.",
+    "intro_many": "This update added {count} new entities to your SPAN Panel.",
+    "enabled_heading": "Added and ready to use",
+    "disabled_heading": "Added but switched off",
+    "how_to_enable": "Switched-off entities record nothing until you turn them on. Open the SPAN Panel device page, show its disabled entities, and enable the ones you want.",
+    "nothing_broken": "Nothing is broken and no action is required. Entities appear for several reasons: an update that surfaces more of what your panel reports, a circuit added to the panel, or hardware such as a battery, solar or a charger coming online."
+  },
+  "extension_overflow": {
+    "title": "SPAN Panel: some vendor readings were not added",
+    "body": "A device on your panel declares more vendor readings than this integration will add for one device ({limit}). The rest were left out: {devices}.\n\nNothing you already have is affected, and nothing is broken. The readings that were left out are still listed in this integration's diagnostics download, which is what to attach if you want them surfaced."
+  }
+}

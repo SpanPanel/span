@@ -2,29 +2,33 @@
 
 from collections.abc import Callable, Mapping
 import logging
-from typing import Any, Final
+from typing import Any, ClassVar, Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceNotFound
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelServerError
 
-from . import SpanPanelConfigEntry
+from .adoption import AdoptedSelect, create_adopted_selects
 from .const import DOMAIN, USE_CIRCUIT_NUMBERS, CircuitPriority
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
 from .helpers import (
-    async_create_span_notification,
     build_select_unique_id_for_entry,
+    circuit_has_a_priority_select,
     construct_circuit_identifier_from_tabs,
-    construct_single_circuit_entity_id,
+    construct_circuit_label,
     construct_tabs_attribute,
     construct_voltage_attribute,
 )
+from .naming import (
+    circuit_object_id_base,
+    release_registry_name_written_by_older_release,
+)
+from .runtime import SpanPanelConfigEntry
 
 # Device types that use "Solar" as the fallback identifier when unnamed.
 _SOLAR_DEVICE_TYPES: frozenset[str] = frozenset({"pv"})
@@ -62,6 +66,15 @@ class SpanPanelSelectEntityDescriptionWrapper:
         select_option_fn: Callable[[SpanCircuitSnapshot, str], None] | None = None,
     ) -> None:
         """Initialize the select entity description wrapper."""
+        self.name: str = name
+        """The description's label, kept as the `str` it is.
+
+        `SelectEntityDescription.name` is typed `str | UndefinedType | None`,
+        being optional for a description that declares a `translation_key`
+        instead. This one always declares a label, and the registry-name release
+        wants a `str`, so the wrapper holds on to what it was handed rather than
+        narrowing the frozen description's field back down at every reader.
+        """
         self.entity_description = SelectEntityDescription(
             key=key,
             name=name,
@@ -84,15 +97,29 @@ CIRCUIT_PRIORITY_DESCRIPTION: Final = SpanPanelSelectEntityDescriptionWrapper(
 class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
     """Represent a select entity for Span Panel circuits."""
 
+    # Read in entity code rather than through a description: the wrapper
+    # class is not a frozen dataclass description, so it cannot carry the
+    # declaration. `priority` is the selected option (~96); `name` and
+    # `tabs` build the display name and the id base (~153-171).
+    _residual_field_paths: ClassVar[tuple[str, ...]] = (
+        "circuit.priority",
+        "circuit.name",
+        "circuit.tabs",
+    )
+
     def __init__(
         self,
         coordinator: SpanPanelCoordinator,
         description: SpanPanelSelectEntityDescriptionWrapper,
         circuit_id: str,
-        name: str,
         device_name: str,
     ) -> None:
-        """Initialize the select."""
+        """Initialize the select.
+
+        The circuit's name is not passed in: both the display name and the id
+        base are read from the circuit in the current snapshot, so a circuit
+        renamed on the panel reaches both on the next reload.
+        """
         super().__init__(coordinator)
         snapshot: SpanPanelSnapshot = coordinator.data
 
@@ -116,58 +143,40 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         )
 
         use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        desc_name = description.name
+        circuit_name = circuit.name or _unnamed_select_fallback(circuit, circuit_id)
 
-        desc_name = description.entity_description.name
-        if existing_entity_id:
-            # Entity exists - use circuit-based name when configured, else panel name
-            if use_circuit_numbers:
-                circuit_identifier = construct_circuit_identifier_from_tabs(
-                    circuit.tabs, circuit_id
-                )
-                self._attr_name = f"{circuit_identifier} {desc_name}"
-            elif circuit.name:
-                self._attr_name = f"{circuit.name} {desc_name}"
-            else:
-                fallback = _unnamed_select_fallback(circuit, circuit_id)
-                self._attr_name = f"{fallback} {desc_name}"
+        # One name path, in both naming modes: the panel's name, carried as
+        # `original_name`. That field ranks below the object-id base below, so
+        # what is displayed can no longer decide what "Recreate entity IDs"
+        # proposes.
+        self._attr_name = f"{circuit_name} {desc_name}"
 
-        # Sync the panel friendly name to the entity registry display name
-        # so the UI shows e.g. "Air Conditioner Circuit Priority" while the
-        # entity_id stays circuit-based.
-        if existing_entity_id and use_circuit_numbers and circuit.name:
-            entity_entry = entity_registry.async_get(existing_entity_id)
-            if entity_entry:
-                expected_name = f"{circuit.name} {desc_name}"
-                if entity_entry.name is None or entity_entry.name == expected_name:
-                    entity_registry.async_update_entity(existing_entity_id, name=expected_name)
-
-        if not existing_entity_id:
-            # Initial install - use flag-based name for entity_id generation
-            if use_circuit_numbers:
-                circuit_identifier = construct_circuit_identifier_from_tabs(
-                    circuit.tabs, circuit_id
-                )
-                self._attr_name = f"{circuit_identifier} {desc_name}"
-            elif name:
-                self._attr_name = f"{name} {desc_name}"
-            else:
-                # v1 behavior: None lets HA handle default naming
-                self._attr_name = None
-
-        # Explicitly set entity_id using construct_single_circuit_entity_id
-        # which correctly handles 240V two-tab circuits.
-        # Only pass unique_id for existing entities (registry lookup);
-        # for new entities pass None to get the constructed default.
-        constructed_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "select",
-            description.entity_description.key,
-            circuit,
-            unique_id=self._attr_unique_id if existing_entity_id else None,
+        # The id itself is Home Assistant's to compose. This entity supplies only
+        # its base -- the naming-flag half plus the description's key -- and
+        # leaves `entity_id` unset so Core assembles the rest from the user's
+        # `entity_id_parts`. The key is used as the suffix verbatim:
+        # `get_user_friendly_suffix` maps `circuit_priority` to `priority`, which
+        # is the unique_id's spelling and not this entity's.
+        suffix = description.entity_description.key
+        identifier = (
+            construct_circuit_identifier_from_tabs(circuit.tabs, circuit_id)
+            if use_circuit_numbers
+            else circuit_name
         )
-        if constructed_id:
-            self.entity_id = constructed_id
+        self._span_object_id_base = circuit_object_id_base(identifier, suffix, existing_entity_id)
+
+        # Circuit-numbers mode used to deliver the panel's name by writing the
+        # registry's `name`. That field is the user's override, and Home Assistant
+        # reads it ahead of `suggested_object_id` when generating an entity id, so
+        # occupying it made "Recreate entity IDs" propose a friendly-name id for a
+        # circuit-numbered entity. The name travels as `original_name` now, so all
+        # that is left is to let go of what the old scheme wrote -- and only that:
+        # any other name is the user's.
+        if existing_entity_id:
+            release_registry_name_written_by_older_release(
+                entity_registry, existing_entity_id, circuit.name, (desc_name,)
+            )
 
         self._attr_options = description.options_fn(circuit)
         self._attr_current_option = description.current_option_fn(circuit)
@@ -193,44 +202,33 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         await super().async_will_remove_from_hass()
 
     async def async_select_option(self, option: str) -> None:
-        """Change the selected option."""
+        """Change the selected option.
+
+        A refusal is raised at the caller rather than filed as a persistent
+        notification. The library refuses a priority the panel declares
+        unsettable before anything is published, so there is nothing to correct
+        later and nobody to tell but the person who just made the choice -- and
+        a notification keyed on the circuit would outlive the failure and sit in
+        the sidebar until someone dismissed it by hand.
+
+        A `FAILED` outcome is raised too, and separately worded: that command
+        resolved an address and was never handed to the broker, which the
+        library promises means it will not arrive later either. Both live in
+        `_async_control`, which every control in this integration shares.
+        """
         _LOGGER.debug("Selecting option: %s", option)
         client = self.coordinator.client
-        if not hasattr(client, "set_circuit_priority"):
-            _LOGGER.warning("Client does not support priority control")
-            return
-
         priority = CircuitPriority(option)
 
-        try:
-            await client.set_circuit_priority(self.id, priority.name)
-            await self.coordinator.async_request_refresh()
-        except ServiceNotFound as snf:
-            _LOGGER.warning(
-                "Service not found when setting priority: %s.%s",
-                snf.domain,
-                snf.service,
-            )
-            await async_create_span_notification(
-                self.hass,
-                message="The requested service is not available in the SPAN API.",
-                title="Service Not Found",
-                notification_id=f"span_panel_service_not_found_{self.id}",
-            )
-        except SpanPanelServerError:
-            warning_msg = (
-                f"SPAN API returned a server error attempting "
-                f"to change the circuit priority for {self._attr_name}. "
-                f"This typically indicates panel firmware doesn't support "
-                f"this operation."
-            )
-            _LOGGER.warning("SPAN API may not support setting priority")
-            await async_create_span_notification(
-                self.hass,
-                message=warning_msg,
-                title="SPAN API Error",
-                notification_id=f"span_panel_api_error_{self.id}",
-            )
+        await self._async_control(
+            client.set_circuit_priority(self.id, priority.name),
+            command=f"a priority change for {self.entity_id}",
+            failed_key="circuit_priority_failed",
+            not_delivered_key="circuit_priority_not_delivered",
+            placeholders={"circuit": construct_circuit_label(self._get_circuit(), self.id)},
+        )
+
+        await self.coordinator.async_request_refresh()
 
     def select_option(self, option: str) -> None:
         """Select an option synchronously."""
@@ -243,7 +241,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
 
         Selects become unavailable when panel is offline since they can't change settings.
         """
-        if getattr(self.coordinator, "panel_offline", False):
+        if not self._transport_available:
+            return False
+        if self.coordinator.panel_offline:
             return False
         return super().available
 
@@ -263,8 +263,9 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         if tabs_result is not None:
             attributes["tabs"] = tabs_result
 
-        voltage = construct_voltage_attribute(circuit) or 240
-        attributes["voltage"] = voltage
+        voltage = construct_voltage_attribute(circuit)
+        if voltage is not None:
+            attributes["voltage"] = voltage
 
         if circuit.priority_target is not None:
             attributes["priority_target"] = circuit.priority_target
@@ -272,75 +273,52 @@ class SpanPanelCircuitsSelect(SpanPanelEntity, SelectEntity):
         return attributes or None
 
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
+        """Handle updated data from the coordinator.
+
+        The circuit's name is watched here: the entity carries it as
+        `original_name`, which can only be refreshed by being rebuilt, so a
+        rename earns a reload. Whether the panel still lets this circuit's shed
+        priority be set -- the answer that decided this entity exists -- is
+        watched by `SpanPanelCoordinator._check_settability_change` instead,
+        because the opposite edge happens on circuits that have no entity here
+        to see it.
+        """
         snapshot: SpanPanelSnapshot = self.coordinator.data
         circuit = snapshot.circuits.get(self.id)
         if circuit:
             current_circuit_name = circuit.name
-            use_circuit_numbers = self.coordinator.config_entry.options.get(
-                USE_CIRCUIT_NUMBERS, False
-            )
-            desc_name = self.description_wrapper.entity_description.name
 
-            if use_circuit_numbers:
-                # Circuit-numbers mode: update registry display name, no reload
-                if self.entity_id and current_circuit_name:
-                    entity_registry = er.async_get(self.hass)
-                    entity_entry = entity_registry.async_get(self.entity_id)
-                    if entity_entry:
-                        # Compute old expected display BEFORE updating
-                        # _previous_circuit_name
-                        old_display = (
-                            f"{self._previous_circuit_name} {desc_name}"
-                            if isinstance(self._previous_circuit_name, str)
-                            else None
-                        )
-                        new_display = f"{current_circuit_name} {desc_name}"
+            # One path for both modes: the name is carried by `original_name`,
+            # which is written when the entity is added, so a reload is what
+            # refreshes it. A name in the registry is one the user set.
+            user_has_override = False
+            if self.entity_id:
+                entity_registry = er.async_get(self.hass)
+                entity_entry = entity_registry.async_get(self.entity_id)
+                if entity_entry and entity_entry.name:
+                    user_has_override = True
+                    _LOGGER.debug(
+                        "User has customized name for %s, skipping sync",
+                        self.entity_id,
+                    )
 
-                        # User override: registry name differs from both old
-                        # and new expected display names
-                        user_has_override = (
-                            entity_entry.name is not None
-                            and entity_entry.name not in {old_display, new_display}
-                        )
-
-                        if not user_has_override and (
-                            self._previous_circuit_name is _NAME_UNSET
-                            or current_circuit_name != self._previous_circuit_name
-                        ):
-                            entity_registry.async_update_entity(self.entity_id, name=new_display)
-
+            if user_has_override:
                 self._previous_circuit_name = current_circuit_name
-            else:
-                # Friendly-names mode: existing reload behavior
-                user_has_override = False
-                if self.entity_id:
-                    entity_registry = er.async_get(self.hass)
-                    entity_entry = entity_registry.async_get(self.entity_id)
-                    if entity_entry and entity_entry.name:
-                        user_has_override = True
-                        _LOGGER.debug(
-                            "User has customized name for %s, skipping sync",
-                            self.entity_id,
-                        )
-
-                if user_has_override:
-                    self._previous_circuit_name = current_circuit_name
-                elif self._previous_circuit_name is _NAME_UNSET:
-                    _LOGGER.info(
-                        "First update: syncing entity name to panel name '%s' for select, requesting reload",
-                        current_circuit_name,
-                    )
-                    self._previous_circuit_name = current_circuit_name
-                    self.coordinator.request_reload()
-                elif current_circuit_name != self._previous_circuit_name:
-                    _LOGGER.info(
-                        "Auto-sync detected circuit name change from '%s' to '%s' for select, requesting integration reload",
-                        self._previous_circuit_name,
-                        current_circuit_name,
-                    )
-                    self._previous_circuit_name = current_circuit_name
-                    self.coordinator.request_reload()
+            elif self._previous_circuit_name is _NAME_UNSET:
+                _LOGGER.info(
+                    "First update: syncing entity name to panel name '%s' for select, requesting reload",
+                    current_circuit_name,
+                )
+                self._previous_circuit_name = current_circuit_name
+                self.coordinator.request_reload()
+            elif current_circuit_name != self._previous_circuit_name:
+                _LOGGER.info(
+                    "Auto-sync detected circuit name change from '%s' to '%s' for select, requesting integration reload",
+                    self._previous_circuit_name,
+                    current_circuit_name,
+                )
+                self._previous_circuit_name = current_circuit_name
+                self.coordinator.request_reload()
 
         # Update options and current option based on coordinator data
         circuit = self._get_circuit()
@@ -373,32 +351,41 @@ async def async_setup_entry(
 
     _LOGGER.debug("ASYNC SETUP ENTRY SELECT")
 
+    # Under `disabled` no control entity is created and no registry entry is
+    # removed. See `switch.async_setup_entry` for why the registry entries stay.
+    if config_entry.runtime_data.control_policy.mode is ControlMode.DISABLED:
+        return
+
     coordinator = config_entry.runtime_data.coordinator
     snapshot: SpanPanelSnapshot = coordinator.data
 
     # Get device name from config entry data
     device_name = config_entry.data.get("device_name", config_entry.title)
 
-    entities: list[SpanPanelCircuitsSelect] = []
+    entities: list[SpanPanelCircuitsSelect | AdoptedSelect] = []
 
     for circuit_id, circuit_data in snapshot.circuits.items():
-        if not circuit_data.is_user_controllable:
-            continue
-        # PV/EVSE circuits only get selects if they have a physical breaker
-        # (relative_position == "DOWNSTREAM" means connected at a breaker slot)
-        if (
-            circuit_data.device_type in ("pv", "evse")
-            and circuit_data.relative_position != "DOWNSTREAM"
-        ):
+        if not circuit_has_a_priority_select(circuit_data):
             continue
         entities.append(
             SpanPanelCircuitsSelect(
                 coordinator,
                 CIRCUIT_PRIORITY_DESCRIPTION,
                 circuit_id,
-                circuit_data.name,
                 device_name,
             )
         )
+
+    # Settable properties on devices this integration models nothing for.
+    # Disabled and diagnostic like every adopted entity: the panel authorises the
+    # write, and the user decides whether the control is one they want.
+    entities.extend(
+        create_adopted_selects(
+            coordinator,
+            coordinator.data,
+            dr.async_get(hass),
+            panel_device_id=config_entry.runtime_data.panel_device_id,
+        )
+    )
 
     async_add_entities(entities)

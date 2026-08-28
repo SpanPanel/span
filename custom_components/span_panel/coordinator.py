@@ -6,28 +6,41 @@ from collections.abc import Callable
 from datetime import timedelta
 import logging
 from time import time as _epoch_time
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
 if TYPE_CHECKING:
-    from . import SpanPanelConfigEntry
     from .current_monitor import CurrentMonitor
     from .graph_horizon import GraphHorizonManager
+    from .runtime import SpanPanelConfigEntry
 
 from homeassistant.components.persistent_notification import async_create
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
     ConfigEntryNotReady,
     HomeAssistantError,
 )
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from span_panel_api import SpanMqttClient, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelStaleDataError
+from span_panel_api.exceptions import (
+    SpanPanelAuthError,
+    SpanPanelCAChangedError,
+    SpanPanelError,
+    SpanPanelStaleDataError,
+)
 
 from .const import DOMAIN
+from .helpers import (
+    circuit_has_a_breaker_switch,
+    circuit_has_a_priority_select,
+    detect_capabilities,
+)
 from .id_builder import build_circuit_unique_id
-from .schema_validation import collect_sensor_definitions, validate_field_metadata
+from .notices import async_raise, read_translations
+from .schema_repairs import async_sync_schema_issues
+from .schema_validation import SchemaFindings, evaluate_field_metadata
+from .sensor_definitions import sensor_descriptions_by_field_path
 
 
 class SpanCircuitEnergySensorProtocol(Protocol):
@@ -40,6 +53,35 @@ class SpanCircuitEnergySensorProtocol(Protocol):
 
 
 _LOGGER = logging.getLogger(__name__)
+
+_UPGRADE_NOTICE: Final = "panel_upgraded"
+"""Names both the notice id and its translation section.
+
+One symbol for both because they are the same notice: a rename that moved only
+one of them would leave a standing notice pointing at strings that no longer
+exist, and the notice cannot be re-derived once the upgrade is over.
+"""
+
+_UPGRADE_FALLBACK: Final[dict[str, str]] = {
+    "title": "SPAN Panel firmware upgraded",
+    "body": (
+        "Your SPAN Panel reported a new eBus data model (**{previous} \u2192 {current}**), "
+        "which happens after a firmware upgrade. The integration reloaded so its devices "
+        "and entities match what the panel now publishes.\n\n"
+        "Nothing you rely on has gone away, and no automation changes are required.\n\n"
+        "**DSM Grid State** keeps its entity ID and its history, and now reads the "
+        "islanding state the Microgrid Interconnect Device (MID) senses rather than "
+        "inferring it. **Grid Islandable** now reflects whether a MID is present.\n\n"
+        "Entities that were renamed or replaced by the upgrade may need to be removed "
+        "manually if they remain unavailable."
+    ),
+}
+"""English text, used when no translation file can be read.
+
+Shorter than the translated body on purpose: this is the copy nobody proofreads,
+and the paragraphs it drops are elaboration rather than the facts a user needs.
+"""
+
 
 # Suppress the noisy "Manually updated span_panel data" DEBUG message that
 # HA's DataUpdateCoordinator emits on every async_set_updated_data() call.
@@ -77,17 +119,40 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._reload_requested = False
         # Flag to track if panel is offline/unreachable
         self._panel_offline = False
+        # Flag to track a transport that has stopped for good. Distinct from
+        # offline on purpose; see `transport_dead`.
+        self._transport_dead = False
 
         # Streaming state
         self._unregister_streaming: Callable[[], None] | None = None
         self._unregister_connection: Callable[[], None] | None = None
+        self._unregister_schema_change: Callable[[], None] | None = None
+        self._unregister_fatal_error: Callable[[], None] | None = None
 
         # Hardware capability tracking — detect when BESS/PV are commissioned
         # and trigger a reload so the factory creates the appropriate sensors.
         self._known_capabilities: frozenset[str] | None = None
 
-        # Schema validation — run once after first successful refresh
+        # Per-circuit control settability — detect when the panel changes its
+        # mind about whether a circuit may be operated, in either direction.
+        # None until the first snapshot, which is the baseline.
+        self._known_settability: dict[str, tuple[bool, bool]] | None = None
+
+        # Schema validation — runs once SUCCESSFULLY; a pass that finds no
+        # metadata yet leaves the flag unset so a later one can still answer.
         self._schema_validated = False
+        self._findings: SchemaFindings | None = None
+        # True once `async_setup_entry` has forwarded the platforms and asked for
+        # the first reconcile. Before that there are no entities for a finding to
+        # name; after it, a late first success must reconcile itself.
+        self._platforms_ready = False
+
+        # Which entities read which snapshot field, recorded by the entities
+        # themselves as they are added to hass. Authoritative rather than
+        # reverse-engineered: three platforms build unique_ids three different
+        # ways, so deriving entity ids from entity descriptions gets most of
+        # them wrong. See `SpanPanelEntity.async_added_to_hass`.
+        self._entity_ids_by_field_path: dict[str, set[str]] = {}
 
         # Energy dip compensation — sensors append events here during updates;
         # drained and surfaced as a persistent notification after each cycle.
@@ -131,6 +196,34 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """Return True if the panel is currently offline/unreachable."""
         return self._panel_offline
 
+    @property
+    def transport_dead(self) -> bool:
+        """True once the transport has stopped in a way waiting cannot fix.
+
+        Deliberately not `panel_offline`. Offline means "no data right now",
+        and every consumer of it is written for a gap that closes: sensors
+        hold their last reading through the grace period, POWER sensors read
+        0.0, the panel-status binary sensor says so, and all of them stay
+        available because that is the right answer for a broker that drops for
+        thirty seconds.
+
+        None of it is the right answer for a transport that is not coming
+        back. The last snapshot was read before the failure and is indefinitely
+        old; a dashboard cannot tell a held reading from a live one, and 0 W is
+        not a measurement at all. Entities that read this go unavailable, which
+        is the one honest state -- it says the value is not knowable rather
+        than substituting a plausible one.
+
+        Set by the library's fatal-error channel and by the CA branch of the
+        update path -- today the same condition reached two ways, since a
+        changed CA is the only failure the library declares terminal. Cleared
+        by a connection edge back to connected, which is the only evidence that
+        disproves it; the library refuses to reconnect after a CA change, so in
+        that case the edge arrives only after a person re-pins and the entry
+        reloads.
+        """
+        return self._transport_dead
+
     def request_reload(self) -> None:
         """Request a reload of the integration."""
         self._reload_requested = True
@@ -156,6 +249,35 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
                 reason,
             )
         self._panel_offline = True
+
+    def _mark_transport_dead(self, reason: Exception | str) -> None:
+        """Record that the transport has failed terminally and tell the entities.
+
+        Logged at WARNING, once. This condition does need a person -- nothing
+        here retries, and the Repair raised alongside it is the only way back --
+        but it is already reported at ERROR by the library that gave up on the
+        transport and again by `ca_repairs.async_raise_ca_changed`, which logs
+        at ERROR and raises an `IssueSeverity.ERROR` Repair. A third copy at
+        that level says nothing the first two did not. This line's job is
+        narrower: it records the coordinator's own transition, for whoever is
+        reading the log around those two.
+
+        The fan-out matters on the fatal-callback path. That path is not an
+        update cycle -- `last_update_success` is still True and no listener
+        would otherwise be notified -- so without it every entity would keep
+        rendering its last value until the fallback poll came round a minute
+        later and raised `UpdateFailed`. Guarded on the edge so the second
+        route into the same condition does not re-render everything.
+        """
+        if self._transport_dead:
+            return
+        _LOGGER.warning(
+            "%s transport has stopped and will not recover on its own: %s",
+            self.config_entry.title or "SPAN Panel",
+            reason,
+        )
+        self._transport_dead = True
+        self.async_update_listeners()
 
     # --- Energy dip compensation ---
 
@@ -218,9 +340,113 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         self._unregister_connection = self._client.register_connection_callback(
             self._on_connection_change
         )
+        self._unregister_schema_change = self._client.register_schema_change_callback(
+            self._on_schema_generation_change
+        )
+        # Subscribed here rather than only in `async_setup_entry`, which takes
+        # the same channel for the Repair, because the two consumers want
+        # different things from it and neither is the other's business: the
+        # entry raises something a person can act on, and the coordinator marks
+        # the transport dead so the entities stop answering. The library fans
+        # out to every subscriber.
+        self._unregister_fatal_error = self._client.register_fatal_error_callback(
+            self._on_fatal_transport_error
+        )
         self._unregister_streaming = self._client.register_snapshot_callback(self._on_snapshot_push)
         await self._client.start_streaming()
         _LOGGER.info("MQTT push streaming started")
+
+    def _on_schema_generation_change(self, previous: str | None, current: str | None) -> None:
+        """Reload the entry when the panel changes schema generation underneath us.
+
+        The library rebuilds its parser on its own, which restores *reading* — values
+        resolve again straight away. It cannot restore *topology*: devices and
+        entities are created in `async_setup_entry` from the tree as it looked then.
+        v1.0 introduces a MID the flat tree has no equivalent for and re-keys the
+        EVSEs, so without a reload the panel reads correctly and still shows the old
+        device set. Observed exactly that on a live upgrade — data flowed, entities
+        did not appear, and a manual reload was needed.
+
+        Scheduled rather than awaited: this is called from the client's own callback
+        fan-out, and reloading the entry tears down that client. `async_schedule_reload`
+        defers to the loop so the teardown does not run inside the object being torn
+        down.
+        """
+        _LOGGER.warning(
+            "SPAN panel firmware upgraded its eBus schema generation: data-model-version "
+            "%s -> %s. Reloading the integration so devices and entities match the new "
+            "tree; the MID and any re-keyed chargers appear after the reload.",
+            previous or "absent (flat)",
+            current or "absent (flat)",
+        )
+        self.hass.async_create_task(
+            self._explain_the_upgrade(previous, current), "span_panel_upgrade_notice"
+        )
+        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+
+    async def _explain_the_upgrade(self, previous: str | None, current: str | None) -> None:
+        """Tell the user what the new schema changed for them, once and durably.
+
+        Nothing they depend on goes away, which is worth saying plainly because a
+        firmware upgrade invites the opposite assumption.
+
+        `sensor.*_dsm_grid_state` keeps its entity id and its history and gets *more*
+        trustworthy. Under flat, `schema_0` derived it: the battery's `grid-state` when
+        one was commissioned, otherwise an inference from `dominant-power-source` and
+        whether any power was crossing the grid connection. Under v1.0 it reads the
+        islanding state the MID actually senses -- the heuristic v1.0 exists to retire,
+        retired.
+
+        `binary_sensor.*_grid_islandable` also survives. v1.0 publishes no panel-level
+        `grid-islandable`, on purpose: `devices/bess.md` reads backup capability from
+        the capability set, "a MID `grid` child means premises-segment backup", and
+        "there is no single 'islanded?' bit to reconcile". So it now reflects MID
+        presence, the classifier the spec nominates.
+
+        What is genuinely new is the MID device itself and its `grid-state`, the health
+        of the utility supply, which flat did not report at all.
+
+        **One notice, not two.** This used to be a hardcoded English notification
+        about the reload followed immediately by a translated Repair about the
+        consequences -- two rows in two different places for one event, which is
+        the same duplication that makes people stop reading either. They are now
+        one message, and it is translated.
+
+        **A notification, not a Repair.** The Repairs list is where defects go: it
+        stamped this with a severity and offered to ignore it, so an upgrade that
+        took nothing away arrived looking like a fault. The reason it was a Repair
+        was durability -- a plain notification dies with the process, and somebody
+        away when their panel upgraded would never have learned a device appeared.
+        `notices` supplies that durability directly, so the classification no
+        longer has to be paid for with a lie about severity.
+
+        Scheduled as a task because reading the translations is blocking file I/O
+        and the caller is the client's own synchronous callback fan-out. It races
+        the reload scheduled alongside it and is written to lose safely either
+        way; see `notices.async_restore`.
+        """
+        # Absent means flat, present means parent/child -- the migration guide's own
+        # detection rule.
+        #
+        # Guarding on the direction even though panel firmware does not roll back:
+        # once a panel is on v1.0 it stays there, so in the field this only ever fires
+        # one way. The reverse happens solely in the upgrade rehearsal, where the two
+        # simulators are swapped under a live client, and announcing a retirement
+        # there would be noise about a transition no user experiences.
+        if current is None:
+            return
+        text = await self.hass.async_add_executor_job(
+            read_translations, self.hass.config.language, _UPGRADE_NOTICE
+        )
+        async_raise(
+            self.hass,
+            self.config_entry,
+            _UPGRADE_NOTICE,
+            title=text.get("title") or _UPGRADE_FALLBACK["title"],
+            message=(text.get("body") or _UPGRADE_FALLBACK["body"]).format(
+                previous=previous or "flat", current=current
+            ),
+        )
 
     def _on_connection_change(self, connected: bool) -> None:
         """Handle a broker connection state edge from the MQTT client.
@@ -235,17 +461,35 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         trigger spurious entity re-renders.
         """
         was_offline = self._panel_offline
+        was_dead = self._transport_dead
         if connected:
             self._mark_panel_online()
+            # The one thing that disproves a dead transport: it connected. Not
+            # folded into `_mark_panel_online`, which a successful snapshot also
+            # calls -- a read that came back cannot say the failure the library
+            # declared terminal has been resolved, only that this read worked.
+            self._transport_dead = False
         else:
             self._mark_panel_offline("MQTT broker disconnected")
-        if self._panel_offline != was_offline:
+        if self._panel_offline != was_offline or self._transport_dead != was_dead:
             self.async_update_listeners()
+
+    @callback
+    def _on_fatal_transport_error(self, error: SpanPanelError) -> None:
+        """Take the entities down when the library gives up on the transport.
+
+        The reconnect loop runs fire-and-forget, so a mid-session failure has
+        no call stack to surface on. Waiting for the next fallback poll to
+        re-raise it would leave a minute of entities reporting values read
+        before the transport died.
+        """
+        self._mark_transport_dead(error)
 
     async def _on_snapshot_push(self, snapshot: SpanPanelSnapshot) -> None:
         """Handle a pushed snapshot from MQTT streaming."""
         self._mark_panel_online()
         self._check_capability_change(snapshot)
+        self._check_settability_change(snapshot)
         self.async_set_updated_data(snapshot)
         await self._run_post_update_tasks(snapshot)
 
@@ -254,6 +498,14 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         if self._unregister_connection is not None:
             self._unregister_connection()
             self._unregister_connection = None
+
+        if self._unregister_schema_change is not None:
+            self._unregister_schema_change()
+            self._unregister_schema_change = None
+
+        if self._unregister_fatal_error is not None:
+            self._unregister_fatal_error()
+            self._unregister_fatal_error = None
 
         if self._unregister_streaming is not None:
             self._unregister_streaming()
@@ -267,47 +519,116 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     # --- Schema validation ---
 
     def _run_schema_validation(self) -> None:
-        """Run schema field metadata validation once at startup.
+        """Classify the adapter's field metadata once at startup.
 
-        Compares the library's schema-derived field metadata against the
-        integration's sensor definitions to detect unit mismatches. Also
-        reports fields the integration doesn't map to any sensor.
+        Stores the result for the platforms and the Repairs reconciler to read.
         """
-        field_metadata: dict[str, dict[str, object]] | None = None
-        if isinstance(self._client, SpanMqttClient):
-            raw = self._client.field_metadata
-            if raw is not None:
-                field_metadata = {
-                    k: {"unit": v.unit, "datatype": v.datatype} for k, v in raw.items()
-                }
+        field_metadata = self._client.field_metadata
 
         if field_metadata is None:
-            _LOGGER.debug("Schema validation skipped — no field metadata available")
+            # "Unknown", NOT "nothing is wrong". `field_metadata` is None for the
+            # whole _on_pre_rebuild -> retained-message window, and that fires on
+            # an ORDINARY reconnect (after MQTT_FULL_REBUILD_AFTER_FAILURES), not
+            # only on a generation change. Reconciling against empty findings here
+            # would delete every schema issue — and with it every dismissal the
+            # user has made. Keep the previous findings and skip this pass.
+            _LOGGER.debug("Schema validation skipped: metadata not available yet")
             return
 
-        sensor_defs = collect_sensor_definitions()
-        validate_field_metadata(field_metadata, sensor_defs=sensor_defs)
+        self._findings = evaluate_field_metadata(
+            field_metadata, sensor_descriptions_by_field_path()
+        )
+        # Only now: metadata is static within a session, so one success is
+        # enough and re-reading identical inputs on every pass would be waste.
+        self._schema_validated = True
+
+        if self._platforms_ready:
+            # A late first success. Setup already passed its reconcile point, so
+            # nothing else will raise these — do it here, where the entities that
+            # the findings name are guaranteed to exist.
+            self._sync_repairs()
+
+    @callback
+    def async_register_field_path_entity(self, field_path: str, entity_id: str) -> None:
+        """Record that `entity_id` reads `field_path`.
+
+        Called by the entity itself, which is the only thing that knows both
+        halves for certain. Circuit, panel-data and binary-sensor entities each
+        build their unique_id from a different suffix rule, so a mapping derived
+        from entity descriptions would silently miss most of them.
+        """
+        self._entity_ids_by_field_path.setdefault(field_path, set()).add(entity_id)
+
+    @callback
+    def async_unregister_field_path_entity(self, field_path: str, entity_id: str) -> None:
+        """Forget an entity that is leaving hass, so it stops inflating counts."""
+        entity_ids = self._entity_ids_by_field_path.get(field_path)
+        if entity_ids is None:
+            return
+        entity_ids.discard(entity_id)
+        if not entity_ids:
+            del self._entity_ids_by_field_path[field_path]
+
+    @property
+    def entity_ids_by_field_path(self) -> dict[str, list[str]]:
+        """Entities currently in hass, by the snapshot field each one reads."""
+        return {
+            field_path: sorted(entity_ids)
+            for field_path, entity_ids in self._entity_ids_by_field_path.items()
+        }
+
+    @callback
+    def async_sync_schema_repairs(self) -> None:
+        """Reconcile Repairs now that the platforms are up.
+
+        Called by `async_setup_entry` after the platforms are forwarded, which is
+        the earliest point the entities a finding names exist: validation runs on
+        the first refresh, and setup awaits that *before* forwarding anything.
+
+        Also records that the reconcile point has passed, so a validation pass
+        that first succeeds later reconciles itself rather than waiting for the
+        next reload.
+        """
+        self._platforms_ready = True
+        self._sync_repairs()
+
+    def _sync_repairs(self) -> None:
+        """Reconcile Repairs against the findings, if there are any yet.
+
+        Findings of None means "not yet known", never "healthy" — reconciling
+        against that would delete every issue and every dismissal with it.
+        """
+        if self._findings is None:
+            return
+        async_sync_schema_issues(
+            self.hass, self.config_entry, self._findings, self.entity_ids_by_field_path
+        )
+
+    @property
+    def unresolved_paths(self) -> frozenset[str]:
+        """Field paths the adapter could not resolve. Empty when healthy."""
+        return self._findings.unresolved if self._findings is not None else frozenset()
+
+    @property
+    def schema_findings(self) -> SchemaFindings | None:
+        """Findings from the last completed validation pass, if any."""
+        return self._findings
 
     # --- Hardware capability detection ---
 
     @staticmethod
     def _detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
-        """Derive optional hardware capabilities present in the snapshot."""
-        caps: set[str] = set()
-        if snapshot.battery.soe_percentage is not None:
-            caps.add("bess")
-        if snapshot.power_flow_pv is not None or any(
-            c.device_type == "pv" for c in snapshot.circuits.values()
-        ):
-            caps.add("pv")
-        if snapshot.power_flow_site is not None:
-            caps.add("power_flows")
-        if (
-            any(c.device_type == "evse" for c in snapshot.circuits.values())
-            or len(snapshot.evse) > 0
-        ):
-            caps.add("evse")
-        return frozenset(caps)
+        """Derive optional hardware capabilities present in the snapshot.
+
+        Delegates to `helpers.detect_capabilities` rather than deriving its
+        own set. This was a second, hand-rolled copy that never learned about
+        `mid`, `shed_forecast`, `bess_telemetry`, `pcs` or `der_link_health` --
+        so a panel that gained any of them on a firmware upgrade published the
+        properties, grew no entities, and requested no reload. The platforms
+        gate creation on the helper; the reload trigger has to read the same
+        set or the two silently disagree about what the panel can do.
+        """
+        return detect_capabilities(snapshot)
 
     def _check_capability_change(self, snapshot: SpanPanelSnapshot) -> None:
         """Check if hardware capabilities changed and request reload if expanded."""
@@ -324,6 +645,77 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
                 ", ".join(sorted(new_caps)),
             )
             self._known_capabilities = current
+            self.request_reload()
+
+    # --- Per-circuit control settability ---
+
+    @staticmethod
+    def _read_settability(snapshot: SpanPanelSnapshot) -> dict[str, tuple[bool, bool]]:
+        """Answer, for every circuit, which control entities it would get.
+
+        The same two predicates `switch.async_setup_entry` and
+        `select.async_setup_entry` gate creation on, read here over the whole
+        snapshot rather than restated. A second copy would drift, and the drift
+        would be silent: the platforms and the reload trigger disagreeing about
+        what the panel allows.
+        """
+        return {
+            circuit_id: (
+                circuit_has_a_breaker_switch(circuit),
+                circuit_has_a_priority_select(circuit),
+            )
+            for circuit_id, circuit in snapshot.circuits.items()
+        }
+
+    def _check_settability_change(self, snapshot: SpanPanelSnapshot) -> None:
+        """Request a reload when the panel changes its mind about a circuit.
+
+        Both directions, which is why this lives here rather than on the
+        entities. A circuit that stops being commandable keeps a switch that
+        refuses every press -- an entity can see that about itself. A circuit
+        that *becomes* commandable has no switch and no select at all, so there
+        is nothing on it to notice; only a reader over every circuit can.
+
+        A reload rather than a quiet availability change, because the entity
+        should not exist -- or should exist and does not -- under the new
+        answer, and creating and removing entities is what `async_setup_entry`
+        is for. The baseline is updated on the same pass that asks for the
+        reload, so a settled panel costs one dict comprehension per push and a
+        changed one asks exactly once.
+
+        Only circuits present in *both* readings are judged. A circuit can drop
+        out of a snapshot and come back -- the platforms guard for exactly that
+        -- and counting an absence as a settability change would turn a flap
+        into a reload loop. Membership is still carried forward, so a circuit
+        that leaves and returns with a different answer is caught on its return.
+
+        One known false positive, upstream of here: a library client rebuilt
+        mid-session replays retained MQTT topics, and a replay that arrives
+        partial can present a circuit whose `relay-controllable` has not been
+        redelivered yet. The absent field reads as True for that one dispatch,
+        which looks like a settability change and costs one spurious reload per
+        rebuild. It is a library item (3.1.1), not one this reader can settle --
+        a partial snapshot is indistinguishable here from a real change -- and
+        the reload debounce is what keeps the cost to one.
+        """
+        current = self._read_settability(snapshot)
+        if self._known_settability is None:
+            # First snapshot — record baseline
+            self._known_settability = current
+            return
+
+        known = self._known_settability
+        changed = sorted(
+            circuit_id
+            for circuit_id, answer in current.items()
+            if circuit_id in known and known[circuit_id] != answer
+        )
+        self._known_settability = current
+        if changed:
+            _LOGGER.info(
+                "Panel changed which controls it allows on circuit(s) %s — requesting reload",
+                ", ".join(changed),
+            )
             self.request_reload()
 
     # --- Solar entity migration (v1 → v2) ---
@@ -444,9 +836,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         streaming the polling path effectively never fires. This shared method
         ensures reload requests are processed regardless of transport mode.
         """
-        # One-shot schema validation after first successful refresh
+        # Schema validation: at most once SUCCESSFULLY, retried only while the
+        # answer is still unknown. The guard is set inside `_run_schema_validation`
+        # for that reason — setting it here disabled the feature for the life of
+        # the entry whenever the very first pass landed in the metadata-not-ready
+        # window, which an ordinary reconnect opens.
         if not self._schema_validated:
-            self._schema_validated = True
             self._run_schema_validation()
 
         # Check for pending solar entity migration (v1 solar → v2 PV circuit)
@@ -490,7 +885,28 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             # Check for new hardware capabilities (BESS, PV, power-flows)
             self._check_capability_change(snapshot)
 
+            # Check whether the panel changed which circuits it will let a user
+            # operate. Both transports run it: the fallback poll is the only
+            # path a panel with no live MQTT stream has.
+            self._check_settability_change(snapshot)
+
             await self._run_post_update_tasks(snapshot)
+
+        except SpanPanelCAChangedError as err:
+            # Not an outage, and must not be marked as one. The offline branch
+            # below keeps serving the last snapshot so a brief broker drop does
+            # not blank the dashboard, which is right for a transport that will
+            # come back and wrong for one that has stopped for good: it would
+            # leave every entity showing a plausible value read before the pin
+            # broke. Marking it offline used to do exactly that -- `available`
+            # returns True on the offline shortcut, ahead of `UpdateFailed`, so
+            # the sensors stayed available and the POWER ones read 0 W.
+            #
+            # Nothing is retried or torn down here. The library refuses to
+            # reconnect, the Repair is raised from the fatal-error channel in
+            # `async_setup_entry`, and re-pinning requires a person.
+            self._mark_transport_dead(err)
+            raise UpdateFailed(str(err)) from err
 
         except SpanPanelAuthError as err:
             raise ConfigEntryAuthFailed from err

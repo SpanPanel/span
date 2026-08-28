@@ -13,12 +13,6 @@ from custom_components.span_panel.const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from custom_components.span_panel.helpers import (
-    construct_multi_circuit_entity_id,
-    construct_single_circuit_entity_id,
-)
-
-from .factories import SpanCircuitSnapshotFactory, SpanPanelSnapshotFactory
 
 
 @pytest.fixture
@@ -43,23 +37,6 @@ def mock_config_entry():
             self.options = {}
 
     return MockConfigEntry()
-
-
-@pytest.fixture
-def mock_coordinator():
-    """Create a mock coordinator."""
-    coordinator = MagicMock()
-    coordinator.config_entry = None  # Will be set in tests
-    coordinator.hass = MagicMock()  # Mock hass for entity registry access
-    return coordinator
-
-
-@pytest.fixture
-def mock_span_panel():
-    """Create a mock span panel."""
-    panel = MagicMock()
-    panel.status.serial_number = "TEST123"
-    return panel
 
 
 class TestUpgradeScenarios:
@@ -128,167 +105,6 @@ class TestUpgradeScenarios:
             get_current_naming_pattern(mock_config_entry)
             == EntityNamingPattern.CIRCUIT_NUMBERS.value
         )
-
-
-class TestEntityIdConstructionUpgradeScenarios:
-    """Test entity ID construction preserves existing patterns during upgrades."""
-
-    def _make_coordinator_and_snapshot(self, options, circuit_tabs=None):
-        """Build a coordinator mock and snapshot with a single circuit."""
-        circuit = SpanCircuitSnapshotFactory.create(
-            circuit_id="15",
-            name="Kitchen Outlets",
-            tabs=circuit_tabs or [15],
-        )
-        snapshot = SpanPanelSnapshotFactory.create(circuits={"15": circuit})
-        coordinator = MagicMock()
-        coordinator.data = snapshot
-        coordinator.config_entry = MagicMock()
-        coordinator.config_entry.title = "Span Panel"
-        coordinator.config_entry.data = {"device_name": "Span Panel"}
-        coordinator.config_entry.options = options
-        coordinator.hass = MagicMock()
-        return coordinator, snapshot, circuit
-
-    def test_legacy_entity_id_construction_preserved(self):
-        """Test that legacy entity ID construction is preserved."""
-        coordinator, snapshot, circuit = self._make_coordinator_and_snapshot(
-            {USE_DEVICE_PREFIX: False, USE_CIRCUIT_NUMBERS: False}
-        )
-        entity_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "sensor",
-            "power",
-            circuit,
-        )
-        assert entity_id == "sensor.kitchen_outlets_power"
-
-    def test_post_104_friendly_names_entity_id_construction_preserved(self):
-        """Test that post-1.0.4 friendly names entity ID construction is preserved."""
-        coordinator, snapshot, circuit = self._make_coordinator_and_snapshot(
-            {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: False}
-        )
-        entity_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "sensor",
-            "power",
-            circuit,
-        )
-        assert entity_id == "sensor.span_panel_kitchen_outlets_power"
-
-    def test_modern_circuit_numbers_120v_entity_id_construction_preserved(self):
-        """Test that modern circuit numbers entity ID for 120V is preserved."""
-        coordinator, snapshot, circuit = self._make_coordinator_and_snapshot(
-            {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True},
-            circuit_tabs=[15],
-        )
-        entity_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "sensor",
-            "power",
-            circuit,
-        )
-        assert entity_id == "sensor.span_panel_circuit_15_power"
-
-    def test_modern_circuit_numbers_240v_entity_id_includes_both_tabs(self):
-        """Test that 240V circuits include both tabs in entity ID."""
-        coordinator, snapshot, circuit = self._make_coordinator_and_snapshot(
-            {USE_DEVICE_PREFIX: True, USE_CIRCUIT_NUMBERS: True},
-            circuit_tabs=[15, 17],
-        )
-        entity_id = construct_single_circuit_entity_id(
-            coordinator,
-            snapshot,
-            "sensor",
-            "power",
-            circuit,
-        )
-        assert entity_id == "sensor.span_panel_circuit_15_17_power"
-
-
-class TestSyntheticEntityUpgradeScenarios:
-    """Test synthetic entity construction preserves existing patterns during upgrades."""
-
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_legacy_synthetic_entity_construction_preserved(
-        self, mock_registry, mock_coordinator, mock_span_panel
-    ):
-        """Test that legacy synthetic entity construction is preserved."""
-        mock_registry.return_value = None
-
-        mock_config_entry = MagicMock()
-        mock_config_entry.options = {
-            USE_DEVICE_PREFIX: False,
-            USE_CIRCUIT_NUMBERS: False,
-        }
-        mock_config_entry.title = "Span Panel"
-        mock_config_entry.data = {"device_name": "Span Panel"}
-        mock_coordinator.config_entry = mock_config_entry
-
-        entity_id = construct_multi_circuit_entity_id(
-            mock_coordinator,
-            mock_span_panel,
-            "sensor",
-            "power",
-            circuit_numbers=[30, 32],
-            friendly_name="Solar Inverter",
-        )
-        assert entity_id == "sensor.solar_inverter_power"
-
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_post_104_synthetic_entity_construction_preserved(
-        self, mock_registry, mock_coordinator, mock_span_panel
-    ):
-        """Test that post-1.0.4 synthetic entity construction is preserved."""
-        mock_registry.return_value = None
-
-        mock_config_entry = MagicMock()
-        mock_config_entry.options = {
-            USE_DEVICE_PREFIX: True,
-            USE_CIRCUIT_NUMBERS: False,
-        }
-        mock_config_entry.title = "Span Panel"
-        mock_config_entry.data = {"device_name": "Span Panel"}
-        mock_coordinator.config_entry = mock_config_entry
-
-        entity_id = construct_multi_circuit_entity_id(
-            mock_coordinator,
-            mock_span_panel,
-            "sensor",
-            "power",
-            circuit_numbers=[30, 32],
-            friendly_name="Solar Inverter",
-        )
-        assert entity_id == "sensor.span_panel_solar_inverter_power"
-
-    @patch("custom_components.span_panel.helpers.er.async_get")
-    def test_modern_synthetic_entity_construction_preserved(
-        self, mock_registry, mock_coordinator, mock_span_panel
-    ):
-        """Test that modern synthetic entity construction is preserved."""
-        mock_registry.return_value = None
-
-        mock_config_entry = MagicMock()
-        mock_config_entry.options = {
-            USE_DEVICE_PREFIX: True,
-            USE_CIRCUIT_NUMBERS: True,
-        }
-        mock_config_entry.title = "Span Panel"
-        mock_config_entry.data = {"device_name": "Span Panel"}
-        mock_coordinator.config_entry = mock_config_entry
-
-        entity_id = construct_multi_circuit_entity_id(
-            mock_coordinator,
-            mock_span_panel,
-            "sensor",
-            "power",
-            circuit_numbers=[30, 32],
-            friendly_name="Solar Inverter",
-        )
-        assert entity_id == "sensor.span_panel_circuit_30_32_power"
 
 
 class TestGeneralOptionsPreservesNamingFlags:

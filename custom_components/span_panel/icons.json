@@ -32,11 +32,25 @@
       },
       "wifi_link": {
         "default": "mdi:wifi"
+      },
+      "pcs_active": {
+        "default": "mdi:speedometer"
+      },
+      "pv_panel_link": {
+        "default": "mdi:solar-power-variant"
+      },
+      "evse_panel_link": {
+        "default": "mdi:lan-connect"
       }
     },
     "button": {
       "gfe_override": {
         "default": "mdi:transmission-tower"
+      }
+    },
+    "number": {
+      "evse_charge_current_limit": {
+        "default": "mdi:ev-station"
       }
     },
     "select": {
@@ -56,6 +70,9 @@
       },
       "bess_model": {
         "default": "mdi:battery-outline"
+      },
+      "bess_communication_state": {
+        "default": "mdi:lan-connect"
       },
       "bess_nameplate_capacity": {
         "default": "mdi:battery-high"
@@ -180,11 +197,17 @@
       "pv_vendor": {
         "default": "mdi:domain"
       },
+      "shed_total_time_remaining": {
+        "default": "mdi:battery-clock-outline"
+      },
       "site_power": {
         "default": "mdi:home-lightning-bolt"
       },
       "software_version": {
         "default": "mdi:information"
+      },
+      "time_to_priority_shed": {
+        "default": "mdi:timer-alert-outline"
       },
       "upstream_l1_current": {
         "default": "mdi:current-ac"
@@ -198,6 +221,15 @@
           "connected": "mdi:cloud-check",
           "unconnected": "mdi:cloud-off-outline"
         }
+      },
+      "pcs_import_limit": {
+        "default": "mdi:transmission-tower-import"
+      },
+      "pcs_binding_constraint": {
+        "default": "mdi:scale-balance"
+      },
+      "bess_meter_power": {
+        "default": "mdi:battery-charging-outline"
       }
     }
   },

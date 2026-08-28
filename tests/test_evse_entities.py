@@ -77,19 +77,19 @@ class TestEvseSensorDefinitions:
     """Test EVSE sensor definition structure."""
 
     def test_evse_sensors_count(self):
-        assert len(EVSE_SENSORS) == 3
+        assert len(EVSE_SENSORS) == 4
 
     def test_evse_status_sensor_is_enum(self):
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
         assert status_desc.device_class is not None
         assert status_desc.device_class.value == "enum"
-        assert status_desc.options == ["unknown"]
+        assert "charging" in (status_desc.options or [])
 
     def test_evse_lock_state_sensor_is_enum(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
         assert lock_desc.device_class is not None
         assert lock_desc.device_class.value == "enum"
-        assert lock_desc.options == ["unknown"]
+        assert "locked" in (lock_desc.options or [])
 
     def test_evse_advertised_current_is_measurement(self):
         current_desc = next(
@@ -172,12 +172,16 @@ class TestEvseDeviceInfo:
         evse = SpanEvseSnapshotFactory.create(
             node_id="evse-0",
             vendor_name="SPAN",
-            product_name="SPAN Drive",
+            model="SPAN Drive",
             serial_number="SN123",
             software_version="2.0.0",
         )
         info = evse_device_info(
-            "panel-serial", evse, "Main House", display_suffix="Garage"
+            "panel-serial",
+            evse,
+            "Main House",
+            display_suffix="Garage",
+            panel_device_id="panel-device-id",
         )
         identifiers = info.get("identifiers")
         assert identifiers is not None
@@ -187,45 +191,64 @@ class TestEvseDeviceInfo:
         assert info.get("model") == "SPAN Drive"
         assert info.get("serial_number") == "SN123"
         assert info.get("sw_version") == "2.0.0"
-        via = info.get("via_device")
-        assert via == ("span_panel", "panel-serial")
+        assert info.get("via_device_id") == "panel-device-id"
 
     def test_evse_device_info_fallback_names(self):
         evse = SpanEvseSnapshotFactory.create(
             vendor_name=None,
-            product_name=None,
+            model=None,
         )
-        info = evse_device_info("panel-serial", evse, "Span Panel", display_suffix=None)
+        info = evse_device_info(
+            "panel-serial", evse, "Span Panel", display_suffix=None, panel_device_id="pd"
+        )
         assert info.get("name") == "Span Panel EV Charger"
         assert info.get("manufacturer") == "SPAN"
         assert info.get("model") == "SPAN Drive"
 
     def test_evse_device_info_serial_suffix(self):
         evse = SpanEvseSnapshotFactory.create(
-            product_name="SPAN Drive",
+            model="SPAN Drive",
             serial_number="SN-EVSE-001",
         )
         info = evse_device_info(
-            "panel-serial", evse, "Museum Garage", display_suffix="SN-EVSE-001"
+            "panel-serial",
+            evse,
+            "Museum Garage",
+            display_suffix="SN-EVSE-001",
+            panel_device_id="pd",
         )
         assert info.get("name") == "Museum Garage SPAN Drive (SN-EVSE-001)"
 
     def test_evse_device_info_no_serial(self):
         evse = SpanEvseSnapshotFactory.create(serial_number=None)
-        info = evse_device_info("panel-serial", evse, "Span Panel")
+        info = evse_device_info("panel-serial", evse, "Span Panel", panel_device_id="pd")
         assert info.get("serial_number") is None
 
 
 class TestEvseStatusOptions:
-    """Test EVSE enum options seed with 'unknown' only."""
+    """EVSE enums declare every state they can report.
 
-    def test_status_options_seed_with_unknown(self):
+    These asserted the opposite -- that both seeded with `["unknown"]` and nothing
+    else -- pinning a bug rather than a contract. A sensor sitting at `charging` while
+    declaring only `unknown` as possible is what Home Assistant renders as
+    "Possible states: Unknown", and the runtime discovery meant to fill the gap could
+    only ever list states the charger had already reached.
+
+    The exhaustive comparison against the translations lives in
+    `test_enum_sensor_options.py`; these keep the EVSE-specific expectations local.
+    """
+
+    def test_status_declares_the_full_charging_lifecycle(self):
         status_desc = next(d for d in EVSE_SENSORS if d.key == "evse_status")
-        assert status_desc.options == ["unknown"]
+        options = set(status_desc.options or [])
 
-    def test_lock_state_options_seed_with_unknown(self):
+        assert {"available", "charging", "preparing", "finishing", "faulted"} <= options
+        assert "unknown" in options
+
+    def test_lock_state_declares_both_positions(self):
         lock_desc = next(d for d in EVSE_SENSORS if d.key == "evse_lock_state")
-        assert lock_desc.options == ["unknown"]
+
+        assert set(lock_desc.options or []) == {"locked", "unlocked", "unknown"}
 
 
 class TestEvseMultipleDevices:
@@ -248,8 +271,8 @@ class TestEvseMultipleDevices:
     def test_multiple_evse_device_infos_are_distinct(self):
         evse_a = SpanEvseSnapshotFactory.create(node_id="evse-0")
         evse_b = SpanEvseSnapshotFactory.create(node_id="evse-1")
-        info_a = evse_device_info("panel", evse_a, "Span Panel")
-        info_b = evse_device_info("panel", evse_b, "Span Panel")
+        info_a = evse_device_info("panel", evse_a, "Span Panel", panel_device_id="pd")
+        info_b = evse_device_info("panel", evse_b, "Span Panel", panel_device_id="pd")
         assert info_a.get("identifiers") != info_b.get("identifiers")
 
 
@@ -263,7 +286,7 @@ class TestEvseSnapshotFactory:
         assert evse.lock_state == "LOCKED"
         assert evse.advertised_current_a == 32.0
         assert evse.vendor_name == "SPAN"
-        assert evse.product_name == "SPAN Drive"
+        assert evse.model == "SPAN Drive"
 
     def test_available_factory(self):
         evse = SpanEvseSnapshotFactory.create_available()

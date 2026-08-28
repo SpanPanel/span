@@ -283,3 +283,10 @@ remove_favorite:
         entity:
           domain: sensor
           integration: span_panel
+
+rotate_credentials:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: span_panel

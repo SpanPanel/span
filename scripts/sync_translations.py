@@ -15,6 +15,15 @@ COMPONENT_DIR = Path(__file__).resolve().parent.parent / "custom_components" / "
 STRINGS_PATH = COMPONENT_DIR / "strings.json"
 TRANSLATIONS_DIR = COMPONENT_DIR / "translations"
 EN_PATH = TRANSLATIONS_DIR / "en.json"
+NOTIFICATIONS_DIR = COMPONENT_DIR / "notifications"
+NOTIFICATIONS_EN = NOTIFICATIONS_DIR / "en.json"
+"""Persistent-notification strings, deliberately outside `translations/`.
+
+hassfest validates `strings.json` and `translations/en.json` against Home
+Assistant's own schema and rejects any key it does not define, so these cannot
+live there. They still need the same key-parity guarantee across languages,
+which is why this script checks them too rather than leaving them unchecked.
+"""
 
 
 def collect_leaf_keys(obj: dict | str, prefix: str = "") -> set[str]:
@@ -67,17 +76,17 @@ def sync_en(source: dict) -> bool:
     return True
 
 
-def validate_translations(
-    source_all_keys: set[str], source_leaf_keys: set[str]
+def validate_dir(
+    directory: Path, source_all_keys: set[str], source_leaf_keys: set[str], source_name: str
 ) -> list[str]:
-    """Validate all non-en translation files. Return list of error messages."""
+    """Validate every non-en file in `directory` against the English source."""
     errors: list[str] = []
 
-    for lang_file in sorted(TRANSLATIONS_DIR.glob("*.json")):
+    for lang_file in sorted(directory.glob("*.json")):
         if lang_file.name == "en.json":
             continue
 
-        lang = lang_file.stem
+        lang = f"{directory.name}/{lang_file.stem}"
         try:
             translation = json.loads(lang_file.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
@@ -87,14 +96,14 @@ def validate_translations(
         orphaned = find_orphaned_keys(source_all_keys, translation)
         if orphaned:
             errors.append(
-                f"{lang}: {len(orphaned)} orphaned key(s) not in strings.json:\n"
+                f"{lang}: {len(orphaned)} orphaned key(s) not in {source_name}:\n"
                 + "\n".join(f"  - {k}" for k in orphaned)
             )
 
         missing = find_missing_keys(source_leaf_keys, translation)
         if missing:
             errors.append(
-                f"{lang}: {len(missing)} missing key(s) from strings.json:\n"
+                f"{lang}: {len(missing)} missing key(s) from {source_name}:\n"
                 + "\n".join(f"  - {k}" for k in missing)
             )
 
@@ -118,7 +127,16 @@ def main() -> int:
             display_path = EN_PATH
         print(f"Updated {display_path}")
 
-    errors = validate_translations(source_all_keys, source_leaf_keys)
+    errors = validate_dir(TRANSLATIONS_DIR, source_all_keys, source_leaf_keys, "strings.json")
+
+    if NOTIFICATIONS_EN.exists():
+        notifications = json.loads(NOTIFICATIONS_EN.read_text(encoding="utf-8"))
+        errors += validate_dir(
+            NOTIFICATIONS_DIR,
+            collect_all_keys(notifications),
+            collect_leaf_keys(notifications),
+            "notifications/en.json",
+        )
     if errors:
         print("Translation validation failed:", file=sys.stderr)
         for error in errors:

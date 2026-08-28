@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "Span Panel déjà configuré. Une seule configuration est possible.",
       "cannot_connect": "Échec de la connexion au Span Panel",
+      "host_not_set": "Aucune adresse de panneau n'a été définie ; recommencez la configuration.",
       "no_devices_found": "Aucun appareil trouvé sur le réseau",
       "no_host": "Aucune adresse d'hôte n'a été fournie par le module complémentaire.",
       "no_serial": "Impossible de déterminer le numéro de série du panneau.",
@@ -12,6 +13,9 @@
       "v1_not_supported": "Le micrologiciel v1 n'est pas pris en charge. Veuillez mettre à jour le micrologiciel de votre panneau vers la version v2."
     },
     "error": {
+      "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
+      "ca_unavailable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et sous tension, puis réessayez. La configuration ne peut pas continuer sans elle, car votre mot de passe serait sinon envoyé en clair.",
+      "ca_unusable": "L'autorité de certification enregistrée pour ce panneau ne peut pas être lue, ce changement devrait donc être envoyé sans chiffrement. Rien n'a été modifié. Réauthentifiez le panneau pour enregistrer une autorité utilisable, puis réessayez.",
       "cannot_connect": "Échec de la connexion au Span Panel",
       "fqdn_registration_failed": "Impossible d'enregistrer le nom de domaine auprès du panneau ou le certificat TLS n'a pas été mis à jour à temps.",
       "host_required": "L'hôte est requis",
@@ -68,7 +72,7 @@
         "title": "Connectez-vous au Span Panel"
       },
       "fqdn_failed": {
-        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer, mais la connexion MQTT peut échouer si le certificat du panneau n'inclut pas votre nom de domaine.",
+        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer : le panneau sera configuré à l'adresse que son certificat désigne réellement, et le nom de domaine n'est pas enregistré, car le panneau le rejetterait. Réessayez avec le nom de domaine depuis Reconfigurer une fois le problème résolu.",
         "title": "Enregistrement du domaine"
       },
       "reauth_confirm": {
@@ -93,7 +97,7 @@
         "title": "Reconfiguration terminée"
       },
       "reconfigure_fqdn_failed": {
-        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer, mais la connexion MQTT peut échouer si le certificat du panneau n'inclut pas votre nom de domaine.",
+        "description": "Le nom de domaine n'a pas pu être enregistré auprès du panneau, ou le certificat TLS n'a pas été mis à jour à temps. Vous pouvez continuer : le panneau sera configuré à l'adresse que son certificat désigne réellement, et le nom de domaine n'est pas enregistré, car le panneau le rejetterait. Réessayez avec le nom de domaine depuis Reconfigurer une fois le problème résolu.",
         "title": "Enregistrement du domaine"
       },
       "reconfigure_register_fqdn": {
@@ -119,6 +123,20 @@
         },
         "description": "Entrez les détails de connexion pour votre SPAN Panel.",
         "title": "Connectez-vous au Span Panel"
+      },
+      "panel_https_port": {
+        "title": "Port HTTPS du panneau",
+        "description": "Vous avez défini un port HTTP non standard pour ce panneau : il sert peut-être aussi TLS sur un port non standard, par exemple derrière un proxy inverse. Indiquez le port sur lequel le certificat du panneau est servi.",
+        "data": {
+          "https_port": "Port HTTPS"
+        },
+        "data_description": {
+          "https_port": "Laissez 443, sauf si un proxy ou une redirection de port l'a déplacé."
+        }
+      },
+      "panel_ca": {
+        "title": "Lecture du certificat du panneau",
+        "description": "Home Assistant récupère l'autorité de certification publiée par votre panneau et vérifie que le certificat présenté par celui-ci est signé par elle. Cela se produit avant que vous ne saisissiez votre mot de passe : celui-ci, ainsi que les identifiants que le panneau renvoie en échange, transitent donc par une connexion vérifiée plutôt qu'en clair.\n\nSélectionnez **Valider** pour réessayer."
       }
     }
   },
@@ -147,11 +165,25 @@
       },
       "wifi_link": {
         "name": "Liaison Wi-Fi"
+      },
+      "pcs_active": {
+        "name": "PCS Actif"
+      },
+      "pv_panel_link": {
+        "name": "Liaison du panneau PV"
+      },
+      "evse_panel_link": {
+        "name": "Liaison du panneau EVSE"
       }
     },
     "button": {
       "gfe_override": {
         "name": "Forçage GFE : Connecté au Réseau"
+      }
+    },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "Limite de Courant de Charge EVSE"
       }
     },
     "select": {
@@ -177,8 +209,20 @@
       "bess_model": {
         "name": "Modèle"
       },
+      "bess_communication_state": {
+        "name": "État de Communication",
+        "state": {
+          "ok": "Correct",
+          "degraded": "Dégradé",
+          "lost": "Perdu",
+          "unknown": "Inconnu"
+        }
+      },
       "bess_nameplate_capacity": {
         "name": "Capacité Nominale"
+      },
+      "bess_part_number": {
+        "name": "Référence"
       },
       "bess_serial_number": {
         "name": "Numéro de Série"
@@ -230,6 +274,9 @@
           "unknown": "Inconnu",
           "unlocked": "Déverrouillé"
         }
+      },
+      "evse_part_number": {
+        "name": "Référence"
       },
       "evse_status": {
         "name": "État du Chargeur",
@@ -301,6 +348,15 @@
           "unknown": "Inconnu"
         }
       },
+      "mid_grid_state": {
+        "name": "État du réseau",
+        "state": {
+          "up": "Actif",
+          "down": "Coupé",
+          "degraded": "Dégradé",
+          "unknown": "Inconnu"
+        }
+      },
       "pv_nameplate_capacity": {
         "name": "Capacité Nominale PV"
       },
@@ -313,11 +369,17 @@
       "pv_vendor": {
         "name": "Fournisseur PV"
       },
+      "shed_total_time_remaining": {
+        "name": "Autonomie de Secours Restante"
+      },
       "site_power": {
         "name": "Puissance du Site"
       },
       "software_version": {
         "name": "Version du Logiciel"
+      },
+      "time_to_priority_shed": {
+        "name": "Temps avant Délestage Prioritaire"
       },
       "upstream_l1_current": {
         "name": "Courant Amont L1"
@@ -332,15 +394,75 @@
           "unconnected": "Déconnecté",
           "unknown": "Inconnu"
         }
+      },
+      "pcs_import_limit": {
+        "name": "Limite d'Importation"
+      },
+      "pcs_binding_constraint": {
+        "name": "Contrainte Contraignante",
+        "state": {
+          "fsr": "Capacité Ferme du Service",
+          "doe": "Enveloppe Réseau",
+          "voltage": "Support de Tension",
+          "off_grid": "Hors Réseau",
+          "requested": "Demandé",
+          "operator": "Opérateur",
+          "none": "Aucun",
+          "unknown": "Inconnu"
+        }
+      },
+      "bess_meter_power": {
+        "name": "Puissance du Compteur"
+      }
+    },
+    "switch": {
+      "control_lock": {
+        "name": "Verrou de contrôle"
       }
     }
   },
   "exceptions": {
+    "admin_only_control": {
+      "message": "Seul un administrateur Home Assistant peut piloter ce SPAN Panel."
+    },
+    "adopted_control_failed": {
+      "message": "L'écriture de {property} sur {device} a été refusée : {reason}. Rien n'a été envoyé au panneau, la valeur est donc inchangée."
+    },
+    "adopted_control_not_delivered": {
+      "message": "L'écriture de {property} sur {device} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la valeur est donc inchangée et ne changera pas plus tard."
+    },
     "circuit_priority_failed": {
-      "message": "Échec de la définition de la priorité du circuit pour {circuit}."
+      "message": "Le changement de priorité pour {circuit} a été refusé : {reason}. Rien n'a été envoyé au panneau, la priorité est donc inchangée."
+    },
+    "circuit_priority_not_delivered": {
+      "message": "Le changement de priorité pour {circuit} n'a pas pu être transmis au panneau : {reason}. Il a été refusé plutôt que mis en file d'attente, la priorité est donc inchangée."
     },
     "circuit_relay_failed": {
-      "message": "Échec de la définition de l'état du relais du circuit pour {circuit}."
+      "message": "La commande du disjoncteur pour {circuit} a été refusée : {reason}. Rien n'a été envoyé au panneau, le disjoncteur n'a donc pas changé de position."
+    },
+    "circuit_relay_not_delivered": {
+      "message": "La commande du disjoncteur pour {circuit} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, le disjoncteur n'a donc pas changé de position et ne changera pas plus tard."
+    },
+    "contextless_control_refused": {
+      "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté."
+    },
+    "control_disabled": {
+      "message": "Le contrôle de ce SPAN Panel est désactivé dans ses options. Rien n'a été envoyé au panneau."
+    },
+    "control_lock_disarm_requires_admin": {
+      "message": "Seul un administrateur Home Assistant peut désarmer le verrou de contrôle du SPAN Panel."
+    },
+    "control_lock_disarm_requires_user": {
+      "message": "Le verrou de contrôle du SPAN Panel ne peut être désarmé que par un administrateur connecté, pas par une automatisation ou un script."
+    },
+    "control_locked": {
+      "message": "Le verrou de contrôle du SPAN Panel est armé. Désarmez-le avant de piloter des circuits."
+    },
+    "evse_charge_limit_failed": {
+      "message": "Échec du réglage de la limite de courant de charge pour le chargeur {charger} : {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "La limite de courant de charge du chargeur {charger} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, la limite est donc inchangée."
     },
     "export_manifest_no_entries": {
       "message": "Aucune entrée de configuration SPAN Panel n'est chargée. Ajoutez et configurez un panneau SPAN avant d'appeler ce service."
@@ -361,7 +483,10 @@
       "message": "Le sous-appareil {entity_id} n'a pas de panneau SPAN parent — son via_device_id ne pointe pas vers un panneau SPAN."
     },
     "gfe_override_failed": {
-      "message": "Échec de l'envoi du forçage GFE au panneau."
+      "message": "Le forçage GFE vers {value} a été refusé : {reason}. Rien n'a été envoyé au panneau."
+    },
+    "gfe_override_not_delivered": {
+      "message": "Le forçage GFE vers {value} n'a pas pu être transmis au panneau : {reason}. Il a été refusé plutôt que mis en file d'attente, rien ne se produira donc plus tard."
     },
     "graph_horizon_not_available": {
       "message": "Le gestionnaire d'horizon de graphique n'est pas disponible pour le panneau SPAN sélectionné."
@@ -377,29 +502,67 @@
     },
     "panel_not_ready": {
       "message": "Le SPAN Panel n'est pas prêt. Veuillez vérifier que le panneau est en ligne."
+    },
+    "relay_debounced": {
+      "message": "Le relais de ce circuit a été actionné il y a quelques instants. La commande a été refusée plutôt que mise en file d'attente."
+    },
+    "rotate_credentials_auth_failed": {
+      "message": "Le SPAN Panel a rejeté le jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
+    },
+    "rotate_credentials_ca_unusable": {
+      "message": "L'autorité de certification enregistrée pour ce SPAN Panel est illisible ; la rotation devrait donc circuler en clair. Rien n'a été modifié. Réparez l'autorité de certification du panneau, puis relancez la rotation."
+    },
+    "rotate_credentials_failed": {
+      "message": "Le SPAN Panel à l'adresse {host} n'a pas terminé le renouvellement des identifiants. Les identifiants existants sont inchangés."
+    },
+    "rotate_credentials_multiple_panels": {
+      "message": "Plusieurs SPAN Panel sont chargés. Choisissez le panneau à faire tourner dans le champ d'entrée de configuration : la rotation empêche l'ancien mot de passe du broker de fonctionner pour tous les autres clients de ce panneau."
+    },
+    "rotate_credentials_no_entry": {
+      "message": "Aucun SPAN Panel chargé utilisant l'API v2 n'a été trouvé."
+    },
+    "rotate_credentials_no_token": {
+      "message": "Ce SPAN Panel n'a aucun jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "Le nouveau mot de passe du broker a été enregistré, mais l'intégration SPAN Panel n'est pas revenue en service avec celui-ci. Le panneau a déjà accepté le nouveau mot de passe : ne relancez pas la rotation, consultez les journaux et rechargez l'intégration."
+    },
+    "rotate_credentials_requires_admin": {
+      "message": "Seul un administrateur Home Assistant peut renouveler les identifiants du SPAN Panel."
+    },
+    "rotate_credentials_requires_user": {
+      "message": "Le renouvellement des identifiants doit être lancé par un administrateur depuis l'interface utilisateur. Les automatisations, les scripts et les autres intégrations ne peuvent pas l'appeler."
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
-          "show_panel": "Afficher le Panneau dans la Barre Latérale",
-          "panel_admin_only": "Utilisateurs Administrateurs Uniquement",
+          "allow_contextless_control": "Autoriser le contrôle sans utilisateur connecté",
+          "control_lock_timeout": "Réarmement automatique du verrou de contrôle (minutes)",
+          "control_mode": "Qui peut piloter le panneau",
           "enable_circuit_net_energy_sensors": "Énergie Nette du Circuit",
           "enable_energy_dip_compensation": "Compenser les Baisses d'Énergie Automatiquement",
           "enable_panel_net_energy_sensors": "Énergie Nette du Panneau",
           "enable_unmapped_circuit_sensors": "Capteurs de Circuits Non Assignés",
           "energy_reporting_grace_period": "Période de grâce du capteur d'énergie (minutes)",
+          "panel_admin_only": "Utilisateurs Administrateurs Uniquement",
+          "relay_debounce_seconds": "Anti-rebond du relais (secondes)",
+          "show_panel": "Afficher le Panneau dans la Barre Latérale",
           "snapshot_update_interval": "Intervalle de Mise à Jour du Snapshot (secondes)"
         },
         "data_description": {
-          "show_panel": "Afficher le tableau de bord du panneau SPAN comme entrée de barre latérale.",
-          "panel_admin_only": "Restreindre l'entrée de la barre latérale du tableau de bord aux utilisateurs administrateurs.",
+          "allow_contextless_control": "Les automatisations, les scripts et les autres intégrations appellent les services sans utilisateur associé. Désactiver cette option refuse ces commandes. Laissez-la activée sauf si vos automatisations ne pilotent pas de circuits.",
+          "control_lock_timeout": "-1 désactive le verrou de contrôle et supprime son interrupteur. 0 maintient le verrou armé jusqu'à ce que quelqu'un le désarme. Toute autre valeur le réarme ce nombre de minutes après son désarmement. Seuls les administrateurs peuvent le désarmer.",
+          "control_mode": "Par défaut, Home Assistant accorde à chaque utilisateur non administrateur le contrôle de toutes les entités. Le restreindre aux administrateurs est le seul moyen de changer cela. Le désactiver arrête la création des entités de contrôle ; leurs entrées de registre, noms et zones sont conservés.",
           "enable_circuit_net_energy_sensors": "Énergie nette par circuit, tenant compte de la puissance réactive.",
           "enable_energy_dip_compensation": "Compenser lorsque le panneau signale des lectures d'énergie inférieures. La désactivation efface les compensations.",
           "enable_panel_net_energy_sensors": "Énergie nette pour le compteur principal et la dérivation, tenant compte des flux bidirectionnels.",
           "enable_unmapped_circuit_sensors": "Capteurs sous-jacents pour les onglets non assignés à des disjoncteurs nommés.",
           "energy_reporting_grace_period": "Minutes pendant lesquelles les capteurs conservent leur dernière valeur lorsque le panneau est hors ligne (0–60). Par défaut : 15.",
+          "panel_admin_only": "Restreindre l'entrée de la barre latérale du tableau de bord aux utilisateurs administrateurs.",
+          "relay_debounce_seconds": "Refuse une seconde commande au relais du même circuit pendant ce nombre de secondes. Refusée, jamais mise en file : une commande de relais déclenchée quelques secondes plus tard sur un panneau qui a changé est pire qu'une erreur visible par l'auteur de l'automatisation. 0 la désactive.",
+          "show_panel": "Afficher le tableau de bord du panneau SPAN comme entrée de barre latérale.",
           "snapshot_update_interval": "Secondes entre les reconstructions de snapshot (0–15). Plus bas = plus rapide, plus de CPU. 0 = pas de temporisation."
         },
         "description": "Configurer les paramètres de l'intégration SPAN Panel.",
@@ -408,6 +571,13 @@
     }
   },
   "selector": {
+    "control_mode": {
+      "options": {
+        "admin_only": "Administrateurs uniquement",
+        "all_users": "Tout utilisateur Home Assistant",
+        "disabled": "Personne — ne pas créer d'entités de contrôle"
+      }
+    },
     "entity_naming_pattern": {
       "options": {
         "circuit_numbers": "Numéros de Circuit (ex., span_panel_circuit_15_power)",
@@ -691,6 +861,42 @@
         "entity_id": {
           "name": "Entité",
           "description": "N'importe quel capteur du circuit ou du sous-appareil à retirer des favoris."
+        }
+      }
+    },
+    "rotate_credentials": {
+      "name": "Renouveler les identifiants du panneau",
+      "description": "Demande au SPAN Panel un nouveau mot de passe pour le broker MQTT eBus, l'enregistre et recharge l'intégration. Le mot de passe précédent cesse immédiatement de fonctionner : tout autre client local qui l'utilise — une seconde instance Home Assistant, un script ou un outil tiers — devra être réapprovisionné depuis le panneau avant de pouvoir se reconnecter. Le jeton d'accès du panneau et le mot de passe du panneau ne sont pas modifiés. Seul un administrateur Home Assistant peut l'exécuter, et il ne peut pas être appelé depuis une automatisation ou un script.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrée de configuration",
+          "description": "Le panneau à faire tourner. Facultatif avec un seul panneau ; obligatoire lorsque plusieurs SPAN Panel sont chargés."
+        }
+      }
+    }
+  },
+  "issues": {
+    "schema_field_unresolved": {
+      "title": "Champ de données du Panneau SPAN indisponible",
+      "description": "Le micrologiciel de votre panneau ne fournit plus `{field_path}`. Entités concernées : {count} (par exemple : {examples}). Elles peuvent devenir indisponibles, ou renvoyer des données incomplètes, jusqu'à ce qu'une mise à jour de l'intégration prenne en charge le nouveau micrologiciel."
+    },
+    "schema_unit_mismatch": {
+      "title": "Incohérence d'unité du Panneau SPAN",
+      "description": "Votre panneau signale `{field_path}` en {schema_unit}, alors que cette intégration attend {ha_unit}. Entités concernées : {count} (par exemple : {examples}). Leurs relevés et leurs statistiques à long terme peuvent être erronés. Elles n'ont pas été modifiées automatiquement."
+    },
+    "panel_ca_changed": {
+      "title": "L'autorité de certification du SPAN Panel a changé",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Faire confiance à la nouvelle autorité de certification ?",
+            "description": "{panel} annonce désormais cette autorité de certification :\n\n**{fingerprint}**\n\nL'accepter l'épingle et rétablit la connexion. Ne le faites que si vous savez pourquoi elle a changé : une mise à jour du micrologiciel ou une réinitialisation d'usine la renouvelle légitimement.\n\nSi rien n'aurait dû changer, n'acceptez pas. Un appareil de votre réseau se faisant passer pour votre panneau ressemble exactement à ceci, et accepter lui remettrait la connexion."
+          }
+        },
+        "abort": {
+          "entry_gone": "Ce SPAN Panel n'est plus configuré.",
+          "ca_unreadable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et réessayez.",
+          "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez."
         }
       }
     }

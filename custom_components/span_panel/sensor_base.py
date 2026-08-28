@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 import logging
-from typing import Any, cast
+from typing import Any
 
 from homeassistant.components.sensor import (
     RestoreSensor,
@@ -22,9 +22,15 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.typing import StateType
 from span_panel_api import SpanPanelSnapshot
 
-from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION, USE_CIRCUIT_NUMBERS
+from .const import DOMAIN, ENABLE_ENERGY_DIP_COMPENSATION
 from .coordinator import SpanPanelCoordinator
-from .energy_dip import build_dip_attributes, process_energy_dip
+from .energy_dip import (
+    DipEvent,
+    DipOutcome,
+    PendingDip,
+    build_dip_attributes,
+    process_energy_dip,
+)
 from .entity import SpanPanelEntity
 from .grace_period import (  # noqa: F401
     SpanEnergyExtraStoredData,
@@ -33,7 +39,12 @@ from .grace_period import (  # noqa: F401
     handle_offline_grace_period,
     initialize_from_last_state,
 )
+from .naming import (
+    circuit_object_id_base,
+    release_registry_name_written_by_older_release,
+)
 from .options import ENERGY_REPORTING_GRACE_PERIOD
+from .sensor_definitions import SpanPanelCircuitsSensorEntityDescription
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -58,10 +69,32 @@ _ENERGY_SENSOR_UNRECORDED_ATTRIBUTES: frozenset[str] = frozenset(
 )
 
 
+def _description_label(description: SensorEntityDescription) -> str:
+    """Return the description's own label, or a neutral word where it declares none.
+
+    A description with a `translation_key` declares no `name` -- it declares
+    `None` or leaves the field `UNDEFINED` -- and a sensor that reaches here with
+    neither is a programming error rather than a user-visible state, so "Sensor"
+    keeps it readable instead of rendering a sentinel.
+    """
+    name = description.name
+    if isinstance(name, str) and name:
+        return name
+    return "Sensor"
+
+
 class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntity, ABC):
     """Abstract base class for Span Panel sensors with overridable methods."""
 
     _attr_has_entity_name = True
+
+    _is_sub_device: bool = False
+    """True when this entity is shown on a sub-device's card rather than the panel's.
+
+    Set by the circuit classes when they are handed a `device_info_override`.
+    Such a sensor supplies no base at all: it composes from its label on the
+    sub-device's card, which is the shape the sub-device's own sensors have.
+    """
 
     def __init__(
         self,
@@ -99,36 +132,31 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                     "sensor", DOMAIN, self._attr_unique_id
                 )
 
-                use_circuit_numbers = data_coordinator.config_entry.options.get(
-                    USE_CIRCUIT_NUMBERS, False
-                )
+                # One name path, in both naming modes: the panel's name, carried
+                # as `original_name`. That field ranks below the object-id base
+                # below, so what is displayed can no longer decide what
+                # "Recreate entity IDs" proposes.
+                self._attr_name = self._generate_panel_name(snapshot, description)
 
-                if existing_entity_id:
-                    if use_circuit_numbers:
-                        # Circuit-numbers mode: keep circuit-based name for entity_id stability
-                        self._attr_name = self._generate_friendly_name(snapshot, description)
-                    else:
-                        # Friendly-names mode: use panel name for sync
-                        self._attr_name = self._generate_panel_name(snapshot, description)
-                else:
-                    # Initial install - use flag-based name
-                    self._attr_name = self._generate_friendly_name(snapshot, description)
-
-                # Sync panel friendly name to registry display name in
-                # circuit-numbers mode so the UI shows e.g.
-                # "Kitchen Power" while entity_id stays circuit-based.
-                if existing_entity_id and use_circuit_numbers:
-                    self._sync_friendly_name_to_registry(
-                        snapshot, description, entity_registry, existing_entity_id
+                # The id itself is Home Assistant's to compose. This entity
+                # supplies only its base; `entity_id` is left unset so Core
+                # assembles the rest from the user's `entity_id_parts`. A
+                # sub-device sensor supplies no base either, composing from its
+                # label on the sub-device's card like that device's own sensors.
+                parts = self._object_id_parts(snapshot, description)
+                if parts is not None and not self._is_sub_device:
+                    identifier, suffix = parts
+                    self._span_object_id_base = circuit_object_id_base(
+                        identifier, suffix, existing_entity_id
                     )
 
-                # Wire explicit entity_id via subclass helper
-                entity_id = self._construct_entity_id(snapshot, description, existing_entity_id)
-                if entity_id:
-                    self.entity_id = entity_id
+                if existing_entity_id:
+                    self._release_synced_registry_name(
+                        snapshot, description, entity_registry, existing_entity_id
+                    )
         else:
             # Fallback for entities without unique_id
-            self._attr_name = self._generate_friendly_name(snapshot, description)
+            self._attr_name = self._generate_panel_name(snapshot, description)
 
         # Set entity registry defaults if they exist in the description
         if hasattr(description, "entity_registry_enabled_default"):
@@ -172,26 +200,32 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         """
 
-    @abstractmethod
-    def _generate_friendly_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
-        """Generate friendly name for the sensor.
+    def _object_id_parts(
+        self, snapshot: SpanPanelSnapshot, description: T
+    ) -> tuple[str, str] | None:
+        """Return the identifier and canonical suffix this entity's id is built from.
 
-        Subclasses must implement this to define their naming strategy.
+        `None` -- the default, and the answer for every entity that is not a
+        circuit -- leaves `_span_object_id_base` unset, so Home Assistant
+        composes the id from the display name exactly as it always has.
 
-        Args:
-            snapshot: The panel snapshot data
-            description: The sensor description
-
-        Returns:
-            Friendly name string, or None to let HA use default behavior
-
+        A circuit entity answers with the naming-flag half (`Circuit 15`,
+        `Kitchen Outlets`, `Unmapped Tab 32`) and the suffix
+        `naming.circuit_object_id_base` keys on. The two travel together because
+        neither is any use alone, and because a circuit entity's
+        `description.key` has been overwritten with the circuit id by then, so
+        there is no suffix a default could compute.
         """
+        return None
 
     def _generate_panel_name(self, snapshot: SpanPanelSnapshot, description: T) -> str | None:
-        """Generate panel name for the sensor (always uses panel circuit name).
+        """Generate the displayed name for the sensor, in either naming mode.
 
-        This method is used for name sync - it always uses the panel circuit name
-        regardless of user preferences.
+        Circuit entities override this to prefix the panel's own circuit name,
+        which is what makes a circuit renamed in the SPAN app show through. Every
+        other sensor's name is its description's label -- and a description that
+        declares a `translation_key` instead is normally not asked at all, since
+        its name comes from `translations/en.json`.
 
         Args:
             snapshot: The panel snapshot data
@@ -201,50 +235,59 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             Panel name string
 
         """
-        # This should be implemented by subclasses that need name sync
-        # For now, fall back to friendly name
-        return self._generate_friendly_name(snapshot, description)
+        return _description_label(description)
 
-    def _sync_friendly_name_to_registry(
+    def _release_synced_registry_name(
         self,
         snapshot: SpanPanelSnapshot,
         description: T,
         entity_registry: er.EntityRegistry,
         existing_entity_id: str,
     ) -> None:
-        """Sync panel circuit name to registry display name in circuit-numbers mode."""
+        """Give the registry's `name` back to the user, where an older release took it.
+
+        Circuit-numbers mode used to deliver the panel's name by writing the
+        registry's `name`. That field is the *user's* override, and Home Assistant
+        reads it ahead of `suggested_object_id` when generating an entity id -- so
+        occupying it made "Recreate entity IDs" propose a friendly-name id for a
+        circuit-numbered entity, converting the whole panel if accepted.
+
+        The name now travels as `original_name` instead, so this only has to let
+        go of what the old scheme wrote. Only a name this integration would have
+        written is cleared; anything else is the user's and is left exactly where
+        it is, which is the same test the write used to gate on.
+
+        Every label the description has carried counts, not just its current one:
+        a label reworded between releases left installs holding the older string,
+        and a write we no longer recognise is a write we would never hand back.
+        """
         circuit = snapshot.circuits.get(getattr(self, "circuit_id", ""))
         if not (circuit and circuit.name):
             return
-        entity_entry = entity_registry.async_get(existing_entity_id)
-        if not entity_entry:
-            return
-        description_suffix = str(getattr(description, "name", None) or "Sensor")
-        expected_name = f"{circuit.name} {description_suffix}"
-        if entity_entry.name is None or entity_entry.name == expected_name:
-            entity_registry.async_update_entity(existing_entity_id, name=expected_name)
-
-    def _construct_entity_id(
-        self,
-        snapshot: SpanPanelSnapshot,
-        description: T,
-        existing_entity_id: str | None = None,
-    ) -> str | None:
-        """Construct explicit entity_id for the sensor.
-
-        Subclasses may override to use entity_id helpers from helpers.py.
-        Returns None to let HA auto-generate from _attr_name.
-
-        Args:
-            snapshot: The panel snapshot data
-            description: The sensor description
-            existing_entity_id: The existing entity_id from registry, or None for new entities
-
-        """
-        return None
+        # Only the circuit descriptions declare a reworded label, and only a
+        # circuit entity reaches this line at all -- the guard above returns for
+        # anything with no circuit behind it.
+        legacy_names = (
+            description.legacy_names
+            if isinstance(description, SpanPanelCircuitsSensorEntityDescription)
+            else ()
+        )
+        release_registry_name_written_by_older_release(
+            entity_registry,
+            existing_entity_id,
+            circuit.name,
+            (_description_label(description), *legacy_names),
+        )
 
     def _sync_circuit_name(self) -> None:
-        """Sync circuit name changes: registry display in circuit-numbers mode, reload in friendly-names mode."""
+        """Follow a circuit renamed on the panel, by reloading so the name is rebuilt.
+
+        One path for both modes. The name is carried by `original_name`, which is
+        written when the entity is added, so a reload is what refreshes it --
+        circuit-numbers mode used to write the registry's `name` in place instead,
+        which was quicker but handed that field the last word over entity id
+        generation. See `_release_synced_registry_name`.
+        """
         if not (hasattr(self, "circuit_id") and hasattr(self.coordinator.data, "circuits")):
             return
 
@@ -253,61 +296,33 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             return
 
         current_circuit_name = circuit.name
-        use_circuit_numbers = self.coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
 
-        if use_circuit_numbers:
-            # Circuit-numbers mode: update registry display name, no reload
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry:
-                    description_suffix = str(
-                        getattr(self.entity_description, "name", None) or "Sensor"
-                    )
-                    old_display = (
-                        f"{self._previous_circuit_name} {description_suffix}"
-                        if isinstance(self._previous_circuit_name, str)
-                        else None
-                    )
-                    new_display = f"{current_circuit_name} {description_suffix}"
+        # A name in the registry is one the user set: theirs outranks the panel's,
+        # and reloading would not change what is displayed anyway.
+        user_has_override = False
+        if self.entity_id:
+            entity_registry = er.async_get(self.hass)
+            entity_entry = entity_registry.async_get(self.entity_id)
+            if entity_entry and entity_entry.name:
+                user_has_override = True
 
-                    user_has_override = entity_entry.name is not None and entity_entry.name not in {
-                        old_display,
-                        new_display,
-                    }
-
-                    if not user_has_override and (
-                        self._previous_circuit_name is _NAME_UNSET
-                        or current_circuit_name != self._previous_circuit_name
-                    ):
-                        entity_registry.async_update_entity(self.entity_id, name=new_display)
+        if user_has_override:
             self._previous_circuit_name = current_circuit_name
-        else:
-            # Friendly-names mode: existing reload behavior
-            user_has_override = False
-            if self.entity_id:
-                entity_registry = er.async_get(self.hass)
-                entity_entry = entity_registry.async_get(self.entity_id)
-                if entity_entry and entity_entry.name:
-                    user_has_override = True
-
-            if user_has_override:
-                self._previous_circuit_name = current_circuit_name
-            elif self._previous_circuit_name is _NAME_UNSET:
-                _LOGGER.info(
-                    "First update: syncing sensor name to panel name '%s', requesting reload",
-                    current_circuit_name,
-                )
-                self._previous_circuit_name = current_circuit_name
-                self.coordinator.request_reload()
-            elif current_circuit_name != self._previous_circuit_name:
-                _LOGGER.info(
-                    "Auto-sync detected circuit name change from '%s' to '%s' for sensor, requesting integration reload",
-                    self._previous_circuit_name,
-                    current_circuit_name,
-                )
-                self._previous_circuit_name = current_circuit_name
-                self.coordinator.request_reload()
+        elif self._previous_circuit_name is _NAME_UNSET:
+            _LOGGER.info(
+                "First update: syncing sensor name to panel name '%s', requesting reload",
+                current_circuit_name,
+            )
+            self._previous_circuit_name = current_circuit_name
+            self.coordinator.request_reload()
+        elif current_circuit_name != self._previous_circuit_name:
+            _LOGGER.info(
+                "Auto-sync detected circuit name change from '%s' to '%s' for sensor, requesting integration reload",
+                self._previous_circuit_name,
+                current_circuit_name,
+            )
+            self._previous_circuit_name = current_circuit_name
+            self.coordinator.request_reload()
 
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
@@ -321,16 +336,23 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
 
         Keep entities available during a panel_offline condition so sensors can show
         their grace period state (last_valid_state) or None when grace period expires.
+
+        The unresolved-field probe runs first: the grace-period branch below
+        returns True unconditionally, so probing after it would let every
+        offline sensor keep reporting a field the adapter cannot resolve.
+
+        The transport probe runs for the same reason and answers the harder
+        case: a grace period is a bet that the reading will be true again
+        shortly, and a transport that has stopped for good makes that bet
+        unpayable. `_handle_offline_state` gives POWER sensors 0.0 while it
+        runs, which is a reading nobody took.
         """
-        try:
-            if getattr(self.coordinator, "panel_offline", False):
-                return True
-        except AttributeError as err:
-            # If coordinator is missing expected attribute, log and fall back
-            _LOGGER.debug("Availability check: missing coordinator attribute: %s", err)
-        except Exception as err:  # noqa: BLE001  # pragma: no cover - defensive
-            # Any unexpected error shouldn't crash the availability check
-            _LOGGER.debug("Availability check: unexpected error: %s", err)
+        if self._reads_an_unresolved_field:
+            return False
+        if not self._transport_available:
+            return False
+        if self.coordinator.panel_offline:
+            return True
         return super().available
 
     @property
@@ -441,20 +463,36 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
             str_value = str(raw_value)
             # For enum sensors, ensure the value is in the options list before
             # setting it — HA raises ValueError if the state is not in options.
-            # Options are built dynamically from observed MQTT values.
-            # Values are normalized to lowercase to satisfy HA's translation
-            # key requirement ([a-z0-9-_]+). HA uses the state value directly
-            # as the translation key lookup.
+            # Values are normalized to lowercase to satisfy HA's translation key
+            # requirement ([a-z0-9-_]+); HA uses the state value directly as the
+            # translation key lookup.
+            #
+            # Options are declared statically on each description, from the states
+            # `en.json` renders. They used to be discovered here instead, which could
+            # not work: options would only ever list states the panel had already
+            # reached, so a state it had not yet visited was absent from its own
+            # "Possible states" — and every panel advertised a different set
+            # depending on what it had lived through.
+            #
+            # The append survives as a last resort so an undeclared value degrades to
+            # a shown state rather than a ValueError. It is a warning rather than a
+            # debug line because reaching it means the panel published outside the
+            # enum its own catalog declares, which is a producer defect and not
+            # something a consumer should absorb quietly. It also renders untranslated,
+            # as a raw key.
             if self._attr_device_class is SensorDeviceClass.ENUM:
                 str_value = str_value.lower()
                 if not hasattr(self, "_attr_options") or self._attr_options is None:
                     self._attr_options = []
                 if str_value not in self._attr_options:
                     self._attr_options.append(str_value)
-                    _LOGGER.debug(
-                        "Added enum option '%s' for %s",
-                        str_value,
+                    _LOGGER.warning(
+                        "%s reported '%s', which is not one of its declared states %s. "
+                        "Showing it untranslated; the panel is publishing outside the "
+                        "enum its catalog declares.",
                         self.entity_id or self._attr_unique_id,
+                        str_value,
+                        sorted(o for o in self._attr_options if o != str_value),
                     )
             self._attr_native_value = str_value
 
@@ -498,6 +536,13 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         self._energy_offset: float = 0.0
         self._last_panel_reading: float | None = None
         self._last_dip_delta: float | None = None
+        # A dip that has been compensated but not yet settled — see
+        # `process_energy_dip`. Either being non-None means part of
+        # `_energy_offset` is provisional and may still be taken back: the
+        # first is waiting on evidence, the second has it and is waiting out
+        # the window in which that evidence could still be an artefact.
+        self._pending_dip: PendingDip | None = None
+        self._recently_confirmed_dip: PendingDip | None = None
         self._is_total_increasing: bool = (
             getattr(description, "state_class", None) == SensorStateClass.TOTAL_INCREASING
         )
@@ -518,21 +563,65 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
             and isinstance(raw_value, float | int)
         ):
             raw_float = float(raw_value)
-            new_offset, dip_delta, compensated = process_energy_dip(
-                raw_float, self._last_panel_reading, self._energy_offset
+            outcome = process_energy_dip(
+                raw_float,
+                self._last_panel_reading,
+                self._energy_offset,
+                self._pending_dip,
+                self._recently_confirmed_dip,
             )
-            if dip_delta is not None:
-                self._last_dip_delta = dip_delta
-                self.coordinator.report_energy_dip(
-                    self.entity_id or self._attr_unique_id or "unknown",
-                    dip_delta,
-                    new_offset,
-                )
-            self._energy_offset = new_offset
+            self._apply_dip_event(outcome)
+            self._energy_offset = outcome.offset
+            self._pending_dip = outcome.pending
+            self._recently_confirmed_dip = outcome.recently_confirmed
             self._last_panel_reading = raw_float
-            super()._process_raw_value(compensated)
+            super()._process_raw_value(outcome.compensated)
         else:
             super()._process_raw_value(raw_value)
+
+    def _apply_dip_event(self, outcome: DipOutcome) -> None:
+        """Record the diagnostic, and tell the coordinator once a dip is final.
+
+        The notification waits for the dip to *settle* rather than firing when
+        it is first seen, or even when it is first corroborated. Reporting on
+        sight is what made `SpanPanel/span#259` so loud — a notification naming
+        essentially every circuit on the panel, for an event that had not
+        happened. Reporting on corroboration would be quieter but still
+        premature, because the reading after it can take the offset back; a
+        persistent notification cannot be taken back, so it is held until
+        nothing can undo what it describes. A dip that gets retracted produces
+        no notification at all, because nothing happened.
+
+        `last_dip_delta` is set when the dip is booked, since it describes what
+        the counter did and the compensation is applied from that moment, and
+        cleared on retraction, since by then the counter turns out not to have
+        done it.
+        """
+        if outcome.event is DipEvent.BOOKED:
+            self._last_dip_delta = outcome.delta
+        elif outcome.event is DipEvent.RETRACTED:
+            self._last_dip_delta = None
+            _LOGGER.debug(
+                "Energy dip retracted for %s: %s Wh given back, offset back to %s",
+                self.entity_id or self._attr_unique_id,
+                outcome.delta,
+                outcome.offset,
+            )
+        elif outcome.event is DipEvent.CONFIRMED:
+            _LOGGER.debug(
+                "Energy dip corroborated for %s: %s Wh, reported if it settles",
+                self.entity_id or self._attr_unique_id,
+                outcome.delta,
+            )
+
+        # Checked separately from `event`: a dip can settle on the same reading
+        # that books or retracts another one.
+        if outcome.settled is not None:
+            self.coordinator.report_energy_dip(
+                self.entity_id or self._attr_unique_id or "unknown",
+                outcome.settled,
+                outcome.offset,
+            )
 
     async def async_added_to_hass(self) -> None:
         """Restore grace period state when entity is added to Home Assistant.
@@ -566,6 +655,21 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._last_panel_reading = restored.last_panel_reading
             if restored.last_dip_delta is not None:
                 self._last_dip_delta = restored.last_dip_delta
+            if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
+                self._pending_dip = PendingDip(
+                    baseline=restored.pending_dip_baseline,
+                    delta=restored.pending_dip_delta,
+                )
+            if (
+                restored.confirmed_dip_baseline is not None
+                and restored.confirmed_dip_delta is not None
+                and restored.confirmed_dip_ticks_left is not None
+            ):
+                self._recently_confirmed_dip = PendingDip(
+                    baseline=restored.confirmed_dip_baseline,
+                    delta=restored.confirmed_dip_delta,
+                    confirmed_ticks_left=restored.confirmed_dip_ticks_left,
+                )
             _LOGGER.debug(
                 "Restored energy dip compensation for %s: offset=%s, last_reading=%s, last_dip=%s",
                 self.entity_id or self._attr_unique_id,
@@ -644,22 +748,32 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
         integration is unloaded or HA shuts down, and restored when
         the entity is added back to HA.
         """
-        return cast(
-            SensorExtraStoredData,
-            SpanEnergyExtraStoredData(
-                native_value=(
-                    float(self._attr_native_value)
-                    if isinstance(self._attr_native_value, int | float)
-                    else None
-                ),
-                native_unit_of_measurement=self.native_unit_of_measurement,
-                last_valid_state=self._last_valid_state,
-                last_valid_changed=(
-                    self._last_valid_changed.isoformat() if self._last_valid_changed else None
-                ),
-                energy_offset=self._energy_offset or None,
-                last_panel_reading=self._last_panel_reading,
-                last_dip_delta=self._last_dip_delta,
+        return SpanEnergyExtraStoredData(
+            native_value=(
+                float(self._attr_native_value)
+                if isinstance(self._attr_native_value, int | float)
+                else None
+            ),
+            native_unit_of_measurement=self.native_unit_of_measurement,
+            last_valid_state=self._last_valid_state,
+            last_valid_changed=(
+                self._last_valid_changed.isoformat() if self._last_valid_changed else None
+            ),
+            energy_offset=self._energy_offset or None,
+            last_panel_reading=self._last_panel_reading,
+            last_dip_delta=self._last_dip_delta,
+            pending_dip_baseline=self._pending_dip.baseline if self._pending_dip else None,
+            pending_dip_delta=self._pending_dip.delta if self._pending_dip else None,
+            confirmed_dip_baseline=(
+                self._recently_confirmed_dip.baseline if self._recently_confirmed_dip else None
+            ),
+            confirmed_dip_delta=(
+                self._recently_confirmed_dip.delta if self._recently_confirmed_dip else None
+            ),
+            confirmed_dip_ticks_left=(
+                self._recently_confirmed_dip.confirmed_ticks_left
+                if self._recently_confirmed_dip
+                else None
             ),
         )
 
@@ -735,7 +849,7 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 attributes["grace_period_remaining"] = str(remaining_minutes)
 
                 # Indicate if we're currently using grace period
-                panel_offline = getattr(self.coordinator, "panel_offline", False)
+                panel_offline = self.coordinator.panel_offline
                 if panel_offline and remaining_seconds > 0:
                     attributes["using_grace_period"] = "True"
 

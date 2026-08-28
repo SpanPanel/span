@@ -17,8 +17,50 @@ CONF_EBUS_BROKER_PASSWORD = "ebus_broker_password"  # nosec B105
 CONF_EBUS_BROKER_PORT = "ebus_broker_mqtts_port"
 CONF_HOP_PASSPHRASE = "hop_passphrase"  # nosec B105
 CONF_HTTP_PORT = "http_port"
+CONF_HTTPS_PORT = "https_port"
+CONF_PANEL_CA_PEM = "panel_ca_pem"
 CONF_PANEL_SERIAL = "panel_serial"
 CONF_REGISTERED_FQDN = "registered_fqdn"
+
+DEFAULT_HTTPS_PORT = 443
+"""Where the panel serves TLS. Configurable for the same reason `http_port` is:
+a reverse proxy on the panel's VLAN does not have to listen on 443."""
+
+DEFAULT_MQTTS_PORT = 8883
+"""Where the panel serves MQTT over TLS.
+
+A fallback and nothing more: the panel publishes this port during registration
+and every v2 entry carries it, so a stored value is what is actually used. It is
+here for the reader that has to name a port when `entry.data` holds something
+unusable, rather than refuse an otherwise healthy entry over it."""
+
+PANEL_CA_PENDING = "panel_ca_pending"
+"""Set in `entry.data` for a v2 entry that predates CA pinning.
+
+The CA cannot be fetched in `async_migrate_entry` — that runs during startup, so
+a network call there delays boot whenever the panel is unreachable and leaves a
+failed fetch with no recovery path. The flag defers it to the first successful
+setup, which retries on every subsequent one for free. Same shape as
+`solar_migration_pending`.
+
+**Only the migration sets this.** A newly configured entry always carries a pin,
+because the config flow fetches and confirms the CA before it authenticates and
+refuses to continue without one — registration is the exchange that carries the
+passphrase.
+
+An upgraded entry is a different case, but not a risk-free one, and the
+difference is not that nothing is at stake. Its MQTTS session authenticates with
+the broker password, and with no `ca_pem` the library falls back to fetching the
+CA over unauthenticated plaintext HTTP on every connect and trusting whatever
+answers — which is the substitution this pin exists to close. So an unpinned
+upgraded entry is exposed on each connect until the flag settles.
+
+Starting anyway is still right, for a different reason: that exposure is exactly
+the status quo ante. It is what the entry already had under 3.0.1, and refusing
+to start does not remove it — it removes the integration, and an integration
+that will not start protects nothing. Retrying converts a pre-existing, bounded
+exposure into a closed one at the first successful setup; refusing converts it
+into a guaranteed outage with the credential no safer."""
 
 # Binary sensor / status field keys (used in entity definitions)
 SYSTEM_DOOR_STATE = "doorState"
@@ -79,6 +121,11 @@ NOTIFICATION_PRIORITIES: Final[tuple[str, ...]] = (
     "critical",
 )
 EVENT_CURRENT_ALERT = "span_panel_current_alert"
+
+# Fired alongside a schema Repair so an automation can react without polling
+# the issue registry. Same bus-event shape as the current alert above.
+EVENT_SCHEMA_ISSUE = "span_panel_schema_issue"
+EVENT_CONTROL_COMMAND = "span_panel_control_command"
 
 # Graph time horizon configuration
 VALID_GRAPH_HORIZONS: Final[tuple[str, ...]] = ("5m", "1h", "1d", "1w", "1M")

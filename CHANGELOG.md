@@ -2,6 +2,138 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 8/2026
+
+### In short
+
+- **Install this before SPAN pushes firmware `r202633`** — it replaces the panel's wire model, and 2.0.8 cannot read a panel that has taken it. Requires Home
+  Assistant 2026.8.
+- **The Microgrid Interconnect Device and the solar inverter become devices of their own**, carrying grid health and whether Grid Power is really measuring the
+  grid.
+- **EVSE Charge Current Limit** is the first control here that changes something on a SPAN Drive rather than on the panel.
+- **The battery says when things run out** — Time to Priority Shed and Backup Time Remaining, beside its own power and link state.
+- **Vendor extensions are adopted on a reload**, so a device type or reading nobody has modelled no longer waits for a release.
+- **Your passphrase is no longer stored and the panel's certificate is pinned before credentials cross the network**, with control lockable or admin-only.
+- **Nothing you have moves** — entity ids, unique ids and history survive the upgrade.
+
+### You will need this release before SPAN updates your panel
+
+SPAN firmware `r202633` retires the wire model every release up to 2.0.8 reads, and serves its replacement from the reboot onwards. **2.0.8 cannot read a panel
+on `r202633`.**
+
+### Requires Home Assistant 2026.8.0 or newer
+
+This release requires Home Assistant 2026.8 to avoid a deprecated API — the old API stops working entirely in 2027.8.
+
+**The transition is uneventful** — the integration boots with the right wire library based on which firmware it sees. Your devices and entities are intact.
+
+### Added (subject to firmware support)
+
+- **The panel's Microgrid Interconnect Device appears as its own device**, carrying **Grid State** — the health of the utility supply itself, which your panel
+  never reported before.
+- **Grid Power now reports whether it sits at the service entrance**, through an `at_service_entrance` attribute: false where a battery or another panel sits
+  between the utility and your main lugs, which is when it and **Grid Power Flow** legitimately disagree.
+- **The attribute is present only where your panel publishes the topology it is read from.**
+
+- **The solar inverter gets a device of its own** rather than rendering as diagnostic sensors on the panel's card; the five PV entities keep the entity ids,
+  unique ids and history they have today.
+- **Assign the new Solar device to an area** — those five no longer inherit the panel's area, which quietly drops them from area-scoped dashboards, automations
+  and voice commands until you do.
+- New installations get `sensor.span_panel_solar_pv_vendor` and friends where existing ones keep `sensor.span_panel_pv_vendor`; both are correct.
+
+- **EVSE Charge Current Limit** — a settable ceiling on each commissioned SPAN Drive.
+- The maximum is the one your installer commissioned; the control is unavailable where the rating is not published.
+- The control appears only where the panel says the limit can be changed and reports a change still in flight as a `charge_current_limit_target` attribute.
+
+- **PV Panel Link and EVSE Panel Link** — the panel's own report of the link to your inverter and to each charger, which is the fact **BESS Connected** has
+  always shown for the battery.
+- **EVSE Panel Link is not EV Connected**: one is the panel reaching the charger at all, the other is the charger reporting a plugged-in vehicle, and they can
+  disagree mid-session.
+
+- **BESS Meter Power** — what the battery itself reports it is charging or discharging at, beside the panel's arbitrated **Battery Power**. Enabled by default.
+- **BESS Communication State** — the battery's own `OK` / `DEGRADED` / `LOST` / `UNKNOWN` view of its link, which can differ from the panel's. Diagnostic, off
+  by default.
+- **Both battery power sensors read positive when discharging**, settled by measurement on a live panel — the same convention as PV Power producing and Grid
+  Power Flow importing.
+
+- **Time to Priority Shed and Backup Time Remaining** — how long before the panel starts shedding circuits and how long before the battery is spent. Enabled by
+  default. Each forecast carries its full-charge equivalent and the panel's own `forecast_confidence` as attributes, rather than as two more near-constant
+  entities.
+
+- **Import Limit, Binding Constraint and PCS Active** — the current limit your panel enforces, which rule set it, and whether anything is being throttled right
+  now. Filed under Diagnostics. Import Limit carries the arbitration as attributes.
+- **Every circuit's power sensor gains `pcs_managed` and `pcs_priority`** where the circuit reports them — the shed order when an import limit binds, which is
+  not the backup tier the existing `shed_priority` names.
+
+- **Vendor extensions** — new device types and readings are picked up on a reload. They arrive disabled and filed as diagnostics. Nothing adopted enters
+  long-term statistics, because `state_class` is not published on the wire.
+
+- **Your panel's own card shows metadata** — manufacturer, model and hardware revision read from the enclosure once your panel publishes them.
+- **Part Number** diagnostic sensor on every SPAN Drive, matching the one the battery already has. Off by default.
+- **Circuit Priority's shed policy is readable**: `dsm_state` gains `shed_algorithm` and the two state-of-charge thresholds that decide when circuits shed and
+  when they come back.
+- **Grid-forming device name** as an attribute on the Grid Forming Entity sensor.
+- **The diagnostics download includes your entity registry** — every entity this integration owns, its unique id, and what disabled it, which Home Assistant
+  will not otherwise tell you.
+
+### Changed (subject to firmware support)
+
+- **`DSM Grid State` is now more trustworthy**, reading the islanding state the Microgrid Interconnect Device actually senses rather than inferring it from the
+  battery and the dominant power source, and keeping its entity id and its history.
+- **`Grid Islandable` keeps working across the upgrade** by reflecting whether a Microgrid Interconnect Device is present, so a panel without one reads `Off`
+  rather than going unavailable.
+- **Battery model may read differently after upgrading**, now showing the human-readable designation rather than the SKU, normalised in the library on both
+  sides of the upgrade so it lands once at this release.
+- **Five panel sensors are switched off for new installations** (#234) because of three SPAN-documented defects predating firmware r202633: **Feedthrough
+  Produced Energy**, **Feedthrough Consumed Energy**, **Feedthrough Power**, and the two **Downstream** current sensors.
+- **New entities are now announced in a notification** that splits what arrived into ready to use and switched off, and names each one.
+- **The Wi-Fi network name moved to the Wi-Fi Link sensor** as a `wifi_ssid` attribute, absent rather than blank on a panel that publishes no SSID. It is no
+  longer an attribute of the Software Version sensor, so a template reading `state_attr('sensor.span_panel_software_version', 'wifi_ssid')` should point at the
+  Wi-Fi Link binary sensor instead.
+- **A panel device you renamed yourself is offered ids carrying that name**, since Home Assistant composes from the name you gave the device ahead of the one
+  this integration generated.
+- **New installations provide uniform circuit energy sensor ids — `consumed_energy`, `produced_energy` and `net_energy`**, in line with the panel-level energy
+  sensors.
+- **A newly commissioned SPAN Drive's feed-circuit sensors are named for the charger** — `sensor.<charger>_power`, matching the charger's other sensors; the
+  ones you already have keep their ids.
+
+### Fixed
+
+- **Energy dip compensation no longer books a dip that never happened** (#259), where a partial reading at startup looked like a counter reset and every restart
+  added each circuit's whole lifetime counter to its offset.
+- **A panel this integration can no longer reach makes its entities unavailable instead of reporting 0 W** — a certificate authority that changes mid-session
+  used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
+- **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
+  untouched.
+- **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
+  ever wrong.
+- **A breaker your panel refuses to operate now says so**, reporting the panel's own reason where you pressed it instead of a traceback in the log and a toggle
+  that quietly springs back.
+- **A control command that never reached your panel now says so**, reported where you issued it rather than only in the log and stating plainly that nothing was
+  queued.
+
+### Security
+
+- **The panel's certificate authority is pinned before your passphrase is ever sent**, so the registration exchange that carries it — and everything after — no
+  longer crosses your network in the clear.
+- **A changed authority stops the integration and raises a repair** carrying both fingerprints, because a legitimate rotation and an impersonated panel look
+  identical from here.
+- **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay
+  debounce — every one defaulting to what your panel already does.
+- **`Administrators only` does not cover an automation a non-admin triggered**, because Home Assistant gives an automation a fresh context with no user on it
+  and there is then nothing to hold to the admin test; switch off **Allow control without a logged-in user** if you want those refused too.
+- **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
+  issued it rather than to nobody.
+- **A new [Security](README.md#security) section in the README** covers what rotation costs and the deployment choices that actually bound the panel's exposure.
+
+### Known limitations
+
+- **A panel reachable only by a single-label name — one with no dot and no domain — cannot complete a pinned setup by that name**, because nothing registers a
+  name that is not a fully qualified domain, so the certificate never comes to name it. Set that panel up by its IP address, or by the `.local` name shown in
+  the mobile app.
+- **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved, use **Reconfigure** on
+  the entry, which checks the new address against the standing pin before storing it.
+
 ## [2.0.8] - 5/2026
 
 ### Fixed
@@ -35,11 +167,6 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.6] - 4/2026
 
-**Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
-
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
-
 ### Added
 
 - **By Activity and By Area views** — Two new circuit views available in both the integration panel and the Lovelace card (span-card 0.9.2):
@@ -60,11 +187,6 @@ All notable changes to this project will be documented in this file.
   of the panel going offline or coming back online (including the bump to span-panel-api v2.6.2)
 
 ## [2.0.5] - 4/2026
-
-**Important** 2.0.x cautions still apply — read those carefully if not already on 2.0.x BEFORE proceeding:
-
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
 ### Added
 
@@ -99,11 +221,6 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.4] - 3/2026
 
-**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
-
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
-
 ### Added
 
 - **Grid Power sensor** — New `Grid Power`. Previously only `Current Power` (upstream lugs measurement) was available; the new sensor surfaces the panel's own
@@ -133,22 +250,12 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.3] - 3/2026
 
-**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
-
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
-
 ### Fixed
 
 - **Force dependency re-resolution** — Version bump to ensure HACS re-installs `span-panel-api` for users who had the earlier 2.0.2 release. Users upgrading HA
   without re-downloading the integration could be left with a stale library missing required imports. (#191)
 
 ## [2.0.2] - 3/2026
-
-**Important** 2.0.1 cautions still apply — read those carefully if not already on 2.0.1 BEFORE proceeding:
-
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.x or later of the SpanPanel/span integration if upgrading
 
 ### Fixed
 
@@ -165,13 +272,13 @@ All notable changes to this project will be documented in this file.
 
 ## [2.0.1] - 3/2026
 
-⚠️ **STOP — If your SPAN panel is not on firmware `spanos2/r202603/05` or later, do not upgrade. Ensure you are on v1.3.0 or later BEFORE upgrading to 2.0. This
-upgrade migrates to the SPAN official eBus API. Make a backup first.** ⚠️
+**This is the release that moved the integration to the SPAN official eBus API**, which every release since reads and every panel now runs. The prerequisites
+below applied while panels were still being updated to `spanos2/r202603/05`; they are recorded here for history.
 
 ### Breaking Changes
 
-- Requires firmware `spanos2/r202603/05` or later (v2 eBus MQTT)
-- You _must_ already be on v1.3.0 or later of the SpanPanel/span integration if upgrading
+- Required firmware `spanos2/r202603/05` or later (the eBus MQTT API)
+- You had to already be on v1.3.0 or later of the SpanPanel/span integration to upgrade
 - After upgrading, you must re-authenticate using your **panel passphrase** (found in the SPAN mobile app under On-premise settings) or **proof of proximity**
   (open and close the panel door 3 times). See the [README](README.md) for details.
 - If you were running a beta or RC, ensure you reload the integration after upgrade

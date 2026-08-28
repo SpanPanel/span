@@ -31,6 +31,26 @@ CIRCUIT_SUFFIX_MAPPING = {
     "current": "current",
     "breaker_rating": "breaker_rating",
 }
+"""**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
+
+Every entry here translates a legacy camelCase description key into the suffix
+its entities have carried since before 2.0.8, so a changed entry moves a live
+`unique_id` on every installed panel, and a moved `unique_id` costs the
+statistics.
+
+It governs the `unique_id` only -- the wording an entity id ends with lives in
+`naming.py`.
+
+So the rule for anything new is **verbatim**: a description key added from here on
+resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
+`build_mid_unique_id`, `build_evse_unique_id`) have always done. Their keys were
+written snake_case and never needed translating.
+
+`tests/test_suffix_mappings_are_closed.py` holds these dictionaries to their
+exact contents. It fails on an added key, a removed key and a changed value,
+because all three move a live id.
+"""
+
 
 # Panel sensor API field mappings (used by get_user_friendly_suffix)
 # Includes main meter/feedthrough produced, consumed, and net energy
@@ -49,6 +69,26 @@ PANEL_SUFFIX_MAPPING = {
     "feedthroughNetEnergyWh": "feed_through_energy_net",  # Consistent naming
     "batteryPercentage": "battery_percentage",
 }
+"""**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
+
+Every entry here translates a legacy camelCase description key into the suffix
+its entities have carried since before 2.0.8, so a changed entry moves a live
+`unique_id` on every installed panel, and a moved `unique_id` costs the
+statistics.
+
+It governs the `unique_id` only -- the wording an entity id ends with lives in
+`naming.py`.
+
+So the rule for anything new is **verbatim**: a description key added from here on
+resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
+`build_mid_unique_id`, `build_evse_unique_id`) have always done. Their keys were
+written snake_case and never needed translating.
+
+`tests/test_suffix_mappings_are_closed.py` holds these dictionaries to their
+exact contents. It fails on an added key, a removed key and a changed value,
+because all three move a live id.
+"""
+
 
 # Panel entity suffix mappings (used by get_panel_entity_suffix)
 # These are the actual entity_id/unique_id suffixes used for panel sensors
@@ -68,6 +108,26 @@ PANEL_ENTITY_SUFFIX_MAPPING = {
     "feedthroughNetEnergyWh": "feed_through_net_energy",
     "batteryPercentage": "battery_level",
 }
+"""**Closed.** A compatibility shim for the keys that predate snake_case, not a house style.
+
+Every entry here translates a legacy camelCase description key into the suffix
+its entities have carried since before 2.0.8, so a changed entry moves a live
+`unique_id` on every installed panel, and a moved `unique_id` costs the
+statistics.
+
+It governs the `unique_id` only -- the wording an entity id ends with lives in
+`naming.py`.
+
+So the rule for anything new is **verbatim**: a description key added from here on
+resolves to itself, exactly as the sub-device builders (`build_bess_unique_id`,
+`build_mid_unique_id`, `build_evse_unique_id`) have always done. Their keys were
+written snake_case and never needed translating.
+
+`tests/test_suffix_mappings_are_closed.py` holds these dictionaries to their
+exact contents. It fails on an added key, a removed key and a changed value,
+because all three move a live id.
+"""
+
 
 # Combined mapping for general suffix lookup
 ALL_SUFFIX_MAPPINGS = {**CIRCUIT_SUFFIX_MAPPING, **PANEL_SUFFIX_MAPPING}
@@ -312,6 +372,18 @@ def build_bess_unique_id(serial: str, description_key: str) -> str:
     Returns: "span_{serial}_bess_{description_key}"
     """
     return f"span_{serial}_bess_{description_key}"
+
+
+def build_mid_unique_id(serial: str, description_key: str) -> str:
+    """Build unique ID for Microgrid Interconnect Device sensors (pure function).
+
+    Returns: "span_{serial}_mid_{description_key}"
+
+    Keyed on the panel serial rather than the MID's own, matching `build_bess_unique_id`.
+    The MID is one per enclosure, so the panel serial already makes it unique, and a
+    device-derived key would move if the BESS the MID ships with were ever replaced.
+    """
+    return f"span_{serial}_mid_{description_key}"
 
 
 def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str:

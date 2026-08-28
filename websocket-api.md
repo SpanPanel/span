@@ -6,7 +6,7 @@ AppDaemon scripts, or any WebSocket client connected to Home Assistant.
 ## `span_panel/panel_topology`
 
 Returns the full physical layout of a SPAN panel in a single call — circuits with their breaker slot positions, entity IDs grouped by role (power, energy,
-switch, select), and sub-devices (BESS, EVSE) with their entities.
+switch, select), and sub-devices (BESS, MID, EVSE) with their entities.
 
 A custom card rendering the physical panel needs to know which breaker slot each circuit occupies, which entity provides its power reading, which switch
 controls its relay, and so on. Without this command, the card would need to query the device registry, entity registry, and individual entity states in separate
@@ -109,15 +109,15 @@ relationships explicitly, keyed by circuit UUID, so the card reads a single stru
 
 #### Top Level
 
-| Field         | Type        | Description                                     |
-| ------------- | ----------- | ----------------------------------------------- |
-| `serial`      | string      | Panel serial number                             |
-| `firmware`    | string      | Panel firmware version                          |
-| `panel_size`  | int or null | Total breaker spaces (e.g., 32, 40)             |
-| `device_id`   | string      | HA device registry ID (echoed from request)     |
-| `device_name` | string      | HA device display name                          |
-| `circuits`    | object      | Circuit UUID keyed map (see below)              |
-| `sub_devices` | object      | HA device ID keyed map of BESS/EVSE (see below) |
+| Field         | Type        | Description                                         |
+| ------------- | ----------- | --------------------------------------------------- |
+| `serial`      | string      | Panel serial number                                 |
+| `firmware`    | string      | Panel firmware version                              |
+| `panel_size`  | int or null | Total breaker spaces (e.g., 32, 40)                 |
+| `device_id`   | string      | HA device registry ID (echoed from request)         |
+| `device_name` | string      | HA device display name                              |
+| `circuits`    | object      | Circuit UUID keyed map (see below)                  |
+| `sub_devices` | object      | HA device ID keyed map of BESS/MID/EVSE (see below) |
 
 #### Circuit Object
 
@@ -153,7 +153,7 @@ current, `switch` is absent for always-on circuits).
 | Field           | Type        | Description                           |
 | --------------- | ----------- | ------------------------------------- |
 | `name`          | string      | HA device display name                |
-| `type`          | string      | `bess`, `evse`, or `unknown`          |
+| `type`          | string      | `bess`, `mid`, `evse`, or `unknown`   |
 | `manufacturer`  | string/null | Device manufacturer                   |
 | `model`         | string/null | Device model                          |
 | `serial_number` | string/null | Device serial number                  |

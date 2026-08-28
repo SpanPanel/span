@@ -1,176 +1,234 @@
-"""Schema validation — cross-check field metadata against sensor definitions.
+"""Compare adapter field metadata against what this integration declares it reads.
 
-Compares the ``span-panel-api`` library's field metadata (schema-derived units
-and datatypes keyed by snapshot field paths) against the integration's sensor
-definitions. All Homie/MQTT knowledge stays in the library; this module only
-sees snapshot field paths and HA sensor metadata.
+Consumes the library's three-way signal:
 
-Schema drift detection (diffing schema versions between firmware updates) is
-the library's responsibility. The integration only consumes the result.
+- entry, ``resolved=True`` — produced; the unit is meaningful
+- entry, ``resolved=False`` — a device is present but does not declare the
+  property. Degradation.
+- **no entry** — no device of that type. Hardware absent; not a defect.
 
-All output is log-only. No entity creation or sensor behavior changes.
+Because the adapter classifies absence, this module needs no capability table
+and never infers hardware presence from telemetry.
 
-Phase 1 of the schema-driven changes plan.
+**Two inventories, not one.** An adapter's metadata map carries curated rows —
+snapshot field paths this integration knows about — and, under the library's
+discovery namespace, rows for properties the panel declares and the adapter
+reads nothing from. They answer opposite questions and must never mix:
+`unread` below is "we produce this and render nothing from it", which is an
+inventory of *our* backlog, while a discovered row is "the panel has something
+we never modelled". Letting the second into the first would bury ten known
+entries under whatever a firmware release happened to add, and would make the
+conformance gate's producible set depend on the panel in front of the user.
 
-Usage:
-    Called from the coordinator after the first successful data refresh.
-    Requires ``span-panel-api`` to expose field metadata via the client protocol.
-    Until that library change lands, ``validate_field_metadata()`` is a safe no-op.
+So the metadata is partitioned by namespace before any other question is asked
+of it — see `partition`.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 
 from homeassistant.components.sensor import SensorEntityDescription
+from span_panel_api.models import DiscoveredMetadata, FieldMetadata, is_discovery_path
 
-from .schema_expectations import SENSOR_FIELD_MAP, all_referenced_field_paths
-from .sensor_definitions import (
-    BATTERY_POWER_SENSOR,
-    BATTERY_SENSOR,
-    BESS_METADATA_SENSORS,
-    CIRCUIT_BREAKER_RATING_SENSOR,
-    CIRCUIT_CURRENT_SENSOR,
-    CIRCUIT_SENSORS,
-    DOWNSTREAM_L1_CURRENT_SENSOR,
-    DOWNSTREAM_L2_CURRENT_SENSOR,
-    EVSE_SENSORS,
-    GRID_POWER_FLOW_SENSOR,
-    L1_VOLTAGE_SENSOR,
-    L2_VOLTAGE_SENSOR,
-    MAIN_BREAKER_RATING_SENSOR,
-    PANEL_DATA_STATUS_SENSORS,
-    PANEL_ENERGY_SENSORS,
-    PANEL_POWER_SENSORS,
-    PV_METADATA_SENSORS,
-    PV_POWER_SENSOR,
-    SITE_POWER_SENSOR,
-    STATUS_SENSORS,
-    UNMAPPED_SENSORS,
-    UPSTREAM_L1_CURRENT_SENSOR,
-    UPSTREAM_L2_CURRENT_SENSOR,
-)
+from .field_paths import RESIDUAL_EXEMPT_PATHS, conditional_field_paths, declared_field_paths
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _cross_check_units(
-    field_metadata: dict[str, dict[str, object]],
-    sensor_defs: dict[str, SensorEntityDescription],
-) -> None:
-    """Compare library-reported units against sensor definition units.
+KNOWN_BAD_SCHEMA_UNITS: dict[str, str] = {
+    # SPAN firmware declares the circuit `active-power` property as "kW" while
+    # publishing watts. Three things agree that the label, not the reading, is
+    # wrong: the sibling `lugs` device declares the same quantity as "W"; the
+    # library consumes the value unscaled ("active-power is in watts",
+    # span_panel_api_schema_0/consumer.py:244); and the independent `span-hass`
+    # integration documents the same defect under "Known SPAN API Issue" and
+    # hardcodes the same override. Our `UnitOfPower.WATT` declaration is correct.
+    "circuit.instant_power_w": "kW",
+}
+"""Schema unit declarations this integration knowingly ignores, by field path.
 
-    For each sensor in SENSOR_FIELD_MAP that has a ``native_unit_of_measurement``,
-    look up the corresponding field path in the library's metadata and compare
-    the declared unit.
+Every entry is a firmware defect worked around deliberately — the panel labels a
+property with a unit it does not publish — never a sensor whose unit we gave up
+on checking. Without this, a panel running the affected firmware raises a
+mismatch its owner cannot act on and that reflects no real defect.
+
+The match is exact. If firmware later declares something OTHER than the value
+here for the same field, that is new information and is still reported.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class UnitMismatch:
+    """A declared unit that disagrees with the schema's."""
+
+    field_path: str
+    ha_unit: str
+    schema_unit: str
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveredProperty:
+    """A property the panel declares that the running adapter reads nothing from.
+
+    The runtime half of `tests/test_declared_but_unread`, which asks the same
+    question of the adapter's reference capture and therefore cannot see a panel
+    that starts publishing something in the field.
+
+    Maintainer-facing only. Nothing creates an entity, a Repair or a
+    notification from one of these — it is carried in diagnostics so that
+    triaging an issue shows what that panel declares and this integration
+    ignores, and so the rate can be measured across a few attachments.
+
+    **Declarations only, deliberately.** Diagnostics leave the house into GitHub
+    issues and forum posts, and `diagnostics.TO_REDACT` is key-based: it knows
+    the config entry's keys and nothing at all about wire property names, so it
+    could not protect a value put here. `retained` is the only thing this says
+    about a value, and it says whether one exists rather than what it is.
     """
-    for sensor_key, field_path in SENSOR_FIELD_MAP.items():
-        sensor_def = sensor_defs.get(sensor_key)
-        if sensor_def is None:
+
+    path: str
+    """The library's namespaced path, ``discovered.{device type}/{node}/{property}``.
+
+    Carried verbatim rather than trimmed to the wire path: it is the key the
+    adapter emitted, so a maintainer cross-referencing a capability catalog or
+    the unread baseline is looking at the same string the library is.
+    """
+
+    datatype: str
+    unit: str | None
+    retained: bool | None
+    """Whether the panel has published a value, or None if the adapter did not say.
+
+    None is the forward-compatible case: the namespace is the contract and the
+    enriched row type is not, so an adapter that namespaces a row without
+    carrying `DiscoveredMetadata` still reports its path, datatype and unit
+    rather than being dropped.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaFindings:
+    """Outcome of one validation pass."""
+
+    unresolved: frozenset[str]
+    unit_mismatches: tuple[UnitMismatch, ...]
+    unread: frozenset[str]
+    discovered: tuple[DiscoveredProperty, ...] = ()
+    """Properties the panel declares and the adapter reads nothing from.
+
+    Defaulted because it is additive and because every other member is a
+    finding about *our* declarations, which this is not: an adapter that emits
+    no discovered rows — the flat one does not — leaves this empty, and that is
+    a fact about the adapter rather than a clean bill of health.
+    """
+
+
+def partition(
+    field_metadata: dict[str, FieldMetadata],
+) -> tuple[dict[str, FieldMetadata], tuple[DiscoveredProperty, ...]]:
+    """Split one adapter metadata map into the curated rows and the discovered ones.
+
+    The single place the namespace is tested, so a caller cannot half-apply it.
+    Everything downstream — the producible gate, the unread inventory, the unit
+    check, the Repairs reconciler — takes the curated half and can therefore not
+    be perturbed by what a panel happens to declare.
+    """
+    curated: dict[str, FieldMetadata] = {}
+    discovered: list[DiscoveredProperty] = []
+    for path, entry in field_metadata.items():
+        if not is_discovery_path(path):
+            curated[path] = entry
             continue
+        discovered.append(
+            DiscoveredProperty(
+                path=path,
+                datatype=entry.datatype,
+                unit=entry.unit,
+                retained=entry.retained if isinstance(entry, DiscoveredMetadata) else None,
+            )
+        )
+    return curated, tuple(sorted(discovered, key=lambda item: item.path))
 
-        ha_unit = sensor_def.native_unit_of_measurement
-        if ha_unit is None:
-            # Sensor has no unit (enum, string) — nothing to cross-check
+
+def evaluate_field_metadata(
+    field_metadata: dict[str, FieldMetadata],
+    sensor_defs: dict[str, SensorEntityDescription] | None = None,
+) -> SchemaFindings:
+    """Classify one snapshot of adapter metadata against our declarations.
+
+    `field_metadata` is deliberately not optional. The client returns None until
+    its adapter is ready, and that sentinel means "unknown", not "healthy" —
+    answering it with empty findings would tell a reconciler every issue is
+    resolved. Callers interpret the sentinel themselves; see
+    `SpanPanelCoordinator._run_schema_validation`.
+    """
+    # First, before anything reads the map: the discovered rows are a report
+    # about the panel, not an inventory of what we produce, and every question
+    # below is the second kind.
+    curated, discovered = partition(field_metadata)
+    declared = declared_field_paths()
+    # Schema-conditional entities read a real field off a real metadata row;
+    # what they cannot do is satisfy a gate that demands *both* adapters
+    # produce it. Resolution is a property of the adapter that is running, so
+    # asking about these paths alongside the declared ones is what gives such
+    # an entity its unavailability and its Repair — the apparatus every other
+    # entity already has. Leaving them out is how `panel.wifi_ssid` stayed
+    # invisible: exempt from the gate read as exempt from everything.
+    resolvable = declared | conditional_field_paths()
+    sensor_defs = sensor_defs or {}
+
+    unresolved: set[str] = set()
+    mismatches: list[UnitMismatch] = []
+
+    for field_path in resolvable:
+        entry = curated.get(field_path)
+        if entry is None:
+            # Hardware not present. Not a defect, and deliberately silent.
             continue
-
-        field_info = field_metadata.get(field_path)
-        if field_info is None:
-            _LOGGER.debug(
-                "Schema cross-check: sensor '%s' reads field '%s' but "
-                "library reports no metadata for it",
-                sensor_key,
-                field_path,
-            )
+        if not entry.resolved:
+            unresolved.add(field_path)
             continue
+        description = sensor_defs.get(field_path)
+        if description is None:
+            continue
+        ha_unit = description.native_unit_of_measurement
+        if ha_unit is None or entry.unit is None:
+            continue
+        schema_unit = str(entry.unit)
+        if schema_unit == str(ha_unit):
+            continue
+        if KNOWN_BAD_SCHEMA_UNITS.get(field_path) == schema_unit:
+            # A firmware mislabel we already work around. See the constant.
+            continue
+        mismatches.append(UnitMismatch(field_path, str(ha_unit), schema_unit))
 
-        schema_unit = field_info.get("unit")
-        if schema_unit is None:
-            _LOGGER.debug(
-                "Schema cross-check: field '%s' (sensor '%s') has no unit "
-                "in library metadata, integration expects '%s'",
-                field_path,
-                sensor_key,
-                ha_unit,
-            )
-        elif str(schema_unit) != str(ha_unit):
-            _LOGGER.debug(
-                "Schema cross-check: field '%s' (sensor '%s') unit is '%s' "
-                "in library metadata, integration expects '%s'",
-                field_path,
-                sensor_key,
-                schema_unit,
-                ha_unit,
-            )
+    # `RESIDUAL_EXEMPT_PATHS` are read by the integration; they are exempt from
+    # the *producible* gate because only one adapter emits them, or neither
+    # does, so they are absent from `declared` without being unread. Only the
+    # paths matter here; each entry's `Producibility` annotation is what the
+    # conformance tests verify.
+    #
+    # `curated` and never `field_metadata`, which still holds both halves. A
+    # discovered path reaching this set would read as a produced field nothing
+    # renders -- a defect's shape -- and would bury ten deliberate entries under
+    # whatever the panel's firmware happens to declare.
+    unread = frozenset(set(curated) - set(declared) - RESIDUAL_EXEMPT_PATHS.keys())
+    for field_path in sorted(unread):
+        # An addition is legal within a major version. This is an inventory for
+        # us, never a user-facing finding.
+        _LOGGER.debug("Schema: %s is produced but no platform reads it", field_path)
 
-
-def _report_unmapped_fields(
-    field_metadata: dict[str, dict[str, object]],
-) -> None:
-    """Log fields in library metadata that no sensor definition references."""
-    referenced = all_referenced_field_paths()
-    for field_path in sorted(set(field_metadata) - referenced):
+    for declaration in discovered:
+        # The panel's side of the same question, and equally not user-facing:
+        # the user-facing half of this would be adoption, which is not built.
         _LOGGER.debug(
-            "Schema: field '%s' in library metadata is not mapped to any sensor",
-            field_path,
+            "Schema: %s is declared by the panel and read by nothing here (%s%s, retained=%s)",
+            declaration.path,
+            declaration.datatype,
+            f" in {declaration.unit}" if declaration.unit else "",
+            declaration.retained,
         )
 
-
-def validate_field_metadata(
-    field_metadata: dict[str, dict[str, object]] | None,
-    sensor_defs: dict[str, SensorEntityDescription] | None = None,
-) -> None:
-    """Run integration-side schema validation checks.
-
-    Args:
-        field_metadata: The library's field metadata, keyed by snapshot field
-            path (e.g. ``"panel.instant_grid_power_w"``). Each value is a dict
-            with at least ``"unit"`` and ``"datatype"`` keys. None if the
-            library does not yet expose metadata.
-        sensor_defs: Dict of sensor_key → SensorEntityDescription for unit
-            cross-checking. None skips the cross-check.
-
-    """
-    if field_metadata is None:
-        _LOGGER.debug("Schema validation skipped — library does not expose field metadata")
-        return
-
-    if sensor_defs is not None:
-        _cross_check_units(field_metadata, sensor_defs)
-
-    _report_unmapped_fields(field_metadata)
-
-
-def collect_sensor_definitions() -> dict[str, SensorEntityDescription]:
-    """Collect all sensor definitions into a dict keyed by sensor key.
-
-    Only includes sensors that appear in SENSOR_FIELD_MAP (i.e. sensors
-    that read a single snapshot field and are eligible for cross-checking).
-    """
-    all_defs: list[SensorEntityDescription] = [
-        *PANEL_DATA_STATUS_SENSORS,
-        *STATUS_SENSORS,
-        *UNMAPPED_SENSORS,
-        BATTERY_SENSOR,
-        L1_VOLTAGE_SENSOR,
-        L2_VOLTAGE_SENSOR,
-        UPSTREAM_L1_CURRENT_SENSOR,
-        UPSTREAM_L2_CURRENT_SENSOR,
-        DOWNSTREAM_L1_CURRENT_SENSOR,
-        DOWNSTREAM_L2_CURRENT_SENSOR,
-        MAIN_BREAKER_RATING_SENSOR,
-        CIRCUIT_CURRENT_SENSOR,
-        CIRCUIT_BREAKER_RATING_SENSOR,
-        *BESS_METADATA_SENSORS,
-        *PV_METADATA_SENSORS,
-        *PANEL_POWER_SENSORS,
-        BATTERY_POWER_SENSOR,
-        PV_POWER_SENSOR,
-        GRID_POWER_FLOW_SENSOR,
-        SITE_POWER_SENSOR,
-        *PANEL_ENERGY_SENSORS,
-        *CIRCUIT_SENSORS,
-        *EVSE_SENSORS,
-    ]
-    mapped_keys = set(SENSOR_FIELD_MAP.keys())
-    return {d.key: d for d in all_defs if d.key in mapped_keys}
+    return SchemaFindings(frozenset(unresolved), tuple(mismatches), unread, discovered)

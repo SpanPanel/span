@@ -1,25 +1,18 @@
 """Button entities for the Span Panel."""
 
-import logging
 from typing import Final
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot
-from span_panel_api.exceptions import SpanPanelServerError
+from span_panel_api import SpanPanelSnapshot
 
-from . import SpanPanelConfigEntry
 from .const import CONF_DEVICE_NAME
+from .control_gate import ControlMode
 from .coordinator import SpanPanelCoordinator
 from .entity import SpanPanelEntity
-from .helpers import (
-    async_create_span_notification,
-    construct_panel_unique_id_for_entry,
-    has_bess,
-)
-
-_LOGGER = logging.getLogger(__name__)
+from .helpers import construct_panel_unique_id_for_entry, has_bess
+from .runtime import SpanPanelConfigEntry
 
 PARALLEL_UPDATES = 1
 
@@ -63,47 +56,57 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         )
 
     async def async_press(self) -> None:
-        """Publish the GFE override to the panel."""
-        client = self.coordinator.client
-        if not hasattr(client, "set_dominant_power_source"):
-            _LOGGER.warning("Client does not support GFE override")
-            return
+        """Publish the GFE override to the panel.
 
-        try:
-            await client.set_dominant_power_source(self._override_value)
-            await self.coordinator.async_request_refresh()
-        except SpanPanelServerError:
-            warning_msg = (
-                f"SPAN API returned a server error attempting "
-                f"to override GFE to {self._override_value}."
-            )
-            _LOGGER.warning(warning_msg)
-            await async_create_span_notification(
-                self.hass,
-                message=warning_msg,
-                title="SPAN API Error",
-                notification_id="span_panel_gfe_override_error",
-            )
+        A refusal is raised at the caller rather than filed as a persistent
+        notification, the same way the circuit controls report one: nothing was
+        published, so there is nothing to correct later, and the person who
+        pressed the button is the one who needs to hear about it. A `FAILED`
+        outcome -- handed to nobody, and promised not to arrive later -- is
+        raised on the same grounds and worded as the different fact it is. Both
+        live in `_async_control`, which every control here shares.
+        """
+        client = self.coordinator.client
+        await self._async_control(
+            client.set_dominant_power_source(self._override_value),
+            command=f"a GFE override to {self._override_value}",
+            failed_key="gfe_override_failed",
+            not_delivered_key="gfe_override_not_delivered",
+            placeholders={"value": self._override_value},
+        )
+
+        await self.coordinator.async_request_refresh()
 
     @property
     def available(self) -> bool:
         """Return entity availability.
 
         The override is only relevant when BESS communication is lost and the
-        panel is not already reporting grid-connected. When BESS is online or
-        GFE is already GRID, firmware is managing correctly and the button
+        panel is not already reporting grid-connected. When BESS is online or the
+        panel already reads on-grid, firmware is managing correctly and the button
         should not be pressable.
+
+        The second check reads `dsm_state`, not the grid-forming entity. It asks
+        "are we already on the grid", which is what `dsm_state` answers directly and
+        the GFE answers only by implication -- and, unlike the GFE, it is populated on
+        both wire schemas, so this stays free of any knowledge of which one is
+        underneath. It used to compare `dominant_power_source` to `"GRID"`, which is
+        `None` under v1.0 and so never fired there at all.
+
+        One useful consequence: `dsm_state` folds in the user's own assertion, so once
+        a press takes effect the button disables itself rather than inviting a second.
         """
-        if getattr(self.coordinator, "panel_offline", False):
+        if not self._transport_available:
+            return False
+        if self.coordinator.panel_offline:
             return False
         if not super().available:
             return False
         snapshot: SpanPanelSnapshot = self.coordinator.data
         bess_connected = snapshot.battery.connected if snapshot.battery else None
-        gfe = snapshot.dominant_power_source
         if bess_connected is True:
             return False
-        if gfe == "GRID":
+        if snapshot.dsm_state == "DSM_ON_GRID":
             return False
         return True
 
@@ -114,12 +117,17 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up button entities for Span Panel."""
+    # Under `disabled` no control entity is created and no registry entry is
+    # removed. See `switch.async_setup_entry` for why the registry entries stay.
+    if config_entry.runtime_data.control_policy.mode is ControlMode.DISABLED:
+        return
+
     coordinator = config_entry.runtime_data.coordinator
 
     entities: list[SpanPanelGFEOverrideButton] = []
 
     snapshot: SpanPanelSnapshot = coordinator.data
-    if isinstance(coordinator.client, SpanMqttClient) and has_bess(snapshot):
+    if has_bess(snapshot):
         entities.append(SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"))
 
     async_add_entities(entities)

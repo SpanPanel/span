@@ -6,6 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from homeassistant.components.diagnostics import REDACTED
+from homeassistant.const import CONF_ACCESS_TOKEN
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import (
     CONF_EBUS_BROKER_PASSWORD,
@@ -16,8 +21,6 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
-from homeassistant.const import CONF_ACCESS_TOKEN
-from homeassistant.core import HomeAssistant
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -25,8 +28,6 @@ from .factories import (
     SpanEvseSnapshotFactory,
     SpanPanelSnapshotFactory,
 )
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 async def test_config_entry_diagnostics_includes_redacted_runtime_data(
@@ -63,10 +64,18 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = False
+    coordinator.transport_dead = False
     coordinator.last_update_success = True
+    # Explicit: a MagicMock answers `len()` and iteration happily, so leaving
+    # this unset would let the discovery block render as an empty report rather
+    # than as the "no metadata yet" state it actually is.
+    coordinator.schema_findings = None
 
+    # Version 6 deliberately: an entry that has not yet been through the v7
+    # migration still carries the passphrase, and redaction must still cover it.
     entry = MockConfigEntry(
         domain=DOMAIN,
+        version=6,
         data={
             CONF_ACCESS_TOKEN: "access-secret",
             CONF_EBUS_BROKER_PASSWORD: "mqtt-password",
@@ -76,7 +85,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         title="SPAN Panel",
         unique_id="sp3-diag-001",
     )
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator)
+    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -89,6 +98,9 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         "serial_number": "sp3-diag-001",
         "firmware_version": "spanos2/r202603/05",
         "panel_size": 32,
+        "lugs_at_service_entrance": True,
+        "instant_grid_power_w": 2500.75,
+        "power_flow_grid": None,
         "wifi_ssid": "Span WiFi",
         "eth0_link": True,
         "wlan_link": False,
@@ -136,28 +148,37 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         eth0_link=None,
         wlan_link=None,
         circuits={
-            "uuid_minimal": SimpleNamespace(
-                name=None,
+            # The real model, not a namespace: every field the diagnostics dump
+            # reads off a circuit is present on `SpanCircuitSnapshot`, and a hand
+            # -rolled double that omitted two of them is what kept a pair of
+            # unreachable `hasattr` guards alive in the dump.
+            "uuid_minimal": SpanCircuitSnapshotFactory.create(
+                circuit_id="uuid_minimal",
+                name="",
                 relay_state="OPEN",
-                relay_state_target=None,
                 priority="NEVER",
-                priority_target=None,
                 is_user_controllable=False,
                 instant_power_w=0.0,
                 produced_energy_wh=0.0,
                 consumed_energy_wh=0.0,
+                tabs=[],
             )
         },
         evse={},
         battery=None,
+        adopted_devices=(),
+        lugs_at_service_entrance=True,
+        instant_grid_power_w=0.0,
+        power_flow_grid=None,
     )
     coordinator = MagicMock()
     coordinator.data = snapshot
     coordinator.panel_offline = True
     coordinator.last_update_success = False
+    coordinator.schema_findings = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator)
+    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -165,9 +186,12 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "serial_number": "sp3-diag-002",
         "firmware_version": "spanos2/r202603/06",
         "panel_size": None,
+        "lugs_at_service_entrance": True,
+        "instant_grid_power_w": 0.0,
+        "power_flow_grid": None,
     }
     assert result["circuits"]["uuid_minimal"] == {
-        "name": None,
+        "name": "",
         "relay_state": "OPEN",
         "relay_state_target": None,
         "priority": "NEVER",
@@ -176,6 +200,8 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "instant_power_w": 0.0,
         "produced_energy_wh": 0.0,
         "consumed_energy_wh": 0.0,
+        "device_type": "circuit",
+        "tabs": [],
     }
     assert result["evse"] == {}
     assert result["battery"] == {}
@@ -183,3 +209,44 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         "panel_offline": True,
         "last_update_success": False,
     }
+
+
+async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> None:
+    """The registry is where an upgrade complaint is settled, and the UI hides it.
+
+    Home Assistant says "This entity is disabled" without saying by what, and a
+    user without shell access to `.storage` cannot read `disabled_by` at all. Four
+    causes look identical on screen and need four different fixes, so the field
+    that distinguishes them has to leave the machine somehow.
+
+    `unique_id` rides along because it answers the question underneath: an entity
+    whose id changed is a new entity however familiar its name, and that is the
+    difference between an upgrade defect and a surprise.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "span_sp3_diag_003_l1_voltage",
+        config_entry=entry,
+        suggested_object_id="span_panel_l1_voltage",
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+
+    coordinator = MagicMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-003")
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry.runtime_data = SimpleNamespace(coordinator=coordinator)
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    rows = {row["entity_id"]: row for row in result["entities"]}
+    assert "sensor.span_panel_l1_voltage" in rows
+    row = rows["sensor.span_panel_l1_voltage"]
+    assert row["disabled_by"] == "integration"
+    assert row["unique_id"] == "span_sp3_diag_003_l1_voltage"

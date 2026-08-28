@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from homeassistant.components.sensor import SensorStateClass
+
 from custom_components.span_panel.const import ENABLE_ENERGY_DIP_COMPENSATION
+from custom_components.span_panel.energy_dip import CONFIRMED_RETRACTION_WINDOW, PendingDip
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
@@ -25,6 +27,7 @@ class DummyDipSensor(SpanEnergySensorBase):
         """Bypass parent __init__ to avoid full HA dependencies."""
         self.coordinator = SimpleNamespace(
             panel_offline=False,
+            transport_dead=False,
             config_entry=SimpleNamespace(
                 options={
                     ENERGY_REPORTING_GRACE_PERIOD: 15,
@@ -55,19 +58,47 @@ class DummyDipSensor(SpanEnergySensorBase):
         self._energy_offset: float = 0.0
         self._last_panel_reading: float | None = None
         self._last_dip_delta: float | None = None
-        self._is_total_increasing: bool = (
-            state_class == SensorStateClass.TOTAL_INCREASING
-        )
+        self._pending_dip: PendingDip | None = None
+        self._recently_confirmed_dip: PendingDip | None = None
+        self._is_total_increasing: bool = state_class == SensorStateClass.TOTAL_INCREASING
         self._dip_compensation_enabled: bool = dip_enabled
 
     def _generate_unique_id(self, snapshot, description):
         return "dummy_sensor"
 
-    def _generate_friendly_name(self, snapshot, description):
-        return "Dummy"
-
     def get_data_source(self, snapshot):
         return "dummy_data"
+
+
+def _restart(before: DummyDipSensor) -> DummyDipSensor:
+    """Persist a sensor's dip state and restore it into a fresh one.
+
+    Mirrors what `SpanEnergySensorBase.async_added_to_hass` does with the
+    record `extra_restore_state_data` wrote, without an HA instance to store it.
+    """
+    restored = SpanEnergyExtraStoredData.from_dict(before.extra_restore_state_data.as_dict())
+    assert restored is not None
+
+    after = DummyDipSensor(dip_enabled=True)
+    after._energy_offset = restored.energy_offset or 0.0
+    after._last_panel_reading = restored.last_panel_reading
+    after._last_dip_delta = restored.last_dip_delta
+    if restored.pending_dip_baseline is not None and restored.pending_dip_delta is not None:
+        after._pending_dip = PendingDip(
+            baseline=restored.pending_dip_baseline,
+            delta=restored.pending_dip_delta,
+        )
+    if (
+        restored.confirmed_dip_baseline is not None
+        and restored.confirmed_dip_delta is not None
+        and restored.confirmed_dip_ticks_left is not None
+    ):
+        after._recently_confirmed_dip = PendingDip(
+            baseline=restored.confirmed_dip_baseline,
+            delta=restored.confirmed_dip_delta,
+            confirmed_ticks_left=restored.confirmed_dip_ticks_left,
+        )
+    return after
 
 
 # =============================================================================
@@ -109,6 +140,10 @@ class TestExtraStoredDataDipFields:
         assert result is not None
         assert result.energy_offset == 10.0
         assert result.last_panel_reading == 190.0
+        # Written before the corroborated slot existed, so it records only an
+        # unsettled dip -- which is the state those records were always in.
+        assert result.confirmed_dip_baseline is None
+        assert result.confirmed_dip_ticks_left is None
         assert result.last_dip_delta == 10.0
 
     def test_backward_compat_missing_dip_fields(self):
@@ -225,7 +260,13 @@ class TestDipCompensation:
         assert sensor._last_dip_delta is None
 
     def test_multiple_dips_accumulate(self):
-        """Multiple dips accumulate the offset."""
+        """Multiple confirmed dips accumulate the offset.
+
+        Each has to be corroborated by the counter climbing from its new, lower
+        base — which is what a firmware reset actually looks like — rather than
+        by the counter returning to where it was, which is what a transient bad
+        reading looks like and is now retracted instead.
+        """
         sensor = DummyDipSensor(dip_enabled=True)
 
         sensor._mock_panel_value = 1000.0
@@ -237,16 +278,47 @@ class TestDipCompensation:
         assert sensor._energy_offset == 20.0
         assert sensor._attr_native_value == 1000.0
 
-        # Normal increase
-        sensor._mock_panel_value = 1010.0
+        # Counting up from the lower base confirms it
+        sensor._mock_panel_value = 985.0
         sensor._update_native_value()
-        assert sensor._attr_native_value == 1030.0  # 1010 + 20
+        assert sensor._energy_offset == 20.0
+        assert sensor._attr_native_value == 1005.0  # 985 + 20
 
-        # Second dip: 30 Wh
+        # Second dip: 25 Wh
+        sensor._mock_panel_value = 960.0
+        sensor._update_native_value()
+        assert sensor._energy_offset == 45.0  # 20 + 25
+        assert sensor._attr_native_value == 1005.0  # 960 + 45
+
+        sensor._mock_panel_value = 965.0
+        sensor._update_native_value()
+        assert sensor._energy_offset == 45.0
+        assert sensor._attr_native_value == 1010.0  # 965 + 45
+
+    def test_a_counter_that_comes_back_leaves_no_offset_behind(self):
+        """The behaviour this rule changed, stated directly.
+
+        A reading that dipped and then rose past where it started was compensated
+        permanently: the offset stayed, inflating the sensor by the size of a
+        drop that never happened. `SpanPanel/span#259` is the same arithmetic on
+        a lifetime counter instead of 20 Wh.
+        """
+        sensor = DummyDipSensor(dip_enabled=True)
+
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+
         sensor._mock_panel_value = 980.0
         sensor._update_native_value()
-        assert sensor._energy_offset == 50.0  # 20 + 30
-        assert sensor._attr_native_value == 1030.0  # 980 + 50
+        assert sensor._energy_offset == 20.0
+
+        sensor._mock_panel_value = 1010.0
+        sensor._update_native_value()
+
+        assert sensor._energy_offset == 0.0
+        assert sensor._attr_native_value == 1010.0
+        assert sensor._last_dip_delta is None
+        sensor.coordinator.report_energy_dip.assert_not_called()
 
     def test_disabled_passthrough(self):
         """When disabled, dips pass through without compensation."""
@@ -279,20 +351,42 @@ class TestDipCompensation:
         assert sensor._attr_native_value == 950.0
         assert sensor._energy_offset == 0.0
 
-    def test_dip_reports_to_coordinator(self):
-        """Dip detection calls coordinator.report_energy_dip."""
+    def test_dip_reports_to_coordinator_once_it_settles(self):
+        """The notification waits until nothing can take the offset back.
+
+        Not on detection: firing on sight is what produced the
+        `SpanPanel/span#259` notification naming essentially every circuit on
+        the panel for an event that had not happened. And not on corroboration
+        either, because the readings just after it can still retract the dip,
+        while a persistent notification cannot be retracted at all.
+        """
         sensor = DummyDipSensor(dip_enabled=True)
         sensor.entity_id = "sensor.test_energy"
 
-        sensor._mock_panel_value = 1000.0
-        sensor._update_native_value()
+        for value in (1000.0, 950.0, 955.0, 956.0, 957.0):
+            sensor._mock_panel_value = value
+            sensor._update_native_value()
+            sensor.coordinator.report_energy_dip.assert_not_called()
 
-        sensor._mock_panel_value = 950.0
+        sensor._mock_panel_value = 958.0
         sensor._update_native_value()
 
         sensor.coordinator.report_energy_dip.assert_called_once_with(
             "sensor.test_energy", 50.0, 50.0
         )
+
+    def test_a_dip_retracted_inside_its_window_is_never_reported(self):
+        """A notification that cannot be taken back is not sent speculatively."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor.entity_id = "sensor.test_energy"
+
+        for value in (1000.0, 950.0, 955.0, 1001.0, 1002.0, 1003.0, 1004.0):
+            sensor._mock_panel_value = value
+            sensor._update_native_value()
+
+        assert sensor._energy_offset == 0.0
+        assert sensor._attr_native_value == 1004.0
+        sensor.coordinator.report_energy_dip.assert_not_called()
 
     def test_no_report_when_no_dip(self):
         """Normal increases don't trigger coordinator notification."""
@@ -454,3 +548,188 @@ class TestDipRestoration:
         stored = sensor.extra_restore_state_data
         d = stored.as_dict()
         assert d["energy_offset"] is None
+
+
+# =============================================================================
+# An unsettled dip across a restart
+# =============================================================================
+
+
+class TestPendingDipSurvivesARestart:
+    """A restart between booking a dip and settling it must not settle it.
+
+    This is the sequence that matters most, because the two are adjacent: the
+    reading that would settle a dip is the one after the reading that booked it,
+    and Home Assistant can stop in between. Forgetting the dip was provisional
+    would confirm it by default — turning the restart itself into the thing that
+    makes a bad offset permanent, which is `SpanPanel/span#259` exactly.
+    """
+
+    def test_the_pending_record_is_persisted(self):
+        sensor = DummyDipSensor(dip_enabled=True)
+
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+
+        stored = sensor.extra_restore_state_data.as_dict()
+
+        assert stored["pending_dip_baseline"] == 1000.0
+        assert stored["pending_dip_delta"] == 1000.0
+
+    def test_nothing_pending_is_persisted_as_none(self):
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._attr_native_value = 1000.0
+
+        stored = sensor.extra_restore_state_data.as_dict()
+
+        assert stored["pending_dip_baseline"] is None
+        assert stored["pending_dip_delta"] is None
+
+    def test_a_restart_mid_dip_still_retracts_when_the_counter_returns(self):
+        """The offset booked before the restart is given back after it."""
+        before = DummyDipSensor(dip_enabled=True)
+        before._mock_panel_value = 1000.0
+        before._update_native_value()
+        before._mock_panel_value = 0.0
+        before._update_native_value()
+
+        after = _restart(before)
+        assert after._pending_dip is not None
+
+        after._mock_panel_value = 1007.6
+        after._update_native_value()
+
+        assert after._energy_offset == 0.0
+        assert after._attr_native_value == 1007.6
+        after.coordinator.report_energy_dip.assert_not_called()
+
+
+class TestTheConfirmationWindowSurvivesARestart:
+    """A confirmed dip is still provisional for a few readings, restart or not.
+
+    Both halves of that matter across a restart. Dropping the window would make
+    a mis-confirmed offset permanent; restoring the record as though it had
+    never been confirmed would leave it retractable indefinitely, so a counter
+    that genuinely reset would hand its offset back on the day it climbed past
+    its old lifetime total.
+    """
+
+    @staticmethod
+    def _confirmed() -> DummyDipSensor:
+        """Build a sensor that has booked a dip and just had it confirmed."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        for value in (1000.0, 0.0, 5.0):
+            sensor._mock_panel_value = value
+            sensor._update_native_value()
+        return sensor
+
+    def test_the_remaining_window_is_persisted(self):
+        stored = self._confirmed().extra_restore_state_data.as_dict()
+
+        assert stored["confirmed_dip_baseline"] == 1000.0
+        assert stored["confirmed_dip_delta"] == 1000.0
+        assert stored["confirmed_dip_ticks_left"] == CONFIRMED_RETRACTION_WINDOW
+        # The corroborated dip left the unsettled slot when it was corroborated.
+        assert stored["pending_dip_baseline"] is None
+
+    def test_a_return_after_the_restart_still_retracts(self):
+        after = _restart(self._confirmed())
+
+        after._mock_panel_value = 1001.0
+        after._update_native_value()
+
+        assert after._energy_offset == 0.0
+        assert after._attr_native_value == 1001.0
+        after.coordinator.report_energy_dip.assert_not_called()
+
+    def test_the_window_keeps_running_out_across_the_restart(self):
+        """Restarting does not buy the record more readings."""
+        after = _restart(self._confirmed())
+
+        for value in (6.0, 7.0, 8.0):
+            after._mock_panel_value = value
+            after._update_native_value()
+
+        assert after._recently_confirmed_dip is None
+
+        after._mock_panel_value = 1001.0
+        after._update_native_value()
+
+        assert after._energy_offset == 1000.0
+        assert after._attr_native_value == 2001.0
+
+    def test_the_dip_is_reported_when_it_settles_after_the_restart(self):
+        """A restart delays the notification with the window, it does not lose it."""
+        after = _restart(self._confirmed())
+        after.entity_id = "sensor.test_energy"
+
+        for value in (6.0, 7.0, 8.0):
+            after._mock_panel_value = value
+            after._update_native_value()
+
+        after.coordinator.report_energy_dip.assert_called_once_with(
+            "sensor.test_energy", 1000.0, 1000.0
+        )
+
+
+class TestAnOutageDoesNotSettleADip:
+    """Grace period and dip compensation share a stored record but not a decision.
+
+    While the panel is offline `_update_native_value` hands off to the grace
+    period and returns before any dip processing, so an outage cannot book,
+    confirm or retract anything. That is the intended division: grace period
+    answers "what should this sensor read while the panel is unreachable", dip
+    compensation answers "what did the counter do", and an outage is evidence
+    about the transport rather than about the counter.
+    """
+
+    def test_an_outage_leaves_an_unsettled_dip_exactly_as_it_was(self):
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+        booked = sensor._pending_dip
+
+        sensor.coordinator.panel_offline = True
+        sensor._mock_panel_value = 12345.0  # must not be read while offline
+        sensor._update_native_value()
+
+        assert sensor._pending_dip == booked
+        assert sensor._energy_offset == 1000.0
+        assert sensor._last_panel_reading == 0.0
+
+    def test_grace_period_holds_the_compensated_value(self):
+        """What HA was showing is what it keeps showing, offset included."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+
+        sensor.coordinator.panel_offline = True
+        sensor._update_native_value()
+
+        assert sensor._attr_native_value == 1000.0
+        assert sensor._last_valid_state == 1000.0
+
+    def test_the_dip_settles_normally_once_the_panel_returns(self):
+        """The outage delays the verdict rather than deciding it."""
+        sensor = DummyDipSensor(dip_enabled=True)
+        sensor._mock_panel_value = 1000.0
+        sensor._update_native_value()
+        sensor._mock_panel_value = 0.0
+        sensor._update_native_value()
+
+        sensor.coordinator.panel_offline = True
+        sensor._update_native_value()
+        sensor.coordinator.panel_offline = False
+        sensor._mock_panel_value = 1007.6
+        sensor._update_native_value()
+
+        assert sensor._energy_offset == 0.0
+        assert sensor._pending_dip is None
+        assert sensor._attr_native_value == 1007.6
+        sensor.coordinator.report_energy_dip.assert_not_called()

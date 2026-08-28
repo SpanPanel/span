@@ -3,6 +3,7 @@
     "abort": {
       "already_configured": "スパンパネルがすでに設定されています。設定は一つのみです。",
       "cannot_connect": "スパンパネルへの接続に失敗しました",
+      "host_not_set": "パネルのアドレスが設定されていません。セットアップをやり直してください。",
       "no_devices_found": "ネットワーク上にデバイスが見つかりません",
       "no_host": "アドオンからホストアドレスが提供されませんでした。",
       "no_serial": "パネルのシリアル番号を特定できませんでした。",
@@ -12,6 +13,9 @@
       "v1_not_supported": "v1ファームウェアはサポートされていません。パネルのファームウェアをv2にアップグレードしてください。"
     },
     "error": {
+      "ca_leaf_mismatch": "このパネルが提供する証明書は、パネルが公開した認証局で署名されていません。HTTPS ポートが正しいこと、接続が傍受されていないことを確認してから、もう一度お試しください。",
+      "ca_unavailable": "パネルの認証局を読み取れませんでした。パネルに到達でき、電源が入っていることを確認してから、もう一度お試しください。これがないとセットアップは続行できません。続行するとパスフレーズが平文で送信されてしまうためです。",
+      "ca_unusable": "このパネルに保存されている認証局を読み取れないため、この変更は暗号化されずに送信されることになります。何も変更されていません。パネルを再認証して使用可能な認証局を保存してから、もう一度お試しください。",
       "cannot_connect": "スパンパネルへの接続に失敗しました",
       "fqdn_registration_failed": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。",
       "host_required": "ホストが必要です",
@@ -68,7 +72,7 @@
         "title": "スパンパネルに接続"
       },
       "fqdn_failed": {
-        "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルの証明書にドメイン名が含まれていない場合、MQTT接続が失敗する可能性があります。",
+        "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルは証明書に記載されているアドレスで設定され、ドメイン名は保存されません。パネルがそのドメイン名を拒否するためです。登録を妨げていた問題を解決してから、「再設定」でドメイン名をもう一度お試しください。",
         "title": "ドメイン登録"
       },
       "reauth_confirm": {
@@ -93,7 +97,7 @@
         "title": "再設定完了"
       },
       "reconfigure_fqdn_failed": {
-        "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルの証明書にドメイン名が含まれていない場合、MQTT接続が失敗する可能性があります。",
+        "description": "パネルにドメイン名を登録できなかったか、TLS証明書が時間内に更新されませんでした。続行できますが、パネルは証明書に記載されているアドレスで設定され、ドメイン名は保存されません。パネルがそのドメイン名を拒否するためです。登録を妨げていた問題を解決してから、「再設定」でドメイン名をもう一度お試しください。",
         "title": "ドメイン登録"
       },
       "reconfigure_register_fqdn": {
@@ -119,6 +123,20 @@
         },
         "description": "SPAN Panelの接続詳細を入力してください。",
         "title": "スパンパネルに接続"
+      },
+      "panel_https_port": {
+        "title": "パネルの HTTPS ポート",
+        "description": "このパネルに標準以外の HTTP ポートを設定しているため、リバースプロキシ経由などで TLS も標準以外のポートで提供されている可能性があります。パネルの証明書が提供されているポートを入力してください。",
+        "data": {
+          "https_port": "HTTPS ポート"
+        },
+        "data_description": {
+          "https_port": "プロキシやポート変換で変更していない限り、443 のままにしてください。"
+        }
+      },
+      "panel_ca": {
+        "title": "パネルの証明書を読み取っています",
+        "description": "Home Assistant は、パネルが公開している認証局を取得し、パネルが提供する証明書がその認証局で署名されていることを確認します。これはパスフレーズを入力する前に行われるため、パスフレーズと、その引き換えにパネルが返す認証情報は、平文ではなく検証済みの接続を通ります。\n\n**送信**を選ぶと再試行します。"
       }
     }
   },
@@ -147,11 +165,25 @@
       },
       "wifi_link": {
         "name": "Wi-Fiリンク"
+      },
+      "pcs_active": {
+        "name": "PCS 動作中"
+      },
+      "pv_panel_link": {
+        "name": "PVパネルリンク"
+      },
+      "evse_panel_link": {
+        "name": "EVSEパネルリンク"
       }
     },
     "button": {
       "gfe_override": {
         "name": "GFEオーバーライド：系統接続"
+      }
+    },
+    "number": {
+      "evse_charge_current_limit": {
+        "name": "EVSE充電電流上限"
       }
     },
     "select": {
@@ -177,8 +209,20 @@
       "bess_model": {
         "name": "モデル"
       },
+      "bess_communication_state": {
+        "name": "通信状態",
+        "state": {
+          "ok": "正常",
+          "degraded": "劣化",
+          "lost": "喪失",
+          "unknown": "不明"
+        }
+      },
       "bess_nameplate_capacity": {
         "name": "定格容量"
+      },
+      "bess_part_number": {
+        "name": "型番"
       },
       "bess_serial_number": {
         "name": "シリアル番号"
@@ -230,6 +274,9 @@
           "unknown": "不明",
           "unlocked": "アンロック"
         }
+      },
+      "evse_part_number": {
+        "name": "型番"
       },
       "evse_status": {
         "name": "充電器ステータス",
@@ -301,6 +348,15 @@
           "unknown": "不明"
         }
       },
+      "mid_grid_state": {
+        "name": "系統状態",
+        "state": {
+          "up": "正常",
+          "down": "停電",
+          "degraded": "劣化",
+          "unknown": "不明"
+        }
+      },
       "pv_nameplate_capacity": {
         "name": "PV定格容量"
       },
@@ -313,11 +369,17 @@
       "pv_vendor": {
         "name": "PVベンダー"
       },
+      "shed_total_time_remaining": {
+        "name": "バックアップ残り時間"
+      },
       "site_power": {
         "name": "サイト電力"
       },
       "software_version": {
         "name": "ソフトウェアバージョン"
+      },
+      "time_to_priority_shed": {
+        "name": "優先遮断までの時間"
       },
       "upstream_l1_current": {
         "name": "上流側L1電流"
@@ -332,15 +394,75 @@
           "unconnected": "未接続",
           "unknown": "不明"
         }
+      },
+      "pcs_import_limit": {
+        "name": "インポート制限"
+      },
+      "pcs_binding_constraint": {
+        "name": "拘束制約",
+        "state": {
+          "fsr": "確定サービス容量",
+          "doe": "系統エンベロープ",
+          "voltage": "電圧サポート",
+          "off_grid": "オフグリッド",
+          "requested": "要求",
+          "operator": "オペレーター",
+          "none": "なし",
+          "unknown": "不明"
+        }
+      },
+      "bess_meter_power": {
+        "name": "メーター電力"
+      }
+    },
+    "switch": {
+      "control_lock": {
+        "name": "コントロールロック"
       }
     }
   },
   "exceptions": {
+    "admin_only_control": {
+      "message": "この SPAN Panel を操作できるのは Home Assistant の管理者だけです。"
+    },
+    "adopted_control_failed": {
+      "message": "{device}の{property}への書き込みは拒否されました: {reason}。パネルには何も送信されていないため、値は変わっていません。"
+    },
+    "adopted_control_not_delivered": {
+      "message": "{device}の{property}への書き込みをパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、値は変わっておらず、後から変わることもありません。"
+    },
     "circuit_priority_failed": {
-      "message": "{circuit}の回路優先度の設定に失敗しました。"
+      "message": "{circuit}の優先度変更は拒否されました: {reason}。パネルには何も送信されていないため、優先度は変わっていません。"
+    },
+    "circuit_priority_not_delivered": {
+      "message": "{circuit}の優先度変更をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、優先度は変わっていません。"
     },
     "circuit_relay_failed": {
-      "message": "{circuit}の回路リレー状態の設定に失敗しました。"
+      "message": "{circuit}のブレーカー操作は拒否されました: {reason}。パネルには何も送信されていないため、ブレーカーの状態は変わっていません。"
+    },
+    "circuit_relay_not_delivered": {
+      "message": "{circuit}のブレーカー操作をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、ブレーカーの状態は変わっておらず、後から変わることもありません。"
+    },
+    "contextless_control_refused": {
+      "message": "この SPAN Panel は、ログインユーザーからではない操作コマンドを拒否します。"
+    },
+    "control_disabled": {
+      "message": "この SPAN Panel の制御はオプションで無効になっています。パネルには何も送信されませんでした。"
+    },
+    "control_lock_disarm_requires_admin": {
+      "message": "SPAN Panel のコントロールロックを解除できるのは Home Assistant の管理者だけです。"
+    },
+    "control_lock_disarm_requires_user": {
+      "message": "SPAN Panel のコントロールロックを解除できるのは、ログインした管理者だけです。オートメーションやスクリプトからは解除できません。"
+    },
+    "control_locked": {
+      "message": "SPAN Panel のコントロールロックが施錠されています。回路を操作する前に解除してください。"
+    },
+    "evse_charge_limit_failed": {
+      "message": "充電器 {charger} の充電電流上限を設定できませんでした: {reason}"
+    },
+    "evse_charge_limit_not_delivered": {
+      "message": "充電器 {charger} の充電電流上限をパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、上限は変わっていません。"
     },
     "export_manifest_no_entries": {
       "message": "SPANパネルの設定エントリが読み込まれていません。このサービスを呼び出す前に、SPANパネルを追加して設定してください。"
@@ -361,7 +483,10 @@
       "message": "サブデバイス {entity_id} に親のSPAN Panelデバイスがありません。via_device_id がSPANパネルを指していません。"
     },
     "gfe_override_failed": {
-      "message": "パネルへのGFEオーバーライドの送信に失敗しました。"
+      "message": "{value}へのGFEオーバーライドは拒否されました: {reason}。パネルには何も送信されていません。"
+    },
+    "gfe_override_not_delivered": {
+      "message": "{value}へのGFEオーバーライドをパネルに送信できませんでした: {reason}。キューに入れずに拒否したため、後から実行されることもありません。"
     },
     "graph_horizon_not_available": {
       "message": "選択されたSPANパネルではグラフホライズンマネージャーが利用できません。"
@@ -377,29 +502,67 @@
     },
     "panel_not_ready": {
       "message": "SPAN Panelの準備ができていません。パネルがオンラインであることを確認してください。"
+    },
+    "relay_debounced": {
+      "message": "その回路のリレーはついさきほど操作されました。コマンドはキューに入れずに拒否しました。"
+    },
+    "rotate_credentials_auth_failed": {
+      "message": "SPAN Panel が保存済みのアクセストークンを拒否しました。認証情報をローテーションする前に、統合を再認証してください。"
+    },
+    "rotate_credentials_ca_unusable": {
+      "message": "この SPAN Panel に保存されている認証局を読み取れないため、認証情報のローテーションは暗号化されない通信になります。変更は行われていません。パネルの認証局を修復してから、もう一度ローテーションしてください。"
+    },
+    "rotate_credentials_failed": {
+      "message": "{host} の SPAN Panel が認証情報のローテーションを完了しませんでした。既存の認証情報は変更されていません。"
+    },
+    "rotate_credentials_multiple_panels": {
+      "message": "複数の SPAN Panel が読み込まれています。ローテーションするパネルを設定エントリのフィールドで選択してください。ローテーションすると、そのパネルの他のすべてのクライアントで以前のブローカーパスワードが使用できなくなります。"
+    },
+    "rotate_credentials_no_entry": {
+      "message": "v2 API を使用する読み込み済みの SPAN Panel が見つかりません。"
+    },
+    "rotate_credentials_no_token": {
+      "message": "この SPAN Panel には保存済みのアクセストークンがありません。認証情報をローテーションする前に、統合を再認証してください。"
+    },
+    "rotate_credentials_reload_failed": {
+      "message": "新しいブローカーパスワードは保存されましたが、SPAN Panel 統合はそのパスワードで再起動できませんでした。パネルはすでに新しいパスワードを受け入れているため、再度ローテーションしないでください。ログを確認して統合を再読み込みしてください。"
+    },
+    "rotate_credentials_requires_admin": {
+      "message": "SPAN Panel の認証情報をローテーションできるのは Home Assistant の管理者だけです。"
+    },
+    "rotate_credentials_requires_user": {
+      "message": "認証情報のローテーションは、管理者がユーザーインターフェースから実行する必要があります。オートメーション、スクリプト、他の統合からは呼び出せません。"
     }
   },
   "options": {
     "step": {
       "init": {
         "data": {
-          "show_panel": "サイドバーにダッシュボードを表示",
-          "panel_admin_only": "管理ユーザーのみ",
+          "allow_contextless_control": "ログインユーザーなしの操作を許可する",
+          "control_lock_timeout": "コントロールロックの自動再施錠（分）",
+          "control_mode": "パネルを操作できるユーザー",
           "enable_circuit_net_energy_sensors": "回路正味エネルギー",
           "enable_energy_dip_compensation": "エネルギー低下を自動補正",
           "enable_panel_net_energy_sensors": "パネル正味エネルギー",
           "enable_unmapped_circuit_sensors": "未割当回路センサー",
           "energy_reporting_grace_period": "エネルギーセンサー猶予期間 (分)",
+          "panel_admin_only": "管理ユーザーのみ",
+          "relay_debounce_seconds": "リレーのデバウンス（秒）",
+          "show_panel": "サイドバーにダッシュボードを表示",
           "snapshot_update_interval": "スナップショット更新間隔（秒）"
         },
         "data_description": {
-          "show_panel": "SPANパネルダッシュボードをサイドバーエントリとして表示します。",
-          "panel_admin_only": "ダッシュボードサイドバーエントリを管理ユーザーのみに制限します。",
+          "allow_contextless_control": "オートメーション、スクリプト、他の統合は、ユーザーが紐づかない状態でサービスを呼び出します。無効にすると、そうしたコマンドを拒否します。オートメーションで回路を操作していない場合を除き、有効のままにしてください。",
+          "control_lock_timeout": "-1 はコントロールロックを無効にし、そのスイッチを削除します。0 は誰かが解除するまで施錠したままにします。それ以外の値は、解除してからその分数後に再施錠します。解除できるのは管理者だけです。",
+          "control_mode": "Home Assistant は既定で、管理者以外のすべてのユーザーにすべてのエンティティの操作を許可します。管理者のみに制限することが、これを変更する唯一の方法です。無効にすると操作用エンティティが作成されなくなりますが、レジストリのエントリ、名前、エリアは保持されます。",
           "enable_circuit_net_energy_sensors": "無効電力を考慮した回路ごとの正味エネルギー。",
           "enable_energy_dip_compensation": "パネルがより低いエネルギー読み取り値を報告した場合に補正します。無効にするとオフセットがクリアされます。",
           "enable_panel_net_energy_sensors": "双方向フローを考慮した主幹メーターとフィードスルーの正味エネルギー。",
           "enable_unmapped_circuit_sensors": "名前付きブレーカーに割り当てられていないタブのバッキングセンサー。",
           "energy_reporting_grace_period": "パネルがオフライン時にセンサーが最後の値を保持する分数（0〜60）。デフォルト：15。",
+          "panel_admin_only": "ダッシュボードサイドバーエントリを管理ユーザーのみに制限します。",
+          "relay_debounce_seconds": "同じ回路のリレーへの 2 回目のコマンドを、この秒数のあいだ拒否します。キューに入れずに拒否します。状態の変わったパネルに対して数秒遅れで発火するリレーコマンドは、オートメーションの作成者が気づけるエラーよりも危険だからです。0 で無効になります。",
+          "show_panel": "SPANパネルダッシュボードをサイドバーエントリとして表示します。",
           "snapshot_update_interval": "スナップショット再構築の間隔（秒）（0〜15）。低い値＝高速、CPU負荷増。0＝デバウンスなし。"
         },
         "description": "SPAN Panel統合の設定を構成します。",
@@ -408,6 +571,13 @@
     }
   },
   "selector": {
+    "control_mode": {
+      "options": {
+        "admin_only": "管理者のみ",
+        "all_users": "すべての Home Assistant ユーザー",
+        "disabled": "なし — 操作用エンティティを作成しない"
+      }
+    },
     "entity_naming_pattern": {
       "options": {
         "circuit_numbers": "回路番号（例：span_panel_circuit_15_power）",
@@ -691,6 +861,42 @@
         "entity_id": {
           "name": "エンティティ",
           "description": "お気に入りから削除する回路またはサブデバイスの任意のセンサー。"
+        }
+      }
+    },
+    "rotate_credentials": {
+      "name": "パネルの認証情報をローテーション",
+      "description": "SPAN Panel に新しい eBus MQTT ブローカーのパスワードを要求し、保存して統合を再読み込みします。以前のブローカーのパスワードは直ちに無効になるため、それを使用している他のローカルクライアント（2 台目の Home Assistant、スクリプト、サードパーティのツールなど）は、再接続する前にパネルから再プロビジョニングする必要があります。パネルのアクセストークンとパネルのパスフレーズは変更されません。実行できるのは Home Assistant の管理者だけで、オートメーションやスクリプトからは呼び出せません。",
+      "fields": {
+        "config_entry_id": {
+          "name": "設定エントリ",
+          "description": "ローテーションするパネル。パネルが 1 台の場合は任意ですが、複数の SPAN Panel が読み込まれている場合は必須です。"
+        }
+      }
+    }
+  },
+  "issues": {
+    "schema_field_unresolved": {
+      "title": "SPAN パネルのデータフィールドが利用できません",
+      "description": "パネルのファームウェアが `{field_path}` を提供しなくなりました。{count} 個のエンティティが影響を受けます (例: {examples})。新しいファームウェアに対応する統合の更新が入るまで、これらは利用不可になるか、不完全なデータを報告する可能性があります。"
+    },
+    "schema_unit_mismatch": {
+      "title": "SPAN パネルの単位の不一致",
+      "description": "パネルは `{field_path}` を {schema_unit} で報告していますが、この統合は {ha_unit} を想定しています。{count} 個のエンティティが影響を受けます (例: {examples})。これらの測定値と長期統計が誤っている可能性があります。エンティティは自動的には変更されていません。"
+    },
+    "panel_ca_changed": {
+      "title": "SPAN Panel の認証局が変更されました",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "新しい認証局を信頼しますか？",
+            "description": "{panel} は現在、次の認証局を通知しています。\n\n**{fingerprint}**\n\n受け入れるとピン留めして再接続します。変更された理由が分かっている場合にのみ実行してください。ファームウェアの更新や工場出荷時リセットでは正当に更新されます。\n\n何も変わっていないはずなら、受け入れないでください。ネットワーク上の別の機器がパネルになりすましている場合もまったく同じように見え、受け入れるとその機器に接続を渡すことになります。"
+          }
+        },
+        "abort": {
+          "entry_gone": "その SPAN Panel はすでに設定されていません。",
+          "ca_unreadable": "パネルの認証局を読み取れませんでした。パネルに到達できることを確認して、もう一度お試しください。",
+          "ca_leaf_mismatch": "このパネルが提供する証明書は、パネルが公開した認証局で署名されていません。そのため、その認証局は承認の対象として提示されず、何も変更されていません。HTTPS ポートが正しいこと、接続が傍受されていないことを確認してから、もう一度お試しください。"
         }
       }
     }

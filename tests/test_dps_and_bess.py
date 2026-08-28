@@ -1,7 +1,9 @@
 """Tests for GFE override buttons and BESS connected binary sensor."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
+from homeassistant.exceptions import HomeAssistantError
 import pytest
 from span_panel_api import SpanBatterySnapshot
 from span_panel_api.exceptions import SpanPanelServerError
@@ -12,6 +14,8 @@ from custom_components.span_panel.button import (
     SpanPanelGFEOverrideButton,
 )
 from custom_components.span_panel.helpers import has_bess
+from custom_components.span_panel.sensor_definitions import BESS_METADATA_SENSORS
+from custom_components.span_panel.sensor_panel import _grid_forming_device_name
 
 from .factories import SpanPanelSnapshotFactory
 
@@ -67,15 +71,22 @@ class TestBessConnectedBinarySensor:
 def _make_gfe_coordinator(
     dominant_power_source: str | None = "GRID",
     battery: SpanBatterySnapshot | None = None,
+    dsm_state: str = "DSM_ON_GRID",
 ) -> MagicMock:
-    """Build a mock coordinator for GFE button tests."""
+    """Build a mock coordinator for GFE button tests.
+
+    `dsm_state` is what the button's availability guard reads; `dominant_power_source`
+    stays because other tests here assert on the GFE sensor itself.
+    """
     snapshot = SpanPanelSnapshotFactory.create(
         dominant_power_source=dominant_power_source,
+        dsm_state=dsm_state,
         battery=battery if battery is not None else SpanBatterySnapshot(),
     )
 
     coordinator = MagicMock()
     coordinator.data = snapshot
+    coordinator.transport_dead = False
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.title = "SPAN Panel"
     coordinator.config_entry.data = {}
@@ -114,49 +125,27 @@ class TestGFEOverrideButtons:
         coordinator.async_request_refresh.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_button_missing_control_method(self) -> None:
-        """Client without set_dominant_power_source method logs warning."""
+    async def test_button_server_error(self) -> None:
+        """SpanPanelServerError surfaces as a translated Home Assistant error."""
         coordinator = _make_gfe_coordinator()
-        button = SpanPanelGFEOverrideButton(
-            coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
-        )
+
+        button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
         button.hass = MagicMock()
 
-        # Client without set_dominant_power_source
-        coordinator.client = MagicMock(spec=[])
+        coordinator.client = AsyncMock()
+        coordinator.client.set_dominant_power_source = AsyncMock(
+            side_effect=SpanPanelServerError("test error")
+        )
 
-        await button.async_press()
-
-        # Should not raise, just log
-        coordinator.async_request_refresh.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_button_server_error(self) -> None:
-        """SpanPanelServerError triggers a notification."""
-        coordinator = _make_gfe_coordinator()
-
-        with patch(
-            "custom_components.span_panel.button.async_create_span_notification",
-            new_callable=AsyncMock,
-        ) as mock_notification:
-            button = SpanPanelGFEOverrideButton(
-                coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
-            )
-            button.hass = MagicMock()
-
-            coordinator.client = AsyncMock()
-            coordinator.client.set_dominant_power_source = AsyncMock(
-                side_effect=SpanPanelServerError("test error")
-            )
-
+        with pytest.raises(HomeAssistantError) as raised:
             await button.async_press()
 
-            mock_notification.assert_called_once()
+        assert raised.value.translation_key == "gfe_override_failed"
 
     def test_available_when_bess_offline_and_not_grid(self) -> None:
-        """Button is available when BESS is offline and GFE is not GRID."""
+        """Button is available when BESS is offline and the panel is not on grid."""
         coordinator = _make_gfe_coordinator(
-            dominant_power_source="BATTERY",
+            dsm_state="DSM_OFF_GRID",
             battery=SpanBatterySnapshot(soe_percentage=50.0, connected=False),
         )
         coordinator.panel_offline = False
@@ -190,9 +179,9 @@ class TestGFEOverrideButtons:
         assert button.available is False
 
     def test_available_when_no_bess(self) -> None:
-        """Button is available when no BESS is commissioned and GFE is not GRID."""
+        """Button is available when no BESS is commissioned and the panel is not on grid."""
         coordinator = _make_gfe_coordinator(
-            dominant_power_source="BATTERY",
+            dsm_state="DSM_OFF_GRID",
             battery=SpanBatterySnapshot(),
         )
         coordinator.panel_offline = False
@@ -200,3 +189,50 @@ class TestGFEOverrideButtons:
             coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"
         )
         assert button.available is True
+
+
+class TestGridFormingDeviceAttribute:
+    """The GFE sensor's `grid_forming_device` attribute."""
+
+    def test_the_attribute_is_absent_when_the_library_has_no_mid(self) -> None:
+        """Degrades to nothing against span-panel-api 2.6.4, which has no `mid` field.
+
+        Also the correct answer on any flat panel: no flat firmware publishes a MID, so
+        there is no forming device to name.
+        """
+        snapshot = SpanPanelSnapshotFactory.create(dominant_power_source="BATTERY")
+
+        assert _grid_forming_device_name(snapshot) is None
+
+    def test_the_attribute_is_the_display_name_not_the_wire_id(self) -> None:
+        """A Homie device id is not a Home Assistant device id.
+
+        The state keeps the closed enum automations compare against; this refines it with
+        the part a person recognises.
+        """
+        mid = SimpleNamespace(
+            grid_forming_entity="sim-40t-001-SIM-BESS-40T-001",
+            grid_forming_device_name="Battery",
+        )
+        snapshot = SimpleNamespace(mid=mid)
+
+        assert _grid_forming_device_name(snapshot) == "Battery"
+
+    def test_no_name_when_the_grid_itself_is_forming(self) -> None:
+        """There is no device to name, so the attribute stays off the sensor."""
+        snapshot = SimpleNamespace(mid=SimpleNamespace(grid_forming_device_name=None))
+
+        assert _grid_forming_device_name(snapshot) is None
+
+
+# ---------------------------------------------------------------------------
+# BESS metadata sensor declarations
+# ---------------------------------------------------------------------------
+
+
+def test_bess_part_number_sensor_is_declared() -> None:
+    """The BESS SKU is surfaced, and declares the field it reads."""
+    part = next(d for d in BESS_METADATA_SENSORS if d.key == "part_number")
+
+    assert part.field_path == "battery.part_number"
+    assert part.derived is None

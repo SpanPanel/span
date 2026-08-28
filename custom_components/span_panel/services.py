@@ -3,15 +3,30 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
 
-from homeassistant.const import CONF_HOST
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util.json import JsonObjectType, JsonValueType
+from span_panel_api import regenerate_passphrase
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelTimeoutError,
+)
 import voluptuous as vol
 
-from .const import DEFAULT_GRAPH_HORIZON, DOMAIN, VALID_GRAPH_HORIZONS
+from .config_flow_validation import PanelCaUnusableError, panel_rest_transport
+from .const import (
+    CONF_API_VERSION,
+    CONF_EBUS_BROKER_PASSWORD,
+    DEFAULT_GRAPH_HORIZON,
+    DOMAIN,
+    VALID_GRAPH_HORIZONS,
+)
 from .current_monitor import CurrentMonitor
 from .frontend import FavoriteKind, async_get_favorites, async_set_favorite
 from .graph_horizon import GraphHorizonManager
@@ -22,11 +37,7 @@ from .options import (
     SPIKE_THRESHOLD_PCT,
     WINDOW_DURATION_M,
 )
-
-if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
-
-    from . import SpanPanelRuntimeData
+from .runtime import SpanPanelRuntimeData, loaded_runtime_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,8 +52,6 @@ def _async_register_services(hass: HomeAssistant) -> None:
         _call: ServiceCall,
     ) -> ServiceResponse:
         """Export circuit topology manifest for all configured SPAN panels."""
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         if not hass.config_entries.async_loaded_entries(DOMAIN):
             raise ServiceValidationError(
                 "No SPAN panel configuration entries are loaded. "
@@ -52,19 +61,18 @@ def _async_register_services(hass: HomeAssistant) -> None:
             )
 
         entity_reg = er.async_get(hass)
-        panels = []
+        panels: list[JsonValueType] = []
 
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
 
-            snapshot = entry.runtime_data.coordinator.data
+            snapshot = runtime_data.coordinator.data
             if snapshot is None:
                 continue
             serial = snapshot.serial_number
-            circuits = []
+            circuits: list[JsonValueType] = []
 
             for circuit_id, circuit in snapshot.circuits.items():
                 if circuit_id.startswith("unmapped_tab_"):
@@ -99,7 +107,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
                     }
                 )
 
-        return cast(ServiceResponse, {"panels": panels})
+        return {"panels": panels}
 
     hass.services.async_register(
         DOMAIN,
@@ -191,15 +199,12 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         When config_entry_id is provided, returns that specific entry.
         Otherwise falls back to the first loaded entry.
         """
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
             if config_entry_id is None or entry.entry_id == config_entry_id:
-                return entry.runtime_data, entry
+                return runtime_data, entry
         return None
 
     def _get_monitor(
@@ -278,15 +283,20 @@ def _async_register_monitoring_services(hass: HomeAssistant) -> None:
         entry_id = call.data.get("config_entry_id")
         result = _get_runtime_data(entry_id)
         if result is None:
-            return cast(ServiceResponse, {"enabled": False})
+            return {"enabled": False}
         runtime_data, _entry = result
         monitor = runtime_data.coordinator.current_monitor
         if monitor is None:
-            return cast(ServiceResponse, {"enabled": False})
-        status = monitor.get_monitoring_status()
+            return {"enabled": False}
+        status: JsonObjectType = monitor.get_monitoring_status()
         status["enabled"] = True
-        status["global_settings"] = monitor.get_global_settings()
-        return cast(ServiceResponse, status)
+        # `MonitoringSettings` is `dict[str, int | bool | str]`, which `dict` is
+        # invariant in, so it needs widening rather than casting to sit in a
+        # JSON response. `get_global_settings` builds a fresh dict per call, so
+        # the copy costs nothing.
+        global_settings: JsonObjectType = dict(monitor.get_global_settings())
+        status["global_settings"] = global_settings
+        return status
 
     hass.services.async_register(
         DOMAIN,
@@ -371,16 +381,13 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
         call: ServiceCall,
     ) -> GraphHorizonManager:
         """Find the GraphHorizonManager for the given entry."""
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
             if entry_id is None or entry.entry_id == entry_id:
-                mgr = entry.runtime_data.coordinator.graph_horizon_manager
+                mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
                     return mgr
         raise ServiceValidationError(
@@ -419,19 +426,17 @@ def _async_register_graph_horizon_services(hass: HomeAssistant) -> None:
     async def async_handle_get_graph_settings(
         call: ServiceCall,
     ) -> ServiceResponse:
-        from . import SpanPanelRuntimeData  # pylint: disable=import-outside-toplevel
-
         entry_id = call.data.get("config_entry_id")
         for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-            if not hasattr(entry, "runtime_data") or not isinstance(
-                entry.runtime_data, SpanPanelRuntimeData
-            ):
+            runtime_data = loaded_runtime_data(entry)
+            if runtime_data is None:
                 continue
             if entry_id is None or entry.entry_id == entry_id:
-                mgr = entry.runtime_data.coordinator.graph_horizon_manager
+                mgr = runtime_data.coordinator.graph_horizon_manager
                 if mgr is not None:
-                    return cast(ServiceResponse, mgr.get_all_settings())
-        return cast(ServiceResponse, {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}})
+                    settings: JsonObjectType = mgr.get_all_settings()
+                    return settings
+        return {"global_horizon": DEFAULT_GRAPH_HORIZON, "circuits": {}}
 
     hass.services.async_register(
         DOMAIN,
@@ -513,8 +518,10 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
         ``kind`` is ``"circuits"`` or ``"sub_devices"``. For circuits,
         ``target_id`` is the panel-local circuit uuid (extracted from the
-        entity's unique_id). For sub-devices, ``target_id`` is the HA
-        device id of the BESS/EVSE; the panel id walks up via ``via_device_id``.
+        entity's unique_id). For sub-devices, ``target_id`` is the HA device id
+        of the sub-device; the panel id walks up via ``via_device_id``. Nothing
+        here enumerates the kinds, so a new one -- the PV inverter most recently
+        -- is favouritable the day its device exists.
 
         Failure paths use distinct translation keys so users see the
         actual reason their pick was rejected.
@@ -551,7 +558,7 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
         # Resolve the panel device id. Sub-devices register with
         # via_device_id; main panels never do, so via_device_id presence is a
-        # reliable discriminator (BESS / EVSE today) and we walk up to the
+        # reliable discriminator whatever kinds exist, and we walk up to the
         # parent SPAN Panel here.
         if device_entry.via_device_id is not None:
             parent = device_registry.async_get(device_entry.via_device_id)
@@ -603,21 +610,37 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
             translation_placeholders={"entity_id": entity_id},
         )
 
+    def _favorites_response(favorites: dict[str, dict[str, list[str]]]) -> ServiceResponse:
+        """Wrap the favorites map in the shape all three favorites services return.
+
+        The map is rebuilt rather than handed over as-is because `dict` and
+        `list` are invariant: the storage type says exactly `list[str]`, and a
+        JSON response value says `list[JsonValueType]`, so the two are not the
+        same type however identical the contents. Rebuilding also means the
+        response cannot alias the caller's map.
+        """
+        payload: JsonObjectType = {
+            panel_device_id: {kind: list(target_ids) for kind, target_ids in kinds.items()}
+            for panel_device_id, kinds in favorites.items()
+        }
+        return {"favorites": payload}
+
     async def async_handle_get_favorites(_call: ServiceCall) -> ServiceResponse:
-        favorites = await async_get_favorites(hass)
-        return cast(ServiceResponse, {"favorites": favorites})
+        return _favorites_response(await async_get_favorites(hass))
 
     async def async_handle_add_favorite(call: ServiceCall) -> ServiceResponse:
         entity_id = call.data["entity_id"]
         panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
-        favorites = await async_set_favorite(hass, panel_device_id, kind, target_id, True)
-        return cast(ServiceResponse, {"favorites": favorites})
+        return _favorites_response(
+            await async_set_favorite(hass, panel_device_id, kind, target_id, True)
+        )
 
     async def async_handle_remove_favorite(call: ServiceCall) -> ServiceResponse:
         entity_id = call.data["entity_id"]
         panel_device_id, kind, target_id = _resolve_entity_to_favorite_target(entity_id)
-        favorites = await async_set_favorite(hass, panel_device_id, kind, target_id, False)
-        return cast(ServiceResponse, {"favorites": favorites})
+        return _favorites_response(
+            await async_set_favorite(hass, panel_device_id, kind, target_id, False)
+        )
 
     _favorite_mutation_schema = vol.Schema({vol.Required("entity_id"): str})
 
@@ -641,4 +664,167 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
         async_handle_remove_favorite,
         schema=_favorite_mutation_schema,
         supports_response=SupportsResponse.OPTIONAL,
+    )
+
+
+async def _async_require_admin_caller(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Refuse a service call that does not come from a logged-in administrator.
+
+    `verify_domain_control` is deliberately not used here. It returns early for
+    a call with no `user_id` — every automation, script and integration — and
+    otherwise checks `POLICY_CONTROL`, which Home Assistant's default user
+    policy grants to non-admins. Neither is an administrator check.
+
+    A contextless call is refused outright rather than being treated as
+    trusted: an unattended automation has no business rotating credentials.
+    """
+    user_id = call.context.user_id
+    if user_id is None:
+        raise ServiceValidationError(
+            "Credential rotation must be run by an administrator from the "
+            "user interface, not from an automation or script.",
+            translation_domain=DOMAIN,
+            translation_key="rotate_credentials_requires_user",
+        )
+
+    user = await hass.auth.async_get_user(user_id)
+    if user is None or not user.is_admin:
+        raise ServiceValidationError(
+            "Only a Home Assistant administrator can rotate SPAN Panel credentials.",
+            translation_domain=DOMAIN,
+            translation_key="rotate_credentials_requires_admin",
+        )
+
+
+def _async_register_credential_services(hass: HomeAssistant) -> None:
+    """Register credential-rotation services."""
+
+    def _get_v2_entry(config_entry_id: str | None) -> ConfigEntry:
+        """Return the loaded v2 entry to rotate, or explain why there isn't one.
+
+        With the id omitted and more than one panel loaded there is no defensible
+        default: rotating invalidates the broker password every other local client
+        of that panel is using, so picking one and hoping is worse than asking.
+        A single loaded panel is unambiguous and the id stays optional there.
+        """
+        candidates: list[ConfigEntry] = []
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            if config_entry_id is not None and entry.entry_id != config_entry_id:
+                continue
+            if loaded_runtime_data(entry) is None:
+                continue
+            if entry.data.get(CONF_API_VERSION) != "v2":
+                continue
+            candidates.append(entry)
+
+        if not candidates:
+            raise ServiceValidationError(
+                "No loaded SPAN panel using the v2 API was found.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_no_entry",
+            )
+
+        if config_entry_id is None and len(candidates) > 1:
+            raise ServiceValidationError(
+                "More than one SPAN panel is loaded. Name the panel to rotate "
+                "with the config entry field.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_multiple_panels",
+            )
+
+        return candidates[0]
+
+    async def async_handle_rotate_credentials(call: ServiceCall) -> None:
+        await _async_require_admin_caller(hass, call)
+
+        entry = _get_v2_entry(call.data.get("config_entry_id"))
+        host = str(entry.data[CONF_HOST])
+        token = str(entry.data.get(CONF_ACCESS_TOKEN, ""))
+        if not token:
+            raise ServiceValidationError(
+                "This SPAN panel has no stored access token. Reauthenticate before rotating.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_no_token",
+            )
+
+        # Over the pinned CA where this entry has one. A credential-rotation
+        # service that delivered fresh secrets over unverified HTTP would undo
+        # the point of pinning at the one moment it matters most, so an entry
+        # whose stored CA no longer parses is refused rather than downgraded.
+        # (An entry that was never pinned is plaintext by design; that is the
+        # transport it has always used, and this service does not change it.)
+        try:
+            transport = panel_rest_transport(hass, entry.data, allow_plaintext_fallback=False)
+        except PanelCaUnusableError as err:
+            raise ServiceValidationError(
+                "The stored certificate authority for this SPAN panel cannot be "
+                "read, so the rotation would have to travel unencrypted. "
+                "Nothing was changed. Repair the panel's certificate authority, "
+                "then rotate again.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_ca_unusable",
+            ) from err
+
+        try:
+            new_password = await regenerate_passphrase(
+                host,
+                token,
+                port=transport.port,
+                httpx_client=transport.httpx_client,
+                ssl_context=transport.ssl_context,
+            )
+        except SpanPanelAuthError as err:
+            raise ServiceValidationError(
+                "The stored access token was rejected by the panel. Reauthenticate first.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_auth_failed",
+            ) from err
+        except (
+            SpanPanelConnectionError,
+            SpanPanelTimeoutError,
+            SpanPanelAPIError,
+        ) as err:
+            # Nothing has been written yet, so the entry still holds the
+            # credential the panel still accepts.
+            raise ServiceValidationError(
+                f"The SPAN panel at {host} did not complete the rotation.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_failed",
+                translation_placeholders={"host": host},
+            ) from err
+
+        updated_data = dict(entry.data)
+        updated_data[CONF_EBUS_BROKER_PASSWORD] = new_password
+        hass.config_entries.async_update_entry(entry, data=updated_data)
+
+        # Awaited rather than fired and forgotten: the running client still
+        # holds the password the panel just invalidated, so the call should not
+        # report success until the entry is back up on the new one. A reload
+        # that fails is reported as a failure of the call — the stored password
+        # stays, because it is the one the panel now accepts and re-rotating
+        # would only invalidate it again.
+        if not await hass.config_entries.async_reload(entry.entry_id):
+            _LOGGER.error(
+                "Stored a new MQTT broker credential for SPAN panel entry %s, "
+                "but the entry did not reload onto it",
+                entry.entry_id,
+            )
+            raise HomeAssistantError(
+                "The new broker password was stored, but the SPAN panel "
+                "integration did not come back up on it. Check the logs and "
+                "reload the entry.",
+                translation_domain=DOMAIN,
+                translation_key="rotate_credentials_reload_failed",
+            )
+
+        _LOGGER.info(
+            "Rotated the MQTT broker credential for SPAN panel entry %s",
+            entry.entry_id,
+        )
+
+    hass.services.async_register(
+        DOMAIN,
+        "rotate_credentials",
+        async_handle_rotate_credentials,
+        schema=vol.Schema({vol.Optional("config_entry_id"): str}),
     )

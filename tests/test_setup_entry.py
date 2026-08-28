@@ -4,8 +4,18 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.httpx_client import get_async_client
 import pytest
-from span_panel_api.exceptions import SpanPanelAuthError
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelServerError
 
 from custom_components.span_panel import SpanPanelRuntimeData, async_setup_entry
 from custom_components.span_panel.const import (
@@ -17,17 +27,10 @@ from custom_components.span_panel.const import (
     CONF_HTTP_PORT,
     DOMAIN,
 )
-from homeassistant.config_entries import (
-    ConfigEntryAuthFailed,
-    ConfigEntryError,
-    ConfigEntryNotReady,
-)
-from homeassistant.const import CONF_HOST
-from homeassistant.core import HomeAssistant
+from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .factories import SpanPanelSnapshotFactory
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _create_v2_entry(**data_overrides) -> MockConfigEntry:
@@ -76,7 +79,7 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
         ) as mock_coordinator_cls,
         patch(
             "custom_components.span_panel.ensure_device_registered",
-            AsyncMock(),
+            AsyncMock(return_value="panel-device-id"),
         ) as mock_ensure_device,
         patch.object(
             hass.config_entries, "async_forward_entry_setups", AsyncMock()
@@ -85,7 +88,14 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     ):
         assert await async_setup_entry(hass, entry) is True
 
-    assert entry.runtime_data == SpanPanelRuntimeData(coordinator=coordinator)
+    # The panel's registry id is carried forward, not recomputed: every sub-device
+    # links to it with `via_device_id`, and registration is the only place it is known.
+    assert isinstance(entry.runtime_data, SpanPanelRuntimeData)
+    assert entry.runtime_data.coordinator is coordinator
+    assert entry.runtime_data.panel_device_id == "panel-device-id"
+    # The control lock is one object per entry, shared with the gate, so it is
+    # compared by identity elsewhere and never by value.
+    assert entry.runtime_data.control_lock.armed is False
     assert hass.data[DOMAIN]["websocket_registered"] is True
     mock_ws.assert_called_once_with(hass)
     mock_client_cls.assert_called_once()
@@ -96,6 +106,82 @@ async def test_async_setup_entry_v2_success_sets_runtime_data_and_title(
     mock_ensure_device.assert_awaited_once_with(hass, entry, snapshot, "SPAN Panel")
     mock_forward.assert_awaited_once()
     mock_update_entry.assert_called_once_with(entry, title="SPAN Panel")
+
+
+async def test_the_panel_client_is_given_home_assistants_shared_http_client(
+    hass: HomeAssistant,
+) -> None:
+    """Not a client of its own, and not a copy: the one instance HA hands out.
+
+    Without this the library builds a throwaway client per schema read -- once at
+    connect, and once per retry while a panel finishes rebooting after a firmware
+    upgrade. `quality_scale.yaml` declares `inject-websession: done`, and that was
+    true of the config flow and of nothing that ran afterwards.
+
+    Asserted by identity rather than by type. A test that only checked something
+    was passed would pass just as well for a fresh client built here, which is
+    the thing being removed -- HA owns this one and closes it at shutdown.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch(
+            "custom_components.span_panel.SpanMqttClient", return_value=client
+        ) as mock_client_cls,
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert mock_client_cls.call_args.kwargs["httpx_client"] is get_async_client(hass)
+
+
+async def test_a_panel_that_is_not_ready_yet_retries_rather_than_dying(
+    hass: HomeAssistant,
+) -> None:
+    """A rebooting panel answers rather than refusing, and that is not a broken install.
+
+    5xx from its front end while the application behind it starts, or a 200 with
+    nothing usable in it, both arrive as `SpanPanelServerError`. Uncaught they
+    produced SETUP_ERROR with a traceback and no automatic retry — a human needed,
+    for a condition that clears itself in minutes.
+
+    The two conditions correlate more than they look: one power event takes out
+    the house's electrical panel and the Home Assistant host watching it, and they
+    race each other back up. `ConfigEntryNotReady` is what makes the race
+    survivable.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock(
+        side_effect=SpanPanelServerError("Panel not ready: HTTP 502", 502)
+    )
+    client.close = AsyncMock()
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        pytest.raises(ConfigEntryNotReady),
+    ):
+        await async_setup_entry(hass, entry)
+
+    client.close.assert_awaited_once()
 
 
 async def test_async_setup_entry_v2_missing_mqtt_credentials_raises_auth_failed(
@@ -284,3 +370,172 @@ async def test_async_setup_entry_shutdowns_coordinator_on_forward_failure(
         await async_setup_entry(hass, entry)
 
     coordinator.async_shutdown.assert_awaited_once()
+
+
+async def test_setup_syncs_schema_repairs_after_the_platforms(
+    hass: HomeAssistant,
+) -> None:
+    """Repairs must be reconciled after the platforms, never before.
+
+    A schema Repair names the entities an unresolved field took down, and those
+    entities record themselves only once their platform has added them. Schema
+    validation itself runs on the first refresh, which setup awaits well before
+    forwarding the platforms — reconciling there would report every dead field
+    as affecting zero entities.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = snapshot
+
+    order: list[str] = []
+    coordinator.async_sync_schema_repairs = MagicMock(
+        side_effect=lambda: order.append("sync")
+    )
+
+    async def _forward(*_args, **_kwargs) -> None:
+        order.append("forward")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator",
+            return_value=coordinator,
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", AsyncMock(side_effect=_forward)
+        ),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert order == ["forward", "sync"]
+
+
+async def test_setup_announces_additions_after_the_platforms(
+    hass: HomeAssistant,
+) -> None:
+    """The announcement has to run after the forward, and that is the whole ordering.
+
+    A newly added entity is only in the registry once its platform has added it,
+    so announcing before the forward would announce nothing, every time. The old
+    mechanism also needed a *probe* before the forward, because it diffed the
+    registry across it; the announcement record replaced that, which is what makes
+    the answer survive a restart landing between the two.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    snapshot = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = snapshot
+
+    registry = er.async_get(hass)
+    registry.async_get_or_create("sensor", DOMAIN, "already-there", config_entry=entry)
+
+    order: list[str] = []
+    coordinator.async_sync_schema_repairs = MagicMock(side_effect=lambda: order.append("sync"))
+
+    async def _forward(*_args, **_kwargs) -> None:
+        order.append("forward")
+        registry.async_get_or_create(
+            "sensor",
+            DOMAIN,
+            "added-by-the-forward",
+            config_entry=entry,
+            disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+        )
+
+    async def _announce(_hass, _entry) -> None:
+        order.append("announce")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator",
+            return_value=coordinator,
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(
+            hass.config_entries, "async_forward_entry_setups", AsyncMock(side_effect=_forward)
+        ),
+        patch.object(hass.config_entries, "async_update_entry"),
+        patch(
+            "custom_components.span_panel.async_announce_new_entities",
+            side_effect=_announce,
+        ),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert order == ["forward", "sync", "announce"]
+
+
+async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forwarded(
+    hass: HomeAssistant,
+) -> None:
+    """The gate consults the lock long before the switch exists to restore it.
+
+    `set_control_interceptor` happens above the first refresh; the platform
+    forward is the last thing setup does. A lock built disarmed would leave
+    that whole window -- a first refresh, a streaming start, a device
+    registration -- with the feature nominally on and nothing refusing.
+
+    Asserted here rather than through the entity because the entity is exactly
+    what has not been created yet at the moment this matters.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, options={CONTROL_LOCK_TIMEOUT: 0})
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert entry.runtime_data.control_lock.armed is True
+def test_runtime_data_defaults_its_lock_to_the_default_policys_answer() -> None:
+    """The dataclass default may not contradict the policy it stands in for.
+
+    `control_lock` is defaulted rather than required, so an entry built without
+    one gets whatever this class decides -- and a bare `ControlLock()` would be
+    disarmed, a promise about a feature the class has no way to check. Deriving
+    it from `ControlPolicy.default()` is what keeps it honest, and this pins the
+    two together so a change to the default policy cannot silently unlock the
+    entries that never named a lock.
+    """
+    runtime_data = SpanPanelRuntimeData(coordinator=MagicMock(), panel_device_id="panel-device-id")
+
+    assert runtime_data.control_lock.armed == ControlPolicy.default().lock_enabled
