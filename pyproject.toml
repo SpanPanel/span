@@ -22,16 +22,16 @@ dev = [
     "homeassistant-stubs==2026.8.0",
     "types-requests",
     "types-PyYAML",
-    "mypy==1.20.2",
-    "pyright==1.1.409",
-    "ruff==0.15.12",
+    "mypy==2.1.0",
+    "pyright==1.1.410",
+    "ruff==0.15.18",
     "bandit[toml]==1.9.4",
-    "prek>=0.3.11",
+    "prek>=0.4.5",
     "voluptuous-stubs",
     "python-direnv",
     "prettier",
     "radon==6.0.1",
-    "pylint==4.0.5",
+    "pylint==4.0.6",
     # Pinned, not floored: each release pins one exact Home Assistant, so this
     # and the `homeassistant` pin above are a single choice rather than two.
     # 0.13.354 is the release that pins 2026.8.0, the version this integration
