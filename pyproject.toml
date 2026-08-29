@@ -1,6 +1,6 @@
 [project]
 name = "span"
-version = "2.1.0"
+version = "2.1.0b23"
 description = "Span Panel Custom Integration for Home Assistant"
 authors = [{name = "SpanPanel"}]
 license = {text = "MIT"}

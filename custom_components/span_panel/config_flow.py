@@ -363,6 +363,75 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         )
         return None
 
+    async def _async_hassio_host_update(self, host: str, port: int, serial: str) -> dict[str, Any]:
+        """Return the host keys a Supervisor discovery should carry, usually none.
+
+        An add-on restart republishes the container hostname it answers on,
+        which is not a claim that the panel has moved and is not the address the
+        user configured. Overwriting the stored host with it broke a working
+        entry seconds after creation: the panel's certificate names the address
+        the user typed and does not name the add-on's hostname, so every
+        connection afterwards failed verification against the entry's own pin.
+
+        The question that decides it is the same one the entry itself asks on
+        every setup -- does this address still reach this panel -- so it is
+        asked directly rather than by proxy: probe the configured host on the
+        *newly discovered* port, because a reallocated port on the same machine
+        is exactly the case the ports being unguarded exists for. A v2 answer
+        carrying this serial means the entry is fine where it is and is left
+        alone.
+
+        Deliberately not `_async_host_update`'s pinned-address check. That one
+        decides whether an unauthenticated claim may move an entry, and answers
+        "no" by refusing the move outright; this one decides whether there is
+        anything to move at all, and its evidence is the panel the entry already
+        has rather than the candidate. An add-on that has genuinely taken the
+        panel's place still moves the entry, which is the Supervisor route's
+        documented trade.
+
+        `CONF_EBUS_BROKER_HOST` moves with `CONF_HOST` or not at all. The two
+        are the same address for the same panel -- `async_setup_entry` dials the
+        configured host and only logs the broker's own advertisement -- and
+        moving one without the other left the entry describing two different
+        machines.
+        """
+        entry = self.hass.config_entries.async_entry_for_domain_unique_id(self.handler, serial)
+        if entry is None:
+            return {CONF_HOST: host}
+
+        configured = str(entry.data.get(CONF_HOST, ""))
+        if not configured or configured == host:
+            return {CONF_HOST: host}
+
+        detection = await detect_api_version(
+            configured, port=port, httpx_client=get_async_client(self.hass, verify_ssl=False)
+        )
+        reached = (
+            detection.api_version == "v2"
+            and detection.status_info is not None
+            and detection.status_info.serial_number == serial
+        )
+        if reached:
+            _LOGGER.debug(
+                "Supervisor discovery published host %s, but panel %s still answers at its "
+                "configured host %s on port %s. Taking the ports and leaving the host alone",
+                host,
+                serial,
+                configured,
+                port,
+            )
+            return {}
+
+        _LOGGER.info(
+            "Moving the entry for panel %s from %s to %s: the configured host no longer "
+            "answers for this panel on port %s",
+            serial,
+            configured,
+            host,
+            port,
+        )
+        return {CONF_HOST: host, CONF_EBUS_BROKER_HOST: host}
+
     async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> ConfigFlowResult:
         """Handle a flow initiated by zeroconf discovery."""
         # Do not probe device if the host is already configured
@@ -434,18 +503,22 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         Deduplicate by panel serial, not by host, so each panel gets its own
         config entry.
 
-        **This route is deliberately not held to the pinned-address check** that
+        **The ports are deliberately not held to the pinned-address check** that
         `async_step_zeroconf` and the by-hand re-add both go through, in
         `_async_host_update`. A Supervisor discovery arrives over the
         authenticated Supervisor API from an add-on the user installed, and
-        add-ons legitimately reallocate their own ports, so applying that guard
-        would freeze the entry against its own add-on -- which is why the ports
-        go straight into the update below. The cost is stated rather than
-        hidden, here and in README's Security section: an add-on that already
-        holds Supervisor privileges can move a pinned entry. If the trade is
-        ever revisited, the guard is the same helper the other two routes call.
-        See developer.md, "The Supervisor discovery path is deliberately
-        unguarded".
+        add-ons legitimately reallocate their own ports across restarts, so
+        holding the ports to the stored values would freeze the entry against
+        its own add-on. They go straight into the update below.
+
+        The *host* is a different question and is not carried by that argument.
+        An add-on reallocating a port has not moved, and the address the user
+        configured is the one their panel's certificate names; overwriting it
+        with the add-on's own container hostname broke a working entry seconds
+        after it was created, because that hostname is not a name the panel
+        serves. So the host moves only when the configured one has stopped
+        answering for this panel -- see `_async_hassio_host_update`. See
+        developer.md, "The Supervisor discovery path is unguarded on ports".
         """
         config = discovery_info.config
         host = str(config.get("host", ""))
@@ -483,9 +556,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         # restarts: an entry left pointing at last run's ports is an entry that
         # cannot reach its panel.
         await self.async_set_unique_id(panel_serial)
-        updates: dict[str, Any] = {CONF_HOST: host, CONF_HTTP_PORT: port}
+        updates: dict[str, Any] = {CONF_HTTP_PORT: port}
         if self._https_port_known:
             updates[CONF_HTTPS_PORT] = self._https_port
+        updates.update(await self._async_hassio_host_update(host, port, panel_serial))
         self._abort_if_unique_id_configured(updates=updates)
 
         # Set up flow — same path as v2 zeroconf discovery

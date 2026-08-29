@@ -823,15 +823,23 @@ advertised by SPAN panel …" with the fingerprint.
 **A registered domain is checked once the panel reports the new certificate**, not when registration is requested. The panel regenerates its certificate around
 the FQDN asynchronously, so the flow polls for the name to appear in the SAN rather than assuming the call took effect.
 
-## The Supervisor discovery path is deliberately unguarded
+## The Supervisor discovery path is unguarded on ports
 
 A pinned entry only follows a discovered host when that host serves a certificate the entry's anchor validates — `async_step_zeroconf` and the by-hand re-add
 both go through that check, because the serial they match on comes from an unauthenticated endpoint anything on the LAN can answer.
 
-`async_step_hassio` deliberately does not. A Supervisor discovery arrives over the authenticated Supervisor API from an add-on the user installed, and add-ons
-legitimately reallocate their own ports, so applying the stored-address guard would freeze the entry against its own add-on. The cost is stated rather than
-hidden: an add-on that already holds Supervisor privileges can move a pinned entry. If that trade is ever revisited, the guard is the same helper the other two
-routes call.
+`async_step_hassio` deliberately does not hold its **ports** to that check. A Supervisor discovery arrives over the authenticated Supervisor API from an add-on
+the user installed, and add-ons legitimately reallocate their own ports across restarts, so holding the ports to the stored values would freeze the entry
+against its own add-on.
+
+**The host is not covered by that argument, and is not taken on the add-on's word.** An add-on republishing its container hostname has not moved the panel, and
+that hostname is generally not a name the panel's certificate carries — writing it over a working host broke an entry seconds after it was created. So
+`_async_hassio_host_update` probes the _configured_ host on the _newly discovered_ port, which is precisely the reallocated-port case, and keeps the stored host
+whenever a v2 answer there carries this panel's serial. Only a configured host that has stopped answering for this panel is replaced, and then `CONF_HOST` and
+`CONF_EBUS_BROKER_HOST` move together — moving one without the other left the entry naming two different machines.
+
+That is a narrower check than the other two routes make, and the residual cost is stated rather than hidden: an add-on that already holds Supervisor privileges
+can still move an entry whose configured host has genuinely gone away. If that trade is ever revisited, the guard is the same helper the other two routes call.
 
 ## Linting and Type Checking
 

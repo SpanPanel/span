@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import ipaddress
 import logging
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from homeassistant import config_entries
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.hassio import HassioServiceInfo
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
 from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
@@ -190,9 +191,7 @@ async def test_user_flow_detects_v2_and_shows_auth_choice(hass: HomeAssistant) -
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         assert result2["type"] == FlowResultType.MENU
         assert result2["step_id"] == "choose_v2_auth"
@@ -282,9 +281,7 @@ async def test_passphrase_auth_success(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
         assert result2["step_id"] == "choose_v2_auth"
 
         # Select passphrase auth from the menu
@@ -324,9 +321,7 @@ async def test_passphrase_auth_bad_passphrase(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         # Select passphrase auth from the menu
         result2b = await hass.config_entries.flow.async_configure(
@@ -365,9 +360,7 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         # Select passphrase auth from the menu
         result2b = await hass.config_entries.flow.async_configure(
@@ -411,9 +404,7 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
         )
 
         # Step 1: submit host
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         # Step 2: choose auth method (passphrase)
         result2b = await hass.config_entries.flow.async_configure(
@@ -456,9 +447,7 @@ async def _reach_the_ca_step(hass: HomeAssistant):
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
-    return await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_HOST: MOCK_HOST}
-    )
+    return await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_HOST: MOCK_HOST})
 
 
 @pytest.mark.asyncio
@@ -584,9 +573,7 @@ async def test_a_recovered_panel_can_be_retried_into_a_successful_pin(
         patch("custom_components.span_panel.config_flow.validate_host", return_value=True),
         patch(
             "custom_components.span_panel.config_flow.async_fetch_panel_ca",
-            new=AsyncMock(
-                side_effect=[SpanPanelConnectionError("unreachable"), FAKE_CA_PEM]
-            ),
+            new=AsyncMock(side_effect=[SpanPanelConnectionError("unreachable"), FAKE_CA_PEM]),
         ),
     ):
         failed = await _reach_the_ca_step(hass)
@@ -1408,9 +1395,7 @@ async def test_user_flow_recovery_after_bad_host(hass: HomeAssistant) -> None:
         assert result2["errors"] == {"base": "cannot_connect"}
 
         # Second attempt succeeds
-        result3 = await _submit_host_and_pin(
-            hass, result2["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result3 = await _submit_host_and_pin(hass, result2["flow_id"], {CONF_HOST: MOCK_HOST})
         assert result3["type"] == FlowResultType.MENU
         assert result3["step_id"] == "choose_v2_auth"
 
@@ -1435,9 +1420,7 @@ async def test_passphrase_auth_empty_passphrase(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -1475,9 +1458,7 @@ async def test_passphrase_auth_recovery_after_error(hass: HomeAssistant) -> None
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -1524,9 +1505,7 @@ async def test_proximity_auth_success(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
         assert result2["step_id"] == "choose_v2_auth"
 
         result2b = await hass.config_entries.flow.async_configure(
@@ -1562,9 +1541,7 @@ async def test_proximity_not_proven_returns_to_menu(hass: HomeAssistant) -> None
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -1599,9 +1576,7 @@ async def test_proximity_switch_to_passphrase(hass: HomeAssistant) -> None:
             DOMAIN, context={"source": config_entries.SOURCE_USER}
         )
 
-        result2 = await _submit_host_and_pin(
-            hass, result["flow_id"], {CONF_HOST: MOCK_HOST}
-        )
+        result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
@@ -2228,28 +2203,53 @@ async def test_hassio_discovery_routes_to_confirm(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_hassio_dedup_by_serial(hass: HomeAssistant) -> None:
-    """Hassio discovery of an already-configured serial should abort and update host/port."""
-    existing = MockConfigEntry(
+def _hassio_configured_entry(hass: HomeAssistant, **data: object) -> MockConfigEntry:
+    """Add an entry for the simulator's serial, configured at a host of its own."""
+    entry = MockConfigEntry(
         version=3,
         minor_version=1,
         domain=DOMAIN,
         title="Span Panel",
         data={
             CONF_HOST: "192.168.1.40",
+            CONF_EBUS_BROKER_HOST: "192.168.1.40",
             CONF_ACCESS_TOKEN: "existing-token",
             CONF_API_VERSION: "v2",
             CONF_HTTP_PORT: 80,
+            **data,
         },
         source=config_entries.SOURCE_USER,
         options={},
         unique_id="SPAN-SIM-001",
     )
-    existing.add_to_hass(hass)
+    entry.add_to_hass(hass)
+    return entry
+
+
+def _detection_by_host(*answering: str) -> Callable[..., DetectionResult]:
+    """Answer as the simulator for the named hosts and as nothing for the rest.
+
+    Keyed by host because that is the whole question here: the discovered host
+    and the configured one are two different addresses, and which of them
+    answers is what decides whether the entry moves.
+    """
+
+    def detect(host: str, **_kwargs: object) -> DetectionResult:
+        if host in answering:
+            return MOCK_V2_DETECTION_SIM
+        return DetectionResult(api_version="v1", probe_failed=True)
+
+    return detect
+
+
+@pytest.mark.asyncio
+async def test_hassio_dedup_by_serial(hass: HomeAssistant) -> None:
+    """A discovery of an already-configured serial aborts rather than adding a second entry."""
+    existing = _hassio_configured_entry(hass)
 
     with patch(
         "custom_components.span_panel.config_flow.detect_api_version",
-        return_value=MOCK_V2_DETECTION_SIM,
+        side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"),
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
@@ -2259,9 +2259,109 @@ async def test_hassio_dedup_by_serial(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
-    # Host and port should be updated to the new values
-    assert existing.data[CONF_HOST] == "192.168.1.50"
     assert existing.data[CONF_HTTP_PORT] == 9090
+
+
+@pytest.mark.asyncio
+async def test_hassio_keeps_a_configured_host_that_still_answers(hass: HomeAssistant) -> None:
+    """The defect: an add-on restart overwrote a working host with its own hostname.
+
+    The add-on republishes the container hostname it answers on, which is not a
+    claim that the panel moved and is generally not a name the panel's
+    certificate carries. Writing it over the configured host broke the entry
+    seconds after it was created — every connection afterwards failed
+    verification against the entry's own pin.
+    """
+    existing = _hassio_configured_entry(hass)
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    assert result["reason"] == "already_configured"
+    assert existing.data[CONF_HOST] == "192.168.1.40"
+    assert existing.data[CONF_EBUS_BROKER_HOST] == "192.168.1.40"
+    # The ports are the add-on's own and are taken as published either way.
+    assert existing.data[CONF_HTTP_PORT] == 9090
+
+
+@pytest.mark.asyncio
+async def test_hassio_probes_the_configured_host_on_the_newly_published_port(
+    hass: HomeAssistant,
+) -> None:
+    """A reallocated port on the same machine is the case the ports are unguarded for.
+
+    Probing the configured host on its *stored* port would report it dead every
+    time the add-on moved, which is the move this is meant to prevent.
+    """
+    _hassio_configured_entry(hass)
+    probe = AsyncMock(side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"))
+
+    with patch("custom_components.span_panel.config_flow.detect_api_version", probe):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    probed = [(call.args[0], call.kwargs["port"]) for call in probe.call_args_list]
+    assert ("192.168.1.40", 9090) in probed
+
+
+@pytest.mark.asyncio
+async def test_hassio_moves_host_and_broker_host_together_when_the_old_one_is_dead(
+    hass: HomeAssistant,
+) -> None:
+    """A configured host that has stopped answering is a panel that really moved.
+
+    Both keys move or neither does: they are the same address for the same
+    panel, and moving one without the other left the entry naming two different
+    machines.
+    """
+    existing = _hassio_configured_entry(hass)
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        side_effect=_detection_by_host("192.168.1.50"),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    assert result["reason"] == "already_configured"
+    assert existing.data[CONF_HOST] == "192.168.1.50"
+    assert existing.data[CONF_EBUS_BROKER_HOST] == "192.168.1.50"
+    assert existing.data[CONF_HTTP_PORT] == 9090
+
+
+@pytest.mark.asyncio
+async def test_hassio_takes_both_ports_whichever_way_the_host_goes(
+    hass: HomeAssistant,
+) -> None:
+    """The published ports are the add-on's own and are never held to stored values."""
+    kept = _hassio_configured_entry(hass, **{CONF_HTTPS_PORT: 443})
+
+    with patch(
+        "custom_components.span_panel.config_flow.detect_api_version",
+        side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info({**MOCK_HASSIO_CONFIG, "https_port": 10090}),
+        )
+
+    assert kept.data[CONF_HOST] == "192.168.1.40"
+    assert kept.data[CONF_HTTP_PORT] == 9090
+    assert kept.data[CONF_HTTPS_PORT] == 10090
 
 
 @pytest.mark.usefixtures("socket_enabled")
@@ -2290,9 +2390,7 @@ async def test_hassio_end_to_end_entry_creation(hass: HomeAssistant) -> None:
         # Step 2: confirm -> HTTPS port (this panel moved its HTTP port) -> CA
         port_step = await hass.config_entries.flow.async_configure(result["flow_id"], {})
         assert port_step["step_id"] == "panel_https_port"
-        result2 = await _submit_host_and_pin(
-            hass, port_step["flow_id"], {CONF_HTTPS_PORT: 9443}
-        )
+        result2 = await _submit_host_and_pin(hass, port_step["flow_id"], {CONF_HTTPS_PORT: 9443})
         assert result2["type"] == FlowResultType.MENU
         assert result2["step_id"] == "choose_v2_auth"
 
@@ -2599,9 +2697,7 @@ async def test_zeroconf_invalid_http_port_defaults_to_80(hass: HomeAssistant) ->
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "confirm_discovery"
-    mock_detect.assert_awaited_once_with(
-        "192.168.1.200", port=80, httpx_client=fake_client
-    )
+    mock_detect.assert_awaited_once_with("192.168.1.200", port=80, httpx_client=fake_client)
 
 
 @pytest.mark.usefixtures("socket_enabled")
@@ -2801,9 +2897,7 @@ async def test_fqdn_entry_creation_sets_registered_fqdn_and_unique_title(
         )
         assert port_step["step_id"] == "panel_https_port"
         # Left at the default, so it is not written to the entry.
-        result2 = await _submit_host_and_pin(
-            hass, port_step["flow_id"], {CONF_HTTPS_PORT: 443}
-        )
+        result2 = await _submit_host_and_pin(hass, port_step["flow_id"], {CONF_HTTPS_PORT: 443})
         result2b = await hass.config_entries.flow.async_configure(
             result2["flow_id"],
             {"next_step_id": "auth_passphrase"},

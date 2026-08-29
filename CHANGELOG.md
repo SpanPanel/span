@@ -105,6 +105,8 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
 - **A panel that has moved to another address now says so in Repairs**, naming the addresses its certificate does carry so you can point the entry at one with
   Reconfigure, instead of retrying silently with every entity unavailable and one line a minute in the log.
+- **An add-on restart no longer overwrites the address you configured** — a panel announced by an add-on keeps the host you gave it for as long as that host
+  still answers, and only the add-on's own ports are taken as published.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
   untouched.
 - **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
