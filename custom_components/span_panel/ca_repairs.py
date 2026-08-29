@@ -25,6 +25,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
+from .leaf_repairs import async_clear_leaf_name_mismatch
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,15 @@ def async_raise_ca_changed(
     `is_persistent` because the transport this describes is already dead. A
     non-persistent issue reloads as a tombstone, and this one has no live state
     to re-assert it from — the client that would have noticed is gone.
+
+    Supersedes a standing name mismatch on the same entry, and does it here
+    rather than at each call site so no future one can forget. The two findings
+    come out of the same failed handshake and its diagnosis, so both can stand
+    against one panel; only this one carries a decision, and telling somebody to
+    re-point their configuration at an address served by a certificate this
+    integration has just refused to trust is the wrong instruction.
     """
+    async_clear_leaf_name_mismatch(hass, entry)
     _LOGGER.error(
         "SPAN panel %s is advertising CA %s where %s was pinned. Not reconnecting: a "
         "rotated CA and an intercepted connection look identical from here. Confirm the "

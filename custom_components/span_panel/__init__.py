@@ -21,7 +21,12 @@ from homeassistant.helpers import (
 )
 from homeassistant.helpers.httpx_client import get_async_client
 from homeassistant.helpers.typing import ConfigType
-from span_panel_api import SpanMqttClient, SpanPanelSnapshot, ca_fingerprint
+from span_panel_api import (
+    LeafNameMismatch,
+    SpanMqttClient,
+    SpanPanelSnapshot,
+    ca_fingerprint,
+)
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
@@ -67,6 +72,7 @@ from .frontend import (
     async_save_panel_settings as async_save_panel_settings,
 )
 from .graph_horizon import GraphHorizonManager
+from .leaf_repairs import async_clear_leaf_name_mismatch, async_raise_leaf_name_mismatch
 from .migrations import CURRENT_CONFIG_VERSION, async_migrate_entry  # noqa: F401
 from .notices import async_forget, async_restore
 from .options import SNAPSHOT_UPDATE_INTERVAL
@@ -350,6 +356,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 # the one every other integration already shares.
                 httpx_client=get_async_client(hass),
             )
+
+            # Before `connect()`, unlike every other subscription here, because
+            # the library runs the diagnosis this reports *inside* the first
+            # connect. Registered afterwards it would see nothing on the path it
+            # exists for: a mismatch makes `connect()` raise
+            # `SpanPanelConnectionError`, setup raises `ConfigEntryNotReady`, and
+            # the retry builds a new client -- so every attempt would fire the
+            # signal into a client with no subscriber and the user would keep
+            # getting the log line and nothing else.
+            @callback
+            def _on_leaf_name_mismatch(mismatch: LeafNameMismatch) -> None:
+                async_raise_leaf_name_mismatch(hass, entry, mismatch)
+
+            entry.async_on_unload(client.register_leaf_mismatch_callback(_on_leaf_name_mismatch))
+
             try:
                 await client.connect()
             except SpanPanelCAChangedError as err:
@@ -384,8 +405,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 raise ConfigEntryNotReady(f"SPAN panel is not ready yet: {err}") from err
 
             # The connection got as far as a handshake under the current pin, so
-            # any standing Repair describes a state that no longer holds.
+            # any standing Repair describes a state that no longer holds. That
+            # covers the name mismatch too: the handshake that just succeeded is
+            # the one whose failure the mismatch explains, and it is the same
+            # event the library re-arms its own signal on.
             async_clear_ca_changed(hass, entry)
+            async_clear_leaf_name_mismatch(hass, entry)
 
             # The other half of the same condition: the reconnect loop runs
             # fire-and-forget, so a CA that changes mid-session cannot surface as

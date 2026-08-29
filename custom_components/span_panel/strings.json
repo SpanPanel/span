@@ -900,6 +900,14 @@
           "ca_leaf_mismatch": "The certificate this panel serves is not signed by the authority it published, so that authority has not been offered for you to accept and nothing has been changed. Check that the HTTPS port is correct and that nothing is intercepting the connection, then try again."
         }
       }
+    },
+    "panel_leaf_name_mismatch": {
+      "title": "SPAN Panel is not at the configured address",
+      "description": "{panel} is configured as **{host}**, but the certificate it serves names only: **{leaf_names}**. The panel has probably moved, or the address was stored under a name the panel does not know itself by.\n\nUse *Reconfigure* on the SPAN Panel entry to point it at one of the names above. The integration keeps retrying meanwhile and will recover on its own if the panel returns to {host}."
+    },
+    "panel_leaf_name_mismatch_no_names": {
+      "title": "SPAN Panel is not at the configured address",
+      "description": "{panel} is configured as **{host}**, but the certificate it serves names no address at all, so there is no address to point the entry at. That is a fault in the panel's certificate rather than in the address you configured, and it usually clears after the panel regenerates it — a restart of the panel is the usual way.\n\nIf it persists, use *Reconfigure* on the SPAN Panel entry to re-establish the connection. The integration keeps retrying meanwhile and will recover on its own if the panel starts naming {host} again."
     }
   }
 }

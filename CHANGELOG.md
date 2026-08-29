@@ -103,6 +103,8 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   added each circuit's whole lifetime counter to its offset.
 - **A panel this integration can no longer reach makes its entities unavailable instead of reporting 0 W** — a certificate authority that changes mid-session
   used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
+- **A panel that has moved to another address now says so in Repairs**, naming the addresses its certificate does carry so you can point the entry at one with
+  Reconfigure, instead of retrying silently with every entity unavailable and one line a minute in the log.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
   untouched.
 - **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
