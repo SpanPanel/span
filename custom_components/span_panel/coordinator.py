@@ -37,6 +37,7 @@ from .helpers import (
     detect_capabilities,
 )
 from .id_builder import build_circuit_unique_id
+from .leaf_repairs import async_clear_leaf_name_mismatch
 from .notices import async_raise, read_translations
 from .schema_repairs import async_sync_schema_issues
 from .schema_validation import SchemaFindings, evaluate_field_metadata
@@ -459,10 +460,19 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         Listener fan-out is guarded by a real state change so a misbehaving
         or future-version library that re-emits the same edge does not
         trigger spurious entity re-renders.
+
+        A connect also drops any standing name-mismatch Repair, and this edge is
+        the right place for it rather than a snapshot arriving: it is the exact
+        event the library re-arms its own once-per-outage signal on, so the
+        notice the user sees and the library's idea of whether it has reported
+        anything cannot drift apart. Raising is deliberately not done here --
+        `async_setup_entry` holds the one subscription that raises, so a mismatch
+        is reported once however many things are listening.
         """
         was_offline = self._panel_offline
         was_dead = self._transport_dead
         if connected:
+            async_clear_leaf_name_mismatch(self.hass, self.config_entry)
             self._mark_panel_online()
             # The one thing that disproves a dead transport: it connected. Not
             # folded into `_mark_panel_online`, which a successful snapshot also

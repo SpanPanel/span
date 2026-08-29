@@ -14,6 +14,7 @@
     },
     "error": {
       "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo.",
+      "ca_name_mismatch": "El panel respondió en esta dirección pero su certificado no la nombra, por lo que cualquier conexión posterior la rechazaría. Reconfigure con un nombre de dominio completo, lo que pide al panel que regenere su certificado para incluirlo, o con el nombre .local del panel, que su certificado ya cubre.",
       "ca_unavailable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible y está encendido, y vuelva a intentarlo. La configuración no puede continuar sin ella, porque de lo contrario su contraseña se enviaría en claro.",
       "ca_unusable": "La autoridad de certificación almacenada para este panel no se puede leer, por lo que este cambio tendría que enviarse sin cifrar. No se ha cambiado nada. Vuelva a autenticar el panel para almacenar una autoridad utilizable y vuelva a intentarlo.",
       "cannot_connect": "No se logró establecer conexión con Span Panel",
@@ -899,6 +900,14 @@
           "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado, por lo que esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo."
         }
       }
+    },
+    "panel_leaf_name_mismatch": {
+      "title": "El SPAN Panel no está en la dirección configurada",
+      "description": "{panel} está configurado como **{host}**, pero el certificado que sirve solo nombra: **{leaf_names}**. Es probable que el panel se haya movido, o que la dirección se guardara con un nombre por el que el panel no se conoce a sí mismo.\n\nUse *Reconfigurar* en la entrada del SPAN Panel para apuntarla a uno de los nombres anteriores. Mientras tanto, la integración sigue reintentando y se recuperará por sí sola si el panel vuelve a {host}."
+    },
+    "panel_leaf_name_mismatch_no_names": {
+      "title": "El SPAN Panel no está en la dirección configurada",
+      "description": "{panel} está configurado como **{host}**, pero el certificado que sirve no nombra ninguna dirección, por lo que no hay ninguna dirección a la que apuntar la entrada. Se trata de un fallo del certificado del panel y no de la dirección que usted configuró, y suele resolverse cuando el panel lo regenera: lo habitual es reiniciar el panel.\n\nSi persiste, use *Reconfigurar* en la entrada del SPAN Panel para restablecer la conexión. Mientras tanto, la integración sigue reintentando y se recuperará por sí sola si el panel vuelve a nombrar {host}."
     }
   }
 }

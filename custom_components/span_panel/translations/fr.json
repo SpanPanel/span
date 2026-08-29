@@ -14,6 +14,7 @@
     },
     "error": {
       "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez.",
+      "ca_name_mismatch": "Le panneau a répondu à cette adresse mais son certificat ne la nomme pas, de sorte que toute connexion ultérieure la rejetterait. Reconfigurez avec un nom de domaine pleinement qualifié, ce qui demande au panneau de régénérer son certificat pour l'inclure, ou avec le nom .local du panneau, que son certificat couvre déjà.",
       "ca_unavailable": "L'autorité de certification du panneau n'a pas pu être lue. Vérifiez que le panneau est joignable et sous tension, puis réessayez. La configuration ne peut pas continuer sans elle, car votre mot de passe serait sinon envoyé en clair.",
       "ca_unusable": "L'autorité de certification enregistrée pour ce panneau ne peut pas être lue, ce changement devrait donc être envoyé sans chiffrement. Rien n'a été modifié. Réauthentifiez le panneau pour enregistrer une autorité utilisable, puis réessayez.",
       "cannot_connect": "Échec de la connexion au Span Panel",
@@ -899,6 +900,14 @@
           "ca_leaf_mismatch": "Le certificat présenté par ce panneau n'est pas signé par l'autorité qu'il a publiée ; cette autorité ne vous a donc pas été proposée et rien n'a été modifié. Vérifiez que le port HTTPS est correct et que rien n'intercepte la connexion, puis réessayez."
         }
       }
+    },
+    "panel_leaf_name_mismatch": {
+      "title": "Le SPAN Panel n'est pas à l'adresse configurée",
+      "description": "{panel} est configuré comme **{host}**, mais le certificat qu'il présente ne nomme que : **{leaf_names}**. Le panneau a probablement changé d'adresse, ou l'adresse a été enregistrée sous un nom que le panneau ne se connaît pas.\n\nUtilisez *Reconfigurer* sur l'entrée SPAN Panel pour la pointer vers l'un des noms ci-dessus. L'intégration continue de réessayer entre-temps et se rétablira d'elle-même si le panneau revient à {host}."
+    },
+    "panel_leaf_name_mismatch_no_names": {
+      "title": "Le SPAN Panel n'est pas à l'adresse configurée",
+      "description": "{panel} est configuré comme **{host}**, mais le certificat qu'il présente ne nomme aucune adresse ; il n'y a donc aucune adresse vers laquelle pointer l'entrée. C'est un défaut du certificat du panneau et non de l'adresse que vous avez configurée, et cela se résout généralement lorsque le panneau le régénère — un redémarrage du panneau est la manière habituelle.\n\nSi cela persiste, utilisez *Reconfigurer* sur l'entrée SPAN Panel pour rétablir la connexion. L'intégration continue de réessayer entre-temps et se rétablira d'elle-même si le panneau nomme à nouveau {host}."
     }
   }
 }

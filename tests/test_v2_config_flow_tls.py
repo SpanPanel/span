@@ -645,6 +645,13 @@ async def test_reconfigure_refuses_a_name_the_pinned_certificate_does_not_cover(
     The address bootstrap is what lets the probe reach the panel at all; it is
     not permission to store a host the pinned certificate rejects, and nothing
     on this branch will ask the panel to start serving it.
+
+    Refused as a *naming* failure, not a signing one. The panel answered and its
+    certificate chains to the pinned anchor -- nothing else holds a key that
+    anchor signed -- so telling the user it "is not signed by the authority it
+    published" would accuse the network of interception over a name the panel
+    simply has not been told about. The remedies differ too, and only the
+    naming message can name them.
     """
     entry = _pinned_entry(hass, panel)
 
@@ -655,7 +662,7 @@ async def test_reconfigure_refuses_a_name_the_pinned_certificate_does_not_cover(
 
     assert result["type"] == FlowResultType.FORM, result
     assert result["step_id"] == "reconfigure"
-    assert result["errors"] == {"base": "ca_leaf_mismatch"}
+    assert result["errors"] == {"base": "ca_name_mismatch"}
     assert entry.data[CONF_HOST] == PANEL_LOOPBACK
 
 
@@ -832,3 +839,202 @@ async def test_re_adding_a_pinned_panel_by_a_name_it_serves_moves_the_entry(
     assert result["type"] == FlowResultType.ABORT, result
     assert result["reason"] == "already_configured"
     assert entry.data[CONF_HOST] == PANEL_SHORTNAME
+
+
+@pytest.fixture
+def moved_panel(tmp_path: Any) -> Iterator[Panel]:
+    """Serve a leaf naming an address the panel no longer has, as a moved lease does.
+
+    The listener is on loopback, so the flow reaches it while its certificate
+    names 10.0.0.99 and nothing else. That is what a DHCP move looks like from
+    the integration's side, and it is chain-valid throughout -- the panel is
+    still the panel, and still the only holder of a key the pinned anchor
+    signed.
+    """
+    instance = Panel(tmp_path)
+    instance.present([x509.IPAddress(ipaddress.ip_address("10.0.0.99"))])
+    yield instance
+    instance.close()
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_a_moved_panel_can_be_reconfigured_to_an_fqdn(
+    hass: HomeAssistant, moved_panel: Panel
+) -> None:
+    """The case that had no way out before this.
+
+    The panel's certificate names neither the address it now answers on nor the
+    name being moved to, so every probe over the pinned transport failed
+    hostname verification and the flow reported it unreachable. Reconfigure was
+    the documented remedy and refused for the same reason, the mDNS move-guard
+    refused, and reauth offers no host field -- deleting the entry was the only
+    route left.
+
+    Registration is what repairs it: the flow probes over a transport that keeps
+    the pin and drops only the name binding, asks the panel to regenerate its
+    certificate around the FQDN, and stores the name once the panel serves it.
+    """
+    entry = _pinned_entry(hass, moved_panel)
+
+    register = AsyncMock(side_effect=_registration_adds_the_fqdn(moved_panel))
+    with (
+        patch("custom_components.span_panel.config_flow.register_fqdn", new=register),
+        patch("custom_components.span_panel.config_flow.asyncio.sleep", new=AsyncMock()),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_FQDN}
+        )
+        result = await _finish_progress(hass, result)
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT, result
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HOST] == PANEL_FQDN
+    assert entry.data[CONF_REGISTERED_FQDN] == PANEL_FQDN
+    # The anchor is untouched throughout: nothing here is a CA change.
+    assert entry.data[CONF_PANEL_CA_PEM] == moved_panel.ca_pem
+    assert register.await_args.args[2] == PANEL_FQDN
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_a_moved_panel_is_still_refused_at_a_bare_address(
+    hass: HomeAssistant, moved_panel: Panel
+) -> None:
+    """Reaching the panel is not permission to store the address it was reached at.
+
+    Nothing on this branch asks the panel to start naming the address, so the
+    entry would be stored pointing somewhere the coordinator and the broker both
+    reject -- they verify the hostname and cannot be relaxed the way one flow's
+    own probe can.
+    """
+    entry = _pinned_entry(hass, moved_panel)
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: PANEL_LOOPBACK}
+    )
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["errors"] == {"base": "ca_name_mismatch"}
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_an_impostor_is_still_refused_as_a_signing_failure(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """The guarantee the relaxed probe must not weaken.
+
+    Relaxing the name binding leaves the chain, the signature and the expiry
+    verified against the pinned anchor, so a host without a key that anchor
+    signed fails exactly as it did before -- and is reported as what it is,
+    rather than as a naming problem.
+    """
+    entry = _pinned_entry(hass, panel)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_PANEL_CA_PEM: unrelated_ca_pem()}
+    )
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: PANEL_LOOPBACK}
+    )
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["errors"] == {"base": "ca_leaf_mismatch"}
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_an_unreachable_host_is_not_accused_of_interception(
+    hass: HomeAssistant, panel: Panel
+) -> None:
+    """An unplugged cable used to be reported as an unsigned certificate.
+
+    `async_leaf_chains_to_ca` answered False for a timeout and a verification
+    failure alike, so a host that never answered produced "the certificate this
+    panel serves is not signed by the authority it published" -- an accusation
+    about a certificate nothing ever presented.
+    """
+    entry = _pinned_entry(hass, panel)
+
+    # A port on loopback with nothing listening: connection refused, no TLS.
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_HTTPS_PORT: _closed_port()}
+    )
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: PANEL_LOOPBACK}
+    )
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["errors"] == {"base": "cannot_connect"}
+
+
+def _closed_port() -> int:
+    """Return a port nothing is listening on, by binding and immediately closing."""
+    import socket as _socket
+
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+@pytest.mark.usefixtures("socket_enabled", "resolves_to_loopback")
+@pytest.mark.asyncio
+async def test_a_moved_panel_whose_registration_fails_has_nothing_to_continue_to(
+    hass: HomeAssistant, moved_panel: Panel
+) -> None:
+    """"Continue anyway" must not store a name the panel never started serving.
+
+    On every other path there is a verified address to fall back to -- the one
+    the flow reached the panel by. On this one there is not: the certificate
+    names neither the FQDN nor anything reachable, which is why the flow relaxed
+    the name binding for its own probe in the first place, and registration was
+    the single thing that would have fixed that. It failed.
+
+    Falling back therefore has nowhere to fall back to, and continuing would
+    write the unserved name and report success -- stranding every runtime
+    connection on the hostname check, which the coordinator and the broker apply
+    and cannot relax. The entry is left exactly as it was.
+    """
+    entry = _pinned_entry(hass, moved_panel)
+
+    with (
+        # The panel accepts the call and regenerates nothing, so its leaf still
+        # names the address it no longer has.
+        patch("custom_components.span_panel.config_flow.register_fqdn", new=AsyncMock()),
+        patch("custom_components.span_panel.config_flow.asyncio.sleep", new=AsyncMock()),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_HOST: PANEL_FQDN}
+        )
+        result = await _finish_progress(hass, result)
+        assert result["step_id"] == "reconfigure_fqdn_failed", result
+
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "ca_name_mismatch"}
+    # Untouched: the entry still points where it did, and is still pinned.
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK
+    assert CONF_REGISTERED_FQDN not in entry.data
+    assert entry.data[CONF_PANEL_CA_PEM] == moved_panel.ca_pem
+
+    # And the form it lands on is live, not a dead end: submitting it re-enters
+    # the reconfigure step and is judged again, rather than wedging the flow.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: PANEL_LOOPBACK}
+    )
+    assert result["type"] == FlowResultType.FORM, result
+    assert result["step_id"] == "reconfigure"
+    assert result["errors"] == {"base": "ca_name_mismatch"}
+    assert entry.data[CONF_HOST] == PANEL_LOOPBACK

@@ -36,7 +36,7 @@ The integration includes a built-in dashboard accessible from the Home Assistant
 monitoring with configurable alerts, and circuit settings for relays and load shedding. See [Frontend Dashboard](frontend.md) for details. You can optionally
 use the [span-card](https://github.com/SpanPanel/span-card) Lovelace card for visualization and switch control.
 
-The [SPAN Panel Simulator](https://github.com/SpanPanel/simulator) HA App lets you clone your panel's circuit layout for testing, or model an upgrade to
+The [SPAN Panel PanelBench](https://github.com/SpanPanel/panelbench) HA App lets you clone your panel's circuit layout for testing, or model an upgrade to
 evaluate firmware or integration changes in a sandbox before applying them to your real panel.
 
 This integration communicates with the SPAN Panel over your local network using SPAN's official
@@ -46,23 +46,23 @@ real-time state updates without polling.
 
 ## ⚠️ Backup and Upgrade to v2.1.x before your panel's firmware updates, or the integration will stop working (upgrade only from v2.0.8!)
 
-**SPAN firmware `r202633` changes the API in a non-compatible way after the firmware hits** When your panel takes that update, 2.0.8 stops being able to read
-it. The integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go
-blank. It does not fail loudly. It goes quiet.
+**SPAN firmware `r202633` changes the API in a way that is not backward compatible.** When your panel takes that update, 2.0.8 stops being able to read it. The
+integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go blank.
+It does not fail loudly. It goes quiet.
 
 **Nobody outside SPAN knows when your panel will update, and you cannot defer it from Home Assistant.** Panels update on SPAN's timing. There is no schedule to
-plan around, which is why the safe move is to be on 2.1.x already rather than to wait for a signal that is less appealing.
+plan around, which is why the safe move is to be on 2.1.x already rather than to wait for the signal, which is your panel going quiet.
 
 **Upgrading first costs you nothing.** On your current firmware, 2.1.x reads your panel exactly as 2.0.8 does.
 
-The changeover is designed to be seamless.** The integration detects the new format on the wire, reloads itself, and carries on:
+**The changeover is designed to be seamless.** The integration detects the new format on the wire, reloads itself, and carries on:
 
-- no re-pairing, no re-authentication.
+- No re-pairing, no re-authentication.
 - Entity ids, unique ids and long-term statistics survive. Dashboards, automations and history follow.
 - New entities appear because the new firmware genuinely publishes more. Nothing you already had is removed.
 
 Upgrade afterwards instead and you reach the same place — after however long it takes you to notice, and to work out that a firmware update is the reason your
-panel went silent. Worst case should be a reload.
+panel went silent. The worst case is a reload.
 
 Take another backup after the upgrade.
 
@@ -81,7 +81,7 @@ The old format is retired in the same update that introduces the new one — the
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel with firmware `spanos2/r202603/05` or later
-- SPAN Panel integration v1.3.0 or later
+- SPAN Panel integration v2.0.8 specifically, if you are upgrading to 2.1.x
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door
 
 ## Installation
@@ -93,11 +93,11 @@ The old format is retired in the same update that introduces the new one — the
 5. Restart Home Assistant (you will be prompted by a repair notification)
 6. Go to `Settings` > `Devices & Services`
 7. Click `+ Add Integration` and search for "Span"
-8. Enter the IP address of your SPAN Panel
+8. Pick your panel from the discovered list, or enter its IP address or `.local` name (both shown in the mobile app)
 9. The integration detects the panel as v2 and presents an authentication choice:
    - **Enter Panel Passphrase** — type the passphrase found in the SPAN mobile app under On-premise settings
    - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
-10. Choose your entity naming pattern
+10. Choose your entity ID naming pattern (see naming patterns below)
 11. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
 
 ### Upgrade Process
@@ -257,57 +257,6 @@ can island — so **Grid Islandable** reads `Off` and **Grid Forming Entity** re
 
 `DSM Grid State` keeps its entity id and history but is no longer inferred from the battery or the dominant power source; it now reads the islanding state the
 MID actually senses.
-
-### Adopted Devices
-
-The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modelled. Rather than ignoring it, the integration
-gives it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
-
-Everything adopted arrives **disabled and diagnostic**, so nothing reaches a dashboard uninvited, and the new-entity notification names the device so you can
-find it. A property the device accepts writes to becomes a control rather than a reading — a `boolean` becomes a switch, an enumeration becomes a select, a
-number becomes a number entity — and those arrive switched off too.
-
-Two things worth knowing before you build on one:
-
-- **Nothing adopted enters long-term statistics.** No adopted entity carries a `state_class`, because the correct one is not published on the wire and guessing
-  wrong writes corrupt statistics that fixing the panel afterwards does not repair. If you want statistics from an adopted reading, wrap it in a template
-  sensor, a Riemann-sum integration or a utility meter — a deliberate choice on an entity you enabled.
-- **A new property on a device this integration already models is adopted too**, but as a reading on that device's existing card rather than as a device of its
-  own. See [Adopted Vendor Readings](#adopted-vendor-readings) below.
-
-### Adopted Vendor Readings
-
-The other half of vendor extensibility. A publisher can add a property to a device this integration already models — the battery, a charger, the solar inverter,
-a circuit or the panel itself — and until 2.1.x that reading went nowhere: it appeared in the diagnostics download and in no entity list. It now becomes an
-entity on that device's own card. The wire already says which device and node it belongs to, so it has a home; what it does not say is how important it is.
-
-They behave like adopted devices in the ways that matter, and differ in two:
-
-- **They arrive switched off and filed as diagnostics**, so nothing lands on a dashboard uninvited. The new-entity notification names each one, up to five per
-  device; beyond that it gives the device and a count instead, because fifteen new vendor readings at once would otherwise cost you the curated additions in the
-  same message.
-- **They are readings only — never switches, selects or number boxes**, even where the panel says the property accepts writes. These sit beside curated controls
-  that do real work, such as the charge limit that refuses a value above what your charger was commissioned for, and a generic control would sit there with none
-  of that. If a control is worth having, it arrives curated in a release.
-- **They keep the panel's own wording**, so a vendor property on the battery reads `Battery 2 Cell Temperature` rather than something tidied up. Deliberately
-  plainer than a curated entity's name: it is how you tell at a glance which entities this integration designed and which it is passing through.
-- **Nothing adopted enters long-term statistics**, exactly as for adopted devices, and here it buys something extra: with no statistics behind them, a later
-  release can correct one of these entities' units, device class or category with nothing to repair.
-
-**What the delete button does**, since it is not quite what you would expect:
-
-- Delete one while your panel is still publishing that property and it comes back — switched off — at the next reload. There is no setting to suppress it,
-  because leaving it switched off is already that.
-- Delete one after your panel has stopped publishing it and it stays gone, because nothing exists to recreate it from.
-
-So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which. A property your panel stops
-publishing is left in place reading unknown rather than removed: silence on the wire does not distinguish a property that is gone from one that has not arrived
-yet, and deleting your entity on a guess is not something an upgrade should do.
-
-**These entities are permanent in id, not in identity.** If one of these readings is later curated properly, the curated entity is a new entity with its own id
-and its own history — the adopted one is not renamed into it. That is the trade for surfacing a reading the moment it appears rather than waiting for a release
-to model it, and it is why a vendor reading you have come to depend on is worth mentioning in an issue: curation is what turns it into something with a real
-name, a proper category and statistics.
 
 ### Power Sensor Attributes
 
@@ -505,6 +454,54 @@ Applies to Main Meter and Feed Through energy sensors.
 | ---------------------------- | ------ | ----------------------------------------------------------------- |
 | GFE Override: Grid Connected | Button | Tell the panel the grid is up when BESS communication interrupted |
 
+### Adopted Devices
+
+The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modelled. Rather than ignoring it, the integration
+gives it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
+
+Everything adopted arrives **disabled and diagnostic**, so nothing reaches a dashboard uninvited, and the new-entity notification names the device so you can
+find it. A property the device accepts writes to becomes a control rather than a reading — a `boolean` becomes a switch, an enumeration becomes a select, a
+number becomes a number entity — and those arrive switched off too.
+
+Two things worth knowing before you build on one:
+
+- **Nothing adopted enters long-term statistics.** No adopted entity carries a `state_class`, because the correct one is not published on the wire and guessing
+  wrong writes corrupt statistics that fixing the panel afterwards does not repair. If you want statistics from an adopted reading, wrap it in a template
+  sensor, a Riemann-sum integration or a utility meter — a deliberate choice on an entity you enabled.
+- **A new property on a device this integration already models is adopted too**, but as a reading on that device's existing card rather than as a device of its
+  own. See [Adopted Vendor Readings](#adopted-vendor-readings) below.
+
+### Adopted Vendor Readings
+
+The other half of vendor extensibility. A publisher can add a property to a device this integration already models — the battery, a charger, the solar inverter,
+a circuit or the panel itself — and until 2.1.x that reading went nowhere: it appeared in the diagnostics download and in no entity list. It now becomes an
+entity on that device's own card. The wire already says which device and node it belongs to, so it has a home; what it does not say is how important it is.
+
+They behave like adopted devices in the ways that matter, and differ as follows:
+
+- **They arrive switched off and filed as diagnostics**, so nothing lands on a dashboard uninvited. The new-entity notification names each one, up to five per
+  device; beyond that it gives the device and a count instead, because fifteen new vendor readings at once would otherwise cost you the curated additions in the
+  same message.
+- **They are readings only — never switches, selects or number boxes**, even where the panel says the property accepts writes. These sit beside curated controls
+  that do real work, such as the charge limit that refuses a value above what your charger was commissioned for, and a generic control would sit there with none
+  of that. If a control is worth having, it arrives curated in a release.
+- **They keep the panel's own wording**, so a vendor property on the battery reads `Battery 2 Cell Temperature` rather than something tidied up. Deliberately
+  plainer than a curated entity's name: it is how you tell at a glance which entities this integration designed and which it is passing through.
+- **What the delete button does**, since it is not quite what you would expect:
+
+  - Delete one while your panel is still publishing that property and it comes back — switched off — at the next reload. There is no setting to suppress it,
+    because leaving it switched off is already that.
+  - Delete one after your panel has stopped publishing it and it stays gone, because nothing exists to recreate it from.
+
+So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which. A property your panel stops
+publishing is left in place reading unknown rather than removed: silence on the wire does not distinguish a property that is gone from one that has not arrived
+yet, and deleting your entity on a guess is not something an upgrade should do.
+
+**These entities are permanent in id, not in identity.** If one of these readings is later curated properly (delivered as an official part of the integration),
+the curated entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is the trade for surfacing a reading the
+moment it appears rather than waiting for a release to model it, and it is why a vendor reading you have come to depend on is worth raising in an issue:
+curation is what turns it into something with a real name, a proper category and statistics.
+
 ### BESS & Grid Management
 
 This section explains how the SPAN panel manages power sources and load shedding when a Battery Energy Storage System (BESS) is installed, and what the
@@ -569,7 +566,7 @@ even after the grid is restored. Manual confirmation or an external sensor is re
 
 When `bess_connected` returns to on, no action is needed — firmware resumes normal GFE management automatically.
 
-For a detailed discussion of failure scenarios, the MID topology, generator and non-integrated BESS behavior, and `/set` risk analysis, see
+For a detailed discussion of failure scenarios, the MID topology, generator and non-integrated BESS behaviour, and `/set` risk analysis, see
 [BESS & Grid Management Deep Dive](bess-grid-management.md).
 
 ## Configuration Options
@@ -632,17 +629,11 @@ A dip is compensated as soon as it is seen, but not believed straight away. A co
 so a reading that drops and then returns to where it was is a transport artifact rather than a reset, and its offset is taken back. The offset stays provisional
 until a later reading either disproves it (the counter comes back) or corroborates it (the counter climbs from the new, lower base).
 
-**Corroboration is evidence, not a verdict.** A debounced burst can deliver two stale samples with the later one higher, which looks exactly like a counter
-climbing away from a fresh base, so a corroborated dip stays provisional for three further readings; a return to the original baseline inside that window still
-takes the whole offset back. Once the window is spent the offset is final. A second dip arriving inside another's window is judged against its own baseline
-rather than folded into the older one, so each is retracted or kept on its own evidence.
-
 **The persistent notification therefore lists a dip once it settles — when that window closes — and a dip that is disproved produces no notification at all** —
+
 the sensor was compensated the whole time and nothing needs your attention. Reporting on corroboration alone left a notice standing for an event the next
 reading undid, which a persistent notification cannot take back the way the offset can. Seeing no notification after a momentary dip is the feature working, not
 failing.
-
-Both the provisional record and its remaining window survive a restart, so restarting neither loses a retraction nor renews the window it had left.
 
 **Diagnostic attributes** (visible when compensation is active):
 
@@ -663,68 +654,34 @@ and select your preferred precision from the "Display Precision" menu.
 
 ## Security
 
-There are limits to what the integration can enforce. Anything that already holds the eBus MQTT broker password — including another integration running in the
-same Home Assistant process — talks to the panel directly and is not subject to Home Assistant's permission model at all.
+**The integration cannot enforce much on its own.** Anything holding the eBus broker password — including another integration in the same Home Assistant process
+— talks to the panel directly, outside Home Assistant's permission model.
 
-**What pinning the panel's certificate authority does and does not buy you.** The authority is fetched over your local network on a connection that has nothing
-to verify itself against — it is the anchor everything else is checked against. So:
+**What pinning the panel's certificate authority buys.** The authority is fetched over your network on a connection with nothing to verify itself against,
+because it _is_ the anchor everything else is checked against:
 
-- Anyone merely **listening** on your network cannot read your passphrase or the credentials the panel returns for it.
-- A device **actively standing between** Home Assistant and your panel at that first fetch could answer with an authority of its own, sign a certificate with
-  it, and still see them. Pinning cannot detect that on its own.
+- A **listener** cannot read your passphrase or the credentials the panel returns for it.
+- A device **actively in the path at that first fetch** can answer with an authority of its own and read both. Pinning alone cannot detect this.
 
-Comparing the fingerprint against another source is what closes the second case. At first contact there is nothing to compare against: SPAN does not publish the
-value, so the question could only be answered by pressing Submit. The fingerprint is put where it can actually be used instead — diagnostics report it under
-`panel_ca`, it is logged at setup, and another install of this integration on the same panel reports the same value.
+Comparing the fingerprint against another source closes the second case. It is in diagnostics under `panel_ca`, in the setup log, and reported identically by
+another install of this integration on the same panel. After the first pin, any change stops the integration and raises a repair — see Troubleshooting.
 
-After the first pin, nothing can change the authority without stopping and asking you — there is a prior value to compare against. See the
-certificate-authority-changed entry in Troubleshooting.
+| Situation                                           | What happens                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setting up by hostname                              | Verified, never relaxed. A domain joins the certificate's SAN only after you authenticate; everything before that runs against an address the certificate already names.                                                                                                                                                                                       |
+| Panel announces a new address, or you re-add it     | The entry moves only if the candidate serves a certificate its own anchor validates. Otherwise the move is refused and logged at `WARNING`.                                                                                                                                                                                                                    |
+| The panel really has moved                          | Use **Reconfigure**. A host that does not chain is refused, one that does not answer is reported unreachable, and one that chains but is not named is your panel — move it to an **FQDN** (the panel regenerates its certificate around that name) or the panel's **`.local` name** (already covered). A bare new IP the certificate does not name is refused. |
+| A panel announced by an **add-on**                  | The add-on's ports are taken as published, because add-ons reallocate their own. The address you configured is kept while it still answers for that panel, and replaced only when it has stopped answering.                                                                                                                                                    |
+| The entry has no anchor, or a stored one won't load | **Reauthenticate** acquires one before either sign-in method is offered.                                                                                                                                                                                                                                                                                       |
 
-**Re-authenticating an entry that has no anchor acquires one first.** Reauth is a registration, so it carries the passphrase out and the broker password back —
-the same exchange setup performs. An entry that arrived from before pinning, or one whose stored authority will no longer load, goes through the
-certificate-authority step before either sign-in method is offered, and keeps the anchor afterwards instead of falling back to a plaintext fetch on every
-connection.
+**Entries from before pinning** pin at the first startup that reaches the panel, logged at `WARNING` with the fingerprint. Until that succeeds the authority is
+re-fetched over plaintext on every connection and whatever answers is trusted. If the panel is unreachable the integration starts anyway and retries, because
+refusing to start would remove the integration without making the credential any safer.
 
-**Setting a panel up by hostname works, and the hostname is verified.** A panel's certificate names the addresses it already knows itself by; a domain joins
-that list only when the integration asks the panel to regenerate its certificate, which happens after you have authenticated. Everything before that runs
-against the address the certificate already names, hostname verification never relaxed, and the domain is checked once the panel reports the new certificate.
-
-**A pinned entry follows its panel to a new address only when the new address proves itself.** An entry moves when your panel announces itself over mDNS at a
-new address, and when you add the same panel again by hand. Both used to be decided by a serial read from an unauthenticated endpoint, which anything on your
-network can claim. The entry now asks whether the candidate serves a certificate its own anchor validates, on the port the entry uses, and refuses the move —
-logging at `WARNING` — otherwise. If the panel really has moved and its certificate really has changed, use **Reconfigure** on the entry.
-
-A panel that arrives through the **Supervisor** — a Home Assistant add-on — is the one exception to that check, and deliberately so: it announces itself over
-the authenticated Supervisor API and legitimately reallocates its own ports, so holding it to the stored address would freeze the entry. An add-on already
-holding Supervisor privileges can therefore move a pinned entry.
-
-**Panels configured before this release are pinned differently, and are not risk-free until they are.** They are pinned on the first startup that reaches the
-panel, logged at `WARNING` with the fingerprint so you can find the value afterwards. What was fetched is checked against the certificate the panel serves on
-the broker port — the connection the anchor is actually used for — and an authority that signs nothing the panel serves is not stored. Until a pin succeeds, the
-connection to the broker still authenticates with your panel's password while the authority is re-fetched over plaintext HTTP on every connection and whatever
-answers is trusted — the substitution pinning exists to close.
-
-If the panel is unreachable the integration starts anyway and retries on the next startup. That is deliberate. The exposure in the meantime is exactly the one
-the entry already had before this release, and refusing to start would not remove it — it would only remove the integration, leaving the credential no safer
-while guaranteeing an outage. Retrying closes it at the first opportunity instead.
-
-The same is true of an entry whose broker port does not serve a certificate the panel's own authority signs — a proxy terminating TLS with a certificate of its
-own, say. It stays unpinned and logs that warning at every start, and no repair is raised for it.
-
-The reverse arrangement has the opposite cost. Where a proxy terminates only port 443, the panel's own authority still signs the broker's certificate, so the
-entry pins at the reload — and the anchor is then also what every REST call to the panel is verified against. **Reauthenticate**, **Reconfigure** and **Rotate
-credentials** all refuse, rather than send your access token unencrypted, until port 443 serves the panel's own certificate too.
-
-**Reauthenticate is the route that does this on screen.** An unpinned entry sent through **Reauthenticate** goes to the certificate-authority step first, which
-asks for the TLS port where the HTTP port has been moved — the install most likely to be behind a proxy — and refuses with an error if the authority does not
-sign what the panel serves. Reconfiguring the entry to the panel's own address is the other way through, but the pin then happens during the reload that
-follows, silently: the only announcement is a `WARNING` reading "Pinned the CA advertised by SPAN panel …" with the fingerprint.
-
-Diagnostics report the fingerprint under `panel_ca`. The certificate itself is not included — it is public, but multi-KB, and the fingerprint is the part worth
-reading.
-
-If your panel serves TLS somewhere other than port 443 — behind a reverse proxy, say — the setup flow asks for the port, but only when you have already changed
-the HTTP port from 80.
+**Proxies cut both ways.** One terminating the broker port with a certificate of its own leaves the entry unpinned, warning at every start with no repair
+raised. One terminating only port 443 lets the entry pin, but **Reauthenticate**, **Reconfigure** and **Rotate credentials** then refuse rather than send your
+access token unencrypted, until port 443 serves the panel's own certificate too. If your panel serves TLS on another port the setup flow asks — but only once
+you have moved the HTTP port off 80.
 
 ### Restricting who can operate the panel
 
@@ -766,13 +723,13 @@ Every command is also logged at `INFO`.
 
 Commands report one of four outcomes, and the distinctions matter:
 
-| Outcome       | Meaning                                                                                  |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| `confirmed`   | The panel reported the value you asked for.                                              |
-| `accepted`    | The broker acknowledged the message and the panel did not report a change.               |
-| `unconfirmed` | Nothing came back within the deadline. **Not an error** — see the troubleshooting entry. |
-| `failed`      | The command was never handed to the broker and will not be delivered.                    |
-| `refused:…`   | This integration refused it, for the named reason.                                       |
+| Outcome       | Meaning                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------- |
+| `confirmed`   | The panel reported the value you asked for.                                             |
+| `accepted`    | The broker acknowledged the message and the panel did not report a change.              |
+| `unconfirmed` | Nothing came back within the deadline.**Not an error** — see the troubleshooting entry. |
+| `failed`      | The command was never handed to the broker and will not be delivered.                   |
+| `refused:…`   | This integration refused it, for the named reason.                                      |
 
 ### Rotating panel credentials
 
@@ -809,15 +766,15 @@ the one that works. The action reports the failure and says so; check the log an
 The panel credential is a single all-or-nothing secret, and anyone standing at the panel can mint a fresh one with three presses of the door switch. Network
 topology and physical control of the panel are the real boundary; everything above is defense in depth behind it.
 
-- **Put the panel on its own VLAN**, with default-deny between VLANs, and allow only the Home Assistant host to reach it. The integration currently uses
-  `tcp/80` for the REST bootstrap and `tcp/8883` for MQTTS. Deny `tcp/9001` and `tcp/9002` (plaintext and WebSocket MQTT) from every source unless you are
+- **Put the panel on a trusted VLAN**, with default-deny between VLANs, and allow only the Home Assistant host to reach it. Open `tcp/443` (REST), `tcp/8883`
+  (MQTTS) and `tcp/80` (the plaintext certificate-authority fetch, and REST too until the entry pins), and deny `tcp/9001` and `tcp/9002` unless you are
   actively using the SPAN Home on-premise UI.
-- **Use the IP address or an FQDN, not the `.local` name.** mDNS does not cross VLAN boundaries. The panel's IP is in its certificate SAN, so hostname
-  verification still works; for an FQDN, the integration registers it with the panel so the panel adds it to the SAN.
-- **If Home Assistant cannot be on the panel's VLAN**, put a reverse proxy on the panel's VLAN and restrict its inbound to the Home Assistant host. The proxy
-  holds no panel credential; it only relays. Note that MQTTS is a TCP stream, not HTTP — a plain HTTP reverse proxy covers the REST port only, and `tcp/8883`
-  needs a stream proxy (HAProxy, nginx `stream`, or Caddy's `layer4` plugin).
-- **Lock the panel enclosure.** The three-press proximity bypass hands out full credentials to anyone who can open the door; it is the equivalent of a printed
+- **Use the IP address or an FQDN, not the `.local` name**, because mDNS does not cross VLAN boundaries. The panel's IP is already in its certificate SAN, and
+  for an FQDN the integration registers it so the panel adds it.
+- **If Home Assistant cannot be on the panel's VLAN**, put a reverse proxy there and restrict its inbound to the Home Assistant host; it holds no panel
+  credential and only relays. MQTTS is a TCP stream rather than HTTP, so `tcp/8883` needs a stream proxy (HAProxy, nginx `stream`, or Caddy's `layer4` plugin)
+  while a plain HTTP proxy covers the REST port alone.
+- **Secure the panel enclosure**, because the three-press proximity bypass hands full credentials to anyone who can open the door — the equivalent of a printed
   root password. This outranks every software control on this page.
 - **Put dashboard-only household members in Home Assistant's read-only group.** Home Assistant's default user policy grants every non-admin user control of
   every entity, which includes this integration's circuit switches and priority selects.
@@ -841,11 +798,11 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **Replaced sub-device shows the old serial number**                          | After replacing a SPAN sub-device (Drive / EVSE, BESS, PV inverter), the device entry in Home Assistant keeps showing the previous hardware's serial number. The integration keys entities off the panel-assigned node identity, which is intentionally stable across hardware swaps so long-term history (e.g. lifetime charging kWh for a Drive) is preserved. The device-registry serial number, however, does not auto-refresh. | In**Settings → Devices & Services → Span Panel**, open the affected sub-device and delete it, then reload the integration (or restart Home Assistant). The device re-registers with the new serial number. Entity IDs and their recorded history are preserved.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **Door sensor unavailable**                                                  | The SPAN API returns UNKNOWN if the cabinet door has not been operated recently. This is a defect in the SPAN API.                                                                                                                                                                                                                                                                                                                  | The integration reports the sensor as unavailable until a proper value arrives. Opening or closing the door publishes the correct state. The door is classified as a tamper sensor (`Detected` / `Clear`) to differentiate it from a normal entry door.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **No switch on a circuit**                                                   | A circuit has no switch entity exposed in Home Assistant.                                                                                                                                                                                                                                                                                                                                                                           | The circuit is configured in the SPAN App as one of the "Always on Circuits". The API does not permit user control of those circuits, so no switch is created.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Reinstalling to change the entity ID style gives back the old entity IDs** | The naming style is chosen at install and cannot be changed from the options, so reinstalling looks like the way to switch. It is not: every entity returns with the entity ID it had before.                                                                                                                                                                                                                                       | Home Assistant remembers a removed entity for **30 days**, keyed on its unique ID, and restores that record's entity ID — along with its name, area, labels and icon — as soon as an entity with the same unique ID appears again. This integration's unique IDs do not change with the naming style, so the remembered ID wins over the one the new style asks for. Either clear the leftover registry entries between removing and reinstalling, or wait out the 30 days and let Home Assistant discard them. A tool such as [ha-registry-clean](https://github.com/LegoTypes/ha-registry-clean) can do the clearing; it is a separate project, not part of this integration. Clearing also discards the names, areas and labels you had assigned.                                                                                                                                                                                                     |
+| **Reinstalling to change the entity ID style gives back the old entity IDs** | The naming style is chosen at install and cannot be changed from the options, so reinstalling looks like the way to switch. It is not: every entity returns with the entity ID it had before.                                                                                                                                                                                                                                       | Home Assistant remembers a removed entity for**30 days**, keyed on its unique ID, and restores that record's entity ID — along with its name, area, labels and icon — as soon as an entity with the same unique ID appears again. This integration's unique IDs do not change with the naming style, so the remembered ID wins over the one the new style asks for. Either clear the leftover registry entries between removing and reinstalling, or wait out the 30 days and let Home Assistant discard them. A tool such as [ha-registry-clean](https://github.com/LegoTypes/ha-registry-clean) can do the clearing; it is a separate project, not part of this integration. Clearing also discards the names, areas and labels you had assigned.                                                                                                                                                                                                      |
 | **Setup fails after downgrading the integration**                            | After installing an older release, the SPAN Panel config entry fails to set up and Home Assistant reports an unsupported configuration version.                                                                                                                                                                                                                                                                                     | The release that stopped storing the panel passphrase migrated the config entry to version 7. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and there is no automatic downgrade. Reinstall the newer release, or restore a backup taken before the upgrade. Removing and re-adding the integration also works and preserves entity IDs, but needs the panel passphrase or physical access to the door again.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **"SPAN Panel certificate authority changed" repair**                        | The integration has stopped connecting and a repair reports two fingerprints: the one it pinned and the one the panel now advertises. Entities are unavailable.                                                                                                                                                                                                                                                                     | The panel is presenting a different certificate authority than the one you accepted at setup. Two things look identical from here and only you can tell them apart: a firmware upgrade or a factory reset rotates the authority legitimately, and so does a device on your network standing in for your panel. **If you know why it changed**, open the repair, compare the new fingerprint, and accept it — that re-pins and reconnects. **If nothing should have changed**, do not accept. Check what else is on the panel's network segment first. The integration will not reconnect on its own and will not re-pin on its own, deliberately: retrying would mean waiting to succeed against whatever is answering.                                                                                                                                                                                                                                  |
+| **"SPAN Panel certificate authority changed" repair**                        | The integration has stopped connecting and a repair reports two fingerprints: the one it pinned and the one the panel now advertises. Entities are unavailable.                                                                                                                                                                                                                                                                     | The panel is presenting a different certificate authority than the one you accepted at setup. Two things look identical from here and only you can tell them apart: a firmware upgrade or a factory reset rotates the authority legitimately, and so does a device on your network standing in for your panel.**If you know why it changed**, open the repair, compare the new fingerprint, and accept it — that re-pins and reconnects. **If nothing should have changed**, do not accept. Check what else is on the panel's network segment first. The integration will not reconnect on its own and will not re-pin on its own, deliberately: retrying would mean waiting to succeed against whatever is answering.                                                                                                                                                                                                                                   |
 | **A circuit re-commissioned in the SPAN App has the wrong controls**         | A circuit whose configuration changed in the SPAN App — made controllable, locked, or set to never back up — still has the controls it had before. A newly controllable circuit has no Breaker switch. A newly locked one still shows its switch, and operating it reports that the command was refused.                                                                                                                            | Reload the integration (**Settings → Devices & Services → Span Panel → ⋮ → Reload**). Which control entities exist is decided when the integration starts, from what the panel declares about each circuit at that moment; a change made afterwards is picked up at the next reload or restart. Reloading is safe — entity IDs, history, names and areas are preserved, because they are keyed on identifiers that do not change. Until you reload, a control the panel no longer accepts is refused rather than published: the command is not queued and the breaker does not move.                                                                                                                                                                                                                                                                                                                                                                     |
-| **A control reports `unconfirmed`**                                          | The logbook or the `span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                     | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                                                                                                                                                                                                                               |
+| **A control reports `unconfirmed`**                                          | The logbook or the`span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                      | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                                                                                                                                                                                                                               |
 
 ## Development
 

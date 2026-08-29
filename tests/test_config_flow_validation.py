@@ -248,6 +248,11 @@ async def test_check_fqdn_tls_ready_uses_the_pinned_anchor_without_refetching() 
         def __exit__(self, exc_type, exc, tb):
             return False
 
+        def getpeercert(self):
+            # The handshake now establishes only the chain; the name binding is
+            # judged separately from the certificate it hands back.
+            return {"subjectAltName": (("DNS", "panel.example.com"),)}
+
     class FakeSSLContext:
         def wrap_socket(self, _sock, server_hostname: str):
             assert server_hostname == "panel.example.com"
@@ -274,7 +279,7 @@ async def test_check_fqdn_tls_ready_uses_the_pinned_anchor_without_refetching() 
         assert await check_fqdn_tls_ready("panel.example.com", 8883, "pinned-pem") is True
 
     mock_download.assert_not_awaited()
-    build_context.assert_called_once_with("pinned-pem")
+    build_context.assert_called_once_with("pinned-pem", check_hostname=False)
 
 
 @pytest.mark.asyncio
@@ -291,6 +296,11 @@ async def test_check_fqdn_tls_ready_returns_true_on_success() -> None:
 
         def __exit__(self, exc_type, exc, tb):
             return False
+
+        def getpeercert(self):
+            # The handshake now establishes only the chain; the name binding is
+            # judged separately from the certificate it hands back.
+            return {"subjectAltName": (("DNS", "panel.example.com"),)}
 
     class FakeSSLContext:
         def wrap_socket(self, _sock, server_hostname: str):
@@ -315,7 +325,7 @@ async def test_check_fqdn_tls_ready_returns_true_on_success() -> None:
 
     # The library's builder, not a hand-rolled context: it is the one that clears
     # VERIFY_X509_STRICT, which the panel's AKI-less CA fails without.
-    build_context.assert_called_once_with("pem-data")
+    build_context.assert_called_once_with("pem-data", check_hostname=False)
 
 
 @pytest.mark.asyncio
@@ -332,6 +342,11 @@ async def test_check_fqdn_tls_ready_returns_false_on_ssl_error() -> None:
 
         def __exit__(self, exc_type, exc, tb):
             return False
+
+        def getpeercert(self):
+            # The handshake now establishes only the chain; the name binding is
+            # judged separately from the certificate it hands back.
+            return {"subjectAltName": (("DNS", "panel.example.com"),)}
 
     class FakeSSLContext:
         def wrap_socket(self, _sock, server_hostname: str):

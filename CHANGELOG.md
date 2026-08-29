@@ -103,6 +103,10 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   added each circuit's whole lifetime counter to its offset.
 - **A panel this integration can no longer reach makes its entities unavailable instead of reporting 0 W** — a certificate authority that changes mid-session
   used to leave every power sensor reading zero and every energy sensor frozen, indefinitely and indistinguishably from a panel drawing no power.
+- **A panel that has moved to another address now says so in Repairs**, naming the addresses its certificate does carry so you can point the entry at one with
+  Reconfigure, instead of retrying silently with every entity unavailable and one line a minute in the log.
+- **An add-on restart no longer overwrites the address you configured** — a panel announced by an add-on keeps the host you gave it for as long as that host
+  still answers, and only the add-on's own ports are taken as published.
 - **Recreate entity IDs proposes the ids your panel would produce now** (#252), in your installation's naming style, leaving unique ids and statistics
   untouched.
 - **The README described Battery Power's sign backwards**, since the sensor has always reported discharging as positive (#184) and only the documentation was
@@ -132,7 +136,9 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   name that is not a fully qualified domain, so the certificate never comes to name it. Set that panel up by its IP address, or by the `.local` name shown in
   the mobile app.
 - **A discovered address this entry's authority rejects is refused with a log warning and nothing else** — if the panel really has moved, use **Reconfigure** on
-  the entry, which checks the new address against the standing pin before storing it.
+  the entry, which checks the new address against the standing pin before storing it. A panel whose certificate does not yet name where it now answers is moved
+  by reconfiguring to a fully qualified domain name, which asks the panel to regenerate its certificate around it, or to the `.local` name its certificate
+  already covers; a bare new IP address the certificate does not name is refused, because every connection after the flow would reject it too.
 
 ## [2.0.8] - 5/2026
 
