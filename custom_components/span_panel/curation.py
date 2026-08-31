@@ -21,13 +21,17 @@ import logging
 from typing import TYPE_CHECKING, Final, TypedDict
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 
 # `homeassistant.components.sensor` re-exports this at runtime but leaves it out
 # of its `__all__`, so the package-level import is an `attr-defined` error under
 # mypy. `.const` is where it is actually defined and is the path that type-checks.
 from homeassistant.components.sensor.const import DEVICE_CLASS_UNITS
-from homeassistant.const import Platform
+from homeassistant.const import EntityCategory, Platform
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
@@ -323,3 +327,41 @@ async def async_save_record(
     else:
         raw_records.pop(key, None)
     await store.async_save({"records": raw_records})
+
+
+def sensor_description(
+    path: str,
+    unit: str | None,
+    default_device_class: SensorDeviceClass | None,
+    record: CurationRecord | None,
+) -> SensorEntityDescription:
+    """Return the description a (possibly curated) adopted sensor is built from.
+
+    The one place in the integration where a `state_class` reaches an adopted
+    entity. `adoption.py` and `extension.py` call this rather than building
+    their own description, which is what keeps their AST guards true.
+    """
+    device_class = default_device_class
+    state_class: SensorStateClass | None = None
+    if record is not None:
+        if record.device_class is not None:
+            device_class = SensorDeviceClass(record.device_class)
+        state_class = record.state_class
+    return SensorEntityDescription(
+        key=path,
+        device_class=device_class,
+        native_unit_of_measurement=unit,
+        state_class=state_class,
+    )
+
+
+def binary_sensor_device_class(record: CurationRecord | None) -> BinarySensorDeviceClass | None:
+    """Return a curated binary device class, or none -- there is no unit map to default from."""
+    if record is None or record.device_class is None:
+        return None
+    return BinarySensorDeviceClass(record.device_class)
+
+
+def entity_category_for(record: CurationRecord | None) -> EntityCategory | None:
+    """Return DIAGNOSTIC unless the user explicitly promoted this row."""
+    return None if record is not None and record.promote else EntityCategory.DIAGNOSTIC

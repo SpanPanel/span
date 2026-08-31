@@ -2,12 +2,11 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
-from homeassistant.const import Platform
+from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
+import pytest
 
 from custom_components.span_panel.curation import (
     CurationError,
@@ -18,9 +17,12 @@ from custom_components.span_panel.curation import (
     allowed_state_classes,
     async_load_curation,
     async_save_record,
+    binary_sensor_device_class,
+    entity_category_for,
     parse_record,
     record_as_dict,
     sanitise,
+    sensor_description,
     validate_record,
 )
 
@@ -237,3 +239,35 @@ def test_a_dropped_field_is_named_in_the_warning_it_logs(
     assert overlay.for_row("bess/battery-2/cell-voltage", SENSOR_STRING) == CurationRecord()
     assert "bess/battery-2/cell-voltage" in caplog.text
     assert "device_class" in caplog.text
+
+
+# The description helpers. Every curated value reaches an entity through one of
+# these three, which is what lets `adoption.py` and `extension.py` stay free of
+# the tokens their AST guards forbid.
+
+
+def test_sensor_description_without_a_record_matches_todays_behaviour() -> None:
+    description = sensor_description("b/p", "V", SensorDeviceClass.VOLTAGE, None)
+    assert description.state_class is None
+    assert description.device_class is SensorDeviceClass.VOLTAGE
+    assert description.native_unit_of_measurement == "V"
+
+
+def test_a_record_supplies_state_class_and_overrides_the_default_device_class() -> None:
+    record = CurationRecord(state_class=SensorStateClass.MEASUREMENT, device_class="energy")
+    description = sensor_description("b/p", "Wh", SensorDeviceClass.ENERGY, record)
+    assert description.state_class is SensorStateClass.MEASUREMENT
+    assert description.device_class is SensorDeviceClass.ENERGY
+
+
+def test_entity_category_promotes_only_on_an_explicit_record() -> None:
+    assert entity_category_for(None) is EntityCategory.DIAGNOSTIC
+    assert entity_category_for(CurationRecord()) is EntityCategory.DIAGNOSTIC
+    assert entity_category_for(CurationRecord(promote=True)) is None
+
+
+def test_binary_sensor_device_class_reads_the_record_only() -> None:
+    assert binary_sensor_device_class(None) is None
+    assert binary_sensor_device_class(CurationRecord(device_class="problem")) is (
+        BinarySensorDeviceClass.PROBLEM
+    )

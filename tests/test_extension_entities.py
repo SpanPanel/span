@@ -9,7 +9,9 @@ not there yet.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
@@ -510,3 +512,24 @@ async def test_the_overflow_record_survives_a_restart(
     await _notice(hass, entry, snapshot)
 
     assert _notification_id(entry) not in dict(hass.data.get("persistent_notification", {}))
+
+
+def test_no_state_class_is_set_anywhere_in_the_extension_module() -> None:
+    """Assert the no-statistics rule against the syntax, not against an instance.
+
+    This closes the gap the adoption module's guard left: `extension.py` had only
+    per-instance coverage, so a future branch setting a state class on a platform
+    no test instantiates would pass everything above. The one module allowed to
+    spell `state_class` is `curation.py`, where every value comes from a
+    validated user record.
+    """
+    from custom_components.span_panel import extension
+
+    tree = ast.parse(Path(extension.__file__).read_text(encoding="utf-8"))
+    keywords = [node.arg for node in ast.walk(tree) if isinstance(node, ast.keyword)]
+    targets = [node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)]
+    assert "state_class" not in keywords
+    assert "_attr_state_class" not in targets
+    assert not [
+        node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and "StateClass" in node.id
+    ]
