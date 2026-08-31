@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 import logging
-from typing import Final
+from typing import TYPE_CHECKING, Final, TypedDict
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
@@ -28,8 +28,14 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 # mypy. `.const` is where it is actually defined and is the path that type-checks.
 from homeassistant.components.sensor.const import DEVICE_CLASS_UNITS
 from homeassistant.const import Platform
+from homeassistant.helpers.storage import Store
 
+from .const import DOMAIN
 from .util import NUMERIC_DATATYPES
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -209,3 +215,102 @@ def allowed_device_classes(context: RowContext) -> list[str]:
         if constrained is None or context.unit in constrained:
             allowed.append(device_class.value)
     return allowed
+
+
+_STORE_VERSION: Final = 1
+
+
+class StoredCuration(TypedDict):
+    """The one shape this module writes to disk."""
+
+    records: dict[str, dict[str, str]]
+
+
+def _store(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredCuration]:
+    """Per entry, exactly as `additions._store` is: two panels curate independently."""
+    return Store(hass, _STORE_VERSION, f"{DOMAIN}.curation.{entry.entry_id}")
+
+
+class CurationOverlay:
+    """Every stored record for one entry, resolved once per setup."""
+
+    def __init__(self, records: Mapping[str, CurationRecord]) -> None:
+        """Take a copy: the overlay is read once at setup and never re-reads the disk."""
+        self._records = dict(records)
+
+    @classmethod
+    def empty(cls) -> CurationOverlay:
+        """Return the overlay for an entry that has curated nothing."""
+        return cls({})
+
+    def record_for(self, key: str) -> CurationRecord | None:
+        """Return the record as stored, unmeasured against any row -- see `for_row`."""
+        return self._records.get(key)
+
+    def for_row(self, key: str, context: RowContext) -> CurationRecord | None:
+        """Return the record as it applies to the row's *current* declaration.
+
+        Curation must never block setup: a field the wire no longer supports
+        is dropped with one warning, never raised.
+        """
+        record = self._records.get(key)
+        if record is None:
+            return None
+        sanitised, dropped = sanitise(record, context)
+        if dropped:
+            _LOGGER.warning(
+                "Curation for %s no longer fits the published declaration; ignoring %s",
+                key,
+                ", ".join(dropped),
+            )
+        return sanitised
+
+    def stale_fields(self, key: str, context: RowContext) -> tuple[str, ...]:
+        """Name the fields `for_row` would drop, so the editor can say which are stale."""
+        record = self._records.get(key)
+        if record is None:
+            return ()
+        return sanitise(record, context)[1]
+
+    def as_dicts(self) -> dict[str, dict[str, str]]:
+        """Enum values and keys only -- safe for diagnostics and the list command."""
+        return {key: record_as_dict(record) for key, record in sorted(self._records.items())}
+
+
+async def async_load_curation(hass: HomeAssistant, entry: ConfigEntry) -> CurationOverlay:
+    """Read the overlay off disk. A store this module did not write loads as empty.
+
+    Awaited from `async_setup_entry`, so nothing here may raise for bad disk
+    content -- see `additions._load` for the incident that rule comes from.
+    """
+    stored = await _store(hass, entry).async_load()
+    records: dict[str, CurationRecord] = {}
+    raw_records = stored.get("records") if isinstance(stored, dict) else None
+    if isinstance(raw_records, dict):
+        for key, raw in raw_records.items():
+            record = parse_record(raw)
+            if isinstance(key, str) and record is not None:
+                records[key] = record
+            else:
+                _LOGGER.warning("Discarding unreadable curation record under %r", key)
+    elif stored is not None:
+        _LOGGER.warning("Curation store is not the shape this integration writes; starting empty")
+    return CurationOverlay(records)
+
+
+async def async_save_record(
+    hass: HomeAssistant, entry: ConfigEntry, key: str, record: CurationRecord | None
+) -> None:
+    """Write one record (or clear one) and leave every other key untouched."""
+    store = _store(hass, entry)
+    stored = await store.async_load()
+    raw_records: dict[str, dict[str, str]] = {}
+    if isinstance(stored, dict) and isinstance(stored.get("records"), dict):
+        for existing_key, raw in stored["records"].items():
+            if isinstance(existing_key, str) and parse_record(raw) is not None:
+                raw_records[existing_key] = dict(raw)
+    if record is None:
+        raw_records.pop(key, None)
+    else:
+        raw_records[key] = record_as_dict(record)
+    await store.async_save({"records": raw_records})
