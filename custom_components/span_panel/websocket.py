@@ -14,7 +14,7 @@ from .const import DOMAIN
 from .helpers import build_panel_unique_id, construct_voltage_attribute
 from .id_builder import build_binary_sensor_unique_id
 from .util import classify_sub_device_identifier
-from .websocket_adopted import handle_adopted_list
+from .websocket_adopted import handle_adopted_curate, handle_adopted_list
 
 if TYPE_CHECKING:
     from .runtime import SpanPanelRuntimeData
@@ -65,6 +65,7 @@ def async_register_commands(hass: HomeAssistant) -> None:
     """
     websocket_api.async_register_command(hass, handle_panel_topology)
     websocket_api.async_register_command(hass, handle_adopted_list)
+    websocket_api.async_register_command(hass, handle_adopted_curate)
 
 
 @websocket_api.websocket_command(

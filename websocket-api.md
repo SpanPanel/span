@@ -288,3 +288,98 @@ does. Curation is keyed on the wire address rather than on a registry ID, so a r
 | not_panel_device | The device_id is a sub-device, not the panel  |
 | not_loaded       | The integration or config entry is not loaded |
 | no_data          | The coordinator has no panel data yet         |
+
+## `span_panel/adopted/curate`
+
+Stores the metadata a user asserts for one adopted row, or clears it. The `key` is one `adopted/list` reported: the rows this command accepts are derived the
+same way and from the same snapshot, so a key that command did not offer is refused rather than stored.
+
+**This command writes no registry state.** Enabling an entity, renaming it, giving it an icon or an area, and choosing a display unit are all Core's own
+websocket commands, which already ask for admin and already carry the undo. What is here is only what Core has nowhere to put — a state class, a device class,
+and prominence for an entity built from a vendor declaration.
+
+A successful save has three effects and no others: the record is written to the integration's own store, the config entry is scheduled for reload, and the
+result is returned. The reload is not incidental. An entity description is fixed when the entity is constructed, so a record reaches its entity only by that
+entity being built again — and being built _with_ it, since a state class that first appears after states have been recorded is a statistics reset rather than a
+metadata change.
+
+Admin only, like every command here.
+
+### Request
+
+```json
+{
+  "type": "span_panel/adopted/curate",
+  "device_id": "<ha_device_registry_id>",
+  "key": "nj-2316-005k6_adopted_generator-1/meter/active-power",
+  "record": {
+    "state_class": "measurement",
+    "device_class": "power",
+    "entity_category": "none"
+  }
+}
+```
+
+| Field       | Type   | Description                                                                                |
+| ----------- | ------ | ------------------------------------------------------------------------------------------ |
+| `device_id` | string | The device registry ID for the **main SPAN panel**, the same handle `panel_topology` takes |
+| `key`       | string | The `key` of the row being curated, exactly as `adopted/list` reported it                  |
+| `record`    | object | The full record to store; an empty object clears the row                                   |
+
+#### Record Object
+
+| Field             | Type   | Description                                                                            |
+| ----------------- | ------ | -------------------------------------------------------------------------------------- |
+| `state_class`     | string | `measurement`, `total`, or `total_increasing` — numeric sensor rows only               |
+| `device_class`    | string | A sensor or binary-sensor device class the row's platform and declared unit admit      |
+| `entity_category` | string | `none`, the one storable value — it promotes the entity out of the diagnostic category |
+
+`record` replaces the stored record rather than merging into it: a field left out is a field cleared. The values admissible for a given row are exactly the
+`allowed_state_classes` and `allowed_device_classes` that `adopted/list` reported for it, so a card built from that response never offers a value this command
+refuses.
+
+### Response
+
+```json
+{
+  "record": {
+    "state_class": "measurement",
+    "device_class": "power",
+    "entity_category": "none"
+  },
+  "warnings": []
+}
+```
+
+| Field      | Type     | Description                                                   |
+| ---------- | -------- | ------------------------------------------------------------- |
+| `record`   | object   | The record now stored; `{}` when the row was cleared          |
+| `warnings` | string[] | Advisory consequences of the save, which has already happened |
+
+#### Warnings
+
+| Code                 | Description                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `statistics_removed` | The cleared record carried a state class, so long-term statistics stop being compiled and HA raises its own `state_class_removed` repair              |
+| `total_increasing`   | The recorder reads a drop of more than a tenth as a meter reset and starts a new cycle, so a reading that legitimately falls manufactures consumption |
+
+Warnings are never refusals. They name effects the stored record does not show on its face, because both are about the recorder rather than about the entity.
+
+### Errors
+
+| Code                       | Description                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| device_not_found           | The device_id does not exist in HA                                                    |
+| not_span_panel             | The device is not a SPAN Panel device                                                 |
+| not_panel_device           | The device_id is a sub-device, not the panel                                          |
+| not_loaded                 | The integration or config entry is not loaded                                         |
+| no_data                    | The coordinator has no panel data yet                                                 |
+| unknown_key                | No curatable row on this panel carries that key                                       |
+| invalid_state_class        | A state class was asserted on a row that is not a numeric sensor                      |
+| invalid_device_class       | The value is not a device class for this row's platform                               |
+| incompatible_device_class  | The device class does not admit the unit the row declares                             |
+| invalid_field_for_platform | A control row accepts prominence only, not a state class or a device class            |
+| invalid_format             | The request failed the command schema — an unknown value or field, or a malformed key |
+
+The first five are the codes `adopted/list` answers, from the same resolution: a consumer that learned them for one command does not meet a second set on the
+next.

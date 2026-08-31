@@ -24,9 +24,11 @@ join the ones here.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components import websocket_api
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -43,11 +45,16 @@ from .adoption import (
 )
 from .const import DOMAIN
 from .curation import (
+    PROMOTED,
+    CurationError,
     CurationOverlay,
+    CurationRecord,
     RowContext,
     allowed_device_classes,
     allowed_state_classes,
+    async_save_record,
     record_as_dict,
+    validate_record,
 )
 from .extension import adoptable, extension_curation_key, resolve_platform
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
@@ -100,6 +107,25 @@ class _AdoptableRow:
 
     adopted_device: bool
     """Whether the card is one adoption minted, rather than a curated device."""
+
+
+_STATE_CLASS_VALUES: Final = [cls.value for cls in SensorStateClass]
+"""Every state class, without regard to a row -- the schema has no row to regard.
+
+Which choices a *particular* row admits is `allowed_state_classes`' answer and
+`validate_record`'s to enforce, because both need the declaration. This is only
+the alphabet, so a value Core has never heard of never reaches either.
+"""
+
+_DEVICE_CLASS_VALUES: Final = sorted(
+    {cls.value for cls in SensorDeviceClass} | {cls.value for cls in BinarySensorDeviceClass}
+)
+"""Both platforms' device classes, unioned for the same reason: no row here yet.
+
+A binary row's classes and a sensor row's are disjoint vocabularies, and which
+one applies is decided from `RowContext.platform` in `curation`. Sorted so the
+schema's own error message names the values in a stable order.
+"""
 
 
 @websocket_api.websocket_command(
@@ -185,6 +211,106 @@ def _row_payload(
         "allowed_state_classes": allowed_state_classes(row.context),
         "stale_fields": list(overlay.stale_fields(row.key, row.context)),
     }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "span_panel/adopted/curate",
+        vol.Required("device_id"): str,
+        vol.Required("key"): vol.All(
+            str, vol.Length(min=1, max=256), vol.Match(r"^[A-Za-z0-9_./-]+$")
+        ),
+        vol.Required("record"): vol.Schema(
+            {
+                vol.Optional("state_class"): vol.In(_STATE_CLASS_VALUES),
+                vol.Optional("device_class"): vol.In(_DEVICE_CLASS_VALUES),
+                vol.Optional("entity_category"): PROMOTED,
+            }
+        ),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def handle_adopted_curate(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Store one row's asserted metadata, or clear it, and rebuild the entity that reads it.
+
+    Admin users pass the panel's device registry id -- the same handle
+    `adopted/list` takes -- and a `key` that command reported. The rows are
+    derived again here rather than the key being trusted: the store is keyed on
+    wire addresses, so a key nothing publishes would be held forever, read by no
+    entity and shown on no list.
+
+    An empty `record` clears the row. Anything else is validated against the
+    row's *current* declaration, and a refusal carries `curation`'s own code
+    unchanged, so the editor renders the refusal it can explain rather than a
+    generic one. What the schema can decide without the declaration -- enum
+    membership, the one storable category, the key's shape -- is decided there,
+    so only questions that need the wire reach this far.
+
+    **A save's side effects are exactly three: the store, a reload, the reply.**
+    Nothing here writes registry state, per this module's boundary. The reload is
+    the half that is easy to miss: an entity description is fixed at
+    construction, so a record reaches its entity only by that entity being built
+    again -- and being built *with* it, because a state class that arrives after
+    the first state is written is a statistics reset rather than a metadata
+    change.
+    """
+    resolved = _resolve_panel_entry(hass, connection, msg)
+    if resolved is None:
+        return
+    entry, runtime_data, snapshot = resolved
+
+    key: str = msg["key"]
+    row = {candidate.key: candidate for candidate in _rows(hass, snapshot)}.get(key)
+    if row is None:
+        connection.send_error(msg["id"], "unknown_key", f"No curatable row is keyed {key!r}")
+        return
+
+    previous = runtime_data.curation.record_for(key)
+    record: CurationRecord | None = None
+    if msg["record"]:
+        try:
+            record = validate_record(msg["record"], row.context)
+        except CurationError as err:
+            connection.send_error(msg["id"], err.code, str(err))
+            return
+
+    await async_save_record(hass, entry, key, record)
+    hass.config_entries.async_schedule_reload(entry.entry_id)
+    connection.send_result(
+        msg["id"],
+        {
+            "record": {} if record is None else record_as_dict(record),
+            "warnings": _warnings(record, previous),
+        },
+    )
+
+
+def _warnings(record: CurationRecord | None, previous: CurationRecord | None) -> list[str]:
+    """Name the consequences of a save that the saved record does not show on its face.
+
+    Advisory rather than refusals -- the write has happened and the user asked
+    for it -- and both are about the recorder rather than the entity, which is
+    exactly why the record cannot show them.
+
+    Clearing a state class stops long-term statistics being compiled for the
+    entity, and core raises its own `state_class_removed` repair against the
+    statistics already collected (`sensor/recorder.py`). Asserting
+    `total_increasing` reinterprets the reading rather than describing it: the
+    recorder reads a drop of more than a tenth as a meter reset and starts a new
+    cycle, so a reading that legitimately falls manufactures consumption.
+    """
+    if record is None:
+        if previous is not None and previous.state_class is not None:
+            return ["statistics_removed"]
+        return []
+    if record.state_class is SensorStateClass.TOTAL_INCREASING:
+        return ["total_increasing"]
+    return []
 
 
 def _rows(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> list[_AdoptableRow]:
