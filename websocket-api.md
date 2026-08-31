@@ -358,10 +358,10 @@ refuses.
 
 #### Warnings
 
-| Code                 | Description                                                                                                                                           |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `statistics_removed` | The cleared record carried a state class, so long-term statistics stop being compiled and HA raises its own `state_class_removed` repair              |
-| `total_increasing`   | The recorder reads a drop of more than a tenth as a meter reset and starts a new cycle, so a reading that legitimately falls manufactures consumption |
+| Code                 | Description                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `statistics_removed` | The save leaves the row without a state class it previously had — cleared outright or narrowed to the other fields — so long-term statistics stop being compiled and HA raises its own `state_class_removed` repair |
+| `total_increasing`   | The recorder reads a drop of more than a tenth as a meter reset and starts a new cycle, so a reading that legitimately falls manufactures consumption                                                               |
 
 Warnings are never refusals. They name effects the stored record does not show on its face, because both are about the recorder rather than about the entity.
 

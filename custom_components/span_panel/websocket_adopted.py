@@ -297,14 +297,21 @@ def _warnings(record: CurationRecord | None, previous: CurationRecord | None) ->
     for it -- and both are about the recorder rather than the entity, which is
     exactly why the record cannot show them.
 
-    Clearing a state class stops long-term statistics being compiled for the
-    entity, and core raises its own `state_class_removed` repair against the
-    statistics already collected (`sensor/recorder.py`). Asserting
-    `total_increasing` reinterprets the reading rather than describing it: the
-    recorder reads a drop of more than a tenth as a meter reset and starts a new
-    cycle, so a reading that legitimately falls manufactures consumption.
+    The first fires on what a save *leaves*, not on how it was spelled. A record
+    narrowed to its other fields drops the state class exactly as clearing the
+    whole record does, so a warning scoped to the clear would let the identical
+    consequence go unsaid on the route a user is more likely to take. Losing a
+    state class stops long-term statistics being compiled for the entity, and
+    core raises its own `state_class_removed` repair against the ones already
+    collected (`sensor/recorder.py`).
+
+    Asserting `total_increasing` reinterprets the reading rather than describing
+    it: the recorder reads a drop of more than a tenth as a meter reset and
+    starts a new cycle, so a reading that legitimately falls manufactures
+    consumption. It cannot co-fire with the first, which requires the save to
+    have left no state class at all.
     """
-    if record is None:
+    if record is None or record.state_class is None:
         if previous is not None and previous.state_class is not None:
             return ["statistics_removed"]
         return []

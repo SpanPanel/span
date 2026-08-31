@@ -968,6 +968,40 @@ async def test_clearing_a_record_that_carried_a_state_class_warns_the_statistics
     assert _row(_group(listed, "Backup Generator"), POWER_KEY)["curation"] == {}
 
 
+async def test_narrowing_a_record_off_its_state_class_warns_the_same_way(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The warning is about what the save leaves, not about how it was spelled.
+
+    A record narrowed to its other fields drops the state class exactly as
+    clearing the whole record does -- the same stopped statistics and the same
+    repair -- and it is the likelier route, because a user editing one field of a
+    record still sends the whole record back.
+    """
+    panel = _setup(hass)
+    await _curate(
+        hass,
+        hass_ws_client,
+        panel.id,
+        POWER_KEY,
+        {"state_class": "measurement", "device_class": "power"},
+    )
+    await _reload_overlay(hass)
+
+    reply = await _curate(hass, hass_ws_client, panel.id, POWER_KEY, {"device_class": "power"})
+
+    assert reply["result"] == {
+        "record": {"device_class": "power"},
+        "warnings": ["statistics_removed"],
+    }
+
+    await _reload_overlay(hass)
+    listed = await _list(hass, hass_ws_client, panel.id)
+    assert _row(_group(listed, "Backup Generator"), POWER_KEY)["curation"] == {
+        "device_class": "power"
+    }
+
+
 async def test_clearing_a_record_that_never_carried_one_warns_nothing(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator
 ) -> None:
