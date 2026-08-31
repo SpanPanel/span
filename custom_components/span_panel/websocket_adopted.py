@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 import voluptuous as vol
@@ -202,30 +203,52 @@ def _rows(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> list[_AdoptableRo
     a row it declines has no entity, no card to group under and no name to show.
 
     Adopted declarations are sorted by `path` for the same reason `_create`
-    sorts them -- adapter emission order tracks the wire, so an order derived
-    from it moves when a firmware update declares a property earlier. Extension
-    rows are sorted for a weaker version of the same reason: `adoptable` returns
-    the already-registered rows first, so an unsorted list would reshuffle the
-    card the moment a new row's entity appeared.
+    sorts them, and the sort does the same job here: `adopted_unique_id` is
+    deliberately non-injective, so two wire addresses can flatten onto one id,
+    and the lexically first path claims it. **The other is skipped rather than
+    listed**, mirroring `_create`, because a listed loser is not merely a row
+    with no entity: `entity_id` resolves by (platform, unique_id), so it would
+    report the *winner's* entity beside its own curation key -- inviting a record
+    saved against an entity that will never read it, under a live entity_id
+    saying it will. The skip is silent; `_create` already warns, naming both
+    addresses, and a second line per list request would say nothing new.
+
+    Claimed per platform, which is the scope the registry keys on: an entity is
+    unique by (domain, integration, unique_id), so the same id under `sensor` and
+    under `switch` is two entities and not a collision. `_create` runs once per
+    platform and gets that scoping for free; one pass over every platform has to
+    say so.
+
+    Extension rows are sorted for a weaker version of the ordering reason:
+    `adoptable` returns the already-registered rows first, so an unsorted list
+    would reshuffle the card the moment a new row's entity appeared. They need no
+    claim -- `extension_unique_id` carries the wire path verbatim and is
+    injective by construction.
     """
     device_registry = dr.async_get(hass)
     entity_registry = er.async_get(hass)
     rows: list[_AdoptableRow] = []
+    claimed: set[tuple[Platform, str]] = set()
 
     for device in snapshot.adopted_devices:
         identifier = resolve_identifier(device_registry, snapshot.serial_number, device)
         card = device_registry.async_get_device(identifiers={(DOMAIN, identifier)})
         for declaration in sorted(device.properties, key=lambda row: row.path):
+            platform = classify(declaration)
+            unique_id = adopted_unique_id(identifier, declaration)
+            if (platform, unique_id) in claimed:
+                continue
+            claimed.add((platform, unique_id))
             rows.append(
                 _AdoptableRow(
                     key=adopted_curation_key(identifier, declaration),
                     path=declaration.path,
                     context=RowContext(
-                        platform=classify(declaration),
+                        platform=platform,
                         datatype=declaration.datatype,
                         unit=declaration.unit,
                     ),
-                    unique_id=adopted_unique_id(identifier, declaration),
+                    unique_id=unique_id,
                     device_identifier=identifier,
                     device_registry_id=None if card is None else card.id,
                     device_label=_device_label(card, adopted_device_label(device)),

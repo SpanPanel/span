@@ -71,6 +71,31 @@ GENERATOR = AdoptedDevice(
     properties=(POWER, SETPOINT, LABEL),
 )
 
+# Two wire addresses that flatten to one adopted unique_id -- the collision
+# `adopted_unique_id` documents as permanent, spelled out. `battery-2/...` sorts
+# first because `-` precedes `/`, which is what makes it the claim.
+FLATTENS_FIRST = AdoptedProperty(
+    node_id="battery-2",
+    property_id="cell-temperature",
+    datatype="float",
+    unit="°C",
+    value="31.4",
+)
+FLATTENS_SECOND = AdoptedProperty(
+    node_id="battery",
+    property_id="2-cell-temperature",
+    datatype="float",
+    unit="°C",
+    value="31.5",
+)
+FLATTENS_SECOND_AS_SWITCH = AdoptedProperty(
+    node_id="battery",
+    property_id="2-cell-temperature",
+    datatype="boolean",
+    settable=True,
+    value="true",
+)
+
 CELL_TEMPERATURE = ExtensionProperty(
     subject=ExtensionSubject(kind="battery"),
     node_id="battery-2",
@@ -205,6 +230,76 @@ async def test_rows_are_grouped_by_the_device_they_render_on(
 
     assert [row["key"] for row in generator["rows"]] == [SETPOINT_KEY, POWER_KEY, LABEL_KEY]
     assert [row["key"] for row in battery["rows"]] == [CELL_TEMPERATURE_KEY]
+
+
+async def test_one_declaration_claims_a_flattened_id_and_the_other_is_not_listed(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The row that cannot become an entity is not offered as one.
+
+    `adopted_unique_id` is deliberately non-injective, so two wire addresses can
+    flatten onto one id; `adoption._create` gives it to the lexically first path
+    and skips the other. Listing both would be worse than cosmetic: the editor
+    resolves `entity_id` by (platform, unique_id), so the skipped row would
+    report the *winner's* entity while carrying its own curation key -- a record
+    the user saves against an entity that will never read it, beside a live
+    entity_id saying it will.
+
+    The declarations are handed over in the other order, so what decides is the
+    sort rather than the order the publisher happened to emit.
+    """
+    unique_id = adopted_unique_id(ADOPTED_IDENTIFIER, FLATTENS_FIRST)
+    assert unique_id == adopted_unique_id(ADOPTED_IDENTIFIER, FLATTENS_SECOND)
+    panel = _setup(
+        hass,
+        _snapshot(
+            devices=(replace(GENERATOR, properties=(FLATTENS_SECOND, FLATTENS_FIRST)),),
+            rows=(),
+        ),
+    )
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        unique_id,
+        suggested_object_id="backup_generator_battery_2_cell_temperature",
+    )
+
+    reply = await _list(hass, hass_ws_client, panel.id)
+    rows = _group(reply, "Backup Generator")["rows"]
+
+    assert [row["key"] for row in rows] == [
+        adopted_curation_key(ADOPTED_IDENTIFIER, FLATTENS_FIRST)
+    ]
+    assert rows[0]["path"] == "battery-2/cell-temperature"
+    assert rows[0]["entity_id"] == "sensor.backup_generator_battery_2_cell_temperature"
+
+
+async def test_one_id_on_two_platforms_is_two_entities_and_two_rows(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The claim is per platform, because the registry's own uniqueness is.
+
+    An entity is unique by (domain, integration, unique_id), so the same id under
+    `sensor` and under `switch` is two entities rather than a collision --
+    `adoption._create` claims per platform for exactly that reason. A claim
+    scoped to the id alone would drop a row that really does become an entity.
+    """
+    panel = _setup(
+        hass,
+        _snapshot(
+            devices=(replace(GENERATOR, properties=(FLATTENS_FIRST, FLATTENS_SECOND_AS_SWITCH)),),
+            rows=(),
+        ),
+    )
+
+    reply = await _list(hass, hass_ws_client, panel.id)
+    rows = _group(reply, "Backup Generator")["rows"]
+
+    assert [row["platform"] for row in rows] == ["sensor", "switch"]
+    assert [row["key"] for row in rows] == [
+        adopted_curation_key(ADOPTED_IDENTIFIER, FLATTENS_FIRST),
+        adopted_curation_key(ADOPTED_IDENTIFIER, FLATTENS_SECOND_AS_SWITCH),
+    ]
 
 
 async def test_a_row_carries_the_documented_keys(
