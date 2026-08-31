@@ -169,6 +169,23 @@ async def test_saving_none_clears_the_record(hass: HomeAssistant) -> None:
     assert overlay.record_for("bess/b/p") is None
 
 
+async def test_a_record_that_asserts_nothing_clears_rather_than_being_written(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Saving `CurationRecord()` may not leave the one shape the loader calls damaged.
+
+    Its stored form is `{}`, which `parse_record` refuses -- so writing it would
+    put a record on disk that the next load reports as unreadable and the save
+    after that silently deletes, over a value the signature accepts.
+    """
+    entry = _entry()
+    await async_save_record(hass, entry, "bess/b/p", CurationRecord(promote=True))
+    await async_save_record(hass, entry, "bess/b/p", CurationRecord())
+    overlay = await async_load_curation(hass, entry)
+    assert overlay.as_dicts() == {}
+    assert "unreadable" not in caplog.text
+
+
 async def test_a_wrong_shaped_store_loads_as_empty(
     hass: HomeAssistant, hass_storage: dict[str, object]
 ) -> None:

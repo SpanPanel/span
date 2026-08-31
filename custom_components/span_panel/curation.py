@@ -301,7 +301,15 @@ async def async_load_curation(hass: HomeAssistant, entry: ConfigEntry) -> Curati
 async def async_save_record(
     hass: HomeAssistant, entry: ConfigEntry, key: str, record: CurationRecord | None
 ) -> None:
-    """Write one record (or clear one) and leave every other key untouched."""
+    """Write one record (or clear one) and leave every other key untouched.
+
+    A record asserting nothing clears the key rather than being stored, because
+    its stored form is `{}` and `parse_record` refuses that. Writing it would
+    leave a record on disk that the next load reports as unreadable -- the
+    warning meant for a damaged or hand-edited store -- and the save after that
+    would delete, over a value this signature accepts. Save may not write what
+    load rejects.
+    """
     store = _store(hass, entry)
     stored = await store.async_load()
     raw_records: dict[str, dict[str, str]] = {}
@@ -309,8 +317,9 @@ async def async_save_record(
         for existing_key, raw in stored["records"].items():
             if isinstance(existing_key, str) and parse_record(raw) is not None:
                 raw_records[existing_key] = dict(raw)
-    if record is None:
-        raw_records.pop(key, None)
+    fields = record_as_dict(record) if record is not None else {}
+    if fields:
+        raw_records[key] = fields
     else:
-        raw_records[key] = record_as_dict(record)
+        raw_records.pop(key, None)
     await store.async_save({"records": raw_records})
