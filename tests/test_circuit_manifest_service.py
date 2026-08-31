@@ -11,6 +11,7 @@ from custom_components.span_panel import (
     _async_register_services,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
@@ -92,6 +93,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(
@@ -169,10 +171,12 @@ class TestExportCircuitManifest:
         entry_a.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot_a),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
         entry_b.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot_b),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(
@@ -216,6 +220,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(
@@ -260,6 +265,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         # Only register entity for one circuit
@@ -322,6 +328,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(
@@ -369,6 +376,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(
@@ -404,6 +412,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
         # No entities registered
 
@@ -436,6 +445,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(
@@ -469,6 +479,7 @@ class TestExportCircuitManifest:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         _register_power_entity(

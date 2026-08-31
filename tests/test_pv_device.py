@@ -63,6 +63,7 @@ from custom_components.span_panel.binary_sensor import (
     async_setup_entry as binary_sensor_setup_entry,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     Producibility,
@@ -248,7 +249,9 @@ async def _install(
 
     coordinator = _coordinator(hass, entry, snapshot)
     entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id=panel_device_id
+        coordinator=coordinator,
+        panel_device_id=panel_device_id,
+        curation=CurationOverlay.empty(),
     )
     await _register(hass, entry, "sensor", sensor_setup_entry)
     await _register(hass, entry, "binary_sensor", binary_sensor_setup_entry)

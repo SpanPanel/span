@@ -41,6 +41,7 @@ from custom_components.span_panel.const import (
     SYSTEM_ETHERNET_LINK,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.entity import SpanPanelEntity
 from custom_components.span_panel.field_paths import DerivedReason
 from custom_components.span_panel.schema_validation import SchemaFindings
@@ -78,7 +79,9 @@ def _make_coordinator(hass: HomeAssistant) -> SpanPanelCoordinator:
     coordinator = SpanPanelCoordinator(hass, cast(SpanMqttClient, MagicMock()), entry)
     coordinator.data = snapshot
     entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     return coordinator
 

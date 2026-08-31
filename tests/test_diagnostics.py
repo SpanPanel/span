@@ -18,6 +18,7 @@ from custom_components.span_panel.const import (
     CONF_HOP_PASSPHRASE,
     DOMAIN,
 )
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -85,7 +86,11 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         title="SPAN Panel",
         unique_id="sp3-diag-001",
     )
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -178,7 +183,11 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
     coordinator.schema_findings = None
 
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 

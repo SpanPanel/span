@@ -329,6 +329,16 @@ async def async_save_record(
     await store.async_save({"records": raw_records})
 
 
+async def async_forget_curation(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Drop the curated records when the entry is removed.
+
+    The keys are wire addresses, not registry ids, so a store left behind would
+    be picked back up by whatever entry is next added for the same panel -- and
+    silently re-assert metadata the user removed the panel to be rid of.
+    """
+    await _store(hass, entry).async_remove()
+
+
 def sensor_description(
     path: str,
     unit: str | None,

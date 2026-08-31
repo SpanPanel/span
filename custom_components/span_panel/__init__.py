@@ -61,6 +61,7 @@ from .const import (
 )
 from .control_gate import ControlGate, ControlLock, ControlPolicy
 from .coordinator import SpanPanelCoordinator
+from .curation import async_forget_curation, async_load_curation
 from .current_monitor import CurrentMonitor
 from .extension import async_notice_declined_extensions
 from .frontend import (
@@ -496,6 +497,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             panel_device_id=await ensure_device_registered(
                 hass, entry, snapshot, smart_device_name
             ),
+            curation=await async_load_curation(hass, entry),
         )
 
         # Before the forward, because a sub-device's `via_device_id` has to name a
@@ -569,9 +571,15 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     The announcement record goes with them, and for a sharper reason: it outliving
     the entry would mean re-adding the same panel announces none of the entities
     it recreates, because every one of them is already recorded as announced.
+
+    The curation overlay goes for the same reason. Its keys are wire addresses
+    rather than registry ids, so a store left behind is one the next entry for
+    the same panel would load and apply, re-asserting metadata the user is no
+    longer here to have asked for.
     """
     async_clear_schema_issues(hass, entry)
     await async_forget_announcements(hass, entry)
+    await async_forget_curation(hass, entry)
     await async_forget(hass, entry)
 
 

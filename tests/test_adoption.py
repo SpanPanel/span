@@ -45,6 +45,7 @@ from custom_components.span_panel.adoption import (
     resolve_identifier,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.diagnostics import _adoption
 from custom_components.span_panel.id_builder import build_panel_unique_id
 from custom_components.span_panel.number import (
@@ -975,7 +976,11 @@ async def test_a_vendor_format_nothing_can_read_leaves_the_curated_control_stand
     coordinator.unresolved_paths = frozenset()
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={}, title="SPAN Panel", unique_id=PANEL_SERIAL)
     entry.add_to_hass(hass)
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
     coordinator.config_entry = entry
     added: list[object] = []
 

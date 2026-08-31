@@ -8,10 +8,12 @@ the annotation reached for it from inside functions instead, and `services.py`
 grew five copies of the same runtime-data guard around five deferred imports.
 
 Nothing here imports anything from this package at runtime except
-`control_gate`, which is itself a leaf. `SpanPanelCoordinator` is needed only as
-an annotation, so it is imported under `TYPE_CHECKING`: a module that wants to
-say "this is a SPAN entry" should not have to pull in the coordinator and,
-through it, the schema and sensor machinery.
+`control_gate` and `curation`, and neither reaches back into the platforms:
+`control_gate` sees `const` and `options`, `curation` sees `const` and `util`.
+`SpanPanelCoordinator` is needed only as an annotation, so it is imported under
+`TYPE_CHECKING`: a module that wants to say "this is a SPAN entry" should not
+have to pull in the coordinator and, through it, the schema and sensor
+machinery.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 
 from .control_gate import ControlLock, ControlPolicy
+from .curation import CurationOverlay
 
 if TYPE_CHECKING:
     from .coordinator import SpanPanelCoordinator
@@ -50,6 +53,14 @@ class SpanPanelRuntimeData:
     # exists, so an id looked up here is one no caller has to handle the absence
     # of. See `ensure_device_registered`.
     panel_device_id: str
+    # The user's curation overlay for adopted entities, loaded from .storage
+    # before the platforms are forwarded so every adopted entity is *born* with
+    # its curated metadata -- a state class that arrives after the first state is
+    # written is a statistics reset rather than a metadata change. Required
+    # rather than defaulted: a setup path that forgets the load has to fail here,
+    # because an empty overlay is indistinguishable from a user who has curated
+    # nothing, and the user's records would still be sitting on disk.
+    curation: CurationOverlay
     # Resolved once at setup and read by every control platform, so a single
     # answer decides which entities exist and which callers may operate them.
     # Defaulted rather than required because the default *is* the policy an entry

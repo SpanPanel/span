@@ -19,6 +19,7 @@ from custom_components.span_panel.const import (
     ENABLE_ENERGY_DIP_COMPENSATION,
     USE_CIRCUIT_NUMBERS,
 )
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
@@ -103,7 +104,9 @@ def _make_coordinator(
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     coordinator.request_reload = MagicMock()
     coordinator.register_circuit_energy_sensor = MagicMock()
@@ -738,7 +741,9 @@ def test_energy_sensor_coerces_invalid_grace_period_value() -> None:
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     description = next(
         desc for desc in PANEL_ENERGY_SENSORS if desc.key == "mainMeterEnergyConsumedWh"
@@ -810,7 +815,9 @@ def test_evse_sensor_uses_evse_subdevice_info_and_name() -> None:
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     description = next(desc for desc in EVSE_SENSORS if desc.key == "evse_status")
 

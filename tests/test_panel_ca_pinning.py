@@ -28,6 +28,7 @@ from custom_components.span_panel.const import (
     PANEL_STATUS,
 )
 from custom_components.span_panel.coordinator import SpanPanelCoordinator
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.sensor_circuit import SpanCircuitPowerSensor
 from custom_components.span_panel.sensor_definitions import CIRCUIT_SENSORS
 
@@ -555,7 +556,9 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
     )
     entry.mock_state(hass, ConfigEntryState.LOADED)
     entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=MagicMock(), panel_device_id="panel-device-id"
+        coordinator=MagicMock(),
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     _async_register_credential_services(hass)
 

@@ -7,7 +7,10 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.span_panel import async_remove_entry
+from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.curation import (
     CurationError,
     CurationOverlay,
@@ -15,6 +18,7 @@ from custom_components.span_panel.curation import (
     RowContext,
     allowed_device_classes,
     allowed_state_classes,
+    async_forget_curation,
     async_load_curation,
     async_save_record,
     binary_sensor_device_class,
@@ -209,6 +213,34 @@ async def test_an_unreadable_record_is_skipped_not_fatal(
     overlay = await async_load_curation(hass, _entry())
     assert overlay.record_for("good/b/p") == CurationRecord(promote=True)
     assert overlay.record_for("bad/b/p") is None
+
+
+async def test_removing_the_entry_forgets_the_curated_records(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """The keys are wire addresses, not registry ids.
+
+    A store left behind is one the next entry added for the same panel would
+    load and apply, re-asserting metadata for a panel the user removed.
+    """
+    entry = _entry()
+    await async_save_record(hass, entry, "bess/b/p", CurationRecord(promote=True))
+
+    await async_forget_curation(hass, entry)
+
+    assert "span_panel.curation.test-entry" not in hass_storage
+    assert (await async_load_curation(hass, entry)).as_dicts() == {}
+
+
+async def test_removing_the_config_entry_is_what_calls_the_forget(hass: HomeAssistant) -> None:
+    """The store outliving the entry is only prevented if the removal hook says so."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="removed-entry", unique_id="sp3-001")
+    entry.add_to_hass(hass)
+    await async_save_record(hass, entry, "bess/b/p", CurationRecord(promote=True))
+
+    await async_remove_entry(hass, entry)
+
+    assert (await async_load_curation(hass, entry)).as_dicts() == {}
 
 
 def test_for_row_sanitises_and_stale_fields_reports() -> None:

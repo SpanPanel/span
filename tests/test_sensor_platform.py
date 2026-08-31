@@ -16,6 +16,7 @@ from custom_components.span_panel.const import (
     ENABLE_UNMAPPED_CIRCUIT_SENSORS,
     USE_CIRCUIT_NUMBERS,
 )
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.sensor import (
     _build_evse_device_info_map,
     async_setup_entry,
@@ -240,7 +241,9 @@ def test_build_evse_device_info_map_uses_feed_circuit_and_display_suffix() -> No
         options={USE_CIRCUIT_NUMBERS: False},
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     mapping = _build_evse_device_info_map(coordinator, snapshot)
@@ -281,7 +284,9 @@ def test_create_circuit_sensors_skips_unmapped_and_optional_net_sensors() -> Non
     )
     coordinator.config_entry = entry
     entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     entities = create_circuit_sensors(coordinator, snapshot, entry)
@@ -316,7 +321,9 @@ def test_create_unmapped_circuit_sensors_only_creates_unmapped_entities() -> Non
         domain=DOMAIN, data={}, title="SPAN Panel"
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     entities = create_unmapped_circuit_sensors(coordinator, snapshot)
@@ -341,7 +348,9 @@ def test_create_battery_sensors_returns_expected_entities_when_bess_present() ->
         title="SPAN Panel",
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     entities = create_battery_sensors(coordinator, snapshot)
@@ -369,7 +378,9 @@ def test_create_power_flow_sensors_gate_pv_and_site_flow() -> None:
         domain=DOMAIN, data={}, title="SPAN Panel"
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     entities = create_power_flow_sensors(coordinator, snapshot)
@@ -396,7 +407,9 @@ def test_create_evse_sensors_creates_all_descriptions_for_each_charger() -> None
         domain=DOMAIN, data={}, title="SPAN Panel"
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     entities = create_evse_sensors(coordinator, snapshot)
