@@ -38,6 +38,19 @@ SUB_DEVICE_MID: Final = "mid"
 SUB_DEVICE_EVSE: Final = "evse"
 SUB_DEVICE_PV: Final = "pv"
 
+BOOLEAN_DATATYPE: Final = "boolean"
+ENUM_DATATYPE: Final = "enum"
+NUMERIC_DATATYPES: Final = frozenset({"float", "integer"})
+"""The wire datatypes an eBus `$datatype` declares, as far as this integration reads them.
+
+Here rather than in `adoption.py`, where they were first written, because three
+modules now decide something from a declared datatype and only one of them is
+about adopting a device: `extension.py` picks a platform from it, and
+`curation.py` refuses a state class off a row that is not numeric. `util.py` is
+the module all three already import from, so this is the one home that does not
+make a reader of one feature import the other.
+"""
+
 ADOPTED_IDENTIFIER_TOKEN: Final = "adopted"
 """The infix marking a sub-device identifier as adopted rather than curated.
 

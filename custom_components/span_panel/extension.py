@@ -38,7 +38,6 @@ from homeassistant.helpers.entity_registry import EntityRegistry
 from span_panel_api import ExtensionProperty, ExtensionSubject, SpanPanelSnapshot
 
 from .adoption import (
-    BOOLEAN_DATATYPE,
     DEVICE_CLASS_BY_UNIT,
     clamp_state,
     homie_boolean,
@@ -50,6 +49,7 @@ from .entity import SpanPanelEntity
 from .notices import async_raise_on_change, read_translations
 from .util import (
     ADOPTED_IDENTIFIER_TOKEN,
+    BOOLEAN_DATATYPE,
     SUB_DEVICE_BESS,
     SUB_DEVICE_EVSE,
     SUB_DEVICE_MID,

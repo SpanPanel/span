@@ -53,7 +53,12 @@ from span_panel_api import AdoptedDevice, AdoptedProperty, SpanPanelSnapshot
 from .const import DOMAIN
 from .entity import SpanPanelEntity
 from .id_builder import get_user_friendly_suffix
-from .util import ADOPTED_IDENTIFIER_TOKEN
+from .util import (
+    ADOPTED_IDENTIFIER_TOKEN,
+    BOOLEAN_DATATYPE,
+    ENUM_DATATYPE,
+    NUMERIC_DATATYPES,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -62,10 +67,6 @@ if TYPE_CHECKING:
     from .coordinator import SpanPanelCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-
-BOOLEAN_DATATYPE: Final = "boolean"
-ENUM_DATATYPE: Final = "enum"
-NUMERIC_DATATYPES: Final = frozenset({"float", "integer"})
 
 MAX_STATE_LENGTH: Final = 255
 """Home Assistant's hard limit on a state string.
