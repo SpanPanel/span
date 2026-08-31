@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Adopted entities can now be curated from the dashboard's new Adopted tab** — set a device class, a statistics class and whether the entity stays under
+  Diagnostics, with the change applied on an automatic reload.
+
 ## [2.1.0] - 8/2026
 
 ### In short

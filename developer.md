@@ -480,22 +480,27 @@ Why by node: the capability catalogs carry **no marker** for "this value is a de
 and such a list goes stale silently. `ebus-sdk`'s own `topology.py` covers `feeds-device-id` and `fed-by-device-id` and omits `grid-forming-entity`, which lives
 on the `grid` capability. A node cannot go stale that way.
 
-### Nothing adopted enters long-term statistics
+### Nothing adopted enters long-term statistics unless its owner asserts one
 
-No adopted entity carries a `state_class`. `test_no_state_class_is_set_anywhere_in_the_module` reads `adoption.py` as syntax and fails if one ever appears.
+No adopted entity carries a `state_class` this integration chose. `test_no_state_class_is_set_anywhere_in_the_module` reads `adoption.py` as syntax and fails if
+one ever appears there; a user-asserted one reaches the entity through the description helpers in
+[`curation.py`](#the-description-helpers-are-the-only-place-state_class-is-spelled), which is the only module in the integration that spells the word.
 
-Three reasons, and they are independent:
+Three reasons the integration will not pick one itself, and they are independent:
 
 1. It is not declared on the wire and is not derivable from one. This integration ships `feedthroughEnergyProducedWh` as `TOTAL` beside
    `mainMeterEnergyProducedWh` as `TOTAL_INCREASING` — same unit, same device class, opposite classification.
 2. A wrong one writes corrupt long-term statistics, and fixing the producer afterwards does not repair them.
 3. Enrolling a property nobody asked for into long-term statistics is a permanent write to every install's recorder database.
 
-A user who wants statistics from an adopted reading wraps it in a template sensor, a Riemann-sum integration or a utility meter. That is their call, made on an
+None of the three is an argument against the _user_ choosing one, and all three are arguments for it being their choice rather than a default: they own the
+vendor device, so they are not guessing, and the assertion is stored where it can be seen and undone. A user who would rather not assert one, or who wants a
+different derivation, still wraps the reading in a template sensor, a Riemann-sum integration or a utility meter — either way it is their call, made on an
 entity they chose to enable.
 
-`device_class` is enumerated in `DEVICE_CLASS_BY_UNIT` rather than inferred. A unit outside the map gets **no** device class — `%` is deliberately absent,
-because its uses here are a state of charge, a confidence and a duty cycle, and no single class is right for all of them.
+`device_class` is enumerated in `DEVICE_CLASS_BY_UNIT` rather than inferred, and a curated record overrides whatever that map answers. A unit outside the map
+gets **no** device class — `%` is deliberately absent, because its uses here are a state of charge, a confidence and a duty cycle, and no single class is right
+for all of them.
 
 ### The device exists even with no entities
 
@@ -656,6 +661,12 @@ file costs the translation and not the notification.
 take. **No values, no device name, no serial.** Same rule as `schema_discovery` and for the same reason: `TO_REDACT` is key-based over the config entry and
 cannot protect a wire value put there.
 
+`adopted_curation` is the companion block, and it is `CurationOverlay.as_dicts()` verbatim: every stored record, keyed by its curation key, carrying its enum
+values and nothing else. It withholds under the same rule for a narrower reason — the keys are wire addresses and the values are Core enum members, so there is
+no wire value and no user free text in the block by construction. The free text a curated row does have (its name and its icon) lives in Core's registry rather
+than in this store, so a diagnostics download cannot leak it from here at all. What the block answers is the question worth asking of a support attachment:
+whether a surprising entity is surprising because a user asserted something, and which field it was.
+
 ### Adopted entities declare no field paths
 
 `snapshot.adopted_devices` is outside the curated field-path vocabulary by construction — it carries no metadata row, so the producible gate has nothing to
@@ -719,14 +730,16 @@ better metadata arrives. Three consequences worth knowing before changing any of
 
 ### What metadata may reshape, and what it may not
 
-| Attribute                                   | Revisable later?                              |
-| ------------------------------------------- | --------------------------------------------- |
-| `entity_category`, device class, unit, name | **Yes**, freely — no id change, no statistics |
-| Platform (`sensor` vs `binary_sensor`)      | **No.** The domain is baked into `entity_id`  |
-| `state_class`                               | Never set at all                              |
+| Attribute                                   | Revisable later?                                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `entity_category`, device class, unit, name | **Yes**, freely — no id change, no statistics                                            |
+| Platform (`sensor` vs `binary_sensor`)      | **No.** The domain is baked into `entity_id`                                             |
+| `state_class`                               | **User-curated only**, through the [curation store](#curation-metadata-the-user-asserts) |
 
-The free half is free _because_ of the never half: these entities carry no `state_class`, so they write no long-term statistics, so a later unit or device-class
-change has nothing to reinterpret. Contrast a curated entity, where changing a unit under a `state_class` is the unrepairable case.
+The free half is free _because_ of the never half, and curation does not spend it: an uncurated row still carries no `state_class`, still writes no long-term
+statistics, and still has nothing for a later unit or device-class change to reinterpret. What changes is who may end that: the owner of the device, explicitly,
+on one row at a time — and from that point the row is in the same position as a curated entity, where changing a unit under a `state_class` is the unrepairable
+case. That is why the curate command answers `incompatible_device_class` rather than storing a device class the declared unit does not admit.
 
 The platform is enforced in `resolve_platform`, not remembered: whatever domain the id is already registered under wins, however the declaration later changes.
 `async_update_entity` raises `ValueError("New entity ID should be same domain")`, so re-deriving the platform from better metadata would not move a row — it
@@ -777,6 +790,105 @@ confidence, and the ranking is the argument:
 
 The real fix is upstream: a declared `role` on the property, proposed in `SpanPanel_Docs/span/docs/dev/ebus-property-role-proposal.md`. Until then the ranking
 is the shipping plan, and `entity_category` being free to revise is what makes a conservative default cheap.
+
+## Curation: metadata the user asserts
+
+Adoption's refusal was never "adopted entities may not have statistics" — it was "the integration will not guess", and those are the same rule only while nobody
+who does know the answer has anywhere to say it. `curation.py` is that place. It owns three fields and no others: `state_class`, `device_class`, and promotion
+out of `EntityCategory.DIAGNOSTIC`. Everything else a user might want to change about an adopted entity — its name, icon, area, display unit, precision, and
+whether it is enabled at all — is registry state Core already owns, and this integration writes none of it.
+
+Identity is untouched in every case. A curated row keeps its `unique_id`, its `entity_id` and its platform: the overlay changes what an entity declares, never
+what it is. That is what makes this safe to apply to entities whose ids are [permanent by design](#terminal-identity) — it is metadata handed to an existing
+identity, not a second identity namespace.
+
+### The store is an overlay keyed by wire address
+
+`helpers.storage.Store` at `span_panel.curation.{entry_id}`, one per config entry for the same reason `additions.py` has one: two panels in one house curate
+independently. The stored shape is `{"records": {key: {field: value}}}`, and a record holds only what the user asserted — a missing field means the adopted
+default, and a missing key means the row was never curated at all.
+
+The keys are scope-prefixed wire addresses rather than `unique_id`s:
+
+| Half                                | Curation key                     | Built by                 |
+| ----------------------------------- | -------------------------------- | ------------------------ |
+| Vendor reading on a modelled device | `{scope}/{node}/{property}`      | `extension_curation_key` |
+| Entity on an adopted device         | `{identifier}/{node}/{property}` | `adopted_curation_key`   |
+
+The prefix is what makes a key injective: `path` is `{node}/{property}` on both models and is unique only within one device. The two namespaces cannot collide,
+because only an adopted identifier carries the `_adopted_` token. Neither key goes through `get_user_friendly_suffix`, which is what makes `adopted_unique_id`
+[deliberately non-injective](#the-device-level-grammar-is-not-injective-and-the-collision-is-caught) — keying the store on a `unique_id` would have inherited
+that collision and let one record reach two wire addresses.
+
+**A record asserting nothing clears its key rather than being stored.** Its stored form is `{}`, which `parse_record` refuses, so writing it would leave a
+record on disk that the next load reports as unreadable — the warning meant for a damaged or hand-edited store — and the save after that would delete, over a
+value the signature accepts. Save may not write what load rejects.
+
+Records are never pruned. One whose wire path stops being published goes inert rather than being deleted, which is the same "the integration never decides a
+row's fate" stance the rest of adoption takes. The whole store does go when the config entry is removed (`async_forget_curation`), and that one is deliberate:
+the keys are wire addresses rather than registry ids, so a store left behind is one the next entry for the same panel would load and apply, re-asserting
+metadata the user removed the panel to be rid of.
+
+### Validation refuses at save, and runs again at construction
+
+`validate_record` refuses rather than warns, because a stored record is applied unattended at every future setup — a warning would be read once, by nobody.
+Everything decidable without the wire is decided in the websocket schema instead (enum membership, the one storable `entity_category`, the key's charset), so
+only cross-field questions reach the validator: a `state_class` needs a sensor row with a numeric datatype, a `device_class` must belong to its platform's enum
+and must admit the unit the row declares (through Core's own `DEVICE_CLASS_UNITS`), and a control row accepts prominence and nothing else.
+
+The same validator runs again at construction, where it drops rather than refuses. A record can go stale between the save and a later setup — the vendor may
+change a row's unit or datatype — so `sanitise` re-measures each field independently, keeps the ones that still validate, and `CurationOverlay.for_row` emits
+one warning naming what it dropped. It never raises: curation must not be able to block setup. It never deletes either, because the wire may revert and the
+user's other assertions are still good.
+
+That is also why the list command reports a record **as stored** rather than as it would be applied, beside a `stale_fields` list naming the difference.
+Reporting the sanitised form would show the user an assertion they never made and hide that theirs was dropped.
+
+### The description helpers are the only place `state_class` is spelled
+
+`adoption.py` and `extension.py` each carry an AST guard asserting the token appears nowhere in them — not as a keyword, not as an `_attr_state_class` target,
+not as a `SensorStateClass` name. Both stay true while their entities carry curated state classes, because neither module builds its own description: both call
+`curation.sensor_description`, which takes the wire path, the declared unit, the `DEVICE_CLASS_BY_UNIT` default and the record, and returns the
+`SensorEntityDescription` the entity is constructed from. `binary_sensor_device_class` and `entity_category_for` do the same job for the other two fields.
+
+This ends up stricter than the design asked for. The plan was to relax the adoption guard into "the keyword is permitted when its value comes from the curation
+interface"; routing through a helper meant it did not have to relax at all, and the guard newly added for `extension.py` could be the same absolute form rather
+than a weaker one. A guard that admits one shape of exception is a guard somebody has to re-read before trusting.
+
+### The two commands write no registry state
+
+`websocket_adopted.py` defines `span_panel/adopted/list` and `span_panel/adopted/curate`, and `websocket.py`'s `async_register_commands` registers them beside
+`panel_topology` — the import runs that way and only that way, so no cycle can appear as further commands join. Both are `@require_admin`, both take the main
+panel's device registry id, and both answer `panel_topology`'s error codes from the same resolution — a consumer that learned one set does not meet a second.
+[websocket-api.md](websocket-api.md) is the wire contract; what matters here is the boundary.
+
+**Enabling is Core's act, and so are naming, icons, areas, display units and precision.** `config/entity_registry/update` already exposes all of them, already
+requires admin and already carries the undo, so duplicating any of it here would mean two writers for one field and no rule about which wins. What is left over
+is exactly what Core has nowhere to put — a state class, a device class and prominence for an entity built from a vendor declaration — and that is the whole of
+what `curate` stores. `entity_category` is the interesting one: it _is_ a registry column, but it is absent from that websocket's schema, which is why promotion
+has to come from us.
+
+Both commands derive their rows through one function, `_rows`, using the same helpers the entity builders use — `resolve_identifier` and `classify` for an
+adopted device, `adoptable` and `resolve_platform` for a vendor reading. A second derivation would let the editor disagree with the entities it edits: offering
+a state class for a row that is really a control, or a key `curate` cannot resolve. `curate` re-derives rather than trusting the key it was handed, because the
+store is keyed on wire addresses and a key nothing publishes would be held forever — read by no entity and shown on no list.
+
+`_rows` inherits the adopted-device collision rule as a **skip** rather than a listing. A row whose `unique_id` was claimed by a lexically earlier wire path is
+left out entirely, because `entity_id` resolves by (platform, `unique_id`): listing it would report the _winner's_ entity beside the loser's curation key,
+inviting a record saved against an entity that will never read it under a live `entity_id` saying it will. `_create` already warns and names both addresses, so
+the skip is silent.
+
+### The reload is the mechanism, not a courtesy
+
+A save has exactly three effects: the record is written, the entry is scheduled for reload, and the result is returned. The reload is the half that reads as
+politeness and is not. An entity description is fixed when the entity is constructed, so a record reaches its entity only by that entity being built again — and
+being built _with_ it, because a `state_class` that first appears after states have been recorded is a statistics reset rather than a metadata change.
+
+The response also carries advisory `warnings`, which are consequences of a save rather than objections to it: the write has already happened, and the user asked
+for it. `statistics_removed` fires on what a save _leaves_ rather than on how it was spelled — a record narrowed to its other fields drops a state class exactly
+as clearing the whole record does — and names Core's answer to that, which is to raise its `state_class_removed` repair and stop compiling statistics for the
+entity. Statistics already collected are not deleted. `total_increasing` is the other warning, and it reinterprets a reading rather than describing it:
+`sensor/recorder.py`'s `reset_detected` reads a drop of more than a tenth as a meter reset, so a reading that legitimately falls manufactures consumption.
 
 ## Runtime data lives in `runtime.py`, and one helper answers for it
 

@@ -465,9 +465,10 @@ number becomes a number entity — and those arrive switched off too.
 
 Two things worth knowing before you build on one:
 
-- **Nothing adopted enters long-term statistics.** No adopted entity carries a `state_class`, because the correct one is not published on the wire and guessing
-  wrong writes corrupt statistics that fixing the panel afterwards does not repair. If you want statistics from an adopted reading, wrap it in a template
-  sensor, a Riemann-sum integration or a utility meter — a deliberate choice on an entity you enabled.
+- **Nothing adopted enters long-term statistics until you say it should.** Adopted entities arrive with no statistics class, because the correct one is not
+  published on the wire and guessing wrong writes corrupt statistics that fixing the panel afterwards does not repair. You are welcome to supply it — the
+  [Adopted tab](#the-adopted-tab) is where — or to leave it alone and wrap the reading in a template sensor, a Riemann-sum integration or a utility meter.
+  Either way it is a deliberate choice on an entity you enabled.
 - **A new property on a device this integration already models is adopted too**, but as a reading on that device's existing card rather than as a device of its
   own. See [Adopted Vendor Readings](#adopted-vendor-readings) below.
 
@@ -497,10 +498,48 @@ So deletion means "hide it until next time" for a live reading and "clear it out
 publishing is left in place reading unknown rather than removed: silence on the wire does not distinguish a property that is gone from one that has not arrived
 yet, and deleting your entity on a guess is not something an upgrade should do.
 
-**These entities are permanent in id, not in identity.** If one of these readings is later curated properly (delivered as an official part of the integration),
-the curated entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is the trade for surfacing a reading the
-moment it appears rather than waiting for a release to model it, and it is why a vendor reading you have come to depend on is worth raising in an issue:
-curation is what turns it into something with a real name, a proper category and statistics.
+**These entities are permanent in id, not in identity.** If one of these readings is later modelled properly (delivered as an official part of the integration),
+that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is the trade for surfacing a reading the moment
+it appears rather than waiting for a release to model it, and it is why a vendor reading you have come to depend on is worth raising in an issue: being modelled
+is what turns it into something with a real name, a proper category and statistics out of the box.
+
+### The Adopted Tab
+
+The integration will not guess what an adopted reading means. You are not guessing — it is your device — so the built-in dashboard has an **Adopted** tab where
+you can tell the integration what it refuses to infer. It lists every adopted entity on your panel, grouped by the device it belongs to, and expands each one
+into a small form. The tab appears only for administrator accounts.
+
+Three of those fields are the integration's own, and they are the ones Home Assistant has nowhere to put for an entity built from a vendor declaration:
+
+- **Device class** — what kind of quantity this is (power, temperature, energy), which gives the entity a sensible icon and, for the classes Home Assistant
+  knows how to convert, lets you pick a display unit.
+- **Statistics class** — Home Assistant's `state_class`, which is what enrolls the reading in long-term statistics and makes it usable on an Energy dashboard or
+  in a long-range history graph. This is the piece nothing else in Home Assistant can set for you.
+- **Prominence** — whether the entity stays filed under Diagnostics or is promoted out of it.
+
+The rest of the form — **name, icon, area, and whether the entity is enabled** — is Home Assistant's own entity settings, shown here so you do not have to go
+somewhere else, and saved into Home Assistant's registry exactly as if you had edited the entity directly. The integration never changes any of it on your
+behalf; enabling an adopted entity is always something you do.
+
+You are only offered choices your panel's own declaration allows. A statistics class is offered only on numeric readings; the device classes listed are the ones
+compatible with the unit your panel publishes, and the unit itself stays whatever the publisher sends.
+
+**Saving reloads the integration.** That is not a formality — it is how the setting takes effect. An entity's type information is fixed at the moment the entity
+is built, so the reload is what rebuilds it already carrying what you asserted, rather than attaching a statistics class to an entity that has been recording
+without one — which Home Assistant reads as its statistics starting over rather than as a change of metadata.
+
+Two consequences are worth knowing before you use the statistics class:
+
+- **`total_increasing` tells Home Assistant the reading is a meter that only counts up.** The recorder treats a drop of more than a tenth as the meter being
+  reset and starts a new cycle, so choosing it for a reading that legitimately falls will manufacture consumption that never happened. Choose it only for a
+  genuine lifetime total.
+- **Removing a statistics class stops statistics, and Home Assistant will say so.** If an entity already has statistics and then loses its statistics class,
+  Home Assistant raises a repair notice against it — a warning rather than something with a fix button — and stops compiling new statistics for it. The
+  statistics already collected are not deleted, and the notice clears by itself if you put a statistics class back.
+
+**Nothing about the entity's identity changes.** It keeps the same entity id, the same unique id and the same history, so dashboards and automations pointing at
+it keep working. Statistics simply begin from the point the entity is enabled and writing states with a statistics class; the history it recorded before that
+stays as ordinary state history.
 
 ### BESS & Grid Management
 
