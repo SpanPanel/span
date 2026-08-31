@@ -7,7 +7,7 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.14.3,<3.15"
 dependencies = [
-    "homeassistant==2026.8.0",
+    "homeassistant==2026.8.3",
     "span-panel-api==3.3.0",
     # Separate distributions, not dependencies of the bootstrap: adapters are found
     # through the `span_panel_api.schema_adapters` entry-point group, so each one has
@@ -19,7 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "homeassistant-stubs==2026.8.0",
+    "homeassistant-stubs==2026.8.3",
     "types-requests",
     "types-PyYAML",
     "mypy==2.3.1",
@@ -36,7 +36,7 @@ dev = [
     # and the `homeassistant` pin above are a single choice rather than two.
     # 0.13.354 is the release that pins 2026.8.0, the version this integration
     # declares as its floor and therefore the one worth testing against.
-    "pytest-homeassistant-custom-component==0.13.354",
+    "pytest-homeassistant-custom-component==0.13.358",
     "isort",
     "vulture>=2.14",
 ]
