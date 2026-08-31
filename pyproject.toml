@@ -34,9 +34,10 @@ dev = [
     "pylint==4.0.6",
     # Pinned, not floored: each release pins one exact Home Assistant, so this
     # and the `homeassistant` pin above are a single choice rather than two.
-    # 0.13.354 is the release that pins 2026.8.0, the version this integration
-    # declares as its floor and therefore the one worth testing against.
-    "pytest-homeassistant-custom-component==0.13.358",
+    # 0.13.357 is the release that pins 2026.8.3 — the version pinned above; a
+    # bump to 0.13.358 pinned 2026.9.0b0 and made the pair unresolvable, which
+    # CI's re-lock from PyPI catches and a stale local venv does not.
+    "pytest-homeassistant-custom-component==0.13.357",
     "isort",
     "vulture>=2.14",
 ]
