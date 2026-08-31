@@ -437,9 +437,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # downgrade the pin exists to prevent (issue #264). The transport's
             # own client is not used here; see the constructor comment below.
             try:
-                transport = panel_rest_transport(
-                    hass, entry.data, allow_plaintext_fallback=False
-                )
+                transport = panel_rest_transport(hass, entry.data, allow_plaintext_fallback=False)
             except PanelCaUnusableError as err:
                 async_raise_ca_unusable(hass, entry, str(err))
                 raise ConfigEntryError(  # noqa: TRY301
