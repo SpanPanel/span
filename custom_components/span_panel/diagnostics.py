@@ -335,4 +335,8 @@ async def async_get_config_entry_diagnostics(
         },
         "schema_discovery": _discovery(coordinator.schema_findings),
         "adopted_devices": _adoption(snapshot),
+        # Keys and enum values only -- no wire values, no user free text (names
+        # and icons live in Core's registry, not here). Same withholding rules
+        # as the adoption block above.
+        "adopted_curation": entry.runtime_data.curation.as_dicts(),
     }

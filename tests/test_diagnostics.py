@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from homeassistant.components.diagnostics import REDACTED
+from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -18,7 +19,12 @@ from custom_components.span_panel.const import (
     CONF_HOP_PASSPHRASE,
     DOMAIN,
 )
-from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.curation import (
+    CurationOverlay,
+    CurationRecord,
+    async_load_curation,
+    async_save_record,
+)
 from custom_components.span_panel.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -250,7 +256,15 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     coordinator.transport_dead = False
     coordinator.last_update_success = True
     coordinator.schema_findings = None
-    entry.runtime_data = SimpleNamespace(coordinator=coordinator)
+    # The real runtime data, not a namespace, for the reason the circuit double
+    # above is the real model: a hand-rolled stand-in carrying only the fields
+    # the dump happened to read when it was written goes stale silently, and
+    # mypy cannot see the drift on a `SimpleNamespace`.
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -259,3 +273,52 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
     row = rows["sensor.span_panel_l1_voltage"]
     assert row["disabled_by"] == "integration"
     assert row["unique_id"] == "span_sp3_diag_003_l1_voltage"
+
+
+async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> None:
+    """What the user asserted about adopted rows is the other half of the adoption block.
+
+    The adoption block says what the panel published. Without this one, a
+    maintainer reading an attachment cannot tell a state class the integration
+    derived from one the household declared, and those two fail differently.
+
+    Seeded through the store rather than by handing an overlay in, because what
+    the payload has to carry is what a *loaded* entry holds: the overlay
+    diagnostics reads is the one setup read off disk.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="curated-entry", title="SPAN Panel")
+    entry.add_to_hass(hass)
+    await async_save_record(
+        hass,
+        entry,
+        "bess/battery-2/cell-voltage",
+        CurationRecord(state_class=SensorStateClass.MEASUREMENT, device_class="voltage"),
+    )
+    await async_save_record(hass, entry, "bess/battery-2/enabled", CurationRecord(promote=True))
+
+    coordinator = MagicMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-diag-004")
+    coordinator.panel_offline = False
+    coordinator.transport_dead = False
+    coordinator.last_update_success = True
+    coordinator.schema_findings = None
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=await async_load_curation(hass, entry),
+    )
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["adopted_curation"] == {
+        "bess/battery-2/cell-voltage": {"state_class": "measurement", "device_class": "voltage"},
+        "bess/battery-2/enabled": {"entity_category": "none"},
+    }
+    # Keys and enum values, and the assertion is on the shape rather than on a
+    # filter this test applies: a record that grew a name, an icon or a wire
+    # value would be a leak the payload cannot redact, because `TO_REDACT` is
+    # key-based over the config entry and reaches nothing here.
+    assert all(
+        set(record) <= {"state_class", "device_class", "entity_category"}
+        for record in result["adopted_curation"].values()
+    )
