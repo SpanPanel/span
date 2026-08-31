@@ -702,6 +702,7 @@ async def async_setup_entry(
                 snapshot,
                 dr.async_get(hass),
                 er.async_get(hass),
+                overlay=config_entry.runtime_data.curation,
             ),
         ]
     )
