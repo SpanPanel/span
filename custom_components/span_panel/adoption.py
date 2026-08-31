@@ -14,16 +14,23 @@ path to undercut. On a curated device, curation is plausibly coming and its
 controls do real work, so `extension.py` mints a terminal identity in plain wire
 vocabulary and surfaces even a settable property as a reading.
 
-**Nothing adopted enters long-term statistics.** No adopted entity carries a
-`state_class`, ever. Three reasons, and the third is the one that shapes the
+**This module never decides that something enters long-term statistics.** It
+spells no `state_class` anywhere -- an AST guard in `tests/test_adoption.py`
+asserts the token is absent from the syntax, not merely from the paths a test
+happens to construct. Three reasons, and the third is the one that shapes the
 module: `state_class` is not declared on the wire and is not derivable from one
 (`feedthroughEnergyProducedWh` is `TOTAL` beside `mainMeterEnergyProducedWh` as
 `TOTAL_INCREASING` -- same unit, same device class); a wrong one writes corrupt
 statistics that fixing the producer does not repair; and enrolling a property
 nobody asked for into long-term statistics is a permanent write to every
-install's recorder database. A user who wants statistics from an adopted reading
-can wrap it in a template sensor, a Riemann sum or a utility meter, which is
-their call to make on an entity they chose to enable.
+install's recorder database.
+
+**The owner of the device may still assert one, and that is a different act.**
+A user curating a row is not guessing about their own hardware, and their
+assertion arrives here as a `CurationRecord` that `curation.sensor_description`
+turns into a description -- which is how a curated row gets a state class
+without this module naming the thing it must not infer. Nothing is asserted by
+default: an uncurated row is exactly the entity it was before curation existed.
 
 **These entities declare no field paths.** `snapshot.adopted_devices` is outside
 the curated field-path vocabulary by construction: it carries no metadata row, so
@@ -43,14 +50,22 @@ from typing import TYPE_CHECKING, Final
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.const import EntityCategory, Platform
+from homeassistant.const import Platform
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from span_panel_api import AdoptedDevice, AdoptedProperty, SpanPanelSnapshot
 
 from .const import DOMAIN
+from .curation import (
+    CurationOverlay,
+    CurationRecord,
+    RowContext,
+    binary_sensor_device_class,
+    entity_category_for,
+    sensor_description,
+)
 from .entity import SpanPanelEntity
 from .id_builder import get_user_friendly_suffix
 from .util import (
@@ -300,6 +315,17 @@ def adopted_unique_id(identifier: str, declaration: AdoptedProperty) -> str:
     return f"span_{identifier.lower()}_{get_user_friendly_suffix(wire_path)}"
 
 
+def adopted_curation_key(identifier: str, declaration: AdoptedProperty) -> str:
+    """Return the curation-store key for one adopted property.
+
+    The frozen registry identifier plus the `{node}/{property}` path, hyphens
+    preserved -- injective where `adopted_unique_id` deliberately is not,
+    because nothing here flattens. Scope-prefixed because `path` alone is
+    unique only within one device.
+    """
+    return f"{identifier}/{declaration.path}"
+
+
 def adopted_device_info(
     identifier: str,
     device: AdoptedDevice,
@@ -387,13 +413,15 @@ def async_register_adopted_devices(
 class AdoptedEntity(SpanPanelEntity):
     """Base for an entity built from a declaration rather than from a description.
 
-    Disabled and diagnostic without exception. Adoption's job is to make a device
-    reachable, not to put it on somebody's dashboard: the user decides what is
-    worth enabling, having seen the device exists.
+    Disabled without exception, and diagnostic unless the owner of the device
+    said otherwise. Adoption's job is to make a device reachable, not to put it
+    on somebody's dashboard: the user decides what is worth enabling, having
+    seen the device exists. A curated row is that decision already made, so
+    `entity_category_for` lets it out of diagnostics -- and leaves it disabled
+    all the same, because enabling is still their act.
     """
 
     _attr_entity_registry_enabled_default = False
-    _attr_entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -403,6 +431,7 @@ class AdoptedEntity(SpanPanelEntity):
         declaration: AdoptedProperty,
         *,
         panel_device_id: str,
+        record: CurationRecord | None = None,
     ) -> None:
         """Bind this entity to one property of one adopted device."""
         super().__init__(coordinator)
@@ -413,6 +442,7 @@ class AdoptedEntity(SpanPanelEntity):
         self._attr_device_info = adopted_device_info(
             identifier, device, panel_device_id=panel_device_id
         )
+        self._attr_entity_category = entity_category_for(record)
 
     def _published(self) -> str | None:
         """Return this property's current value, or None when the panel publishes none.
@@ -432,7 +462,7 @@ class AdoptedEntity(SpanPanelEntity):
 
 
 class AdoptedSensor(AdoptedEntity, SensorEntity):
-    """A reading from an adopted device, with no `state_class`."""
+    """A reading from an adopted device, described by its declaration and its record."""
 
     def __init__(
         self,
@@ -442,15 +472,27 @@ class AdoptedSensor(AdoptedEntity, SensorEntity):
         declaration: AdoptedProperty,
         *,
         panel_device_id: str,
+        record: CurationRecord | None = None,
     ) -> None:
-        """Take the unit and device class from what the panel declared."""
+        """Take the unit and device class from what the panel declared.
+
+        The description is built in `curation` rather than here, which is what
+        lets a curated row carry the one piece of metadata this module may not
+        name and still leaves an uncurated row with exactly what it had.
+        """
         super().__init__(
-            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+            coordinator,
+            identifier,
+            device,
+            declaration,
+            panel_device_id=panel_device_id,
+            record=record,
         )
-        self.entity_description = SensorEntityDescription(
-            key=declaration.path,
-            device_class=DEVICE_CLASS_BY_UNIT.get(declaration.unit or ""),
-            native_unit_of_measurement=declaration.unit,
+        self.entity_description = sensor_description(
+            declaration.path,
+            declaration.unit,
+            DEVICE_CLASS_BY_UNIT.get(declaration.unit or ""),
+            record,
         )
 
     @property
@@ -483,6 +525,34 @@ class AdoptedSensor(AdoptedEntity, SensorEntity):
 class AdoptedBinarySensor(AdoptedEntity, BinarySensorEntity):
     """A declared `boolean` from an adopted device that the panel does not accept writes to."""
 
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        identifier: str,
+        device: AdoptedDevice,
+        declaration: AdoptedProperty,
+        *,
+        panel_device_id: str,
+        record: CurationRecord | None = None,
+    ) -> None:
+        """Take the device class from the record, because there is nothing to default from.
+
+        A sensor's device class can be read off the declared unit; a boolean
+        declares no unit, so `door` and `problem` and `running` are
+        indistinguishable on the wire. An uncurated binary sensor therefore has
+        no device class at all, and the user's assertion is the only one there
+        can be.
+        """
+        super().__init__(
+            coordinator,
+            identifier,
+            device,
+            declaration,
+            panel_device_id=panel_device_id,
+            record=record,
+        )
+        self._attr_device_class = binary_sensor_device_class(record)
+
     @property
     def is_on(self) -> bool | None:
         """Homie spells a boolean `true`/`false`; anything else is not an answer."""
@@ -506,10 +576,22 @@ class AdoptedControl(AdoptedEntity):
         declaration: AdoptedProperty,
         *,
         panel_device_id: str,
+        record: CurationRecord | None = None,
     ) -> None:
-        """Remember the wire address this control publishes to."""
+        """Remember the wire address this control publishes to.
+
+        The record reaches a control carrying prominence and nothing else --
+        `sanitise` refuses a state class or a device class on a row that is not
+        a sensor -- so it is passed straight through rather than filtered again
+        here.
+        """
         super().__init__(
-            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+            coordinator,
+            identifier,
+            device,
+            declaration,
+            panel_device_id=panel_device_id,
+            record=record,
         )
         self._node_id = declaration.node_id
         self._property_id = declaration.property_id
@@ -579,10 +661,16 @@ class AdoptedSelect(AdoptedControl, SelectEntity):
         declaration: AdoptedProperty,
         *,
         panel_device_id: str,
+        record: CurationRecord | None = None,
     ) -> None:
         """Take the option list from the declaration, which is the whole domain."""
         super().__init__(
-            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+            coordinator,
+            identifier,
+            device,
+            declaration,
+            panel_device_id=panel_device_id,
+            record=record,
         )
         self._attr_options = parse_enum_format(declaration.format)
 
@@ -614,6 +702,7 @@ class AdoptedNumber(AdoptedControl, NumberEntity):
         declaration: AdoptedProperty,
         *,
         panel_device_id: str,
+        record: CurationRecord | None = None,
     ) -> None:
         """Take the bounds from the declaration, which is what makes this a number.
 
@@ -633,7 +722,12 @@ class AdoptedNumber(AdoptedControl, NumberEntity):
                 "whose format cannot be read is classified as a sensor"
             )
         super().__init__(
-            coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+            coordinator,
+            identifier,
+            device,
+            declaration,
+            panel_device_id=panel_device_id,
+            record=record,
         )
         self._attr_native_min_value, self._attr_native_max_value, self._attr_native_step = bounds
         self._attr_native_unit_of_measurement = declaration.unit
@@ -749,6 +843,7 @@ def create_adopted_sensors(
     registry: DeviceRegistry,
     *,
     panel_device_id: str,
+    overlay: CurationOverlay,
 ) -> list[AdoptedSensor]:
     """Every adopted property that is not a declared boolean.
 
@@ -762,6 +857,7 @@ def create_adopted_sensors(
         registry,
         Platform.SENSOR,
         panel_device_id=panel_device_id,
+        overlay=overlay,
     )
 
 
@@ -771,6 +867,7 @@ def create_adopted_binary_sensors(
     registry: DeviceRegistry,
     *,
     panel_device_id: str,
+    overlay: CurationOverlay,
 ) -> list[AdoptedBinarySensor]:
     """Every adopted property declared `boolean` that the panel accepts no write to."""
     return _create(
@@ -780,6 +877,7 @@ def create_adopted_binary_sensors(
         registry,
         Platform.BINARY_SENSOR,
         panel_device_id=panel_device_id,
+        overlay=overlay,
     )
 
 
@@ -789,6 +887,7 @@ def create_adopted_switches(
     registry: DeviceRegistry,
     *,
     panel_device_id: str,
+    overlay: CurationOverlay,
 ) -> list[AdoptedSwitch]:
     """Every adopted property declared `boolean` and settable."""
     return _create(
@@ -798,6 +897,7 @@ def create_adopted_switches(
         registry,
         Platform.SWITCH,
         panel_device_id=panel_device_id,
+        overlay=overlay,
     )
 
 
@@ -807,6 +907,7 @@ def create_adopted_selects(
     registry: DeviceRegistry,
     *,
     panel_device_id: str,
+    overlay: CurationOverlay,
 ) -> list[AdoptedSelect]:
     """Every adopted `enum` that is settable and declares its option list."""
     return _create(
@@ -816,6 +917,7 @@ def create_adopted_selects(
         registry,
         Platform.SELECT,
         panel_device_id=panel_device_id,
+        overlay=overlay,
     )
 
 
@@ -825,6 +927,7 @@ def create_adopted_numbers(
     registry: DeviceRegistry,
     *,
     panel_device_id: str,
+    overlay: CurationOverlay,
 ) -> list[AdoptedNumber]:
     """Every adopted numeric that is settable and declares its bounds."""
     return _create(
@@ -834,6 +937,7 @@ def create_adopted_numbers(
         registry,
         Platform.NUMBER,
         panel_device_id=panel_device_id,
+        overlay=overlay,
     )
 
 
@@ -845,6 +949,7 @@ def _create[AdoptedT: AdoptedEntity](
     platform: Platform,
     *,
     panel_device_id: str,
+    overlay: CurationOverlay,
 ) -> list[AdoptedT]:
     """Build one platform's share of the adopted properties, one entity per id.
 
@@ -878,6 +983,13 @@ def _create[AdoptedT: AdoptedEntity](
     The sort covers a whole device rather than only the colliding pair, because a
     rule that only applied on collision would still depend on arrival order to
     decide which pair collided first.
+
+    **The curated record is read through `for_row`, never off the overlay.** The
+    store keeps whatever the user asserted when they asserted it, and the
+    declaration it was asserted against can have moved since. `for_row` measures
+    the record against the declaration in hand and drops what no longer fits;
+    the raw record would reach `SensorDeviceClass(...)` unchecked and raise
+    inside `async_setup_entry`, which is the whole platform for one stale row.
     """
     built: list[AdoptedT] = []
     claimed: dict[str, str] = {}
@@ -900,9 +1012,18 @@ def _create[AdoptedT: AdoptedEntity](
                 )
                 continue
             claimed[unique_id] = declaration.path
+            record = overlay.for_row(
+                adopted_curation_key(identifier, declaration),
+                RowContext(platform=platform, datatype=declaration.datatype, unit=declaration.unit),
+            )
             built.append(
                 entity_class(
-                    coordinator, identifier, device, declaration, panel_device_id=panel_device_id
+                    coordinator,
+                    identifier,
+                    device,
+                    declaration,
+                    panel_device_id=panel_device_id,
+                    record=record,
                 )
             )
     return built

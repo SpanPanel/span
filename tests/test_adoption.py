@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
-from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, InvalidStateError
@@ -45,7 +46,7 @@ from custom_components.span_panel.adoption import (
     resolve_identifier,
 )
 from custom_components.span_panel.const import DOMAIN
-from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.diagnostics import _adoption
 from custom_components.span_panel.id_builder import build_panel_unique_id
 from custom_components.span_panel.number import (
@@ -191,6 +192,7 @@ def test_no_adopted_sensor_carries_a_state_class(hass: HomeAssistant) -> None:
         _snapshot(_device(properties=declarations)),
         dr.async_get(hass),
         panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
 
     assert len(entities) == 3
@@ -225,6 +227,7 @@ def test_a_declared_unit_this_integration_knows_gets_a_device_class(hass: HomeAs
         _snapshot(_device(properties=declarations)),
         dr.async_get(hass),
         panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
     assert entity.device_class is SensorDeviceClass.POWER
 
@@ -243,6 +246,7 @@ def test_a_unit_outside_the_map_gets_no_device_class(hass: HomeAssistant, unit: 
         _snapshot(_device(properties=declarations)),
         dr.async_get(hass),
         panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
     assert entity.device_class is None
     assert unit not in DEVICE_CLASS_BY_UNIT
@@ -257,10 +261,15 @@ def test_every_adopted_entity_is_disabled_and_diagnostic(hass: HomeAssistant) ->
     snapshot = _snapshot(_device(properties=declarations))
     coordinator = MagicMock(data=snapshot)
     registry = dr.async_get(hass)
+    uncurated = CurationOverlay.empty()
 
     entities = [
-        *create_adopted_sensors(coordinator, snapshot, registry, panel_device_id="panel-device-id"),
-        *create_adopted_binary_sensors(coordinator, snapshot, registry, panel_device_id="panel-device-id"),
+        *create_adopted_sensors(
+            coordinator, snapshot, registry, panel_device_id="panel-device-id", overlay=uncurated
+        ),
+        *create_adopted_binary_sensors(
+            coordinator, snapshot, registry, panel_device_id="panel-device-id", overlay=uncurated
+        ),
     ]
 
     assert len(entities) == 2
@@ -274,9 +283,12 @@ def test_a_declared_boolean_becomes_a_binary_sensor_and_not_a_sensor(hass: HomeA
     snapshot = _snapshot(_device(properties=declarations))
     coordinator = MagicMock(data=snapshot)
     registry = dr.async_get(hass)
+    uncurated = CurationOverlay.empty()
 
-    assert create_adopted_sensors(coordinator, snapshot, registry, panel_device_id="p") == []
-    (entity,) = create_adopted_binary_sensors(coordinator, snapshot, registry, panel_device_id="p")
+    assert create_adopted_sensors(coordinator, snapshot, registry, panel_device_id="p", overlay=uncurated) == []
+    (entity,) = create_adopted_binary_sensors(
+        coordinator, snapshot, registry, panel_device_id="p", overlay=uncurated
+    )
     assert entity.is_on is True
 
 
@@ -392,7 +404,7 @@ def _built(hass: HomeAssistant, *declarations: AdoptedProperty) -> dict[Platform
     snapshot = _snapshot(_device(properties=declarations))
     coordinator = MagicMock(data=snapshot)
     registry = dr.async_get(hass)
-    kwargs = {"panel_device_id": "panel-device-id"}
+    kwargs = {"panel_device_id": "panel-device-id", "overlay": CurationOverlay.empty()}
     return {
         Platform.SENSOR: list(create_adopted_sensors(coordinator, snapshot, registry, **kwargs)),
         Platform.BINARY_SENSOR: list(create_adopted_binary_sensors(coordinator, snapshot, registry, **kwargs)),
@@ -462,7 +474,11 @@ async def test_a_switch_publishes_the_vocabulary_homie_defines(hass: HomeAssista
     coordinator.async_request_refresh = AsyncMock()
 
     (entity,) = create_adopted_switches(
-        coordinator, snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        coordinator,
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
     await entity.async_turn_on()
 
@@ -476,7 +492,11 @@ def _adopted_switch(hass: HomeAssistant) -> tuple[MagicMock, object]:
     coordinator = MagicMock(data=snapshot)
     coordinator.async_request_refresh = AsyncMock()
     (entity,) = create_adopted_switches(
-        coordinator, snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        coordinator,
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
     return coordinator, entity
 
@@ -535,7 +555,13 @@ async def test_a_number_publishes_an_integer_where_the_declaration_says_integer(
     coordinator.client.set_adopted_property = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
 
-    (entity,) = create_adopted_numbers(coordinator, snapshot, dr.async_get(hass), panel_device_id="panel-device-id")
+    (entity,) = create_adopted_numbers(
+        coordinator,
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
+    )
     await entity.async_set_native_value(45.0)
 
     coordinator.client.set_adopted_property.assert_awaited_once_with("generator-1", "generator", "setpoint", "45")
@@ -751,7 +777,11 @@ def test_the_lexically_first_of_two_colliding_properties_wins_either_way(
     snapshot = _snapshot(_device(properties=declared))
 
     sensors = create_adopted_sensors(
-        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
 
     assert len(sensors) == 1
@@ -774,7 +804,11 @@ def test_the_same_address_on_two_devices_is_not_a_collision(hass: HomeAssistant)
     )
 
     sensors = create_adopted_sensors(
-        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
 
     assert len({str(sensor.unique_id) for sensor in sensors}) == 2
@@ -804,7 +838,11 @@ def test_a_string_over_the_state_limit_is_clamped_rather_than_written(
     snapshot = _snapshot(_device(properties=(declaration,)))
 
     (sensor,) = create_adopted_sensors(
-        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
 
     assert sensor.native_value == "x" * MAX_STATE_LENGTH
@@ -818,7 +856,11 @@ def test_a_string_within_the_limit_is_passed_through_untouched(hass: HomeAssista
     snapshot = _snapshot(_device(properties=(declaration,)))
 
     (sensor,) = create_adopted_sensors(
-        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
 
     assert sensor.native_value == "ok"
@@ -994,8 +1036,141 @@ def test_the_malformed_numeric_still_reaches_the_user_as_a_reading(hass: HomeAss
     """Routed to a sensor, not dropped: the property has a value, only no domain."""
     snapshot = _panel_with_a_charger_and_a_malformed_numeric()
     sensors = create_adopted_sensors(
-        MagicMock(data=snapshot), snapshot, dr.async_get(hass), panel_device_id="panel-device-id"
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
     )
 
     assert sorted(str(entity.name) for entity in sensors) == ["Ceiling", "Setpoint"]
     assert adopted_control_count(snapshot) == 0
+
+
+# -- A curated record reaches the entity at construction ----------------------
+
+
+def _overlay_for(declaration_path: str, record: CurationRecord, identifier: str) -> CurationOverlay:
+    """One overlay holding one record, under the key `_create` will look up."""
+    return CurationOverlay({f"{identifier}/{declaration_path}": record})
+
+
+def test_a_curated_record_shapes_the_sensor_at_construction(hass: HomeAssistant) -> None:
+    """What the user asserted is what the entity is born with.
+
+    Applied at construction rather than patched onto a live entity: a
+    `state_class` decides whether the recorder writes long-term statistics, and
+    that decision is read when the entity is added.
+    """
+    declarations = (_property(unit="V", datatype="float"),)
+    snapshot = _snapshot(_device(properties=declarations))
+    identifier = resolve_identifier(
+        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+    )
+    record = CurationRecord(
+        state_class=SensorStateClass.MEASUREMENT, device_class="voltage", promote=True
+    )
+    (entity,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=_overlay_for(declarations[0].path, record, identifier),
+    )
+    assert entity.state_class is SensorStateClass.MEASUREMENT
+    assert entity.device_class is SensorDeviceClass.VOLTAGE
+    assert entity.entity_category is None
+    assert entity.entity_registry_enabled_default is False
+
+
+def test_an_uncurated_row_is_exactly_todays_entity(hass: HomeAssistant) -> None:
+    """Curation is opt-in per row: an empty overlay changes nothing at all."""
+    declarations = (_property(unit="V", datatype="float"),)
+    snapshot = _snapshot(_device(properties=declarations))
+    (entity,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
+    )
+    assert entity.state_class is None
+    assert entity.entity_category is EntityCategory.DIAGNOSTIC
+
+
+def test_a_stale_record_field_is_skipped_and_the_rest_applied(hass: HomeAssistant) -> None:
+    """A record can outlive the declaration it was written against.
+
+    The vendor moved this row to `string`, so the asserted `state_class` no
+    longer has a numeric sensor to sit on -- and a state class on a text
+    reading is exactly the corrupt statistics adoption refuses to write. The
+    field is dropped; the prominence the user also asked for still applies.
+    """
+    declarations = (_property(unit=None, datatype="string"),)
+    snapshot = _snapshot(_device(properties=declarations))
+    identifier = resolve_identifier(
+        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+    )
+    record = CurationRecord(state_class=SensorStateClass.MEASUREMENT, promote=True)
+    (entity,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=_overlay_for(declarations[0].path, record, identifier),
+    )
+    assert entity.state_class is None
+    assert entity.entity_category is None
+
+
+def test_a_curated_binary_sensor_takes_the_device_class_it_was_given(hass: HomeAssistant) -> None:
+    """The record is the only device class a binary sensor can have.
+
+    A sensor's comes off the declared unit; a boolean declares no unit, so
+    `door` and `problem` and `running` are indistinguishable on the wire and
+    there is nothing for `DEVICE_CLASS_BY_UNIT` to answer with.
+    """
+    declarations = (_property(node_id="relay", property_id="closed", datatype="boolean", unit=None),)
+    snapshot = _snapshot(_device(properties=declarations))
+    identifier = resolve_identifier(
+        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+    )
+    record = CurationRecord(device_class=BinarySensorDeviceClass.DOOR.value)
+    (entity,) = create_adopted_binary_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=_overlay_for(declarations[0].path, record, identifier),
+    )
+    assert entity.device_class is BinarySensorDeviceClass.DOOR
+    assert entity.entity_category is EntityCategory.DIAGNOSTIC
+
+
+def test_a_control_takes_prominence_and_nothing_else(hass: HomeAssistant) -> None:
+    """A control row carries one field, and the entity is what proves it.
+
+    `sanitise` refuses a device class on a row that is not a sensor, so nothing
+    downstream re-filters the record -- which is only safe if the refusal
+    actually holds at the entity. Asserted here rather than only against
+    `sanitise` so that a control growing its own description later cannot start
+    honouring a field the editor never offered.
+    """
+    declarations = (
+        _property(node_id="relay", property_id="enabled", datatype="boolean", unit=None, settable=True),
+    )
+    snapshot = _snapshot(_device(properties=declarations))
+    identifier = resolve_identifier(
+        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+    )
+    record = CurationRecord(device_class="voltage", promote=True)
+    (entity,) = create_adopted_switches(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=_overlay_for(declarations[0].path, record, identifier),
+    )
+    assert entity.entity_category is None
+    assert entity.device_class is None
+    assert entity.entity_registry_enabled_default is False

@@ -129,6 +129,7 @@ async def async_setup_entry(
             snapshot,
             dr.async_get(hass),
             panel_device_id=config_entry.runtime_data.panel_device_id,
+            overlay=config_entry.runtime_data.curation,
         )
 
         # Vendor extensions on devices this integration *does* model, which
