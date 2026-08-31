@@ -35,6 +35,7 @@ from span_panel_api.exceptions import (
     SpanPanelError,
     SpanPanelServerError,
     SpanPanelTimeoutError,
+    SpanPanelTLSVerificationError,
     SpanPanelValidationError,
 )
 from span_panel_api.mqtt.models import MqttClientConfig
@@ -43,8 +44,23 @@ from span_panel_api.mqtt.models import MqttClientConfig
 from . import config_flow  # noqa: F401
 from .additions import async_announce_new_entities, async_forget_announcements
 from .adoption import async_register_adopted_devices
-from .ca_repairs import async_clear_ca_changed, async_raise_ca_changed
-from .config_flow_validation import as_port, async_ca_signs_panel_leaf, async_fetch_panel_ca
+from .ca_repairs import (
+    async_clear_ca_changed,
+    async_clear_ca_unusable,
+    async_clear_rest_tls_untrusted,
+    async_raise_ca_changed,
+    async_raise_ca_unusable,
+    async_raise_rest_tls_untrusted,
+)
+from .config_flow_validation import (
+    LeafVerdict,
+    PanelCaUnusableError,
+    as_port,
+    async_ca_signs_panel_leaf,
+    async_fetch_panel_ca,
+    async_leaf_probe,
+    panel_rest_transport,
+)
 from .const import (
     CONF_API_VERSION,
     CONF_EBUS_BROKER_HOST,
@@ -213,8 +229,14 @@ async def _async_pinned_ca(
     # Verifying one port and using the anchor on two has a cost, and it is
     # stated rather than hidden: a CA that signs the broker's leaf but not
     # whatever answers on 443 -- a proxy terminating only the HTTPS port --
-    # pins here and then fails every REST path, which the callers that carry a
-    # secret refuse rather than downgrade. README and the changelog say so.
+    # pins here and then fails every REST path. Since the runtime schema fetch
+    # moved onto the pin (issue #264), that failure is no longer quiet: setup
+    # retries under `ConfigEntryNotReady` with the `panel_rest_tls_untrusted`
+    # Repair naming the port when something answers it badly, and with the
+    # retry message naming the port and Reconfigure when nothing answers it at
+    # all -- Reconfigure offers the HTTPS port to a pinned entry for exactly
+    # this population. Never plaintext either way. README and the changelog
+    # say so.
     #
     # One asymmetry to know about: `async_ca_signs_panel_leaf` accepts a leaf
     # reached at the address `host` resolves to, while the bridge dials `host`
@@ -247,6 +269,88 @@ async def _async_pinned_ca(
         fingerprint,
     )
     return ca_pem
+
+
+async def _async_rest_tls_verdict(
+    hass: HomeAssistant,
+    entry: SpanPanelConfigEntry,
+    host: str,
+    http_port: int,
+    https_port: int,
+    pinned_pem: str,
+    err: SpanPanelTLSVerificationError,
+) -> ConfigEntryError | ConfigEntryNotReady:
+    """Say what a REST certificate-verification failure was, and how setup ends.
+
+    The same question the library asks when the MQTT handshake fails under a
+    pin, answered the same way, because the failure itself carries no evidence:
+    re-read the CA the panel advertises — plaintext deliberately, since a fetch
+    verified against the old pin would fail and tell us nothing — and compare
+    fingerprints. The fetch is diagnostic only and never re-anchors anything.
+
+    A different fingerprint is the CA-changed Repair, with its guided re-pin —
+    a firmware reset rotating the CA is the common legitimate cause of this
+    failure, and it already has a flow. It is also the only terminal outcome,
+    which mirrors the library's own `_diagnose_verification_failure`: a
+    matching fingerprint never escalates, because `SSLCertVerificationError`
+    under an unchanged CA is three different conditions and two of them are
+    transient. The leaf probe splits them. A leaf that names somewhere else is
+    a moved panel — the leaf-mismatch Repair, which promises retrying, and
+    setup keeps that promise. A leaf the pin does not validate at all is either
+    something terminating TLS in front of the panel or a certificate a clock
+    reset pushed outside its validity window — one Repair naming both, retried
+    so the clock case heals itself and the proxy case stands visibly refused,
+    never downgraded to plaintext. And missing evidence — the CA unreadable,
+    the TLS port unreachable — retries with no verdict at all, because a panel
+    mid-reboot must not be convicted of anything.
+    """
+    expected = ca_fingerprint(pinned_pem)
+    try:
+        advertised = await async_fetch_panel_ca(hass, host, http_port=http_port)
+        observed = ca_fingerprint(advertised)
+    except (
+        SpanPanelAPIError,
+        SpanPanelConnectionError,
+        SpanPanelTimeoutError,
+        SpanPanelValidationError,
+    ) as fetch_err:
+        _LOGGER.warning(
+            "TLS verification failed for SPAN panel %s's REST API and the panel's CA "
+            "could not be re-read to say why (%s). Treating this as transient and retrying",
+            entry.title,
+            fetch_err,
+        )
+        return ConfigEntryNotReady(f"SPAN panel REST TLS failure is undiagnosed yet: {err}")
+    if observed != expected:
+        async_raise_ca_changed(hass, entry, expected, observed)
+        return ConfigEntryError(
+            f"SPAN panel {entry.title} is advertising CA {observed} where {expected} was pinned"
+        )
+    probe = await async_leaf_probe(host, https_port, pinned_pem)
+    if probe.verdict is LeafVerdict.NAME_MISMATCH:
+        # The other half of the mutual supersede: `async_raise_rest_tls_untrusted`
+        # clears the leaf repair itself, but `leaf_repairs` cannot import
+        # `ca_repairs` back without a cycle, so this direction lives with the
+        # one caller that can produce both verdicts. A panel cannot be both
+        # merely moved and untrusted; only the current verdict may stand.
+        async_clear_rest_tls_untrusted(hass, entry)
+        async_raise_leaf_name_mismatch(
+            hass, entry, LeafNameMismatch(host=host, leaf_names=probe.leaf_names)
+        )
+        return ConfigEntryNotReady(
+            f"SPAN panel {entry.title}'s certificate does not name {host}; "
+            "see the Repair, and retrying meanwhile"
+        )
+    if probe.verdict is LeafVerdict.UNTRUSTED:
+        async_raise_rest_tls_untrusted(hass, entry, host, https_port, expected)
+        return ConfigEntryNotReady(
+            f"{host}:{https_port} answered with a certificate SPAN panel {entry.title}'s "
+            "pinned CA does not currently validate; see the Repair, and retrying meanwhile"
+        )
+    return ConfigEntryNotReady(
+        f"SPAN panel {entry.title}'s REST TLS failure did not reproduce under diagnosis "
+        f"({probe.verdict}); retrying: {err}"
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> bool:
@@ -325,6 +429,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # plaintext HTTP on every connect and trusting whatever answers.
             ca_pem = await _async_pinned_ca(hass, entry, host, panel_http_port)
 
+            # From `entry.data` rather than `config`, because the deferred pin
+            # above may have just written the anchor there. Fail closed on a
+            # stored PEM that cannot be read: the fallback the other callers get
+            # would put this entry's schema fetch — the call that runs
+            # unattended on every boot — back on plaintext, which is the
+            # downgrade the pin exists to prevent (issue #264). The transport's
+            # own client is not used here; see the constructor comment below.
+            try:
+                transport = panel_rest_transport(
+                    hass, entry.data, allow_plaintext_fallback=False
+                )
+            except PanelCaUnusableError as err:
+                async_raise_ca_unusable(hass, entry, str(err))
+                raise ConfigEntryError(  # noqa: TRY301
+                    f"The stored CA for SPAN panel {entry.title} cannot be read; "
+                    "re-acquire it in Settings > Repairs"
+                ) from err
+
             broker_config = MqttClientConfig(
                 broker_host=host,
                 username=config[CONF_EBUS_BROKER_USERNAME],
@@ -341,19 +463,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 serial_number,
                 broker_config,
                 snapshot_interval=snapshot_interval,
+                # Both ports, because the client runs two transports with
+                # opposite security properties. The plaintext port carries the
+                # bridge's CA fetches, which never follow the pin — they read
+                # the very anchor everything else is checked against. The
+                # schema fetch rides the pinned transport on the HTTPS port
+                # whenever the entry holds an anchor, which is every entry the
+                # config flow has created since pinning landed; passing the
+                # HTTPS port without a context is refused by the library, hence
+                # the pairing (issue #264).
                 panel_http_port=panel_http_port,
+                panel_https_port=transport.port if transport.ssl_context is not None else None,
+                ssl_context=transport.ssl_context,
                 # Home Assistant's shared client, which it owns and closes at
-                # shutdown. Without this the library built one per schema read --
-                # once at connect, and once per retry while a panel finishes
-                # rebooting after a firmware upgrade. `quality_scale.yaml` claims
-                # `inject-websession: done`, and until now that was true of the
-                # config flow and of nothing that ran afterwards.
-                #
-                # Verification is not the reason for the default client rather
-                # than the config flow's `verify_ssl=False` one: the library's
-                # bootstrap URLs are plain `http://`, so TLS never happens on
-                # this path either way. It is the default client because that is
-                # the one every other integration already shares.
+                # shutdown, and which serves only the unpinned plaintext path --
+                # under a context the library builds a dedicated client per
+                # call, because httpx fixes its trust store at construction.
+                # `transport.httpx_client` is deliberately not used: it is the
+                # config flow's `verify_ssl=False` variant, and asking for that
+                # here would stand up a second connection pool for a flag that
+                # is inert on plaintext. The default client is the one every
+                # other integration already shares.
                 httpx_client=get_async_client(hass),
             )
 
@@ -388,6 +518,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             except SpanPanelAuthError as err:
                 await client.close()
                 raise ConfigEntryAuthFailed(f"MQTT authentication failed: {err}") from err
+            except SpanPanelValidationError as err:
+                # The library refusing a stored combination it will not guess
+                # about — an HTTPS port of 80 under a pin is the one that
+                # reaches here, written by a config flow that used to accept
+                # it. A stored value does not fix itself, so no retry; the
+                # message names the remedy.
+                await client.close()
+                raise ConfigEntryError(  # noqa: TRY301
+                    f"SPAN panel {entry.title}'s stored HTTPS port is not usable under "
+                    f"its pinned CA ({err}); correct it with Reconfigure"
+                ) from err
+            except SpanPanelTLSVerificationError as err:
+                # Before its parent `SpanPanelConnectionError`, which would
+                # retry it with no diagnosis. Something answered the REST HTTPS
+                # port with a certificate the pin rejects; which Repair that
+                # raises — and whether it is terminal — is decided by the
+                # diagnosis below, the only party holding the evidence.
+                await client.close()
+                pinned_pem = transport.ca_pem
+                if pinned_pem is None:
+                    # Not reachable: the library raises this only under an
+                    # ssl_context, and the transport carries a PEM exactly when
+                    # it carries a context. Stated as a guard rather than
+                    # laundered through `str()`, so if the pairing is ever
+                    # broken the failure names itself instead of fingerprinting
+                    # the string "None".
+                    raise
+                raise await _async_rest_tls_verdict(
+                    hass,
+                    entry,
+                    host,
+                    panel_http_port,
+                    transport.port,
+                    pinned_pem,
+                    err,
+                ) from err
             except (
                 SpanPanelConnectionError,
                 SpanPanelTimeoutError,
@@ -402,7 +568,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 SpanPanelServerError,
             ) as err:
                 await client.close()
-                raise ConfigEntryNotReady(f"SPAN panel is not ready yet: {err}") from err
+                message = f"SPAN panel is not ready yet: {err}"
+                if transport.ssl_context is not None:
+                    # For the population the deferred pin serves — TLS behind
+                    # NAT, a port forward, a proxy — nothing may answer the
+                    # default HTTPS port at all, and that failure is a plain
+                    # refused connection indistinguishable from a reboot. The
+                    # retry message is the one channel that reaches them, so it
+                    # carries the remedy instead of blaming the panel.
+                    message += (
+                        f" (its REST API is expected on HTTPS port {transport.port}; if the "
+                        "panel's TLS is served elsewhere, set the HTTPS port via Reconfigure)"
+                    )
+                raise ConfigEntryNotReady(message) from err
 
             # The connection got as far as a handshake under the current pin, so
             # any standing Repair describes a state that no longer holds. That
@@ -411,6 +589,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             # event the library re-arms its own signal on.
             async_clear_ca_changed(hass, entry)
             async_clear_leaf_name_mismatch(hass, entry)
+            # Same reconciliation: the REST half of the handshake succeeded
+            # under the current pin too — the schema fetch inside connect() is
+            # what these two describe failing.
+            async_clear_rest_tls_untrusted(hass, entry)
+            async_clear_ca_unusable(hass, entry)
 
             # The other half of the same condition: the reconnect loop runs
             # fire-and-forget, so a CA that changes mid-session cannot surface as
@@ -571,6 +754,13 @@ async def async_remove_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) -
     it recreates, because every one of them is already recorded as announced.
     """
     async_clear_schema_issues(hass, entry)
+    # The CA family too, for the same reason — and the two persistent ones most
+    # of all, since nothing else can ever clear an issue whose entry is gone:
+    # the fixable flow aborts with `entry_gone`, and the rest have no flow.
+    async_clear_ca_changed(hass, entry)
+    async_clear_ca_unusable(hass, entry)
+    async_clear_rest_tls_untrusted(hass, entry)
+    async_clear_leaf_name_mismatch(hass, entry)
     await async_forget_announcements(hass, entry)
     await async_forget(hass, entry)
 

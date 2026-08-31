@@ -679,9 +679,10 @@ re-fetched over plaintext on every connection and whatever answers is trusted. I
 refusing to start would remove the integration without making the credential any safer.
 
 **Proxies cut both ways.** One terminating the broker port with a certificate of its own leaves the entry unpinned, warning at every start with no repair
-raised. One terminating only port 443 lets the entry pin, but **Reauthenticate**, **Reconfigure** and **Rotate credentials** then refuse rather than send your
-access token unencrypted, until port 443 serves the panel's own certificate too. If your panel serves TLS on another port the setup flow asks — but only once
-you have moved the HTTP port off 80.
+raised. One terminating only port 443 lets the entry pin, but startup then refuses to connect and keeps retrying, with a repair naming the port — every REST
+call a pinned entry makes, the schema read at startup included, verifies against the pin, and a certificate the pin does not validate is refused rather than
+downgraded to plaintext — until the port serves the panel's own certificate. If your panel serves TLS on another port, the setup flow asks once you have moved
+the HTTP port off 80, and **Reconfigure** offers the HTTPS port to any pinned entry.
 
 ### Restricting who can operate the panel
 

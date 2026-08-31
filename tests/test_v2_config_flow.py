@@ -3156,3 +3156,197 @@ async def test_reconfigure_refuses_to_downgrade_an_unreadable_pin(
     assert entry.data[CONF_HOST] == "panel.example.com"
     assert entry.data[CONF_REGISTERED_FQDN] == "panel.example.com"
     assert entry.data[CONF_PANEL_CA_PEM] == UNREADABLE_CA_PEM
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_offers_the_https_port_to_a_pinned_entry(
+    hass: HomeAssistant,
+) -> None:
+    """A pinned entry's REST rides the HTTPS port, so reconfigure must let it be set.
+
+    The population this exists for was never asked: TLS behind a port forward
+    with the HTTP port still on 80, which the CA step's gating skips. Before
+    this field, such an entry was enforced against port 443 with no in-product
+    way to say otherwise.
+    """
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: FAKE_CA_PEM,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    assert CONF_HTTPS_PORT in result["data_schema"].schema
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_keeps_the_host_only_form_for_an_unpinned_entry(
+    hass: HomeAssistant,
+) -> None:
+    """No pin, no HTTPS transport — a TLS-port question would answer nothing."""
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+
+    assert result["type"] == FlowResultType.FORM
+    assert CONF_HTTPS_PORT not in result["data_schema"].schema
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_rejects_the_plaintext_port_as_https(
+    hass: HomeAssistant,
+) -> None:
+    """80 is the plaintext default; storing it as the TLS port bricks every setup."""
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: FAKE_CA_PEM,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    detect = AsyncMock(return_value=MOCK_V2_DETECTION)
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=MagicMock(),
+        ),
+        patch("custom_components.span_panel.config_flow.detect_api_version", new=detect),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: MOCK_HOST, CONF_HTTPS_PORT: 80},
+        )
+
+    assert result2["type"] == FlowResultType.FORM
+    assert result2["errors"] == {"base": "https_port_is_plaintext"}
+    detect.assert_not_awaited()
+    assert CONF_HTTPS_PORT not in entry.data
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_stores_a_corrected_https_port(hass: HomeAssistant) -> None:
+    """The submitted port is both probed against and persisted."""
+    entry = MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "token",
+            CONF_API_VERSION: "v2",
+            CONF_PANEL_CA_PEM: FAKE_CA_PEM,
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    leaf_host = AsyncMock(side_effect=lambda _hass, host, _port, _pem: host)
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.async_panel_leaf_host",
+            new=leaf_host,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+    ):
+        result = await entry.start_reconfigure_flow(hass)
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_HOST: MOCK_HOST, CONF_HTTPS_PORT: 8443},
+        )
+
+    assert result2["type"] == FlowResultType.ABORT
+    assert result2["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_HTTPS_PORT] == 8443
+    # The probe ran against the port the user submitted, not the stored default.
+    assert leaf_host.await_args.args[2] == 8443
+
+
+@pytest.mark.asyncio
+async def test_the_https_port_step_refuses_the_plaintext_port(
+    hass: HomeAssistant,
+) -> None:
+    """80 stored as the TLS port fails every later setup; refuse it at the form."""
+    discovery_info = ZeroconfServiceInfo(
+        ip_address=ipaddress.IPv4Address("192.168.1.200"),
+        ip_addresses=[ipaddress.IPv4Address("192.168.1.200")],
+        hostname="span-panel.local.",
+        name="SPAN Panel._ebus._tcp.local.",
+        port=8883,
+        properties={"httpPort": "8080"},
+        type="_ebus._tcp.local.",
+    )
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.is_ipv4_address",
+            return_value=True,
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=discovery_info,
+        )
+        port_step = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        assert port_step["step_id"] == "panel_https_port"
+
+        refused = await hass.config_entries.flow.async_configure(
+            port_step["flow_id"], {CONF_HTTPS_PORT: 80}
+        )
+
+    assert refused["type"] == FlowResultType.FORM
+    assert refused["step_id"] == "panel_https_port"
+    assert refused["errors"] == {"base": "https_port_is_plaintext"}

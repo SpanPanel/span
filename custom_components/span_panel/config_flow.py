@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from dataclasses import replace
 import enum
 import logging
 import ssl
@@ -184,6 +185,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         self._v2_panel_serial: str | None = None
         self._http_port: int = 80
         self._https_port: int = DEFAULT_HTTPS_PORT
+        # Reconfigure's own copy, kept apart from `_https_port` because that one
+        # belongs to the CA-acquisition steps and reauth. None until the user
+        # submits the reconfigure form of a pinned entry.
+        self._reconfigure_https_port: int | None = None
         # Whether something authoritative already told this flow where the panel
         # serves TLS, rather than the value above being a default. Discovery is
         # one such source: a panel that publishes the port knows where it
@@ -1053,17 +1058,30 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     async def async_step_panel_https_port(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Collect the port the panel serves TLS on."""
+        """Collect the port the panel serves TLS on.
+
+        80 is refused here, at the form, because the library refuses it at
+        every call it would later anchor — a stored plaintext port under a pin
+        fails each setup with nothing the user can do but reconfigure. Refuse
+        it while the person who typed it is present.
+        """
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HTTPS_PORT, default=DEFAULT_HTTPS_PORT): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=65535)
+                ),
+            }
+        )
         if user_input is None:
+            return self.async_show_form(step_id="panel_https_port", data_schema=schema)
+        port = int(user_input[CONF_HTTPS_PORT])
+        if port == 80:
             return self.async_show_form(
                 step_id="panel_https_port",
-                data_schema=vol.Schema(
-                    {
-                        vol.Required(CONF_HTTPS_PORT, default=DEFAULT_HTTPS_PORT): int,
-                    }
-                ),
+                data_schema=schema,
+                errors={"base": "https_port_is_plaintext"},
             )
-        self._https_port = int(user_input[CONF_HTTPS_PORT])
+        self._https_port = port
         return await self.async_step_panel_ca()
 
     async def async_step_panel_ca(
@@ -1352,6 +1370,40 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             raise ConfigFlowError("Missing required parameters during entry creation")
         return self.create_new_entry(self.host, self.serial_number, self.access_token)
 
+    def _reconfigure_form(
+        self, entry: config_entries.ConfigEntry, host: str, error: str | None = None
+    ) -> ConfigFlowResult:
+        """Show the reconfigure form, with the HTTPS port on it exactly when the entry is pinned.
+
+        A pinned entry's REST calls ride the HTTPS port, and one population was
+        never asked for it: TLS behind a port forward with the HTTP port still
+        on 80, which the CA step's own gating skips. Reconfigure is the remedy
+        every refusal points at, so this is where the port has to be settable.
+        An unpinned entry keeps the host-only form — it has no TLS transport
+        for the answer to configure.
+        """
+        schema: dict[Any, Any] = {vol.Required(CONF_HOST, default=host): str}
+        if entry.data.get(CONF_PANEL_CA_PEM):
+            default = (
+                self._reconfigure_https_port
+                if self._reconfigure_https_port is not None
+                else as_port(entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+            )
+            schema[vol.Required(CONF_HTTPS_PORT, default=default)] = vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=65535)
+            )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(schema),
+            errors={"base": error} if error else None,
+        )
+
+    def _reconfigured_transport(self, transport: PanelRestTransport) -> PanelRestTransport:
+        """Apply the submitted HTTPS port to a transport built from stored data."""
+        if self._reconfigure_https_port is None or transport.ssl_context is None:
+            return transport
+        return replace(transport, port=self._reconfigure_https_port)
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -1360,18 +1412,23 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
 
         if user_input is None:
             current_host = reconfigure_entry.data.get(CONF_HOST, "")
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=current_host): str}),
-            )
+            return self._reconfigure_form(reconfigure_entry, str(current_host))
 
         host = user_input[CONF_HOST].strip()
         if not host:
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=""): str}),
-                errors={"base": "host_required"},
-            )
+            return self._reconfigure_form(reconfigure_entry, "", "host_required")
+
+        if reconfigure_entry.data.get(CONF_PANEL_CA_PEM):
+            submitted = port_or_none(user_input.get(CONF_HTTPS_PORT))
+            if submitted is None:
+                submitted = as_port(reconfigure_entry.data.get(CONF_HTTPS_PORT), DEFAULT_HTTPS_PORT)
+            if submitted == 80:
+                # The plaintext default. The library refuses this combination at
+                # every call, so storing it would fail every later setup;
+                # refused here instead, where the person who typed it is
+                # present. See `_build_url` in span-panel-api.
+                return self._reconfigure_form(reconfigure_entry, host, "https_port_is_plaintext")
+            self._reconfigure_https_port = submitted
 
         # Validate the host is reachable and is a v2 panel
         http_port = as_port(reconfigure_entry.data.get(CONF_HTTP_PORT), 80)
@@ -1394,11 +1451,8 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 reconfigure_entry.title,
                 err,
             )
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "ca_unusable"},
-            )
+            return self._reconfigure_form(reconfigure_entry, host, "ca_unusable")
+        self._rest_transport = self._reconfigured_transport(self._rest_transport)
         # The new host may be one the panel's certificate does not name -- a new
         # DHCP lease, or an FQDN it has not been told about yet -- and this entry
         # is pinned. Ask what is actually true of it before deciding, because
@@ -1420,11 +1474,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 # one of them is the panel being absent.
                 verdict = await async_leaf_verdict(host, self._rest_transport.port, pinned_pem)
                 if verdict is LeafVerdict.UNREACHABLE:
-                    return self.async_show_form(
-                        step_id="reconfigure",
-                        data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                        errors={"base": "cannot_connect"},
-                    )
+                    return self._reconfigure_form(reconfigure_entry, host, "cannot_connect")
                 if verdict is not LeafVerdict.NAME_MISMATCH:
                     _LOGGER.warning(
                         "Refusing to reconfigure panel %s to %s: the certificate served there on "
@@ -1435,11 +1485,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                         self._rest_transport.port,
                         pem_fingerprint_or_reason(pinned_pem),
                     )
-                    return self.async_show_form(
-                        step_id="reconfigure",
-                        data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                        errors={"base": "ca_leaf_mismatch"},
-                    )
+                    return self._reconfigure_form(reconfigure_entry, host, "ca_leaf_mismatch")
                 # The panel is there -- only it holds a key the pinned anchor
                 # signed -- but its certificate names neither this address nor
                 # anything this flow could reach it by. Every call over the
@@ -1449,11 +1495,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 # regenerate the certificate that fixes this. The relaxed
                 # transport never leaves this flow and is never stored.
                 self._leaf_names_host = False
-                self._rest_transport = panel_rest_transport(
-                    self.hass,
-                    reconfigure_entry.data,
-                    allow_plaintext_fallback=False,
-                    verify_hostname=False,
+                self._rest_transport = self._reconfigured_transport(
+                    panel_rest_transport(
+                        self.hass,
+                        reconfigure_entry.data,
+                        allow_plaintext_fallback=False,
+                        verify_hostname=False,
+                    )
                 )
         try:
             detection = await detect_api_version(
@@ -1468,25 +1516,13 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             SpanPanelTimeoutError,
             SpanPanelAPIError,
         ):
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "cannot_connect"},
-            )
+            return self._reconfigure_form(reconfigure_entry, host, "cannot_connect")
 
         if detection.probe_failed:
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "cannot_connect"},
-            )
+            return self._reconfigure_form(reconfigure_entry, host, "cannot_connect")
 
         if detection.api_version != "v2" or detection.status_info is None:
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "cannot_connect"},
-            )
+            return self._reconfigure_form(reconfigure_entry, host, "cannot_connect")
 
         # Ensure the serial number matches — prevent switching to a different panel
         await self.async_set_unique_id(detection.status_info.serial_number)
@@ -1520,13 +1556,11 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 reconfigure_entry.title,
                 host,
             )
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=vol.Schema({vol.Required(CONF_HOST, default=host): str}),
-                errors={"base": "ca_name_mismatch"},
-            )
+            return self._reconfigure_form(reconfigure_entry, host, "ca_name_mismatch")
 
         data_updates: dict[str, Any] = {CONF_HOST: host}
+        if self._reconfigure_https_port is not None:
+            data_updates[CONF_HTTPS_PORT] = self._reconfigure_https_port
         old_fqdn = str(reconfigure_entry.data.get(CONF_REGISTERED_FQDN, ""))
         if old_fqdn:
             # Switching from FQDN to IP — clean up old registration
@@ -1585,12 +1619,15 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     ) -> ConfigFlowResult:
         """Complete reconfiguration after successful FQDN registration."""
         reconfigure_entry = self._get_reconfigure_entry()
+        data_updates: dict[str, Any] = {
+            CONF_HOST: self.host or "",
+            CONF_REGISTERED_FQDN: self.host or "",
+        }
+        if self._reconfigure_https_port is not None:
+            data_updates[CONF_HTTPS_PORT] = self._reconfigure_https_port
         return self.async_update_reload_and_abort(
             reconfigure_entry,
-            data_updates={
-                CONF_HOST: self.host or "",
-                CONF_REGISTERED_FQDN: self.host or "",
-            },
+            data_updates=data_updates,
         )
 
     async def async_step_reconfigure_fqdn_failed(
@@ -1620,17 +1657,18 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                     self._get_reconfigure_entry().title,
                     self.host,
                 )
-                return self.async_show_form(
-                    step_id="reconfigure",
-                    data_schema=vol.Schema({vol.Required(CONF_HOST, default=self.host or ""): str}),
-                    errors={"base": "ca_name_mismatch"},
+                return self._reconfigure_form(
+                    self._get_reconfigure_entry(), self.host or "", "ca_name_mismatch"
                 )
             # User chose to continue anyway — update host without FQDN registration
             self._fall_back_to_the_bootstrap_address()
             reconfigure_entry = self._get_reconfigure_entry()
+            data_updates: dict[str, Any] = {CONF_HOST: self.host or ""}
+            if self._reconfigure_https_port is not None:
+                data_updates[CONF_HTTPS_PORT] = self._reconfigure_https_port
             return self.async_update_reload_and_abort(
                 reconfigure_entry,
-                data_updates={CONF_HOST: self.host or ""},
+                data_updates=data_updates,
             )
         return self.async_show_form(
             step_id="reconfigure_fqdn_failed",
