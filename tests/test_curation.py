@@ -2,6 +2,7 @@
 
 import pytest
 
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import Platform
 
@@ -108,3 +109,25 @@ def test_record_round_trips_through_its_dict_form() -> None:
     assert parse_record(record_as_dict(record)) == record
     assert parse_record({"unknown": "shape"}) is None
     assert parse_record("not a mapping") is None
+
+
+def test_an_unknown_state_class_is_refused_on_a_row_that_could_carry_one() -> None:
+    with pytest.raises(CurationError) as err:
+        validate_record({"state_class": "not-a-state-class"}, SENSOR_FLOAT_V)
+    assert err.value.code == "invalid_state_class"
+
+
+def test_a_control_row_refuses_a_state_class_before_reading_it() -> None:
+    with pytest.raises(CurationError) as err:
+        validate_record({"state_class": "measurement"}, SWITCH)
+    assert err.value.code == "invalid_field_for_platform"
+
+
+def test_a_stored_record_the_wire_vocabulary_has_outgrown_reads_as_absent() -> None:
+    assert parse_record({"state_class": "no-longer-a-state-class"}) is None
+    assert parse_record({"entity_category": "diagnostic"}) is None
+    assert parse_record({}) is None
+
+
+def test_a_binary_row_is_offered_every_binary_device_class() -> None:
+    assert allowed_device_classes(BINARY) == [cls.value for cls in BinarySensorDeviceClass]
