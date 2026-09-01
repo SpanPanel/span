@@ -617,64 +617,43 @@ and select your preferred precision from the "Display Precision" menu.
 **The integration cannot enforce much on its own.** Anything holding the eBus broker password — including another integration in the same Home Assistant process
 — talks to the panel directly, outside Home Assistant's permission model.
 
-**What pinning the panel's certificate authority buys.** The authority is fetched over your network on a connection with nothing to verify itself against,
-because it _is_ the anchor everything else is checked against:
+**What pinning the panel's certificate authority implies**:
 
 - A **listener** cannot read your passphrase or the credentials the panel returns for it.
-- A device **actively in the path at that first fetch** can answer with an authority of its own and read both. Pinning alone cannot detect this.
+- A device **actively in the path at that first fetch** can answer with an authority of its own and read both. Pinning alone cannot detect this (see deployment
+  recommendations).
 
-Comparing the fingerprint against another source closes the second case. It is in diagnostics under `panel_ca`, in the setup log, and reported identically by
-another install of this integration on the same panel. After the first pin, any change stops the integration and raises a repair — see Troubleshooting.
+Comparing the fingerprint against another source closes the second case. It is in diagnostics under `panel_ca`, and in the log of the setup that pinned it — at
+`INFO` from the config flow, at `WARNING` for an entry pinned on upgrade. After the first pin, any change stops the integration and raises a repair — see
+Troubleshooting.
 
-| Situation                                           | What happens                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Setting up by hostname                              | Verified, never relaxed. A domain joins the certificate's SAN only after you authenticate; everything before that runs against an address the certificate already names.                                                                                                                                                                                      |
-| Panel announces a new address, or you re-add it     | The entry moves only if the candidate serves a certificate its own anchor validates. Otherwise the move is refused and logged at`WARNING`.                                                                                                                                                                                                                    |
-| The panel really has moved                          | Use**Reconfigure**. A host that does not chain is refused, one that does not answer is reported unreachable, and one that chains but is not named is your panel — move it to an **FQDN** (the panel regenerates its certificate around that name) or the panel's **`.local` name** (already covered). A bare new IP the certificate does not name is refused. |
-| A panel announced by an**add-on**                   | The add-on's ports are taken as published, because add-ons reallocate their own. The address you configured is kept while it still answers for that panel, and replaced only when it has stopped answering.                                                                                                                                                   |
-| The entry has no anchor, or a stored one won't load | **Reauthenticate** acquires one before either sign-in method is offered.                                                                                                                                                                                                                                                                                      |
-
-**Entries from before pinning** pin at the first startup that reaches the panel, logged at `WARNING` with the fingerprint. Until that succeeds the authority is
-re-fetched over plaintext on every connection and whatever answers is trusted. If the panel is unreachable the integration starts anyway and retries, because
-refusing to start would remove the integration without making the credential any safer.
-
-**Proxies cut both ways.** One terminating the broker port with a certificate of its own leaves the entry unpinned, warning at every start with no repair
-raised. One terminating only port 443 lets the entry pin, but startup then refuses to connect and keeps retrying, with a repair naming the port — every REST
-call a pinned entry makes, the schema read at startup included, verifies against the pin, and a certificate the pin does not validate is refused rather than
-downgraded to plaintext — until the port serves the panel's own certificate. If your panel serves TLS on another port, the setup flow asks once you have moved
-the HTTP port off 80, and **Reconfigure** offers the HTTPS port to any pinned entry.
+| Situation                                           | What happens                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setting up by hostname                              | Verified, never relaxed. A domain joins the certificate's SAN only after you authenticate; everything before that runs against an address the certificate already names.                                                                                                                                   |
+| Panel announces a new address, or you re-add it     | The entry moves only if the candidate serves a certificate its own anchor validates. Otherwise the move is refused and logged at `WARNING`.                                                                                                                                                                |
+| The panel really has moved                          | Use **Reconfigure**. A host that does not chain is refused, one that does not answer is reported unreachable — move it to an **FQDN** (the panel regenerates its certificate around that name) or the panel's **`.local` name** (already covered). A bare new IP the certificate does not name is refused. |
+| The entry has no anchor, or a stored one won't load | **Reauthenticate** acquires one before either sign-in method is offered.                                                                                                                                                                                                                                   |
 
 ### Restricting who can operate the panel
 
-Four options in **Settings → Devices & Services → Span Panel → Configure**. **Every one defaults to the behavior your panel already has**, so upgrading changes
-nothing until you choose otherwise.
+Four options in **Settings → Devices & Services → Span Panel → Configure**. Each is enforced where commands are published rather than only at the entity, so a
+refusal holds however the command arrived.
 
-| Option                                     | What it does                                                                                                                                                                                  | What it does not do                                                                                                        |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| **Who may operate the panel**              | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and adopted controls from non-admin users. `Nobody` stops creating those entities altogether. | Neither affects sensors, and neither constrains anything holding the broker password.                                      |
-| **Allow control without a logged-in user** | Turning it off refuses commands from automations, scripts and other integrations, which arrive with no user attached.                                                                         | It cannot tell a well-behaved automation from a runaway one — only that neither has a user.                                |
-| **Control lock auto-relock**               | Adds a switch that, while armed, refuses every control command. Anyone can arm it; only an administrator can disarm it, and never an automation.                                              | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
-| **Relay debounce**                         | Refuses a second command to the same circuit's relay within the window.                                                                                                                       | It is per circuit, so an automation cycling many circuits still gets through.                                              |
+| Option                                     | Default                                                                                                      | What it refuses                                                                                                                                                                                                          | What it does not do                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Who may operate the panel**              | Any Home Assistant user — Home Assistant's own policy, which grants every non-admin control of every entity  | `Administrators only` refuses circuit switches, priority selects, the GFE override, EVSE limits and adopted controls from non-admin users. `Nobody` also stops those entities being created.                             | Neither touches sensors. Neither reaches an automation, which runs with no user at all — pair it with the next option.     |
+| **Allow control without a logged-in user** | On                                                                                                           | Turning it off refuses every command with no user attached: all automations, and any script or integration an automation calls. A script a person runs keeps that person's user and is unaffected.                       | It cannot tell a well-behaved automation from a runaway one — only that neither has a user.                                |
+| **Control lock auto-relock**               | Off, and no switch exists                                                                                    | A switch that, while armed, refuses every control command. Anyone can arm it; only a logged-in administrator can disarm it. `0` holds the disarm until someone re-arms; any other value re-arms after that many minutes. | It is not a password. It defends against misclicks and runaway automations, which is what a local control can actually do. |
+| **Relay debounce**                         | 2 seconds — **the one default that is not what your panel did before this release**; set `0` to restore that | A second command to the same circuit's relay inside the window. Refused, never queued.                                                                                                                                   | It is per circuit, so an automation cycling many circuits still gets through.                                              |
 
-**Why `Administrators only` is worth setting.** Home Assistant's default user policy grants every non-admin user control of every entity. Until you change this,
-a dashboard-only household member can open any breaker in the house.
+**What none of this defends against.** These options constrain callers arriving through Home Assistant, and nothing else. Anything already holding the broker
+credential — a second Home Assistant instance, a script you wrote, a malicious custom integration reading it out of this process's memory — publishes to the
+panel directly; see [Recommended deployment](#recommended-deployment), where network topology and a locked enclosure are the real boundary.
 
-**`Administrators only` does not reach an automation a non-admin triggered.** It checks the user a command arrived with, and Home Assistant gives an automation
-a fresh context with no user on it — the triggering context is recorded as the parent, not carried through — so an automation a non-admin set off publishes with
-nothing for the admin test to hold. (A script is different: run by a person it keeps that person's user, and run from an automation it inherits the automation's
-userless one.) The option that covers those callers is **Allow control without a logged-in user**; the two are separate settings because most households want
-their automations to keep working. Set both if you want control limited to administrators acting in person.
-
-**What none of this defends against.** These options constrain callers arriving through Home Assistant. They do not constrain anything that already holds the
-broker credential — a second Home Assistant instance, a script you wrote, or a malicious custom integration running inside this same Home Assistant process,
-which reads the credential straight out of memory. For that, see [Recommended deployment](#recommended-deployment) below; network topology and a locked
-enclosure are the real boundary.
-
-**Nothing is deleted when you choose `Nobody`.** The control entities stop being created and read as unavailable; their registry entries, names, areas and
-customizations are kept, so turning the option back on restores exactly the entities you had. The option is also enforced where commands are published, not only
-by the absence of entities, so a command reaching the panel by any other route is refused rather than sent. Dashboards and automations referencing them will
-show them unavailable in the meantime — including the shipped SPAN Panel card, whose toggles call `switch.turn_on` and `select.select_option` directly and have
-no card-side message for a refusal. A non-admin using that card under `Administrators only` gets a refusal with no explanation on the card.
+**Choosing `Nobody` deletes nothing.** The control entities stop being created and read as unavailable, but their registry entries, names, areas and
+customizations are kept, so turning the option back on restores exactly the entities you had. Dashboards and automations referencing them show them unavailable
+meanwhile — including the shipped SPAN Panel card, whose toggles call `switch.turn_on` and `select.select_option` directly and report only a generic "Unable to
+toggle relay" rather than the refusal's reason.
 
 ### The record of what was commanded
 
@@ -682,45 +661,37 @@ Every control command fires a `span_panel_control_command` event and appears in 
 there is no user — an automation — the originating automation or script is named instead, so an unattended write is attributed to _what_ rather than left blank.
 Every command is also logged at `INFO`.
 
-Commands report one of four outcomes, and the distinctions matter:
+Commands report one of four outcomes, or a refusal, and the distinctions matter:
 
-| Outcome       | Meaning                                                                                 |
-| ------------- | --------------------------------------------------------------------------------------- |
-| `confirmed`   | The panel reported the value you asked for.                                             |
-| `accepted`    | The broker acknowledged the message and the panel did not report a change.              |
-| `unconfirmed` | Nothing came back within the deadline.**Not an error** — see the troubleshooting entry. |
-| `failed`      | The command was never handed to the broker and will not be delivered.                   |
-| `refused:…`   | This integration refused it, for the named reason.                                      |
+| Outcome       | Meaning                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `confirmed`   | The panel reported the value you asked for.                                              |
+| `accepted`    | The broker acknowledged the message and the panel did not report a change.               |
+| `unconfirmed` | Nothing came back within the deadline. **Not an error** — see the troubleshooting entry. |
+| `failed`      | The command was never handed to the broker and will not be delivered.                    |
+| `refused:…`   | This integration refused it, for the named reason.                                       |
 
 ### Rotating panel credentials
 
-The `span_panel.rotate_credentials` action asks the panel for a new eBus MQTT broker password, stores it, and reloads the integration.
+This asks the panel for a new password for the connection the integration uses, stores it, and reloads. Run it after a contractor visit, a suspected exposure,
+or anything else that put someone in front of your panel.
 
 ```yaml
 action: span_panel.rotate_credentials
 data: {}
 ```
 
-Run it after a contractor visit, a suspected credential exposure, or any event that put someone else in front of the panel.
+**Run it yourself, from the interface.** Only a Home Assistant administrator can, and an automation or script cannot. With more than one panel, set the **Config
+entry** field to say which — the action refuses to guess.
 
-**Name the panel when you have more than one.** The `config_entry_id` field is optional with a single panel loaded and required beyond that: rotating stops the
-previous broker password working for every other local client of whichever panel it ran against, so the action refuses an ambiguous call rather than picking
-one.
+**Anything else talking to your panel stops until you set it up again.** A second Home Assistant, a script, third-party tooling: each has to be given the new
+password from the panel before it reconnects. This integration handles itself. Your panel passphrase does not change, so the SPAN app is unaffected.
 
-**Know the blast radius before you run it.** The previous broker password stops working the moment the panel issues the new one, so every other local client
-using it — a second Home Assistant instance, a script, third-party tooling — must be re-provisioned from the panel before it will reconnect. This integration
-re-provisions itself automatically; nothing else does. The panel access token and the panel passphrase are not changed.
+**A failure changes nothing, so fix the cause and run it again.** If the panel rejects the integration's sign-in, reauthenticate it first. If a repair about the
+panel's certificate is open, resolve that first — a new password is never sent over a connection that cannot be verified.
 
-Only a Home Assistant administrator can run it, and it cannot be called from an automation or script: a call arriving without a logged-in user is refused
-outright. If the panel rejects the stored access token, reauthenticate the integration first — the existing credentials are left untouched on every failure
-path.
-
-**It will not run over an unverified connection.** The rotation carries the access token out and the new broker password back, so an entry whose stored
-authority cannot be read is refused with nothing changed rather than falling back to plaintext; repair the panel's certificate authority and run it again. An
-entry that was never pinned has no anchor to fall back from and keeps the connection it has always used.
-
-**If the reload afterwards fails, do not rotate again.** The new password is stored and the panel has already accepted it, so a second rotation would invalidate
-the one that works. The action reports the failure and says so; check the log and reload the integration.
+**The one exception: if the reload afterwards fails, do not run it again.** The panel has already accepted the new password and the integration has stored it,
+so rotating a second time would throw away the one that works. Check the log and reload the integration instead.
 
 ### Recommended deployment
 
@@ -730,18 +701,19 @@ topology and physical control of the panel are the real boundary; everything abo
 - **Put the panel on a trusted VLAN**, with default-deny between VLANs, and allow only the Home Assistant host to reach it. Open `tcp/443` (REST), `tcp/8883`
   (MQTTS) and `tcp/80` (the plaintext certificate-authority fetch, and REST too until the entry pins), and deny `tcp/9001` and `tcp/9002` unless you are
   actively using the SPAN Home on-premise UI.
-- **Use the IP address or an FQDN, not the `.local` name**, because mDNS does not cross VLAN boundaries. The panel's IP is already in its certificate SAN, and
+- **Use the IP address or an FQDN, and the `.local` name only** if you have an mDNS repeater like Avahi. The panel's IP is already in its certificate SAN, and
   for an FQDN the integration registers it so the panel adds it.
-- **If Home Assistant cannot be on the panel's VLAN**, put a reverse proxy there and restrict its inbound to the Home Assistant host; it holds no panel
-  credential and only relays. MQTTS is a TCP stream rather than HTTP, so `tcp/8883` needs a stream proxy (HAProxy, nginx `stream`, or Caddy's `layer4` plugin)
-  while a plain HTTP proxy covers the REST port alone.
 - **Secure the panel enclosure**, because the three-press proximity bypass hands full credentials to anyone who can open the door — the equivalent of a printed
   root password. This outranks every software control on this page.
 - **Put dashboard-only household members in Home Assistant's read-only group.** Home Assistant's default user policy grants every non-admin user control of
   every entity, which includes this integration's circuit switches and priority selects.
 - **Encrypt your Home Assistant backups.** An unencrypted backup contains `.storage/core.config_entries`, and the panel credentials in it are in plaintext.
 - **Enable multi-factor authentication on Home Assistant** and do not expose its API directly to the Internet. A compromised Home Assistant administrator
-  account is a compromised panel.
+  account is a compromised panel. Consider the use of Tailscale, a free and secure mesh network service, if you need to reach Home Assistant from your own
+  devices over the Internet.
+- **A proxy may forward traffic, but must not answer for the panel.** One that passes the traffic through untouched as raw TCP works normally, as long as Home
+  Assistant still reaches the panel by a name the certificate covers: its IP address, its `.local` name, or a domain set through **Reconfigure**. Point that
+  name at the proxy in DNS rather than entering the proxy's own address, which is refused.
 
 ## WebSocket API
 
@@ -763,7 +735,7 @@ See [WebSocket API Reference](websocket-api.md) for the full schema, response fo
 | **Setup fails after downgrading the integration**                            | After installing an older release, the SPAN Panel config entry fails to set up and Home Assistant reports an unsupported configuration version.                                                                                                                                                                                                                                                                                     | The release that stopped storing the panel passphrase migrated the config entry to version 7. Home Assistant refuses to load a config entry whose version is newer than the installed integration understands, and there is no automatic downgrade. Reinstall the newer release, or restore a backup taken before the upgrade. Removing and re-adding the integration also works and preserves entity IDs, but needs the panel passphrase or physical access to the door again.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **"SPAN Panel certificate authority changed" repair**                        | The integration has stopped connecting and a repair reports two fingerprints: the one it pinned and the one the panel now advertises. Entities are unavailable.                                                                                                                                                                                                                                                                     | The panel is presenting a different certificate authority than the one you accepted at setup. Two things look identical from here and only you can tell them apart: a firmware upgrade or a factory reset rotates the authority legitimately, and so does a device on your network standing in for your panel.**If you know why it changed**, open the repair, compare the new fingerprint, and accept it — that re-pins and reconnects. **If nothing should have changed**, do not accept. Check what else is on the panel's network segment first. The integration will not reconnect on its own and will not re-pin on its own, deliberately: retrying would mean waiting to succeed against whatever is answering.                                                                                                                                                                                                                                   |
 | **A circuit re-commissioned in the SPAN App has the wrong controls**         | A circuit whose configuration changed in the SPAN App — made controllable, locked, or set to never back up — still has the controls it had before. A newly controllable circuit has no Breaker switch. A newly locked one still shows its switch, and operating it reports that the command was refused.                                                                                                                            | Reload the integration (**Settings → Devices & Services → Span Panel → ⋮ → Reload**). Which control entities exist is decided when the integration starts, from what the panel declares about each circuit at that moment; a change made afterwards is picked up at the next reload or restart. Reloading is safe — entity IDs, history, names and areas are preserved, because they are keyed on identifiers that do not change. Until you reload, a control the panel no longer accepts is refused rather than published: the command is not queued and the breaker does not move.                                                                                                                                                                                                                                                                                                                                                                     |
-| **The Adopted tab is missing from the dashboard**                            | The dashboard offers By Activity, By Area and Monitoring, but neither **Adopted** nor **By Panel**.                                                                                                                                                                                                                                                                                                                                 | The panel dropdown at the top of the dashboard is on **Favorites**, which merges every configured panel into one workspace rather than being a panel itself, so the tabs that only mean something for a single panel are not offered there. Switch the dropdown to a panel and both come back; the selection is remembered per browser. Adopted is also administrator-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **The Adopted tab is missing from the dashboard**                            | The dashboard offers By Activity, By Area and Monitoring, but neither**Adopted** nor **By Panel**.                                                                                                                                                                                                                                                                                                                                  | The panel dropdown at the top of the dashboard is on**Favorites**, which merges every configured panel into one workspace rather than being a panel itself, so the tabs that only mean something for a single panel are not offered there. Switch the dropdown to a panel and both come back; the selection is remembered per browser. Adopted is also administrator-only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **A control reports `unconfirmed`**                                          | The logbook or the`span_panel_control_command` event says a command was `unconfirmed`. Nothing appears broken.                                                                                                                                                                                                                                                                                                                      | **This is not an error.** It means the panel took the command and did not report a change within the deadline, and the most common reason by far is that there was no change to report — the relay was already open, the priority was already that value. It is also indistinguishable from a silent rejection by the panel, because SPAN's firmware sends no reason code; the integration reports what it observed rather than guessing. The two outcomes that do mean something went wrong are `failed`, which means the command was never sent, and `refused:…`, which means this integration refused it and names why.                                                                                                                                                                                                                                                                                                                               |
 
 ## Development

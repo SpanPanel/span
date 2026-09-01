@@ -134,8 +134,8 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   longer crosses your network in the clear.
 - **A changed authority stops the integration and raises a repair** carrying both fingerprints, because a legitimate rotation and an impersonated panel look
   identical from here.
-- **Four new options decide who may operate the panel** — administrators only, no commands without a logged-in user, an admin-only control lock, and a relay
-  debounce — every one defaulting to what your panel already does.
+- **Four new options decide who may operate the panel**: administrators only, no commands without a logged-in user, an admin-only control lock, and a two-second
+  relay debounce.
 - **`Administrators only` does not cover an automation a non-admin triggered**, because Home Assistant gives an automation a fresh context with no user on it
   and there is then nothing to hold to the admin test; switch off **Allow control without a logged-in user** if you want those refused too.
 - **Every control command is now recorded** in the logbook, on the event bus as `span_panel_control_command`, and at `INFO`, attributed to the automation that
