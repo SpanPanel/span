@@ -51,6 +51,25 @@ the module all three already import from, so this is the one home that does not
 make a reader of one feature import the other.
 """
 
+
+def declares_a_number(datatype: str, unit: str | None) -> bool:
+    """Say whether a declaration describes a row whose value is a number.
+
+    Either half is enough. The declared `$datatype` is the truth of it; a
+    declared unit is taken as saying the same thing, because a publisher that
+    omits a `$datatype` still declares `W`, and a property carrying a unit is a
+    number whatever else it says.
+
+    The unit alone used to answer this, as a proxy, and read a bare count -- an
+    `integer` with no unit -- as text. Here rather than in each caller because
+    two of them decide different things from the same question and must not
+    answer it differently: `adoption` and `extension` parse a published value
+    with it, and `curation` offers the device classes that go behind that value.
+    A row whose reading is a float and whose only offered device class is `enum`
+    is the incoherence this being one function prevents.
+    """
+    return unit is not None or datatype in NUMERIC_DATATYPES
+
 ADOPTED_IDENTIFIER_TOKEN: Final = "adopted"
 """The infix marking a sub-device identifier as adopted rather than curated.
 

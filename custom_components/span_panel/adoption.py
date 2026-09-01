@@ -73,6 +73,7 @@ from .util import (
     BOOLEAN_DATATYPE,
     ENUM_DATATYPE,
     NUMERIC_DATATYPES,
+    declares_a_number,
 )
 
 if TYPE_CHECKING:
@@ -494,24 +495,36 @@ class AdoptedSensor(AdoptedEntity, SensorEntity):
             DEVICE_CLASS_BY_UNIT.get(declaration.unit or ""),
             record,
         )
+        self._numeric = declares_a_number(declaration.datatype, declaration.unit)
 
     @property
     def native_value(self) -> str | float | None:
-        """Return the published value, parsed to a number only where one is declared.
+        """Return the published value, parsed to a number where the declaration says it is one.
+
+        The declared `$datatype` is what says so, and a declared unit is taken as
+        saying so too. The unit alone used to decide it, as a proxy: a property
+        carrying `W` is a number whatever else it says. But a bare count declares
+        no unit and is numeric all the same, and the proxy read one as text --
+        harmless while an uncurated reading asserted nothing about itself, and
+        not harmless once the owner of the device could put a `measurement` on
+        exactly that row and have the recorder handed a string under it.
+
+        The union rather than the datatype alone, because a publisher that omits
+        a `$datatype` still declares a unit, and nothing that parses today may
+        stop parsing.
 
         A declared numeric that arrives unparseable is reported as `None` rather
-        than as its raw text: the entity has a unit and a device class, and
-        putting a string behind those would be a worse lie than reporting
-        nothing.
+        than as its raw text: putting a string behind a unit and a device class
+        would be a worse lie than reporting nothing.
 
-        An undeclared one is text, and text off a vendor device is unbounded, so
-        it goes through `clamp_state` -- see there for why truncating beats
-        letting core refuse it.
+        Anything else is text, and text off a vendor device is unbounded, so it
+        goes through `clamp_state` -- see there for why truncating beats letting
+        core refuse it.
         """
         raw = self._published()
         if raw is None:
             return None
-        if self.entity_description.native_unit_of_measurement is None:
+        if not self._numeric:
             return clamp_state(raw, f"Adopted {self._declaration_path}")
         try:
             return float(raw)

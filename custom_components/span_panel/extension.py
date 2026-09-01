@@ -71,6 +71,7 @@ from .util import (
     SUB_DEVICE_EVSE,
     SUB_DEVICE_MID,
     SUB_DEVICE_PV,
+    declares_a_number,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -451,19 +452,33 @@ class ExtensionSensor(ExtensionEntity, SensorEntity):
         self.entity_description = sensor_description(
             row.path, row.unit, DEVICE_CLASS_BY_UNIT.get(row.unit or ""), record
         )
+        self._numeric = declares_a_number(row.datatype, row.unit)
 
     @property
     def native_value(self) -> str | float | None:
-        """Return the published value, parsed to a number only where one is declared.
+        """Return the published value, parsed to a number where the declaration says it is one.
 
-        An undeclared one is text, and a vendor string is unbounded on the wire,
-        so it goes through the clamp `adoption` holds for both halves of vendor
+        The declared `$datatype` is what says so, and a declared unit is taken as
+        saying so too. The unit alone used to decide it, as a proxy: a property
+        carrying `V` is a number whatever else it says. But a vendor count
+        declares no unit and is numeric all the same, and the proxy read one as
+        text -- harmless while an uncurated reading asserted nothing about
+        itself, and not harmless once the owner of the device could put a
+        `measurement` on exactly that row and have the recorder handed a string
+        under it.
+
+        The union rather than the datatype alone, because a publisher that omits
+        a `$datatype` still declares a unit, and nothing that parses today may
+        stop parsing.
+
+        Anything else is text, and a vendor string is unbounded on the wire, so
+        it goes through the clamp `adoption` holds for both halves of vendor
         extensibility.
         """
         raw = self._published()
         if raw is None:
             return None
-        if self.entity_description.native_unit_of_measurement is None:
+        if not self._numeric:
             return clamp_state(raw, f"Extension {self._declaration_path}")
         try:
             return float(raw)

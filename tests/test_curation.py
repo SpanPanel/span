@@ -114,6 +114,42 @@ def test_allowed_device_classes_respect_the_wire_unit() -> None:
     assert allowed_device_classes(SWITCH) == []
 
 
+def test_allowed_device_classes_respect_the_wire_datatype() -> None:
+    """A device class the row's datatype cannot satisfy is not an offer worth making.
+
+    The unit gate alone let a `string` row be offered `power_factor` and `aqi` --
+    classes that constrain no unit, and so passed -- which reads unknown forever
+    because the value behind them is text.
+    """
+    numeric = allowed_device_classes(SENSOR_FLOAT_V)
+    assert "enum" not in numeric
+    assert "date" not in numeric
+    assert "timestamp" not in numeric
+    assert "voltage" in numeric
+
+    text = allowed_device_classes(SENSOR_STRING)
+    assert "power_factor" not in text
+    assert "aqi" not in text
+    assert {"enum", "timestamp"} <= set(text)
+
+
+def test_a_device_class_the_datatype_cannot_satisfy_is_refused() -> None:
+    """Both directions, because the partition has two halves and each is a real mistake."""
+    with pytest.raises(CurationError) as err:
+        validate_record({"device_class": "enum"}, SENSOR_FLOAT_V)
+    assert err.value.code == "incompatible_device_class"
+    assert "float" in str(err.value)
+
+    with pytest.raises(CurationError) as err:
+        validate_record({"device_class": "power_factor"}, SENSOR_STRING)
+    assert err.value.code == "incompatible_device_class"
+    assert "string" in str(err.value)
+
+
+def test_a_device_class_the_datatype_does_satisfy_is_accepted() -> None:
+    assert validate_record({"device_class": "enum"}, SENSOR_STRING).device_class == "enum"
+
+
 def test_record_round_trips_through_its_dict_form() -> None:
     record = CurationRecord(
         state_class=SensorStateClass.TOTAL_INCREASING, device_class="energy", promote=True

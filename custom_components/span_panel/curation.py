@@ -27,15 +27,19 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 
-# `homeassistant.components.sensor` re-exports this at runtime but leaves it out
-# of its `__all__`, so the package-level import is an `attr-defined` error under
-# mypy. `.const` is where it is actually defined and is the path that type-checks.
-from homeassistant.components.sensor.const import DEVICE_CLASS_UNITS
+# `homeassistant.components.sensor` re-exports both at runtime but leaves them
+# out of its `__all__`, so the package-level import is an `attr-defined` error
+# under mypy. `.const` is where they are actually defined and is the path that
+# type-checks.
+from homeassistant.components.sensor.const import (
+    DEVICE_CLASS_UNITS,
+    NON_NUMERIC_DEVICE_CLASSES,
+)
 from homeassistant.const import EntityCategory, Platform
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
-from .util import NUMERIC_DATATYPES
+from .util import NUMERIC_DATATYPES, declares_a_number
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -91,6 +95,30 @@ def _validate_state_class(value: object, context: RowContext) -> SensorStateClas
         raise CurationError("invalid_state_class", f"unknown state class {value!r}") from err
 
 
+def _admits_datatype(device_class: SensorDeviceClass, context: RowContext) -> bool:
+    """Say whether a sensor device class can describe a value of this row's kind.
+
+    Core splits its own sensor device classes in two -- the four in
+    `NON_NUMERIC_DEVICE_CLASSES` describe a date, an option or a moment, and
+    every other one describes a number -- and the declaration says which kind of
+    value the row carries. Crossing the two produces an entity that reads
+    `unknown` for the life of the install: `power_factor` behind a text reading
+    has no number to show, and `enum` behind a float has no option list any
+    publisher could supply.
+
+    Which side a row falls on is `declares_a_number`'s answer, not the datatype
+    alone, because that is the same question `AdoptedSensor.native_value` asks
+    when it decides whether to parse. A row read as a float whose only offered
+    device classes were the non-numeric four would be offered nothing it could
+    use -- and core refuses to render a state carrying both a unit and a
+    non-numeric device class at all, so every such offer would raise.
+    """
+    numeric_row = declares_a_number(context.datatype, context.unit)
+    if device_class in NON_NUMERIC_DEVICE_CLASSES:
+        return not numeric_row
+    return numeric_row
+
+
 def _validate_device_class(value: object, context: RowContext) -> str:
     if context.platform is Platform.BINARY_SENSOR:
         try:
@@ -108,6 +136,11 @@ def _validate_device_class(value: object, context: RowContext) -> str:
         device_class = SensorDeviceClass(str(value))
     except ValueError as err:
         raise CurationError("invalid_device_class", f"unknown device class {value!r}") from err
+    if not _admits_datatype(device_class, context):
+        raise CurationError(
+            "incompatible_device_class",
+            f"{device_class.value} does not admit the declared datatype {context.datatype!r}",
+        )
     constrained = DEVICE_CLASS_UNITS.get(device_class)
     if constrained is not None and context.unit not in constrained:
         raise CurationError(
@@ -208,13 +241,19 @@ def allowed_state_classes(context: RowContext) -> list[str]:
 
 
 def allowed_device_classes(context: RowContext) -> list[str]:
-    """Return the device classes compatible with this row's platform and declared unit."""
+    """Return the device classes this row's platform, datatype and declared unit admit.
+
+    The same two checks `_validate_device_class` applies, in the same order, so
+    the editor never offers a class the validator would then refuse.
+    """
     if context.platform is Platform.BINARY_SENSOR:
         return [cls.value for cls in BinarySensorDeviceClass]
     if context.platform is not Platform.SENSOR:
         return []
     allowed: list[str] = []
     for device_class in SensorDeviceClass:
+        if not _admits_datatype(device_class, context):
+            continue
         constrained = DEVICE_CLASS_UNITS.get(device_class)
         if constrained is None or context.unit in constrained:
             allowed.append(device_class.value)

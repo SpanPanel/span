@@ -407,6 +407,63 @@ def test_an_unparseable_number_is_reported_as_nothing_rather_than_as_text(
     assert sensor.native_value is None
 
 
+# --- what a value is parsed as is what the declaration says it is -----------
+
+
+def test_a_unit_less_numeric_row_still_publishes_a_number(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A vendor count declares no unit and is a number all the same.
+
+    The unit stood in for "this is numeric" while an uncurated row could assert
+    nothing. Curation makes the gap consequential: the datatype admits a state
+    class, so the recorder would be handed the string `"42"` under one.
+    """
+    snapshot = _snapshot(
+        _row(property_id="cycle-count", datatype="integer", unit=None, value="42")
+    )
+    (sensor,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert sensor.native_value == 42.0
+
+
+def test_a_unit_less_numeric_row_that_publishes_text_reports_nothing(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Declared numeric is declared numeric: unparseable text is not a fallback to text."""
+    snapshot = _snapshot(
+        _row(property_id="cycle-count", datatype="integer", unit=None, value="lots")
+    )
+    (sensor,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert sensor.native_value is None
+
+
+def test_a_unit_less_string_row_is_still_text(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The half of the rule that must not move: a declared string stays a string."""
+    snapshot = _snapshot(_row(property_id="mode", datatype="string", unit=None, value="idle"))
+    (sensor,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert sensor.native_value == "idle"
+
+
 # --- what the owner of the device is allowed to assert ----------------------
 
 
@@ -468,6 +525,24 @@ def test_a_curated_record_shapes_the_extension_sensor(
     assert entity.entity_category is None
     # Promotion is not enablement. Enabling stays the user's separate act.
     assert entity.entity_registry_enabled_default is False
+
+
+def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The gap the datatype rule closes, stated through the record that opens it."""
+    row = _row(property_id="cycle-count", datatype="integer", unit=None, value="42")
+    snapshot = _snapshot(row)
+    record = CurationRecord(state_class=SensorStateClass.MEASUREMENT)
+    (entity,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=_overlay_keyed(row, record),
+    )
+    assert entity.state_class is SensorStateClass.MEASUREMENT
+    assert entity.native_value == 42.0
 
 
 def test_an_uncurated_extension_row_is_exactly_todays_entity(

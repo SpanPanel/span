@@ -866,6 +866,77 @@ def test_a_string_within_the_limit_is_passed_through_untouched(hass: HomeAssista
     assert sensor.native_value == "ok"
 
 
+# -- What a value is parsed as is what the declaration says it is -------------
+
+
+def test_a_unit_less_numeric_declaration_still_publishes_a_number(hass: HomeAssistant) -> None:
+    """A bare count declares no unit and is a number all the same.
+
+    The unit used to stand in for "this is numeric", which was true enough while
+    an uncurated row could assert nothing: a count published as `"42"` read as
+    the string `"42"` and nobody could put a state class behind it. Curation
+    makes that consequential -- the datatype admits `measurement`, so the
+    recorder would be handed text under a numeric state class.
+    """
+    declaration = _property(
+        node_id="meter", property_id="cycle-count", datatype="integer", unit=None, value="42"
+    )
+    snapshot = _snapshot(_device(properties=(declaration,)))
+
+    (sensor,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
+    )
+
+    assert sensor.native_value == 42.0
+
+
+def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
+    hass: HomeAssistant,
+) -> None:
+    """The gap this closes, stated through the record that opens it."""
+    declaration = _property(
+        node_id="meter", property_id="cycle-count", datatype="integer", unit=None, value="42"
+    )
+    snapshot = _snapshot(_device(properties=(declaration,)))
+    identifier = resolve_identifier(
+        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+    )
+    record = CurationRecord(state_class=SensorStateClass.MEASUREMENT)
+
+    (sensor,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=_overlay_for(declaration.path, record, identifier),
+    )
+
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    assert sensor.native_value == 42.0
+
+
+def test_a_unit_less_numeric_that_publishes_text_reports_nothing(hass: HomeAssistant) -> None:
+    """Declared numeric is declared numeric: unparseable text is not a fallback to text."""
+    declaration = _property(
+        node_id="meter", property_id="cycle-count", datatype="integer", unit=None, value="lots"
+    )
+    snapshot = _snapshot(_device(properties=(declaration,)))
+
+    (sensor,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        dr.async_get(hass),
+        panel_device_id="panel-device-id",
+        overlay=CurationOverlay.empty(),
+    )
+
+    assert sensor.native_value is None
+
+
 # -- Diagnostics report the proxy relationship, never the parent's id ---------
 
 
