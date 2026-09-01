@@ -70,6 +70,7 @@ def declares_a_number(datatype: str, unit: str | None) -> bool:
     """
     return unit is not None or datatype in NUMERIC_DATATYPES
 
+
 ADOPTED_IDENTIFIER_TOKEN: Final = "adopted"
 """The infix marking a sub-device identifier as adopted rather than curated.
 
