@@ -36,9 +36,12 @@ import tomllib
 CHECKOUT = "../../span/span-panel-api"
 """The library checkout, relative to this repository's root.
 
-Relative rather than absolute because this repository is worked in through git
-worktrees, and `../../span/span-panel-api` resolves to the same directory from
-every one of them. An absolute path would be correct on exactly one machine.
+Relative rather than absolute because an absolute path would be correct on
+exactly one machine. The cost is that it is depth-sensitive: it arrives from the
+primary checkout and from a worktree placed beside it, and misses from a worktree
+nested inside the checkout, as `.claude/worktrees/<name>` is. `setup-hooks.sh`
+closes that gap with a symlink rather than this file with a second spelling,
+because what is written here is what every import in the suite resolves through.
 """
 
 LIBRARY = "span-panel-api"
