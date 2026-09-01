@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.websocket import (
     _build_circuit_entity_map,
     _classify_sensor_role,
@@ -400,6 +401,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(SpanPanelSnapshotFactory.create()),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         panel_device = _register_panel_device(
@@ -488,6 +490,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
@@ -552,6 +555,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         device = _register_panel_device(hass, "span_entry")
@@ -582,6 +586,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-sub-001")
@@ -661,6 +666,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-evse-001")
@@ -735,6 +741,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-prio-001")
@@ -787,6 +794,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-contract-001")
@@ -859,6 +867,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-backup-001")
@@ -895,6 +904,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
@@ -935,6 +945,7 @@ class TestHandlePanelTopology:
         entry.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot),
             panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")

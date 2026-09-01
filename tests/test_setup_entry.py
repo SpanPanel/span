@@ -28,6 +28,7 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .factories import SpanPanelSnapshotFactory
@@ -526,6 +527,8 @@ async def test_an_enabled_control_lock_is_armed_before_the_platforms_are_forward
         assert await async_setup_entry(hass, entry) is True
 
     assert entry.runtime_data.control_lock.armed is True
+
+
 def test_runtime_data_defaults_its_lock_to_the_default_policys_answer() -> None:
     """The dataclass default may not contradict the policy it stands in for.
 
@@ -536,6 +539,68 @@ def test_runtime_data_defaults_its_lock_to_the_default_policys_answer() -> None:
     two together so a change to the default policy cannot silently unlock the
     entries that never named a lock.
     """
-    runtime_data = SpanPanelRuntimeData(coordinator=MagicMock(), panel_device_id="panel-device-id")
+    runtime_data = SpanPanelRuntimeData(
+        coordinator=MagicMock(),
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
 
     assert runtime_data.control_lock.armed == ControlPolicy.default().lock_enabled
+
+
+def test_runtime_data_refuses_to_be_built_without_an_overlay() -> None:
+    """`curation` is required so a setup path that forgets the load fails loudly.
+
+    Defaulting it to an empty overlay would make a missed load indistinguishable
+    from a user who has curated nothing -- every adopted entity born bare, with
+    the user's stored assertions still on disk and nothing saying why they stopped
+    being applied.
+    """
+    with pytest.raises(TypeError, match="curation"):
+        SpanPanelRuntimeData(coordinator=MagicMock(), panel_device_id="panel-device-id")
+
+
+async def test_setup_hands_the_platforms_the_overlay_that_was_on_disk(
+    hass: HomeAssistant, hass_storage: dict[str, object]
+) -> None:
+    """Loaded before the platforms are forwarded, so adopted entities are born curated.
+
+    Applying it afterwards would mean every adopted entity exists uncurated for
+    the length of a setup, and a `state_class` that arrives after the first state
+    is written is a statistics reset rather than a metadata change.
+    """
+    hass_storage["span_panel.curation.entry-setup"] = {
+        "version": 1,
+        "data": {"records": {"bess/battery-2/cell-voltage": {"device_class": "voltage"}}},
+    }
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock()
+    coordinator = MagicMock()
+    coordinator.async_config_entry_first_refresh = AsyncMock()
+    coordinator.async_setup_streaming = AsyncMock()
+    coordinator.data = SpanPanelSnapshotFactory.create(serial_number="sp3-setup-001")
+    forwarded_overlay: list[CurationOverlay] = []
+
+    async def _capture(*args: object, **kwargs: object) -> None:
+        forwarded_overlay.append(entry.runtime_data.curation)
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch("custom_components.span_panel.SpanMqttClient", return_value=client),
+        patch(
+            "custom_components.span_panel.SpanPanelCoordinator", return_value=coordinator
+        ),
+        patch(
+            "custom_components.span_panel.ensure_device_registered",
+            AsyncMock(return_value="panel-device-id"),
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", _capture),
+        patch.object(hass.config_entries, "async_update_entry"),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+
+    assert forwarded_overlay[0].record_for("bess/battery-2/cell-voltage") == CurationRecord(
+        device_class="voltage"
+    )

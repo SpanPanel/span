@@ -268,7 +268,7 @@ of things nobody remembers deciding. The current entries are all permanent: deli
 already owns or has no use for), values held for identity reasons (`pv/info/serial-number`), redundant echoes (`connection/*-device-type` dereferences to a
 declared `$type`), and properties no producer publishes (`connection/count`).
 
-**"Unread" here means "no curated entity", not "invisible".** Since 2.1.0b7 an unread property on a _modelled_ device also surfaces through
+**"Unread" here means "no curated entity", not "invisible".** Since 2.1.0b7 an unread property on a _modeled_ device also surfaces through
 [extension adoption](#extension-properties) as a disabled diagnostic entity, so a baseline line records a decision not to **curate** something — to give it a
 designed name, a category and a place — rather than a decision to withhold it. The two skips above were written before that distinction existed and read as
 though a baseline line hid a property; it does not, and the entries were reworded rather than left to mislead. A reason that turns on the cost of a _default-on_
@@ -308,7 +308,7 @@ against the capture's own published values rather than leaving it to review.
 This block is **maintainer-facing only**: nothing creates an entity, a Repair or a notification from a `schema_discovery` row — including for a device that _is_
 adopted, whose properties are reported here as declarations exactly like any other.
 
-That is a statement about this block, not about the properties in it. The same properties on a _modelled_ device also arrive as `snapshot.extension_properties`,
+That is a statement about this block, not about the properties in it. The same properties on a _modeled_ device also arrive as `snapshot.extension_properties`,
 which does carry values and does become entities — see [Extension properties](#extension-properties). Two artefacts describing one property, joined by its
 `{node}/{property}` path, with opposite audiences and opposite rules about values. Adoption itself is the next section.
 
@@ -359,7 +359,7 @@ R1 — "Recreate entity IDs" must never propose a change the user did not cause 
 existing entity's id **where Home Assistant composes it under the entity-id options that match how that install was built**. That is why the suffix wording is
 read back and why the name half is anchored on the circuit's own name: two spellings of ours, or a relabel, must never produce an offer.
 
-It is **not** a licence to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
+It is **not** a license to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
 device is the charger and not the panel; a second panel the config flow named "Span Panel 2", whose circuit ids all say `span_panel_` because the old builder
 was never told the panel's name; an install with `USE_DEVICE_PREFIX` off, whose ids carry no device at all where `has_entity_name` prefixes one — that is the
 user's own configuration at work, and the offer is legitimate. Recreate offers it; nothing moves until the user presses the button (R5). The "legacy preset"
@@ -445,12 +445,12 @@ the declaration or the `relay-controllable` value says no. A stale flag therefor
 
 ## Adopting a device this integration models nothing for
 
-The section above is about properties on devices we already read. This one is about a device type nobody modelled at all — a vendor's generator, heat pump or
+The section above is about properties on devices we already read. This one is about a device type nobody modeled at all — a vendor's generator, heat pump or
 second inverter, which the eBus schema explicitly permits. Such a device used to produce nothing: no device, no entity, no sign it was there.
 
 ### The rule
 
-Both halves of vendor extensibility are adopted, and **the half decides the shape**: a device nobody modelled becomes a device, a property on a device we do
+Both halves of vendor extensibility are adopted, and **the half decides the shape**: a device nobody modeled becomes a device, a property on a device we do
 model becomes a reading on that device's existing card.
 
 | What arrives                                     | What happens                                                                                       |
@@ -458,13 +458,13 @@ model becomes a reading on that device's existing card.
 | A device type `MODELLED_TYPES` does not name     | **Adopt as a device.** One sub-device, its properties surfaced beneath it. This section.           |
 | A new node or property on a device we _do_ model | **Adopt as a reading** on that device's card — never a new device. [Below](#extension-properties). |
 | A new property on a device already adopted       | Adopt, with its siblings.                                                                          |
-| A second instance of a modelled type             | **Not adopted.** See below.                                                                        |
+| A second instance of a modeled type              | **Not adopted.** See below.                                                                        |
 
 The two differ in what they can promise. An adopted _device_ is a card nothing else was ever going to describe. An adopted _property_ sits beside curated
 entities on a card this integration designed, so it is deliberately the plainer thing: read-only, wire-named, and carrying no expectation that curation will one
 day rename it into something better.
 
-Extra instances of a modelled type are **not** adopted. A second BESS is a multiplicity limitation of the snapshot model, not an unmodelled device, and adopting
+Extra instances of a modeled type are **not** adopted. A second BESS is a multiplicity limitation of the snapshot model, not an unmodeled device, and adopting
 it would stand a machine-named card beside the curated Battery describing the same hardware. The gap stays visible as a gap.
 
 ### Inside an adopted device, the node decides the destination
@@ -472,7 +472,7 @@ it would stand a machine-named card beside the curated Battery describing the sa
 Keyed on the Homie node — what the eBus vocabulary defines — rather than on property names:
 
 - **`info/*` → device-card fields.** `model`, `serial-number`, `firmware-version`, `hardware-version`, `vendor-name`. The whole node, not just the five the card
-  reads: dropping only the recognised ones would surface `info/nominal-power` as a string sensor the moment a vendor declared one.
+  reads: dropping only the recognized ones would surface `info/nominal-power` as a string sensor the moment a vendor declared one.
 - **`connection/*` → the device link.** Topology, which is `via_device`.
 - **Everything else → entities**, `EntityCategory.DIAGNOSTIC` and disabled by default.
 
@@ -480,22 +480,27 @@ Why by node: the capability catalogs carry **no marker** for "this value is a de
 and such a list goes stale silently. `ebus-sdk`'s own `topology.py` covers `feeds-device-id` and `fed-by-device-id` and omits `grid-forming-entity`, which lives
 on the `grid` capability. A node cannot go stale that way.
 
-### Nothing adopted enters long-term statistics
+### Nothing adopted enters long-term statistics unless its owner asserts one
 
-No adopted entity carries a `state_class`. `test_no_state_class_is_set_anywhere_in_the_module` reads `adoption.py` as syntax and fails if one ever appears.
+No adopted entity carries a `state_class` this integration chose. `test_no_state_class_is_set_anywhere_in_the_module` reads `adoption.py` as syntax and fails if
+one ever appears there; a user-asserted one reaches the entity through the description helpers in
+[`curation.py`](#the-description-helpers-are-the-only-place-state_class-is-spelled), which is the only module in the integration that spells the word.
 
-Three reasons, and they are independent:
+Three reasons the integration will not pick one itself, and they are independent:
 
 1. It is not declared on the wire and is not derivable from one. This integration ships `feedthroughEnergyProducedWh` as `TOTAL` beside
    `mainMeterEnergyProducedWh` as `TOTAL_INCREASING` — same unit, same device class, opposite classification.
 2. A wrong one writes corrupt long-term statistics, and fixing the producer afterwards does not repair them.
 3. Enrolling a property nobody asked for into long-term statistics is a permanent write to every install's recorder database.
 
-A user who wants statistics from an adopted reading wraps it in a template sensor, a Riemann-sum integration or a utility meter. That is their call, made on an
+None of the three is an argument against the _user_ choosing one, and all three are arguments for it being their choice rather than a default: they own the
+vendor device, so they are not guessing, and the assertion is stored where it can be seen and undone. A user who would rather not assert one, or who wants a
+different derivation, still wraps the reading in a template sensor, a Riemann-sum integration or a utility meter — either way it is their call, made on an
 entity they chose to enable.
 
-`device_class` is enumerated in `DEVICE_CLASS_BY_UNIT` rather than inferred. A unit outside the map gets **no** device class — `%` is deliberately absent,
-because its uses here are a state of charge, a confidence and a duty cycle, and no single class is right for all of them.
+`device_class` is enumerated in `DEVICE_CLASS_BY_UNIT` rather than inferred, and a curated record overrides whatever that map answers. A unit outside the map
+gets **no** device class — `%` is deliberately absent, because its uses here are a state of charge, a confidence and a duty cycle, and no single class is right
+for all of them.
 
 ### The device exists even with no entities
 
@@ -538,13 +543,13 @@ and went.
 `AdoptedDevice` carries `parent` (the device id it declares as its parent) and `proxied` (whether that parent is a peer rather than the tree root). Adoption
 does not act on either: every adopted device is registered under the panel with `via_device_id`, exactly as every curated sub-device is.
 
-They are carried because a _proxied_ unmodelled device is a real shape we would otherwise flatten away without leaving evidence. The library's own reference
-tree contains one — `bess-mid` declares `parent: bess`, which is the `{proxier-id}-{proxied-id}` naming of the specification's `devices/proxy.md`. A vendor
-gateway proxying its own sub-devices arrives the same way, and the parent link is the only structural information about how they relate.
+They are carried because a _proxied_ unmodeled device is a real shape we would otherwise flatten away without leaving evidence. The library's own reference tree
+contains one — `bess-mid` declares `parent: bess`, which is the `{proxier-id}-{proxied-id}` naming of the specification's `devices/proxy.md`. A vendor gateway
+proxying its own sub-devices arrives the same way, and the parent link is the only structural information about how they relate.
 
 **Diagnostics report `proxied`, never `parent`.** A device id can embed a serial — producers derive a DER's id preferring a serial over a default slug, which is
 why the library holds PV's `info/serial-number` unvalued — so reporting the parent verbatim would leak the serial the block deliberately withholds. The boolean
-answers a maintainer's actual question, which is whether a proxied unmodelled device has appeared at all.
+answers a maintainer's actual question, which is whether a proxied unmodeled device has appeared at all.
 
 **Why the nesting waits.** [python-sdk#49](https://github.com/electrification-bus/python-sdk/issues/49#issuecomment-5359203067) settled that proxied ids differ
 by design — several enclosures on a shared broker each proxying the same physical device produce different ids on purpose — and that consumers correlate by
@@ -591,12 +596,12 @@ All five creators share `_create`, so `classify` is the only place a property's 
 that as a partition, which is what five separate predicates could not guarantee.
 
 Controls are disabled and diagnostic like every other adopted entity. There is deliberately no second, weaker gate — no read-only mode for settable properties.
-Enabling an entity is a deliberate act, commanding it is a second one, the panel authorises the write regardless of what we create, and this integration already
+Enabling an entity is a deliberate act, commanding it is a second one, the panel authorizes the write regardless of what we create, and this integration already
 ships switches that open and close breakers.
 
 ### The write, and why it is not a generic one
 
-`SpanMqttClient.set_adopted_property(device_id, node_id, property_id, value)` publishes the write. **The lookup is the authorisation**: it resolves the property
+`SpanMqttClient.set_adopted_property(device_id, node_id, property_id, value)` publishes the write. **The lookup is the authorization**: it resolves the property
 against the current snapshot's `adopted_devices` and publishes to the `set_topic` that property carries. No topic is accepted from the caller.
 
 That matters because the obvious alternative — a `set_property_topic(device, node, property)` member on `SchemaAdapter` — would put every curated control one
@@ -605,8 +610,8 @@ argument away, and two of them do real work on the way out:
 - `set_dominant_power_source` translates `GRID` into the `ON_GRID` the v1.0 islanding assertion accepts.
 - `set_evse_charge_limit` **refuses** a value above the commissioned ceiling, because publishing past it is the one write with a physical consequence.
 
-A generic write reachable at modelled devices routes around both. Because `set_topic` is populated only for settable properties on devices `is_modelled`
-rejected, a modelled device produces no `AdoptedDevice` and cannot be addressed this way however the arguments are spelled.
+A generic write reachable at modeled devices routes around both. Because `set_topic` is populated only for settable properties on devices `is_modelled`
+rejected, a modeled device produces no `AdoptedDevice` and cannot be addressed this way however the arguments are spelled.
 
 It also kept the change additive. A new `SchemaAdapter` member is required of every adapter package, so an install carrying an older adapter wheel would fail at
 **discovery** — the whole integration, not one feature.
@@ -656,6 +661,12 @@ file costs the translation and not the notification.
 take. **No values, no device name, no serial.** Same rule as `schema_discovery` and for the same reason: `TO_REDACT` is key-based over the config entry and
 cannot protect a wire value put there.
 
+`adopted_curation` is the companion block, and it is `CurationOverlay.as_dicts()` verbatim: every stored record, keyed by its curation key, carrying its enum
+values and nothing else. It withholds under the same rule for a narrower reason — the keys are wire addresses and the values are Core enum members, so there is
+no wire value and no user free text in the block by construction. The free text a curated row does have (its name and its icon) lives in Core's registry rather
+than in this store, so a diagnostics download cannot leak it from here at all. What the block answers is the question worth asking of a support attachment:
+whether a surprising entity is surprising because a user asserted something, and which field it was.
+
 ### Adopted entities declare no field paths
 
 `snapshot.adopted_devices` is outside the curated field-path vocabulary by construction — it carries no metadata row, so the producible gate has nothing to
@@ -691,13 +702,13 @@ span_{serial}_adopted_{scope}/{node}/{property}
 
 - **Anchored on what is stable and ours** — the panel serial and the curated scope (`bess`, `mid`, `pv`, `panel`, `evse_{node}`, `circuit_{id}`).
 - **Addressed by the wire path verbatim**, which is upstream's own capability-catalog spelling (`AdoptedProperty.path`, `discovery_path()`). Verbatim is what
-  makes it injective: the id _is_ the address. Normalising hyphens would collapse `battery-2` + `cell-temperature` and `battery` + `2-cell-temperature` into one
+  makes it injective: the id _is_ the address. Normalizing hyphens would collapse `battery-2` + `cell-temperature` and `battery` + `2-cell-temperature` into one
   id, which `test_the_pairs_a_normalising_grammar_would_collapse_stay_distinct` pins.
 - **Never through `get_user_friendly_suffix`**, which de-_dots_ rather than de-hyphens and substitutes a curated suffix on a mapping hit.
 - **Not the eBus proxy composition.** `{proxier-id}-{proxied-id}` is upstream's device-handle spelling, and upstream states those handles are not identities:
   they differ across enclosures and are unstable across the proxy-to-native transition. An id anchored on one would rename itself when a device stopped being
   proxied, and nothing here migrates, so there would be no recovery.
-- An address outside the Homie charset (`[a-z0-9-]`) is **refused, not sanitised** — sanitising is what would make the slash-split ambiguous. It stays visible
+- An address outside the Homie charset (`[a-z0-9-]`) is **refused, not sanitized** — sanitizing is what would make the slash-split ambiguous. It stays visible
   in diagnostics.
 
 The slash distinguishes the two adoption grammars: device-level ids contain none.
@@ -719,14 +730,16 @@ better metadata arrives. Three consequences worth knowing before changing any of
 
 ### What metadata may reshape, and what it may not
 
-| Attribute                                   | Revisable later?                              |
-| ------------------------------------------- | --------------------------------------------- |
-| `entity_category`, device class, unit, name | **Yes**, freely — no id change, no statistics |
-| Platform (`sensor` vs `binary_sensor`)      | **No.** The domain is baked into `entity_id`  |
-| `state_class`                               | Never set at all                              |
+| Attribute                                   | Revisable later?                                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `entity_category`, device class, unit, name | **Yes**, freely — no id change, no statistics                                            |
+| Platform (`sensor` vs `binary_sensor`)      | **No.** The domain is baked into `entity_id`                                             |
+| `state_class`                               | **User-curated only**, through the [curation store](#curation-metadata-the-user-asserts) |
 
-The free half is free _because_ of the never half: these entities carry no `state_class`, so they write no long-term statistics, so a later unit or device-class
-change has nothing to reinterpret. Contrast a curated entity, where changing a unit under a `state_class` is the unrepairable case.
+The free half is free _because_ of the never half, and curation does not spend it: an uncurated row still carries no `state_class`, still writes no long-term
+statistics, and still has nothing for a later unit or device-class change to reinterpret. What changes is who may end that: the owner of the device, explicitly,
+on one row at a time — and from that point the row is in the same position as a curated entity, where changing a unit under a `state_class` is the unrepairable
+case. That is why the curate command answers `incompatible_device_class` rather than storing a device class the declared unit does not admit.
 
 The platform is enforced in `resolve_platform`, not remembered: whatever domain the id is already registered under wins, however the declaration later changes.
 `async_update_entity` raises `ValueError("New entity ID should be same domain")`, so re-deriving the platform from better metadata would not move a row — it
@@ -739,7 +752,7 @@ rows deleted. The worked bypass: a vendor publishes `acme/charge-limit` beside t
 `evse_charge_limit_payload()`, which **refuses** a value above the commissioned ceiling. An auto-generated number on the same device, fed by a generic set
 topic, publishes whatever the user types on the same wire. The islanding assertion is the same shape — schema_1 translates `GRID` into `ON_GRID`.
 
-"Disabled-by-default gates the control", which `classify` argues for unmodelled devices, does not transfer: there the hazard is user intent, here it is semantic
+"Disabled-by-default gates the control", which `classify` argues for unmodeled devices, does not transfer: there the hazard is user intent, here it is semantic
 interaction with curated logic the user cannot see. The library enforces it structurally — `ExtensionProperty` has no set-topic member to populate, and
 `set_adopted_property` still resolves only against `adopted_devices`.
 
@@ -773,10 +786,121 @@ confidence, and the ranking is the argument:
 2. **A unit in `DEVICE_CLASS_BY_UNIT` → reading.** Moderate, and it may promote but never demote, because it fails systematically in one direction: the most
    headline-worthy number a battery publishes is a `%` state of charge, and `%` is absent from that map on purpose, being equally a confidence or a duty cycle.
 3. **Everything else → detail**, by fall-through rather than a third signal. The node a property hangs off is the obvious candidate for one and is deliberately
-   not consulted: Homie nodes are organisational, not editorial.
+   not consulted: Homie nodes are organizational, not editorial.
 
 The real fix is upstream: a declared `role` on the property, proposed in `SpanPanel_Docs/span/docs/dev/ebus-property-role-proposal.md`. Until then the ranking
 is the shipping plan, and `entity_category` being free to revise is what makes a conservative default cheap.
+
+## Curation: metadata the user asserts
+
+Adoption's refusal was never "adopted entities may not have statistics" — it was "the integration will not guess", and those are the same rule only while nobody
+who does know the answer has anywhere to say it. `curation.py` is that place. It owns three fields and no others: `state_class`, `device_class`, and promotion
+out of `EntityCategory.DIAGNOSTIC`. Everything else a user might want to change about an adopted entity — its name, icon, area, display unit, precision, and
+whether it is enabled at all — is registry state Core already owns, and this integration writes none of it.
+
+Identity is untouched in every case. A curated row keeps its `unique_id`, its `entity_id` and its platform: the overlay changes what an entity declares, never
+what it is. That is what makes this safe to apply to entities whose ids are [permanent by design](#terminal-identity) — it is metadata handed to an existing
+identity, not a second identity namespace.
+
+### The store is an overlay keyed by wire address
+
+`helpers.storage.Store` at `span_panel.curation.{entry_id}`, one per config entry for the same reason `additions.py` has one: two panels in one house curate
+independently. The stored shape is `{"records": {key: {field: value}}}`, and a record holds only what the user asserted — a missing field means the adopted
+default, and a missing key means the row was never curated at all.
+
+The keys are scope-prefixed wire addresses rather than `unique_id`s:
+
+| Half                               | Curation key                     | Built by                 |
+| ---------------------------------- | -------------------------------- | ------------------------ |
+| Vendor reading on a modeled device | `{scope}/{node}/{property}`      | `extension_curation_key` |
+| Entity on an adopted device        | `{identifier}/{node}/{property}` | `adopted_curation_key`   |
+
+The prefix is what makes a key injective: `path` is `{node}/{property}` on both models and is unique only within one device. The two namespaces cannot collide,
+because only an adopted identifier carries the `_adopted_` token. Neither key goes through `get_user_friendly_suffix`, which is what makes `adopted_unique_id`
+[deliberately non-injective](#the-device-level-grammar-is-not-injective-and-the-collision-is-caught) — keying the store on a `unique_id` would have inherited
+that collision and let one record reach two wire addresses.
+
+**A record asserting nothing clears its key rather than being stored.** Its stored form is `{}`, which `parse_record` refuses, so writing it would leave a
+record on disk that the next load reports as unreadable — the warning meant for a damaged or hand-edited store — and the save after that would delete, over a
+value the signature accepts. Save may not write what load rejects.
+
+Records are never pruned. One whose wire path stops being published goes inert rather than being deleted, which is the same "the integration never decides a
+row's fate" stance the rest of adoption takes. The whole store does go when the config entry is removed (`async_forget_curation`), and that one is deliberate:
+the keys are wire addresses rather than registry ids, so a store left behind is one the next entry for the same panel would load and apply, re-asserting
+metadata the user removed the panel to be rid of.
+
+### Validation refuses at save, and runs again at construction
+
+`validate_record` refuses rather than warns, because a stored record is applied unattended at every future setup — a warning would be read once, by nobody.
+Everything decidable without the wire is decided in the websocket schema instead (enum membership, the one storable `entity_category`, the key's charset), so
+only cross-field questions reach the validator: a `state_class` needs a sensor row with a numeric datatype, a `device_class` must belong to its platform's enum
+and must fit both what the row declares it is and the unit it declares (Core's own `NON_NUMERIC_DEVICE_CLASSES` and `DEVICE_CLASS_UNITS`), and a control row
+accepts prominence and nothing else.
+
+The datatype half of that came later than the unit half and closes a real gap: gating on the unit alone let a text row be offered `power_factor`, `aqi` and
+`monetary`, which constrain no unit and so passed vacuously, each of which reads `unknown` for the life of the install. Which side of Core's partition a row
+falls on is `util.declares_a_number`'s answer — a numeric `$datatype` or a declared unit — which is the same predicate `AdoptedSensor.native_value` uses to
+decide whether to parse. Sharing it is the point: a row whose reading is parsed as a float and whose only offered device class was `enum` would be incoherent,
+and Core refuses to render a state carrying both a unit and a non-numeric device class at all.
+
+`declares_a_number` is also why a unit-less numeric reading is a number. The unit used to stand in for "this is numeric", so a bare `integer` count published as
+`"42"` reached the state machine as text — harmless while an uncurated row asserted nothing about itself, and not harmless once its owner could put a
+`measurement` on exactly that row and hand the recorder a string under it. The union rather than the datatype alone, because a publisher that omits a
+`$datatype` still declares a unit, and nothing that parsed before may stop parsing.
+
+The same validator runs again at construction, where it drops rather than refuses. A record can go stale between the save and a later setup — the vendor may
+change a row's unit or datatype — so `sanitise` re-measures each field independently, keeps the ones that still validate, and `CurationOverlay.for_row` emits
+one warning naming what it dropped. It never raises: curation must not be able to block setup. It never deletes either, because the wire may revert and the
+user's other assertions are still good.
+
+That is also why the list command reports a record **as stored** rather than as it would be applied, beside a `stale_fields` list naming the difference.
+Reporting the sanitized form would show the user an assertion they never made and hide that theirs was dropped.
+
+### The description helpers are the only place `state_class` is spelled
+
+`adoption.py` and `extension.py` each carry an AST guard asserting the token appears nowhere in them — not as a keyword, not as an `_attr_state_class` target,
+not as a `SensorStateClass` name. Both stay true while their entities carry curated state classes, because neither module builds its own description: both call
+`curation.sensor_description`, which takes the wire path, the declared unit, the `DEVICE_CLASS_BY_UNIT` default and the record, and returns the
+`SensorEntityDescription` the entity is constructed from. `binary_sensor_device_class` and `entity_category_for` do the same job for the other two fields.
+
+This ends up stricter than the design asked for. The plan was to relax the adoption guard into "the keyword is permitted when its value comes from the curation
+interface"; routing through a helper meant it did not have to relax at all, and the guard newly added for `extension.py` could be the same absolute form rather
+than a weaker one. A guard that admits one shape of exception is a guard somebody has to re-read before trusting.
+
+### The two commands write no registry state
+
+`websocket_adopted.py` defines `span_panel/adopted/list` and `span_panel/adopted/curate`, and `websocket.py`'s `async_register_commands` registers them beside
+`panel_topology` — the import runs that way and only that way, so no cycle can appear as further commands join. Both are `@require_admin`, both take the main
+panel's device registry id, and both answer `panel_topology`'s error codes from the same resolution — a consumer that learned one set does not meet a second.
+[websocket-api.md](websocket-api.md) is the wire contract; what matters here is the boundary.
+
+**Enabling is Core's act, and so are naming, icons, areas, display units and precision.** `config/entity_registry/update` already exposes all of them, already
+requires admin and already carries the undo, so duplicating any of it here would mean two writers for one field and no rule about which wins. What is left over
+is exactly what Core has nowhere to put — a state class, a device class and prominence for an entity built from a vendor declaration — and that is the whole of
+what `curate` stores. `entity_category` is the interesting one: it _is_ a registry column, but it is absent from that websocket's schema, which is why promotion
+has to come from us.
+
+Both commands derive their rows through one function, `_rows`, using the same helpers the entity builders use — `resolve_identifier` and `classify` for an
+adopted device, `adoptable` and `resolve_platform` for a vendor reading. A second derivation would let the editor disagree with the entities it edits: offering
+a state class for a row that is really a control, or a key `curate` cannot resolve. `curate` re-derives rather than trusting the key it was handed, because the
+store is keyed on wire addresses and a key nothing publishes would be held forever — read by no entity and shown on no list.
+
+`_rows` inherits the adopted-device collision rule as a **skip** rather than a listing. A row whose `unique_id` was claimed by a lexically earlier wire path is
+left out entirely, because `entity_id` resolves by (platform, `unique_id`): listing it would report the _winner's_ entity beside the loser's curation key,
+inviting a record saved against an entity that will never read it under a live `entity_id` saying it will. `_create` already warns and names both addresses, so
+the skip is silent.
+
+### The reload is the mechanism, not a courtesy
+
+A save has exactly three effects: the record is written, the entry is scheduled for reload, and the result is returned. The reload is the half that reads as
+politeness and is not. An entity description is fixed when the entity is constructed, so a record reaches its entity only by that entity being built again — and
+being built _with_ it, because a `state_class` that first appears after states have been recorded is a statistics reset rather than a metadata change.
+
+The response also carries advisory `warnings`, which are consequences of a save rather than objections to it: the write has already happened, and the user asked
+for it. `statistics_removed` fires on what a save _leaves_ rather than on how it was spelled — a record narrowed to its other fields drops a state class exactly
+as clearing the whole record does — and names Core's answer to that, which is to raise its `state_class_removed` repair and stop compiling statistics for the
+entity. Statistics already collected are not deleted. `total_increasing` is the other warning, and it reinterprets a reading rather than describing it:
+`sensor/recorder.py`'s `reset_detected` reads a drop of more than a tenth as a meter reset, so a reading that legitimately falls manufactures consumption.
 
 ## Runtime data lives in `runtime.py`, and one helper answers for it
 

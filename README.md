@@ -44,44 +44,11 @@ This integration communicates with the SPAN Panel over your local network using 
 infrastructure. eBus uses the [Homie Convention](https://homieiot.github.io/) for MQTT topics and messages, with the panel's built-in MQTT broker delivering
 real-time state updates without polling.
 
-## ⚠️ Backup and Upgrade to v2.1.x before your panel's firmware updates, or the integration will stop working (upgrade only from v2.0.8!)
-
-**SPAN firmware `r202633` changes the API in a way that is not backward compatible.** When your panel takes that update, 2.0.8 stops being able to read it. The
-integration still connects, still shows as loaded, and reports every circuit as missing — sensors go unavailable, automations stop firing, dashboards go blank.
-It does not fail loudly. It goes quiet.
-
-**Nobody outside SPAN knows when your panel will update, and you cannot defer it from Home Assistant.** Panels update on SPAN's timing. There is no schedule to
-plan around, which is why the safe move is to be on 2.1.x already rather than to wait for the signal, which is your panel going quiet.
-
-**Upgrading first costs you nothing.** On your current firmware, 2.1.x reads your panel exactly as 2.0.8 does.
-
-**The changeover is designed to be seamless.** The integration detects the new format on the wire, reloads itself, and carries on:
-
-- No re-pairing, no re-authentication.
-- Entity ids, unique ids and long-term statistics survive. Dashboards, automations and history follow.
-- New entities appear because the new firmware genuinely publishes more. Nothing you already had is removed.
-
-Upgrade afterwards instead and you reach the same place — after however long it takes you to notice, and to work out that a firmware update is the reason your
-panel went silent. The worst case is a reload.
-
-Take another backup after the upgrade.
-
-<details>
-<summary>What changes in the firmware</summary>
-
-The firmware upgrade `r202633` rewrites _how_ the panel publishes its self-describing BOM. The MQTT topic structure changes, and the panel stops presenting
-itself as a long list of properties. It presents a tree that can proxy other devices instead. Every topic moves.
-
-The old format is retired in the same update that introduces the new one — there is no overlap and no setting to keep the old behaviour.
-
-</details>
-
 ## Prerequisites
 
 - [Home Assistant](https://www.home-assistant.io/) installed
 - [HACS](https://hacs.xyz/) installed
 - SPAN Panel with firmware `spanos2/r202603/05` or later
-- SPAN Panel integration v2.0.8 specifically, if you are upgrading to 2.1.x
 - Panel passphrase (found via the SPAN app) **or** physical access to the panel door
 
 ## Installation
@@ -99,15 +66,6 @@ The old format is retired in the same update that introduces the new one — the
    - **Proof of Proximity** — open and close the panel door 3 times, then click Submit
 10. Choose your entity ID naming pattern (see naming patterns below)
 11. Optionally adjust the snapshot update interval — 0 is real-time, up to 15 seconds based on CPU
-
-### Upgrade Process
-
-When upgrading through HACS:
-
-1. **Create a backup** of your Home Assistant configuration and database
-2. **Review the changes** in this README and CHANGELOG
-3. **Check your automations** — review any references to removed entities
-4. **Update during a quiet period** when you can monitor the upgrade
 
 If you encounter issues, restore from your backup or check the [troubleshooting section](#troubleshooting) below.
 
@@ -454,53 +412,56 @@ Applies to Main Meter and Feed Through energy sensors.
 | ---------------------------- | ------ | ----------------------------------------------------------------- |
 | GFE Override: Grid Connected | Button | Tell the panel the grid is up when BESS communication interrupted |
 
-### Adopted Devices
+### Adopted Devices and Readings
 
-The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modelled. Rather than ignoring it, the integration
-gives it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
+The eBus schema is vendor-extensible, so your panel can publish a device type this integration has never modeled. Rather than ignoring it, the integration gives
+it a card of its own hanging off the panel, carrying whatever identity it publishes, with its readings as entities beneath it.
 
-Everything adopted arrives **disabled and diagnostic**, so nothing reaches a dashboard uninvited, and the new-entity notification names the device so you can
-find it. A property the device accepts writes to becomes a control rather than a reading — a `boolean` becomes a switch, an enumeration becomes a select, a
-number becomes a number entity — and those arrive switched off too.
+Everything adopted arrives **disabled** and **filed under Diagnostics until you promote it** from the dashboard [Adopted tab](#the-adopted-tab); the new-entity
+notification names the device so you can find it. A property the device accepts writes to becomes a control rather than a reading — a `boolean` becomes a
+switch, an enumeration becomes a select, a number becomes a number entity — and those arrive switched off too.
 
-Two things worth knowing before you build on one:
+Three things worth knowing before you build on one:
 
-- **Nothing adopted enters long-term statistics.** No adopted entity carries a `state_class`, because the correct one is not published on the wire and guessing
-  wrong writes corrupt statistics that fixing the panel afterwards does not repair. If you want statistics from an adopted reading, wrap it in a template
-  sensor, a Riemann-sum integration or a utility meter — a deliberate choice on an entity you enabled.
+- **Nothing adopted enters long-term statistics until you say it should.** Adopted entities arrive with no statistics class, because the correct one is not
+  published on the wire. You are welcome to supply it in the [Adopted tab](#the-adopted-tab).
 - **A new property on a device this integration already models is adopted too**, but as a reading on that device's existing card rather than as a device of its
-  own. See [Adopted Vendor Readings](#adopted-vendor-readings) below.
-
-### Adopted Vendor Readings
-
-The other half of vendor extensibility. A publisher can add a property to a device this integration already models — the battery, a charger, the solar inverter,
-a circuit or the panel itself — and until 2.1.x that reading went nowhere: it appeared in the diagnostics download and in no entity list. It now becomes an
-entity on that device's own card. The wire already says which device and node it belongs to, so it has a home; what it does not say is how important it is.
-
-They behave like adopted devices in the ways that matter, and differ as follows:
-
-- **They arrive switched off and filed as diagnostics**, so nothing lands on a dashboard uninvited. The new-entity notification names each one, up to five per
-  device; beyond that it gives the device and a count instead, because fifteen new vendor readings at once would otherwise cost you the curated additions in the
-  same message.
-- **They are readings only — never switches, selects or number boxes**, even where the panel says the property accepts writes. These sit beside curated controls
-  that do real work, such as the charge limit that refuses a value above what your charger was commissioned for, and a generic control would sit there with none
-  of that. If a control is worth having, it arrives curated in a release.
-- **They keep the panel's own wording**, so a vendor property on the battery reads `Battery 2 Cell Temperature` rather than something tidied up. Deliberately
-  plainer than a curated entity's name: it is how you tell at a glance which entities this integration designed and which it is passing through.
+  own.
 - **What the delete button does**, since it is not quite what you would expect:
 
-  - Delete one while your panel is still publishing that property and it comes back — switched off — at the next reload. There is no setting to suppress it,
+  - Delete a reading while your panel is still publishing that property and it comes back — switched off — at the next reload, carrying whatever you curated for
+    it. Curation is keyed on the wire address rather than on the entity, so deleting the entity does not discard it. There is no setting to suppress the entity,
     because leaving it switched off is already that.
   - Delete one after your panel has stopped publishing it and it stays gone, because nothing exists to recreate it from.
 
-So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which. A property your panel stops
-publishing is left in place reading unknown rather than removed: silence on the wire does not distinguish a property that is gone from one that has not arrived
-yet, and deleting your entity on a guess is not something an upgrade should do.
+So deletion means "hide it until next time" for a live reading and "clear it out" for a dead one, and your panel decides which.
 
-**These entities are permanent in id, not in identity.** If one of these readings is later curated properly (delivered as an official part of the integration),
-the curated entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is the trade for surfacing a reading the
-moment it appears rather than waiting for a release to model it, and it is why a vendor reading you have come to depend on is worth raising in an issue:
-curation is what turns it into something with a real name, a proper category and statistics.
+**These entities are permanent in id, not in identity.** If one of these readings is later modeled properly (delivered as an official part of the integration),
+that entity is a new entity with its own id and its own history — the adopted one is not renamed into it. That is why a vendor reading you have come to depend
+on is worth raising in an issue: being modeled is what turns it into something with a real name, a proper category and statistics out of the box.
+
+### The Adopted Tab
+
+The integration will not guess what an adopted reading means. You are not guessing — it is your device — so the built-in dashboard has an **Adopted** tab where
+you can tell the integration about the reading.
+
+A row that arrived as a control rather than a reading — a switch, a select or a number box — offers prominence alone, because a device class and a statistics
+class both describe a value being read.
+
+You are only offered choices your panel's own declaration allows. A statistics class is offered only on a reading whose declared datatype is numeric; the device
+classes listed are the ones that fit both what the panel says the reading is and the unit it publishes, so a text reading is never offered a class that expects
+a number, and the unit itself stays whatever the publisher sends.
+
+**Saving reloads the integration**, and setting or clearing a statistics class asks you to confirm before it does.
+
+Two consequences are what that confirmation is about:
+
+- **`total_increasing` tells Home Assistant the reading is a meter that only counts up.** The recorder treats a drop of more than a tenth as the meter being
+  reset and starts a new cycle, so choosing it for a reading that legitimately falls will manufacture consumption that never happened. Choose it only for a
+  genuine lifetime total.
+- **Removing a statistics class stops statistics, and Home Assistant will say so.** If an entity already has statistics and then loses its statistics class,
+  Home Assistant raises a repair notice against it — a warning rather than something with a fix button — and stops compiling new statistics for it. The
+  statistics already collected are not deleted, and the notice clears by itself if you put a statistics class back.
 
 ### BESS & Grid Management
 
@@ -566,7 +527,7 @@ even after the grid is restored. Manual confirmation or an external sensor is re
 
 When `bess_connected` returns to on, no action is needed — firmware resumes normal GFE management automatically.
 
-For a detailed discussion of failure scenarios, the MID topology, generator and non-integrated BESS behaviour, and `/set` risk analysis, see
+For a detailed discussion of failure scenarios, the MID topology, generator and non-integrated BESS behavior, and `/set` risk analysis, see
 [BESS & Grid Management Deep Dive](bess-grid-management.md).
 
 ## Configuration Options
@@ -630,7 +591,6 @@ so a reading that drops and then returns to where it was is a transport artifact
 until a later reading either disproves it (the counter comes back) or corroborates it (the counter climbs from the new, lower base).
 
 **The persistent notification therefore lists a dip once it settles — when that window closes — and a dip that is disproved produces no notification at all** —
-
 the sensor was compensated the whole time and nothing needs your attention. Reporting on corroboration alone left a notice standing for an event the next
 reading undid, which a persistent notification cannot take back the way the offset can. Seeing no notification after a momentary dip is the feature working, not
 failing.
@@ -666,13 +626,13 @@ because it _is_ the anchor everything else is checked against:
 Comparing the fingerprint against another source closes the second case. It is in diagnostics under `panel_ca`, in the setup log, and reported identically by
 another install of this integration on the same panel. After the first pin, any change stops the integration and raises a repair — see Troubleshooting.
 
-| Situation                                           | What happens                                                                                                                                                                                                                                                                                                                                                   |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Setting up by hostname                              | Verified, never relaxed. A domain joins the certificate's SAN only after you authenticate; everything before that runs against an address the certificate already names.                                                                                                                                                                                       |
-| Panel announces a new address, or you re-add it     | The entry moves only if the candidate serves a certificate its own anchor validates. Otherwise the move is refused and logged at `WARNING`.                                                                                                                                                                                                                    |
-| The panel really has moved                          | Use **Reconfigure**. A host that does not chain is refused, one that does not answer is reported unreachable, and one that chains but is not named is your panel — move it to an **FQDN** (the panel regenerates its certificate around that name) or the panel's **`.local` name** (already covered). A bare new IP the certificate does not name is refused. |
-| A panel announced by an **add-on**                  | The add-on's ports are taken as published, because add-ons reallocate their own. The address you configured is kept while it still answers for that panel, and replaced only when it has stopped answering.                                                                                                                                                    |
-| The entry has no anchor, or a stored one won't load | **Reauthenticate** acquires one before either sign-in method is offered.                                                                                                                                                                                                                                                                                       |
+| Situation                                           | What happens                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setting up by hostname                              | Verified, never relaxed. A domain joins the certificate's SAN only after you authenticate; everything before that runs against an address the certificate already names.                                                                                                                                                                                      |
+| Panel announces a new address, or you re-add it     | The entry moves only if the candidate serves a certificate its own anchor validates. Otherwise the move is refused and logged at`WARNING`.                                                                                                                                                                                                                    |
+| The panel really has moved                          | Use**Reconfigure**. A host that does not chain is refused, one that does not answer is reported unreachable, and one that chains but is not named is your panel — move it to an **FQDN** (the panel regenerates its certificate around that name) or the panel's **`.local` name** (already covered). A bare new IP the certificate does not name is refused. |
+| A panel announced by an**add-on**                   | The add-on's ports are taken as published, because add-ons reallocate their own. The address you configured is kept while it still answers for that panel, and replaced only when it has stopped answering.                                                                                                                                                   |
+| The entry has no anchor, or a stored one won't load | **Reauthenticate** acquires one before either sign-in method is offered.                                                                                                                                                                                                                                                                                      |
 
 **Entries from before pinning** pin at the first startup that reaches the panel, logged at `WARNING` with the fingerprint. Until that succeeds the authority is
 re-fetched over plaintext on every connection and whatever answers is trusted. If the panel is unreachable the integration starts anyway and retries, because
@@ -686,7 +646,7 @@ the HTTP port off 80, and **Reconfigure** offers the HTTPS port to any pinned en
 
 ### Restricting who can operate the panel
 
-Four options in **Settings → Devices & Services → Span Panel → Configure**. **Every one defaults to the behaviour your panel already has**, so upgrading changes
+Four options in **Settings → Devices & Services → Span Panel → Configure**. **Every one defaults to the behavior your panel already has**, so upgrading changes
 nothing until you choose otherwise.
 
 | Option                                     | What it does                                                                                                                                                                                  | What it does not do                                                                                                        |

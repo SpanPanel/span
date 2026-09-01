@@ -18,6 +18,7 @@ import pytest
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import SpanPanelRuntimeData
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     Producibility,
@@ -75,7 +76,9 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     return coordinator
 

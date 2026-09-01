@@ -42,6 +42,7 @@ from custom_components.span_panel.binary_sensor import (
     async_setup_entry as binary_sensor_async_setup_entry,
 )
 from custom_components.span_panel.const import DOMAIN, SYSTEM_DOOR_STATE, SYSTEM_WIFI_LINK
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
     declared_field_paths,
@@ -143,7 +144,9 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     return coordinator
 

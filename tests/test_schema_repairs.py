@@ -7,6 +7,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.span_panel.const import DOMAIN, EVENT_SCHEMA_ISSUE
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.schema_repairs import (
     async_clear_schema_issues,
     async_sync_schema_issues,
@@ -540,6 +541,7 @@ async def _entities_by_declared_path(hass):
     config_entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id=await ensure_device_registered(hass, config_entry, snapshot, "SPAN Panel"),
+        curation=CurationOverlay.empty(),
     )
 
     grouped: dict[str, dict[str, list[object]]] = {}

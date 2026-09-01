@@ -41,6 +41,7 @@ from span_panel_api.models import (
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.diagnostics import async_get_config_entry_diagnostics
 from custom_components.span_panel.field_paths import (
     RESIDUAL_EXEMPT_PATHS,
@@ -187,7 +188,9 @@ def _entry(findings: SchemaFindings | None) -> MockConfigEntry:
     coordinator.schema_findings = findings
     entry = MockConfigEntry(domain=DOMAIN, title="SPAN Panel", unique_id="example-40t-001")
     entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     return entry
 

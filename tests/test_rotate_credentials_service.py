@@ -25,6 +25,7 @@ from custom_components.span_panel.const import (
     CONF_PANEL_CA_PEM,
     DOMAIN,
 )
+from custom_components.span_panel.curation import CurationOverlay
 
 OLD_BROKER_PASSWORD = "old-broker-password"
 NEW_BROKER_PASSWORD = "new-broker-password"
@@ -52,6 +53,7 @@ def _add_v2_entry(hass: HomeAssistant) -> MockConfigEntry:
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
         panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     return entry
 
@@ -226,6 +228,7 @@ async def test_no_v2_entry_is_reported(hass: HomeAssistant) -> None:
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
         panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     _async_register_credential_services(hass)
 
@@ -251,6 +254,7 @@ async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> N
     second.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
         panel_device_id="panel-device-id-two",
+        curation=CurationOverlay.empty(),
     )
     _async_register_credential_services(hass)
 
@@ -304,6 +308,7 @@ async def test_two_panels_and_no_id_refuses_rather_than_picking_one(
     second.runtime_data = SpanPanelRuntimeData(
         coordinator=MagicMock(),
         panel_device_id="panel-device-id-two",
+        curation=CurationOverlay.empty(),
     )
     _async_register_credential_services(hass)
 

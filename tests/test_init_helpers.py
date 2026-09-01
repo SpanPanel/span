@@ -15,6 +15,7 @@ from custom_components.span_panel import (
     update_listener,
 )
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay
 from homeassistant.const import CONF_HOST
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -42,7 +43,11 @@ async def test_async_remove_config_entry_device_rejects_main_panel_device(
     coordinator = MagicMock()
     coordinator.data = snapshot
     entry = MockConfigEntry(domain=DOMAIN, data={})
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
     device = MagicMock()
     device.identifiers = {(DOMAIN, "sp3-main-001")}
 
@@ -57,7 +62,11 @@ async def test_async_remove_config_entry_device_allows_subdevice_removal(
     coordinator = MagicMock()
     coordinator.data = snapshot
     entry = MockConfigEntry(domain=DOMAIN, data={})
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
     device = MagicMock()
     device.identifiers = {(DOMAIN, "sp3-main-001_evse")}
 
@@ -176,7 +185,11 @@ async def test_async_unload_entry_shuts_down_runtime_data(
     coordinator = MagicMock()
     coordinator.async_shutdown = AsyncMock()
     entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-789")
-    entry.runtime_data = SpanPanelRuntimeData(coordinator=coordinator, panel_device_id="panel-device-id")
+    entry.runtime_data = SpanPanelRuntimeData(
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
+    )
 
     with patch.object(
         hass.config_entries, "async_unload_platforms", AsyncMock(return_value=True)

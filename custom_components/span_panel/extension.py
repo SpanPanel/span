@@ -13,6 +13,15 @@ re-homes or migrates one on its own schedule, and curation is never blocked by
 one existing -- an entity's `unique_id` and `entity_id` are permanent, its
 *identity* carries no expectation of permanence beyond that.
 
+**Terminal is not unimprovable, and the owner of the device is not guessing.**
+A user who curates a row asserts what this module refuses to infer, and their
+record arrives as metadata `curation.py` composes into the description built
+here -- which is how a curated reading carries a state class without this
+module naming the thing an AST guard forbids it to spell. It changes what an
+entity *says*, never what it *is*: the id, the card and the platform are
+untouched, and an uncurated row is exactly the entity it was before curation
+existed.
+
 **Nothing is ever removed by this integration.** A row the user deletes is
 recreated -- disabled, as it arrives -- for as long as the property is still
 published, so deletion is not suppression and no suppression feature is needed.
@@ -29,16 +38,15 @@ import re
 from typing import Final
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, Platform
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo, DeviceRegistry
 from homeassistant.helpers.entity_registry import EntityRegistry
 from span_panel_api import ExtensionProperty, ExtensionSubject, SpanPanelSnapshot
 
 from .adoption import (
-    BOOLEAN_DATATYPE,
     DEVICE_CLASS_BY_UNIT,
     clamp_state,
     homie_boolean,
@@ -46,14 +54,24 @@ from .adoption import (
 )
 from .const import DOMAIN
 from .coordinator import SpanPanelCoordinator
+from .curation import (
+    CurationOverlay,
+    CurationRecord,
+    RowContext,
+    binary_sensor_device_class,
+    entity_category_for,
+    sensor_description,
+)
 from .entity import SpanPanelEntity
 from .notices import async_raise_on_change, read_translations
 from .util import (
     ADOPTED_IDENTIFIER_TOKEN,
+    BOOLEAN_DATATYPE,
     SUB_DEVICE_BESS,
     SUB_DEVICE_EVSE,
     SUB_DEVICE_MID,
     SUB_DEVICE_PV,
+    declares_a_number,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -192,6 +210,18 @@ def is_extension_unique_id(unique_id: str) -> bool:
     return f"_{ADOPTED_IDENTIFIER_TOKEN}_" in unique_id and "/" in unique_id
 
 
+def extension_curation_key(subject: ExtensionSubject, path: str) -> str | None:
+    """Return the curation-store key for one extension property: `{scope}/{node}/{property}`.
+
+    Scope-prefixed because `path` is unique only within one wire device; the
+    scope segment is exactly the one the unique_id carries, so the key is
+    injective for the same reason the id is. `None` mirrors
+    `extension_unique_id`: no scope, nothing to curate.
+    """
+    scope = extension_scope(subject)
+    return None if scope is None else f"{scope}/{path}"
+
+
 def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject) -> str | None:
     """Return the registry identifier of the curated device this property belongs on.
 
@@ -247,10 +277,14 @@ def resolve_platform(registry: EntityRegistry, unique_id: str, datatype: str) ->
     would strand it and mint a second entity beside it.
 
     Metadata may reshape everything else about a standing entity -- category,
-    device class, unit, name, icon -- and safely, because these entities carry no
-    `state_class` and so have no statistics for a unit change to corrupt. The
-    platform is the exception, and the exception is enforced here rather than
-    remembered: whatever domain the id is already registered under wins.
+    device class, unit, name, icon. For an uncurated entity that is free,
+    because it writes no long-term statistics and so has nothing for a unit
+    change to corrupt. A curated one carries what its owner asserted, and
+    `curation.sanitise` re-measures that assertion against each new
+    declaration, so a reshaping the assertion no longer fits drops it rather
+    than applying it over a wire that has moved. The platform is the exception
+    either way, and the exception is enforced here rather than remembered:
+    whatever domain the id is already registered under wins.
     """
     for platform in (Platform.SENSOR, Platform.BINARY_SENSOR):
         if registry.async_get_entity_id(platform.value, DOMAIN, unique_id) is not None:
@@ -262,10 +296,11 @@ def prominence_hint(row: ExtensionProperty) -> str:
     """Return an advisory ranking for one extension property.
 
     Advisory, and only advisory: every extension entity arrives DIAGNOSTIC
-    whatever this says. `entity_category` is the one attribute that is free to
-    revise later -- no id change, no statistics consequence -- so the conservative
-    default costs a line in a future release, while the mistakes that are *not*
-    free are simply never made here.
+    whatever this says, until its owner curates it out -- which is the act this
+    hint exists to rank rather than to perform. `entity_category` is the one
+    attribute that is free to revise later -- no id change, no statistics
+    consequence -- so the conservative default costs a line in a future release,
+    while the mistakes that are *not* free are simply never made here.
 
     Ranked by confidence, and each signal's failure mode is why it sits where it
     does:
@@ -316,13 +351,15 @@ through a notice naming the device, because a silent truncation would read as
 class ExtensionEntity(SpanPanelEntity):
     """Base for an entity built from a vendor extension on a curated device.
 
-    Disabled and diagnostic without exception, exactly as `AdoptedEntity` is: the
-    integration's job here is to make the reading reachable, not to put it on
-    somebody's dashboard.
+    Disabled without exception, and diagnostic unless the owner of the device
+    said otherwise, exactly as `AdoptedEntity` is: the integration's job here is
+    to make the reading reachable, not to put it on somebody's dashboard. A
+    curated row is that decision already made, so `entity_category_for` lets it
+    out of diagnostics -- and leaves it disabled all the same, because enabling
+    is still their act.
     """
 
     _attr_entity_registry_enabled_default = False
-    _attr_entity_category: EntityCategory | None = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -331,6 +368,7 @@ class ExtensionEntity(SpanPanelEntity):
         row: ExtensionProperty,
         *,
         device_identifier: str,
+        record: CurationRecord | None = None,
     ) -> None:
         """Bind this entity to one extension property of one curated device."""
         super().__init__(coordinator)
@@ -353,6 +391,7 @@ class ExtensionEntity(SpanPanelEntity):
             "prominence_hint": prominence_hint(row),
             "wire_path": row.path,
         }
+        self._attr_entity_category = entity_category_for(record)
 
     def _row(self) -> ExtensionProperty | None:
         """Return this property's current row, or None when it has left the tree.
@@ -380,11 +419,16 @@ class ExtensionEntity(SpanPanelEntity):
 
 
 class ExtensionSensor(ExtensionEntity, SensorEntity):
-    """A vendor reading on a curated device, with no `state_class`.
+    """A vendor reading on a curated device, described by the wire and by its record.
 
-    No `state_class`, ever, and that is what makes the rest of this safe: an
-    entity writing no long-term statistics has nothing for a later unit or
-    device-class change to corrupt, so metadata may reshape it freely.
+    This module infers nothing that would enrol a reading in long-term
+    statistics, and spells no such attribute anywhere -- an AST guard in
+    `tests/test_extension_entities.py` asserts the token is absent from the
+    syntax rather than from the paths a test happens to construct. So an
+    uncurated reading has nothing for a later unit or device-class change to
+    corrupt, and metadata may reshape it freely. The owner of the vendor device
+    may assert one, and their assertion reaches the entity through
+    `curation.sensor_description` rather than from anything guessed here.
     """
 
     def __init__(
@@ -394,27 +438,47 @@ class ExtensionSensor(ExtensionEntity, SensorEntity):
         row: ExtensionProperty,
         *,
         device_identifier: str,
+        record: CurationRecord | None = None,
     ) -> None:
-        """Take the unit and device class from what the publisher declared."""
-        super().__init__(coordinator, unique_id, row, device_identifier=device_identifier)
-        self.entity_description = SensorEntityDescription(
-            key=row.path,
-            device_class=DEVICE_CLASS_BY_UNIT.get(row.unit or ""),
-            native_unit_of_measurement=row.unit,
+        """Take the unit and device class from what the publisher declared.
+
+        The description is built in `curation` rather than here, which is what
+        lets a curated row carry the one piece of metadata this module may not
+        name and still leaves an uncurated row with exactly what it had.
+        """
+        super().__init__(
+            coordinator, unique_id, row, device_identifier=device_identifier, record=record
         )
+        self.entity_description = sensor_description(
+            row.path, row.unit, DEVICE_CLASS_BY_UNIT.get(row.unit or ""), record
+        )
+        self._numeric = declares_a_number(row.datatype, row.unit)
 
     @property
     def native_value(self) -> str | float | None:
-        """Return the published value, parsed to a number only where one is declared.
+        """Return the published value, parsed to a number where the declaration says it is one.
 
-        An undeclared one is text, and a vendor string is unbounded on the wire,
-        so it goes through the clamp `adoption` holds for both halves of vendor
+        The declared `$datatype` is what says so, and a declared unit is taken as
+        saying so too. The unit alone used to decide it, as a proxy: a property
+        carrying `V` is a number whatever else it says. But a vendor count
+        declares no unit and is numeric all the same, and the proxy read one as
+        text -- harmless while an uncurated reading asserted nothing about
+        itself, and not harmless once the owner of the device could put a
+        `measurement` on exactly that row and have the recorder handed a string
+        under it.
+
+        The union rather than the datatype alone, because a publisher that omits
+        a `$datatype` still declares a unit, and nothing that parses today may
+        stop parsing.
+
+        Anything else is text, and a vendor string is unbounded on the wire, so
+        it goes through the clamp `adoption` holds for both halves of vendor
         extensibility.
         """
         raw = self._published()
         if raw is None:
             return None
-        if self.entity_description.native_unit_of_measurement is None:
+        if not self._numeric:
             return clamp_state(raw, f"Extension {self._declaration_path}")
         try:
             return float(raw)
@@ -428,6 +492,28 @@ class ExtensionSensor(ExtensionEntity, SensorEntity):
 class ExtensionBinarySensor(ExtensionEntity, BinarySensorEntity):
     """A declared `boolean` vendor extension on a curated device."""
 
+    def __init__(
+        self,
+        coordinator: SpanPanelCoordinator,
+        unique_id: str,
+        row: ExtensionProperty,
+        *,
+        device_identifier: str,
+        record: CurationRecord | None = None,
+    ) -> None:
+        """Take the device class from the record, because there is nothing to default from.
+
+        A sensor's device class can be read off the declared unit; a boolean
+        declares no unit, so `door` and `problem` and `running` are
+        indistinguishable on the wire. An uncurated binary sensor therefore has
+        no device class at all, and the user's assertion is the only one there
+        can be.
+        """
+        super().__init__(
+            coordinator, unique_id, row, device_identifier=device_identifier, record=record
+        )
+        self._attr_device_class = binary_sensor_device_class(record)
+
     @property
     def is_on(self) -> bool | None:
         """Homie spells a boolean `true`/`false`; anything else is not an answer."""
@@ -439,10 +525,18 @@ def create_extension_sensors(
     snapshot: SpanPanelSnapshot,
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
+    *,
+    overlay: CurationOverlay,
 ) -> list[ExtensionSensor]:
     """Every extension property that is not a declared boolean."""
     return _create(
-        ExtensionSensor, coordinator, snapshot, device_registry, entity_registry, Platform.SENSOR
+        ExtensionSensor,
+        coordinator,
+        snapshot,
+        device_registry,
+        entity_registry,
+        Platform.SENSOR,
+        overlay=overlay,
     )
 
 
@@ -451,6 +545,8 @@ def create_extension_binary_sensors(
     snapshot: SpanPanelSnapshot,
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
+    *,
+    overlay: CurationOverlay,
 ) -> list[ExtensionBinarySensor]:
     """Every extension property declared `boolean`."""
     return _create(
@@ -460,6 +556,7 @@ def create_extension_binary_sensors(
         device_registry,
         entity_registry,
         Platform.BINARY_SENSOR,
+        overlay=overlay,
     )
 
 
@@ -470,6 +567,8 @@ def _create[ExtensionT: ExtensionEntity](
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
     platform: Platform,
+    *,
+    overlay: CurationOverlay,
 ) -> list[ExtensionT]:
     """Build one platform's share of the extension properties.
 
@@ -477,12 +576,33 @@ def _create[ExtensionT: ExtensionEntity](
     the only place a property's platform is decided -- two bodies would each
     restate the predicate, and a property could then reach both platforms or
     neither.
+
+    **The curated record is read through `for_row`, never off the overlay.** The
+    store keeps whatever the user asserted when they asserted it, and the
+    declaration it was asserted against can have moved since. `for_row` measures
+    the record against the declaration in hand and drops what no longer fits;
+    the raw record would reach the device-class constructor unchecked and raise
+    inside `async_setup_entry`, which is the whole platform for one stale row.
+    The context is built from `platform` rather than from the datatype, because
+    `resolve_platform` has already ruled on which platform this row is on and a
+    second derivation could disagree with the registry.
+
+    `extension_curation_key` declines exactly the subjects `extension_unique_id`
+    declines, so every row reaching here has a key. The `None` branch is the
+    type system holding the two to one contract, not a case that occurs.
     """
     built: list[ExtensionT] = []
     for row, unique_id, device_identifier in adoptable(snapshot, device_registry, entity_registry):
         if resolve_platform(entity_registry, unique_id, row.datatype) is not platform:
             continue
-        built.append(entity_class(coordinator, unique_id, row, device_identifier=device_identifier))
+        key = extension_curation_key(row.subject, row.path)
+        context = RowContext(platform=platform, datatype=row.datatype, unit=row.unit)
+        record = None if key is None else overlay.for_row(key, context)
+        built.append(
+            entity_class(
+                coordinator, unique_id, row, device_identifier=device_identifier, record=record
+            )
+        )
     return built
 
 

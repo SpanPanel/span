@@ -20,6 +20,7 @@ from custom_components.span_panel.const import (
     PANEL_STATUS,
     SYSTEM_DOOR_STATE,
 )
+from custom_components.span_panel.curation import CurationOverlay
 from homeassistant.core import HomeAssistant
 
 from .factories import (
@@ -46,7 +47,9 @@ def _make_coordinator(snapshot) -> MagicMock:
         unique_id=snapshot.serial_number,
     )
     coordinator.config_entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator

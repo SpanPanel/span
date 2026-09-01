@@ -38,6 +38,39 @@ SUB_DEVICE_MID: Final = "mid"
 SUB_DEVICE_EVSE: Final = "evse"
 SUB_DEVICE_PV: Final = "pv"
 
+BOOLEAN_DATATYPE: Final = "boolean"
+ENUM_DATATYPE: Final = "enum"
+NUMERIC_DATATYPES: Final = frozenset({"float", "integer"})
+"""The wire datatypes an eBus `$datatype` declares, as far as this integration reads them.
+
+Here rather than in `adoption.py`, where they were first written, because three
+modules now decide something from a declared datatype and only one of them is
+about adopting a device: `extension.py` picks a platform from it, and
+`curation.py` refuses a state class off a row that is not numeric. `util.py` is
+the module all three already import from, so this is the one home that does not
+make a reader of one feature import the other.
+"""
+
+
+def declares_a_number(datatype: str, unit: str | None) -> bool:
+    """Say whether a declaration describes a row whose value is a number.
+
+    Either half is enough. The declared `$datatype` is the truth of it; a
+    declared unit is taken as saying the same thing, because a publisher that
+    omits a `$datatype` still declares `W`, and a property carrying a unit is a
+    number whatever else it says.
+
+    The unit alone used to answer this, as a proxy, and read a bare count -- an
+    `integer` with no unit -- as text. Here rather than in each caller because
+    two of them decide different things from the same question and must not
+    answer it differently: `adoption` and `extension` parse a published value
+    with it, and `curation` offers the device classes that go behind that value.
+    A row whose reading is a float and whose only offered device class is `enum`
+    is the incoherence this being one function prevents.
+    """
+    return unit is not None or datatype in NUMERIC_DATATYPES
+
+
 ADOPTED_IDENTIFIER_TOKEN: Final = "adopted"
 """The infix marking a sub-device identifier as adopted rather than curated.
 

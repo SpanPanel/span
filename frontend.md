@@ -93,6 +93,34 @@ values.
 
 ![Monitoring Configuration](images/monitoring.png)
 
+## Adopted View
+
+The Adopted tab is where you tell the integration what an adopted entity means. Your panel's schema is vendor-extensible, so it can publish devices and readings
+this integration has never modeled; those arrive carrying only what the wire says about them, and the rest is yours to assert. The tab is shown to administrator
+accounts only, and on a panel rather than in the Favorites view.
+
+Rows are grouped by the device card they render on — one group per adopted device, one per modeled device carrying vendor readings — and each row expands into a
+small form. A badge marks a row you have already curated, and another marks one whose saved values the panel has stopped supporting.
+
+Three of the fields are the integration's own, because Home Assistant has nowhere to keep them for an entity built from a vendor declaration:
+
+- **Device class** — what kind of quantity the reading is, which gives it a sensible icon and, for the classes Home Assistant knows how to convert, a choice of
+  display unit.
+- **Statistics class** — Home Assistant's `state_class`, which is what enrolls the reading in long-term statistics and makes it usable on an Energy dashboard.
+- **Prominence** — whether the entity stays filed under Diagnostics or is promoted out of it.
+
+The rest of the form — **name**, **display unit** and **precision**, and whether the entity is **enabled** — is Home Assistant's own entity settings, shown here
+so you do not have to go elsewhere, and written straight into Home Assistant's registry exactly as if you had edited the entity there. Those fields appear once
+the entity exists in the registry; until then the row offers the integration's three and says so. The icon and the area are Home Assistant's own settings too
+and are not restated here — set them from the entity's settings dialog.
+
+You are offered only what your panel's declaration allows: a statistics class on numeric readings, and the device classes that fit both the declared datatype
+and the unit the panel publishes, so a text reading is never offered a class that expects a number. Setting or clearing a statistics class asks you to confirm
+first, because that choice is written into recorded history and correcting the class afterwards does not repair what was already recorded. Saving reloads the
+integration, which is how the setting takes effect — the reload rebuilds the entity already carrying what you asserted.
+
+See [The Adopted Tab](README.md#the-adopted-tab) in the README for the fuller account of what gets adopted and why.
+
 ## Favorites View
 
 The dashboard supports a cross-panel **Favorites** view that lets you curate a single workspace from circuits and sub-devices (BESS, EVSE) belonging to any of

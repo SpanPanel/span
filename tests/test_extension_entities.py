@@ -9,11 +9,15 @@ not there yet.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.persistent_notification import async_dismiss
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import EVENT_HOMEASSISTANT_FINAL_WRITE, EntityCategory, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -22,6 +26,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import ExtensionProperty, ExtensionSubject
 
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.extension import (
     HINT_DETAIL,
     HINT_READING,
@@ -33,7 +38,9 @@ from custom_components.span_panel.extension import (
     classify_extension,
     create_extension_binary_sensors,
     create_extension_sensors,
+    extension_curation_key,
     extension_device_identifier,
+    extension_scope,
     extension_unique_id,
     prominence_hint,
     resolve_platform,
@@ -308,7 +315,11 @@ def test_a_sensor_arrives_disabled_diagnostic_and_without_statistics(
     """
     snapshot = _snapshot(_row())
     sensors = create_extension_sensors(
-        _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
     )
     assert len(sensors) == 1
     sensor = sensors[0]
@@ -326,7 +337,11 @@ def test_a_name_carries_the_node_so_it_cannot_collide_with_a_curated_one(
     """Curated names on these cards carry no wire vocabulary, so prefixing avoids collisions."""
     snapshot = _snapshot(_row())
     sensor = create_extension_sensors(
-        _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
     )[0]
     assert sensor._attr_name == "Battery 2 Cell Temperature"
 
@@ -338,7 +353,11 @@ def test_a_declared_boolean_becomes_a_binary_sensor(
         _row(property_id="pack-enabled", datatype="boolean", unit=None, value="true")
     )
     binary = create_extension_binary_sensors(
-        _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
     )
     assert len(binary) == 1
     assert isinstance(binary[0], ExtensionBinarySensor)
@@ -346,7 +365,11 @@ def test_a_declared_boolean_becomes_a_binary_sensor(
     # And it is not also a sensor: one property, one platform.
     assert (
         create_extension_sensors(
-            _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+            _coordinator(snapshot),
+            snapshot,
+            dr.async_get(hass),
+            er.async_get(hass),
+            overlay=CurationOverlay.empty(),
         )
         == []
     )
@@ -358,7 +381,11 @@ def test_a_property_that_stops_being_published_reads_unknown_rather_than_vanishi
     """Absence on the wire is ambiguous, so the entity stays and reports nothing."""
     snapshot = _snapshot(_row())
     sensor = create_extension_sensors(
-        _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
     )[0]
 
     sensor.coordinator.data = _snapshot()
@@ -371,9 +398,215 @@ def test_an_unparseable_number_is_reported_as_nothing_rather_than_as_text(
     """A string behind a unit and a device class is a worse lie than no reading."""
     snapshot = _snapshot(_row(value="not-a-number"))
     sensor = create_extension_sensors(
-        _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
     )[0]
     assert sensor.native_value is None
+
+
+# --- what a value is parsed as is what the declaration says it is -----------
+
+
+def test_a_unit_less_numeric_row_still_publishes_a_number(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A vendor count declares no unit and is a number all the same.
+
+    The unit stood in for "this is numeric" while an uncurated row could assert
+    nothing. Curation makes the gap consequential: the datatype admits a state
+    class, so the recorder would be handed the string `"42"` under one.
+    """
+    snapshot = _snapshot(
+        _row(property_id="cycle-count", datatype="integer", unit=None, value="42")
+    )
+    (sensor,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert sensor.native_value == 42.0
+
+
+def test_a_unit_less_numeric_row_that_publishes_text_reports_nothing(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Declared numeric is declared numeric: unparseable text is not a fallback to text."""
+    snapshot = _snapshot(
+        _row(property_id="cycle-count", datatype="integer", unit=None, value="lots")
+    )
+    (sensor,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert sensor.native_value is None
+
+
+def test_a_unit_less_string_row_is_still_text(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The half of the rule that must not move: a declared string stays a string."""
+    snapshot = _snapshot(_row(property_id="mode", datatype="string", unit=None, value="idle"))
+    (sensor,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert sensor.native_value == "idle"
+
+
+# --- what the owner of the device is allowed to assert ----------------------
+
+
+def _overlay_keyed(row: ExtensionProperty, record: CurationRecord) -> CurationOverlay:
+    """Key a record the way `_create` looks one up: the scope segment, then the wire path."""
+    return CurationOverlay({f"{extension_scope(row.subject)}/{row.path}": record})
+
+
+def test_the_curation_key_is_scoped_because_a_wire_path_alone_is_not_unique() -> None:
+    """Three wire devices publishing one path are three rows, so they are three keys.
+
+    `path` is unique only within one wire device, so keying on it bare would let
+    a record asserted for one circuit reshape the identically-named property on
+    every other circuit -- and on the battery. The scope segment is exactly the
+    one `extension_unique_id` carries, so the key is injective for the reason
+    the id is.
+    """
+    rows = (
+        _row(),
+        _row(kind="circuit", instance_key="circuit-a"),
+        _row(kind="circuit", instance_key="circuit-b"),
+    )
+    assert {extension_curation_key(row.subject, row.path) for row in rows} == {
+        "bess/battery-2/cell-temperature",
+        "circuit_circuit-a/battery-2/cell-temperature",
+        "circuit_circuit-b/battery-2/cell-temperature",
+    }
+
+
+def test_a_subject_that_names_no_card_has_nothing_to_curate() -> None:
+    """`None` mirrors `extension_unique_id`: no card, no entity, and so no key."""
+    subject = ExtensionSubject(kind="thermostat", instance_key=None)
+    assert extension_curation_key(subject, "acme/setpoint") is None
+
+
+def test_a_curated_record_shapes_the_extension_sensor(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Every field the owner of the device may assert reaches the entity.
+
+    Including the `state_class` this module may not infer: the entity is built
+    from a description `curation` composed, so a user's assertion arrives
+    without `extension.py` ever naming the thing its AST guard forbids.
+    """
+    row = _row(datatype="float", unit="V")
+    snapshot = _snapshot(row)
+    record = CurationRecord(
+        state_class=SensorStateClass.MEASUREMENT, device_class="voltage", promote=True
+    )
+    (entity,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=_overlay_keyed(row, record),
+    )
+    assert entity.state_class is SensorStateClass.MEASUREMENT
+    assert entity.device_class is SensorDeviceClass.VOLTAGE
+    assert entity.entity_category is None
+    # Promotion is not enablement. Enabling stays the user's separate act.
+    assert entity.entity_registry_enabled_default is False
+
+
+def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The gap the datatype rule closes, stated through the record that opens it."""
+    row = _row(property_id="cycle-count", datatype="integer", unit=None, value="42")
+    snapshot = _snapshot(row)
+    record = CurationRecord(state_class=SensorStateClass.MEASUREMENT)
+    (entity,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=_overlay_keyed(row, record),
+    )
+    assert entity.state_class is SensorStateClass.MEASUREMENT
+    assert entity.native_value == 42.0
+
+
+def test_an_uncurated_extension_row_is_exactly_todays_entity(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """Curation adds a path; it moves nothing that nobody curated."""
+    row = _row(datatype="float", unit="V")
+    snapshot = _snapshot(row)
+    (entity,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
+    )
+    assert entity.state_class is None
+    assert entity.entity_category is EntityCategory.DIAGNOSTIC
+    # The unit map still supplies what the wire declared.
+    assert entity.device_class is SensorDeviceClass.VOLTAGE
+
+
+def test_a_stale_extension_record_field_is_skipped_and_the_rest_applied(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A record outlives the declaration it was asserted against, and must not fail setup.
+
+    The publisher has relabelled a numeric property as a string, so the stored
+    state class no longer fits. It is dropped -- the row is read through
+    `for_row` rather than off the overlay -- and the prominence the same user
+    asserted is honoured all the same.
+    """
+    row = _row(datatype="string", unit=None)
+    snapshot = _snapshot(row)
+    record = CurationRecord(state_class=SensorStateClass.MEASUREMENT, promote=True)
+    (entity,) = create_extension_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=_overlay_keyed(row, record),
+    )
+    assert entity.state_class is None
+    assert entity.entity_category is None
+
+
+def test_a_curated_binary_sensor_gets_the_only_device_class_there_can_be(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """A boolean declares no unit, so `door` and `problem` are indistinguishable on the wire.
+
+    There is nothing to default from, which makes the user's assertion the only
+    device class a vendor boolean can ever carry.
+    """
+    row = _row(property_id="pack-fault", datatype="boolean", unit=None, value="true")
+    snapshot = _snapshot(row)
+    (entity,) = create_extension_binary_sensors(
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=_overlay_keyed(row, CurationRecord(device_class="problem")),
+    )
+    assert entity.device_class == BinarySensorDeviceClass.PROBLEM
+    assert entity.entity_category is EntityCategory.DIAGNOSTIC
 
 
 # --- the prominence hint ----------------------------------------------------
@@ -405,7 +638,11 @@ def test_the_hint_is_carried_on_the_entity_for_curation_triage(
 ) -> None:
     snapshot = _snapshot(_row())
     sensor = create_extension_sensors(
-        _coordinator(snapshot), snapshot, dr.async_get(hass), er.async_get(hass)
+        _coordinator(snapshot),
+        snapshot,
+        dr.async_get(hass),
+        er.async_get(hass),
+        overlay=CurationOverlay.empty(),
     )[0]
     assert sensor._attr_extra_state_attributes["prominence_hint"] == HINT_READING
     assert sensor._attr_extra_state_attributes["wire_path"] == "battery-2/cell-temperature"
@@ -510,3 +747,24 @@ async def test_the_overflow_record_survives_a_restart(
     await _notice(hass, entry, snapshot)
 
     assert _notification_id(entry) not in dict(hass.data.get("persistent_notification", {}))
+
+
+def test_no_state_class_is_set_anywhere_in_the_extension_module() -> None:
+    """Assert the no-statistics rule against the syntax, not against an instance.
+
+    This closes the gap the adoption module's guard left: `extension.py` had only
+    per-instance coverage, so a future branch setting a state class on a platform
+    no test instantiates would pass everything above. The one module allowed to
+    spell `state_class` is `curation.py`, where every value comes from a
+    validated user record.
+    """
+    from custom_components.span_panel import extension
+
+    tree = ast.parse(Path(extension.__file__).read_text(encoding="utf-8"))
+    keywords = [node.arg for node in ast.walk(tree) if isinstance(node, ast.keyword)]
+    targets = [node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)]
+    assert "state_class" not in keywords
+    assert "_attr_state_class" not in targets
+    assert not [
+        node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and "StateClass" in node.id
+    ]

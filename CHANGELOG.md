@@ -2,7 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.1.1]
+## [2.1.1] - 8/2026
+
+### Added
+
+- **Adopted entities can now be curated from the dashboard's new Adopted tab** — set a device class, a statistics class and whether the entity stays under
+  Diagnostics, with the change applied on an automatic reload.
 
 ### Fixed
 
@@ -19,7 +24,7 @@ All notable changes to this project will be documented in this file.
   grid.
 - **EVSE Charge Current Limit** is the first control here that changes something on a SPAN Drive rather than on the panel.
 - **The battery says when things run out** — Time to Priority Shed and Backup Time Remaining, beside its own power and link state.
-- **Vendor extensions are adopted on a reload**, so a device type or reading nobody has modelled no longer waits for a release.
+- **Vendor extensions are adopted on a reload**, so a device type or reading nobody has modeled no longer waits for a release.
 - **Your passphrase is no longer stored and the panel's certificate is pinned before credentials cross the network**, with control lockable or admin-only.
 - **Nothing you have moves** — entity ids, unique ids and history survive the upgrade.
 
@@ -89,7 +94,7 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
   battery and the dominant power source, and keeping its entity id and its history.
 - **`Grid Islandable` keeps working across the upgrade** by reflecting whether a Microgrid Interconnect Device is present, so a panel without one reads `Off`
   rather than going unavailable.
-- **Battery model may read differently after upgrading**, now showing the human-readable designation rather than the SKU, normalised in the library on both
+- **Battery model may read differently after upgrading**, now showing the human-readable designation rather than the SKU, normalized in the library on both
   sides of the upgrade so it lands once at this release.
 - **Five panel sensors are switched off for new installations** (#234) because of three SPAN-documented defects predating firmware r202633: **Feedthrough
   Produced Energy**, **Feedthrough Consumed Energy**, **Feedthrough Power**, and the two **Downstream** current sensors.
@@ -247,9 +252,9 @@ This release requires Home Assistant 2026.8 to avoid a deprecated API — the ol
 ### Changed
 
 - **Simulation moved to dedicated add-on** — Panel cloning and simulation are no longer part of the integration's options flow. A new `export_circuit_manifest`
-  service provides panel parameters to the standalone [SPAN Panel Simulator](https://github.com/SpanPanel/simulator) add-on, which now supports upgrade
-  modelling (evaluate firmware or integration upgrades in a sandbox before applying them to your real panel) and panel clone (replicate your panel's circuit
-  layout for testing).
+  service provides panel parameters to the standalone [SPAN Panel Simulator](https://github.com/SpanPanel/simulator) add-on, which now supports upgrade modeling
+  (evaluate firmware or integration upgrades in a sandbox before applying them to your real panel) and panel clone (replicate your panel's circuit layout for
+  testing).
 
 ### Fixed
 

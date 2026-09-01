@@ -41,6 +41,7 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
     USE_DEVICE_PREFIX,
 )
+from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.entity import SpanPanelEntity
 from custom_components.span_panel.id_builder import (
     build_circuit_unique_id,
@@ -165,7 +166,9 @@ class _Install[E: SpanPanelEntity]:
         coordinator = _coordinator(self._hass, snapshot, self._entry)
         self._coordinator = coordinator
         self._entry.runtime_data = SpanPanelRuntimeData(
-            coordinator=coordinator, panel_device_id="panel-device-id"
+            coordinator=coordinator,
+            panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
         )
 
         self._platform = MockEntityPlatform(
@@ -931,7 +934,9 @@ async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
     )
     coordinator = _coordinator(hass, snapshot, entry)
     entry.runtime_data = SpanPanelRuntimeData(
-        coordinator=coordinator, panel_device_id="panel-device-id"
+        coordinator=coordinator,
+        panel_device_id="panel-device-id",
+        curation=CurationOverlay.empty(),
     )
 
     platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)
