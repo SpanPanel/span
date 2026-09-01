@@ -517,9 +517,9 @@ Three of those fields are the integration's own, and they are the ones Home Assi
   in a long-range history graph. This is the piece nothing else in Home Assistant can set for you.
 - **Prominence** — whether the entity stays filed under Diagnostics or is promoted out of it.
 
-The rest of the form — **name, icon, area, and whether the entity is enabled** — is Home Assistant's own entity settings, shown here so you do not have to go
-somewhere else, and saved into Home Assistant's registry exactly as if you had edited the entity directly. The integration never changes any of it on your
-behalf; enabling an adopted entity is always something you do.
+The rest of the form — **name, icon, display unit and precision, and whether the entity is enabled** — is Home Assistant's own entity settings, shown here so
+you do not have to go somewhere else, and saved into Home Assistant's registry exactly as if you had edited the entity directly. The integration never changes
+any of it on your behalf; enabling an adopted entity is always something you do.
 
 You are only offered choices your panel's own declaration allows. A statistics class is offered only on numeric readings; the device classes listed are the ones
 compatible with the unit your panel publishes, and the unit itself stays whatever the publisher sends.
