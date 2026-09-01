@@ -242,7 +242,33 @@ class LeafVerdict(StrEnum):
     UNREACHABLE = "unreachable"
 
 
+@dataclass(frozen=True, slots=True)
+class LeafProbeResult:
+    """One leaf probe's verdict, with the names the certificate actually carries.
+
+    `leaf_names` exists for exactly one verdict: a `NAME_MISMATCH` is only
+    actionable when the user can be told which names *would* work, and the
+    probe is the one place that has the validated certificate in hand. SAN
+    ``DNS`` and ``IP Address`` entries in certificate order — the same reading
+    the library's `LeafNameMismatch` documents — and empty for every other
+    verdict, where no validated certificate came back or the names answered
+    nothing.
+    """
+
+    verdict: LeafVerdict
+    leaf_names: tuple[str, ...]
+
+
 async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdict:
+    """Classify the certificate served on `tls_port` against `ca_pem`.
+
+    The verdict half of `async_leaf_probe`, kept as its own name for the
+    callers that act only on the classification.
+    """
+    return (await async_leaf_probe(host, tls_port, ca_pem)).verdict
+
+
+async def async_leaf_probe(host: str, tls_port: int, ca_pem: str) -> LeafProbeResult:
     """Classify the certificate served on `tls_port` against `ca_pem`.
 
     One handshake, with hostname checking off, which establishes the chain; the
@@ -261,7 +287,7 @@ async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdi
     """
     loop = asyncio.get_running_loop()
 
-    def _check() -> LeafVerdict:
+    def _check() -> LeafProbeResult:
         try:
             # The library's builder, not a hand-rolled context: the panel's CA
             # omits the Authority Key Identifier extension, which Python's
@@ -271,7 +297,7 @@ async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdi
         except (ssl.SSLError, ValueError):
             # An anchor that will not load cannot validate anything. Nothing was
             # reached, so this is not an accusation against the host.
-            return LeafVerdict.UNTRUSTED
+            return LeafProbeResult(LeafVerdict.UNTRUSTED, ())
         try:
             with (
                 socket.create_connection((host, tls_port), timeout=5) as sock,
@@ -279,7 +305,7 @@ async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdi
             ):
                 peer = tls.getpeercert()
         except ssl.SSLCertVerificationError:
-            return LeafVerdict.UNTRUSTED
+            return LeafProbeResult(LeafVerdict.UNTRUSTED, ())
         except (OSError, TimeoutError, UnicodeError):
             # `UnicodeError` for the same reason as in `async_resolve_host`: the
             # connect resolves the name, and an over-long label raises out of
@@ -287,7 +313,7 @@ async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdi
             # subclass of `OSError` and lands here too -- a handshake that broke
             # without a verification failure says nothing about the peer's
             # certificate, so it is a failure to reach, not a failure to trust.
-            return LeafVerdict.UNREACHABLE
+            return LeafProbeResult(LeafVerdict.UNREACHABLE, ())
 
         # The handshake completed under the pinned anchor, so the peer holds a
         # key that anchor signed. Only the name is left in question.
@@ -297,10 +323,18 @@ async def async_leaf_verdict(host: str, tls_port: int, ca_pem: str) -> LeafVerdi
             # the verdict that unlocks the relaxed transport, and "the handshake
             # completed but no validated certificate came back" is not evidence
             # that anything holds a key the anchor signed.
-            return LeafVerdict.UNTRUSTED
+            return LeafProbeResult(LeafVerdict.UNTRUSTED, ())
         if leaf_names_host(peer, host):
-            return LeafVerdict.TRUSTED
-        return LeafVerdict.NAME_MISMATCH
+            return LeafProbeResult(LeafVerdict.TRUSTED, ())
+        names: list[str] = []
+        for san_entry in peer.get("subjectAltName", ()):
+            # Typeshed leaves SAN entries loosely typed; only the two-string
+            # shape carries an address, which is all the repair can point at.
+            if isinstance(san_entry, tuple) and len(san_entry) == 2:
+                kind, value = san_entry
+                if kind in ("DNS", "IP Address") and isinstance(value, str):
+                    names.append(value)
+        return LeafProbeResult(LeafVerdict.NAME_MISMATCH, tuple(names))
 
     return await loop.run_in_executor(None, _check)
 
