@@ -834,7 +834,19 @@ metadata the user removed the panel to be rid of.
 `validate_record` refuses rather than warns, because a stored record is applied unattended at every future setup — a warning would be read once, by nobody.
 Everything decidable without the wire is decided in the websocket schema instead (enum membership, the one storable `entity_category`, the key's charset), so
 only cross-field questions reach the validator: a `state_class` needs a sensor row with a numeric datatype, a `device_class` must belong to its platform's enum
-and must admit the unit the row declares (through Core's own `DEVICE_CLASS_UNITS`), and a control row accepts prominence and nothing else.
+and must fit both what the row declares it is and the unit it declares (Core's own `NON_NUMERIC_DEVICE_CLASSES` and `DEVICE_CLASS_UNITS`), and a control row
+accepts prominence and nothing else.
+
+The datatype half of that came later than the unit half and closes a real gap: gating on the unit alone let a text row be offered `power_factor`, `aqi` and
+`monetary`, which constrain no unit and so passed vacuously, each of which reads `unknown` for the life of the install. Which side of Core's partition a row
+falls on is `util.declares_a_number`'s answer — a numeric `$datatype` or a declared unit — which is the same predicate `AdoptedSensor.native_value` uses to
+decide whether to parse. Sharing it is the point: a row whose reading is parsed as a float and whose only offered device class was `enum` would be incoherent,
+and Core refuses to render a state carrying both a unit and a non-numeric device class at all.
+
+`declares_a_number` is also why a unit-less numeric reading is a number. The unit used to stand in for "this is numeric", so a bare `integer` count published as
+`"42"` reached the state machine as text — harmless while an uncurated row asserted nothing about itself, and not harmless once its owner could put a
+`measurement` on exactly that row and hand the recorder a string under it. The union rather than the datatype alone, because a publisher that omits a
+`$datatype` still declares a unit, and nothing that parsed before may stop parsing.
 
 The same validator runs again at construction, where it drops rather than refuses. A record can go stale between the save and a later setup — the vendor may
 change a row's unit or datatype — so `sanitise` re-measures each field independently, keeps the ones that still validate, and `CurationOverlay.for_row` emits

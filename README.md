@@ -517,12 +517,14 @@ Three of those fields are the integration's own, and they are the ones Home Assi
   in a long-range history graph. This is the piece nothing else in Home Assistant can set for you.
 - **Prominence** — whether the entity stays filed under Diagnostics or is promoted out of it.
 
-The rest of the form — **name, icon, display unit and precision, and whether the entity is enabled** — is Home Assistant's own entity settings, shown here so
-you do not have to go somewhere else, and saved into Home Assistant's registry exactly as if you had edited the entity directly. The integration never changes
-any of it on your behalf; enabling an adopted entity is always something you do.
+The rest of the form — **name, display unit and precision, and whether the entity is enabled** — is Home Assistant's own entity settings, shown here so you do
+not have to go somewhere else, and saved into Home Assistant's registry exactly as if you had edited the entity directly. The integration never changes any of
+it on your behalf; enabling an adopted entity is always something you do. Anything else Home Assistant's own entity settings already cover — the icon, the area,
+the labels — you set there, not here.
 
 You are only offered choices your panel's own declaration allows. A statistics class is offered only on numeric readings; the device classes listed are the ones
-compatible with the unit your panel publishes, and the unit itself stays whatever the publisher sends.
+that fit both what the panel says the reading is and the unit it publishes, so a text reading is never offered a class that expects a number, and the unit
+itself stays whatever the publisher sends.
 
 **Saving reloads the integration.** That is not a formality — it is how the setting takes effect. An entity's type information is fixed at the moment the entity
 is built, so the reload is what rebuilds it already carrying what you asserted, rather than attaching a statistics class to an entity that has been recording

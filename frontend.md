@@ -109,14 +109,15 @@ Three of the fields are the integration's own, because Home Assistant has nowher
 - **Statistics class** — Home Assistant's `state_class`, which is what enrolls the reading in long-term statistics and makes it usable on an Energy dashboard.
 - **Prominence** — whether the entity stays filed under Diagnostics or is promoted out of it.
 
-The rest of the form — **name**, **icon**, **display unit** and **precision**, and whether the entity is **enabled** — is Home Assistant's own entity settings,
-shown here so you do not have to go elsewhere, and written straight into Home Assistant's registry exactly as if you had edited the entity there. Those fields
-appear once the entity exists in the registry; until then the row offers the integration's three and says so.
+The rest of the form — **name**, **display unit** and **precision**, and whether the entity is **enabled** — is Home Assistant's own entity settings, shown here
+so you do not have to go elsewhere, and written straight into Home Assistant's registry exactly as if you had edited the entity there. Those fields appear once
+the entity exists in the registry; until then the row offers the integration's three and says so. The icon and the area are Home Assistant's own settings too
+and are not restated here — set them from the entity's settings dialog.
 
-You are offered only what your panel's declaration allows: a statistics class on numeric readings, and the device classes compatible with the unit the panel
-publishes. Setting or clearing a statistics class asks you to confirm first, because that choice is written into recorded history and correcting the class
-afterwards does not repair what was already recorded. Saving reloads the integration, which is how the setting takes effect — the reload rebuilds the entity
-already carrying what you asserted.
+You are offered only what your panel's declaration allows: a statistics class on numeric readings, and the device classes that fit both the declared datatype
+and the unit the panel publishes, so a text reading is never offered a class that expects a number. Setting or clearing a statistics class asks you to confirm
+first, because that choice is written into recorded history and correcting the class afterwards does not repair what was already recorded. Saving reloads the
+integration, which is how the setting takes effect — the reload rebuilds the entity already carrying what you asserted.
 
 See [The Adopted Tab](README.md#the-adopted-tab) in the README for the fuller account of what gets adopted and why.
 
