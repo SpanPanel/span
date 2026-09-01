@@ -6,23 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **The startup warning that panel traffic is unencrypted is resolved, not silenced** — a pinned entry now reads the panel's schema over HTTPS verified against
-  its pinned certificate authority, instead of plaintext HTTP (#264).
-
-### Added
-
-- **A repair when the HTTPS port serves a certificate the pin does not validate** — a wrong HTTPS port, a proxy terminating TLS in front of the panel, or a
-  panel whose clock reset in an outage; the integration keeps retrying without connecting and never falls back to plaintext, so the clock case heals on its own.
-- **A repair when the stored certificate authority can no longer be read**, guiding you through re-acquiring and confirming the panel's certificate authority.
-- **Reconfigure now offers the HTTPS port on any panel with a pinned certificate authority**, for installs whose TLS lives behind a proxy or port forward and
-  were never asked.
-
-### Changed
-
-- **A panel whose certificate authority rotated is now also detected at startup's first read**, raising the same guided re-pin repair it already had.
-- **A moved panel detected at startup's first read raises the existing address repair and keeps retrying**, exactly as it promises.
-- **When a pinned panel cannot be reached at all, the retry message names the HTTPS port and the Reconfigure remedy** instead of only reporting the panel as not
-  ready.
+- **The startup warning that panel traffic is unencrypted is resolved** — a panel with a pinned certificate authority is now read over verified HTTPS, with
+  repairs and a Reconfigure HTTPS-port option covering the rare setups where the certificate or the port needs attention (#264).
 
 ## [2.1.0] - 8/2026
 
