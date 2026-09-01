@@ -19,6 +19,7 @@
       "ca_unusable": "The certificate authority stored for this panel cannot be read, so this change would have to be sent unencrypted. Nothing has been changed. Reauthenticate the panel to store a usable authority, then try again.",
       "cannot_connect": "Failed to connect to Span Panel",
       "fqdn_registration_failed": "Could not register the domain name with the panel or the TLS certificate was not updated in time.",
+      "https_port_is_plaintext": "Port 80 is the plaintext HTTP port. Enter the port the panel serves TLS on — 443 unless something moved it.",
       "host_required": "Host is required",
       "invalid_auth": "Invalid authentication",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
@@ -86,10 +87,12 @@
       },
       "reconfigure": {
         "data": {
-          "host": "Host"
+          "host": "Host",
+          "https_port": "HTTPS port"
         },
         "data_description": {
-          "host": "IP address or hostname of the SPAN Panel"
+          "host": "IP address or hostname of the SPAN Panel",
+          "https_port": "Shown for a panel with a pinned certificate authority. Leave at 443 unless a proxy or a port mapping moved the panel's TLS."
         },
         "description": "Update the host address for this SPAN Panel. The panel serial number must match.",
         "title": "Reconfigure SPAN Panel"
@@ -900,6 +903,26 @@
           "ca_leaf_mismatch": "The certificate this panel serves is not signed by the authority it published, so that authority has not been offered for you to accept and nothing has been changed. Check that the HTTPS port is correct and that nothing is intercepting the connection, then try again."
         }
       }
+    },
+    "panel_ca_unusable": {
+      "title": "SPAN Panel stored certificate authority is unreadable",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Trust the panel's certificate authority?",
+            "description": "The certificate authority stored for {panel} can no longer be read, so its connection cannot be verified and the integration has stopped rather than continue unencrypted.\n\nThe panel is advertising this certificate authority:\n\n**{fingerprint}**\n\nAccepting pins it and reconnects. Compare the fingerprint against another install or the panel itself if you can — a device on your network standing in for your panel would present a fingerprint of its own."
+          }
+        },
+        "abort": {
+          "entry_gone": "That SPAN Panel is no longer configured.",
+          "ca_unreadable": "The panel's certificate authority could not be read. Check that the panel is reachable and try again.",
+          "ca_leaf_mismatch": "The certificate this panel serves is not signed by the authority it published, so that authority has not been offered for you to accept and nothing has been changed. Check that the HTTPS port is correct and that nothing is intercepting the connection, then try again."
+        }
+      }
+    },
+    "panel_rest_tls_untrusted": {
+      "title": "SPAN Panel HTTPS port is serving an untrusted certificate",
+      "description": "Whatever answers at **{host}:{https_port}** presented a certificate that {panel}'s pinned certificate authority (SHA-256 {fingerprint}) does not currently validate — while the panel itself still advertises that same authority, so the authority has not changed.\n\nTwo things produce this. Something between Home Assistant and the panel — a reverse proxy, a port forward, a wrong HTTPS port on the entry — is terminating TLS with a certificate of its own. Or the panel's clock reset in an outage and its certificate is outside its validity window, which clears on its own once the panel has time again.\n\nThe integration keeps retrying without connecting, and never falls back to unencrypted HTTP. Check the HTTPS port with *Reconfigure* on the SPAN Panel entry, or remove whatever is intercepting the connection; if the panel just lost power, give it a little while."
     },
     "panel_leaf_name_mismatch": {
       "title": "SPAN Panel is not at the configured address",

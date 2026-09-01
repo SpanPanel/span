@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.1]
+
+### Fixed
+
+- **The startup warning that panel traffic is unencrypted is resolved** — a panel with a pinned certificate authority is now read over verified HTTPS, with
+  repairs and a Reconfigure HTTPS-port option covering the rare setups where the certificate or the port needs attention (#264).
+
 ## [2.1.0] - 8/2026
 
 ### In short

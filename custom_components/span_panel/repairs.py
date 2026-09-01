@@ -22,7 +22,7 @@ from span_panel_api.exceptions import (
 )
 import voluptuous as vol
 
-from .ca_repairs import CA_CHANGED_ISSUE_PREFIX
+from .ca_repairs import CA_CHANGED_ISSUE_PREFIX, CA_UNUSABLE_ISSUE_PREFIX
 from .config_flow_validation import (
     as_port,
     async_ca_signs_panel_leaf,
@@ -149,5 +149,13 @@ async def async_create_fix_flow(
     """Return the flow that fixes `issue_id`."""
     if issue_id.startswith(CA_CHANGED_ISSUE_PREFIX):
         entry_id = issue_id.removeprefix(CA_CHANGED_ISSUE_PREFIX)
+        return PanelCAChangedRepairFlow(entry_id)
+    if issue_id.startswith(CA_UNUSABLE_ISSUE_PREFIX):
+        # The same flow on purpose: an unreadable stored anchor and a rotated CA
+        # end in the same place — fetch what the panel advertises, check it
+        # signs the panel's own certificate, and pin it only on a person's
+        # explicit acceptance of the fingerprint. Only the story the issue tells
+        # differs, and that lives in its own translation.
+        entry_id = issue_id.removeprefix(CA_UNUSABLE_ISSUE_PREFIX)
         return PanelCAChangedRepairFlow(entry_id)
     raise ValueError(f"{DOMAIN} raised no fixable issue with id {issue_id}")

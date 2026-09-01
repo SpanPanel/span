@@ -20,6 +20,7 @@
       "cannot_connect": "No se logró establecer conexión con Span Panel",
       "fqdn_registration_failed": "No se pudo registrar el nombre de dominio en el panel o el certificado TLS no se actualizó a tiempo.",
       "host_required": "Se requiere host",
+      "https_port_is_plaintext": "El puerto 80 es el puerto HTTP sin cifrar. Introduzca el puerto en el que el panel sirve TLS — 443 salvo que algo lo haya movido.",
       "invalid_auth": "Autenticación invalida",
       "proximity_failed": "Proximidad no comprobada. Por favor abra y cierre la puerta del panel 3 veces e intente de nuevo.",
       "unknown": "Error inesperado"
@@ -86,10 +87,12 @@
       },
       "reconfigure": {
         "data": {
-          "host": "Host"
+          "host": "Host",
+          "https_port": "Puerto HTTPS"
         },
         "data_description": {
-          "host": "Dirección IP o nombre de host del SPAN Panel"
+          "host": "Dirección IP o nombre de host del SPAN Panel",
+          "https_port": "Se muestra para un panel con autoridad de certificación fijada. Deje 443 salvo que un proxy o una redirección de puertos haya movido el TLS del panel."
         },
         "description": "Actualice la dirección de host para este SPAN Panel. El número de serie del panel debe coincidir.",
         "title": "Reconfigurar SPAN Panel"
@@ -900,6 +903,26 @@
           "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que ha publicado, por lo que esa autoridad no se ha ofrecido para su aceptación y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, y vuelva a intentarlo."
         }
       }
+    },
+    "panel_ca_unusable": {
+      "title": "La autoridad de certificación almacenada del SPAN Panel es ilegible",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "¿Confiar en la autoridad de certificación del panel?",
+            "description": "La autoridad de certificación almacenada para {panel} ya no se puede leer, por lo que su conexión no puede verificarse y la integración se ha detenido en lugar de continuar sin cifrado.\n\nEl panel está anunciando esta autoridad de certificación:\n\n**{fingerprint}**\n\nAceptar la fija y reconecta. Compare la huella con otra instalación o con el propio panel si puede — un dispositivo de su red que suplante al panel presentaría una huella propia."
+          }
+        },
+        "abort": {
+          "entry_gone": "Ese SPAN Panel ya no está configurado.",
+          "ca_unreadable": "No se ha podido leer la autoridad de certificación del panel. Compruebe que el panel es accesible e inténtelo de nuevo.",
+          "ca_leaf_mismatch": "El certificado que sirve este panel no está firmado por la autoridad que publicó, por lo que esa autoridad no se le ha ofrecido para aceptar y no se ha cambiado nada. Compruebe que el puerto HTTPS es correcto y que nada intercepta la conexión, e inténtelo de nuevo."
+        }
+      }
+    },
+    "panel_rest_tls_untrusted": {
+      "title": "El puerto HTTPS del SPAN Panel sirve un certificado no fiable",
+      "description": "Lo que responde en **{host}:{https_port}** presentó un certificado que la autoridad de certificación fijada de {panel} (SHA-256 {fingerprint}) no valida actualmente — mientras el propio panel sigue anunciando esa misma autoridad, así que la autoridad no ha cambiado.\n\nDos cosas producen esto. Algo entre Home Assistant y el panel — un proxy inverso, una redirección de puertos, un puerto HTTPS incorrecto en la entrada — está terminando TLS con un certificado propio. O el reloj del panel se reinició en un apagón y su certificado está fuera de su período de validez, lo que se resuelve solo cuando el panel vuelve a tener hora.\n\nLa integración sigue reintentando sin conectarse, y nunca recurre a HTTP sin cifrar. Compruebe el puerto HTTPS con *Reconfigurar* en la entrada del SPAN Panel, o retire lo que esté interceptando la conexión; si el panel acaba de perder la alimentación, dele un tiempo."
     },
     "panel_leaf_name_mismatch": {
       "title": "El SPAN Panel no está en la dirección configurada",
