@@ -27,7 +27,7 @@
     "span-panel-api-schema-0==1.1.2",
     "span-panel-api-schema-1==1.1.3"
   ],
-  "version": "2.1.1b4",
+  "version": "2.1.1",
   "zeroconf": [
     {
       "type": "_span._tcp.local."
