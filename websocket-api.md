@@ -194,7 +194,7 @@ is scoped to a single panel — circuits, sub-devices, and entity mappings from 
 ## `span_panel/adopted/list`
 
 Returns every adopted row on a panel, grouped by the device card it renders on. An adopted row is a property the panel publishes that this integration models no
-field for — a whole device nobody has modelled, or a vendor extension on a device it does model — surfaced as a disabled diagnostic entity in plain wire
+field for — a whole device nobody has modeled, or a vendor extension on a device it does model — surfaced as a disabled diagnostic entity in plain wire
 vocabulary.
 
 Those entities carry deliberately minimal metadata, because a state class is not declared on the wire and is not derivable from one, and a device class guessed

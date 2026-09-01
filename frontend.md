@@ -96,11 +96,11 @@ values.
 ## Adopted View
 
 The Adopted tab is where you tell the integration what an adopted entity means. Your panel's schema is vendor-extensible, so it can publish devices and readings
-this integration has never modelled; those arrive carrying only what the wire says about them, and the rest is yours to assert. The tab is shown to
-administrator accounts only, and on a panel rather than in the Favorites view.
+this integration has never modeled; those arrive carrying only what the wire says about them, and the rest is yours to assert. The tab is shown to administrator
+accounts only, and on a panel rather than in the Favorites view.
 
-Rows are grouped by the device card they render on — one group per adopted device, one per modelled device carrying vendor readings — and each row expands into
-a small form. A badge marks a row you have already curated, and another marks one whose saved values the panel has stopped supporting.
+Rows are grouped by the device card they render on — one group per adopted device, one per modeled device carrying vendor readings — and each row expands into a
+small form. A badge marks a row you have already curated, and another marks one whose saved values the panel has stopped supporting.
 
 Three of the fields are the integration's own, because Home Assistant has nowhere to keep them for an entity built from a vendor declaration:
 

@@ -37,7 +37,7 @@ label is current.
 
 ## 3. How Home Assistant composes an ID (Core 2026.8)
 
-This is Core's behaviour, cited so nobody has to re-read Core to trust the rest of the document.
+This is Core's behavior, cited so nobody has to re-read Core to trust the rest of the document.
 
 ### 3.1 Priority
 
@@ -91,7 +91,7 @@ base and clears a stale `suggested_object_id`. The row is never frozen at creati
 | Unmapped tab (either mode)              | `Unmapped Tab 32`                                         | `SpanUnmappedCircuitSensor._object_id_parts`                                      |
 
 The identifier **always answers**. A `None` identifier lets Core compose from the label alone, which gives every unnamed circuit the same ID and leaves the
-registry to disambiguate with `_2`, `_3` — the pre-2.1.0 behaviour that is now gone.
+registry to disambiguate with `_2`, `_3` — the pre-2.1.0 behavior that is now gone.
 
 ### 4.2 The suffix
 
@@ -146,7 +146,7 @@ Circuit sensors, the switch and the select set the base at construction. Every o
 - **Sub-device circuit sensors** (an EVSE feed circuit's sensors, `_is_sub_device`): no base. Core composes from the label on the charger's device, so the ID
   names the charger alone — `sensor.<charger>_power` — like the charger's other sensors. A feed sensor created before this route keeps its old ID until Recreate
   is pressed, and is then offered the charger-named one (a legitimate offer: the device part is Core's).
-- **Everything not a circuit entity** (panel, BESS, MID, EVSE, PV, binary sensors, adopted properties): stock behaviour, label-composed.
+- **Everything not a circuit entity** (panel, BESS, MID, EVSE, PV, binary sensors, adopted properties): stock behavior, label-composed.
 
 ### 4.6 Legacy `use_device_prefix`
 
@@ -234,7 +234,7 @@ Anything not in this table that Recreate offers on an unchanged install is a bug
 - [ ] The base is computed from `(identifier, canonical suffix, existing_entity_id)` and nothing else — never from the display label.
 - [ ] `ENTITY_ID_SUFFIX_FORMS` gains an entry only for a form found to have shipped; `NEW_ENTITY_ID_SUFFIX_WORDS` and it stay in one-to-one correspondence
       (`test_every_form_table_entry_has_a_new_wording_and_vice_versa`).
-- [ ] A reworded description label adds the old label to `legacy_names` so §6 still recognises what 2.0.8 wrote.
+- [ ] A reworded description label adds the old label to `legacy_names` so §6 still recognizes what 2.0.8 wrote.
 - [ ] Unique IDs are untouched by any of this; `CIRCUIT_SUFFIX_MAPPING` is closed.
 - [ ] `tests/test_naming.py` and `tests/test_recreate_entity_ids.py` pass. The latter drives a real `EntityPlatform` with `entity_id_parts` fixed, so a
       composition regression fails there rather than in a unit test of a builder.

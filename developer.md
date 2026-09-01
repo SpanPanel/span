@@ -268,7 +268,7 @@ of things nobody remembers deciding. The current entries are all permanent: deli
 already owns or has no use for), values held for identity reasons (`pv/info/serial-number`), redundant echoes (`connection/*-device-type` dereferences to a
 declared `$type`), and properties no producer publishes (`connection/count`).
 
-**"Unread" here means "no curated entity", not "invisible".** Since 2.1.0b7 an unread property on a _modelled_ device also surfaces through
+**"Unread" here means "no curated entity", not "invisible".** Since 2.1.0b7 an unread property on a _modeled_ device also surfaces through
 [extension adoption](#extension-properties) as a disabled diagnostic entity, so a baseline line records a decision not to **curate** something — to give it a
 designed name, a category and a place — rather than a decision to withhold it. The two skips above were written before that distinction existed and read as
 though a baseline line hid a property; it does not, and the entries were reworded rather than left to mislead. A reason that turns on the cost of a _default-on_
@@ -308,7 +308,7 @@ against the capture's own published values rather than leaving it to review.
 This block is **maintainer-facing only**: nothing creates an entity, a Repair or a notification from a `schema_discovery` row — including for a device that _is_
 adopted, whose properties are reported here as declarations exactly like any other.
 
-That is a statement about this block, not about the properties in it. The same properties on a _modelled_ device also arrive as `snapshot.extension_properties`,
+That is a statement about this block, not about the properties in it. The same properties on a _modeled_ device also arrive as `snapshot.extension_properties`,
 which does carry values and does become entities — see [Extension properties](#extension-properties). Two artefacts describing one property, joined by its
 `{node}/{property}` path, with opposite audiences and opposite rules about values. Adoption itself is the next section.
 
@@ -359,7 +359,7 @@ R1 — "Recreate entity IDs" must never propose a change the user did not cause 
 existing entity's id **where Home Assistant composes it under the entity-id options that match how that install was built**. That is why the suffix wording is
 read back and why the name half is anchored on the circuit's own name: two spellings of ours, or a relabel, must never produce an offer.
 
-It is **not** a licence to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
+It is **not** a license to bypass `entity_id_parts` with a hard-coded id. Where composition yields a different device half — a SPAN Drive feed sensor, whose
 device is the charger and not the panel; a second panel the config flow named "Span Panel 2", whose circuit ids all say `span_panel_` because the old builder
 was never told the panel's name; an install with `USE_DEVICE_PREFIX` off, whose ids carry no device at all where `has_entity_name` prefixes one — that is the
 user's own configuration at work, and the offer is legitimate. Recreate offers it; nothing moves until the user presses the button (R5). The "legacy preset"
@@ -445,12 +445,12 @@ the declaration or the `relay-controllable` value says no. A stale flag therefor
 
 ## Adopting a device this integration models nothing for
 
-The section above is about properties on devices we already read. This one is about a device type nobody modelled at all — a vendor's generator, heat pump or
+The section above is about properties on devices we already read. This one is about a device type nobody modeled at all — a vendor's generator, heat pump or
 second inverter, which the eBus schema explicitly permits. Such a device used to produce nothing: no device, no entity, no sign it was there.
 
 ### The rule
 
-Both halves of vendor extensibility are adopted, and **the half decides the shape**: a device nobody modelled becomes a device, a property on a device we do
+Both halves of vendor extensibility are adopted, and **the half decides the shape**: a device nobody modeled becomes a device, a property on a device we do
 model becomes a reading on that device's existing card.
 
 | What arrives                                     | What happens                                                                                       |
@@ -458,13 +458,13 @@ model becomes a reading on that device's existing card.
 | A device type `MODELLED_TYPES` does not name     | **Adopt as a device.** One sub-device, its properties surfaced beneath it. This section.           |
 | A new node or property on a device we _do_ model | **Adopt as a reading** on that device's card — never a new device. [Below](#extension-properties). |
 | A new property on a device already adopted       | Adopt, with its siblings.                                                                          |
-| A second instance of a modelled type             | **Not adopted.** See below.                                                                        |
+| A second instance of a modeled type              | **Not adopted.** See below.                                                                        |
 
 The two differ in what they can promise. An adopted _device_ is a card nothing else was ever going to describe. An adopted _property_ sits beside curated
 entities on a card this integration designed, so it is deliberately the plainer thing: read-only, wire-named, and carrying no expectation that curation will one
 day rename it into something better.
 
-Extra instances of a modelled type are **not** adopted. A second BESS is a multiplicity limitation of the snapshot model, not an unmodelled device, and adopting
+Extra instances of a modeled type are **not** adopted. A second BESS is a multiplicity limitation of the snapshot model, not an unmodeled device, and adopting
 it would stand a machine-named card beside the curated Battery describing the same hardware. The gap stays visible as a gap.
 
 ### Inside an adopted device, the node decides the destination
@@ -472,7 +472,7 @@ it would stand a machine-named card beside the curated Battery describing the sa
 Keyed on the Homie node — what the eBus vocabulary defines — rather than on property names:
 
 - **`info/*` → device-card fields.** `model`, `serial-number`, `firmware-version`, `hardware-version`, `vendor-name`. The whole node, not just the five the card
-  reads: dropping only the recognised ones would surface `info/nominal-power` as a string sensor the moment a vendor declared one.
+  reads: dropping only the recognized ones would surface `info/nominal-power` as a string sensor the moment a vendor declared one.
 - **`connection/*` → the device link.** Topology, which is `via_device`.
 - **Everything else → entities**, `EntityCategory.DIAGNOSTIC` and disabled by default.
 
@@ -543,13 +543,13 @@ and went.
 `AdoptedDevice` carries `parent` (the device id it declares as its parent) and `proxied` (whether that parent is a peer rather than the tree root). Adoption
 does not act on either: every adopted device is registered under the panel with `via_device_id`, exactly as every curated sub-device is.
 
-They are carried because a _proxied_ unmodelled device is a real shape we would otherwise flatten away without leaving evidence. The library's own reference
-tree contains one — `bess-mid` declares `parent: bess`, which is the `{proxier-id}-{proxied-id}` naming of the specification's `devices/proxy.md`. A vendor
-gateway proxying its own sub-devices arrives the same way, and the parent link is the only structural information about how they relate.
+They are carried because a _proxied_ unmodeled device is a real shape we would otherwise flatten away without leaving evidence. The library's own reference tree
+contains one — `bess-mid` declares `parent: bess`, which is the `{proxier-id}-{proxied-id}` naming of the specification's `devices/proxy.md`. A vendor gateway
+proxying its own sub-devices arrives the same way, and the parent link is the only structural information about how they relate.
 
 **Diagnostics report `proxied`, never `parent`.** A device id can embed a serial — producers derive a DER's id preferring a serial over a default slug, which is
 why the library holds PV's `info/serial-number` unvalued — so reporting the parent verbatim would leak the serial the block deliberately withholds. The boolean
-answers a maintainer's actual question, which is whether a proxied unmodelled device has appeared at all.
+answers a maintainer's actual question, which is whether a proxied unmodeled device has appeared at all.
 
 **Why the nesting waits.** [python-sdk#49](https://github.com/electrification-bus/python-sdk/issues/49#issuecomment-5359203067) settled that proxied ids differ
 by design — several enclosures on a shared broker each proxying the same physical device produce different ids on purpose — and that consumers correlate by
@@ -596,12 +596,12 @@ All five creators share `_create`, so `classify` is the only place a property's 
 that as a partition, which is what five separate predicates could not guarantee.
 
 Controls are disabled and diagnostic like every other adopted entity. There is deliberately no second, weaker gate — no read-only mode for settable properties.
-Enabling an entity is a deliberate act, commanding it is a second one, the panel authorises the write regardless of what we create, and this integration already
+Enabling an entity is a deliberate act, commanding it is a second one, the panel authorizes the write regardless of what we create, and this integration already
 ships switches that open and close breakers.
 
 ### The write, and why it is not a generic one
 
-`SpanMqttClient.set_adopted_property(device_id, node_id, property_id, value)` publishes the write. **The lookup is the authorisation**: it resolves the property
+`SpanMqttClient.set_adopted_property(device_id, node_id, property_id, value)` publishes the write. **The lookup is the authorization**: it resolves the property
 against the current snapshot's `adopted_devices` and publishes to the `set_topic` that property carries. No topic is accepted from the caller.
 
 That matters because the obvious alternative — a `set_property_topic(device, node, property)` member on `SchemaAdapter` — would put every curated control one
@@ -610,8 +610,8 @@ argument away, and two of them do real work on the way out:
 - `set_dominant_power_source` translates `GRID` into the `ON_GRID` the v1.0 islanding assertion accepts.
 - `set_evse_charge_limit` **refuses** a value above the commissioned ceiling, because publishing past it is the one write with a physical consequence.
 
-A generic write reachable at modelled devices routes around both. Because `set_topic` is populated only for settable properties on devices `is_modelled`
-rejected, a modelled device produces no `AdoptedDevice` and cannot be addressed this way however the arguments are spelled.
+A generic write reachable at modeled devices routes around both. Because `set_topic` is populated only for settable properties on devices `is_modelled`
+rejected, a modeled device produces no `AdoptedDevice` and cannot be addressed this way however the arguments are spelled.
 
 It also kept the change additive. A new `SchemaAdapter` member is required of every adapter package, so an install carrying an older adapter wheel would fail at
 **discovery** — the whole integration, not one feature.
@@ -702,13 +702,13 @@ span_{serial}_adopted_{scope}/{node}/{property}
 
 - **Anchored on what is stable and ours** — the panel serial and the curated scope (`bess`, `mid`, `pv`, `panel`, `evse_{node}`, `circuit_{id}`).
 - **Addressed by the wire path verbatim**, which is upstream's own capability-catalog spelling (`AdoptedProperty.path`, `discovery_path()`). Verbatim is what
-  makes it injective: the id _is_ the address. Normalising hyphens would collapse `battery-2` + `cell-temperature` and `battery` + `2-cell-temperature` into one
+  makes it injective: the id _is_ the address. Normalizing hyphens would collapse `battery-2` + `cell-temperature` and `battery` + `2-cell-temperature` into one
   id, which `test_the_pairs_a_normalising_grammar_would_collapse_stay_distinct` pins.
 - **Never through `get_user_friendly_suffix`**, which de-_dots_ rather than de-hyphens and substitutes a curated suffix on a mapping hit.
 - **Not the eBus proxy composition.** `{proxier-id}-{proxied-id}` is upstream's device-handle spelling, and upstream states those handles are not identities:
   they differ across enclosures and are unstable across the proxy-to-native transition. An id anchored on one would rename itself when a device stopped being
   proxied, and nothing here migrates, so there would be no recovery.
-- An address outside the Homie charset (`[a-z0-9-]`) is **refused, not sanitised** — sanitising is what would make the slash-split ambiguous. It stays visible
+- An address outside the Homie charset (`[a-z0-9-]`) is **refused, not sanitized** — sanitizing is what would make the slash-split ambiguous. It stays visible
   in diagnostics.
 
 The slash distinguishes the two adoption grammars: device-level ids contain none.
@@ -752,7 +752,7 @@ rows deleted. The worked bypass: a vendor publishes `acme/charge-limit` beside t
 `evse_charge_limit_payload()`, which **refuses** a value above the commissioned ceiling. An auto-generated number on the same device, fed by a generic set
 topic, publishes whatever the user types on the same wire. The islanding assertion is the same shape — schema_1 translates `GRID` into `ON_GRID`.
 
-"Disabled-by-default gates the control", which `classify` argues for unmodelled devices, does not transfer: there the hazard is user intent, here it is semantic
+"Disabled-by-default gates the control", which `classify` argues for unmodeled devices, does not transfer: there the hazard is user intent, here it is semantic
 interaction with curated logic the user cannot see. The library enforces it structurally — `ExtensionProperty` has no set-topic member to populate, and
 `set_adopted_property` still resolves only against `adopted_devices`.
 
@@ -786,7 +786,7 @@ confidence, and the ranking is the argument:
 2. **A unit in `DEVICE_CLASS_BY_UNIT` → reading.** Moderate, and it may promote but never demote, because it fails systematically in one direction: the most
    headline-worthy number a battery publishes is a `%` state of charge, and `%` is absent from that map on purpose, being equally a confidence or a duty cycle.
 3. **Everything else → detail**, by fall-through rather than a third signal. The node a property hangs off is the obvious candidate for one and is deliberately
-   not consulted: Homie nodes are organisational, not editorial.
+   not consulted: Homie nodes are organizational, not editorial.
 
 The real fix is upstream: a declared `role` on the property, proposed in `SpanPanel_Docs/span/docs/dev/ebus-property-role-proposal.md`. Until then the ranking
 is the shipping plan, and `entity_category` being free to revise is what makes a conservative default cheap.
@@ -810,10 +810,10 @@ default, and a missing key means the row was never curated at all.
 
 The keys are scope-prefixed wire addresses rather than `unique_id`s:
 
-| Half                                | Curation key                     | Built by                 |
-| ----------------------------------- | -------------------------------- | ------------------------ |
-| Vendor reading on a modelled device | `{scope}/{node}/{property}`      | `extension_curation_key` |
-| Entity on an adopted device         | `{identifier}/{node}/{property}` | `adopted_curation_key`   |
+| Half                               | Curation key                     | Built by                 |
+| ---------------------------------- | -------------------------------- | ------------------------ |
+| Vendor reading on a modeled device | `{scope}/{node}/{property}`      | `extension_curation_key` |
+| Entity on an adopted device        | `{identifier}/{node}/{property}` | `adopted_curation_key`   |
 
 The prefix is what makes a key injective: `path` is `{node}/{property}` on both models and is unique only within one device. The two namespaces cannot collide,
 because only an adopted identifier carries the `_adopted_` token. Neither key goes through `get_user_friendly_suffix`, which is what makes `adopted_unique_id`
@@ -854,7 +854,7 @@ one warning naming what it dropped. It never raises: curation must not be able t
 user's other assertions are still good.
 
 That is also why the list command reports a record **as stored** rather than as it would be applied, beside a `stale_fields` list naming the difference.
-Reporting the sanitised form would show the user an assertion they never made and hide that theirs was dropped.
+Reporting the sanitized form would show the user an assertion they never made and hide that theirs was dropped.
 
 ### The description helpers are the only place `state_class` is spelled
 
