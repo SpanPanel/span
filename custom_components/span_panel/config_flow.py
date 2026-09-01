@@ -408,9 +408,27 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
         if not configured or configured == host:
             return {CONF_HOST: host}
 
-        detection = await detect_api_version(
-            configured, port=port, httpx_client=get_async_client(self.hass, verify_ssl=False)
-        )
+        # The identity read below decides whether the entry moves, and a pinned
+        # entry owes that read its own transport — since 3.4.1 the library's
+        # plaintext warning is silent for this endpoint, so nothing else would
+        # say the serial arrived unverified. The TLS port follows the same rule
+        # as the plaintext one: the add-on's newly published port when it
+        # published one, because a reallocated port is the very case this probe
+        # exists for, else the transport's own. 80 is the one value the library
+        # refuses under a context, so it falls back to the TLS default rather
+        # than raising out of a background discovery.
+        transport = panel_rest_transport(self.hass, entry.data)
+        if transport.ssl_context is not None:
+            probe_port = self._https_port if self._https_port_known else transport.port
+            if probe_port == 80:
+                probe_port = DEFAULT_HTTPS_PORT
+            detection = await detect_api_version(
+                configured, port=probe_port, ssl_context=transport.ssl_context
+            )
+        else:
+            detection = await detect_api_version(
+                configured, port=port, httpx_client=get_async_client(self.hass, verify_ssl=False)
+            )
         reached = (
             detection.api_version == "v2"
             and detection.status_info is not None

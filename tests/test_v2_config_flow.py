@@ -3350,3 +3350,61 @@ async def test_the_https_port_step_refuses_the_plaintext_port(
     assert refused["type"] == FlowResultType.FORM
     assert refused["step_id"] == "panel_https_port"
     assert refused["errors"] == {"base": "https_port_is_plaintext"}
+
+
+@pytest.mark.asyncio
+async def test_hassio_probes_a_pinned_entry_over_its_pin(hass: HomeAssistant) -> None:
+    """The identity read that decides a host move must not travel plaintext under a pin.
+
+    The probe reads the serial out of the status answer, and 3.4.1's warning
+    exemption means nothing in the log says it went unverified — so the probe
+    owes a pinned entry its own transport. On the add-on's newly published TLS
+    port, because a reallocated port is the very case this probe exists for.
+    """
+    _hassio_configured_entry(hass, **{CONF_PANEL_CA_PEM: FAKE_CA_PEM})
+    context = MagicMock(name="pinned-context")
+    probe = AsyncMock(side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"))
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=context,
+        ),
+        patch("custom_components.span_panel.config_flow.detect_api_version", probe),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info({**MOCK_HASSIO_CONFIG, "https_port": 10090}),
+        )
+
+    call = next(c for c in probe.call_args_list if c.args[0] == "192.168.1.40")
+    assert call.kwargs["ssl_context"] is context
+    assert call.kwargs["port"] == 10090
+
+
+@pytest.mark.asyncio
+async def test_hassio_pinned_probe_takes_the_stored_tls_port_when_none_is_published(
+    hass: HomeAssistant,
+) -> None:
+    """No published TLS port means the entry's own is the only address for the pin."""
+    _hassio_configured_entry(hass, **{CONF_PANEL_CA_PEM: FAKE_CA_PEM, CONF_HTTPS_PORT: 8443})
+    context = MagicMock(name="pinned-context")
+    probe = AsyncMock(side_effect=_detection_by_host("192.168.1.50", "192.168.1.40"))
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow_validation.build_panel_ssl_context",
+            return_value=context,
+        ),
+        patch("custom_components.span_panel.config_flow.detect_api_version", probe),
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_HASSIO},
+            data=_hassio_service_info(MOCK_HASSIO_CONFIG),
+        )
+
+    call = next(c for c in probe.call_args_list if c.args[0] == "192.168.1.40")
+    assert call.kwargs["ssl_context"] is context
+    assert call.kwargs["port"] == 8443
