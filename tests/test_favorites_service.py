@@ -9,6 +9,7 @@ import pytest
 
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 
 from custom_components.span_panel.const import DOMAIN
 from custom_components.span_panel.frontend import (
@@ -287,7 +288,7 @@ def _make_device_entry(
     identifiers: set[tuple[str, str]] | None = None,
     via_device_id: str | None = None,
 ) -> MagicMock:
-    device = MagicMock()
+    device = MagicMock(spec=dr.DeviceEntry)
     device.id = device_id
     device.identifiers = identifiers if identifiers is not None else {(DOMAIN, "serial_a")}
     device.via_device_id = via_device_id
@@ -307,7 +308,7 @@ def _patch_registries(entity: MagicMock | None, device: MagicMock | None) -> Any
     return patch.multiple(
         "custom_components.span_panel.services",
         er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
-        dr=MagicMock(async_get=MagicMock(return_value=device_reg)),
+        dr=MagicMock(async_get=MagicMock(return_value=device_reg), DeviceEntry=dr.DeviceEntry),
     )
 
 
@@ -333,7 +334,7 @@ def _patch_registries_for_subdevice(
     return patch.multiple(
         "custom_components.span_panel.services",
         er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
-        dr=MagicMock(async_get=MagicMock(return_value=device_reg)),
+        dr=MagicMock(async_get=MagicMock(return_value=device_reg), DeviceEntry=dr.DeviceEntry),
     )
 
 
@@ -537,6 +538,33 @@ class TestFavoritesServiceHandlers:
                 await handler(_make_service_call({"entity_id": "sensor.orphan"}))
 
     @pytest.mark.asyncio
+    async def test_add_favorite_rejects_an_entity_on_a_child_device(
+        self, _patched_store: Any
+    ) -> None:
+        """A child device is not a SPAN Panel device, whatever identifier it carries.
+
+        From Home Assistant 2026.9 ``async_get`` can answer with a child device --
+        a part of another device, with no ``via_device_id`` to walk to a panel.
+        SPAN registers none, so an entity on one is refused rather than followed.
+        The fake is deliberately not a ``DeviceEntry``, which is what sets a child
+        device apart, and it carries a SPAN identifier so only that can refuse it.
+        """
+        hass = MagicMock()
+        registered = _capture_registered_handlers(hass)
+        handler = registered["handlers"]["add_favorite"]
+
+        entity = _make_entity_entry(device_id="d_child")
+        child_device = MagicMock()
+        child_device.id = "d_child"
+        child_device.identifiers = {(DOMAIN, "serial_a_outlet")}
+
+        with _patch_registries(entity, child_device):
+            with pytest.raises(ServiceValidationError) as refused:
+                await handler(_make_service_call({"entity_id": "switch.outlet_1"}))
+
+        assert refused.value.translation_key == "favorite_not_span_entity"
+
+    @pytest.mark.asyncio
     async def test_add_favorite_rejects_subdevice_with_non_span_parent(
         self, _patched_store: Any
     ) -> None:
@@ -592,7 +620,7 @@ class TestFavoritesServiceHandlers:
         with patch.multiple(
             "custom_components.span_panel.services",
             er=MagicMock(async_get=MagicMock(return_value=entity_reg)),
-            dr=MagicMock(async_get=MagicMock(return_value=device_reg)),
+            dr=MagicMock(async_get=MagicMock(return_value=device_reg), DeviceEntry=dr.DeviceEntry),
         ):
             with pytest.raises(ServiceValidationError):
                 await handler(

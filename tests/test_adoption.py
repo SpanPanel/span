@@ -700,7 +700,7 @@ def test_a_panel_with_no_adopted_device_registers_nothing(hass: HomeAssistant, r
 
     adopted = [
         device
-        for device in dr.async_get(hass).devices.values()
+        for device in dr.async_entries_for_config_entry(dr.async_get(hass), entry_id)
         if any(ADOPTED_IDENTIFIER_TOKEN in identifier for _domain, identifier in device.identifiers)
     ]
     assert adopted == []

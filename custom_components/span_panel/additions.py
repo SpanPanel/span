@@ -395,7 +395,9 @@ def _sub_device_name(devices: dr.DeviceRegistry, registry_entry: er.RegistryEntr
     if registry_entry.device_id is None:
         return None
     device = devices.async_get(registry_entry.device_id)
-    if device is None or device.via_device_id is None:
+    # A child device (Home Assistant 2026.9+) hangs off nothing by
+    # `via_device_id`, and SPAN registers none, so it names no sub-device.
+    if not isinstance(device, dr.DeviceEntry) or device.via_device_id is None:
         return None
     return device.name_by_user or device.name
 
