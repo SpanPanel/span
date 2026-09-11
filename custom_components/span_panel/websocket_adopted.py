@@ -58,6 +58,7 @@ from .curation import (
 )
 from .extension import adoptable, extension_curation_key, resolve_platform
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
+from .websocket_panel import resolve_panel_device
 
 if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
@@ -154,14 +155,14 @@ async def handle_adopted_list(
     resolved = _resolve_panel_entry(hass, connection, msg)
     if resolved is None:
         return
-    _entry, runtime_data, snapshot = resolved
+    entry, runtime_data, snapshot = resolved
 
     entity_registry = er.async_get(hass)
     devices: list[dict[str, Any]] = []
     # Each device's row list, held here as the same object its group carries, so
     # one pass both opens the group and fills it.
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in _rows(hass, snapshot):
+    for row in _rows(hass, snapshot, entry.entry_id):
         rows = grouped.get(row.device_identifier)
         if rows is None:
             rows = []
@@ -265,7 +266,7 @@ async def handle_adopted_curate(
     entry, runtime_data, snapshot = resolved
 
     key: str = msg["key"]
-    row = {candidate.key: candidate for candidate in _rows(hass, snapshot)}.get(key)
+    row = {candidate.key: candidate for candidate in _rows(hass, snapshot, entry.entry_id)}.get(key)
     if row is None:
         connection.send_error(msg["id"], "unknown_key", f"No curatable row is keyed {key!r}")
         return
@@ -320,7 +321,9 @@ def _warnings(record: CurationRecord | None, previous: CurationRecord | None) ->
     return []
 
 
-def _rows(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> list[_AdoptableRow]:
+def _rows(
+    hass: HomeAssistant, snapshot: SpanPanelSnapshot, config_entry_id: str
+) -> list[_AdoptableRow]:
     """Every row on this panel a user may curate, in a deterministic order.
 
     Both halves of vendor extensibility, resolved through the same functions the
@@ -364,8 +367,10 @@ def _rows(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> list[_AdoptableRo
     claimed: set[tuple[Platform, str]] = set()
 
     for device in snapshot.adopted_devices:
-        identifier = resolve_identifier(device_registry, snapshot.serial_number, device)
-        card = device_registry.async_get_device(identifiers={(DOMAIN, identifier)})
+        identifier = resolve_identifier(
+            device_registry, snapshot.serial_number, device, config_entry_id=config_entry_id
+        )
+        card = device_registry.async_get_device_by_identifier((DOMAIN, identifier), config_entry_id)
         for declaration in sorted(device.properties, key=lambda row: row.path):
             platform = classify(declaration)
             unique_id = adopted_unique_id(identifier, declaration)
@@ -392,11 +397,11 @@ def _rows(hass: HomeAssistant, snapshot: SpanPanelSnapshot) -> list[_AdoptableRo
             )
 
     for extension, unique_id, identifier in sorted(
-        adoptable(snapshot, device_registry, entity_registry),
+        adoptable(snapshot, device_registry, entity_registry, config_entry_id=config_entry_id),
         key=lambda adopted: (adopted[2], adopted[0].path),
     ):
         key = extension_curation_key(extension.subject, extension.path)
-        card = device_registry.async_get_device(identifiers={(DOMAIN, identifier)})
+        card = device_registry.async_get_device_by_identifier((DOMAIN, identifier), config_entry_id)
         if key is None or card is None:
             # Neither happens: `adoptable` declines a subject with no scope, which
             # is exactly what `extension_curation_key` declines, and it declines a
@@ -446,44 +451,18 @@ def _resolve_panel_entry(
     """Resolve the panel device id in a request to the entry, its runtime data and its snapshot.
 
     Sends the refusal itself and answers None, so a handler's first line is the
-    whole of its validation. The checks and their codes mirror
-    `handle_panel_topology`, because the two commands take the same handle and a
-    consumer that learned one set of codes must not meet a second.
+    whole of its validation. The device is resolved by `resolve_panel_device`,
+    the one function every command shares, so its refusals and their codes are
+    topology's by construction rather than by keeping two copies in step.
 
     Runtime state is reached through `loaded_runtime_data`, per AGENTS.md's
     runtime-data guard: core deletes `runtime_data` on unload, and what is there
     on a loaded entry is whatever the owning integration put there.
-
-    One divergence from topology, in an unreachable case: a device carrying a
-    SPAN identifier whose entry the registry no longer holds is refused as
-    `not_span_panel` rather than `not_loaded`. Resolving the entry and checking
-    its domain is one step here, and a device whose SPAN entry is gone is not a
-    SPAN panel any more.
     """
-    device_registry = dr.async_get(hass)
-    device_entry = device_registry.async_get(msg["device_id"])
-
-    if device_entry is None:
-        connection.send_error(msg["id"], "device_not_found", "Device not found")
+    resolved = resolve_panel_device(hass, connection, msg)
+    if resolved is None:
         return None
-
-    if not any(domain == DOMAIN for domain, _ in device_entry.identifiers):
-        connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
-        return None
-
-    # Every sub-device registers with via_device_id pointing at the panel.
-    if device_entry.via_device_id is not None:
-        connection.send_error(
-            msg["id"],
-            "not_panel_device",
-            "Use the SPAN panel device registry ID, not a sub-device.",
-        )
-        return None
-
-    entry = _config_entry(hass, device_entry)
-    if entry is None:
-        connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
-        return None
+    _panel_device, entry = resolved
 
     if entry.state is not ConfigEntryState.LOADED:
         connection.send_error(msg["id"], "not_loaded", "SPAN Panel integration is not loaded")
@@ -500,17 +479,3 @@ def _resolve_panel_entry(
         return None
 
     return entry, runtime_data, snapshot
-
-
-def _config_entry(hass: HomeAssistant, device_entry: dr.DeviceEntry) -> ConfigEntry | None:
-    """Return the SPAN Panel entry this device belongs to, if one still does.
-
-    The entry's domain is checked rather than assumed: a device row may carry
-    entries from more than one integration, and the first one is not necessarily
-    ours.
-    """
-    for entry_id in device_entry.config_entries:
-        entry = hass.config_entries.async_get_entry(entry_id)
-        if entry is not None and entry.domain == DOMAIN:
-            return entry
-    return None

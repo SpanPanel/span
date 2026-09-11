@@ -173,7 +173,9 @@ async def test_ensure_device_registered_creates_missing_device(
 
     await ensure_device_registered(hass, entry, snapshot, "SPAN Panel")
 
-    created = device_registry.async_get_device(identifiers={(DOMAIN, "sp3-create-001")})
+    created = device_registry.async_get_device_by_identifier(
+        (DOMAIN, "sp3-create-001"), entry.entry_id
+    )
     assert created is not None
     assert created.name == "SPAN Panel"
 

@@ -128,6 +128,7 @@ async def async_setup_entry(
             coordinator,
             snapshot,
             dr.async_get(hass),
+            config_entry_id=config_entry.entry_id,
             panel_device_id=config_entry.runtime_data.panel_device_id,
             overlay=config_entry.runtime_data.curation,
         )
@@ -139,6 +140,7 @@ async def async_setup_entry(
             snapshot,
             dr.async_get(hass),
             er.async_get(hass),
+            config_entry_id=config_entry.entry_id,
             overlay=config_entry.runtime_data.curation,
         )
 

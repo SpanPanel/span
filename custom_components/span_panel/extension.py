@@ -526,6 +526,7 @@ def create_extension_sensors(
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
     *,
+    config_entry_id: str,
     overlay: CurationOverlay,
 ) -> list[ExtensionSensor]:
     """Every extension property that is not a declared boolean."""
@@ -536,6 +537,7 @@ def create_extension_sensors(
         device_registry,
         entity_registry,
         Platform.SENSOR,
+        config_entry_id=config_entry_id,
         overlay=overlay,
     )
 
@@ -546,6 +548,7 @@ def create_extension_binary_sensors(
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
     *,
+    config_entry_id: str,
     overlay: CurationOverlay,
 ) -> list[ExtensionBinarySensor]:
     """Every extension property declared `boolean`."""
@@ -556,6 +559,7 @@ def create_extension_binary_sensors(
         device_registry,
         entity_registry,
         Platform.BINARY_SENSOR,
+        config_entry_id=config_entry_id,
         overlay=overlay,
     )
 
@@ -568,6 +572,7 @@ def _create[ExtensionT: ExtensionEntity](
     entity_registry: EntityRegistry,
     platform: Platform,
     *,
+    config_entry_id: str,
     overlay: CurationOverlay,
 ) -> list[ExtensionT]:
     """Build one platform's share of the extension properties.
@@ -592,7 +597,9 @@ def _create[ExtensionT: ExtensionEntity](
     type system holding the two to one contract, not a case that occurs.
     """
     built: list[ExtensionT] = []
-    for row, unique_id, device_identifier in adoptable(snapshot, device_registry, entity_registry):
+    for row, unique_id, device_identifier in adoptable(
+        snapshot, device_registry, entity_registry, config_entry_id=config_entry_id
+    ):
         if resolve_platform(entity_registry, unique_id, row.datatype) is not platform:
             continue
         key = extension_curation_key(row.subject, row.path)
@@ -623,14 +630,16 @@ def adoptable(
     snapshot: SpanPanelSnapshot,
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
+    *,
+    config_entry_id: str,
 ) -> list[tuple[ExtensionProperty, str, str]]:
     """Every extension property that can become an entity, with its id and card.
 
     Three reasons a declared property is declined here, all of them stated rather
-    than silent: its subject resolves to no device card, its card is not in the
-    registry yet, or its address is outside the Homie charset. The first two are
-    ordinary states on a setup that raced a capability -- the entity appears on
-    the next reload, as capability-gated platforms already do.
+    than silent: its subject resolves to no device card, its card is not in this
+    entry's registry yet, or its address is outside the Homie charset. The first
+    two are ordinary states on a setup that raced a capability -- the entity
+    appears on the next reload, as capability-gated platforms already do.
 
     **An id the registry already holds is never displaced by the cap.** The cap
     admits rows in the order the adapter emitted them, and that order tracks the
@@ -643,13 +652,15 @@ def adoptable(
     everything already registered is admitted first, and the cap applies only to
     what is new.
     """
-    return _partition(snapshot, device_registry, entity_registry)[0]
+    return _partition(snapshot, device_registry, entity_registry, config_entry_id)[0]
 
 
 def declined_extensions(
     snapshot: SpanPanelSnapshot,
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
+    *,
+    config_entry_id: str,
 ) -> dict[str, int]:
     """How many properties each wire device declared beyond the cap.
 
@@ -658,22 +669,42 @@ def declined_extensions(
     partition, and a warning per platform would double-count in the log while
     saying nothing new.
     """
-    return _partition(snapshot, device_registry, entity_registry)[1]
+    return _partition(snapshot, device_registry, entity_registry, config_entry_id)[1]
 
 
 def _partition(
     snapshot: SpanPanelSnapshot,
     device_registry: DeviceRegistry,
     entity_registry: EntityRegistry,
+    config_entry_id: str,
 ) -> tuple[list[tuple[ExtensionProperty, str, str]], dict[str, int]]:
-    """Split the declared properties into what is adopted and what the cap declined."""
+    """Split the declared properties into what is adopted and what the cap declined.
+
+    The card is looked up within `config_entry_id` rather than across every entry,
+    for the reason `util.py` gives at its own head: identifiers are unique inside a
+    config entry and nowhere else. The unscoped question could be answered by a
+    device another entry owns, and the row would then be admitted as though its
+    card existed. It would not land on that device -- the registry files an
+    entity's device within the entity's own entry -- but on a card minted for it
+    here, carrying nothing but the identifier: the card of its own an extension
+    entity must never mint, reached around the deferral that exists to prevent it.
+
+    A second SPAN entry cannot hold this panel's identifiers today, because the
+    config flow keys entries on the serial every identifier embeds. That is a
+    property of the flow rather than of the registry, and the lookup does not
+    rest on it. Home Assistant reports the unscoped lookup as deprecated for this
+    ambiguity and says it stops working in 2027.8.
+    """
     known: list[tuple[ExtensionProperty, str, str]] = []
     fresh: list[tuple[ExtensionProperty, str, str]] = []
     for row in snapshot.extension_properties:
         identifier = extension_device_identifier(snapshot.serial_number, row.subject)
         if identifier is None:
             continue
-        if device_registry.async_get_device(identifiers={(DOMAIN, identifier)}) is None:
+        if (
+            device_registry.async_get_device_by_identifier((DOMAIN, identifier), config_entry_id)
+            is None
+        ):
             _LOGGER.debug(
                 "Extension property %s has no registered device for %s yet; deferred to the next reload",
                 row.path,
@@ -755,7 +786,9 @@ async def async_notice_declined_extensions(
     readings declined on the same one -- is news the user is told about, while a
     translation change is not.
     """
-    declined = declined_extensions(snapshot, device_registry, entity_registry)
+    declined = declined_extensions(
+        snapshot, device_registry, entity_registry, config_entry_id=entry.entry_id
+    )
     if not declined:
         return
     rendered = ", ".join(f"{key} ({count})" for key, count in sorted(declined.items()))

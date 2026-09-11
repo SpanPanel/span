@@ -870,9 +870,9 @@ than a weaker one. A guard that admits one shape of exception is a guard somebod
 ### The two commands write no registry state
 
 `websocket_adopted.py` defines `span_panel/adopted/list` and `span_panel/adopted/curate`, and `websocket.py`'s `async_register_commands` registers them beside
-`panel_topology` — the import runs that way and only that way, so no cycle can appear as further commands join. Both are `@require_admin`, both take the main
-panel's device registry id, and both answer `panel_topology`'s error codes from the same resolution — a consumer that learned one set does not meet a second.
-[websocket-api.md](websocket-api.md) is the wire contract; what matters here is the boundary.
+`panel_topology` — the import runs that way and only that way, so no cycle can appear as further commands join. Both are `@require_admin` and both take the main
+panel's device registry id, which every command resolves through one function, `websocket_panel.resolve_panel_device` — so all three answer the same error
+codes, and a consumer that learned one set does not meet a second. [websocket-api.md](websocket-api.md) is the wire contract; what matters here is the boundary.
 
 **Enabling is Core's act, and so are naming, icons, areas, display units and precision.** `config/entity_registry/update` already exposes all of them, already
 requires admin and already carries the undo, so duplicating any of it here would mean two writers for one field and no rule about which wins. What is left over

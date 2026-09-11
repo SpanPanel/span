@@ -15,6 +15,7 @@ from .helpers import build_panel_unique_id, construct_voltage_attribute
 from .id_builder import build_binary_sensor_unique_id
 from .util import classify_sub_device_identifier
 from .websocket_adopted import handle_adopted_curate, handle_adopted_list
+from .websocket_panel import resolve_panel_device
 
 if TYPE_CHECKING:
     from .runtime import SpanPanelRuntimeData
@@ -88,39 +89,12 @@ async def handle_panel_topology(
     tabs/entity mappings, and sub-devices -- every kind
     `classify_sub_device_identifier` names, which is BESS, MID, EVSE and PV.
     """
-    device_id = msg["device_id"]
-
+    resolved = resolve_panel_device(hass, connection, msg)
+    if resolved is None:
+        return
+    device_entry, config_entry = resolved
+    config_entry_id = config_entry.entry_id
     device_registry = dr.async_get(hass)
-    device_entry = device_registry.async_get(device_id)
-
-    if device_entry is None:
-        connection.send_error(msg["id"], "device_not_found", "Device not found")
-        return
-
-    is_span_device = any(domain == DOMAIN for domain, _ in device_entry.identifiers)
-    if not is_span_device:
-        connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
-        return
-
-    # Every sub-device registers with via_device_id pointing at the panel.
-    if device_entry.via_device_id is not None:
-        connection.send_error(
-            msg["id"],
-            "not_panel_device",
-            "Use the SPAN panel device registry ID, not a sub-device.",
-        )
-        return
-
-    # Find the config entry for this device.
-    config_entry_id = _find_config_entry_id(device_entry)
-    if config_entry_id is None:
-        connection.send_error(msg["id"], "not_span_panel", "Device is not a SPAN Panel device")
-        return
-
-    config_entry = hass.config_entries.async_get_entry(config_entry_id)
-    if config_entry is None:
-        connection.send_error(msg["id"], "not_loaded", "SPAN Panel config entry not found")
-        return
 
     if config_entry.state is not ConfigEntryState.LOADED:
         connection.send_error(msg["id"], "not_loaded", "SPAN Panel integration is not loaded")
@@ -194,10 +168,13 @@ async def handle_panel_topology(
     # Build sub-devices section from devices linked via via_device_id.
     sub_devices: dict[str, dict[str, Any]] = {}
 
+    # Matched against the panel device itself rather than the id the request
+    # carried: they differ when that id was saved before 2026.8, and every
+    # sub-device links to the device -- see `resolve_panel_device`.
     for dev in dr.async_entries_for_config_entry(device_registry, config_entry_id):
-        if dev.id == device_id:
+        if dev.id == device_entry.id:
             continue
-        if dev.via_device_id != device_id:
+        if dev.via_device_id != device_entry.id:
             continue
 
         sub_device_entities = entities_by_device.get(dev.id, [])
@@ -226,25 +203,19 @@ async def handle_panel_topology(
             "serial": snapshot.serial_number,
             "firmware": snapshot.firmware_version,
             "panel_size": snapshot.panel_size,
-            "device_id": device_id,
+            "device_id": msg["device_id"],
+            # The panel's current device and the entry that owns it. They differ
+            # from what the request carried only when that was an id saved before
+            # 2026.8, which the device list no longer holds -- so a consumer takes
+            # the panel's identity from here rather than looking up the id it has.
+            "panel_device_id": device_entry.id,
+            "config_entry_id": config_entry_id,
             "device_name": device_entry.name,
             "panel_entities": panel_entities,
             "circuits": circuits,
             "sub_devices": sub_devices,
         },
     )
-
-
-def _find_config_entry_id(device_entry: dr.DeviceEntry) -> str | None:
-    """Find the SPAN Panel config entry ID for a device."""
-    is_span_device = any(domain == DOMAIN for domain, _ in device_entry.identifiers)
-    if not is_span_device:
-        return None
-
-    # Return the first config entry; a SPAN device only belongs to one.
-    for config_entry_id in device_entry.config_entries:
-        return config_entry_id
-    return None
 
 
 def _classify_sub_device(device_entry: dr.DeviceEntry) -> str:

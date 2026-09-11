@@ -546,7 +546,10 @@ def _async_register_favorites_services(hass: HomeAssistant) -> None:
 
         device_registry = dr.async_get(hass)
         device_entry = device_registry.async_get(entry.device_id)
-        if device_entry is None or not any(
+        # From 2026.9 `async_get` can answer with a child device, a part of
+        # another device with no `via_device_id`. SPAN registers none, so a
+        # child device is not a SPAN Panel device either.
+        if not isinstance(device_entry, dr.DeviceEntry) or not any(
             domain == DOMAIN for domain, _ in device_entry.identifiers
         ):
             raise ServiceValidationError(
