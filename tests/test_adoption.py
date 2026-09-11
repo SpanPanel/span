@@ -64,6 +64,12 @@ if TYPE_CHECKING:
     from span_panel_api import SpanPanelSnapshot
 
 PANEL_SERIAL = "sp3-242424-001"
+# The scope the builder tests hand `create_adopted_*`. Inert on purpose: those
+# tests give the builders an empty registry, so the lookup misses under any
+# scope and they exercise classification, not identity. The scope itself is
+# pinned by the tests that register a card first -- the freeze through the
+# builders here, and every platform in `test_platform_entry_scope.py`.
+ENTRY_ID = "adopted-entry"
 
 
 @pytest.fixture
@@ -191,6 +197,7 @@ def test_no_adopted_sensor_carries_a_state_class(hass: HomeAssistant) -> None:
         MagicMock(data=_snapshot(_device(properties=declarations))),
         _snapshot(_device(properties=declarations)),
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -226,6 +233,7 @@ def test_a_declared_unit_this_integration_knows_gets_a_device_class(hass: HomeAs
         MagicMock(data=_snapshot(_device(properties=declarations))),
         _snapshot(_device(properties=declarations)),
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -245,6 +253,7 @@ def test_a_unit_outside_the_map_gets_no_device_class(hass: HomeAssistant, unit: 
         MagicMock(data=_snapshot(_device(properties=declarations))),
         _snapshot(_device(properties=declarations)),
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -265,10 +274,10 @@ def test_every_adopted_entity_is_disabled_and_diagnostic(hass: HomeAssistant) ->
 
     entities = [
         *create_adopted_sensors(
-            coordinator, snapshot, registry, panel_device_id="panel-device-id", overlay=uncurated
+            coordinator, snapshot, registry, config_entry_id=ENTRY_ID, panel_device_id="panel-device-id", overlay=uncurated
         ),
         *create_adopted_binary_sensors(
-            coordinator, snapshot, registry, panel_device_id="panel-device-id", overlay=uncurated
+            coordinator, snapshot, registry, config_entry_id=ENTRY_ID, panel_device_id="panel-device-id", overlay=uncurated
         ),
     ]
 
@@ -285,9 +294,9 @@ def test_a_declared_boolean_becomes_a_binary_sensor_and_not_a_sensor(hass: HomeA
     registry = dr.async_get(hass)
     uncurated = CurationOverlay.empty()
 
-    assert create_adopted_sensors(coordinator, snapshot, registry, panel_device_id="p", overlay=uncurated) == []
+    assert create_adopted_sensors(coordinator, snapshot, registry, config_entry_id=ENTRY_ID, panel_device_id="p", overlay=uncurated) == []
     (entity,) = create_adopted_binary_sensors(
-        coordinator, snapshot, registry, panel_device_id="p", overlay=uncurated
+        coordinator, snapshot, registry, config_entry_id=ENTRY_ID, panel_device_id="p", overlay=uncurated
     )
     assert entity.is_on is True
 
@@ -295,25 +304,39 @@ def test_a_declared_boolean_becomes_a_binary_sensor_and_not_a_sensor(hass: HomeA
 # -- Identity freezes at first sighting --------------------------------------
 
 
-def test_a_serial_arriving_after_adoption_does_not_move_the_device(hass: HomeAssistant) -> None:
+def test_a_serial_arriving_after_adoption_does_not_move_the_device(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
     """The failure this rule exists to prevent, in its most likely form.
 
     A device adopted under its wire id that later publishes `info/serial-number`
     would, without freezing, be re-derived onto the serial -- which the registry
     reads as a device replacement and which takes the entities and their history
     with it.
+
+    Against the real registry rather than a stub, because the lookup is scoped to
+    this entry and a stub that ignored the scope would answer the same whether
+    the scope were right, wrong or absent.
     """
+    entry_id, panel_device_id = registered_panel
     registry = dr.async_get(hass)
     first_seen = adopted_identifier(PANEL_SERIAL, "generator-1")
-    entry = MagicMock()
-    registry.async_get_or_create = MagicMock()
-    registry.async_get_device = lambda identifiers: entry if (DOMAIN, first_seen) in identifiers else None
+    registry.async_get_or_create(
+        config_entry_id=entry_id,
+        identifiers={(DOMAIN, first_seen)},
+        name="Backup Generator",
+        via_device_id=panel_device_id,
+    )
 
     later = _device("generator-1", serial_number="EX-0000-0001")
-    assert resolve_identifier(registry, PANEL_SERIAL, later) == first_seen
+    assert (
+        resolve_identifier(registry, PANEL_SERIAL, later, config_entry_id=entry_id) == first_seen
+    )
 
 
-def test_a_wire_id_that_moves_keeps_a_device_adopted_under_its_serial(hass: HomeAssistant) -> None:
+def test_a_wire_id_that_moves_keeps_a_device_adopted_under_its_serial(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
     """The other direction, which this repository has already been bitten by.
 
     Producers derive a DER's id preferring a serial over a default slug, so the
@@ -321,34 +344,47 @@ def test_a_wire_id_that_moves_keeps_a_device_adopted_under_its_serial(hass: Home
     `info/serial-number` is held unvalued. A device adopted under its serial has
     to survive that.
     """
+    entry_id, panel_device_id = registered_panel
     registry = dr.async_get(hass)
     first_seen = adopted_identifier(PANEL_SERIAL, "EX-0000-0001")
-    entry = MagicMock()
-    registry.async_get_device = lambda identifiers: entry if (DOMAIN, first_seen) in identifiers else None
+    registry.async_get_or_create(
+        config_entry_id=entry_id,
+        identifiers={(DOMAIN, first_seen)},
+        name="Backup Generator",
+        via_device_id=panel_device_id,
+    )
 
     moved = _device("panel-EX-0000-0001", serial_number="EX-0000-0001")
-    assert resolve_identifier(registry, PANEL_SERIAL, moved) == first_seen
+    assert (
+        resolve_identifier(registry, PANEL_SERIAL, moved, config_entry_id=entry_id) == first_seen
+    )
 
 
-def test_a_device_never_seen_before_is_adopted_under_its_serial_when_it_has_one(hass: HomeAssistant) -> None:
+def test_a_device_never_seen_before_is_adopted_under_its_serial_when_it_has_one(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
     """The specification's own correlator, used where nothing is frozen yet.
 
     Device ids are opaque and a proxied id is `{proxier-id}-{proxied-id}`, so the
     same hardware carries different ids under different enclosures by design. The
     serial is what the specification says to correlate on.
     """
-    registry = dr.async_get(hass)
-    registry.async_get_device = lambda identifiers: None
+    entry_id, _panel_device_id = registered_panel
 
     fresh = _device("generator-1", serial_number="EX-0000-0001")
-    assert resolve_identifier(registry, PANEL_SERIAL, fresh) == adopted_identifier(PANEL_SERIAL, "EX-0000-0001")
+    assert resolve_identifier(
+        dr.async_get(hass), PANEL_SERIAL, fresh, config_entry_id=entry_id
+    ) == adopted_identifier(PANEL_SERIAL, "EX-0000-0001")
 
 
-def test_a_device_with_no_serial_is_adopted_under_its_wire_id(hass: HomeAssistant) -> None:
-    registry = dr.async_get(hass)
-    registry.async_get_device = lambda identifiers: None
+def test_a_device_with_no_serial_is_adopted_under_its_wire_id(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    entry_id, _panel_device_id = registered_panel
 
-    assert resolve_identifier(registry, PANEL_SERIAL, _device("generator-1")) == adopted_identifier(
+    assert resolve_identifier(
+        dr.async_get(hass), PANEL_SERIAL, _device("generator-1"), config_entry_id=entry_id
+    ) == adopted_identifier(
         PANEL_SERIAL, "generator-1"
     )
 
@@ -404,7 +440,11 @@ def _built(hass: HomeAssistant, *declarations: AdoptedProperty) -> dict[Platform
     snapshot = _snapshot(_device(properties=declarations))
     coordinator = MagicMock(data=snapshot)
     registry = dr.async_get(hass)
-    kwargs = {"panel_device_id": "panel-device-id", "overlay": CurationOverlay.empty()}
+    kwargs = {
+        "config_entry_id": ENTRY_ID,
+        "panel_device_id": "panel-device-id",
+        "overlay": CurationOverlay.empty(),
+    }
     return {
         Platform.SENSOR: list(create_adopted_sensors(coordinator, snapshot, registry, **kwargs)),
         Platform.BINARY_SENSOR: list(create_adopted_binary_sensors(coordinator, snapshot, registry, **kwargs)),
@@ -477,6 +517,7 @@ async def test_a_switch_publishes_the_vocabulary_homie_defines(hass: HomeAssista
         coordinator,
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -495,6 +536,7 @@ def _adopted_switch(hass: HomeAssistant) -> tuple[MagicMock, object]:
         coordinator,
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -559,6 +601,7 @@ async def test_a_number_publishes_an_integer_where_the_declaration_says_integer(
         coordinator,
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -614,8 +657,8 @@ def test_a_device_whose_whole_declaration_is_info_still_gets_a_card(hass: HomeAs
 
     async_register_adopted_devices(hass, entry_id, snapshot, panel_device_id=panel_device_id)
 
-    registered = dr.async_get(hass).async_get_device(
-        identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1"))}
+    registered = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1")), entry_id
     )
     assert registered is not None
     assert registered.name == "Backup Generator"
@@ -640,8 +683,15 @@ def test_registration_freezes_the_anchor_before_any_entity_resolves_it(hass: Hom
     async_register_adopted_devices(hass, entry_id, _snapshot(with_serial), panel_device_id=panel_device_id)
 
     registry = dr.async_get(hass)
-    assert registry.async_get_device(identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1"))})
-    assert registry.async_get_device(identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "EX-0000-0001"))}) is None
+    assert registry.async_get_device_by_identifier(
+        (DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1")), entry_id
+    )
+    assert (
+        registry.async_get_device_by_identifier(
+            (DOMAIN, adopted_identifier(PANEL_SERIAL, "EX-0000-0001")), entry_id
+        )
+        is None
+    )
 
 
 def test_a_panel_with_no_adopted_device_registers_nothing(hass: HomeAssistant, registered_panel: tuple[str, str]) -> None:
@@ -780,6 +830,7 @@ def test_the_lexically_first_of_two_colliding_properties_wins_either_way(
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -807,6 +858,7 @@ def test_the_same_address_on_two_devices_is_not_a_collision(hass: HomeAssistant)
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -841,6 +893,7 @@ def test_a_string_over_the_state_limit_is_clamped_rather_than_written(
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -859,6 +912,7 @@ def test_a_string_within_the_limit_is_passed_through_untouched(hass: HomeAssista
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -887,6 +941,7 @@ def test_a_unit_less_numeric_declaration_still_publishes_a_number(hass: HomeAssi
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -903,7 +958,10 @@ def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
     )
     snapshot = _snapshot(_device(properties=(declaration,)))
     identifier = resolve_identifier(
-        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+        dr.async_get(hass),
+        snapshot.serial_number,
+        snapshot.adopted_devices[0],
+        config_entry_id=ENTRY_ID,
     )
     record = CurationRecord(state_class=SensorStateClass.MEASUREMENT)
 
@@ -911,6 +969,7 @@ def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=_overlay_for(declaration.path, record, identifier),
     )
@@ -930,6 +989,7 @@ def test_a_unit_less_numeric_that_publishes_text_reports_nothing(hass: HomeAssis
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -1110,6 +1170,7 @@ def test_the_malformed_numeric_still_reaches_the_user_as_a_reading(hass: HomeAss
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -1136,7 +1197,10 @@ def test_a_curated_record_shapes_the_sensor_at_construction(hass: HomeAssistant)
     declarations = (_property(unit="V", datatype="float"),)
     snapshot = _snapshot(_device(properties=declarations))
     identifier = resolve_identifier(
-        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+        dr.async_get(hass),
+        snapshot.serial_number,
+        snapshot.adopted_devices[0],
+        config_entry_id=ENTRY_ID,
     )
     record = CurationRecord(
         state_class=SensorStateClass.MEASUREMENT, device_class="voltage", promote=True
@@ -1145,6 +1209,7 @@ def test_a_curated_record_shapes_the_sensor_at_construction(hass: HomeAssistant)
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=_overlay_for(declarations[0].path, record, identifier),
     )
@@ -1162,6 +1227,7 @@ def test_an_uncurated_row_is_exactly_todays_entity(hass: HomeAssistant) -> None:
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=CurationOverlay.empty(),
     )
@@ -1180,13 +1246,17 @@ def test_a_stale_record_field_is_skipped_and_the_rest_applied(hass: HomeAssistan
     declarations = (_property(unit=None, datatype="string"),)
     snapshot = _snapshot(_device(properties=declarations))
     identifier = resolve_identifier(
-        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+        dr.async_get(hass),
+        snapshot.serial_number,
+        snapshot.adopted_devices[0],
+        config_entry_id=ENTRY_ID,
     )
     record = CurationRecord(state_class=SensorStateClass.MEASUREMENT, promote=True)
     (entity,) = create_adopted_sensors(
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=_overlay_for(declarations[0].path, record, identifier),
     )
@@ -1204,13 +1274,17 @@ def test_a_curated_binary_sensor_takes_the_device_class_it_was_given(hass: HomeA
     declarations = (_property(node_id="relay", property_id="closed", datatype="boolean", unit=None),)
     snapshot = _snapshot(_device(properties=declarations))
     identifier = resolve_identifier(
-        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+        dr.async_get(hass),
+        snapshot.serial_number,
+        snapshot.adopted_devices[0],
+        config_entry_id=ENTRY_ID,
     )
     record = CurationRecord(device_class=BinarySensorDeviceClass.DOOR.value)
     (entity,) = create_adopted_binary_sensors(
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=_overlay_for(declarations[0].path, record, identifier),
     )
@@ -1232,16 +1306,102 @@ def test_a_control_takes_prominence_and_nothing_else(hass: HomeAssistant) -> Non
     )
     snapshot = _snapshot(_device(properties=declarations))
     identifier = resolve_identifier(
-        dr.async_get(hass), snapshot.serial_number, snapshot.adopted_devices[0]
+        dr.async_get(hass),
+        snapshot.serial_number,
+        snapshot.adopted_devices[0],
+        config_entry_id=ENTRY_ID,
     )
     record = CurationRecord(device_class="voltage", promote=True)
     (entity,) = create_adopted_switches(
         MagicMock(data=snapshot),
         snapshot,
         dr.async_get(hass),
+        config_entry_id=ENTRY_ID,
         panel_device_id="panel-device-id",
         overlay=_overlay_for(declarations[0].path, record, identifier),
     )
     assert entity.entity_category is None
     assert entity.device_class is None
     assert entity.entity_registry_enabled_default is False
+
+
+async def test_a_device_another_entry_owns_does_not_freeze_this_panels_identity(
+    hass: HomeAssistant,
+) -> None:
+    """The identity freeze reads *this* entry's registry, not every entry's.
+
+    `resolve_identifier` decides which spelling this install already uses by
+    asking the registry what it already holds. Identifiers are unique within a
+    config entry and nowhere else, so an unscoped question can be answered by a
+    device another entry owns -- and this panel's device is then frozen onto a
+    stranger's identifier, permanently, because the freeze is by design
+    irreversible. Nothing of ours was ever adopted under the wire id here, so
+    the serial is the anchor the specification asks for.
+    """
+    registry = dr.async_get(hass)
+    other = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-other", unique_id="other")
+    other.add_to_hass(hass)
+    registry.async_get_or_create(
+        config_entry_id=other.entry_id,
+        identifiers={(DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1"))},
+        name="Somebody else's generator",
+    )
+    mine = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-mine", unique_id=PANEL_SERIAL)
+    mine.add_to_hass(hass)
+    panel = registry.async_get_or_create(
+        config_entry_id=mine.entry_id,
+        identifiers={(DOMAIN, PANEL_SERIAL)},
+        name="Span Panel",
+    )
+    snapshot = _snapshot(_device("generator-1", serial_number="EX-0000-0001"))
+
+    async_register_adopted_devices(hass, mine.entry_id, snapshot, panel_device_id=panel.id)
+
+    frozen_onto_the_stranger = registry.async_get_device_by_identifier(
+        (DOMAIN, adopted_identifier(PANEL_SERIAL, "generator-1")), mine.entry_id
+    )
+    assert frozen_onto_the_stranger is None
+    assert (
+        registry.async_get_device_by_identifier(
+            (DOMAIN, adopted_identifier(PANEL_SERIAL, "EX-0000-0001")), mine.entry_id
+        )
+        is not None
+    )
+
+
+def test_the_builders_resolve_a_frozen_device_within_the_entry_they_are_handed(
+    hass: HomeAssistant, registered_panel: tuple[str, str]
+) -> None:
+    """The freeze holds through the builders, not only through `resolve_identifier`.
+
+    `_create` resolves each device's identifier again rather than reading the one
+    registration froze, so the scope it is handed decides which card it finds.
+    A device adopted under its wire id that later publishes a serial keeps the
+    wire id's unique_id; asked in the wrong entry, the lookup misses, the serial
+    is minted, and the registry reads the new unique_id as an entity replacement
+    that takes the entity's history with it.
+    """
+    entry_id, panel_device_id = registered_panel
+    registry = dr.async_get(hass)
+    frozen = adopted_identifier(PANEL_SERIAL, "generator-1")
+    registry.async_get_or_create(
+        config_entry_id=entry_id,
+        identifiers={(DOMAIN, frozen)},
+        name="Backup Generator",
+        via_device_id=panel_device_id,
+    )
+    declaration = _property()
+    snapshot = _snapshot(
+        _device("generator-1", serial_number="EX-0000-0001", properties=(declaration,))
+    )
+
+    (sensor,) = create_adopted_sensors(
+        MagicMock(data=snapshot),
+        snapshot,
+        registry,
+        config_entry_id=entry_id,
+        panel_device_id=panel_device_id,
+        overlay=CurationOverlay.empty(),
+    )
+
+    assert sensor.unique_id == adopted_unique_id(frozen, declaration)

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.2] - 9/2026
+
+### Fixed
+
+- **Home Assistant's warning about a deprecated device lookup is resolved** — the integration, its card and its dashboard now find devices the way Home
+  Assistant 2026.8 asks, before the old ways stop working in 2027.8.
+- **A SPAN Panel card set up before Home Assistant 2026.8 works again, with nothing to change** — Home Assistant gave the panel a new device ID during that
+  upgrade if a helper, such as a utility meter, was attached to it. A card still holding the old ID now finds the panel again: its battery, charger and other
+  devices, its monitoring and its circuits' areas all come back, where it showed no devices or an intermittent "not loaded" error.
+
 ## [2.1.1] - 8/2026
 
 ### Added

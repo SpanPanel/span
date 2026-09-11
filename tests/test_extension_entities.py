@@ -193,14 +193,14 @@ def test_a_row_whose_card_is_not_registered_yet_is_deferred(
 ) -> None:
     """A capability race defers the entity to the next reload rather than minting a card."""
     snapshot = _snapshot(_row(kind="pv"))
-    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass)) == []
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0]) == []
 
 
 def test_a_row_on_a_registered_card_is_adoptable(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
     snapshot = _snapshot(_row())
-    adoptable_rows = adoptable(snapshot, dr.async_get(hass), er.async_get(hass))
+    adoptable_rows = adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
     assert len(adoptable_rows) == 1
     row, unique_id, identifier = adoptable_rows[0]
     assert identifier == BESS_IDENTIFIER
@@ -212,7 +212,7 @@ def test_an_off_charset_address_is_declined_rather_than_sanitised(
     hass: HomeAssistant, registered_panel: tuple[str, str]
 ) -> None:
     snapshot = _snapshot(_row(property_id="Cell_Temperature"))
-    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass)) == []
+    assert adoptable(snapshot, dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0]) == []
 
 
 # --- the cap ----------------------------------------------------------------
@@ -223,7 +223,7 @@ def test_a_vendor_flooding_one_device_is_capped(
 ) -> None:
     """Registry rows are permanent and nothing removes them, so the flood is bounded."""
     rows = tuple(_row(property_id=f"reading-{index}") for index in range(MAX_PER_DEVICE + 25))
-    adopted = adoptable(_snapshot(*rows), dr.async_get(hass), er.async_get(hass))
+    adopted = adoptable(_snapshot(*rows), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
     assert len(adopted) == MAX_PER_DEVICE
 
 
@@ -246,7 +246,7 @@ def test_the_cap_is_per_wire_device_not_per_card(
         _row(kind="panel", node_id="acme", property_id="site-reading"),
         _row(kind="lugs", instance_key="upstream", node_id="acme", property_id="phase-balance"),
     )
-    adopted = adoptable(_snapshot(*noisy, *quiet), dr.async_get(hass), er.async_get(hass))
+    adopted = adoptable(_snapshot(*noisy, *quiet), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
 
     # Every quiet device keeps its readings, though all four share the panel card.
     adopted_keys = [subject_key(row.subject) for row, _uid, _identifier in adopted]
@@ -269,7 +269,7 @@ def test_two_lugs_publishing_the_same_property_get_two_identities(
     """
     upstream = _row(kind="lugs", instance_key="upstream", node_id="acme", property_id="phase-balance", value="1.5")
     downstream = _row(kind="lugs", instance_key="downstream", node_id="acme", property_id="phase-balance", value="99.9")
-    adopted = adoptable(_snapshot(upstream, downstream), dr.async_get(hass), er.async_get(hass))
+    adopted = adoptable(_snapshot(upstream, downstream), dr.async_get(hass), er.async_get(hass), config_entry_id=registered_panel[0])
 
     ids = [unique_id for _row_, unique_id, _identifier in adopted]
     assert len(ids) == len(set(ids)) == 2
@@ -296,7 +296,7 @@ def test_a_registered_entity_is_never_displaced_by_the_cap(
 
     # The standing property now arrives *last*, behind a full cap of new ones.
     newcomers = tuple(_row(property_id=f"new-{index}") for index in range(MAX_PER_DEVICE))
-    adopted = adoptable(_snapshot(*newcomers, standing), dr.async_get(hass), registry)
+    adopted = adoptable(_snapshot(*newcomers, standing), dr.async_get(hass), registry, config_entry_id=registered_panel[0])
 
     assert standing_id in {unique_id for _row_, unique_id, _identifier in adopted}
     assert len(adopted) == MAX_PER_DEVICE
@@ -319,6 +319,7 @@ def test_a_sensor_arrives_disabled_diagnostic_and_without_statistics(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )
     assert len(sensors) == 1
@@ -341,6 +342,7 @@ def test_a_name_carries_the_node_so_it_cannot_collide_with_a_curated_one(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )[0]
     assert sensor._attr_name == "Battery 2 Cell Temperature"
@@ -357,6 +359,7 @@ def test_a_declared_boolean_becomes_a_binary_sensor(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )
     assert len(binary) == 1
@@ -369,6 +372,7 @@ def test_a_declared_boolean_becomes_a_binary_sensor(
             snapshot,
             dr.async_get(hass),
             er.async_get(hass),
+            config_entry_id=registered_panel[0],
             overlay=CurationOverlay.empty(),
         )
         == []
@@ -385,6 +389,7 @@ def test_a_property_that_stops_being_published_reads_unknown_rather_than_vanishi
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )[0]
 
@@ -402,6 +407,7 @@ def test_an_unparseable_number_is_reported_as_nothing_rather_than_as_text(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )[0]
     assert sensor.native_value is None
@@ -427,6 +433,7 @@ def test_a_unit_less_numeric_row_still_publishes_a_number(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )
     assert sensor.native_value == 42.0
@@ -444,6 +451,7 @@ def test_a_unit_less_numeric_row_that_publishes_text_reports_nothing(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )
     assert sensor.native_value is None
@@ -459,6 +467,7 @@ def test_a_unit_less_string_row_is_still_text(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )
     assert sensor.native_value == "idle"
@@ -518,6 +527,7 @@ def test_a_curated_record_shapes_the_extension_sensor(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, record),
     )
     assert entity.state_class is SensorStateClass.MEASUREMENT
@@ -539,6 +549,7 @@ def test_a_curated_unit_less_numeric_reports_a_float_under_its_state_class(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, record),
     )
     assert entity.state_class is SensorStateClass.MEASUREMENT
@@ -556,6 +567,7 @@ def test_an_uncurated_extension_row_is_exactly_todays_entity(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )
     assert entity.state_class is None
@@ -582,6 +594,7 @@ def test_a_stale_extension_record_field_is_skipped_and_the_rest_applied(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, record),
     )
     assert entity.state_class is None
@@ -603,6 +616,7 @@ def test_a_curated_binary_sensor_gets_the_only_device_class_there_can_be(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=_overlay_keyed(row, CurationRecord(device_class="problem")),
     )
     assert entity.device_class == BinarySensorDeviceClass.PROBLEM
@@ -642,6 +656,7 @@ def test_the_hint_is_carried_on_the_entity_for_curation_triage(
         snapshot,
         dr.async_get(hass),
         er.async_get(hass),
+        config_entry_id=registered_panel[0],
         overlay=CurationOverlay.empty(),
     )[0]
     assert sensor._attr_extra_state_attributes["prominence_hint"] == HINT_READING
@@ -768,3 +783,38 @@ def test_no_state_class_is_set_anywhere_in_the_extension_module() -> None:
     assert not [
         node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and "StateClass" in node.id
     ]
+
+
+def test_a_card_another_entry_owns_does_not_make_a_row_adoptable(
+    hass: HomeAssistant,
+) -> None:
+    """The ambiguity the deprecation exists to remove, on the extension side.
+
+    Identifiers are unique within a config entry and nowhere else, so a lookup
+    that searches every entry can answer with a card this entry does not own --
+    and the extension entity then renders on somebody else's device, carrying a
+    reading from a panel that device has nothing to do with. There is no card of
+    our own here, so the row is deferred exactly as it is when the card has not
+    been registered yet.
+    """
+    registry = dr.async_get(hass)
+    other = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-other", unique_id="other")
+    other.add_to_hass(hass)
+    registry.async_get_or_create(
+        config_entry_id=other.entry_id,
+        identifiers={(DOMAIN, BESS_IDENTIFIER)},
+        name="Somebody else's battery",
+    )
+    mine = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-mine", unique_id=PANEL_SERIAL)
+    mine.add_to_hass(hass)
+    registry.async_get_or_create(
+        config_entry_id=mine.entry_id,
+        identifiers={(DOMAIN, PANEL_SERIAL)},
+        name="Span Panel",
+    )
+
+    adopted = adoptable(
+        _snapshot(_row()), registry, er.async_get(hass), config_entry_id=mine.entry_id
+    )
+
+    assert adopted == []

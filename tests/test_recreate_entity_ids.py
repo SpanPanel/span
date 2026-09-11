@@ -755,7 +755,7 @@ async def test_an_area_the_user_assigned_reaches_the_proposal_under_default_part
 
     area = ar.async_get(hass).async_get_or_create("Basement")
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, SERIAL)})
+    device = device_registry.async_get_device_by_identifier((DOMAIN, SERIAL), entry.entry_id)
     assert device is not None
     device_registry.async_update_device(device.id, area_id=area.id)
 
@@ -1073,7 +1073,9 @@ async def test_a_panel_device_the_user_renamed_is_offered_the_renamed_id(
     await install.load(ORIGINAL_NAME)
 
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, SERIAL)})
+    device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, SERIAL), second_panel_entry.entry_id
+    )
     assert device is not None
     device_registry.async_update_device(device.id, name_by_user="Garage Panel")
 
@@ -1272,7 +1274,7 @@ async def test_an_area_reaches_the_proposal_for_a_control_too(
 
     area = ar.async_get(hass).async_get_or_create("Basement")
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, SERIAL)})
+    device = device_registry.async_get_device_by_identifier((DOMAIN, SERIAL), entry.entry_id)
     assert device is not None
     device_registry.async_update_device(device.id, area_id=area.id)
 

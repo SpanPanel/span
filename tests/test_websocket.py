@@ -14,7 +14,6 @@ from custom_components.span_panel.websocket import (
     _build_circuit_entity_map,
     _classify_sensor_role,
     _classify_sub_device,
-    _find_config_entry_id,
     async_register_commands,
     handle_panel_topology,
 )
@@ -198,31 +197,6 @@ class TestClassifySubDevice:
         assert _classify_sub_device(device) == "unknown"
 
 
-class TestFindConfigEntryId:
-    """Tests for _find_config_entry_id."""
-
-    def test_finds_span_entry(self):
-        """Return the config entry id for SPAN panel devices."""
-        device = MagicMock()
-        device.identifiers = {(DOMAIN, "sp3-242424-001")}
-        device.config_entries = {"entry_123"}
-        assert _find_config_entry_id(device) == "entry_123"
-
-    def test_non_span_device(self):
-        """Ignore devices that do not belong to the SPAN domain."""
-        device = MagicMock()
-        device.identifiers = {("other_domain", "some_id")}
-        device.config_entries = {"entry_123"}
-        assert _find_config_entry_id(device) is None
-
-    def test_no_config_entries(self):
-        """Return None when a SPAN device has no linked config entries."""
-        device = MagicMock()
-        device.identifiers = {(DOMAIN, "sp3-242424-001")}
-        device.config_entries = set()
-        assert _find_config_entry_id(device) is None
-
-
 class TestBuildCircuitEntityMap:
     """Tests for _build_circuit_entity_map."""
 
@@ -388,6 +362,31 @@ class TestHandlePanelTopology:
         )
 
     @pytest.mark.asyncio
+    async def test_a_span_identifier_another_entry_owns(self, hass: HomeAssistant):
+        """Refused as `not_span_panel`, exactly as the adopted commands refuse it.
+
+        A device belongs to the one entry that owns it, and that entry's domain is
+        what makes it a SPAN panel or not -- an identifier in SPAN's domain on a
+        device another entry owns does not. Both commands resolve the panel through
+        one function, so they refuse it with one code.
+        """
+        other = MockConfigEntry(domain="other_domain", data={}, entry_id="other_entry")
+        other.add_to_hass(hass)
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id="other_entry",
+            identifiers={(DOMAIN, "sp3-242424-001")},
+        )
+
+        connection = _make_mock_connection()
+        msg = {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+
+        await _handle_panel_topology_inner(hass, connection, msg)
+
+        connection.send_error.assert_called_once_with(
+            1, "not_span_panel", "Device is not a SPAN Panel device"
+        )
+
+    @pytest.mark.asyncio
     async def test_sub_device_id_rejected(self, hass: HomeAssistant):
         """Error when device_id is a sub-device, not the panel."""
         entry = MockConfigEntry(
@@ -520,6 +519,10 @@ class TestHandlePanelTopology:
         assert result["firmware"] == "spanos2/r202603/05"
         assert result["panel_size"] == 32
         assert result["device_name"] == "SPAN Panel"
+        # The panel's current device and its entry, which a consumer reads from
+        # here rather than looking the id it holds up in the device list.
+        assert result["panel_device_id"] == device.id
+        assert result["config_entry_id"] == "span_entry"
 
         # Kitchen circuit (240V).
         kitchen_data = result["circuits"]["uuid_kitchen"]

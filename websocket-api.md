@@ -27,6 +27,11 @@ relationships explicitly, keyed by circuit UUID, so the card reads a single stru
 | ----------- | ------ | ------------------------------------------------------------------------------------------------------- |
 | `device_id` | string | The Home Assistant device registry ID for the SPAN panel. Found in the URL when viewing the device page |
 
+A device ID saved before Home Assistant 2026.8 is still accepted. That release split every device belonging to several config entries into one device per entry,
+each with a new ID, so an older card configuration can hold the panel's previous ID; it resolves to the panel device SPAN owns now, and `device_id` in the
+response echoes the ID as sent. Take the panel's identity from `panel_device_id` and `config_entry_id` in the response rather than by looking `device_id` up in
+Home Assistant's device list, which no longer holds a pre-2026.8 ID.
+
 ### Response
 
 ```json
@@ -35,6 +40,8 @@ relationships explicitly, keyed by circuit UUID, so the card reads a single stru
   "firmware": "spanos2/r202603/05",
   "panel_size": 32,
   "device_id": "abc123def456",
+  "panel_device_id": "abc123def456",
+  "config_entry_id": "e5f6a7b8c9d0",
   "device_name": "SPAN Panel",
   "circuits": {
     "a1b2c3d4e5f6": {
@@ -109,15 +116,17 @@ relationships explicitly, keyed by circuit UUID, so the card reads a single stru
 
 #### Top Level
 
-| Field         | Type        | Description                                         |
-| ------------- | ----------- | --------------------------------------------------- |
-| `serial`      | string      | Panel serial number                                 |
-| `firmware`    | string      | Panel firmware version                              |
-| `panel_size`  | int or null | Total breaker spaces (e.g., 32, 40)                 |
-| `device_id`   | string      | HA device registry ID (echoed from request)         |
-| `device_name` | string      | HA device display name                              |
-| `circuits`    | object      | Circuit UUID keyed map (see below)                  |
-| `sub_devices` | object      | HA device ID keyed map of BESS/MID/EVSE (see below) |
+| Field             | Type        | Description                                         |
+| ----------------- | ----------- | --------------------------------------------------- |
+| `serial`          | string      | Panel serial number                                 |
+| `firmware`        | string      | Panel firmware version                              |
+| `panel_size`      | int or null | Total breaker spaces (e.g., 32, 40)                 |
+| `device_id`       | string      | HA device registry ID (echoed from request)         |
+| `panel_device_id` | string      | The panel's current HA device registry ID           |
+| `config_entry_id` | string      | The config entry that owns the panel                |
+| `device_name`     | string      | HA device display name                              |
+| `circuits`        | object      | Circuit UUID keyed map (see below)                  |
+| `sub_devices`     | object      | HA device ID keyed map of BESS/MID/EVSE (see below) |
 
 #### Circuit Object
 

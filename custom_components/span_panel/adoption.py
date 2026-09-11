@@ -247,7 +247,13 @@ def adopted_identifier(panel_serial: str, anchor: str) -> str:
     return f"{panel_serial}_{ADOPTED_IDENTIFIER_TOKEN}_{anchor}"
 
 
-def resolve_identifier(registry: DeviceRegistry, panel_serial: str, device: AdoptedDevice) -> str:
+def resolve_identifier(
+    registry: DeviceRegistry,
+    panel_serial: str,
+    device: AdoptedDevice,
+    *,
+    config_entry_id: str,
+) -> str:
     """Return the identifier this install already uses for this device, or a new one.
 
     **An adopted device freezes its identity anchor at first sighting.** Both
@@ -267,12 +273,22 @@ def resolve_identifier(registry: DeviceRegistry, panel_serial: str, device: Adop
 
     The registry is the memory, so this needs no new persistence: a device that
     exists was adopted before, and one that does not is being adopted now.
+
+    That memory is read within `config_entry_id`, never across every entry.
+    Identifiers are unique inside a config entry and nowhere else, so the unscoped
+    question can be answered by a device another entry owns -- and this panel's
+    device would then be frozen onto a stranger's identifier, permanently, since
+    the freeze is by design irreversible. Home Assistant deprecated the unscoped
+    lookup for that ambiguity and stops answering it in 2027.8.
     """
     for candidate in (device.device_id, device.serial_number):
         if candidate is None:
             continue
         identifier = adopted_identifier(panel_serial, candidate)
-        if registry.async_get_device(identifiers={(DOMAIN, identifier)}) is not None:
+        if (
+            registry.async_get_device_by_identifier((DOMAIN, identifier), config_entry_id)
+            is not None
+        ):
             return identifier
     return adopted_identifier(panel_serial, adopted_anchor(device))
 
@@ -403,7 +419,9 @@ def async_register_adopted_devices(
     """
     registry = dr.async_get(hass)
     for device in snapshot.adopted_devices:
-        identifier = resolve_identifier(registry, snapshot.serial_number, device)
+        identifier = resolve_identifier(
+            registry, snapshot.serial_number, device, config_entry_id=entry_id
+        )
         registry.async_get_or_create(
             config_entry_id=entry_id,
             **adopted_device_info(identifier, device, panel_device_id=panel_device_id),
@@ -855,6 +873,7 @@ def create_adopted_sensors(
     snapshot: SpanPanelSnapshot,
     registry: DeviceRegistry,
     *,
+    config_entry_id: str,
     panel_device_id: str,
     overlay: CurationOverlay,
 ) -> list[AdoptedSensor]:
@@ -869,6 +888,7 @@ def create_adopted_sensors(
         snapshot,
         registry,
         Platform.SENSOR,
+        config_entry_id=config_entry_id,
         panel_device_id=panel_device_id,
         overlay=overlay,
     )
@@ -879,6 +899,7 @@ def create_adopted_binary_sensors(
     snapshot: SpanPanelSnapshot,
     registry: DeviceRegistry,
     *,
+    config_entry_id: str,
     panel_device_id: str,
     overlay: CurationOverlay,
 ) -> list[AdoptedBinarySensor]:
@@ -889,6 +910,7 @@ def create_adopted_binary_sensors(
         snapshot,
         registry,
         Platform.BINARY_SENSOR,
+        config_entry_id=config_entry_id,
         panel_device_id=panel_device_id,
         overlay=overlay,
     )
@@ -899,6 +921,7 @@ def create_adopted_switches(
     snapshot: SpanPanelSnapshot,
     registry: DeviceRegistry,
     *,
+    config_entry_id: str,
     panel_device_id: str,
     overlay: CurationOverlay,
 ) -> list[AdoptedSwitch]:
@@ -909,6 +932,7 @@ def create_adopted_switches(
         snapshot,
         registry,
         Platform.SWITCH,
+        config_entry_id=config_entry_id,
         panel_device_id=panel_device_id,
         overlay=overlay,
     )
@@ -919,6 +943,7 @@ def create_adopted_selects(
     snapshot: SpanPanelSnapshot,
     registry: DeviceRegistry,
     *,
+    config_entry_id: str,
     panel_device_id: str,
     overlay: CurationOverlay,
 ) -> list[AdoptedSelect]:
@@ -929,6 +954,7 @@ def create_adopted_selects(
         snapshot,
         registry,
         Platform.SELECT,
+        config_entry_id=config_entry_id,
         panel_device_id=panel_device_id,
         overlay=overlay,
     )
@@ -939,6 +965,7 @@ def create_adopted_numbers(
     snapshot: SpanPanelSnapshot,
     registry: DeviceRegistry,
     *,
+    config_entry_id: str,
     panel_device_id: str,
     overlay: CurationOverlay,
 ) -> list[AdoptedNumber]:
@@ -949,6 +976,7 @@ def create_adopted_numbers(
         snapshot,
         registry,
         Platform.NUMBER,
+        config_entry_id=config_entry_id,
         panel_device_id=panel_device_id,
         overlay=overlay,
     )
@@ -961,6 +989,7 @@ def _create[AdoptedT: AdoptedEntity](
     registry: DeviceRegistry,
     platform: Platform,
     *,
+    config_entry_id: str,
     panel_device_id: str,
     overlay: CurationOverlay,
 ) -> list[AdoptedT]:
@@ -1006,7 +1035,7 @@ def _create[AdoptedT: AdoptedEntity](
     """
     built: list[AdoptedT] = []
     claimed: dict[str, str] = {}
-    for device, identifier in _adopted(snapshot, registry):
+    for device, identifier in _adopted(snapshot, registry, config_entry_id):
         for declaration in sorted(device.properties, key=lambda row: row.path):
             if classify(declaration) is not platform:
                 continue
@@ -1043,10 +1072,15 @@ def _create[AdoptedT: AdoptedEntity](
 
 
 def _adopted(
-    snapshot: SpanPanelSnapshot, registry: DeviceRegistry
+    snapshot: SpanPanelSnapshot, registry: DeviceRegistry, config_entry_id: str
 ) -> list[tuple[AdoptedDevice, str]]:
     """Each adopted device paired with the identifier this install uses for it."""
     return [
-        (device, resolve_identifier(registry, snapshot.serial_number, device))
+        (
+            device,
+            resolve_identifier(
+                registry, snapshot.serial_number, device, config_entry_id=config_entry_id
+            ),
+        )
         for device in snapshot.adopted_devices
     ]

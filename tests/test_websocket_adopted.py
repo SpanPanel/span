@@ -283,10 +283,10 @@ async def test_rows_are_grouped_by_the_device_they_render_on(
     assert battery["adopted_device"] is False
 
     registry = dr.async_get(hass)
-    adopted_card = registry.async_get_device(identifiers={(DOMAIN, ADOPTED_IDENTIFIER)})
+    adopted_card = registry.async_get_device_by_identifier((DOMAIN, ADOPTED_IDENTIFIER), ENTRY_ID)
     assert adopted_card is not None
     assert generator["device_id"] == adopted_card.id
-    bess_card = registry.async_get_device(identifiers={(DOMAIN, BESS_IDENTIFIER)})
+    bess_card = registry.async_get_device_by_identifier((DOMAIN, BESS_IDENTIFIER), ENTRY_ID)
     assert bess_card is not None
     assert battery["device_id"] == bess_card.id
 
@@ -681,13 +681,12 @@ async def test_not_span_panel(hass: HomeAssistant, hass_ws_client: WebSocketGene
 async def test_a_span_identifier_no_span_entry_owns(
     hass: HomeAssistant, hass_ws_client: WebSocketGenerator
 ) -> None:
-    """A device row that outlived its entry is refused rather than followed.
+    """A SPAN identifier on a device another entry owns is refused, not followed.
 
-    The entry's domain is checked rather than assumed, because a device row may
-    carry entries from more than one integration and the first is not necessarily
-    ours. Topology answers `not_loaded` here; this command answers
-    `not_span_panel`, because resolving the entry and checking its domain is one
-    step and a device whose SPAN entry is gone is not a SPAN panel any more.
+    A device belongs to the one entry that owns it, and that entry's domain is
+    what makes it a SPAN panel -- an identifier in SPAN's domain does not. Topology
+    refuses it with the same code, because both commands resolve the panel through
+    `resolve_panel_device`.
     """
     other = MockConfigEntry(domain="other_domain", data={}, entry_id="other_entry")
     other.add_to_hass(hass)
@@ -708,7 +707,7 @@ async def test_not_panel_device(hass: HomeAssistant, hass_ws_client: WebSocketGe
     ordinary mistake, and it earns its own code rather than an empty list.
     """
     _setup(hass)
-    bess = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BESS_IDENTIFIER)})
+    bess = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, BESS_IDENTIFIER), ENTRY_ID)
     assert bess is not None
 
     reply = await _list(hass, hass_ws_client, bess.id)
@@ -1230,9 +1229,38 @@ async def test_curate_takes_the_panel_handle(
     command it calls next, so curate resolves the panel through the same helper.
     """
     _setup(hass)
-    bess = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, BESS_IDENTIFIER)})
+    bess = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, BESS_IDENTIFIER), ENTRY_ID)
     assert bess is not None
 
     reply = await _curate(hass, hass_ws_client, bess.id, POWER_KEY, {})
 
     assert reply["error"]["code"] == "not_panel_device"
+
+
+async def test_a_card_another_entry_owns_is_not_reported_as_this_panels(
+    hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+) -> None:
+    """The editor groups rows under a card this entry owns, or under no card at all.
+
+    Identifiers are unique within a config entry and nowhere else, so an unscoped
+    lookup can resolve an adopted device to a card another entry owns. The group
+    then carries a stranger's name and a stranger's `device_id` -- pointing the
+    user at a device that has nothing to do with this panel, and offering to
+    curate rows against it. Ours is not registered yet here, so the group falls
+    back to the wire's own label with no id, exactly as it does before the first
+    reload.
+    """
+    other = MockConfigEntry(domain=DOMAIN, data={}, entry_id="entry-other", unique_id="other")
+    other.add_to_hass(hass)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=other.entry_id,
+        identifiers={(DOMAIN, ADOPTED_IDENTIFIER)},
+        name="Somebody else's generator",
+    )
+    panel = _setup(hass, register_adopted=False)
+
+    reply = await _list(hass, hass_ws_client, panel.id)
+
+    names = [group["name"] for group in reply["result"]["devices"]]
+    assert "Somebody else's generator" not in names
+    assert _group(reply, "Backup Generator")["device_id"] is None

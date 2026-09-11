@@ -575,6 +575,7 @@ async def async_setup_entry(
             coordinator,
             coordinator.data,
             dr.async_get(hass),
+            config_entry_id=config_entry.entry_id,
             panel_device_id=config_entry.runtime_data.panel_device_id,
             overlay=config_entry.runtime_data.curation,
         )
