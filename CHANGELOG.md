@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 - **A SPAN Panel card set up before Home Assistant 2026.8 works again, with nothing to change** — Home Assistant gave the panel a new device ID during that
   upgrade if a helper, such as a utility meter, was attached to it. A card still holding the old ID now finds the panel again: its battery, charger and other
   devices, its monitoring and its circuits' areas all come back, where it showed no devices or an intermittent "not loaded" error.
+- **The card no longer shows an empty tile for the Microgrid Interconnect** — a device with nothing to display is now left off the card rather than drawn as a
+  bare header and settings icon.
 
 ## [2.1.1] - 8/2026
 
