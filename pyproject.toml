@@ -24,14 +24,14 @@ dev = [
     "types-PyYAML",
     "mypy==2.3.1",
     "pyright==1.1.411",
-    "ruff==0.16.5",
+    "ruff==0.16.6",
     "bandit[toml]==1.9.4",
-    "prek>=0.5.0",
+    "prek>=0.5.2",
     "voluptuous-stubs",
     "python-direnv",
     "prettier",
     "radon==6.0.1",
-    "pylint==4.0.7",
+    "pylint==4.0.8",
     # Pinned, not floored: each release pins one exact Home Assistant, so this
     # and the `homeassistant` pin above are a single choice rather than two.
     # 0.13.357 is the release that pins 2026.8.3 — the version pinned above; a
