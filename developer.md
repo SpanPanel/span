@@ -75,6 +75,18 @@ echo 'dotenv' > .envrc
 direnv allow
 ```
 
+## Worktrees
+
+Create worktrees with the script rather than `git worktree add`:
+
+```bash
+./scripts/new-worktree.sh <name> [<branch>]    # <branch> defaults to feat/<name>
+```
+
+It fetches `origin`, fast-forwards `main` where that is safe, creates `../span-<name>` on a branch that does not track a remote, links `.env` from the primary
+checkout, and runs `setup-hooks.sh` inside it. The worktree gets a virtual environment of its own, which resolves the library from `../../span/span-panel-api`
+like the primary checkout does. When a library worktree of the same name exists, the script ends by printing the command to install it, described below.
+
 ## Working against unreleased library code
 
 `pyproject.toml` installs `span-panel-api` and both adapters from `../../span/span-panel-api` as editable path dependencies. That is a committed, shared file:
