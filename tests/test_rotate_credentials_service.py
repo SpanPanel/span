@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, CoreState, HomeAssistant, ServiceResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+import httpx
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+from span_panel_api import PassphraseRotation
+from span_panel_api.exceptions import (
+    SpanPanelAPIError,
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelInsufficientPrivilegeError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+    SpanPanelTLSVerificationError,
+)
 
 from custom_components.span_panel import (
     SpanPanelRuntimeData,
     _async_register_credential_services,
+    update_listener,
 )
 from custom_components.span_panel.const import (
     CONF_API_VERSION,
@@ -26,9 +38,30 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.services import (
+    _ROTATION_RECONNECT_DELAYS_S,
+    _ROTATIONS_IN_PROGRESS,
+    rotation_in_progress,
+)
 
 OLD_BROKER_PASSWORD = "old-broker-password"
 NEW_BROKER_PASSWORD = "new-broker-password"
+# The panel reports the same value in both fields; distinct here so a test can
+# tell which field the integration stored.
+NEW_HOP_PASSPHRASE = "new-hop-passphrase"
+ROTATION = PassphraseRotation(
+    ebus_broker_password=NEW_BROKER_PASSWORD, hop_passphrase=NEW_HOP_PASSPHRASE
+)
+
+
+def _raised_from(
+    error_type: type[SpanPanelConnectionError | SpanPanelTimeoutError],
+    cause_type: type[httpx.TransportError],
+) -> Exception:
+    """Build a library transport error chained from the httpx error behind it."""
+    error = error_type(cause_type.__name__)
+    error.__cause__ = cause_type(cause_type.__name__)
+    return error
 
 
 def _add_v2_entry(hass: HomeAssistant) -> MockConfigEntry:
@@ -70,14 +103,15 @@ def _non_admin_context(hass: HomeAssistant) -> Context:
     return Context(user_id=user.id)
 
 
-async def _call_rotate(hass: HomeAssistant, context: Context | None) -> None:
+async def _call_rotate(hass: HomeAssistant, context: Context | None) -> ServiceResponse:
     """Call the service, blocking so exceptions propagate."""
-    await hass.services.async_call(
+    return await hass.services.async_call(
         DOMAIN,
         "rotate_credentials",
         {},
         blocking=True,
         context=context,
+        return_response=True,
     )
 
 
@@ -92,13 +126,14 @@ async def test_admin_rotation_stores_the_new_password_and_reloads(
     reload_mock = AsyncMock(return_value=True)
     with (
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
         ) as rotate,
         patch.object(hass.config_entries, "async_reload", reload_mock),
     ):
-        await _call_rotate(hass, _admin_context(hass))
+        response = await _call_rotate(hass, _admin_context(hass))
 
+    assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": True}
     assert rotate.await_count == 1
     assert rotate.await_args.args[0] == "192.168.1.100"
     assert rotate.await_args.args[1] == "panel-access-token"
@@ -113,8 +148,8 @@ async def test_non_admin_is_refused(hass: HomeAssistant) -> None:
     _async_register_credential_services(hass)
 
     with patch(
-        "custom_components.span_panel.services.regenerate_passphrase",
-        AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        "custom_components.span_panel.services.rotate_passphrase",
+        AsyncMock(return_value=ROTATION),
     ) as rotate, pytest.raises(ServiceValidationError) as err:
         await _call_rotate(hass, _non_admin_context(hass))
 
@@ -130,8 +165,8 @@ async def test_contextless_call_is_refused(hass: HomeAssistant) -> None:
     _async_register_credential_services(hass)
 
     with patch(
-        "custom_components.span_panel.services.regenerate_passphrase",
-        AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        "custom_components.span_panel.services.rotate_passphrase",
+        AsyncMock(return_value=ROTATION),
     ) as rotate, pytest.raises(ServiceValidationError) as err:
         await _call_rotate(hass, None)
 
@@ -163,8 +198,8 @@ async def test_connection_failure_leaves_the_old_password_in_place(
     reload_mock = AsyncMock(return_value=True)
     with (
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            AsyncMock(side_effect=SpanPanelConnectionError("unreachable")),
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(side_effect=_raised_from(SpanPanelConnectionError, httpx.ConnectError)),
         ),
         patch.object(hass.config_entries, "async_reload", reload_mock),
         pytest.raises(ServiceValidationError) as err,
@@ -183,7 +218,7 @@ async def test_rejected_token_asks_for_reauthentication(hass: HomeAssistant) -> 
     _async_register_credential_services(hass)
 
     with patch(
-        "custom_components.span_panel.services.regenerate_passphrase",
+        "custom_components.span_panel.services.rotate_passphrase",
         AsyncMock(side_effect=SpanPanelAuthError("401")),
     ), pytest.raises(ServiceValidationError) as err:
         await _call_rotate(hass, _admin_context(hass))
@@ -204,8 +239,8 @@ async def test_missing_access_token_is_reported_before_any_call(
     _async_register_credential_services(hass)
 
     with patch(
-        "custom_components.span_panel.services.regenerate_passphrase",
-        AsyncMock(return_value=NEW_BROKER_PASSWORD),
+        "custom_components.span_panel.services.rotate_passphrase",
+        AsyncMock(return_value=ROTATION),
     ) as rotate, pytest.raises(ServiceValidationError) as err:
         await _call_rotate(hass, _admin_context(hass))
 
@@ -260,8 +295,8 @@ async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> N
 
     with (
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
         ),
         patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
     ):
@@ -271,6 +306,7 @@ async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> N
             {"config_entry_id": second.entry_id},
             blocking=True,
             context=_admin_context(hass),
+            return_response=True,
         )
 
     assert second.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
@@ -314,8 +350,8 @@ async def test_two_panels_and_no_id_refuses_rather_than_picking_one(
 
     with (
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
         ) as rotate,
         patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
         pytest.raises(ServiceValidationError) as err,
@@ -329,26 +365,244 @@ async def test_two_panels_and_no_id_refuses_rather_than_picking_one(
 
 
 @pytest.mark.asyncio
-async def test_a_reload_that_fails_is_reported_with_the_password_already_stored(
+async def test_a_reconnect_that_never_succeeds_still_returns_the_passphrase(
     hass: HomeAssistant,
 ) -> None:
-    """The panel did not come back on the new password; the caller must hear it."""
+    """Raising would discard the only copy of the new passphrase, so it is returned."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    reload_mock = AsyncMock(return_value=False)
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ),
+        patch.object(hass.config_entries, "async_reload", reload_mock),
+        patch("custom_components.span_panel.services.asyncio.sleep", AsyncMock()) as sleep,
+    ):
+        response = await _call_rotate(hass, _admin_context(hass))
+
+    assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": False}
+    assert [c.args[0] for c in sleep.await_args_list] == list(_ROTATION_RECONNECT_DELAYS_S)
+    assert sum(_ROTATION_RECONNECT_DELAYS_S) == pytest.approx(30.0)
+    assert reload_mock.await_count == len(_ROTATION_RECONNECT_DELAYS_S) + 1
+    # The panel has already issued it, so the entry must keep the new one.
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
+    assert not rotation_in_progress(hass, entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_a_reload_that_raises_still_returns_the_passphrase(
+    hass: HomeAssistant,
+) -> None:
+    """An exception from a reload is a failed attempt, not a lost response."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    reload_mock = AsyncMock(side_effect=[RuntimeError("setup blew up"), True])
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ),
+        patch.object(hass.config_entries, "async_reload", reload_mock),
+        patch("custom_components.span_panel.services.asyncio.sleep", AsyncMock()),
+    ):
+        response = await _call_rotate(hass, _admin_context(hass))
+
+    assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": True}
+    assert reload_mock.await_count == 2
+    assert not rotation_in_progress(hass, entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_reconnect_retries_until_the_broker_accepts_the_new_password(
+    hass: HomeAssistant,
+) -> None:
+    """Refusals right after the rotation are retried with the new password, under the grace flag."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    seen: list[tuple[str, bool]] = []
+
+    async def _reload(entry_id: str) -> bool:
+        seen.append(
+            (
+                hass.config_entries.async_get_entry(entry_id).data[CONF_EBUS_BROKER_PASSWORD],
+                rotation_in_progress(hass, entry_id),
+            )
+        )
+        return len(seen) == 3
+
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ),
+        patch.object(hass.config_entries, "async_reload", AsyncMock(side_effect=_reload)),
+        patch("custom_components.span_panel.services.asyncio.sleep", AsyncMock()) as sleep,
+    ):
+        response = await _call_rotate(hass, _admin_context(hass))
+
+    assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": True}
+    # Every attempt uses the new password and runs inside the grace window.
+    assert seen == [(NEW_BROKER_PASSWORD, True)] * 3
+    assert [c.args[0] for c in sleep.await_args_list] == list(_ROTATION_RECONNECT_DELAYS_S[:2])
+    assert not rotation_in_progress(hass, entry.entry_id)
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+
+
+@pytest.mark.asyncio
+async def test_the_options_listener_leaves_the_reload_to_the_rotation(
+    hass: HomeAssistant,
+) -> None:
+    """Storing the new password must not start a second, unguarded reload."""
+    entry = _add_v2_entry(hass)
+    hass.set_state(CoreState.running)
+    hass.data.setdefault(_ROTATIONS_IN_PROGRESS, set()).add(entry.entry_id)
+
+    with patch.object(hass.config_entries, "async_reload", AsyncMock()) as reload_mock:
+        await update_listener(hass, entry)
+
+    reload_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_passphrase_is_returned_but_never_stored_or_logged(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The integration keeps only the broker password; the passphrase goes to the caller."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+    caplog.set_level(logging.DEBUG)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ),
+        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
+    ):
+        response = await _call_rotate(hass, _admin_context(hass))
+
+    assert response["hop_passphrase"] == NEW_HOP_PASSPHRASE
+    assert NEW_HOP_PASSPHRASE not in repr(dict(entry.data))
+    assert NEW_HOP_PASSPHRASE not in repr(dict(entry.options))
+    assert NEW_HOP_PASSPHRASE not in caplog.text
+    assert NEW_BROKER_PASSWORD not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_call_that_does_not_ask_for_the_response_is_refused(
+    hass: HomeAssistant,
+) -> None:
+    """Without the response the new passphrase would be lost, so nothing is rotated."""
     entry = _add_v2_entry(hass)
     _async_register_credential_services(hass)
 
     with (
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ) as rotate,
+        pytest.raises(ServiceValidationError),
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            "rotate_credentials",
+            {},
+            blocking=True,
+            context=_admin_context(hass),
+        )
+
+    rotate.assert_not_awaited()
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
+
+
+@pytest.mark.parametrize(
+    ("error", "translation_key", "validation"),
+    [
+        (
+            SpanPanelInsufficientPrivilegeError("403"),
+            "rotate_credentials_insufficient_privilege",
+            True,
         ),
-        patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=False)),
+        (SpanPanelAuthError("401"), "rotate_credentials_auth_failed", True),
+        (SpanPanelServerError("500", status_code=500), "rotate_credentials_outcome_unknown", False),
+        (SpanPanelServerError("503", status_code=503), "rotate_credentials_failed", True),
+        (SpanPanelServerError("502", status_code=502), "rotate_credentials_outcome_unknown", False),
+        (
+            SpanPanelAPIError("unreadable body", status_code=200),
+            "rotate_credentials_outcome_unknown",
+            False,
+        ),
+        (SpanPanelAPIError("404", status_code=404), "rotate_credentials_failed", True),
+        (
+            _raised_from(SpanPanelTimeoutError, httpx.ReadTimeout),
+            "rotate_credentials_outcome_unknown",
+            False,
+        ),
+        (
+            _raised_from(SpanPanelTimeoutError, httpx.WriteTimeout),
+            "rotate_credentials_outcome_unknown",
+            False,
+        ),
+        (
+            _raised_from(SpanPanelConnectionError, httpx.RemoteProtocolError),
+            "rotate_credentials_outcome_unknown",
+            False,
+        ),
+        (
+            _raised_from(SpanPanelConnectionError, httpx.ReadError),
+            "rotate_credentials_outcome_unknown",
+            False,
+        ),
+        (SpanPanelTimeoutError("timed out"), "rotate_credentials_outcome_unknown", False),
+        (
+            _raised_from(SpanPanelTimeoutError, httpx.ConnectTimeout),
+            "rotate_credentials_failed",
+            True,
+        ),
+        (
+            _raised_from(SpanPanelTimeoutError, httpx.PoolTimeout),
+            "rotate_credentials_failed",
+            True,
+        ),
+        (
+            _raised_from(SpanPanelConnectionError, httpx.ConnectError),
+            "rotate_credentials_failed",
+            True,
+        ),
+        (SpanPanelTLSVerificationError("bad certificate"), "rotate_credentials_failed", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_each_rotation_error_has_its_own_message_and_stores_nothing(
+    hass: HomeAssistant,
+    error: Exception,
+    translation_key: str,
+    validation: bool,
+) -> None:
+    """An unknown outcome is not reported as a refusal that changed nothing."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    reload_mock = AsyncMock(return_value=True)
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(side_effect=error),
+        ),
+        patch.object(hass.config_entries, "async_reload", reload_mock),
         pytest.raises(HomeAssistantError) as err,
     ):
         await _call_rotate(hass, _admin_context(hass))
 
-    assert err.value.translation_key == "rotate_credentials_reload_failed"
-    # The panel has already issued it, so the entry must keep the new one.
-    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
+    assert err.value.translation_key == translation_key
+    assert isinstance(err.value, ServiceValidationError) is validation
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
+    reload_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -364,8 +618,8 @@ async def test_an_unusable_stored_ca_refuses_rather_than_rotating_in_the_clear(
 
     with (
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            AsyncMock(return_value=NEW_BROKER_PASSWORD),
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
         ) as rotate,
         patch.object(hass.config_entries, "async_reload", AsyncMock(return_value=True)),
         pytest.raises(ServiceValidationError) as err,

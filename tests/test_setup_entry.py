@@ -30,6 +30,7 @@ from custom_components.span_panel.const import (
 from custom_components.span_panel.control_gate import ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay, CurationRecord
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
+from custom_components.span_panel.services import _ROTATIONS_IN_PROGRESS
 
 from .factories import SpanPanelSnapshotFactory
 
@@ -246,6 +247,33 @@ async def test_async_setup_entry_v2_auth_error_closes_client(
             "custom_components.span_panel.SpanMqttClient", return_value=client
         ),
         pytest.raises(ConfigEntryAuthFailed, match="MQTT authentication failed"),
+    ):
+        await async_setup_entry(hass, entry)
+
+    client.close.assert_awaited_once()
+
+
+async def test_broker_auth_refusal_during_a_rotation_is_not_ready_not_reauth(
+    hass: HomeAssistant,
+) -> None:
+    """Right after a rotation the broker may still refuse the new password.
+
+    `rotate_credentials` retries the reload, so the refusal must not start a
+    reauth flow while it does.
+    """
+    entry = _create_v2_entry()
+    entry.add_to_hass(hass)
+    client = MagicMock()
+    client.connect = AsyncMock(side_effect=SpanPanelAuthError("bad auth"))
+    client.close = AsyncMock()
+    hass.data.setdefault(_ROTATIONS_IN_PROGRESS, set()).add(entry.entry_id)
+
+    with (
+        patch("custom_components.span_panel.async_register_commands"),
+        patch(
+            "custom_components.span_panel.SpanMqttClient", return_value=client
+        ),
+        pytest.raises(ConfigEntryNotReady, match="rotated password"),
     ):
         await async_setup_entry(hass, entry)
 

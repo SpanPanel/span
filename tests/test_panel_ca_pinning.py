@@ -11,6 +11,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from span_panel_api import PassphraseRotation
 from span_panel_api.exceptions import SpanPanelCAChangedError, SpanPanelConnectionError
 
 from custom_components.span_panel import _async_pinned_ca, async_migrate_entry
@@ -570,10 +571,12 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
             return_value=context,
         ),
         patch(
-            "custom_components.span_panel.services.regenerate_passphrase",
-            new=AsyncMock(return_value="new"),
+            "custom_components.span_panel.services.rotate_passphrase",
+            new=AsyncMock(
+                return_value=PassphraseRotation(ebus_broker_password="new", hop_passphrase="new")
+            ),
         ) as rotate,
-        patch.object(hass.config_entries, "async_reload", new=AsyncMock()),
+        patch.object(hass.config_entries, "async_reload", new=AsyncMock(return_value=True)),
     ):
         await hass.services.async_call(
             DOMAIN,
@@ -581,6 +584,7 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
             {},
             blocking=True,
             context=Context(user_id=user.id),
+            return_response=True,
         )
 
     assert rotate.await_args is not None

@@ -183,6 +183,7 @@ class SpanBatterySnapshotFactory:
         software_version: str | None = None,
         nameplate_capacity_kwh: float | None = None,
         connected: bool | None = None,
+        communication_state: str | None = None,
     ) -> SpanBatterySnapshot:
         """Create a SpanBatterySnapshot with reasonable defaults."""
         return SpanBatterySnapshot(
@@ -195,6 +196,7 @@ class SpanBatterySnapshotFactory:
             software_version=software_version,
             nameplate_capacity_kwh=nameplate_capacity_kwh,
             connected=connected,
+            communication_state=communication_state,
         )
 
 

@@ -519,6 +519,9 @@
     "rotate_credentials_failed": {
       "message": "The SPAN Panel at {host} did not complete the credential rotation. The existing credentials are unchanged."
     },
+    "rotate_credentials_insufficient_privilege": {
+      "message": "The stored access token has reduced privileges and cannot rotate credentials. Reauthenticate the integration with the panel passphrase, then rotate again."
+    },
     "rotate_credentials_no_entry": {
       "message": "No loaded SPAN panel using the v2 API was found."
     },
@@ -528,8 +531,8 @@
     "rotate_credentials_no_token": {
       "message": "This SPAN panel has no stored access token. Reauthenticate the integration before rotating credentials."
     },
-    "rotate_credentials_reload_failed": {
-      "message": "The new broker password was stored, but the SPAN Panel integration did not come back up on it. The panel has already accepted the new password, so do not rotate again: check the logs and reload the integration."
+    "rotate_credentials_outcome_unknown": {
+      "message": "The SPAN Panel at {host} did not report the outcome of the credential rotation. The panel passphrase and broker password may have changed. Reauthenticate the integration; if the passphrase is no longer accepted, use proof of proximity."
     },
     "rotate_credentials_requires_admin": {
       "message": "Only a Home Assistant administrator can rotate SPAN Panel credentials."
@@ -870,7 +873,7 @@
     },
     "rotate_credentials": {
       "name": "Rotate panel credentials",
-      "description": "Ask the SPAN panel for a new eBus MQTT broker password, store it, and reload the integration. The previous broker password stops working immediately, so any other local client using it — a second Home Assistant instance, a script, or third-party tooling — must be re-provisioned from the panel before it will reconnect. The panel access token and the panel passphrase are not changed. Only a Home Assistant administrator can run this, and it cannot be called from an automation or script.",
+      "description": "Ask the SPAN panel to replace its passphrase, which is also its eBus MQTT broker password, store the new broker password, and reload the integration. Both the panel passphrase and the broker password change. The new passphrase is returned in the response and is not stored by the integration, so save it before closing the response. Any other local client using the previous password, such as a second Home Assistant instance, a script, or third-party tooling, must be re-provisioned with the new one. The broker may disconnect the session and needs a moment to accept the new password, so the integration retries for about 30 seconds before reporting in the response that it did not reconnect. Only a Home Assistant administrator can run this, and it cannot be called from an automation or script.",
       "fields": {
         "config_entry_id": {
           "name": "Config entry",

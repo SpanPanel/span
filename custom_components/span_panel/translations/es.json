@@ -519,6 +519,9 @@
     "rotate_credentials_failed": {
       "message": "El SPAN Panel en {host} no completó la rotación de credenciales. Las credenciales existentes no han cambiado."
     },
+    "rotate_credentials_insufficient_privilege": {
+      "message": "El token de acceso almacenado tiene privilegios reducidos y no puede rotar las credenciales. Vuelva a autenticar la integración con la frase de acceso del panel y luego rote de nuevo."
+    },
     "rotate_credentials_multiple_panels": {
       "message": "Hay más de un SPAN Panel cargado. Elija en el campo de entrada de configuración el panel que desea rotar: al rotar, la contraseña anterior del broker deja de funcionar para todos los demás clientes de ese panel."
     },
@@ -528,8 +531,8 @@
     "rotate_credentials_no_token": {
       "message": "Este SPAN Panel no tiene un token de acceso almacenado. Vuelva a autenticar la integración antes de rotar las credenciales."
     },
-    "rotate_credentials_reload_failed": {
-      "message": "Se guardó la nueva contraseña del broker, pero la integración de SPAN Panel no volvió a iniciarse con ella. El panel ya aceptó la nueva contraseña, así que no vuelva a rotar: revise los registros y recargue la integración."
+    "rotate_credentials_outcome_unknown": {
+      "message": "El SPAN Panel en {host} no informó el resultado de la rotación de credenciales. La frase de acceso del panel y la contraseña del broker pueden haber cambiado. Vuelva a autenticar la integración; si la frase de acceso ya no se acepta, use la prueba de proximidad."
     },
     "rotate_credentials_requires_admin": {
       "message": "Solo un administrador de Home Assistant puede rotar las credenciales del SPAN Panel."
@@ -870,7 +873,7 @@
     },
     "rotate_credentials": {
       "name": "Rotar las credenciales del panel",
-      "description": "Pide al SPAN Panel una nueva contraseña del broker MQTT eBus, la guarda y recarga la integración. La contraseña anterior deja de funcionar de inmediato, por lo que cualquier otro cliente local que la utilice — una segunda instancia de Home Assistant, un script o herramientas de terceros — deberá volver a aprovisionarse desde el panel antes de poder reconectarse. El token de acceso del panel y la contraseña del panel no cambian. Solo un administrador de Home Assistant puede ejecutarlo, y no se puede llamar desde una automatización o un script.",
+      "description": "Pide al SPAN Panel que reemplace su frase de acceso, que también es la contraseña del broker MQTT eBus, guarda la nueva contraseña del broker y recarga la integración. Cambian tanto la frase de acceso del panel como la contraseña del broker. La nueva frase de acceso se devuelve en la respuesta y la integración no la guarda, así que guárdela antes de cerrar la respuesta. Cualquier otro cliente local que use la contraseña anterior, como una segunda instancia de Home Assistant, un script o herramientas de terceros, debe volver a aprovisionarse con la nueva. El broker puede desconectar la sesión y necesita un momento para aceptar la nueva contraseña, por lo que la integración reintenta durante unos 30 segundos antes de indicar en la respuesta que no se reconectó. Solo un administrador de Home Assistant puede ejecutarlo, y no se puede llamar desde una automatización o un script.",
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuración",

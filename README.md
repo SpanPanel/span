@@ -214,7 +214,7 @@ islanded: the grid can be down while your home runs happily off the battery.
 can island — so **Grid Islandable** reads `Off` and **Grid Forming Entity** reads `Grid` rather than either going unavailable.
 
 `DSM Grid State` keeps its entity id and history but is no longer inferred from the battery or the dominant power source; it now reads the islanding state the
-MID actually senses.
+MID actually senses, or your GFE override while the panel is acting on one.
 
 ### Power Sensor Attributes
 
@@ -517,6 +517,9 @@ restoration in this state. Only an external signal (utility-side sensor) or manu
 The **GFE Override: Grid Connected** button tells the panel that the grid is back and shedding can stop. When the BESS restores communication, it automatically
 reclaims control and the override is superseded — no manual undo is needed.
 
+The button is available only while the panel is not already on grid and the battery reports its **Communication State** as lost or degraded, which is when the
+panel accepts the override. On firmware that does not publish that state, it is available while **BESS Connected** is off.
+
 **Risk asymmetry** — Telling the panel to shed (conservative direction) is low-risk; worst case is unnecessary circuit disruption. Telling the panel the grid is
 back when it is not means unmanaged battery drain and reduced runtime, which could affect critical equipment. The battery protects itself by disconnecting when
 depleted, so there is no overload risk, but runtime will be reduced. Use the override button only with confidence that the grid has actually been restored — via
@@ -673,25 +676,31 @@ Commands report one of four outcomes, or a refusal, and the distinctions matter:
 
 ### Rotating panel credentials
 
-This asks the panel for a new password for the connection the integration uses, stores it, and reloads. Run it after a contractor visit, a suspected exposure,
-or anything else that put someone in front of your panel.
+This asks the panel to replace its passphrase, which is also the password for the connection the integration uses, stores the new broker password, and reloads.
+Run it after a contractor visit, a suspected exposure, or anything else that put someone in front of your panel.
 
 ```yaml
 action: span_panel.rotate_credentials
 data: {}
 ```
 
-**Run it yourself, from the interface.** Only a Home Assistant administrator can, and an automation or script cannot. With more than one panel, set the **Config
-entry** field to say which — the action refuses to guess.
+**Run it yourself, from the interface, and save the new passphrase.** Only a Home Assistant administrator can, and an automation or script cannot. The new panel
+passphrase is shown in the action's response and nowhere else: the integration does not store it. With more than one panel, set the **Config entry** field to
+say which — the action refuses to guess.
 
 **Anything else talking to your panel stops until you set it up again.** A second Home Assistant, a script, third-party tooling: each has to be given the new
-password from the panel before it reconnects. This integration handles itself. Your panel passphrase does not change, so the SPAN app is unaffected.
+password before it reconnects. This integration handles itself: the broker may disconnect the session and needs a moment to accept the new password, so the
+integration keeps retrying with the new password for about 30 seconds.
 
-**A failure changes nothing, so fix the cause and run it again.** If the panel rejects the integration's sign-in, reauthenticate it first. If a repair about the
-panel's certificate is open, resolve that first — a new password is never sent over a connection that cannot be verified.
+**A refused rotation changes nothing, so fix the cause and run it again.** If the panel rejects the integration's sign-in, or says its access token has reduced
+privileges, reauthenticate it with the panel passphrase first. If a repair about the panel's certificate is open, resolve that first — a new password is never
+sent over a connection that cannot be verified.
 
-**The one exception: if the reload afterwards fails, do not run it again.** The panel has already accepted the new password and the integration has stored it,
-so rotating a second time would throw away the one that works. Check the log and reload the integration instead.
+**If the panel does not report the outcome, assume the passphrase may have changed.** Reauthenticate the integration, using proof of proximity if the old
+passphrase is no longer accepted.
+
+**If the response says `reconnected: false`, do not run it again.** The panel has already accepted the new password and the integration has stored it, so
+rotating a second time would throw away the one that works. Check the log and reload the integration instead.
 
 ### Recommended deployment
 

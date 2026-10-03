@@ -119,6 +119,7 @@ from .services import (  # noqa: F401
     _build_set_circuit_threshold_schema,
     _build_set_global_monitoring_schema,
     _build_set_mains_threshold_schema,
+    rotation_in_progress,
 )
 from .util import snapshot_to_device_info
 from .websocket import async_register_commands
@@ -516,6 +517,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
                 raise ConfigEntryError(str(err)) from err
             except SpanPanelAuthError as err:
                 await client.close()
+                if rotation_in_progress(hass, entry.entry_id):
+                    # Just after `rotate_credentials` the broker may refuse the
+                    # new password for a moment; the service retries the reload.
+                    raise ConfigEntryNotReady(
+                        "MQTT broker has not accepted the rotated password yet"
+                    ) from err
                 raise ConfigEntryAuthFailed(f"MQTT authentication failed: {err}") from err
             except SpanPanelValidationError as err:
                 # The library refusing a stored combination it will not guess
@@ -805,6 +812,10 @@ async def update_listener(hass: HomeAssistant, entry: SpanPanelConfigEntry) -> N
 
     try:
         if hass.state is not CoreState.running:
+            return
+
+        # `rotate_credentials` stored the new password and reloads it itself.
+        if rotation_in_progress(hass, entry.entry_id):
             return
 
         await hass.config_entries.async_reload(entry.entry_id)
