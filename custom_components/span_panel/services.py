@@ -888,7 +888,9 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             try:
                 return await hass.config_entries.async_reload(entry.entry_id)
             except Exception:
-                _LOGGER.exception("Reloading SPAN panel entry %s after a rotation failed", entry.entry_id)
+                _LOGGER.exception(
+                    "Reloading SPAN panel entry %s after a rotation failed", entry.entry_id
+                )
                 return False
 
         in_progress = hass.data.setdefault(_ROTATIONS_IN_PROGRESS, set())
