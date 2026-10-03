@@ -16,6 +16,9 @@ from .runtime import SpanPanelConfigEntry
 
 PARALLEL_UPDATES = 1
 
+_HEALTHY_COMMUNICATION_STATE: Final = "OK"
+"""The battery communication state during which the panel ignores the assertion."""
+
 
 GFE_OVERRIDE_DESCRIPTION: Final = ButtonEntityDescription(
     key="gfe_override",
@@ -95,6 +98,13 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
 
         One useful consequence: `dsm_state` folds in the user's own assertion, so once
         a press takes effect the button disables itself rather than inviting a second.
+
+        **The battery's own link health decides, when it is published.** The panel
+        accepts the assertion only while the battery's communication state is not
+        `OK`, so any other value (`LOST`, `DEGRADED`, `UNKNOWN`) makes the button
+        available. When no communication state is published, `connected` decides
+        instead, and an absent connection status counts as eligible because the
+        panel still accepts the assertion then.
         """
         if not self._transport_available:
             return False
@@ -103,8 +113,12 @@ class SpanPanelGFEOverrideButton(SpanPanelEntity, ButtonEntity):
         if not super().available:
             return False
         snapshot: SpanPanelSnapshot = self.coordinator.data
-        bess_connected = snapshot.battery.connected if snapshot.battery else None
-        if bess_connected is True:
+        battery = snapshot.battery
+        communication_state = battery.communication_state if battery else None
+        if communication_state is not None:
+            if communication_state.upper() == _HEALTHY_COMMUNICATION_STATE:
+                return False
+        elif battery is not None and battery.connected is True:
             return False
         if snapshot.dsm_state == "DSM_ON_GRID":
             return False

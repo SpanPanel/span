@@ -88,8 +88,8 @@ _INTERNAL_ROUTES: Mapping[Declaration, str] = {
         "adapter parses the tree, so it is consumed before any snapshot exists"
     ),
     Declaration("distribution-enclosure", "shed", "asserted-islanding-state"): (
-        "tier 2 of resolve_islanding_state (schema_1 panel.py), shadowed in this "
-        "fixture by the MID's tier-1 answer, and the write target of the existing "
+        "tier 1 of resolve_islanding_state (schema_1 panel.py), whose probe value "
+        "ON_GRID matches this fixture's MID, and the write target of the existing "
         "dominant-power-source control (schema_1 adapter.py)"
     ),
     Declaration("lugs", "connection", "feeds-device-id"): (

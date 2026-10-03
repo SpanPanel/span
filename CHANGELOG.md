@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+Reported and fixed by [@dcj](https://github.com/dcj) in [#277](https://github.com/SpanPanel/span/pull/277), from issue
+[#276](https://github.com/SpanPanel/span/issues/276).
+
+### Fixed
+
+- **Rotate panel credentials now returns the new panel passphrase**: the panel replaces its passphrase along with the broker password, so the action's response
+  carries the new passphrase for you to save. The integration still does not store it, and the action can only be run with its response.
+- **The integration reconnects after a rotation instead of asking to reauthenticate**: the broker may not accept the new password as soon as the panel returns
+  it, so the integration retries with the new password for about a minute. If it still has not reconnected, the response says so; run the rotation again, or as
+  a last resort restart the panel. Access tokens already issued, including the integration's, are not revoked.
+- **Rotation errors say what happened**: a reduced-privilege access token and a panel that did not report the outcome each get their own message, and the latter
+  no longer claims that nothing changed. A request that timed out or lost its connection after it was sent is reported as an unknown outcome, and a panel whose
+  passphrase service is not running is reported as unchanged. When the outcome is unknown, the message says to run the rotation again, and to reauthenticate only
+  if the panel refuses it.
+- **Rotate panel credentials works on a panel that is not loaded**: a panel that did not reconnect after a rotation, or that restarted with a broker password
+  the panel no longer accepts, can be rotated again, since the rotation needs only the stored access token, which the panel does not revoke.
+- **Overlapping rotations of one panel run one after the other**: a second call, such as a double submit, waits until the first has reconnected, so the stored
+  broker password is the one from the later rotation.
+- **GFE Override button follows the battery's own link health**: on firmware that publishes the battery's Communication State, the button is available only
+  while that state is anything other than OK, which is when the panel accepts the override. Elsewhere it is available unless BESS Connected is on.
+- **DSM Grid State shows a GFE override while the panel is acting on it**, instead of the islanding state the MID senses.
+
 ## [2.1.2] - 9/2026
 
 ### Fixed

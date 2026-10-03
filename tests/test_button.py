@@ -148,6 +148,56 @@ def test_gfe_override_button_available_only_when_override_is_relevant() -> None:
     assert button.available is False
 
 
+@pytest.mark.parametrize(
+    ("communication_state", "connected", "expected"),
+    [
+        ("OK", False, False),
+        ("OK", None, False),
+        ("ok", False, False),
+        ("UNKNOWN", True, True),
+        ("UNKNOWN", False, True),
+        ("LOST", True, True),
+        ("LOST", None, True),
+        ("DEGRADED", True, True),
+        ("DEGRADED", False, True),
+        (None, True, False),
+        (None, False, True),
+        (None, None, True),
+    ],
+)
+def test_gfe_override_button_follows_the_battery_communication_state(
+    communication_state: str | None, connected: bool | None, expected: bool
+) -> None:
+    """The battery's own communication state gates the button when it is published.
+
+    The panel accepts the assertion only while that state is not OK, whatever
+    `connected` says. `connected` is consulted only when no communication state is
+    published, and an absent connection status counts as eligible.
+    """
+    snapshot = SpanPanelSnapshotFactory.create(
+        battery=SpanBatterySnapshotFactory.create(
+            connected=connected, communication_state=communication_state
+        ),
+        dsm_state="DSM_OFF_GRID",
+    )
+    coordinator = _make_button_coordinator(snapshot)
+    button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
+
+    assert button.available is expected
+
+
+def test_gfe_override_button_stays_unavailable_on_grid_with_comms_lost() -> None:
+    """A LOST battery link does not override the on-grid check."""
+    snapshot = SpanPanelSnapshotFactory.create(
+        battery=SpanBatterySnapshotFactory.create(communication_state="LOST"),
+        dsm_state="DSM_ON_GRID",
+    )
+    coordinator = _make_button_coordinator(snapshot)
+    button = SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID")
+
+    assert button.available is False
+
+
 @pytest.mark.asyncio
 async def test_button_async_setup_entry_only_adds_button_when_the_panel_has_bess(
     hass: HomeAssistant,
