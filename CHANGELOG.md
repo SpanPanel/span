@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+Reported and fixed by [@dcj](https://github.com/dcj) in [#277](https://github.com/SpanPanel/span/pull/277), from issue
+[#276](https://github.com/SpanPanel/span/issues/276).
+
 ### Fixed
 
 - **Rotate panel credentials now returns the new panel passphrase**: the panel replaces its passphrase along with the broker password, so the action's response
