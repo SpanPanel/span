@@ -697,11 +697,12 @@ keeps retrying with the new password for about a minute.
 privileges, reauthenticate it with the panel passphrase first. If a repair about the panel's certificate is open, resolve that first — a new password is never
 sent over a connection that cannot be verified.
 
-**If the panel does not report the outcome, assume the passphrase may have changed.** While the integration is still loaded, run the action again: its response
-gives you a passphrase you know. After a restart, reauthenticate the integration instead, using proof of proximity if the old passphrase is no longer accepted.
+**If the panel does not report the outcome, assume the passphrase may have changed.** Run the action again: its response gives you a passphrase you know. It
+works whether or not the integration is loaded, because the panel does not revoke the integration's access token. If the panel refuses that rotation,
+reauthenticate the integration, using proof of proximity if the old passphrase is no longer accepted.
 
 **If the response says `reconnected: false`, save the passphrase, then rotate again.** The integration has stored the new password, but the broker was still
-refusing it after about a minute. While the integration is still loaded, run the action again: the integration uses the newly returned password, and the
+refusing it after about a minute. Run the action again, even though the integration is not loaded: the integration uses the newly returned password, and the
 passphrase in that response is the one to keep. As a last resort, restart the panel.
 
 ### Recommended deployment

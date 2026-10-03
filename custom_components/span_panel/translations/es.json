@@ -523,16 +523,16 @@
       "message": "El token de acceso almacenado tiene privilegios reducidos y no puede rotar las credenciales. Vuelva a autenticar la integración con la frase de acceso del panel y luego rote de nuevo."
     },
     "rotate_credentials_multiple_panels": {
-      "message": "Hay más de un SPAN Panel cargado. Elija en el campo de entrada de configuración el panel que desea rotar: al rotar, la contraseña anterior del broker deja de funcionar para todos los demás clientes de ese panel."
+      "message": "Hay más de un SPAN Panel configurado. Elija en el campo de entrada de configuración el panel que desea rotar: al rotar, la contraseña anterior del broker deja de funcionar para todos los demás clientes de ese panel."
     },
     "rotate_credentials_no_entry": {
-      "message": "No se encontró ningún SPAN Panel cargado que use la API v2."
+      "message": "No se encontró ningún SPAN Panel que use la API v2."
     },
     "rotate_credentials_no_token": {
       "message": "Este SPAN Panel no tiene un token de acceso almacenado. Vuelva a autenticar la integración antes de rotar las credenciales."
     },
     "rotate_credentials_outcome_unknown": {
-      "message": "El SPAN Panel en {host} no informó el resultado de la rotación de credenciales. La frase de acceso del panel y la contraseña del broker pueden haber cambiado. Mientras la integración siga cargada, vuelva a ejecutar la rotación para obtener una frase de acceso conocida. Después de un reinicio, vuelva a autenticar la integración; si la frase de acceso anterior ya no se acepta, use la prueba de proximidad."
+      "message": "El SPAN Panel en {host} no informó el resultado de la rotación de credenciales. La frase de acceso del panel y la contraseña del broker pueden haber cambiado. Vuelva a ejecutar la rotación para obtener una frase de acceso conocida. Si el panel rechaza esa rotación, vuelva a autenticar la integración; si la frase de acceso anterior ya no se acepta, use la prueba de proximidad."
     },
     "rotate_credentials_requires_admin": {
       "message": "Solo un administrador de Home Assistant puede rotar las credenciales del SPAN Panel."
@@ -873,7 +873,7 @@
     },
     "rotate_credentials": {
       "name": "Rotar las credenciales del panel",
-      "description": "Pide al SPAN Panel que reemplace su frase de acceso, que actualmente también es la contraseña del broker MQTT eBus, guarda la nueva contraseña del broker y recarga la integración. Cambian tanto la frase de acceso del panel como la contraseña del broker. Los tokens de acceso ya emitidos, incluido el de la integración, no se revocan. La nueva frase de acceso se devuelve en la respuesta y la integración no la guarda, así que guárdela antes de cerrar la respuesta. Cualquier otro cliente local que use la contraseña anterior, como una segunda instancia de Home Assistant, un script o herramientas de terceros, debe volver a aprovisionarse con la nueva. Es posible que el broker no acepte la nueva contraseña en cuanto el panel la devuelve, por lo que la integración reintenta durante aproximadamente un minuto antes de indicar en la respuesta que no se reconectó. Si no se reconectó, vuelva a ejecutar la rotación mientras la integración siga cargada, y la integración usará la contraseña recién devuelta; como último recurso, reinicie el panel. Solo un administrador de Home Assistant puede ejecutarlo, y no se puede llamar desde una automatización o un script.",
+      "description": "Pide al SPAN Panel que reemplace su frase de acceso, que actualmente también es la contraseña del broker MQTT eBus, guarda la nueva contraseña del broker y recarga la integración. Cambian tanto la frase de acceso del panel como la contraseña del broker. Los tokens de acceso ya emitidos, incluido el de la integración, no se revocan. La nueva frase de acceso se devuelve en la respuesta y la integración no la guarda, así que guárdela antes de cerrar la respuesta. Cualquier otro cliente local que use la contraseña anterior, como una segunda instancia de Home Assistant, un script o herramientas de terceros, debe volver a aprovisionarse con la nueva. Es posible que el broker no acepte la nueva contraseña en cuanto el panel la devuelve, por lo que la integración reintenta durante aproximadamente un minuto antes de indicar en la respuesta que no se reconectó. Si no se reconectó, vuelva a ejecutar la rotación, y la integración usará la contraseña recién devuelta; como último recurso, reinicie el panel. Solo un administrador de Home Assistant puede ejecutarlo, y no se puede llamar desde una automatización o un script.",
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuración",

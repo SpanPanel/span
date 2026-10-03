@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import Context, CoreState, HomeAssistant, ServiceResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -318,16 +318,65 @@ async def test_config_entry_id_selects_the_named_panel(hass: HomeAssistant) -> N
 
 
 @pytest.mark.asyncio
-async def test_entry_without_runtime_data_is_skipped(hass: HomeAssistant) -> None:
-    """An entry that reports loaded but carries no runtime data is not a candidate."""
+async def test_entry_that_is_not_loaded_is_rotated(hass: HomeAssistant) -> None:
+    """An entry that is not loaded is rotated from its stored data.
+
+    It is the entry a rotation that did not reconnect leaves behind, or one that
+    restarted with a broker password the panel no longer accepts, and another
+    rotation is how it recovers: the panel does not revoke the stored token.
+    """
     entry = _add_v2_entry(hass)
+    entry.mock_state(hass, ConfigEntryState.SETUP_RETRY)
     del entry.runtime_data
     _async_register_credential_services(hass)
 
-    with pytest.raises(ServiceValidationError) as err:
+    reload_mock = AsyncMock(return_value=True)
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ) as rotate,
+        patch.object(hass.config_entries, "async_reload", reload_mock),
+    ):
+        response = await _call_rotate(hass, _admin_context(hass))
+
+    assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": True}
+    assert rotate.await_args.args[1] == "panel-access-token"
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
+    reload_mock.assert_awaited_once_with(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_disabled_entry_is_not_a_candidate(hass: HomeAssistant) -> None:
+    """A disabled entry is not rotated, and nothing reaches the panel."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=7,
+        data={
+            CONF_HOST: "192.168.1.100",
+            CONF_ACCESS_TOKEN: "panel-access-token",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_PASSWORD: OLD_BROKER_PASSWORD,
+        },
+        entry_id="span_entry",
+        unique_id="sp3-test-001",
+        disabled_by=ConfigEntryDisabler.USER,
+    )
+    entry.add_to_hass(hass)
+    _async_register_credential_services(hass)
+
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(return_value=ROTATION),
+        ) as rotate,
+        pytest.raises(ServiceValidationError) as err,
+    ):
         await _call_rotate(hass, _admin_context(hass))
 
     assert err.value.translation_key == "rotate_credentials_no_entry"
+    rotate.assert_not_awaited()
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
 
 
 @pytest.mark.asyncio

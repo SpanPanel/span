@@ -79,10 +79,9 @@ def _rotation_outcome_unknown(host: str) -> HomeAssistantError:
     return HomeAssistantError(
         f"The SPAN Panel at {host} did not report the outcome of the credential "
         "rotation. The panel passphrase and broker password may have changed. "
-        "While the integration is still loaded, run the rotation again to get a "
-        "passphrase you know. After a restart, reauthenticate the integration "
-        "instead, using proof of proximity if the old passphrase is no longer "
-        "accepted.",
+        "Run the rotation again to get a passphrase you know. If the panel "
+        "refuses that rotation, reauthenticate the integration, using proof of "
+        "proximity if the old passphrase is no longer accepted.",
         translation_domain=DOMAIN,
         translation_key="rotate_credentials_outcome_unknown",
         translation_placeholders={"host": host},
@@ -763,18 +762,25 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
     """Register credential-rotation services."""
 
     def _get_v2_entry(config_entry_id: str | None) -> ConfigEntry:
-        """Return the loaded v2 entry to rotate, or explain why there isn't one.
+        """Return the v2 entry to rotate, or explain why there isn't one.
 
-        With the id omitted and more than one panel loaded there is no defensible
+        Loaded or not. A rotation reads only the stored host, access token and CA,
+        and the panel neither revokes nor expires access tokens, so the stored token
+        still authorizes it. The entries that most need another rotation are the
+        ones that are not loaded: one that did not reconnect after a rotation, and
+        one that restarted after an outcome-unknown rotation with a broker password
+        the panel no longer accepts. Ignored and disabled entries are not candidates.
+
+        With the id omitted and more than one panel configured there is no defensible
         default: rotating invalidates the broker password every other local client
         of that panel is using, so picking one and hoping is worse than asking.
-        A single loaded panel is unambiguous and the id stays optional there.
+        A single v2 panel is unambiguous and the id stays optional there.
         """
         candidates: list[ConfigEntry] = []
-        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        for entry in hass.config_entries.async_entries(
+            DOMAIN, include_ignore=False, include_disabled=False
+        ):
             if config_entry_id is not None and entry.entry_id != config_entry_id:
-                continue
-            if loaded_runtime_data(entry) is None:
                 continue
             if entry.data.get(CONF_API_VERSION) != "v2":
                 continue
@@ -782,14 +788,14 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
 
         if not candidates:
             raise ServiceValidationError(
-                "No loaded SPAN panel using the v2 API was found.",
+                "No SPAN panel using the v2 API was found.",
                 translation_domain=DOMAIN,
                 translation_key="rotate_credentials_no_entry",
             )
 
         if config_entry_id is None and len(candidates) > 1:
             raise ServiceValidationError(
-                "More than one SPAN panel is loaded. Name the panel to rotate "
+                "More than one SPAN panel is configured. Name the panel to rotate "
                 "with the config entry field.",
                 translation_domain=DOMAIN,
                 translation_key="rotate_credentials_multiple_panels",
@@ -918,9 +924,9 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             _LOGGER.error(
                 "Rotated the panel passphrase for SPAN panel entry %s and stored "
                 "the new broker password, but the entry did not reconnect with it. "
-                "Save the passphrase from the response. While the entry is still "
-                "loaded, run the rotation again to get a password the broker "
-                "accepts; otherwise, restart the panel as a last resort",
+                "Save the passphrase from the response, then run the rotation "
+                "again to get a password the broker accepts; restart the panel "
+                "as a last resort",
                 entry.entry_id,
             )
 
@@ -937,8 +943,8 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
         # clear the in-progress marker for both.
         lock = hass.data.setdefault(_ROTATION_LOCKS, {}).setdefault(entry_id, asyncio.Lock())
         async with lock:
-            # Looked up again: the rotation ahead of this one may have left
-            # the entry unloaded, and its data now holds that rotation's result.
+            # Looked up again: the rotation ahead of this one may have stored a
+            # new broker password, and this one must start from that data.
             return await _async_rotate(_get_v2_entry(entry_id))
 
     # Response only: the new passphrase exists nowhere else once this returns,

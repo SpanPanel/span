@@ -523,16 +523,16 @@
       "message": "O token de acesso guardado tem privilégios reduzidos e não pode rodar as credenciais. Volte a autenticar a integração com a frase-passe do painel e rode novamente."
     },
     "rotate_credentials_multiple_panels": {
-      "message": "Está carregado mais do que um SPAN Panel. Escolha o painel a rodar no campo da entrada de configuração: a rotação faz com que a palavra-passe anterior do broker deixe de funcionar para todos os outros clientes desse painel."
+      "message": "Está configurado mais do que um SPAN Panel. Escolha o painel a rodar no campo da entrada de configuração: a rotação faz com que a palavra-passe anterior do broker deixe de funcionar para todos os outros clientes desse painel."
     },
     "rotate_credentials_no_entry": {
-      "message": "Não foi encontrado nenhum SPAN Panel carregado que utilize a API v2."
+      "message": "Não foi encontrado nenhum SPAN Panel que utilize a API v2."
     },
     "rotate_credentials_no_token": {
       "message": "Este SPAN Panel não tem um token de acesso guardado. Volte a autenticar a integração antes de rodar as credenciais."
     },
     "rotate_credentials_outcome_unknown": {
-      "message": "O SPAN Panel em {host} não comunicou o resultado da rotação de credenciais. A frase-passe do painel e a palavra-passe do broker podem ter mudado. Enquanto a integração ainda estiver carregada, execute a rotação novamente para obter uma frase-passe conhecida. Após um reinício, volte a autenticar a integração; se a frase-passe antiga já não for aceite, use a prova de proximidade."
+      "message": "O SPAN Panel em {host} não comunicou o resultado da rotação de credenciais. A frase-passe do painel e a palavra-passe do broker podem ter mudado. Execute a rotação novamente para obter uma frase-passe conhecida. Se o painel recusar essa rotação, volte a autenticar a integração; se a frase-passe antiga já não for aceite, use a prova de proximidade."
     },
     "rotate_credentials_requires_admin": {
       "message": "Apenas um administrador do Home Assistant pode rodar as credenciais do SPAN Panel."
@@ -873,7 +873,7 @@
     },
     "rotate_credentials": {
       "name": "Rodar as credenciais do painel",
-      "description": "Pede ao SPAN Panel que substitua a sua frase-passe, que atualmente é também a palavra-passe do broker MQTT eBus, guarda a nova palavra-passe do broker e recarrega a integração. Mudam tanto a frase-passe do painel como a palavra-passe do broker. Os tokens de acesso já emitidos, incluindo o da integração, não são revogados. A nova frase-passe é devolvida na resposta e não é guardada pela integração, pelo que deve guardá-la antes de fechar a resposta. Qualquer outro cliente local que use a palavra-passe anterior, como uma segunda instância do Home Assistant, um script ou ferramentas de terceiros, tem de ser reaprovisionado com a nova. O broker pode não aceitar a nova palavra-passe assim que o painel a devolve, pelo que a integração tenta novamente durante cerca de um minuto antes de indicar na resposta que não voltou a ligar-se. Nesse caso, execute a rotação novamente enquanto a integração ainda estiver carregada, e a integração usa a palavra-passe acabada de devolver; como último recurso, reinicie o painel. Só um administrador do Home Assistant o pode executar, e não pode ser invocado a partir de uma automação ou script.",
+      "description": "Pede ao SPAN Panel que substitua a sua frase-passe, que atualmente é também a palavra-passe do broker MQTT eBus, guarda a nova palavra-passe do broker e recarrega a integração. Mudam tanto a frase-passe do painel como a palavra-passe do broker. Os tokens de acesso já emitidos, incluindo o da integração, não são revogados. A nova frase-passe é devolvida na resposta e não é guardada pela integração, pelo que deve guardá-la antes de fechar a resposta. Qualquer outro cliente local que use a palavra-passe anterior, como uma segunda instância do Home Assistant, um script ou ferramentas de terceiros, tem de ser reaprovisionado com a nova. O broker pode não aceitar a nova palavra-passe assim que o painel a devolve, pelo que a integração tenta novamente durante cerca de um minuto antes de indicar na resposta que não voltou a ligar-se. Nesse caso, execute a rotação novamente, e a integração usa a palavra-passe acabada de devolver; como último recurso, reinicie o painel. Só um administrador do Home Assistant o pode executar, e não pode ser invocado a partir de uma automação ou script.",
       "fields": {
         "config_entry_id": {
           "name": "Entrada de configuração",
