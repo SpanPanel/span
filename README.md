@@ -517,8 +517,8 @@ restoration in this state. Only an external signal (utility-side sensor) or manu
 The **GFE Override: Grid Connected** button tells the panel that the grid is back and shedding can stop. When the BESS restores communication, it automatically
 reclaims control and the override is superseded — no manual undo is needed.
 
-The button is available only while the panel is not already on grid and the battery reports its **Communication State** as lost or degraded, which is when the
-panel accepts the override. On firmware that does not publish that state, it is available while **BESS Connected** is off.
+The button is available only while the panel is not already on grid and the battery's **Communication State** is anything other than OK, which is when the panel
+accepts the override. On firmware that does not publish that state, it is available unless **BESS Connected** is on.
 
 **Risk asymmetry** — Telling the panel to shed (conservative direction) is low-risk; worst case is unnecessary circuit disruption. Telling the panel the grid is
 back when it is not means unmanaged battery drain and reduced runtime, which could affect critical equipment. The battery protects itself by disconnecting when
@@ -676,8 +676,9 @@ Commands report one of four outcomes, or a refusal, and the distinctions matter:
 
 ### Rotating panel credentials
 
-This asks the panel to replace its passphrase, which is also the password for the connection the integration uses, stores the new broker password, and reloads.
-Run it after a contractor visit, a suspected exposure, or anything else that put someone in front of your panel.
+This asks the panel to replace its passphrase, which is currently also the password for the connection the integration uses, stores the new broker password, and
+reloads. Access tokens the panel has already issued, including the integration's, are not revoked. Run it after a contractor visit, a suspected exposure, or
+anything else that put someone in front of your panel.
 
 ```yaml
 action: span_panel.rotate_credentials
@@ -689,18 +690,19 @@ passphrase is shown in the action's response and nowhere else: the integration d
 say which — the action refuses to guess.
 
 **Anything else talking to your panel stops until you set it up again.** A second Home Assistant, a script, third-party tooling: each has to be given the new
-password before it reconnects. This integration handles itself: the broker may disconnect the session and needs a moment to accept the new password, so the
-integration keeps retrying with the new password for about 30 seconds.
+password before it reconnects. This integration handles itself: the broker may not accept the new password as soon as the panel returns it, so the integration
+keeps retrying with the new password for about a minute.
 
 **A refused rotation changes nothing, so fix the cause and run it again.** If the panel rejects the integration's sign-in, or says its access token has reduced
 privileges, reauthenticate it with the panel passphrase first. If a repair about the panel's certificate is open, resolve that first — a new password is never
 sent over a connection that cannot be verified.
 
-**If the panel does not report the outcome, assume the passphrase may have changed.** Reauthenticate the integration, using proof of proximity if the old
-passphrase is no longer accepted.
+**If the panel does not report the outcome, assume the passphrase may have changed.** While the integration is still loaded, run the action again: its response
+gives you a passphrase you know. After a restart, reauthenticate the integration instead, using proof of proximity if the old passphrase is no longer accepted.
 
-**If the response says `reconnected: false`, do not run it again.** The panel has already accepted the new password and the integration has stored it, so
-rotating a second time would throw away the one that works. Check the log and reload the integration instead.
+**If the response says `reconnected: false`, save the passphrase, then rotate again.** The integration has stored the new password, but the broker was still
+refusing it after about a minute. While the integration is still loaded, run the action again: the integration uses the newly returned password, and the
+passphrase in that response is the one to keep. As a last resort, restart the panel.
 
 ### Recommended deployment
 

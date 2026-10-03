@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -41,6 +44,7 @@ from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.services import (
     _ROTATION_RECONNECT_DELAYS_S,
     _ROTATIONS_IN_PROGRESS,
+    _rotation_outcome_unknown,
     rotation_in_progress,
 )
 
@@ -385,7 +389,7 @@ async def test_a_reconnect_that_never_succeeds_still_returns_the_passphrase(
 
     assert response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": False}
     assert [c.args[0] for c in sleep.await_args_list] == list(_ROTATION_RECONNECT_DELAYS_S)
-    assert sum(_ROTATION_RECONNECT_DELAYS_S) == pytest.approx(30.0)
+    assert sum(_ROTATION_RECONNECT_DELAYS_S) == pytest.approx(60.0)
     assert reload_mock.await_count == len(_ROTATION_RECONNECT_DELAYS_S) + 1
     # The panel has already issued it, so the entry must keep the new one.
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == NEW_BROKER_PASSWORD
@@ -629,3 +633,66 @@ async def test_an_unusable_stored_ca_refuses_rather_than_rotating_in_the_clear(
     assert err.value.translation_key == "rotate_credentials_ca_unusable"
     rotate.assert_not_awaited()
     assert entry.data[CONF_EBUS_BROKER_PASSWORD] == OLD_BROKER_PASSWORD
+
+
+@pytest.mark.asyncio
+async def test_overlapping_rotations_of_one_entry_run_one_after_the_other(
+    hass: HomeAssistant,
+) -> None:
+    """A second call waits for the first to finish, and the later rotation's password is stored."""
+    entry = _add_v2_entry(hass)
+    _async_register_credential_services(hass)
+
+    second = PassphraseRotation(
+        ebus_broker_password="second-broker-password", hop_passphrase="second-hop"
+    )
+    events: list[str] = []
+    release_first_reload = asyncio.Event()
+    first_reload_started = asyncio.Event()
+
+    async def _rotate(*_args: object, **_kwargs: object) -> PassphraseRotation:
+        events.append(f"put{len([e for e in events if e.startswith('put')]) + 1}")
+        return ROTATION if events[-1] == "put1" else second
+
+    async def _reload(entry_id: str) -> bool:
+        events.append(f"reload:{rotation_in_progress(hass, entry_id)}")
+        if not first_reload_started.is_set():
+            first_reload_started.set()
+            await release_first_reload.wait()
+        return True
+
+    with (
+        patch(
+            "custom_components.span_panel.services.rotate_passphrase",
+            AsyncMock(side_effect=_rotate),
+        ),
+        patch.object(hass.config_entries, "async_reload", AsyncMock(side_effect=_reload)),
+    ):
+        first = hass.async_create_task(_call_rotate(hass, _admin_context(hass)))
+        await first_reload_started.wait()
+        second_call = hass.async_create_task(_call_rotate(hass, _admin_context(hass)))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        # The second PUT has not started while the first is still reconnecting.
+        assert events == ["put1", "reload:True"]
+        assert rotation_in_progress(hass, entry.entry_id)
+        release_first_reload.set()
+        first_response = await first
+        second_response = await second_call
+
+    assert events == ["put1", "reload:True", "put2", "reload:True"]
+    assert first_response == {"hop_passphrase": NEW_HOP_PASSPHRASE, "reconnected": True}
+    assert second_response == {"hop_passphrase": "second-hop", "reconnected": True}
+    assert entry.data[CONF_EBUS_BROKER_PASSWORD] == "second-broker-password"
+    assert not rotation_in_progress(hass, entry.entry_id)
+
+
+def test_the_outcome_unknown_fallback_matches_strings_json() -> None:
+    """The English default message is the one in strings.json."""
+    strings = json.loads(
+        (Path(__file__).parent.parent / "custom_components/span_panel/strings.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected = strings["exceptions"]["rotate_credentials_outcome_unknown"]["message"]
+    assert str(_rotation_outcome_unknown("panel.local")) == expected.format(host="panel.local")

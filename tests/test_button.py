@@ -151,12 +151,18 @@ def test_gfe_override_button_available_only_when_override_is_relevant() -> None:
 @pytest.mark.parametrize(
     ("communication_state", "connected", "expected"),
     [
-        ("LOST", True, True),
-        ("DEGRADED", True, True),
         ("OK", False, False),
-        ("UNKNOWN", False, False),
-        (None, False, True),
+        ("OK", None, False),
+        ("ok", False, False),
+        ("UNKNOWN", True, True),
+        ("UNKNOWN", False, True),
+        ("LOST", True, True),
+        ("LOST", None, True),
+        ("DEGRADED", True, True),
+        ("DEGRADED", False, True),
         (None, True, False),
+        (None, False, True),
+        (None, None, True),
     ],
 )
 def test_gfe_override_button_follows_the_battery_communication_state(
@@ -164,8 +170,9 @@ def test_gfe_override_button_follows_the_battery_communication_state(
 ) -> None:
     """The battery's own communication state gates the button when it is published.
 
-    The panel accepts the assertion only while that state is LOST or DEGRADED, so
-    `connected` is consulted only when no communication state is published.
+    The panel accepts the assertion only while that state is not OK, whatever
+    `connected` says. `connected` is consulted only when no communication state is
+    published, and an absent connection status counts as eligible.
     """
     snapshot = SpanPanelSnapshotFactory.create(
         battery=SpanBatterySnapshotFactory.create(

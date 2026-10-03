@@ -518,8 +518,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             except SpanPanelAuthError as err:
                 await client.close()
                 if rotation_in_progress(hass, entry.entry_id):
-                    # Just after `rotate_credentials` the broker may refuse the
-                    # new password for a moment; the service retries the reload.
+                    # Just after `rotate_credentials` the broker may not have
+                    # accepted the new password yet; the service retries the reload.
                     raise ConfigEntryNotReady(
                         "MQTT broker has not accepted the rotated password yet"
                     ) from err

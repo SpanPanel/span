@@ -532,7 +532,7 @@
       "message": "Ce SPAN Panel n'a aucun jeton d'accès enregistré. Réauthentifiez l'intégration avant de renouveler les identifiants."
     },
     "rotate_credentials_outcome_unknown": {
-      "message": "Le SPAN Panel à {host} n'a pas indiqué le résultat du renouvellement des identifiants. La phrase secrète du panneau et le mot de passe du broker ont peut-être changé. Réauthentifiez l'intégration ; si la phrase secrète n'est plus acceptée, utilisez la preuve de proximité."
+      "message": "Le SPAN Panel à {host} n'a pas indiqué le résultat du renouvellement des identifiants. La phrase secrète du panneau et le mot de passe du broker ont peut-être changé. Tant que l'intégration est encore chargée, relancez le renouvellement pour obtenir une phrase secrète connue. Après un redémarrage, réauthentifiez plutôt l'intégration ; si l'ancienne phrase secrète n'est plus acceptée, utilisez la preuve de proximité."
     },
     "rotate_credentials_requires_admin": {
       "message": "Seul un administrateur Home Assistant peut renouveler les identifiants du SPAN Panel."
@@ -873,7 +873,7 @@
     },
     "rotate_credentials": {
       "name": "Renouveler les identifiants du panneau",
-      "description": "Demande au SPAN Panel de remplacer sa phrase secrète, qui est aussi le mot de passe du broker MQTT eBus, enregistre le nouveau mot de passe du broker et recharge l'intégration. La phrase secrète du panneau et le mot de passe du broker changent tous les deux. La nouvelle phrase secrète est renvoyée dans la réponse et n'est pas enregistrée par l'intégration : conservez-la avant de fermer la réponse. Tout autre client local utilisant l'ancien mot de passe, comme une seconde instance Home Assistant, un script ou un outil tiers, doit être réapprovisionné avec le nouveau. Le broker peut déconnecter la session et a besoin d'un moment pour accepter le nouveau mot de passe ; l'intégration réessaie donc pendant environ 30 secondes avant d'indiquer dans la réponse qu'elle ne s'est pas reconnectée. Seul un administrateur Home Assistant peut l'exécuter, et il ne peut pas être appelé depuis une automatisation ou un script.",
+      "description": "Demande au SPAN Panel de remplacer sa phrase secrète, qui est actuellement aussi le mot de passe du broker MQTT eBus, enregistre le nouveau mot de passe du broker et recharge l'intégration. La phrase secrète du panneau et le mot de passe du broker changent tous les deux. Les jetons d'accès déjà émis, y compris celui de l'intégration, ne sont pas révoqués. La nouvelle phrase secrète est renvoyée dans la réponse et n'est pas enregistrée par l'intégration : conservez-la avant de fermer la réponse. Tout autre client local utilisant l'ancien mot de passe, comme une seconde instance Home Assistant, un script ou un outil tiers, doit être réapprovisionné avec le nouveau. Il se peut que le broker n'accepte pas le nouveau mot de passe dès que le panneau le renvoie ; l'intégration réessaie donc pendant environ une minute avant d'indiquer dans la réponse qu'elle ne s'est pas reconnectée. Dans ce cas, relancez la rotation tant que l'intégration est encore chargée, et l'intégration utilisera le mot de passe nouvellement renvoyé ; en dernier recours, redémarrez le panneau. Seul un administrateur Home Assistant peut l'exécuter, et il ne peut pas être appelé depuis une automatisation ou un script.",
       "fields": {
         "config_entry_id": {
           "name": "Entrée de configuration",

@@ -50,13 +50,18 @@ _LOGGER = logging.getLogger(__name__)
 # Map internal device_type values to external manifest format
 _DEVICE_TYPE_MAP: dict[str, str] = {"bess": "battery"}
 
-# Waits between reload attempts after a rotation, about 30 seconds in all. The
-# broker may disconnect the session and needs a moment to accept the new
-# password, so a refusal inside this window is not yet a failure.
-_ROTATION_RECONNECT_DELAYS_S: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0, 15.0)
+# Waits between reload attempts after a rotation, about a minute in all. The
+# broker may not accept the new password the moment the rotation returns, so a
+# refusal inside this window is not yet a failure.
+_ROTATION_RECONNECT_DELAYS_S: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0, 15.0, 30.0)
 
-# Entry ids whose rotation is still reconnecting.
+# Entry ids whose rotation is still reconnecting. A set suffices because
+# `_ROTATION_LOCKS` lets only one rotation per entry run at a time.
 _ROTATIONS_IN_PROGRESS: HassKey[set[str]] = HassKey(f"{DOMAIN}_rotations_in_progress")
+
+# One lock per entry id, serializing `rotate_credentials`. Kept in hass.data
+# rather than runtime data, which the rotation's own reload rebuilds.
+_ROTATION_LOCKS: HassKey[dict[str, asyncio.Lock]] = HassKey(f"{DOMAIN}_rotation_locks")
 
 
 def rotation_in_progress(hass: HomeAssistant, entry_id: str) -> bool:
@@ -67,6 +72,21 @@ def rotation_in_progress(hass: HomeAssistant, entry_id: str) -> bool:
     the service.
     """
     return entry_id in hass.data.get(_ROTATIONS_IN_PROGRESS, set())
+
+
+def _rotation_outcome_unknown(host: str) -> HomeAssistantError:
+    """Return the error for a rotation whose outcome the panel did not report."""
+    return HomeAssistantError(
+        f"The SPAN Panel at {host} did not report the outcome of the credential "
+        "rotation. The panel passphrase and broker password may have changed. "
+        "While the integration is still loaded, run the rotation again to get a "
+        "passphrase you know. After a restart, reauthenticate the integration "
+        "instead, using proof of proximity if the old passphrase is no longer "
+        "accepted.",
+        translation_domain=DOMAIN,
+        translation_key="rotate_credentials_outcome_unknown",
+        translation_placeholders={"host": host},
+    )
 
 
 def _rotation_may_have_reached_panel(
@@ -777,10 +797,7 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
 
         return candidates[0]
 
-    async def async_handle_rotate_credentials(call: ServiceCall) -> ServiceResponse:
-        await _async_require_admin_caller(hass, call)
-
-        entry = _get_v2_entry(call.data.get("config_entry_id"))
+    async def _async_rotate(entry: ConfigEntry) -> ServiceResponse:
         host = str(entry.data[CONF_HOST])
         token = str(entry.data.get(CONF_ACCESS_TOKEN, ""))
         if not token:
@@ -837,14 +854,7 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             if (
                 isinstance(err, SpanPanelServerError) and err.status_code != 503
             ) or err.status_code == 200:
-                raise HomeAssistantError(
-                    f"The SPAN panel at {host} did not report the outcome of the "
-                    "rotation. Its passphrase may have changed. Reauthenticate the "
-                    "integration.",
-                    translation_domain=DOMAIN,
-                    translation_key="rotate_credentials_outcome_unknown",
-                    translation_placeholders={"host": host},
-                ) from err
+                raise _rotation_outcome_unknown(host) from err
             raise ServiceValidationError(
                 f"The SPAN panel at {host} did not complete the rotation.",
                 translation_domain=DOMAIN,
@@ -853,14 +863,7 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
             ) from err
         except (SpanPanelConnectionError, SpanPanelTimeoutError) as err:
             if _rotation_may_have_reached_panel(err):
-                raise HomeAssistantError(
-                    f"The SPAN panel at {host} did not report the outcome of the "
-                    "rotation. Its passphrase may have changed. Reauthenticate the "
-                    "integration.",
-                    translation_domain=DOMAIN,
-                    translation_key="rotate_credentials_outcome_unknown",
-                    translation_placeholders={"host": host},
-                ) from err
+                raise _rotation_outcome_unknown(host) from err
             # The request never left, so the entry still holds the credential
             # the panel still accepts.
             raise ServiceValidationError(
@@ -912,11 +915,29 @@ def _async_register_credential_services(hass: HomeAssistant) -> None:
         else:
             _LOGGER.error(
                 "Rotated the panel passphrase for SPAN panel entry %s and stored "
-                "the new broker password, but the entry did not reconnect with it",
+                "the new broker password, but the entry did not reconnect with it. "
+                "Save the passphrase from the response. While the entry is still "
+                "loaded, run the rotation again to get a password the broker "
+                "accepts; otherwise, restart the panel as a last resort",
                 entry.entry_id,
             )
 
         return {"hop_passphrase": rotation.hop_passphrase, "reconnected": reconnected}
+
+    async def async_handle_rotate_credentials(call: ServiceCall) -> ServiceResponse:
+        await _async_require_admin_caller(hass, call)
+
+        entry_id = _get_v2_entry(call.data.get("config_entry_id")).entry_id
+        # One rotation per entry at a time, from before the PUT through the
+        # reload loop. Overlapping calls would otherwise each store the
+        # password from their own response, so the last to arrive wins even
+        # if the panel no longer accepts it, and the first to finish would
+        # clear the in-progress marker for both.
+        lock = hass.data.setdefault(_ROTATION_LOCKS, {}).setdefault(entry_id, asyncio.Lock())
+        async with lock:
+            # Looked up again: the rotation ahead of this one may have left
+            # the entry unloaded, and its data now holds that rotation's result.
+            return await _async_rotate(_get_v2_entry(entry_id))
 
     # Response only: the new passphrase exists nowhere else once this returns,
     # so a caller that did not ask for it must not be able to rotate.
