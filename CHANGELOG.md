@@ -2,13 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.1.2] - 10/2026
 
-Reported and fixed by [@dcj](https://github.com/dcj) in [#277](https://github.com/SpanPanel/span/pull/277), from issue
-[#276](https://github.com/SpanPanel/span/issues/276).
+The credential-rotation, GFE Override and DSM Grid State fixes below were reported and fixed by [@dcj](https://github.com/dcj) in
+[#277](https://github.com/SpanPanel/span/pull/277), from issue [#276](https://github.com/SpanPanel/span/issues/276).
 
 ### Fixed
 
+- **Home Assistant's warning about a deprecated device lookup is resolved** — the integration, its card and its dashboard now find devices the way Home
+  Assistant 2026.8 asks, before the old ways stop working in 2027.8.
+- **A SPAN Panel card set up before Home Assistant 2026.8 works again, with nothing to change** — Home Assistant gave the panel a new device ID during that
+  upgrade if a helper, such as a utility meter, was attached to it. A card still holding the old ID now finds the panel again: its battery, charger and other
+  devices, its monitoring and its circuits' areas all come back, where it showed no devices or an intermittent "not loaded" error.
+- **The card no longer shows an empty tile for the Microgrid Interconnect** — a device with nothing to display is now left off the card rather than drawn as a
+  bare header and settings icon.
+- **No deprecation warning on Home Assistant 2026.9 from the favorites service or new-entity announcements** — Home Assistant 2026.9 can answer a
+  device lookup with a child device, and the integration no longer reads a field such a device does not have.
 - **Rotate panel credentials now returns the new panel passphrase**: the panel replaces its passphrase along with the broker password, so the action's response
   carries the new passphrase for you to save. The integration still does not store it, and the action can only be run with its response.
 - **The integration reconnects after a rotation instead of asking to reauthenticate**: the broker may not accept the new password as soon as the panel returns
@@ -25,18 +34,6 @@ Reported and fixed by [@dcj](https://github.com/dcj) in [#277](https://github.co
 - **GFE Override button follows the battery's own link health**: on firmware that publishes the battery's Communication State, the button is available only
   while that state is anything other than OK, which is when the panel accepts the override. Elsewhere it is available unless BESS Connected is on.
 - **DSM Grid State shows a GFE override while the panel is acting on it**, instead of the islanding state the MID senses.
-
-## [2.1.2] - 9/2026
-
-### Fixed
-
-- **Home Assistant's warning about a deprecated device lookup is resolved** — the integration, its card and its dashboard now find devices the way Home
-  Assistant 2026.8 asks, before the old ways stop working in 2027.8.
-- **A SPAN Panel card set up before Home Assistant 2026.8 works again, with nothing to change** — Home Assistant gave the panel a new device ID during that
-  upgrade if a helper, such as a utility meter, was attached to it. A card still holding the old ID now finds the panel again: its battery, charger and other
-  devices, its monitoring and its circuits' areas all come back, where it showed no devices or an intermittent "not loaded" error.
-- **The card no longer shows an empty tile for the Microgrid Interconnect** — a device with nothing to display is now left off the card rather than drawn as a
-  bare header and settings icon.
 
 ## [2.1.1] - 8/2026
 
