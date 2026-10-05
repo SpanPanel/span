@@ -37,7 +37,7 @@ dev = [
     # 0.13.357 is the release that pins 2026.8.3 — the version pinned above; a
     # bump to 0.13.358 pinned 2026.9.0b0 and made the pair unresolvable, which
     # CI's re-lock from PyPI catches and a stale local venv does not.
-    "pytest-homeassistant-custom-component==0.13.368",
+    "pytest-homeassistant-custom-component==0.13.367",
     "isort",
     "vulture>=2.14",
 ]
