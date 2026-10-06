@@ -10,7 +10,7 @@ import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import ConfigEntriesFlowManager, ConfigFlowResult
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -393,7 +393,13 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
 
 
 async def _create_v2_entry(hass: HomeAssistant) -> ConfigFlowResult:
-    """Drive a passphrase flow through to entry creation and return that result."""
+    """Drive a passphrase flow through to entry creation and return that result.
+
+    The manager is named with its type because mypy reads the attributes core
+    assigns in `ConfigEntries.__init__` as untyped, which would make every
+    result here `Any`.
+    """
+    flow: ConfigEntriesFlowManager = hass.config_entries.flow
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -408,27 +414,25 @@ async def _create_v2_entry(hass: HomeAssistant) -> ConfigFlowResult:
             return_value=MOCK_V2_AUTH,
         ),
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
 
         # Step 1: submit host
         result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         # Step 2: choose auth method (passphrase)
-        result2b = await hass.config_entries.flow.async_configure(
+        result2b = await flow.async_configure(
             result2["flow_id"],
             {"next_step_id": "auth_passphrase"},
         )
 
         # Step 3: submit passphrase
-        result3 = await hass.config_entries.flow.async_configure(
+        result3 = await flow.async_configure(
             result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
         # Step 4: choose entity naming pattern (accept default)
-        return await hass.config_entries.flow.async_configure(
+        return await flow.async_configure(
             result3["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
         )

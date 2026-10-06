@@ -400,7 +400,7 @@ class ControlGate:
             self._refuse(
                 "contextless_control_refused",
                 "This SPAN panel refuses control commands that do not come from a logged-in user. "
-                "To allow them, turn on Allow control without a logged-in user in its options.",
+                'To allow them, turn on "Allow control without a logged-in user" in its options.',
                 parent_id=context.parent_id if context is not None else None,
             )
 

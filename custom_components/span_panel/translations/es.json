@@ -450,7 +450,7 @@
       "message": "El comando del interruptor para {circuit} no se pudo entregar al panel: {reason}. Se rechazó en lugar de ponerse en cola, por lo que el interruptor no ha cambiado de posición ni lo hará más tarde."
     },
     "contextless_control_refused": {
-      "message": "Este SPAN Panel rechaza las órdenes de control que no proceden de un usuario con sesión iniciada. Para permitirlas, active Permitir el control sin un usuario con sesión iniciada en sus opciones."
+      "message": "Este SPAN Panel rechaza las órdenes de control que no proceden de un usuario con sesión iniciada. Para permitirlas, active «Permitir el control sin un usuario con sesión iniciada» en sus opciones."
     },
     "control_disabled": {
       "message": "El control de este SPAN Panel está desactivado en sus opciones. No se envió nada al panel."

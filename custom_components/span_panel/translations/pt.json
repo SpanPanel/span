@@ -450,7 +450,7 @@
       "message": "O comando do disjuntor para {circuit} não pôde ser entregue ao painel: {reason}. Foi recusado em vez de enfileirado, portanto o disjuntor não mudou de posição nem mudará mais tarde."
     },
     "contextless_control_refused": {
-      "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada. Para os permitir, ative Permitir controlo sem um utilizador com sessão iniciada nas suas opções."
+      "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada. Para os permitir, ative «Permitir controlo sem um utilizador com sessão iniciada» nas suas opções."
     },
     "control_disabled": {
       "message": "O controlo deste SPAN Panel está desativado nas suas opções. Nada foi enviado ao painel."

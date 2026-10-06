@@ -450,7 +450,7 @@
       "message": "La commande du disjoncteur pour {circuit} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, le disjoncteur n'a donc pas changé de position et ne changera pas plus tard."
     },
     "contextless_control_refused": {
-      "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté. Pour les autoriser, activez Autoriser le contrôle sans utilisateur connecté dans ses options."
+      "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté. Pour les autoriser, activez « Autoriser le contrôle sans utilisateur connecté » dans ses options."
     },
     "control_disabled": {
       "message": "Le contrôle de ce SPAN Panel est désactivé dans ses options. Rien n'a été envoyé au panneau."

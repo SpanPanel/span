@@ -450,7 +450,7 @@
       "message": "The breaker command for {circuit} could not be delivered to the panel: {reason}. It was refused rather than queued, so the breaker has not moved and will not move later."
     },
     "contextless_control_refused": {
-      "message": "This SPAN panel refuses control commands that do not come from a logged-in user. To allow them, turn on Allow control without a logged-in user in its options."
+      "message": "This SPAN panel refuses control commands that do not come from a logged-in user. To allow them, turn on \"Allow control without a logged-in user\" in its options."
     },
     "control_disabled": {
       "message": "Control of this SPAN panel is switched off in its options. Nothing was sent to the panel."
