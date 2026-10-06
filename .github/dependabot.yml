@@ -50,9 +50,11 @@ updates:
       - "dependencies"
       - "python"
     ignore:
-      # Ignore major version updates for span-panel-api since it's a local dependency
+      # Bumped by hand with each integration release, together with
+      # manifest.json, so the manifest and the pip pins never drift.
       - dependency-name: "span-panel-api"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: "span-panel-api-schema-0"
+      - dependency-name: "span-panel-api-schema-1"
 
   # GitHub Actions dependencies
   - package-ecosystem: "github-actions"
