@@ -16,6 +16,7 @@ from span_panel_api import (
     SpanMidSnapshot,
     SpanPanelSnapshot,
     SpanPcsSnapshot,
+    SpanPVSnapshot,
 )
 
 from custom_components.span_panel.field_paths import (
@@ -125,6 +126,7 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         EVSE_PANEL_LINK_SENSOR,
         GRID_ISLANDABLE_SENSOR,
         PCS_ACTIVE_SENSOR,
+        PV_INVERTER_LINK_SENSOR,
         PV_PANEL_LINK_SENSOR,
     )
 
@@ -136,6 +138,7 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
         BESS_CONNECTED_SENSOR,
         PCS_ACTIVE_SENSOR,
         PV_PANEL_LINK_SENSOR,
+        PV_INVERTER_LINK_SENSOR,
         EVSE_PANEL_LINK_SENSOR,
     ):
         if not isinstance(description, _DeclaringDescription):
@@ -152,9 +155,6 @@ def _declaring_descriptions() -> Iterator[_DeclaringDescription]:
 # snapshot type. A new description class over an existing snapshot type needs no
 # edit here, and its prefix cannot be wrong, because it comes from the same
 # annotation mypy checks the value_fn bodies against.
-#
-# PV has no entry: PV metadata value_fns take the whole panel snapshot and reach
-# through `s.pv.x`, so their prefix is "panel" and `_SUB_SNAPSHOTS` rewrites it.
 _SNAPSHOT_PREFIX: Mapping[type, str] = {
     SpanCircuitSnapshot: "circuit",
     SpanPanelSnapshot: "panel",
@@ -162,6 +162,7 @@ _SNAPSHOT_PREFIX: Mapping[type, str] = {
     SpanEvseSnapshot: "evse",
     SpanMidSnapshot: "mid",
     SpanPcsSnapshot: "pcs",
+    SpanPVSnapshot: "pv",
 }
 
 

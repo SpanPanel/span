@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import dataclasses
 import ipaddress
 import logging
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntriesFlowManager, ConfigFlowResult
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -17,7 +19,13 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+from span_panel_api.exceptions import (
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelPassphraseUnavailableError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+)
 
 from custom_components.span_panel import (
     CURRENT_CONFIG_VERSION,
@@ -43,6 +51,9 @@ from custom_components.span_panel.const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
+from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
+from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -381,10 +392,14 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
 # ---------- v2 entry creation ----------
 
 
-@pytest.mark.usefixtures("socket_enabled")
-@pytest.mark.asyncio
-async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
-    """A completed v2 flow should create an entry with MQTT broker fields."""
+async def _create_v2_entry(hass: HomeAssistant) -> ConfigFlowResult:
+    """Drive a passphrase flow through to entry creation and return that result.
+
+    The manager is named with its type because mypy reads the attributes core
+    assigns in `ConfigEntries.__init__` as untyped, which would make every
+    result here `Any`.
+    """
+    flow: ConfigEntriesFlowManager = hass.config_entries.flow
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -399,43 +414,70 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
             return_value=MOCK_V2_AUTH,
         ),
     ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
 
         # Step 1: submit host
         result2 = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
 
         # Step 2: choose auth method (passphrase)
-        result2b = await hass.config_entries.flow.async_configure(
+        result2b = await flow.async_configure(
             result2["flow_id"],
             {"next_step_id": "auth_passphrase"},
         )
 
         # Step 3: submit passphrase
-        result3 = await hass.config_entries.flow.async_configure(
+        result3 = await flow.async_configure(
             result2b["flow_id"],
             {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE},
         )
 
         # Step 4: choose entity naming pattern (accept default)
-        result4 = await hass.config_entries.flow.async_configure(
+        return await flow.async_configure(
             result3["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
         )
 
-        assert result4["type"] == FlowResultType.CREATE_ENTRY
-        data = result4["data"]
-        assert data[CONF_API_VERSION] == "v2"
-        assert data[CONF_HOST] == MOCK_HOST
-        assert data[CONF_ACCESS_TOKEN] == "v2-token-abc"
-        assert data[CONF_EBUS_BROKER_HOST] == "192.168.1.100"
-        assert data[CONF_EBUS_BROKER_PORT] == 8883
-        assert data[CONF_EBUS_BROKER_USERNAME] == "span-user"
-        assert data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
-        # The passphrase is a registration input, never entry data.
-        assert CONF_HOP_PASSPHRASE not in data
-        assert data[CONF_PANEL_SERIAL] == "SPAN-V2-001"
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
+    """A completed v2 flow should create an entry with MQTT broker fields."""
+    result = await _create_v2_entry(hass)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_API_VERSION] == "v2"
+    assert data[CONF_HOST] == MOCK_HOST
+    assert data[CONF_ACCESS_TOKEN] == "v2-token-abc"
+    assert data[CONF_EBUS_BROKER_HOST] == "192.168.1.100"
+    assert data[CONF_EBUS_BROKER_PORT] == 8883
+    assert data[CONF_EBUS_BROKER_USERNAME] == "span-user"
+    assert data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
+    # The passphrase is a registration input, never entry data.
+    assert CONF_HOP_PASSPHRASE not in data
+    assert data[CONF_PANEL_SERIAL] == "SPAN-V2-001"
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_new_entry_refuses_control_without_a_logged_in_user(
+    hass: HomeAssistant,
+) -> None:
+    """A new install starts with contextless control off, and says so in its options.
+
+    Stored rather than left absent, so an older release reading the entry after
+    a downgrade does not take the missing key for its own default of on.
+    """
+    result = await _create_v2_entry(hass)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    entry = result["result"]
+    assert (entry.version, entry.minor_version) == (
+        CURRENT_CONFIG_VERSION,
+        CURRENT_CONFIG_MINOR_VERSION,
+    )
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
+    assert ControlPolicy.from_options(entry.options).allow_contextless is False
 
 
 async def _reach_the_ca_step(hass: HomeAssistant):
@@ -592,6 +634,7 @@ async def test_config_flow_uses_current_config_entry_version() -> None:
     """New core entries should use the current storage version."""
 
     assert SpanPanelConfigFlow.VERSION == CURRENT_CONFIG_VERSION
+    assert SpanPanelConfigFlow.MINOR_VERSION == CURRENT_CONFIG_MINOR_VERSION
 
 
 @pytest.mark.asyncio
@@ -618,8 +661,11 @@ async def test_migration_updates_older_entry_to_current_version(
 
     assert result is True
     assert entry.version == CURRENT_CONFIG_VERSION
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     # v2→v3 migration adds api_version field
     assert entry.data[CONF_API_VERSION] == "v1"
+    # An entry from before the default changed keeps the control it had.
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
 
 
 @pytest.mark.asyncio
@@ -715,6 +761,109 @@ async def test_home_assistant_actually_runs_the_v7_migration(hass: HomeAssistant
 
     assert entry.version == CURRENT_CONFIG_VERSION
     assert CONF_HOP_PASSPHRASE not in entry.data
+
+
+def _v7_1_entry(options: dict[str, object]) -> MockConfigEntry:
+    """Build a v2 entry as the release before contextless control defaulted off left it."""
+    return MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options=options,
+        unique_id="SPAN-V2-001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_v7_1_migration_keeps_control_without_a_logged_in_user(
+    hass: HomeAssistant,
+) -> None:
+    """An entry that never set the option read it as on, and still does."""
+    entry = _v7_1_entry({})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
+    assert ControlPolicy.from_options(entry.options).allow_contextless is True
+
+
+@pytest.mark.asyncio
+async def test_v7_1_migration_keeps_an_explicit_off(hass: HomeAssistant) -> None:
+    """A user who already turned it off made a choice the migration must not undo."""
+    entry = _v7_1_entry({ALLOW_CONTEXTLESS_CONTROL: False})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
+    assert ControlPolicy.from_options(entry.options).allow_contextless is False
+
+
+@pytest.mark.asyncio
+async def test_v7_1_migration_reads_an_unreadable_value_as_it_was_read(
+    hass: HomeAssistant,
+) -> None:
+    """Anything but a bool resolved to on before, so the migration writes on."""
+    entry = _v7_1_entry({ALLOW_CONTEXTLESS_CONTROL: "no"})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
+
+
+@pytest.mark.asyncio
+async def test_migration_leaves_an_entry_from_a_newer_minor_version_alone(
+    hass: HomeAssistant,
+) -> None:
+    """Core calls the migration on a minor downgrade, which it otherwise allows."""
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION + 1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={CONF_HOST: MOCK_HOST, CONF_API_VERSION: "v2"},
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION + 1
+    assert ALLOW_CONTEXTLESS_CONTROL not in entry.options
+
+
+@pytest.mark.asyncio
+async def test_home_assistant_actually_runs_the_v7_2_migration(hass: HomeAssistant) -> None:
+    """Core must decide to migrate a v7.1 entry.
+
+    The same drift as the v7 case, one level down: core compares
+    `SpanPanelConfigFlow.MINOR_VERSION` against the entry's, and a flow left at
+    the old minor version would never run the step.
+    """
+    entry = _v7_1_entry({})
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
 
 
 # ---------- zeroconf v2 discovery ----------
@@ -1592,6 +1741,209 @@ async def test_proximity_switch_to_passphrase(hass: HomeAssistant) -> None:
 
         assert result3["type"] == FlowResultType.FORM
         assert result3["step_id"] == "auth_passphrase"
+
+
+# ---------- registration a panel cannot complete yet ----------
+
+#: What each registration failure that is not the user's doing shows. Both
+#: steps share the mapping; neither is `invalid_auth`.
+NOT_YET_REGISTERABLE = [
+    pytest.param(
+        SpanPanelServerError("HTTP 503", status_code=503), "panel_not_ready", id="server_503"
+    ),
+    pytest.param(SpanPanelTimeoutError("timed out"), "panel_not_ready", id="timeout"),
+    pytest.param(
+        SpanPanelPassphraseUnavailableError("unavailable", status_code=422),
+        "passphrase_unavailable",
+        id="passphrase_unavailable",
+    ),
+]
+
+#: A registration that succeeded but carried no broker password.
+MOCK_V2_AUTH_NO_BROKER_PASSWORD = dataclasses.replace(
+    MOCK_V2_AUTH, ebus_broker_password=None, hop_passphrase=None
+)
+
+
+async def _passphrase_form(hass: HomeAssistant):
+    """Run a user flow to the passphrase form."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "auth_passphrase"}
+    )
+    assert result["step_id"] == "auth_passphrase"
+    return result
+
+
+async def _confirm_proximity(hass: HomeAssistant):
+    """Run a user flow through the door-challenge confirmation."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "auth_proximity"}
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "auth_proximity_confirm"}
+    )
+
+
+@pytest.mark.parametrize(("error", "expected"), NOT_YET_REGISTERABLE)
+@pytest.mark.asyncio
+async def test_passphrase_registration_the_panel_cannot_complete_yet(
+    hass: HomeAssistant, error: Exception, expected: str
+) -> None:
+    """The passphrase form comes back with a retryable error, then succeeds."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            side_effect=[error, MOCK_V2_AUTH],
+        ),
+    ):
+        form = await _passphrase_form(hass)
+        failed = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+        assert failed["type"] == FlowResultType.FORM
+        assert failed["step_id"] == "auth_passphrase"
+        assert failed["errors"] == {"base": expected}
+
+        retried = await hass.config_entries.flow.async_configure(
+            failed["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+        assert retried["step_id"] == "choose_entity_naming_initial"
+
+
+@pytest.mark.parametrize(("error", "expected"), NOT_YET_REGISTERABLE)
+@pytest.mark.asyncio
+async def test_proximity_registration_the_panel_cannot_complete_yet(
+    hass: HomeAssistant, error: Exception, expected: str
+) -> None:
+    """A proven door challenge that cannot register yet shows why, and can be retried."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            side_effect=[
+                MOCK_V2_DETECTION,
+                MOCK_V2_DETECTION_PROXIMITY_PROVEN,
+                MOCK_V2_DETECTION_PROXIMITY_PROVEN,
+            ],
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_proximity",
+            side_effect=[error, MOCK_V2_AUTH],
+        ),
+    ):
+        failed = await _confirm_proximity(hass)
+        assert failed["type"] == FlowResultType.FORM
+        assert failed["step_id"] == "auth_proximity_confirm"
+        assert failed["errors"] == {"base": expected}
+
+        retried = await hass.config_entries.flow.async_configure(failed["flow_id"], {})
+        assert retried["step_id"] == "choose_entity_naming_initial"
+
+
+@pytest.mark.asyncio
+async def test_no_entry_is_created_without_a_broker_password(hass: HomeAssistant) -> None:
+    """A registration with a null broker password stops at the form.
+
+    Patched below the validator, at the library call, so the guard that turns
+    the missing password into an error is the real one.
+    """
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=AsyncMock(return_value=MOCK_V2_AUTH_NO_BROKER_PASSWORD),
+        ),
+    ):
+        form = await _passphrase_form(hass)
+        failed = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    assert failed["type"] == FlowResultType.FORM
+    assert failed["errors"] == {"base": "passphrase_unavailable"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+@pytest.mark.parametrize("method", ["auth_passphrase", "auth_proximity"])
+@pytest.mark.asyncio
+async def test_reauth_keeps_the_stored_password_when_none_comes_back(
+    hass: HomeAssistant, method: str
+) -> None:
+    """Reauth by either method never overwrites a broker password with nothing."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_HOST: "old-host",
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_EBUS_BROKER_USERNAME: "old-user",
+            CONF_EBUS_BROKER_PASSWORD: "old-pass",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+    before = dict(entry.data)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            side_effect=[MOCK_V2_DETECTION, MOCK_V2_DETECTION_PROXIMITY_PROVEN],
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=AsyncMock(return_value=MOCK_V2_AUTH_NO_BROKER_PASSWORD),
+        ),
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
+        result = await entry.start_reauth_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": method}
+        )
+        if method == "auth_passphrase":
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+            )
+        else:
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {"next_step_id": "auth_proximity_confirm"}
+            )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "passphrase_unavailable"}
+    assert dict(entry.data) == before
 
 
 # ---------- duplicate entry prevention ----------

@@ -22,6 +22,8 @@
       "host_required": "L'hôte est requis",
       "https_port_is_plaintext": "Le port 80 est le port HTTP en clair. Saisissez le port sur lequel le panneau sert TLS — 443 sauf si quelque chose l'a déplacé.",
       "invalid_auth": "Authentification invalide",
+      "panel_not_ready": "Le panneau n'est pas encore prêt à enregistrer Home Assistant, généralement parce qu'il est encore en cours de démarrage. Patientez un instant, puis réessayez.",
+      "passphrase_unavailable": "Le panneau ne peut pas délivrer d'identifiants car sa phrase secrète n'est pas encore disponible. Cela ne signifie pas qu'une phrase secrète incorrecte a été saisie. Patientez quelques minutes, puis réessayez.",
       "proximity_failed": "Proximité non prouvée. Veuillez ouvrir et fermer la porte du panneau 3 fois et réessayer.",
       "unknown": "Erreur inattendue"
     },
@@ -448,7 +450,7 @@
       "message": "La commande du disjoncteur pour {circuit} n'a pas pu être transmise au panneau : {reason}. Elle a été refusée plutôt que mise en file d'attente, le disjoncteur n'a donc pas changé de position et ne changera pas plus tard."
     },
     "contextless_control_refused": {
-      "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté."
+      "message": "Ce SPAN Panel refuse les commandes de contrôle qui ne proviennent pas d'un utilisateur connecté. Pour les autoriser, activez « Autoriser le contrôle sans utilisateur connecté » dans ses options."
     },
     "control_disabled": {
       "message": "Le contrôle de ce SPAN Panel est désactivé dans ses options. Rien n'a été envoyé au panneau."
@@ -559,7 +561,7 @@
           "snapshot_update_interval": "Intervalle de Mise à Jour du Snapshot (secondes)"
         },
         "data_description": {
-          "allow_contextless_control": "Les automatisations, les scripts et les autres intégrations appellent les services sans utilisateur associé. Désactiver cette option refuse ces commandes. Laissez-la activée sauf si vos automatisations ne pilotent pas de circuits.",
+          "allow_contextless_control": "Les automatisations, les scripts et les autres intégrations appellent les services sans utilisateur associé. Tant que cette option est désactivée, ces commandes sont refusées. Activez-la si vos automatisations pilotent des circuits.",
           "control_lock_timeout": "-1 désactive le verrou de contrôle et supprime son interrupteur. 0 maintient le verrou armé jusqu'à ce que quelqu'un le désarme. Toute autre valeur le réarme ce nombre de minutes après son désarmement. Seuls les administrateurs peuvent le désarmer.",
           "control_mode": "Par défaut, Home Assistant accorde à chaque utilisateur non administrateur le contrôle de toutes les entités. Le restreindre aux administrateurs est le seul moyen de changer cela. Le désactiver arrête la création des entités de contrôle ; leurs entrées de registre, noms et zones sont conservés.",
           "enable_circuit_net_energy_sensors": "Énergie nette par circuit, tenant compte de la puissance réactive.",

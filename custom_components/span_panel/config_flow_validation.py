@@ -26,6 +26,7 @@ from span_panel_api import (
 from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelConnectionError,
+    SpanPanelPassphraseUnavailableError,
     SpanPanelTimeoutError,
     SpanPanelValidationError,
 )
@@ -78,19 +79,47 @@ async def validate_v2_passphrase(
     entry that arrived unpinned is routed back through that step first.
 
     Raises:
-        SpanPanelAuthError: on invalid passphrase (401/403).
-        SpanPanelConnectionError: on network/timeout failures.
+        SpanPanelAuthError: on invalid passphrase (401/403, or a 422 other than
+            the one below).
+        SpanPanelPassphraseUnavailableError: the panel cannot read its own
+            passphrase, either refusing registration outright or (from firmware
+            r202639) completing it with no broker password. Not a wrong
+            passphrase; see `_require_broker_password`.
+        SpanPanelServerError: any 5xx, including the 503 a panel still starting
+            up answers from r202639. Retryable.
+        SpanPanelConnectionError: on network failures.
         SpanPanelTimeoutError: on request timeout.
 
     """
-    return await register_v2(
-        host,
-        "Home Assistant",
-        passphrase,
-        port=transport.port,
-        httpx_client=transport.httpx_client,
-        ssl_context=transport.ssl_context,
+    return _require_broker_password(
+        await register_v2(
+            host,
+            "Home Assistant",
+            passphrase,
+            port=transport.port,
+            httpx_client=transport.httpx_client,
+            ssl_context=transport.ssl_context,
+        )
     )
+
+
+def _require_broker_password(result: V2AuthResponse) -> V2AuthResponse:
+    """Return `result` only when it carries a broker password to store.
+
+    From firmware r202639 a panel that cannot read its passphrase still
+    completes registration, but with the broker password null. The library
+    reports that as `None` and leaves the decision to its caller; here it is a
+    failure, because the only thing this flow does with the result is write the
+    password into a config entry, and an entry holding a blank one fails every
+    broker connection with an authentication error that sends the user to
+    reauthenticate against a passphrase that was never the problem. Raised as
+    the same class the panel's explicit refusal uses, so one handler covers both.
+    """
+    if not result.ebus_broker_password:
+        raise SpanPanelPassphraseUnavailableError(
+            "Panel registered the client but returned no broker password"
+        )
+    return result
 
 
 def is_ip_literal(host: str) -> bool:
@@ -432,16 +461,23 @@ async def validate_v2_proximity(
 
     Raises:
         SpanPanelAuthError: if proximity was not proven (door not opened).
-        SpanPanelConnectionError: on network/timeout failures.
+        SpanPanelPassphraseUnavailableError: as for `validate_v2_passphrase`.
+            A registration that sends no passphrase still comes back without a
+            broker password while the panel cannot read its own.
+        SpanPanelServerError: any 5xx, including the 503 a panel still starting
+            up answers from r202639. Retryable.
+        SpanPanelConnectionError: on network failures.
         SpanPanelTimeoutError: on request timeout.
 
     """
-    return await register_v2(
-        host,
-        "Home Assistant",
-        port=transport.port,
-        httpx_client=transport.httpx_client,
-        ssl_context=transport.ssl_context,
+    return _require_broker_password(
+        await register_v2(
+            host,
+            "Home Assistant",
+            port=transport.port,
+            httpx_client=transport.httpx_client,
+            ssl_context=transport.ssl_context,
+        )
     )
 
 

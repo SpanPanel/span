@@ -22,9 +22,12 @@ no sensor, so the agreement is asserted directly rather than inferred from the
 two definitions.
 
 **The agreement is structural; the direction is inherited from the fixture.**
-Both wire properties carry the *same* sign as each other and each path applies
-exactly one negation, so the two entities cannot disagree whatever the
-convention. That is what the agreement assertions below pin, and it holds
+The capture is in the frame firmware through r202633 publishes: both wire
+properties carry the *same* sign as each other and each path applies exactly one
+negation, so the two entities cannot disagree whatever the convention. The tests
+that read the capture unmodified are scoped to that frame; r202639, which
+publishes the BESS meter as the flow's negation, has its own section at the end
+of the sign tests. That is what the agreement assertions below pin, and it holds
 independently of which way is charging. Neither negation changed here:
 `BATTERY_POWER_SENSOR` is the single negation it has been since 2.0.8, and what a
 real panel displays depends on what that panel publishes, not on this fixture.
@@ -246,8 +249,9 @@ def test_the_bess_meter_agrees_with_the_enclosure_about_direction() -> None:
 
     `battery_power` negates the enclosure's flow and `bess_meter_power` negates
     the BESS's own meter; that is only coherent because the two are published in
-    the same frame. Pinned here rather than assumed, because "negate exactly one
-    of them" would be the wrong rule if a firmware ever published them opposed.
+    the same frame in this r202633-frame capture. Pinned here rather than
+    assumed, because "negate exactly one of them" is the wrong rule for r202639,
+    which publishes them opposed (covered below).
     """
     bess_meter = float(_published(BESS, POWER_TOPIC))
     enclosure_flow = float(_published(SCHEMA_ONE_PANEL, ENCLOSURE_FLOW_TOPIC))
@@ -284,11 +288,10 @@ def test_it_agrees_with_the_battery_power_sensor_beside_it() -> None:
 
     `battery_power` reads the enclosure's arbitrated `power-flows/battery`; this
     one reads the BESS's own meter. The specification defines the first as the
-    negation of the second, and this firmware publishes them with the *same* sign
-    instead — an alignment `sensor_definitions.py` records as the spec's violation
-    rather than its rule. Each path negates exactly once, so the UI shows one
-    convention either way, and the check is on the states rather than on either
-    definition. A flip on either side fails here even if the side that flipped
+    negation of the second, and the r202633-frame capture publishes them with the
+    *same* sign instead (r202639 conforms; see the end of the sign tests). Each
+    path negates exactly once here, so the UI shows one convention either way, and
+    the check is on the states rather than on either definition. A flip on either side fails here even if the side that flipped
     still looks self-consistent.
     """
     snapshot = schema_one_snapshot()
@@ -328,6 +331,61 @@ def _republishing_both(*, power: float, enclosure_flow: float) -> SpanPanelSnaps
 
 
 # ---------------------------------------------------------------------------
+# Firmware r202639: the BESS meter is published as the flow's negation
+# ---------------------------------------------------------------------------
+
+R202639_FIRMWARE = "spanos2/r202639/03"
+
+
+def _r202639(*, enclosure_flow: float, power: float | None = None) -> SpanPanelSnapshot:
+    """Re-publish the capture the way r202639 firmware publishes it.
+
+    From r202639 the BESS meter is the negation of `power-flows/battery` rather
+    than equal to it, and the enclosure reports a version string the library can
+    read the release from. `power` overrides the meter for the one test that
+    needs the two properties to disagree.
+    """
+    tree = schema_one_tree()
+    tree[SCHEMA_ONE_PANEL]["info/firmware-version"] = R202639_FIRMWARE
+    tree[SCHEMA_ONE_PANEL][ENCLOSURE_FLOW_TOPIC] = str(enclosure_flow)
+    tree[BESS][POWER_TOPIC] = str(-enclosure_flow if power is None else power)
+    return schema_one_snapshot(tree)
+
+
+@pytest.mark.parametrize("direction", ["charging", "discharging"])
+def test_r202639_the_two_sensors_agree(direction: str) -> None:
+    """On r202639 the wire properties are opposed, and the sensors still agree.
+
+    The capture's enclosure flow is a charging battery; negating it gives the
+    discharging case. Both sensors must report the same value, positive exactly
+    when the battery discharges, so the library's pass-through on this firmware
+    lands on the convention `battery_power` already had.
+    """
+    captured = float(_published(SCHEMA_ONE_PANEL, ENCLOSURE_FLOW_TOPIC))
+    enclosure_flow = captured if direction == "charging" else -captured
+    snapshot = _r202639(enclosure_flow=enclosure_flow)
+
+    own_meter = _state(snapshot, POWER_KEY)
+    flow_sensor = _state(snapshot, ENCLOSURE_FLOW_KEY)
+
+    assert isinstance(own_meter, float) and isinstance(flow_sensor, float)
+    assert own_meter == flow_sensor
+    assert (own_meter > 0) == (direction == "discharging")
+
+
+def test_r202639_the_firmware_version_decides_when_the_flow_is_idle() -> None:
+    """With the flow idle, only the firmware version says the meter's sign.
+
+    With `power-flows/battery` at zero the signs cannot be compared, so only the
+    release build in the firmware version can say the meter is already
+    discharge-positive. A value that passes through unchanged proves it was read.
+    """
+    snapshot = _r202639(enclosure_flow=0.0, power=1200.0)
+
+    assert _state(snapshot, POWER_KEY) == 1200.0
+
+
+# ---------------------------------------------------------------------------
 # States follow the wire
 # ---------------------------------------------------------------------------
 
@@ -335,11 +393,19 @@ def _republishing_both(*, power: float, enclosure_flow: float) -> SpanPanelSnaps
 def test_republishing_the_meter_moves_the_sensor() -> None:
     """The mutation proof. The republished value differs in magnitude and in sign
     from what the capture carries, so a sensor pinned to a constant — or wired to
-    the enclosure's flow instead — cannot report it."""
+    the enclosure's flow instead — cannot report it.
+
+    The panel is pinned to an r202633 firmware version. The capture's own version
+    string does not parse, and without one the library reads a BESS meter whose
+    sign opposes the enclosure's flow as r202639's frame, which is what this
+    one-sided republish would otherwise look like."""
     published = float(_published(BESS, POWER_TOPIC))
     discharging = -published / 2
 
-    snapshot = _republishing(meter__active_power=str(discharging))
+    tree = schema_one_tree()
+    tree[BESS][POWER_TOPIC] = str(discharging)
+    tree[SCHEMA_ONE_PANEL]["info/firmware-version"] = "spanos2/r202633/01"
+    snapshot = schema_one_snapshot(tree)
 
     assert _state(snapshot, POWER_KEY) == -discharging
     assert _state(snapshot, POWER_KEY) != -published

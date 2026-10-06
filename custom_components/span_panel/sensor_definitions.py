@@ -41,6 +41,7 @@ from span_panel_api import (
     SpanMidSnapshot,
     SpanPanelSnapshot,
     SpanPcsSnapshot,
+    SpanPVSnapshot,
 )
 
 from .field_paths import (
@@ -922,12 +923,13 @@ other diagnostics do, off by default.
 arbitrated flow figure; this one reads the BESS's `meter/active-power`, the
 battery's own meter.
 
-**They agree, and this is why.** Both wire properties carry the *same* sign as
-each other -- a live panel capture and `ebus-panel-sim` 0.6.0 both publish
-`-3500.0` for the pair -- and each path applies exactly one negation, so the two
-entities land on one convention whatever that convention is. A sensor whose sign
-contradicted the one beside it would be worse than no sensor, and the agreement
-is structural rather than lucky.
+**They agree, and this is why.** Through firmware r202633 both wire properties
+carry the *same* sign as each other -- a live panel capture and `ebus-panel-sim`
+0.6.0 both publish `-3500.0` for the pair -- and each path applies exactly one
+negation. From r202639 the BESS meter is published as the negation of the flow
+figure and the library passes it through instead, so the two entities land on one
+convention on either firmware. A sensor whose sign contradicted the one beside it
+would be worse than no sensor.
 
 **The shared convention is discharge-positive, and that was measured.** This
 docstring used to claim charge-positive. Driving the producer into
@@ -944,21 +946,18 @@ frame. The library's helper was renamed `_charge_positive` -> `_discharge_positi
 for the same reason.
 
 **What is settled is that nothing here regressed.** `BATTERY_POWER_SENSOR` is
-behaviourally identical to the one released in 2.0.8 -- same source, same single
+behaviorally identical to the one released in 2.0.8 -- same source, same single
 negation, same device and state class -- and both adapters pass
 `power_flow_battery` through untouched. Whatever a live panel showed then, it
 shows now. `bess_meter_power` was briefly withdrawn on the belief that it would
-disagree with its neighbour on real firmware; the capture showed the two wire
+disagree with its neighbor on real firmware; the capture showed the two wire
 properties aligned on the panel *and* on the emitter, so it cannot, and it is
 restored.
 
-**The one thing still worth building** is a discriminator, because the alignment
-above is the eBus specification's *violation* rather than its rule: the spec
-defines `power-flows/battery` as the negation of the BESS meter. Comparing the
-two properties therefore tells a consumer which firmware it is talking to --
-identical means today's, opposed means a future conformant one -- which is what
-would let `battery.power_w` stay correct across that change without a release.
-Undecidable while the battery is idle and both read zero.
+**The library picks the frame, not this integration.** It reads the release
+build number from the panel's firmware version and, where that does not parse,
+compares the BESS meter's sign with `power-flows/battery`. `battery.power_w`
+arrives discharge-positive on every firmware, so this sensor reads it as is.
 
 **`derived` as well as `field_path`, by the producible rule.** The gate wants a
 path both adapters produce, and flat's BESS device class declares neither
@@ -969,15 +968,21 @@ the panel stops resolving the property.
 """
 
 # ---------------------------------------------------------------------------
-# PV metadata sensors (on main panel device)
+# PV metadata sensors (on the solar sub-device, or on each inverter's)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class SpanPVMetadataRequiredKeysMixin(FieldPathDeclarationMixin):
-    """Required keys mixin for PV metadata sensors."""
+    """Required keys mixin for PV metadata sensors.
 
-    value_fn: Callable[[SpanPanelSnapshot], float | str | None]
+    The value_fn takes one inverter's snapshot, as the BESS metadata ones take
+    the battery's, so the same three descriptions serve `snapshot.pv` on a
+    panel with one inverter and each `snapshot.pv_inverters` entry on a panel
+    with more.
+    """
+
+    value_fn: Callable[[SpanPVSnapshot], float | str | None]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -997,14 +1002,14 @@ PV_METADATA_SENSORS: tuple[
         field_path="pv.vendor_name",
         translation_key="pv_vendor",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda s: s.pv.vendor_name,
+        value_fn=lambda pv: pv.vendor_name,
     ),
     SpanPVMetadataSensorEntityDescription(
         key="pv_product",
         field_path="pv.model",
         translation_key="pv_product",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda s: s.pv.model,
+        value_fn=lambda pv: pv.model,
     ),
     SpanPVMetadataSensorEntityDescription(
         key="pv_nameplate_capacity",
@@ -1013,7 +1018,11 @@ PV_METADATA_SENSORS: tuple[
         native_unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
-        value_fn=lambda s: s.pv.nameplate_capacity_w,
+        # The array's DC size as recorded at installation: informational, and
+        # never a limit on what `pv_power` can read. The name stays
+        # "Nameplate Capacity" because renaming it would change the entity id
+        # every new installation derives.
+        value_fn=lambda pv: pv.nameplate_capacity_w,
     ),
 )
 

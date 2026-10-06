@@ -18,12 +18,13 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanEvseSnapshot, SpanPanelSnapshot, SpanPVSnapshot
 
 from .adoption import create_adopted_binary_sensors
 from .const import (
     CONF_DEVICE_NAME,
     PANEL_STATUS,
+    PV_PANEL_LINK_KEY,
     SYSTEM_DOOR_STATE,
     SYSTEM_DOOR_STATE_CLOSED,
     SYSTEM_DOOR_STATE_OPEN,
@@ -38,13 +39,23 @@ from .field_paths import DerivedReason, FieldPathDeclarationMixin
 from .helpers import (
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
+    build_pv_inverter_unique_id_for_entry,
     has_bess,
     has_mid,
+    has_multiple_pv_inverters,
     has_pcs,
     resolve_evse_display_suffix,
+    resolve_pv_display_suffixes,
 )
 from .runtime import SpanPanelConfigEntry
-from .util import EMPTY_EVSE, bess_device_info, evse_device_info, pv_device_info
+from .util import (
+    EMPTY_EVSE,
+    EMPTY_PV,
+    bess_device_info,
+    evse_device_info,
+    pv_device_info,
+    pv_inverter_device_info,
+)
 
 # pylint: disable=invalid-overridden-method
 
@@ -166,7 +177,7 @@ BESS_CONNECTED_SENSOR = SpanPanelBinarySensorEntityDescription(
 )
 
 PV_PANEL_LINK_SENSOR = SpanPanelBinarySensorEntityDescription(
-    key="pv_panel_link",
+    key=PV_PANEL_LINK_KEY,
     field_path="pv.connected",
     derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
     translation_key="pv_panel_link",
@@ -574,6 +585,134 @@ class SpanEvseBinarySensor(SpanPanelEntity, BinarySensorEntity):
         super()._handle_coordinator_update()
 
 
+# ---------------------------------------------------------------------------
+# PV inverter binary sensors, on a panel with more than one inverter
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SpanPVBinarySensorRequiredKeysMixin(FieldPathDeclarationMixin):
+    """Required keys mixin for per-inverter binary sensors."""
+
+    value_fn: Callable[[SpanPVSnapshot], bool | None]
+
+
+@dataclass(frozen=True, kw_only=True)
+class SpanPVBinarySensorEntityDescription(
+    BinarySensorEntityDescription, SpanPVBinarySensorRequiredKeysMixin
+):
+    """Describes one inverter's binary sensor entity."""
+
+
+PV_INVERTER_LINK_SENSOR = SpanPVBinarySensorEntityDescription(
+    key=PV_PANEL_LINK_SENSOR.key,
+    field_path="pv.connected",
+    derived=DerivedReason.SCHEMA_CONDITIONAL_FIELD,
+    translation_key=PV_PANEL_LINK_SENSOR.translation_key,
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    value_fn=lambda pv: pv.connected,
+)
+"""`PV_PANEL_LINK_SENSOR` for one inverter of several.
+
+The same key, translation and source field, read from that inverter's own
+snapshot rather than from `snapshot.pv`. Created per inverter and only where
+its feeding circuit publishes the record, as `EVSE_PANEL_LINK_SENSOR` is per
+charger.
+"""
+
+
+class SpanPVInverterBinarySensor(SpanPanelEntity, BinarySensorEntity):
+    """One inverter's binary sensor, shaped like `SpanEvseBinarySensor`."""
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPVBinarySensorEntityDescription,
+        inverter_key: str,
+    ) -> None:
+        """Initialize the inverter binary sensor."""
+        super().__init__(data_coordinator, context=description)
+        snapshot: SpanPanelSnapshot = data_coordinator.data
+        self._inverter_key = inverter_key
+        self.entity_description = description
+        self._attr_device_class = description.device_class
+        self._value_fn = description.value_fn
+
+        device_name = data_coordinator.config_entry.data.get(
+            CONF_DEVICE_NAME, data_coordinator.config_entry.title
+        )
+        inverter = snapshot.pv_inverters.get(inverter_key, EMPTY_PV)
+        use_circuit_numbers = data_coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+        self._attr_device_info = pv_inverter_device_info(
+            snapshot.serial_number,
+            inverter_key,
+            inverter,
+            device_name or "Span Panel",
+            resolve_pv_display_suffixes(snapshot, use_circuit_numbers).get(inverter_key),
+            panel_device_id=data_coordinator.config_entry.runtime_data.panel_device_id,
+        )
+        self._attr_unique_id = build_pv_inverter_unique_id_for_entry(
+            data_coordinator, snapshot, inverter_key, description.key, device_name
+        )
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        if self.coordinator.panel_offline or self.coordinator.data is None:
+            self._attr_is_on = None
+            super()._handle_coordinator_update()
+            return
+
+        inverter = self.coordinator.data.pv_inverters.get(self._inverter_key, EMPTY_PV)
+        self._attr_is_on = self._value_fn(inverter)
+        super()._handle_coordinator_update()
+
+
+def _create_pv_link_sensors(
+    config_entry: SpanPanelConfigEntry,
+    snapshot: SpanPanelSnapshot,
+) -> list[
+    SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanPVInverterBinarySensor
+]:
+    """Create the enclosure's view of the link to each solar inverter.
+
+    Created where a circuit publishes one. Gated on the record existing and
+    never on what kind of circuit publishes it: `distribution-enclosure.md`
+    makes a mixed-load circuit publishing no `feeds-*` the normal case, so
+    absence is the panel saying it does not know rather than a fault, and the
+    enum it does publish has no UNKNOWN member for it to say that with. See
+    `PV_PANEL_LINK_SENSOR`.
+
+    Per inverter on a panel with more than one, in place of the single sensor,
+    whose registry entry `async_reconcile_pv_inverter_layout` has already
+    re-keyed onto the primary inverter's.
+    """
+    coordinator = config_entry.runtime_data.coordinator
+    if has_multiple_pv_inverters(snapshot):
+        return [
+            SpanPVInverterBinarySensor(coordinator, PV_INVERTER_LINK_SENSOR, key)
+            for key, inverter in snapshot.pv_inverters.items()
+            if inverter.connected is not None
+        ]
+    if snapshot.pv.connected is None:
+        return []
+    configured_name = coordinator.config_entry.data.get(
+        CONF_DEVICE_NAME, coordinator.config_entry.title
+    )
+    return [
+        SpanPanelBinarySensor(
+            coordinator,
+            PV_PANEL_LINK_SENSOR,
+            device_info_override=pv_device_info(
+                snapshot.serial_number,
+                snapshot.pv,
+                configured_name or "Span Panel",
+                panel_device_id=config_entry.runtime_data.panel_device_id,
+            ),
+        )
+    ]
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: SpanPanelConfigEntry,
@@ -586,7 +725,9 @@ async def async_setup_entry(
     coordinator = config_entry.runtime_data.coordinator
 
     entities: list[
-        SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription] | SpanEvseBinarySensor
+        SpanPanelBinarySensor[SpanPanelBinarySensorEntityDescription]
+        | SpanEvseBinarySensor
+        | SpanPVInverterBinarySensor
     ] = [
         _panel_binary_sensor_class(description)(coordinator, description)
         for description in BINARY_SENSORS
@@ -645,28 +786,7 @@ async def async_setup_entry(
     if has_pcs(snapshot):
         entities.append(SpanPanelBinarySensor(coordinator, PCS_ACTIVE_SENSOR))
 
-    # The enclosure's view of the link to the solar inverter, where a circuit
-    # publishes one. Gated on the record existing and never on what kind of
-    # circuit publishes it — `distribution-enclosure.md` makes a mixed-load
-    # circuit publishing no `feeds-*` the normal case, so absence is the panel
-    # saying it does not know rather than a fault, and the enum it does publish
-    # has no UNKNOWN member for it to say that with. See `PV_PANEL_LINK_SENSOR`.
-    if snapshot.pv.connected is not None:
-        configured_name = coordinator.config_entry.data.get(
-            CONF_DEVICE_NAME, coordinator.config_entry.title
-        )
-        entities.append(
-            SpanPanelBinarySensor(
-                coordinator,
-                PV_PANEL_LINK_SENSOR,
-                device_info_override=pv_device_info(
-                    snapshot.serial_number,
-                    snapshot.pv,
-                    configured_name or "Span Panel",
-                    panel_device_id=config_entry.runtime_data.panel_device_id,
-                ),
-            )
-        )
+    entities.extend(_create_pv_link_sensors(config_entry, snapshot))
 
     # Add EVSE binary sensors for each commissioned charger
     if snapshot.evse:

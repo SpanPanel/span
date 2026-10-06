@@ -431,7 +431,12 @@ def test_every_exempt_path_still_has_a_reader() -> None:
     leaf attribute anywhere in the package is deliberately generous: it cannot
     accuse a live read, and it still catches the last reader of a field being
     deleted while its exemption stays behind.
+
+    A ``field_path="..."`` literal counts as a reader too: the entity registers
+    that path against its metadata row even when its value comes through a
+    library property built on the field rather than the attribute itself.
     """
+    declared = _source_declared_paths()
     read_attributes = {
         node.attr
         for source in sorted(_PACKAGE_ROOT.rglob("*.py"))
@@ -439,7 +444,9 @@ def test_every_exempt_path_still_has_a_reader() -> None:
         if isinstance(node, ast.Attribute)
     }
     unread = sorted(
-        path for path in RESIDUAL_EXEMPT_PATHS if path.split(".", 1)[1] not in read_attributes
+        path
+        for path in RESIDUAL_EXEMPT_PATHS
+        if path.split(".", 1)[1] not in read_attributes and path not in declared
     )
     assert not unread, (
         f"exempt paths no longer read anywhere in the package: {unread}. The "

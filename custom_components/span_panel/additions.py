@@ -27,6 +27,7 @@ place.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import logging
 from typing import TYPE_CHECKING, Final, TypedDict
 
@@ -219,6 +220,33 @@ async def async_announce_new_entities(hass: HomeAssistant, entry: ConfigEntry) -
     )
     await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(announced | registered)))
     _LOGGER.debug("Announced %d new entities for %s", len(added), entry.entry_id)
+
+
+async def async_rekey_announced(
+    hass: HomeAssistant, entry: ConfigEntry, moves: Sequence[tuple[str, str]]
+) -> None:
+    """Carry each re-keyed entity's announcement over to its new unique id.
+
+    `moves` holds `(source, target)` unique-id pairs that were re-keyed in place
+    -- see `pv_inverter_layout`. The record compares unique ids, so without this
+    an entity the user has had all along would be announced as new under the id
+    it moved to. Run before `async_announce_new_entities`, and saves only when
+    something changed.
+
+    Reads the record only when there are moves, so a record `_load` cannot
+    read is reported here only on a setup that re-keyed something; the
+    announcement that follows reports it, and re-seeds it, either way.
+    """
+    if not moves:
+        return
+    store = _store(hass, entry)
+    announced = _load(await store.async_load(), entry)
+    if announced is None:
+        return
+    targets = dict(moves)
+    rekeyed = frozenset(targets.get(unique_id, unique_id) for unique_id in announced)
+    if rekeyed != announced:
+        await store.async_save(StoredAnnouncements(announced_unique_ids=sorted(rekeyed)))
 
 
 def _entries(hass: HomeAssistant, entry: ConfigEntry) -> list[er.RegistryEntry]:

@@ -35,7 +35,10 @@ from custom_components.span_panel.const import (
     DOMAIN,
 )
 from custom_components.span_panel.control_gate import ControlLock
-from custom_components.span_panel.migrations import CURRENT_CONFIG_VERSION
+from custom_components.span_panel.migrations import (
+    CURRENT_CONFIG_MINOR_VERSION,
+    CURRENT_CONFIG_VERSION,
+)
 from custom_components.span_panel.options import CONTROL_LOCK_TIMEOUT
 
 from .common import async_fire_time_changed
@@ -63,6 +66,7 @@ def _entry(timeout: float) -> MockConfigEntry:
         title="SPAN Panel",
         unique_id=SERIAL,
         version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
     )
 
 

@@ -137,6 +137,9 @@ def extension_scope(subject: ExtensionSubject) -> str | None:
     not place on a device card has no card to hang an entity on, and inventing a
     scope would mint a permanent id for an entity with nowhere to live.
     """
+    if subject.kind == "pv" and subject.instance_key is not None:
+        # One inverter of several; a lone inverter's subject has no key.
+        return f"{SUB_DEVICE_PV}_{subject.instance_key}"
     if subject.kind in _SCOPE_BY_KIND:
         return _SCOPE_BY_KIND[subject.kind]
     if subject.instance_key is None:
@@ -242,6 +245,8 @@ def extension_device_identifier(panel_identifier: str, subject: ExtensionSubject
         return f"{panel_identifier}_{SUB_DEVICE_BESS}"
     if subject.kind == "mid":
         return f"{panel_identifier}_{SUB_DEVICE_MID}"
+    if subject.kind == "pv" and subject.instance_key is not None:
+        return f"{panel_identifier}_{SUB_DEVICE_PV}_{subject.instance_key}"
     if subject.kind == "pv":
         return f"{panel_identifier}_{SUB_DEVICE_PV}"
     if subject.kind == "evse" and subject.instance_key is not None:

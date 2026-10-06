@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Each solar inverter gets its own device** on a panel that reports more than one, while PV Power stays the panel's total and your existing PV entities keep
+  their entity_ids, moving to the inverter on the lowest breaker space and back if the panel returns to one inverter.
+- **Vendor readings a solar inverter publishes** appear on that inverter's own device.
+- **A solar inverter the panel stops reporting keeps its device and entities** until you delete the device.
+
+### Changed
+
+- **New installs no longer allow control without a logged-in user by default**, so automations cannot operate circuits until you turn on **Allow control without
+  a logged-in user** in the integration's options; existing installs keep their current setting ([#274](https://github.com/SpanPanel/span/discussions/274)).
+
+### Fixed
+
+- **Every inverter's circuit now reads as solar** on a panel with more than one inverter, where the others reported power and Net Energy with the opposite sign.
+- **SPAN Drive's EVSE Charge Current Limit shows the charger's commissioned maximum when nobody has set a limit**, where it showed unknown.
+- **Setup and reauthentication ask you to wait and try again when a panel cannot register Home Assistant yet**, instead of failing with an unexpected error,
+  reporting a correct passphrase as invalid or saving an entry without its broker password.
+
 ## [2.1.2] - 10/2026
 
 The credential-rotation, GFE Override and DSM Grid State fixes below were reported and fixed by [@dcj](https://github.com/dcj) in

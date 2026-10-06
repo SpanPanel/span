@@ -364,32 +364,22 @@ class TestPVMetadataSensorDefinitions:
             )
 
     def test_pv_vendor_value_function(self):
-        snapshot = SpanPanelSnapshotFactory.create(
-            pv=SpanPVSnapshot(vendor_name="SolarEdge")
-        )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_vendor")
-        assert desc.value_fn(snapshot) == "SolarEdge"
+        assert desc.value_fn(SpanPVSnapshot(vendor_name="SolarEdge")) == "SolarEdge"
 
     def test_pv_product_value_function(self):
-        snapshot = SpanPanelSnapshotFactory.create(
-            pv=SpanPVSnapshot(model="SE7600H")
-        )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_product")
-        assert desc.value_fn(snapshot) == "SE7600H"
+        assert desc.value_fn(SpanPVSnapshot(model="SE7600H")) == "SE7600H"
 
     def test_pv_nameplate_capacity_value_function(self):
-        snapshot = SpanPanelSnapshotFactory.create(
-            pv=SpanPVSnapshot(nameplate_capacity_w=7600.0)
-        )
         desc = next(d for d in PV_METADATA_SENSORS if d.key == "pv_nameplate_capacity")
-        assert desc.value_fn(snapshot) == 7600.0
+        assert desc.value_fn(SpanPVSnapshot(nameplate_capacity_w=7600.0)) == 7600.0
         assert desc.device_class is None
         assert desc.entity_registry_enabled_default is False
 
     def test_pv_none_metadata(self):
-        snapshot = SpanPanelSnapshotFactory.create(pv=SpanPVSnapshot())
         for desc in PV_METADATA_SENSORS:
-            assert desc.value_fn(snapshot) is None, f"PV {desc.key} should be None"
+            assert desc.value_fn(SpanPVSnapshot()) is None, f"PV {desc.key} should be None"
 
 
 # ---------------------------------------------------------------------------

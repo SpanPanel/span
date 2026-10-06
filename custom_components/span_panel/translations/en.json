@@ -22,6 +22,8 @@
       "https_port_is_plaintext": "Port 80 is the plaintext HTTP port. Enter the port the panel serves TLS on — 443 unless something moved it.",
       "host_required": "Host is required",
       "invalid_auth": "Invalid authentication",
+      "panel_not_ready": "The panel is not ready to register Home Assistant yet, usually because it is still starting up. Wait a moment, then try again.",
+      "passphrase_unavailable": "The panel cannot issue credentials because its passphrase is not available yet. This does not mean a passphrase was entered incorrectly. Wait a few minutes, then try again.",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
       "unknown": "Unexpected error"
     },
@@ -448,7 +450,7 @@
       "message": "The breaker command for {circuit} could not be delivered to the panel: {reason}. It was refused rather than queued, so the breaker has not moved and will not move later."
     },
     "contextless_control_refused": {
-      "message": "This SPAN panel refuses control commands that do not come from a logged-in user."
+      "message": "This SPAN panel refuses control commands that do not come from a logged-in user. To allow them, turn on \"Allow control without a logged-in user\" in its options."
     },
     "control_disabled": {
       "message": "Control of this SPAN panel is switched off in its options. Nothing was sent to the panel."
@@ -559,7 +561,7 @@
           "snapshot_update_interval": "Snapshot Update Interval (seconds)"
         },
         "data_description": {
-          "allow_contextless_control": "Automations, scripts and other integrations call services with no user attached. Turning this off refuses those commands. Leave it on unless your automations do not operate circuits.",
+          "allow_contextless_control": "Automations, scripts and other integrations call services with no user attached. While this is off, those commands are refused. Turn it on if your automations operate circuits.",
           "control_lock_timeout": "-1 turns the control lock off and removes its switch. 0 keeps the lock armed until someone disarms it. Any other value re-arms it that many minutes after it is disarmed. Only administrators can disarm it.",
           "control_mode": "Home Assistant grants every non-admin user control of every entity by default. Restricting to administrators is the only way to change that. Disabling stops creating the control entities; their registry entries, names and areas are kept.",
           "enable_circuit_net_energy_sensors": "Net energy per circuit, accounting for reactive power.",

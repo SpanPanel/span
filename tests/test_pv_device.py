@@ -71,7 +71,11 @@ from custom_components.span_panel.field_paths import (
 )
 from custom_components.span_panel.sensor import async_setup_entry as sensor_setup_entry
 from custom_components.span_panel.sensor_definitions import PV_METADATA_SENSORS, PV_POWER_SENSOR
-from custom_components.span_panel.util import SUB_DEVICE_PV, classify_sub_device_identifier
+from custom_components.span_panel.util import (
+    SUB_DEVICE_PV,
+    classify_sub_device_identifier,
+    pv_device_info,
+)
 from custom_components.span_panel.websocket import _classify_sub_device
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
@@ -796,18 +800,21 @@ def test_the_cards_firmware_read_is_enumerated_as_a_residual() -> None:
     assert "pv.software_version" not in declared_field_paths()
 
 
-def test_nothing_reads_a_pv_serial_anywhere() -> None:
+def test_the_pv_serial_is_read_but_shown_nowhere() -> None:
     """The negative half of the identifier decision, asserted rather than assumed.
 
     Adding the field to the snapshot would be harmless; reading it here would
     not, because every read is a place a future change could route into the
-    identifier. There is no such field and no such path, and this fails the day
-    one arrives without the decision being revisited.
+    identifier. The library carries the field from span-panel-api 3.5.0; this
+    integration declares no path for it and its device card does not show it,
+    and this fails the day either changes without the decision being revisited.
     """
     assert "pv.serial_number" not in RESIDUAL_EXEMPT_PATHS
     assert "pv.serial_number" not in declared_field_paths()
     snapshot = _pv_snapshot(info__serial_number="INVERTER-SERIAL-0001")
-    assert not hasattr(snapshot.pv, "serial_number")
+    assert snapshot.pv.serial_number == "INVERTER-SERIAL-0001"
+    card = pv_device_info("panel-serial", snapshot.pv, "Panel", panel_device_id="panel-device")
+    assert "INVERTER-SERIAL-0001" not in repr(card)
 
 
 def test_the_kind_vocabulary_is_closed() -> None:

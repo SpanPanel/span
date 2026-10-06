@@ -71,6 +71,13 @@ SYSTEM_ETHERNET_LINK = "eth0Link"
 SYSTEM_CELLULAR_LINK = "wwanLink"
 SYSTEM_WIFI_LINK = "wlanLink"
 PANEL_STATUS = "panel_status"
+PV_PANEL_LINK_KEY = "pv_panel_link"
+"""The solar inverter link sensor's key, in both PV layouts.
+
+Here rather than only on the description in `binary_sensor`, because
+`pv_inverter_layout` re-keys that sensor's registry entry and must not import a
+platform module to learn its key.
+"""
 
 USE_DEVICE_PREFIX = "use_device_prefix"
 USE_CIRCUIT_NUMBERS = "use_circuit_numbers"

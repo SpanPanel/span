@@ -354,18 +354,57 @@ async def async_save_record(
     load rejects.
     """
     store = _store(hass, entry)
-    stored = await store.async_load()
-    raw_records: dict[str, dict[str, str]] = {}
-    if isinstance(stored, dict) and isinstance(stored.get("records"), dict):
-        for existing_key, raw in stored["records"].items():
-            if isinstance(existing_key, str) and parse_record(raw) is not None:
-                raw_records[existing_key] = dict(raw)
+    raw_records = _readable_records(await store.async_load())
     fields = record_as_dict(record) if record is not None else {}
     if fields:
         raw_records[key] = fields
     else:
         raw_records.pop(key, None)
     await store.async_save({"records": raw_records})
+
+
+async def async_rekey_records(
+    hass: HomeAssistant, entry: ConfigEntry, source_scope: str, target_scope: str
+) -> int:
+    """Move every record under `{source_scope}/` to the same path under `{target_scope}/`.
+
+    For an extension entity whose unique id moved to another scope -- see
+    `pv_inverter_layout` -- because a record is keyed by scope and wire path,
+    and one left under the old scope would never be read for the entity again.
+    A record whose target key is already taken is left where it is, beside the
+    one there, as the registry re-key leaves a colliding entity. Saves only when
+    something moved, and returns how many records did.
+    """
+    store = _store(hass, entry)
+    raw_records = _readable_records(await store.async_load())
+    source = f"{source_scope}/"
+    moved = 0
+    for key in sorted(raw_records):
+        if not key.startswith(source):
+            continue
+        target = f"{target_scope}/{key[len(source) :]}"
+        if target in raw_records:
+            _LOGGER.warning("Not moving the curation for %s: %s already has one", key, target)
+            continue
+        raw_records[target] = raw_records.pop(key)
+        moved += 1
+    if moved:
+        await store.async_save({"records": raw_records})
+    return moved
+
+
+def _readable_records(stored: StoredCuration | None) -> dict[str, dict[str, str]]:
+    """Return the stored records `parse_record` accepts, as the raw dicts a save writes.
+
+    Shared by every writer, so none of them can write back what the loader
+    would reject.
+    """
+    raw_records: dict[str, dict[str, str]] = {}
+    if isinstance(stored, dict) and isinstance(stored.get("records"), dict):
+        for existing_key, raw in stored["records"].items():
+            if isinstance(existing_key, str) and parse_record(raw) is not None:
+                raw_records[existing_key] = dict(raw)
+    return raw_records
 
 
 async def async_forget_curation(hass: HomeAssistant, entry: ConfigEntry) -> None:
