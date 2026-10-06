@@ -394,6 +394,22 @@ def build_evse_unique_id(serial: str, evse_id: str, description_key: str) -> str
     return f"span_{serial}_evse_{evse_id}_{description_key}"
 
 
+def build_pv_inverter_unique_id(serial: str, inverter_key: str, description_key: str) -> str:
+    """Build unique ID for one inverter's entities on a multi-inverter panel (pure function).
+
+    Returns: "span_{serial}_pv_{inverter_key}_{description_key}"
+
+    `inverter_key` is the library's `pv_inverters` key: the feeding circuit's id
+    where a circuit feeds the inverter, the inverter's device id otherwise. Never
+    the inverter's serial, which is often unpublished. The serial is not
+    lower-cased, matching `build_evse_unique_id`, the other per-instance builder.
+
+    A panel with one inverter does not reach this: its entities keep the
+    panel-scoped ids they have always had.
+    """
+    return f"span_{serial}_pv_{inverter_key}_{description_key}"
+
+
 def construct_synthetic_unique_id(serial: str, sensor_name: str) -> str:
     """Build unique ID for synthetic sensors using consistent pattern (pure function).
 

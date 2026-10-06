@@ -33,6 +33,8 @@ from span_panel_api.exceptions import (
     SpanPanelAPIError,
     SpanPanelAuthError,
     SpanPanelConnectionError,
+    SpanPanelPassphraseUnavailableError,
+    SpanPanelServerError,
     SpanPanelTimeoutError,
     SpanPanelValidationError,
 )
@@ -808,9 +810,28 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
             result = await validate_v2_proximity(self._rest_host, transport)
         except (SpanPanelAuthError, SpanPanelConnectionError):
             return await self.async_step_auth_proximity()
+        except SpanPanelPassphraseUnavailableError:
+            return self._async_show_proximity_error("passphrase_unavailable")
+        except (SpanPanelServerError, SpanPanelTimeoutError):
+            return self._async_show_proximity_error("panel_not_ready")
 
         self._store_v2_auth_result(result)
         return await self._async_finalize_v2_auth()
+
+    def _async_show_proximity_error(self, reason: str) -> ConfigFlowResult:
+        """Show why a proven proximity still did not register, with a retry.
+
+        A form rather than the instruction menu, because a menu cannot carry an
+        error and these two are not the user's doing: returning to "open the
+        door three times" would suggest the challenge failed. Submitting the
+        form re-enters `async_step_auth_proximity_confirm`, which checks the
+        door challenge again before registering.
+        """
+        return self.async_show_form(
+            step_id="auth_proximity_confirm",
+            data_schema=vol.Schema({}),
+            errors={"base": reason},
+        )
 
     async def async_step_auth_passphrase(
         self,
@@ -843,6 +864,20 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 step_id="auth_passphrase",
                 data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
                 errors={"base": "invalid_auth"},
+            )
+        except SpanPanelPassphraseUnavailableError:
+            # Not `invalid_auth`: the panel could not read its own passphrase,
+            # so the one the user typed was never compared and may be right.
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+                errors={"base": "passphrase_unavailable"},
+            )
+        except (SpanPanelServerError, SpanPanelTimeoutError):
+            return self.async_show_form(
+                step_id="auth_passphrase",
+                data_schema=STEP_AUTH_PASSPHRASE_DATA_SCHEMA,
+                errors={"base": "panel_not_ready"},
             )
         except SpanPanelConnectionError:
             return self.async_show_form(

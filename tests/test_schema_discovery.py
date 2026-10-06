@@ -214,11 +214,11 @@ async def test_diagnostics_carries_the_discovery_report(hass: HomeAssistant) -> 
     # `test_partition_splits_the_map_and_loses_nothing`; re-pinning it here meant
     # that a capture dropping any earlier-sorting property failed this test with a
     # diff about the wrong row, which is what happened when `connection/count` went
-    # away.
+    # away, and again when the library began reading the PV's `info/serial-number`.
     by_path = {row["path"]: row for row in block["properties"]}
-    assert by_path["discovered.pv/info/serial-number"] == {
-        "path": "discovered.pv/info/serial-number",
-        "datatype": "string",
+    assert by_path["discovered.lugs/connection/feeds-device-status"] == {
+        "path": "discovered.lugs/connection/feeds-device-status",
+        "datatype": "enum",
         "unit": None,
         "retained": False,
     }

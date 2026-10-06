@@ -333,7 +333,7 @@ def test_panel_metadata_sensors_return_expected_data_sources() -> None:
     )
 
     assert bess_sensor.get_data_source(snapshot) is battery
-    assert pv_sensor.get_data_source(snapshot) is snapshot
+    assert pv_sensor.get_data_source(snapshot) is pv_snapshot
 
 
 def test_panel_energy_sensor_extra_attributes_include_voltage_and_grace() -> None:

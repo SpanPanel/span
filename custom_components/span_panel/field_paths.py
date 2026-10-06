@@ -328,9 +328,10 @@ RESIDUAL_EXEMPT_PATHS: Mapping[str, Producibility] = MappingProxyType(
         "pv.connected": Producibility.SCHEMA_1_ONLY,
         "evse.connected": Producibility.SCHEMA_1_ONLY,
         # The EVSE charge-current pair behind the `evse_charge_current_limit`
-        # number: the settable limit the entity's value comes from — its
-        # description is `SCHEMA_CONDITIONAL_FIELD` and names it — and the
-        # commissioned ceiling the entity reads for `native_max_value`. Flat
+        # number: the settable limit the entity's value comes from (its
+        # description is `SCHEMA_CONDITIONAL_FIELD` and names it; the value is
+        # the library's effective limit, which falls back to the ceiling), and
+        # the commissioned ceiling the entity reads for `native_max_value`. Flat
         # firmware's `evse` device type publishes `advertised-current` and no
         # settable ceiling at all, so neither can ever satisfy the both-adapters
         # gate. schema_1 carries a metadata row for each, resolved from the

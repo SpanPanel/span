@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from hashlib import sha256
 
 from homeassistant.helpers import (
     entity_registry as er,  # noqa: F401 — re-exported for patch compatibility
 )
-from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
+from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot, SpanPVSnapshot
 
 from .entity_resolver import (  # noqa: F401
     build_bess_unique_id_for_entry,
     build_binary_sensor_unique_id_for_entry,
     build_evse_unique_id_for_entry,
     build_mid_unique_id_for_entry,
+    build_pv_inverter_unique_id_for_entry,
     build_select_unique_id_for_entry,
     build_switch_unique_id_for_entry,
     construct_circuit_unique_id_for_entry,
@@ -34,6 +36,7 @@ from .id_builder import (  # noqa: F401
     build_evse_unique_id,
     build_mid_unique_id,
     build_panel_unique_id,
+    build_pv_inverter_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
     construct_binary_sensor_unique_id,
@@ -64,6 +67,8 @@ __all__ = [
     "build_evse_unique_id",
     "build_evse_unique_id_for_entry",
     "build_panel_unique_id",
+    "build_pv_inverter_unique_id",
+    "build_pv_inverter_unique_id_for_entry",
     "build_select_unique_id",
     "build_select_unique_id_for_entry",
     "build_switch_unique_id",
@@ -93,11 +98,15 @@ __all__ = [
     "has_bess",
     "has_evse",
     "has_mid",
+    "has_multiple_pv_inverters",
     "has_power_flows",
     "has_pv",
     "has_shed_forecast",
+    "pv_inverter_capability_tokens",
     "is_panel_level_sensor_key",
     "resolve_evse_display_suffix",
+    "resolve_pv_display_suffix",
+    "resolve_pv_display_suffixes",
 ]
 
 
@@ -276,6 +285,85 @@ def has_pv(snapshot: SpanPanelSnapshot) -> bool:
     )
 
 
+def has_multiple_pv_inverters(snapshot: SpanPanelSnapshot) -> bool:
+    """Detect whether the panel publishes more than one PV inverter.
+
+    Decides which of two layouts the PV entities take. With one inverter, the
+    `{serial}_pv` card carries that inverter's vendor, model, nameplate and link
+    under the panel-scoped unique ids they have always had, so nothing about an
+    existing installation moves. With more than one, each inverter gets a card
+    and entities of its own keyed by its `pv_inverters` key, and `{serial}_pv`
+    keeps only the panel's aggregate PV power.
+
+    Crossing between the two re-keys the primary inverter's entities in place,
+    so a user's entity_ids survive it in either direction; nothing is deleted.
+    See `pv_inverter_layout`.
+    """
+    return len(snapshot.pv_inverters) > 1
+
+
+def resolve_pv_display_suffix(
+    pv: SpanPVSnapshot,
+    snapshot: SpanPanelSnapshot,
+    use_circuit_numbers: bool,
+) -> str | None:
+    """Resolve the display suffix for one inverter's device name.
+
+    Taken from the circuit that feeds the inverter, in the mode the user names
+    circuits in: the circuit's panel name in friendly-names mode, its breaker
+    positions in circuit-numbers mode, and the positions in either mode when
+    the circuit has no name. The inverter's serial is not a candidate, unlike a
+    charger's: it is usually unpublished, and nothing here reads it.
+
+    Returns None for an inverter no circuit feeds. See
+    `resolve_pv_display_suffixes`, which keeps several inverters' names apart.
+    """
+    circuit = snapshot.circuits.get(pv.feed_circuit_id) if pv.feed_circuit_id else None
+    if circuit is None:
+        return None
+    if not use_circuit_numbers and circuit.name:
+        name: str = circuit.name
+        return name
+    return construct_circuit_identifier_from_tabs(circuit.tabs, circuit.circuit_id)
+
+
+def resolve_pv_display_suffixes(
+    snapshot: SpanPanelSnapshot, use_circuit_numbers: bool
+) -> dict[str, str | None]:
+    """Resolve every inverter's display suffix, distinct from each other's.
+
+    Keyed like `snapshot.pv_inverters`. Each starts from
+    `resolve_pv_display_suffix`; where that is missing or shared (two
+    unfed inverters, or two feeding circuits with the same panel name), a
+    circuit-fed inverter falls back to its breaker positions, and whatever is
+    still missing or shared then takes an ordinal, assigned in key order.
+    Without this, two inverters' devices would carry the same name.
+    """
+    inverters = snapshot.pv_inverters
+    suffixes = {
+        key: resolve_pv_display_suffix(pv, snapshot, use_circuit_numbers)
+        for key, pv in inverters.items()
+    }
+    if len(suffixes) < 2:
+        return suffixes
+    counts = Counter(suffixes.values())
+    for key, pv in inverters.items():
+        if suffixes[key] is None or counts[suffixes[key]] > 1:
+            suffixes[key] = resolve_pv_display_suffix(pv, snapshot, use_circuit_numbers=True)
+    counts = Counter(suffixes.values())
+    taken = {suffix for suffix, count in counts.items() if suffix is not None and count == 1}
+    ordinal = 0
+    for key in sorted(suffixes):
+        suffix = suffixes[key]
+        if suffix is not None and suffix in taken:
+            continue
+        ordinal += 1
+        while str(ordinal) in taken:
+            ordinal += 1
+        suffixes[key] = str(ordinal)
+    return suffixes
+
+
 def has_power_flows(snapshot: SpanPanelSnapshot) -> bool:
     """Detect whether the power-flows node is publishing data."""
     return snapshot.power_flow_site is not None
@@ -415,8 +503,10 @@ def has_der_link_health(snapshot: SpanPanelSnapshot) -> bool:
     version, so a panel that starts publishing the record reaches
     `detect_capabilities`, the coordinator reloads, and the sensors appear.
     """
-    return snapshot.pv.connected is not None or any(
-        evse.connected is not None for evse in snapshot.evse.values()
+    return (
+        snapshot.pv.connected is not None
+        or any(pv.connected is not None for pv in snapshot.pv_inverters.values())
+        or any(evse.connected is not None for evse in snapshot.evse.values())
     )
 
 
@@ -477,6 +567,20 @@ def adopted_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     )
 
 
+def pv_inverter_capability_tokens(snapshot: SpanPanelSnapshot) -> frozenset[str]:
+    """One token per inverter, once the panel publishes more than one.
+
+    So a panel whose upgrade publishes its other inverters reloads into the
+    per-inverter layout (see `has_multiple_pv_inverters`), and a later inverter
+    arriving reloads again. Empty with one inverter, so a single-inverter panel
+    reads exactly as it did. Digested because the key can be a device id, which
+    can carry a serial; see `_digest`.
+    """
+    if not has_multiple_pv_inverters(snapshot):
+        return frozenset()
+    return frozenset(f"pv_inverter:{_digest(key)}" for key in snapshot.pv_inverters)
+
+
 def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     """Derive the set of optional capabilities present in the snapshot.
 
@@ -497,6 +601,7 @@ def detect_capabilities(snapshot: SpanPanelSnapshot) -> frozenset[str]:
     caps: set[str] = set(adopted_capability_tokens(snapshot))
     if has_bess(snapshot):
         caps.add("bess")
+    caps.update(pv_inverter_capability_tokens(snapshot))
     if has_pv(snapshot):
         caps.add("pv")
     if has_power_flows(snapshot):

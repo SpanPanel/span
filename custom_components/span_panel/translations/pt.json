@@ -22,6 +22,8 @@
       "host_required": "O anfitrião é necessário",
       "https_port_is_plaintext": "A porta 80 é a porta HTTP sem cifra. Introduza a porta em que o painel serve TLS — 443 a menos que algo a tenha movido.",
       "invalid_auth": "Autenticação inválida",
+      "panel_not_ready": "O painel ainda não está pronto para registar o Home Assistant, normalmente porque ainda está a arrancar. Aguarde um momento e tente novamente.",
+      "passphrase_unavailable": "O painel não consegue emitir credenciais porque a sua frase-passe ainda não está disponível. Isto não significa que tenha sido introduzida uma frase-passe incorreta. Aguarde alguns minutos e tente novamente.",
       "proximity_failed": "Proximidade não comprovada. Por favor, abra e feche a porta do painel 3 vezes e tente novamente.",
       "unknown": "Erro inesperado"
     },

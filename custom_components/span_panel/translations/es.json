@@ -22,6 +22,8 @@
       "host_required": "Se requiere host",
       "https_port_is_plaintext": "El puerto 80 es el puerto HTTP sin cifrar. Introduzca el puerto en el que el panel sirve TLS — 443 salvo que algo lo haya movido.",
       "invalid_auth": "Autenticación invalida",
+      "panel_not_ready": "El panel aún no está listo para registrar Home Assistant, normalmente porque todavía se está iniciando. Espere un momento e intente de nuevo.",
+      "passphrase_unavailable": "El panel no puede emitir credenciales porque su frase de contraseña aún no está disponible. Esto no significa que se haya introducido una frase de contraseña incorrecta. Espere unos minutos e intente de nuevo.",
       "proximity_failed": "Proximidad no comprobada. Por favor abra y cierre la puerta del panel 3 veces e intente de nuevo.",
       "unknown": "Error inesperado"
     },

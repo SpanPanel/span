@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import dataclasses
 import socket
 import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
-from span_panel_api.exceptions import SpanPanelConnectionError
+from span_panel_api.exceptions import (
+    SpanPanelConnectionError,
+    SpanPanelPassphraseUnavailableError,
+)
 
 from custom_components.span_panel.config_flow_validation import (
     PanelRestTransport,
@@ -181,6 +185,26 @@ async def test_validate_v2_helpers_send_credentials_over_the_given_transport() -
         "httpx_client": None,
         "ssl_context": context,
     }
+
+
+@pytest.mark.parametrize("password", [None, ""])
+@pytest.mark.asyncio
+async def test_validate_v2_helpers_refuse_a_registration_without_a_broker_password(
+    password: str | None,
+) -> None:
+    """Both helpers raise rather than hand back a password there is nothing to store for."""
+    transport = PanelRestTransport(
+        port=8443, ssl_context=None, httpx_client=None, ca_pem="-----BEGIN..."
+    )
+    no_password = dataclasses.replace(MOCK_V2_AUTH, ebus_broker_password=password)
+    with patch(
+        "custom_components.span_panel.config_flow_validation.register_v2",
+        new=AsyncMock(return_value=no_password),
+    ):
+        with pytest.raises(SpanPanelPassphraseUnavailableError):
+            await validate_v2_passphrase("panel.example.com", "passphrase", transport)
+        with pytest.raises(SpanPanelPassphraseUnavailableError):
+            await validate_v2_proximity("panel.example.com", transport)
 
 
 @pytest.mark.asyncio

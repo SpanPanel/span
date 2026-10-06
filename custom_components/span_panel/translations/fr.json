@@ -22,6 +22,8 @@
       "host_required": "L'hôte est requis",
       "https_port_is_plaintext": "Le port 80 est le port HTTP en clair. Saisissez le port sur lequel le panneau sert TLS — 443 sauf si quelque chose l'a déplacé.",
       "invalid_auth": "Authentification invalide",
+      "panel_not_ready": "Le panneau n'est pas encore prêt à enregistrer Home Assistant, généralement parce qu'il est encore en cours de démarrage. Patientez un instant, puis réessayez.",
+      "passphrase_unavailable": "Le panneau ne peut pas délivrer d'identifiants car sa phrase secrète n'est pas encore disponible. Cela ne signifie pas qu'une phrase secrète incorrecte a été saisie. Patientez quelques minutes, puis réessayez.",
       "proximity_failed": "Proximité non prouvée. Veuillez ouvrir et fermer la porte du panneau 3 fois et réessayer.",
       "unknown": "Erreur inattendue"
     },

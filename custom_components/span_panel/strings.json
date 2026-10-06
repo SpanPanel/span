@@ -22,6 +22,8 @@
       "https_port_is_plaintext": "Port 80 is the plaintext HTTP port. Enter the port the panel serves TLS on — 443 unless something moved it.",
       "host_required": "Host is required",
       "invalid_auth": "Invalid authentication",
+      "panel_not_ready": "The panel is not ready to register Home Assistant yet, usually because it is still starting up. Wait a moment, then try again.",
+      "passphrase_unavailable": "The panel cannot issue credentials because its passphrase is not available yet. This does not mean a passphrase was entered incorrectly. Wait a few minutes, then try again.",
       "proximity_failed": "Proximity not proven. Please open and close the panel door 3 times and try again.",
       "unknown": "Unexpected error"
     },

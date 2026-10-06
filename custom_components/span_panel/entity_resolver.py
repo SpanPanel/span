@@ -19,6 +19,7 @@ from .id_builder import (
     build_evse_unique_id,
     build_mid_unique_id,
     build_panel_unique_id,
+    build_pv_inverter_unique_id,
     build_select_unique_id,
     build_switch_unique_id,
     construct_synthetic_unique_id,
@@ -136,6 +137,18 @@ def build_evse_unique_id_for_entry(
     """Build EVSE unique_id using the panel serial from the snapshot."""
     identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
     return build_evse_unique_id(identifier, evse_id, description_key)
+
+
+def build_pv_inverter_unique_id_for_entry(
+    coordinator: SpanPanelCoordinator,
+    snapshot: SpanPanelSnapshot,
+    inverter_key: str,
+    description_key: str,
+    device_name: str | None = None,
+) -> str:
+    """Build one inverter's unique_id using the panel serial from the snapshot."""
+    identifier = _get_device_identifier_for_unique_ids(coordinator, snapshot, device_name)
+    return build_pv_inverter_unique_id(identifier, inverter_key, description_key)
 
 
 def build_bess_unique_id_for_entry(

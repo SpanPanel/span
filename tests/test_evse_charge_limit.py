@@ -352,14 +352,40 @@ async def test_republishing_moves_the_state_and_the_bound(hass: HomeAssistant) -
     assert entity.native_max_value == recommissioned
 
 
-async def test_an_unpublished_limit_is_unknown_rather_than_zero(hass: HomeAssistant) -> None:
-    """The control is still offered — the property is declared, the value is late."""
+async def test_an_unpublished_limit_shows_the_ceiling(hass: HomeAssistant) -> None:
+    """No user limit means the commissioned ceiling is the limit in force.
+
+    From r202639 a charger nobody has limited publishes no user limit at all.
+    The control is still offered, and shows what the charger is enforcing.
+    """
     tree = schema_one_tree()
-    created = await _created(hass, _snapshot(evse={LIMIT_TOPIC: None}))
+    recommissioned = _published(tree, EVSE, CEILING_TOPIC) - 8
+    created = await _created(hass, _snapshot(evse={LIMIT_TOPIC: None, CEILING_TOPIC: recommissioned}))
+    entity = _for(created, tree, EVSE)
+
+    assert entity.native_value == recommissioned
+    assert entity.available is True
+
+
+async def test_a_retained_limit_equal_to_the_ceiling_reads_the_same(hass: HomeAssistant) -> None:
+    """A stale retained limit at the ceiling and an absent one are the same setting."""
+    tree = schema_one_tree()
+    ceiling = _published(tree, EVSE, CEILING_TOPIC)
+    retained = _for(await _created(hass, _snapshot(evse={LIMIT_TOPIC: ceiling})), tree, EVSE)
+    absent = _for(await _created(hass, _snapshot(evse={LIMIT_TOPIC: None})), tree, EVSE)
+
+    assert retained.native_value == absent.native_value == ceiling
+    assert retained.available is absent.available is True
+
+
+async def test_neither_limit_nor_ceiling_is_unknown_rather_than_zero(hass: HomeAssistant) -> None:
+    """With nothing published there is no reading, and no bound to offer either."""
+    tree = schema_one_tree()
+    created = await _created(hass, _snapshot(evse={LIMIT_TOPIC: None, CEILING_TOPIC: None}))
     entity = _for(created, tree, EVSE)
 
     assert entity.native_value is None
-    assert entity.available is True
+    assert entity.available is False
 
 
 async def test_an_unpublished_ceiling_makes_the_control_unavailable(hass: HomeAssistant) -> None:

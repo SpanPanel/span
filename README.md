@@ -182,15 +182,23 @@ On **Import Limit**, and present only when the panel publishes them. These are t
 
 From 2.1.x these live on a **Solar** device of their own rather than on the panel's card, alongside PV Power and PV Panel Link.
 
-| Sensor             | Device Class | Unit | Notes                                         |
-| ------------------ | ------------ | ---- | --------------------------------------------- |
-| PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other") |
-| PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")            |
-| Nameplate Capacity | Power        | kW   | Rated inverter capacity. Off by default       |
+| Sensor             | Device Class | Unit | Notes                                                                                |
+| ------------------ | ------------ | ---- | ------------------------------------------------------------------------------------ |
+| PV Vendor          | —            | —    | PV inverter vendor (e.g., "Enphase", "Other")                                        |
+| PV Product         | —            | —    | PV inverter product (e.g., "IQ8+")                                                   |
+| Nameplate Capacity | —            | W    | DC array size recorded at installation; informational, never a limit. Off by default |
 
 If you upgraded, these keep their entity ids, unique ids and history — but not the panel's area, since an entity takes its area from its device and the Solar
 device starts without one. Assign it an area, or anything area-scoped (dashboards, automations, voice targeting a room) stops matching them. New installations
 get ids from the new device name — `sensor.span_panel_solar_pv_vendor` rather than `sensor.span_panel_pv_vendor`. Both are correct and neither changes again.
+
+On a panel with more than one inverter (published from firmware r202639), each inverter gets a **Solar Inverter** device of its own, named after the circuit
+that feeds it, carrying its own PV Vendor, PV Product, Nameplate Capacity and PV Panel Link. The **Solar** device keeps PV Power, which stays the panel's total
+for all inverters. When the panel first reports a second inverter, the metadata sensors the Solar device carried move to the device of the inverter on the
+lowest breaker space, with their entity IDs, history and automations intact; vendor readings on the Solar device move with them and keep their customizations.
+If the panel returns to a single inverter, the same sensors move back to the Solar device, keeping their entity IDs, and describe the remaining inverter. An
+inverter device the panel no longer reports stays, unavailable, until you delete it. A panel with one inverter keeps exactly the entities and ids described
+above.
 
 **Deprecated:**
 

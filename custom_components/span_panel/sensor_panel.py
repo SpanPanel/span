@@ -10,12 +10,14 @@ from span_panel_api import (
     SpanMidSnapshot,
     SpanPanelSnapshot,
     SpanPcsSnapshot,
+    SpanPVSnapshot,
 )
 
 from .coordinator import SpanPanelCoordinator
 from .helpers import (
     build_bess_unique_id_for_entry,
     build_mid_unique_id_for_entry,
+    build_pv_inverter_unique_id_for_entry,
     construct_panel_unique_id_for_entry,
     construct_synthetic_unique_id_for_entry,
     get_panel_entity_suffix,
@@ -31,6 +33,7 @@ from .sensor_definitions import (
     SpanPVMetadataSensorEntityDescription,
     SpanShedForecastSensorEntityDescription,
 )
+from .util import EMPTY_PV
 
 
 def _grid_forming_device_name(snapshot: SpanPanelSnapshot) -> str | None:
@@ -661,10 +664,8 @@ class SpanMidSensor(SpanSensorBase[SpanMidSensorEntityDescription, SpanMidSnapsh
         return mid
 
 
-class SpanPVMetadataSensor(
-    SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPanelSnapshot]
-):
-    """PV metadata sensor entity on the PV sub-device.
+class SpanPVMetadataSensor(SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPVSnapshot]):
+    """PV metadata sensor entity on the PV sub-device, for a panel with one inverter.
 
     On the panel's own card until the inverter got one of its own, which put the
     inverter's vendor and model beside the *panel's* vendor and model on the card
@@ -680,6 +681,10 @@ class SpanPVMetadataSensor(
     renames an entity it already knows; a new one gets the id Home Assistant
     derives from the inverter's device name. That asymmetry is intended -- see
     `test_pv_device.py`.
+
+    A panel with more than one inverter gets `SpanPVInverterSensor` instead,
+    one set per inverter, and these three are re-keyed in place onto the
+    primary inverter's; see `pv_inverter_layout`.
     """
 
     def __init__(
@@ -703,6 +708,45 @@ class SpanPVMetadataSensor(
             self.coordinator, snapshot, description.key, self._device_name
         )
 
-    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPanelSnapshot:
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPVSnapshot:
         """Get the data source for the PV metadata sensor."""
-        return snapshot
+        return snapshot.pv
+
+
+class SpanPVInverterSensor(SpanSensorBase[SpanPVMetadataSensorEntityDescription, SpanPVSnapshot]):
+    """One inverter's metadata sensor, on a panel with more than one inverter.
+
+    The per-inverter counterpart of `SpanPVMetadataSensor`, built from the same
+    descriptions and shaped like `SpanEvseSensor`: the unique id carries the
+    inverter's `pv_inverters` key, and the entity sits on that inverter's card.
+    An inverter that leaves the snapshot reads as `EMPTY_PV`, as a departed
+    charger reads as `EMPTY_EVSE`.
+    """
+
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPVMetadataSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+        inverter_key: str,
+        device_info_override: DeviceInfo,
+    ) -> None:
+        """Initialize the inverter sensor."""
+        # Before the base initializer, which builds the unique id from it.
+        self._inverter_key = inverter_key
+        super().__init__(data_coordinator, description, snapshot)
+        self._attr_device_info = device_info_override
+
+    def _generate_unique_id(
+        self,
+        snapshot: SpanPanelSnapshot,
+        description: SpanPVMetadataSensorEntityDescription,
+    ) -> str:
+        """Generate unique ID from the inverter's key."""
+        return build_pv_inverter_unique_id_for_entry(
+            self.coordinator, snapshot, self._inverter_key, description.key, self._device_name
+        )
+
+    def get_data_source(self, snapshot: SpanPanelSnapshot) -> SpanPVSnapshot:
+        """Get this inverter's snapshot."""
+        return snapshot.pv_inverters.get(self._inverter_key, EMPTY_PV)

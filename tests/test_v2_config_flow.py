@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import dataclasses
 import ipaddress
 import logging
 import ssl
@@ -17,7 +18,13 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from span_panel_api import DetectionResult, V2AuthResponse, V2StatusInfo
-from span_panel_api.exceptions import SpanPanelAuthError, SpanPanelConnectionError
+from span_panel_api.exceptions import (
+    SpanPanelAuthError,
+    SpanPanelConnectionError,
+    SpanPanelPassphraseUnavailableError,
+    SpanPanelServerError,
+    SpanPanelTimeoutError,
+)
 
 from custom_components.span_panel import (
     CURRENT_CONFIG_VERSION,
@@ -1592,6 +1599,209 @@ async def test_proximity_switch_to_passphrase(hass: HomeAssistant) -> None:
 
         assert result3["type"] == FlowResultType.FORM
         assert result3["step_id"] == "auth_passphrase"
+
+
+# ---------- registration a panel cannot complete yet ----------
+
+#: What each registration failure that is not the user's doing shows. Both
+#: steps share the mapping; neither is `invalid_auth`.
+NOT_YET_REGISTERABLE = [
+    pytest.param(
+        SpanPanelServerError("HTTP 503", status_code=503), "panel_not_ready", id="server_503"
+    ),
+    pytest.param(SpanPanelTimeoutError("timed out"), "panel_not_ready", id="timeout"),
+    pytest.param(
+        SpanPanelPassphraseUnavailableError("unavailable", status_code=422),
+        "passphrase_unavailable",
+        id="passphrase_unavailable",
+    ),
+]
+
+#: A registration that succeeded but carried no broker password.
+MOCK_V2_AUTH_NO_BROKER_PASSWORD = dataclasses.replace(
+    MOCK_V2_AUTH, ebus_broker_password=None, hop_passphrase=None
+)
+
+
+async def _passphrase_form(hass: HomeAssistant):
+    """Run a user flow to the passphrase form."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "auth_passphrase"}
+    )
+    assert result["step_id"] == "auth_passphrase"
+    return result
+
+
+async def _confirm_proximity(hass: HomeAssistant):
+    """Run a user flow through the door-challenge confirmation."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await _submit_host_and_pin(hass, result["flow_id"], {CONF_HOST: MOCK_HOST})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "auth_proximity"}
+    )
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "auth_proximity_confirm"}
+    )
+
+
+@pytest.mark.parametrize(("error", "expected"), NOT_YET_REGISTERABLE)
+@pytest.mark.asyncio
+async def test_passphrase_registration_the_panel_cannot_complete_yet(
+    hass: HomeAssistant, error: Exception, expected: str
+) -> None:
+    """The passphrase form comes back with a retryable error, then succeeds."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_passphrase",
+            side_effect=[error, MOCK_V2_AUTH],
+        ),
+    ):
+        form = await _passphrase_form(hass)
+        failed = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+        assert failed["type"] == FlowResultType.FORM
+        assert failed["step_id"] == "auth_passphrase"
+        assert failed["errors"] == {"base": expected}
+
+        retried = await hass.config_entries.flow.async_configure(
+            failed["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+        assert retried["step_id"] == "choose_entity_naming_initial"
+
+
+@pytest.mark.parametrize(("error", "expected"), NOT_YET_REGISTERABLE)
+@pytest.mark.asyncio
+async def test_proximity_registration_the_panel_cannot_complete_yet(
+    hass: HomeAssistant, error: Exception, expected: str
+) -> None:
+    """A proven door challenge that cannot register yet shows why, and can be retried."""
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            side_effect=[
+                MOCK_V2_DETECTION,
+                MOCK_V2_DETECTION_PROXIMITY_PROVEN,
+                MOCK_V2_DETECTION_PROXIMITY_PROVEN,
+            ],
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_v2_proximity",
+            side_effect=[error, MOCK_V2_AUTH],
+        ),
+    ):
+        failed = await _confirm_proximity(hass)
+        assert failed["type"] == FlowResultType.FORM
+        assert failed["step_id"] == "auth_proximity_confirm"
+        assert failed["errors"] == {"base": expected}
+
+        retried = await hass.config_entries.flow.async_configure(failed["flow_id"], {})
+        assert retried["step_id"] == "choose_entity_naming_initial"
+
+
+@pytest.mark.asyncio
+async def test_no_entry_is_created_without_a_broker_password(hass: HomeAssistant) -> None:
+    """A registration with a null broker password stops at the form.
+
+    Patched below the validator, at the library call, so the guard that turns
+    the missing password into an error is the real one.
+    """
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            return_value=MOCK_V2_DETECTION,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow.validate_host",
+            return_value=True,
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=AsyncMock(return_value=MOCK_V2_AUTH_NO_BROKER_PASSWORD),
+        ),
+    ):
+        form = await _passphrase_form(hass)
+        failed = await hass.config_entries.flow.async_configure(
+            form["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+        )
+
+    assert failed["type"] == FlowResultType.FORM
+    assert failed["errors"] == {"base": "passphrase_unavailable"}
+    assert hass.config_entries.async_entries(DOMAIN) == []
+
+
+@pytest.mark.parametrize("method", ["auth_passphrase", "auth_proximity"])
+@pytest.mark.asyncio
+async def test_reauth_keeps_the_stored_password_when_none_comes_back(
+    hass: HomeAssistant, method: str
+) -> None:
+    """Reauth by either method never overwrites a broker password with nothing."""
+    entry = MockConfigEntry(
+        version=3,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "old-token",
+            CONF_API_VERSION: "v2",
+            CONF_EBUS_BROKER_HOST: "old-host",
+            CONF_EBUS_BROKER_PORT: 8883,
+            CONF_EBUS_BROKER_USERNAME: "old-user",
+            CONF_EBUS_BROKER_PASSWORD: "old-pass",
+        },
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+    before = dict(entry.data)
+
+    with (
+        patch(
+            "custom_components.span_panel.config_flow.detect_api_version",
+            side_effect=[MOCK_V2_DETECTION, MOCK_V2_DETECTION_PROXIMITY_PROVEN],
+        ),
+        patch(
+            "custom_components.span_panel.config_flow_validation.register_v2",
+            new=AsyncMock(return_value=MOCK_V2_AUTH_NO_BROKER_PASSWORD),
+        ),
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
+        result = await entry.start_reauth_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": method}
+        )
+        if method == "auth_passphrase":
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {CONF_HOP_PASSPHRASE: MOCK_PASSPHRASE}
+            )
+        else:
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], {"next_step_id": "auth_proximity_confirm"}
+            )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "passphrase_unavailable"}
+    assert dict(entry.data) == before
 
 
 # ---------- duplicate entry prevention ----------

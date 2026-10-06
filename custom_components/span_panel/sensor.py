@@ -26,11 +26,13 @@ from .helpers import (
     has_bess_telemetry,
     has_evse,
     has_mid,
+    has_multiple_pv_inverters,
     has_pcs,
     has_power_flows,
     has_pv,
     has_shed_forecast,
     resolve_evse_display_suffix,
+    resolve_pv_display_suffixes,
 )
 from .runtime import SpanPanelConfigEntry
 from .sensor_base import SpanEnergySensorBase, SpanSensorBase
@@ -78,10 +80,18 @@ from .sensor_panel import (
     SpanPanelPowerSensor,
     SpanPanelStatus,
     SpanPcsSensor,
+    SpanPVInverterSensor,
     SpanPVMetadataSensor,
     SpanShedForecastSensor,
 )
-from .util import bess_device_info, evse_device_info, mid_device_info, pv_device_info
+from .util import (
+    bess_device_info,
+    evse_device_info,
+    mid_device_info,
+    pv_array_device_info,
+    pv_device_info,
+    pv_inverter_device_info,
+)
 
 # Export the sensor classes for backward compatibility with tests
 __all__ = [
@@ -90,6 +100,7 @@ __all__ = [
     "SpanCircuitEnergySensor",
     "SpanCircuitPowerSensor",
     "SpanEnergySensorBase",
+    "SpanPVInverterSensor",
     "SpanPVMetadataSensor",
     "SpanPanelBattery",
     "SpanPanelEnergySensor",
@@ -505,20 +516,62 @@ def create_battery_sensors(
     return entities
 
 
-def _build_pv_device_info(
-    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
-) -> DeviceInfo:
-    """DeviceInfo for the solar inverter sub-device."""
-    panel_name = (
+def _panel_name(coordinator: SpanPanelCoordinator) -> str:
+    return (
         coordinator.config_entry.data.get(CONF_DEVICE_NAME, coordinator.config_entry.title)
         or "Span Panel"
     )
+
+
+def _build_pv_device_info(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> DeviceInfo:
+    """DeviceInfo for the solar sub-device: one inverter's card, or the aggregate's."""
+    panel_device_id = coordinator.config_entry.runtime_data.panel_device_id
+    if has_multiple_pv_inverters(snapshot):
+        return pv_array_device_info(
+            snapshot.serial_number,
+            snapshot.pv_inverters.values(),
+            _panel_name(coordinator),
+            panel_device_id=panel_device_id,
+        )
     return pv_device_info(
         snapshot.serial_number,
         snapshot.pv,
-        panel_name,
-        panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+        _panel_name(coordinator),
+        panel_device_id=panel_device_id,
     )
+
+
+def create_pv_inverter_sensors(
+    coordinator: SpanPanelCoordinator, snapshot: SpanPanelSnapshot
+) -> list[SpanPVInverterSensor]:
+    """Create each inverter's metadata sensors, on a panel with more than one.
+
+    Mirrors `create_evse_sensors`: one card per inverter, keyed by its
+    `pv_inverters` key, and the three PV metadata descriptions on each. A panel
+    with one inverter gets none of these; its metadata stays on the solar card
+    under the ids it has always had.
+    """
+    if not has_multiple_pv_inverters(snapshot):
+        return []
+    use_circuit_numbers = coordinator.config_entry.options.get(USE_CIRCUIT_NUMBERS, False)
+    suffixes = resolve_pv_display_suffixes(snapshot, use_circuit_numbers)
+    entities: list[SpanPVInverterSensor] = []
+    for key, inverter in snapshot.pv_inverters.items():
+        info = pv_inverter_device_info(
+            snapshot.serial_number,
+            key,
+            inverter,
+            _panel_name(coordinator),
+            suffixes[key],
+            panel_device_id=coordinator.config_entry.runtime_data.panel_device_id,
+        )
+        entities.extend(
+            SpanPVInverterSensor(coordinator, description, snapshot, key, info)
+            for description in PV_METADATA_SENSORS
+        )
+    return entities
 
 
 def create_power_flow_sensors(
@@ -530,10 +583,15 @@ def create_power_flow_sensors(
     Site Power — only when the power-flows node is publishing.
     PV metadata sensors — only when PV is commissioned.
 
+    The metadata sensors are created here only on a panel with one inverter;
+    `create_pv_inverter_sensors` covers a panel with more.
+
     The PV sensors land on the inverter's own sub-device, matching what the BESS
     has done since v1.0: `battery_power` is the enclosure's reading of the
     battery and it sits on the battery's card, so `pv_power` -- the enclosure's
-    reading of the inverter -- belongs on the inverter's.
+    reading of the inverter -- belongs on the inverter's. On a panel with more
+    than one inverter, `pv_power` stays the panel's aggregate reading on the
+    same card, which then describes the inverters together.
 
     Nothing pins an entity_id. An installation that already has these five keeps
     the ids it has, because the registry never renames an entity it already
@@ -555,10 +613,11 @@ def create_power_flow_sensors(
             )
         )
 
-        entities.extend(
-            SpanPVMetadataSensor(coordinator, desc, snapshot, pv_info)
-            for desc in PV_METADATA_SENSORS
-        )
+        if not has_multiple_pv_inverters(snapshot):
+            entities.extend(
+                SpanPVMetadataSensor(coordinator, desc, snapshot, pv_info)
+                for desc in PV_METADATA_SENSORS
+            )
 
     if has_power_flows(snapshot):
         entities.append(SpanPanelPowerSensor(coordinator, GRID_POWER_FLOW_SENSOR, snapshot))
@@ -596,6 +655,7 @@ def create_native_sensors(
     | SpanPanelBattery
     | SpanBessMetadataSensor
     | SpanPVMetadataSensor
+    | SpanPVInverterSensor
     | SpanEvseSensor
     | SpanMidSensor
     | SpanShedForecastSensor
@@ -613,6 +673,7 @@ def create_native_sensors(
         | SpanPanelBattery
         | SpanBessMetadataSensor
         | SpanPVMetadataSensor
+        | SpanPVInverterSensor
         | SpanEvseSensor
         | SpanMidSensor
         | SpanShedForecastSensor
@@ -629,6 +690,7 @@ def create_native_sensors(
     entities.extend(create_shed_forecast_sensors(coordinator, snapshot))
     entities.extend(create_pcs_sensors(coordinator, snapshot))
     entities.extend(create_power_flow_sensors(coordinator, snapshot))
+    entities.extend(create_pv_inverter_sensors(coordinator, snapshot))
     entities.extend(create_evse_sensors(coordinator, snapshot))
 
     return entities

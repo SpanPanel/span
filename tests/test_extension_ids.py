@@ -56,6 +56,7 @@ def test_the_grammar_is_serial_token_scope_then_the_wire_path() -> None:
         ("battery", None, "bess"),
         ("mid", None, "mid"),
         ("pv", None, "pv"),
+        ("pv", "abc123", "pv_abc123"),
         ("evse", "acme-001", "evse_acme-001"),
         ("circuit", "0ab966b95f92a6a51ec548485aa85f54", "circuit_0ab966b95f92a6a51ec548485aa85f54"),
     ],

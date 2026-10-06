@@ -108,7 +108,10 @@ EVSE_CHARGE_CURRENT_LIMIT: Final = SpanEvseNumberEntityDescription(
     native_step=1,
     mode=NumberMode.BOX,
     entity_category=EntityCategory.CONFIG,
-    value_fn=lambda evse: evse.charge_current_limit_a,
+    # The limit in force rather than the user's own: from r202639 a charger
+    # with no user limit publishes none, and the commissioned ceiling is then
+    # what it enforces. Showing unknown there would hide a real setting.
+    value_fn=lambda evse: evse.effective_charge_current_limit_a,
     maximum_fn=lambda evse: evse.charge_current_ceiling_a,
     target_fn=lambda evse: evse.charge_current_limit_target_a,
     settable_fn=lambda evse: evse.charge_current_limit_settable,

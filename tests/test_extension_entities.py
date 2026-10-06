@@ -177,6 +177,7 @@ def test_an_unregistered_id_takes_the_platform_its_datatype_implies(hass: HomeAs
         ("battery", None, f"{PANEL_SERIAL}_bess"),
         ("mid", None, f"{PANEL_SERIAL}_mid"),
         ("pv", None, f"{PANEL_SERIAL}_pv"),
+        ("pv", "abc123", f"{PANEL_SERIAL}_pv_abc123"),
         ("evse", "acme-001", f"{PANEL_SERIAL}_evse_acme-001"),
     ],
 )
