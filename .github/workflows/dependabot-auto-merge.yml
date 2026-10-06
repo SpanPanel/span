@@ -19,8 +19,10 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # Not `span-panel-api`: it is bumped by hand with manifest.json (see
+      # .github/dependabot.yml), so a bump that slips through must not land alone.
       - name: Auto-merge for patch and minor updates
-        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor' }}
+        if: ${{ (steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor') && !contains(steps.metadata.outputs.dependency-names, 'span-panel-api') }}
         run: |
           echo "Auto-merging ${{ steps.metadata.outputs.dependency-names }}"
           gh pr merge --auto --merge "$PR_URL"

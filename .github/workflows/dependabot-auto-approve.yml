@@ -19,8 +19,9 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
+      # Not `span-panel-api`, for the reason given in dependabot-auto-merge.yml.
       - name: Auto-approve patch and minor updates
-        if: ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor' }}
+        if: ${{ (steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor') && !contains(steps.metadata.outputs.dependency-names, 'span-panel-api') }}
         uses: hmarr/auto-approve-action@v4
         with:
           review-message: "Auto-approved ${{ steps.metadata.outputs.update-type }} update for ${{ steps.metadata.outputs.dependency-names }}"
