@@ -2,10 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [2.1.3] - 10/2026
 
 ### Added
 
+- **Support for SPAN panel firmware r202639**, whose changes are listed in SPAN's
+  [API changelog](https://github.com/spanio/SPAN-API-Client-Docs/blob/main/CHANGELOG.md) and handled by the entries below.
 - **Each solar inverter gets its own device** on a panel that reports more than one, while PV Power stays the panel's total and your existing PV entities keep
   their entity_ids, moving to the inverter on the lowest breaker space and back if the panel returns to one inverter.
 - **Vendor readings a solar inverter publishes** appear on that inverter's own device.
@@ -22,6 +24,7 @@ All notable changes to this project will be documented in this file.
 - **SPAN Drive's EVSE Charge Current Limit shows the charger's commissioned maximum when nobody has set a limit**, where it showed unknown.
 - **Setup and reauthentication ask you to wait and try again when a panel cannot register Home Assistant yet**, instead of failing with an unexpected error,
   reporting a correct passphrase as invalid or saving an entry without its broker password.
+- **The battery's Meter Power keeps its sign on firmware r202639**, which reverses the sign the panel publishes for it, so it still agrees with Battery Power.
 
 ## [2.1.2] - 10/2026
 
