@@ -11,12 +11,11 @@ updates:
     allow:
       - dependency-type: "all"
     groups:
-      # Home Assistant core, stubs, and test component must upgrade together.
-      # A version mismatch between any of these causes resolution failures.
+      # Home Assistant core and the test component must upgrade together.
+      # A version mismatch between them causes resolution failures.
       ha-core:
         patterns:
           - "homeassistant"
-          - "homeassistant-stubs"
           - "pytest-homeassistant-custom-component"
       # Group remaining development dependencies together
       dev-dependencies:
@@ -37,7 +36,6 @@ updates:
           - "pyright"
         exclude-patterns:
           - "homeassistant"
-          - "homeassistant-stubs"
           - "pytest-homeassistant-custom-component"
     reviewers:
       - "cayossarian"

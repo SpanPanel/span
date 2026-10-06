@@ -1176,18 +1176,6 @@ wheels = [
 ]
 
 [[package]]
-name = "homeassistant-stubs"
-version = "2026.9.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "homeassistant" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/2e/ae/b39bcdfa43602f276395ab41ab6ed71dda48d5eee475f026da6217dbdf81/homeassistant_stubs-2026.9.4.tar.gz", hash = "sha256:5f4b6c054d72836b6f1fc1ea1aa6597d557ba639d5fe861adbf99a809941c405", size = 1472918, upload-time = "2026-09-27T17:03:01.319Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/b0/13be519e2308a4525ec1f7cef3850c61f0acf39a5484930d0483f06c6e09/homeassistant_stubs-2026.9.4-py3-none-any.whl", hash = "sha256:ae468f9af80c7c8f7424518833a3806f1f8e3cf7f88bf46ed67d97afe0724374", size = 4183194, upload-time = "2026-09-27T17:02:58.603Z" },
-]
-
-[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -2571,7 +2559,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
-    { name = "homeassistant-stubs" },
     { name = "isort" },
     { name = "mypy" },
     { name = "prek" },
@@ -2599,7 +2586,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", extras = ["toml"], specifier = "==1.9.4" },
-    { name = "homeassistant-stubs", specifier = "==2026.9.4" },
     { name = "isort" },
     { name = "mypy", specifier = "==2.4.0" },
     { name = "prek", specifier = ">=0.5.4" },

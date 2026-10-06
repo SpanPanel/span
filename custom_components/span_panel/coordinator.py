@@ -105,6 +105,8 @@ _STREAMING_FALLBACK_INTERVAL = timedelta(seconds=60)
 class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     """Coordinator for managing Span Panel data updates."""
 
+    config_entry: SpanPanelConfigEntry
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -113,7 +115,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
     ) -> None:
         """Initialize the coordinator."""
         self._client = client
-        self.config_entry: SpanPanelConfigEntry = config_entry
         # Track last tick for visibility into cadence
         self._last_tick_epoch: float | None = None
         # Flag to track if a reload was requested
@@ -183,9 +184,6 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
             name=DOMAIN,
             update_interval=update_interval,
         )
-
-        # Ensure config_entry is properly set after super().__init__
-        self.config_entry = config_entry
 
     @property
     def client(self) -> SpanMqttClient:

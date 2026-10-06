@@ -19,7 +19,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "homeassistant-stubs==2026.9.4",
     "types-requests",
     "types-PyYAML",
     "mypy==2.4.0",
@@ -113,12 +112,13 @@ exclude = [
 ]
 
 # Error codes
+# No "mutable-override", matching Core's mypy configuration: Core's typed coordinator
+# `config_entry` pattern relies on it being off.
 enable_error_code = [
     "deprecated",
     "ignore-without-code",
     "redundant-self",
     "truthy-iterable",
-    "mutable-override"
 ]
 disable_error_code = [
     "annotation-unchecked",
