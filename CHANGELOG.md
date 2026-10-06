@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## [2.1.3] - 10/2026
+## [2.1.2] - 10/2026
+
+The credential-rotation, GFE Override and DSM Grid State fixes below were reported and fixed by [@dcj](https://github.com/dcj) in
+[#277](https://github.com/SpanPanel/span/pull/277), from issue [#276](https://github.com/SpanPanel/span/issues/276).
 
 ### Added
 
@@ -17,19 +20,6 @@ All notable changes to this project will be documented in this file.
 
 - **New installs no longer allow control without a logged-in user by default**, so automations cannot operate circuits until you turn on **Allow control without
   a logged-in user** in the integration's options; existing installs keep their current setting ([#274](https://github.com/SpanPanel/span/discussions/274)).
-
-### Fixed
-
-- **Every inverter's circuit now reads as solar** on a panel with more than one inverter, where the others reported power and Net Energy with the opposite sign.
-- **SPAN Drive's EVSE Charge Current Limit shows the charger's commissioned maximum when nobody has set a limit**, where it showed unknown.
-- **Setup and reauthentication ask you to wait and try again when a panel cannot register Home Assistant yet**, instead of failing with an unexpected error,
-  reporting a correct passphrase as invalid or saving an entry without its broker password.
-- **The battery's Meter Power keeps its sign on firmware r202639**, which reverses the sign the panel publishes for it, so it still agrees with Battery Power.
-
-## [2.1.2] - 10/2026
-
-The credential-rotation, GFE Override and DSM Grid State fixes below were reported and fixed by [@dcj](https://github.com/dcj) in
-[#277](https://github.com/SpanPanel/span/pull/277), from issue [#276](https://github.com/SpanPanel/span/issues/276).
 
 ### Fixed
 
@@ -58,6 +48,11 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
 - **GFE Override button follows the battery's own link health**: on firmware that publishes the battery's Communication State, the button is available only
   while that state is anything other than OK, which is when the panel accepts the override. Elsewhere it is available unless BESS Connected is on.
 - **DSM Grid State shows a GFE override while the panel is acting on it**, instead of the islanding state the MID senses.
+- **Every inverter's circuit now reads as solar** on a panel with more than one inverter, where the others reported power and Net Energy with the opposite sign.
+- **SPAN Drive's EVSE Charge Current Limit shows the charger's commissioned maximum when nobody has set a limit**, where it showed unknown.
+- **Setup and reauthentication ask you to wait and try again when a panel cannot register Home Assistant yet**, instead of failing with an unexpected error,
+  reporting a correct passphrase as invalid or saving an entry without its broker password.
+- **The battery's Meter Power keeps its sign on firmware r202639**, which reverses the sign the panel publishes for it, so it still agrees with Battery Power.
 
 ## [2.1.1] - 8/2026
 
