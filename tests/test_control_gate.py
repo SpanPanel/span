@@ -28,6 +28,11 @@ from custom_components.span_panel.control_gate import (
     async_bind_caller,
     outcome_is_failure,
 )
+from custom_components.span_panel.migrations import (
+    CURRENT_CONFIG_MINOR_VERSION,
+    CURRENT_CONFIG_VERSION,
+    async_migrate_entry,
+)
 
 RELAY = ControlCommand(
     device_id="sp3-test-001",
@@ -183,6 +188,50 @@ async def test_an_unbound_caller_is_treated_as_contextless(hass: HomeAssistant) 
         await gate.before_publish(RELAY)
 
     assert err.value.translation_key == "contextless_control_refused"
+
+
+def _gate_for_entry(hass: HomeAssistant, entry: MockConfigEntry) -> ControlGate:
+    """Build the gate the way setup does, from the entry's own options."""
+    return ControlGate(hass, entry, ControlPolicy.from_options(entry.options), ControlLock())
+
+
+@pytest.mark.asyncio
+async def test_a_new_entry_refuses_a_contextless_command(hass: HomeAssistant) -> None:
+    """An entry created at the current version has made no choice, so it is off."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Span Panel",
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION,
+    )
+    entry.add_to_hass(hass)
+    gate = _gate_for_entry(hass, entry)
+
+    token = async_bind_caller(Context(parent_id="automation-context"), "switch.x")
+    try:
+        with pytest.raises(ServiceValidationError) as err:
+            await gate.before_publish(RELAY)
+    finally:
+        CONTROL_CALLER.reset(token)
+
+    assert err.value.translation_key == "contextless_control_refused"
+
+
+@pytest.mark.asyncio
+async def test_a_migrated_entry_still_allows_a_contextless_command(
+    hass: HomeAssistant,
+) -> None:
+    """An upgrade must not start refusing the automations an install already runs."""
+    entry = MockConfigEntry(domain=DOMAIN, title="Span Panel", version=7, minor_version=1)
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry) is True
+    gate = _gate_for_entry(hass, entry)
+
+    token = async_bind_caller(Context(parent_id="automation-context"), "switch.x")
+    try:
+        await gate.before_publish(RELAY)
+    finally:
+        CONTROL_CALLER.reset(token)
 
 
 # ---------- the control lock ----------
@@ -618,12 +667,18 @@ def test_only_failed_means_it_will_never_be_delivered(
 # ---------- policy resolution ----------
 
 
-def test_the_defaults_change_nothing_for_an_existing_entry() -> None:
-    """A silent tightening on upgrade is worse than the status quo."""
+def test_an_entry_with_no_control_options_gets_the_defaults() -> None:
+    """Permissive except for contextless control, which an older entry has stored.
+
+    A silent tightening on upgrade is worse than the status quo, so the one
+    default that tightens is safe only because migration 7.2 wrote the old
+    behaviour into every entry from before it; see the two tests above.
+    """
     policy = ControlPolicy.from_options({})
 
+    assert policy == ControlPolicy.default()
     assert policy.mode is ControlMode.ALL_USERS
-    assert policy.allow_contextless is True
+    assert policy.allow_contextless is False
     assert policy.lock_enabled is False
     assert policy.relay_debounce_seconds == 2.0
 

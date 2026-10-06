@@ -24,7 +24,11 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
-from .control_gate import DEFAULT_RELAY_DEBOUNCE_SECONDS, ControlMode
+from .control_gate import (
+    DEFAULT_ALLOW_CONTEXTLESS_CONTROL,
+    DEFAULT_RELAY_DEBOUNCE_SECONDS,
+    ControlMode,
+)
 from .options import (
     ALLOW_CONTEXTLESS_CONTROL,
     CONTROL_LOCK_TIMEOUT,
@@ -102,9 +106,13 @@ def get_general_options_defaults(
         ),
         # Every default below reproduces what an entry already does. A silent
         # tightening on upgrade would break a household's automations with an
-        # error the user cannot diagnose from the entity.
+        # error the user cannot diagnose from the entity. Contextless control
+        # can default to off only because migration 7.2 stored the old `True`
+        # in every entry that predates it.
         CONTROL_MODE: config_entry.options.get(CONTROL_MODE, ControlMode.ALL_USERS.value),
-        ALLOW_CONTEXTLESS_CONTROL: config_entry.options.get(ALLOW_CONTEXTLESS_CONTROL, True),
+        ALLOW_CONTEXTLESS_CONTROL: config_entry.options.get(
+            ALLOW_CONTEXTLESS_CONTROL, DEFAULT_ALLOW_CONTEXTLESS_CONTROL
+        ),
         CONTROL_LOCK_TIMEOUT: config_entry.options.get(CONTROL_LOCK_TIMEOUT, -1),
         RELAY_DEBOUNCE_SECONDS: config_entry.options.get(
             RELAY_DEBOUNCE_SECONDS, DEFAULT_RELAY_DEBOUNCE_SECONDS

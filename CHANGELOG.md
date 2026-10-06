@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **New installs no longer allow control without a logged-in user by default**, so automations cannot operate circuits until you turn on **Allow control without
+  a logged-in user** in the integration's options; existing installs keep their current setting ([#274](https://github.com/SpanPanel/span/discussions/274)).
+
 ### Added
 
 - **Each solar inverter gets its own device** on a panel that reports more than one, while PV Power stays the panel's total and your existing PV entities keep

@@ -10,6 +10,7 @@ import ssl
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -50,6 +51,9 @@ from custom_components.span_panel.const import (
     DOMAIN,
     PANEL_CA_PENDING,
 )
+from custom_components.span_panel.control_gate import ControlPolicy
+from custom_components.span_panel.migrations import CURRENT_CONFIG_MINOR_VERSION
+from custom_components.span_panel.options import ALLOW_CONTEXTLESS_CONTROL
 
 # Shared mock detection for a different panel (used in reconfigure/duplicate tests)
 MOCK_V2_DETECTION_OTHER = DetectionResult(
@@ -388,10 +392,8 @@ async def test_passphrase_auth_connection_error(hass: HomeAssistant) -> None:
 # ---------- v2 entry creation ----------
 
 
-@pytest.mark.usefixtures("socket_enabled")
-@pytest.mark.asyncio
-async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
-    """A completed v2 flow should create an entry with MQTT broker fields."""
+async def _create_v2_entry(hass: HomeAssistant) -> ConfigFlowResult:
+    """Drive a passphrase flow through to entry creation and return that result."""
     with (
         patch(
             "custom_components.span_panel.config_flow.detect_api_version",
@@ -426,23 +428,52 @@ async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
         )
 
         # Step 4: choose entity naming pattern (accept default)
-        result4 = await hass.config_entries.flow.async_configure(
+        return await hass.config_entries.flow.async_configure(
             result3["flow_id"],
             {"entity_naming_pattern": "friendly_names"},
         )
 
-        assert result4["type"] == FlowResultType.CREATE_ENTRY
-        data = result4["data"]
-        assert data[CONF_API_VERSION] == "v2"
-        assert data[CONF_HOST] == MOCK_HOST
-        assert data[CONF_ACCESS_TOKEN] == "v2-token-abc"
-        assert data[CONF_EBUS_BROKER_HOST] == "192.168.1.100"
-        assert data[CONF_EBUS_BROKER_PORT] == 8883
-        assert data[CONF_EBUS_BROKER_USERNAME] == "span-user"
-        assert data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
-        # The passphrase is a registration input, never entry data.
-        assert CONF_HOP_PASSPHRASE not in data
-        assert data[CONF_PANEL_SERIAL] == "SPAN-V2-001"
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_v2_entry_contains_mqtt_credentials(hass: HomeAssistant) -> None:
+    """A completed v2 flow should create an entry with MQTT broker fields."""
+    result = await _create_v2_entry(hass)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[CONF_API_VERSION] == "v2"
+    assert data[CONF_HOST] == MOCK_HOST
+    assert data[CONF_ACCESS_TOKEN] == "v2-token-abc"
+    assert data[CONF_EBUS_BROKER_HOST] == "192.168.1.100"
+    assert data[CONF_EBUS_BROKER_PORT] == 8883
+    assert data[CONF_EBUS_BROKER_USERNAME] == "span-user"
+    assert data[CONF_EBUS_BROKER_PASSWORD] == "mqtt-secret"
+    # The passphrase is a registration input, never entry data.
+    assert CONF_HOP_PASSPHRASE not in data
+    assert data[CONF_PANEL_SERIAL] == "SPAN-V2-001"
+
+
+@pytest.mark.usefixtures("socket_enabled")
+@pytest.mark.asyncio
+async def test_a_new_entry_refuses_control_without_a_logged_in_user(
+    hass: HomeAssistant,
+) -> None:
+    """A new install starts with contextless control off, and says so in its options.
+
+    Stored rather than left absent, so an older release reading the entry after
+    a downgrade does not take the missing key for its own default of on.
+    """
+    result = await _create_v2_entry(hass)
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    entry = result["result"]
+    assert (entry.version, entry.minor_version) == (
+        CURRENT_CONFIG_VERSION,
+        CURRENT_CONFIG_MINOR_VERSION,
+    )
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
+    assert ControlPolicy.from_options(entry.options).allow_contextless is False
 
 
 async def _reach_the_ca_step(hass: HomeAssistant):
@@ -599,6 +630,7 @@ async def test_config_flow_uses_current_config_entry_version() -> None:
     """New core entries should use the current storage version."""
 
     assert SpanPanelConfigFlow.VERSION == CURRENT_CONFIG_VERSION
+    assert SpanPanelConfigFlow.MINOR_VERSION == CURRENT_CONFIG_MINOR_VERSION
 
 
 @pytest.mark.asyncio
@@ -625,8 +657,11 @@ async def test_migration_updates_older_entry_to_current_version(
 
     assert result is True
     assert entry.version == CURRENT_CONFIG_VERSION
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
     # v2→v3 migration adds api_version field
     assert entry.data[CONF_API_VERSION] == "v1"
+    # An entry from before the default changed keeps the control it had.
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
 
 
 @pytest.mark.asyncio
@@ -722,6 +757,109 @@ async def test_home_assistant_actually_runs_the_v7_migration(hass: HomeAssistant
 
     assert entry.version == CURRENT_CONFIG_VERSION
     assert CONF_HOP_PASSPHRASE not in entry.data
+
+
+def _v7_1_entry(options: dict[str, object]) -> MockConfigEntry:
+    """Build a v2 entry as the release before contextless control defaulted off left it."""
+    return MockConfigEntry(
+        version=7,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={
+            CONF_HOST: MOCK_HOST,
+            CONF_ACCESS_TOKEN: "v2-token-abc",
+            CONF_API_VERSION: "v2",
+        },
+        source=config_entries.SOURCE_USER,
+        options=options,
+        unique_id="SPAN-V2-001",
+    )
+
+
+@pytest.mark.asyncio
+async def test_v7_1_migration_keeps_control_without_a_logged_in_user(
+    hass: HomeAssistant,
+) -> None:
+    """An entry that never set the option read it as on, and still does."""
+    entry = _v7_1_entry({})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
+    assert ControlPolicy.from_options(entry.options).allow_contextless is True
+
+
+@pytest.mark.asyncio
+async def test_v7_1_migration_keeps_an_explicit_off(hass: HomeAssistant) -> None:
+    """A user who already turned it off made a choice the migration must not undo."""
+    entry = _v7_1_entry({ALLOW_CONTEXTLESS_CONTROL: False})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is False
+    assert ControlPolicy.from_options(entry.options).allow_contextless is False
+
+
+@pytest.mark.asyncio
+async def test_v7_1_migration_reads_an_unreadable_value_as_it_was_read(
+    hass: HomeAssistant,
+) -> None:
+    """Anything but a bool resolved to on before, so the migration writes on."""
+    entry = _v7_1_entry({ALLOW_CONTEXTLESS_CONTROL: "no"})
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
+
+
+@pytest.mark.asyncio
+async def test_migration_leaves_an_entry_from_a_newer_minor_version_alone(
+    hass: HomeAssistant,
+) -> None:
+    """Core calls the migration on a minor downgrade, which it otherwise allows."""
+    entry = MockConfigEntry(
+        version=CURRENT_CONFIG_VERSION,
+        minor_version=CURRENT_CONFIG_MINOR_VERSION + 1,
+        domain=DOMAIN,
+        title="Span Panel",
+        data={CONF_HOST: MOCK_HOST, CONF_API_VERSION: "v2"},
+        source=config_entries.SOURCE_USER,
+        options={},
+        unique_id="SPAN-V2-001",
+    )
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION + 1
+    assert ALLOW_CONTEXTLESS_CONTROL not in entry.options
+
+
+@pytest.mark.asyncio
+async def test_home_assistant_actually_runs_the_v7_2_migration(hass: HomeAssistant) -> None:
+    """Core must decide to migrate a v7.1 entry.
+
+    The same drift as the v7 case, one level down: core compares
+    `SpanPanelConfigFlow.MINOR_VERSION` against the entry's, and a flow left at
+    the old minor version would never run the step.
+    """
+    entry = _v7_1_entry({})
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.span_panel.async_setup_entry",
+        AsyncMock(return_value=True),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+
+    assert entry.minor_version == CURRENT_CONFIG_MINOR_VERSION
+    assert entry.options[ALLOW_CONTEXTLESS_CONTROL] is True
 
 
 # ---------- zeroconf v2 discovery ----------

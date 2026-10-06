@@ -61,6 +61,15 @@ schema's topic grammar.
 
 DEFAULT_RELAY_DEBOUNCE_SECONDS = 2.0
 
+DEFAULT_ALLOW_CONTEXTLESS_CONTROL = False
+"""Whether a command with no logged-in user is allowed, for an entry that never said.
+
+Off, because an install that has made no choice should not take commands from
+every automation, script and integration in the house. Entries created before
+this default existed allowed them; migration 7.2 writes that `True` into each
+one's options, so this constant only ever decides for an entry created since.
+"""
+
 
 class ControlMode(StrEnum):
     """Who may operate the panel's controls."""
@@ -138,7 +147,9 @@ class ControlPolicy:
     Every default reproduces the behaviour an existing entry already has. A
     silent tightening on upgrade that breaks a household's automations is a worse
     outcome than the status quo, and the user cannot diagnose it from the
-    entity's error.
+    entity's error. `allow_contextless` departs from what an older entry did, and
+    can only because migration 7.2 stored that older behaviour in every such
+    entry before this reads it.
     """
 
     mode: ControlMode
@@ -160,7 +171,7 @@ class ControlPolicy:
         """
         return cls(
             mode=ControlMode.ALL_USERS,
-            allow_contextless=True,
+            allow_contextless=DEFAULT_ALLOW_CONTEXTLESS_CONTROL,
             lock_timeout_minutes=None,
             relay_debounce_seconds=DEFAULT_RELAY_DEBOUNCE_SECONDS,
         )
@@ -187,7 +198,9 @@ class ControlPolicy:
 
         return cls(
             mode=mode,
-            allow_contextless=_as_bool(options.get(ALLOW_CONTEXTLESS_CONTROL), True),
+            allow_contextless=_as_bool(
+                options.get(ALLOW_CONTEXTLESS_CONTROL), DEFAULT_ALLOW_CONTEXTLESS_CONTROL
+            ),
             lock_timeout_minutes=timeout,
             relay_debounce_seconds=_as_float(
                 options.get(RELAY_DEBOUNCE_SECONDS), DEFAULT_RELAY_DEBOUNCE_SECONDS
@@ -386,7 +399,8 @@ class ControlGate:
         if user_id is None and not self._policy.allow_contextless:
             self._refuse(
                 "contextless_control_refused",
-                "This SPAN panel refuses control commands that do not come from a logged-in user.",
+                "This SPAN panel refuses control commands that do not come from a logged-in user. "
+                "To allow them, turn on Allow control without a logged-in user in its options.",
                 parent_id=context.parent_id if context is not None else None,
             )
 

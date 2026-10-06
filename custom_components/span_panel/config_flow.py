@@ -86,7 +86,9 @@ from .const import (
     USE_DEVICE_PREFIX,
     EntityNamingPattern,
 )
+from .control_gate import DEFAULT_ALLOW_CONTEXTLESS_CONTROL
 from .options import (
+    ALLOW_CONTEXTLESS_CONTROL,
     ENERGY_DISPLAY_PRECISION,
     POWER_DISPLAY_PRECISION,
 )
@@ -158,7 +160,7 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
     """Handle a config flow for Span Panel."""
 
     VERSION = 7
-    MINOR_VERSION = 1
+    MINOR_VERSION = 2
     domain = DOMAIN
 
     def is_matching(self, other_flow: SpanPanelConfigFlow) -> bool:
@@ -1310,6 +1312,10 @@ class SpanPanelConfigFlow(config_entries.ConfigFlow):
                 POWER_DISPLAY_PRECISION: self.power_display_precision,
                 ENERGY_DISPLAY_PRECISION: self.energy_display_precision,
                 ENABLE_ENERGY_DIP_COMPENSATION: self._enable_dip_compensation,
+                # Stored rather than left to the default, so a release from
+                # before that default existed reads this entry the same way
+                # instead of treating the absent key as on.
+                ALLOW_CONTEXTLESS_CONTROL: DEFAULT_ALLOW_CONTEXTLESS_CONTROL,
             },
         )
 

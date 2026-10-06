@@ -450,7 +450,7 @@
       "message": "O comando do disjuntor para {circuit} não pôde ser entregue ao painel: {reason}. Foi recusado em vez de enfileirado, portanto o disjuntor não mudou de posição nem mudará mais tarde."
     },
     "contextless_control_refused": {
-      "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada."
+      "message": "Este SPAN Panel recusa comandos de controlo que não venham de um utilizador com sessão iniciada. Para os permitir, ative Permitir controlo sem um utilizador com sessão iniciada nas suas opções."
     },
     "control_disabled": {
       "message": "O controlo deste SPAN Panel está desativado nas suas opções. Nada foi enviado ao painel."
@@ -561,7 +561,7 @@
           "snapshot_update_interval": "Intervalo de Atualização do Snapshot (segundos)"
         },
         "data_description": {
-          "allow_contextless_control": "Automações, scripts e outras integrações invocam serviços sem qualquer utilizador associado. Desativar esta opção recusa esses comandos. Deixe-a ativa a não ser que as suas automações não operem circuitos.",
+          "allow_contextless_control": "Automações, scripts e outras integrações invocam serviços sem qualquer utilizador associado. Enquanto esta opção estiver desativada, esses comandos são recusados. Ative-a se as suas automações operarem circuitos.",
           "control_lock_timeout": "-1 desativa o bloqueio de controlo e remove o respetivo interruptor. 0 mantém o bloqueio armado até alguém o desarmar. Qualquer outro valor rearma-o esse número de minutos depois de ser desarmado. Só os administradores o podem desarmar.",
           "control_mode": "Por predefinição, o Home Assistant concede a todos os utilizadores não administradores o controlo de todas as entidades. Restringir a administradores é a única forma de alterar isso. Desativar deixa de criar as entidades de controlo; as respetivas entradas de registo, nomes e áreas são mantidos.",
           "enable_circuit_net_energy_sensors": "Energia líquida por circuito, contabilizando potência reativa.",
