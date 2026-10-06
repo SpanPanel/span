@@ -11,13 +11,7 @@ updates:
     allow:
       - dependency-type: "all"
     groups:
-      # Home Assistant core and the test component must upgrade together.
-      # A version mismatch between them causes resolution failures.
-      ha-core:
-        patterns:
-          - "homeassistant"
-          - "pytest-homeassistant-custom-component"
-      # Group remaining development dependencies together
+      # Group development dependencies together
       dev-dependencies:
         patterns:
           - "pytest*"
@@ -34,9 +28,6 @@ updates:
           - "types-*"
           - "voluptuous-stubs"
           - "pyright"
-        exclude-patterns:
-          - "homeassistant"
-          - "pytest-homeassistant-custom-component"
     reviewers:
       - "cayossarian"
     assignees:
@@ -53,6 +44,12 @@ updates:
       - dependency-name: "span-panel-api"
       - dependency-name: "span-panel-api-schema-0"
       - dependency-name: "span-panel-api-schema-1"
+      # Bumped by hand as a pair, as in #281: each harness release pins one
+      # exact Home Assistant, often a beta, so the harness moves only to the
+      # release that pins the `homeassistant` version chosen. `homeassistant`
+      # is ignored too, because bumping it alone breaks the same pairing.
+      - dependency-name: "pytest-homeassistant-custom-component"
+      - dependency-name: "homeassistant"
 
   # GitHub Actions dependencies
   - package-ecosystem: "github-actions"
