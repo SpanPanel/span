@@ -14,11 +14,16 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
 - **Each additional solar inverter gets its own device**, with its own vendor, product and nameplate capacity, and its panel link where the panel reports one.
 - **Vendor readings an additional solar inverter publishes** appear on that inverter's own device.
 - **A solar inverter the panel stops reporting keeps its device and entities** until you delete the device.
+- **The SPAN Panel card and dashboard give each additional solar inverter its own tile**, with its vendor, model, and the power and chart of the circuit that
+  feeds it.
+- **The card editor has a Solar section** for choosing which entities of the Solar device and of each inverter appear on their tiles.
 
 ### Changed
 
 - **New installs no longer allow control without a logged-in user by default**, so automations cannot operate circuits until you turn on **Allow control without
   a logged-in user** in the integration's options; existing installs keep their current setting ([#274](https://github.com/SpanPanel/span/discussions/274)).
+- **The Solar tile's headline and chart now show the power of the circuit that feeds its inverter**, with your site's total PV power in a row beneath it.
+- **The card editor's Battery section offers Meter Power and Nameplate Capacity**, which the battery tile does not otherwise show.
 
 ### Fixed
 
@@ -52,6 +57,9 @@ The credential-rotation, GFE Override and DSM Grid State fixes below were report
 - **Setup and reauthentication ask you to wait and try again when a panel cannot register Home Assistant yet**, instead of failing with an unexpected error,
   reporting a correct passphrase as invalid or saving an entry without its broker password.
 - **The battery's Meter Power keeps its sign on firmware r202639**, which reverses the sign the panel publishes for it, so it still agrees with Battery Power.
+- **The card editor lists the entities of every EV charger**, not only the last one.
+- **The card's breaker chart of a circuit that feeds an EV charger keeps its history**, where it opened empty or stayed blank because the charger's tile charts
+  the same circuit.
 
 ## [2.1.1] - 8/2026
 
