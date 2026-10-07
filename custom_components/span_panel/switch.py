@@ -33,6 +33,7 @@ from .helpers import (
     construct_circuit_label,
     construct_tabs_attribute,
     construct_voltage_attribute,
+    remove_withdrawn_controls,
 )
 from .naming import (
     circuit_object_id_base,
@@ -553,14 +554,27 @@ async def async_setup_entry(
             )
         )
 
-    # Under `disabled` the control entities are not created, and their registry
-    # entries are deliberately left in place. Removing them would risk a
-    # regenerated entity_id on the way back — a `_2` suffix if anything else
-    # claimed the slug meanwhile — and would discard the user's names, areas and
-    # customizations. They read as unavailable instead, which is recoverable.
+    # Under `disabled` the control entities are not created and their registry
+    # entries are kept. Choosing Nobody is the user's decision about every
+    # control, reversed by the user, and the README promises it deletes nothing.
+    # A control the panel withdraws is the panel's decision about one circuit,
+    # and is removed below. Either way Core restores a returning control's
+    # entity id, name and area, so keeping these entries is a promise, not a
+    # safeguard.
     if policy.mode is ControlMode.DISABLED:
         async_add_entities(entities)
         return
+
+    remove_withdrawn_controls(
+        er.async_get(hass),
+        config_entry.entry_id,
+        "switch",
+        snapshot.circuits,
+        circuit_has_a_breaker_switch,
+        lambda circuit_id: build_switch_unique_id_for_entry(
+            coordinator, snapshot, circuit_id, _device_name
+        ),
+    )
 
     for circuit_id, circuit_data in snapshot.circuits.items():
         if not circuit_has_a_breaker_switch(circuit_data):
