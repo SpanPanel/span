@@ -92,6 +92,8 @@ async def handle_panel_topology(
     device only (not a sub-device). Returns panel metadata, circuits with
     tabs/entity mappings, and sub-devices -- every kind
     `classify_sub_device_identifier` names, which is BESS, MID, EVSE and PV.
+    A PV sub-device also carries a `solar` block, the inverter it describes and
+    the circuit reading that is its power; see `solar_topology`.
     """
     resolved = resolve_panel_device(hass, connection, msg)
     if resolved is None:

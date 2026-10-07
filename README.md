@@ -739,7 +739,8 @@ topology and physical control of the panel are the real boundary; everything abo
 ## WebSocket API
 
 The integration provides a `span_panel/panel_topology` WebSocket command that returns the full physical layout of a panel in a single call — circuits with their
-breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, EVSE) with their entities.
+breaker slot positions, entity IDs grouped by role, and sub-devices (BESS, MID, EVSE, PV) with their entities, and for each solar device the inverter it
+describes and the circuit reading that is its power.
 
 See [WebSocket API Reference](websocket-api.md) for the full schema, response format, and usage examples.
 

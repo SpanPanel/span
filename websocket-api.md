@@ -6,7 +6,7 @@ AppDaemon scripts, or any WebSocket client connected to Home Assistant.
 ## `span_panel/panel_topology`
 
 Returns the full physical layout of a SPAN panel in a single call — circuits with their breaker slot positions, entity IDs grouped by role (power, energy,
-switch, select), and sub-devices (BESS, MID, EVSE) with their entities.
+switch, select), and sub-devices (BESS, MID, EVSE, PV) with their entities.
 
 A custom card rendering the physical panel needs to know which breaker slot each circuit occupies, which entity provides its power reading, which switch
 controls its relay, and so on. Without this command, the card would need to query the device registry, entity registry, and individual entity states in separate
@@ -107,6 +107,52 @@ Home Assistant's device list, which no longer holds a pre-2026.8 ID.
           "unique_id": "..."
         }
       }
+    },
+    "device_id_solar": {
+      "name": "SPAN Panel Solar",
+      "type": "pv",
+      "manufacturer": "Enphase",
+      "model": "IQ8PLUS-72-2-US",
+      "serial_number": null,
+      "sw_version": null,
+      "entities": {
+        "sensor.span_panel_solar_pv_power": {
+          "domain": "sensor",
+          "original_name": "PV Power",
+          "unique_id": "..."
+        }
+      },
+      "solar": {
+        "role": "site",
+        "vendor": "Enphase",
+        "model": "IQ8PLUS-72-2-US",
+        "feed_circuit_id": "c1d2e3f4a5b6",
+        "power_entity_id": "sensor.span_panel_solar_inverter_power",
+        "site_power_entity_id": "sensor.span_panel_solar_pv_power"
+      }
+    },
+    "device_id_solar_inverter": {
+      "name": "SPAN Panel Solar Inverter (Garage Solar)",
+      "type": "pv",
+      "manufacturer": "SolarEdge",
+      "model": "SE7600H-US",
+      "serial_number": null,
+      "sw_version": null,
+      "entities": {
+        "sensor.span_panel_solar_inverter_garage_solar_pv_vendor": {
+          "domain": "sensor",
+          "original_name": "PV Vendor",
+          "unique_id": "..."
+        }
+      },
+      "solar": {
+        "role": "inverter",
+        "vendor": "SolarEdge",
+        "model": "SE7600H-US",
+        "feed_circuit_id": "b6a5f4e3d2c1",
+        "power_entity_id": "sensor.span_panel_garage_solar_power",
+        "site_power_entity_id": null
+      }
     }
   }
 }
@@ -159,31 +205,32 @@ current, `switch` is absent for always-on circuits).
 
 #### Sub-Device Object
 
-| Field           | Type        | Description                               |
-| --------------- | ----------- | ----------------------------------------- |
-| `name`          | string      | HA device display name                    |
-| `type`          | string      | `bess`, `mid`, `evse`, `pv`, or `unknown` |
-| `manufacturer`  | string/null | Device manufacturer                       |
-| `model`         | string/null | Device model                              |
-| `serial_number` | string/null | Device serial number                      |
-| `sw_version`    | string/null | Device firmware/software version          |
-| `entities`      | object      | Entity ID keyed map with domain, name     |
-| `solar`         | object      | PV devices only: see Solar Object         |
+| Field           | Type        | Description                                                                                                                                                                     |
+| --------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | string      | HA device display name                                                                                                                                                          |
+| `type`          | string      | `bess`, `mid`, `evse`, `pv`, or `unknown`                                                                                                                                       |
+| `manufacturer`  | string/null | Device manufacturer                                                                                                                                                             |
+| `model`         | string/null | Device model                                                                                                                                                                    |
+| `serial_number` | string/null | Device serial number                                                                                                                                                            |
+| `sw_version`    | string/null | Device firmware/software version                                                                                                                                                |
+| `entities`      | object      | Entity ID keyed map with domain, name                                                                                                                                           |
+| `solar`         | object      | PV devices only, and optional: absent on an inverter's device the panel did not report at setup, and on a Solar device when PV was not commissioned at setup. See Solar Object. |
 
 #### Solar Object
 
-| Field                  | Type        | Description                                                                                            |
-| ---------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `role`                 | string      | `site` for the Solar device, `inverter` for an additional inverter's own device                        |
-| `vendor`               | string/null | Vendor of the inverter this device describes; null when not published or not shared                    |
-| `model`                | string/null | Model of the inverter this device describes; null when not published or not shared                     |
-| `feed_circuit_id`      | string/null | The circuit that feeds the inverter this device describes; null when no circuit feeds it               |
-| `power_entity_id`      | string/null | That inverter's own power reading: its feeding circuit's `power` entity; null when no circuit feeds it |
-| `site_power_entity_id` | string/null | `site` only: PV Power, the site's total; null on `inverter`                                            |
+| Field                  | Type        | Description                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `role`                 | string      | `site` for the Solar device, `inverter` for an additional inverter's own device                                                                                                                                                                                                                                                                                                                            |
+| `vendor`               | string/null | Vendor of what this device describes. On `site`, what the Solar device's PV entities read: the bound inverter, or the inverters together, where `null` means they differ. On `inverter`, that inverter's. `null` where nothing is published.                                                                                                                                                               |
+| `model`                | string/null | Model of what this device describes, as `vendor` is.                                                                                                                                                                                                                                                                                                                                                       |
+| `feed_circuit_id`      | string/null | The circuit that feeds the inverter this device describes. On `inverter`, null when no circuit feeds it. On `site`, null when no single circuit-fed inverter is drawn on this device: the inverters are read together, none is published or bound, the bound inverter's circuit is gone, or the inverter has its own device. While a bound inverter's record has not yet arrived, it is the bound circuit. |
+| `power_entity_id`      | string/null | That inverter's own power reading: the `power` entity of `feed_circuit_id`. Null when `feed_circuit_id` is, and for a moment while that circuit leaves the panel.                                                                                                                                                                                                                                          |
+| `site_power_entity_id` | string/null | `site` only: PV Power, the site's total; null on `inverter`                                                                                                                                                                                                                                                                                                                                                |
 
 `power_entity_id` is an entity id rather than a circuit id, so a consumer that merges several panels' circuits, as the card's favorites view does, can still
 resolve it. `vendor` and `model` are what the panel publishes, `null` where it publishes nothing, whereas the device's `manufacturer` and `model` carry Home
-Assistant's display placeholders.
+Assistant's display placeholders. Which devices carry a block, and each block's circuit, are as of the integration's last setup, which the panel reporting a new
+inverter repeats; `vendor` and `model` are read live, as the PV Vendor and PV Product sensors are.
 
 ### Errors
 
