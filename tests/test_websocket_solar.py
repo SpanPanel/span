@@ -20,6 +20,7 @@ from custom_components.span_panel.sensor_definitions import PV_POWER_SENSOR
 from custom_components.span_panel.websocket import handle_panel_topology
 
 from .adapter_fixtures import schema_one_snapshot
+from .factories import SpanPanelSnapshotFactory
 from .helpers import unwrap_websocket_command
 from .test_pv_binding import _gateway_tree, _unfed_tree
 from .test_pv_device import PV_DEVICE, SOLAR_CIRCUIT, _entry
@@ -240,3 +241,25 @@ async def test_a_pending_record_with_no_inverter_published_keeps_the_bound_circu
     assert site["feed_circuit_id"] == C and site["power_entity_id"] == _circuit_power(
         hass, entry, C
     )
+
+
+async def test_pv_power_another_entry_registered_is_not_this_panels(hass: HomeAssistant) -> None:
+    """Every registry lookup is scoped to the entry: a unique id another entry holds says nothing about this one."""
+    snapshot = SpanPanelSnapshotFactory.create()
+    entry = _entry(hass, "entry-ws-scoped", snapshot.serial_number)
+    await _setup(hass, entry, snapshot)
+    other = MockConfigEntry(domain=DOMAIN, entry_id="entry-ws-other", unique_id="another-panel")
+    other.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        build_panel_unique_id(snapshot.serial_number, PV_POWER_SENSOR.key),
+        config_entry=other,
+    )
+
+    result = await _topology(hass, entry)
+
+    panel_entities = result["panel_entities"]
+    assert isinstance(panel_entities, dict)
+    assert "pv_power" not in panel_entities
+    assert "current_power" in panel_entities

@@ -35,6 +35,7 @@ from homeassistant.helpers.storage import Store
 from span_panel_api import SpanPVSnapshot
 
 from .const import DOMAIN, PV_PANEL_LINK_KEY
+from .entity_resolver import entity_id_in_entry
 from .id_builder import build_binary_sensor_unique_id, build_pv_inverter_unique_id
 from .sensor_definitions import PV_METADATA_SENSORS
 
@@ -240,9 +241,7 @@ def store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredPvBinding]
 
 def _registered_in(registry: er.EntityRegistry, entry_id: str, domain: str, unique_id: str) -> bool:
     """Whether `unique_id` is registered under `domain` in this entry; another entry's says nothing."""
-    entity_id = registry.async_get_entity_id(domain, DOMAIN, unique_id)
-    entry = registry.async_get(entity_id) if entity_id is not None else None
-    return entry is not None and entry.config_entry_id == entry_id
+    return entity_id_in_entry(registry, entry_id, domain, unique_id) is not None
 
 
 def keys_holding_cards(

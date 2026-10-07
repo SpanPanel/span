@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 import voluptuous as vol
 
 from .const import DOMAIN
+from .entity_resolver import entity_id_in_entry
 from .helpers import build_panel_unique_id, construct_voltage_attribute
 from .id_builder import build_binary_sensor_unique_id
 from .runtime import SpanPanelRuntimeData, loaded_runtime_data
@@ -116,7 +117,9 @@ async def handle_panel_topology(
             entities_by_device.setdefault(entity.device_id, []).append(entity)
 
     # Resolve panel-level sensor entity_ids via unique_id registry lookup.
-    panel_entities = _build_panel_entity_map(snapshot.serial_number, entity_registry)
+    panel_entities = _build_panel_entity_map(
+        snapshot.serial_number, entity_registry, config_entry_id
+    )
 
     panel_status_entity = _resolve_panel_status_entity(snapshot.serial_number, entity_registry)
     if panel_status_entity is not None:
@@ -323,16 +326,18 @@ def _build_circuit_entity_map(
 def _build_panel_entity_map(
     serial: str,
     entity_registry: er.EntityRegistry,
+    config_entry_id: str,
 ) -> dict[str, str]:
     """Resolve panel-level sensor unique_ids to current entity_ids.
 
-    Returns a dict of {role: entity_id} for sensors that exist in the
-    registry. Entries that cannot be resolved are omitted.
+    Returns a dict of {role: entity_id} for sensors registered in this config
+    entry. Entries that cannot be resolved are omitted, as is a unique id that
+    another entry holds.
     """
     result: dict[str, str] = {}
     for role, description_key in _PANEL_SENSOR_KEYS.items():
         unique_id = build_panel_unique_id(serial, description_key)
-        entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+        entity_id = entity_id_in_entry(entity_registry, config_entry_id, "sensor", unique_id)
         if entity_id is not None:
             result[role] = entity_id
     return result
