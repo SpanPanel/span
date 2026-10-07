@@ -31,6 +31,7 @@ from span_panel_api.exceptions import (
 )
 
 from .const import DOMAIN
+from .energy_orientation import EnergyCounter, EnergyMeter
 from .helpers import (
     circuit_has_a_breaker_switch,
     circuit_has_a_priority_select,
@@ -44,8 +45,8 @@ from .schema_validation import SchemaFindings, evaluate_field_metadata
 from .sensor_definitions import sensor_descriptions_by_field_path
 
 
-class SpanCircuitEnergySensorProtocol(Protocol):
-    """Protocol for circuit energy sensors that expose their dip offset."""
+class EnergyOffsetSource(Protocol):
+    """An energy counter sensor that exposes its cumulative dip offset."""
 
     @property
     def energy_offset(self) -> float:
@@ -160,9 +161,12 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         # drained and surfaced as a persistent notification after each cycle.
         self._pending_dip_events: list[tuple[str, float, float]] = []
 
-        # Circuit energy sensor registry — consumed/produced sensors register
-        # here so net energy sensors can read their dip offsets directly.
-        self._circuit_energy_sensors: dict[tuple[str, str], SpanCircuitEnergySensorProtocol] = {}
+        # Every meter's counter sensors, so each meter's Net Energy can read their
+        # dip offsets. Keyed by `EnergyCounter` -- never by role and never by
+        # string -- so a net sensor cannot be registered as an offset source.
+        self._energy_offset_sources: dict[
+            tuple[EnergyMeter, EnergyCounter], EnergyOffsetSource
+        ] = {}
 
         # Current monitor — set by async_setup_entry when monitoring is enabled
         self.current_monitor: CurrentMonitor | None = None
@@ -288,18 +292,20 @@ class SpanPanelCoordinator(DataUpdateCoordinator[SpanPanelSnapshot]):
         """
         self._pending_dip_events.append((entity_id, delta, cumulative_offset))
 
-    def register_circuit_energy_sensor(
-        self, circuit_id: str, energy_type: str, sensor: SpanCircuitEnergySensorProtocol
+    def register_energy_sensor(
+        self, meter: EnergyMeter, counter: EnergyCounter, sensor: EnergyOffsetSource
     ) -> None:
-        """Register a consumed/produced energy sensor so net energy can read its dip offset."""
-        self._circuit_energy_sensors[(circuit_id, energy_type)] = sensor
+        """Register a meter's counter sensor, so that meter's Net Energy can read its dip offset."""
+        self._energy_offset_sources[(meter, counter)] = sensor
 
-    def get_circuit_dip_offset(self, circuit_id: str, energy_type: str) -> float:
-        """Return the cumulative dip offset from the registered sensor, or 0."""
-        sensor = self._circuit_energy_sensors.get((circuit_id, energy_type))
-        if sensor is None:
-            return 0.0
-        return sensor.energy_offset
+    def dip_offset(self, meter: EnergyMeter, counter: EnergyCounter) -> float:
+        """Return the cumulative dip offset of a meter's counter, or 0.0 with none registered.
+
+        A user-disabled counter sensor never registers, so its Net adds nothing for
+        it; a disabled sensor tracks no offset to be consistent with.
+        """
+        sensor = self._energy_offset_sources.get((meter, counter))
+        return 0.0 if sensor is None else sensor.energy_offset
 
     async def _fire_dip_notification(self) -> None:
         """Create a persistent notification summarising energy dips this cycle."""

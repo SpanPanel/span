@@ -12,6 +12,12 @@ from span_panel_api import SpanCircuitSnapshot, SpanPanelSnapshot
 
 from .const import USE_CIRCUIT_NUMBERS
 from .coordinator import SpanPanelCoordinator
+from .energy_orientation import (
+    CircuitMeter,
+    EnergyRole,
+    NetEnergyOrientation,
+    circuit_net_orientation,
+)
 from .helpers import (
     construct_circuit_identifier_from_tabs,
     construct_circuit_unique_id_for_entry,
@@ -284,12 +290,27 @@ class SpanCircuitEnergySensor(
     # Naming only; this sensor publishes no circuit attributes.
     _residual_field_paths: ClassVar[tuple[str, ...]] = ("circuit.name", "circuit.tabs")
 
-    async def async_added_to_hass(self) -> None:
-        """Register consumed/produced sensors on the coordinator for net energy lookup."""
-        await super().async_added_to_hass()
-        energy_type = self._ENERGY_TYPE_MAP.get(self.original_key)
-        if energy_type:
-            self.coordinator.register_circuit_energy_sensor(self.circuit_id, energy_type, self)
+    def __init__(
+        self,
+        data_coordinator: SpanPanelCoordinator,
+        description: SpanPanelCircuitsSensorEntityDescription,
+        snapshot: SpanPanelSnapshot,
+        circuit_id: str,
+        device_info_override: DeviceInfo | None = None,
+    ) -> None:
+        """Initialize a circuit energy sensor, keeping the role its description declares.
+
+        Kept under a name of our own because `SensorEntity.entity_description` is
+        annotated as the base description, as `SpanShedForecastSensor` explains.
+        """
+        self._declared_role: EnergyRole | None = description.energy_role
+        super().__init__(
+            data_coordinator,
+            description,
+            snapshot,
+            circuit_id,
+            device_info_override=device_info_override,
+        )
 
     def _generate_panel_name(
         self,
@@ -307,29 +328,17 @@ class SpanCircuitEnergySensor(
         circuit_identifier = _resolve_circuit_identifier_for_sync(circuit, self.circuit_id)
         return f"{circuit_identifier} {description.name}"
 
-    # Map original_key to the energy type used for coordinator dip offset tracking
-    _ENERGY_TYPE_MAP: ClassVar[Mapping[str, str]] = MappingProxyType(
-        {
-            "circuit_energy_consumed": "consumed",
-            "circuit_energy_produced": "produced",
-        }
-    )
+    def _energy_meter(self) -> CircuitMeter:
+        """Return this circuit's meter."""
+        return CircuitMeter(self.circuit_id)
 
-    def _process_raw_value(self, raw_value: float | str | None) -> None:
-        """Process raw value, adjusting net energy for dip compensation consistency.
+    def _energy_role(self) -> EnergyRole | None:
+        """Return Produced, Consumed or Net, as the catalog declares."""
+        return self._declared_role
 
-        Consumed/produced sensors apply dip offsets via the base class. The net
-        energy sensor reads those offsets from the registered sibling sensors
-        so its value stays equal to compensated_consumed - compensated_produced.
-        """
-        super()._process_raw_value(raw_value)
-
-        if self.original_key == "circuit_energy_net" and isinstance(self._attr_native_value, float):
-            consumed_offset = self.coordinator.get_circuit_dip_offset(self.circuit_id, "consumed")
-            produced_offset = self.coordinator.get_circuit_dip_offset(self.circuit_id, "produced")
-            net_adjustment = consumed_offset - produced_offset
-            if net_adjustment:
-                self._attr_native_value += net_adjustment
+    def _net_orientation(self, data_source: SpanCircuitSnapshot) -> NetEnergyOrientation:
+        """Return generation for a solar circuit and load for any other, from the reading being processed."""
+        return circuit_net_orientation(data_source)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,6 +21,12 @@ from custom_components.span_panel.const import (
     USE_CIRCUIT_NUMBERS,
 )
 from custom_components.span_panel.curation import CurationOverlay
+from custom_components.span_panel.energy_orientation import (
+    CircuitMeter,
+    EnergyCounter,
+    EnergyMeter,
+    PanelMeter,
+)
 from custom_components.span_panel.options import ENERGY_REPORTING_GRACE_PERIOD
 from custom_components.span_panel.sensor_base import (
     SpanEnergyExtraStoredData,
@@ -45,6 +52,7 @@ from custom_components.span_panel.sensor_definitions import (
     PV_METADATA_SENSORS,
     STATUS_SENSORS,
     UNMAPPED_SENSORS,
+    SpanPanelCircuitsSensorEntityDescription,
     SpanPanelDataSensorEntityDescription,
 )
 from custom_components.span_panel.sensor_evse import SpanEvseSensor
@@ -112,8 +120,8 @@ def _make_coordinator(
         setup_snapshot=snapshot,
     )
     coordinator.request_reload = MagicMock()
-    coordinator.register_circuit_energy_sensor = MagicMock()
-    coordinator.get_circuit_dip_offset = MagicMock(return_value=0.0)
+    coordinator.register_energy_sensor = MagicMock()
+    coordinator.dip_offset = MagicMock(return_value=0.0)
     return coordinator
 
 
@@ -524,27 +532,179 @@ def test_circuit_energy_sensor_registers_consumed_sensor_on_add() -> None:
     ):
         asyncio.run(sensor.async_added_to_hass())
 
-    coordinator.register_circuit_energy_sensor.assert_called_once_with("c1", "consumed", sensor)
+    coordinator.register_energy_sensor.assert_called_once_with(
+        CircuitMeter("c1"), EnergyCounter.CONSUMED, sensor
+    )
 
 
-def test_circuit_net_energy_sensor_applies_dip_offset_adjustment() -> None:
-    """Net energy sensors should add coordinator-provided dip compensation offsets."""
+def _offsets(meter: EnergyMeter, *, produced: float, consumed: float) -> Callable[[EnergyMeter, EnergyCounter], float]:
+    """`coordinator.dip_offset` for one meter, keyed by counter, never by call order.
+
+    Asking for any other meter raises, so a sensor that reads the wrong meter fails.
+    """
+    table = {(meter, EnergyCounter.PRODUCED): produced, (meter, EnergyCounter.CONSUMED): consumed}
+    return lambda asked_meter, counter: table[(asked_meter, counter)]
+
+
+def _circuit_description(key: str) -> SpanPanelCircuitsSensorEntityDescription:
+    return next(desc for desc in CIRCUIT_SENSORS if desc.key == key)
+
+
+def _panel_description(key: str) -> SpanPanelDataSensorEntityDescription:
+    return next(desc for desc in PANEL_ENERGY_SENSORS if desc.key == key)
+
+
+def _added(sensor: SpanCircuitEnergySensor | SpanPanelEnergySensor) -> None:
+    """Run `async_added_to_hass` with nothing restored, as the registration tests here do."""
+    sensor.async_get_last_extra_data = AsyncMock(return_value=None)
+    sensor.async_get_last_state = AsyncMock(return_value=None)
+    sensor.hass = MagicMock()
+    sensor.entity_id = "sensor.under_test"
+    with patch(
+        "homeassistant.helpers.restore_state.async_get",
+        return_value=MagicMock(async_restore_entity_added=MagicMock(return_value=None)),
+    ):
+        asyncio.run(sensor.async_added_to_hass())
+
+
+@pytest.mark.parametrize("device_type", ["pv", "circuit"])
+@pytest.mark.parametrize(
+    ("produced_offset", "consumed_offset"),
+    [(950.0, 0.0), (0.0, 36.0), (950.0, 36.0), (36.0, 950.0)],
+    ids=["produced-only", "consumed-only", "produced-larger", "consumed-larger"],
+)
+def test_circuit_net_is_compensated_credit_minus_compensated_debit(
+    device_type: str, produced_offset: float, consumed_offset: float
+) -> None:
+    raw_produced, raw_consumed = 50.0, 4.0
     circuit = SpanCircuitSnapshotFactory.create(
         circuit_id="c1",
-        name="Kitchen",
-        consumed_energy_wh=10.0,
-        produced_energy_wh=2.0,
+        name="Garage",
+        produced_energy_wh=raw_produced,
+        consumed_energy_wh=raw_consumed,
+        device_type=device_type,
     )
     snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
     coordinator = _make_coordinator(snapshot)
-    coordinator.get_circuit_dip_offset.side_effect = [5.0, 2.0]
-    description = next(desc for desc in CIRCUIT_SENSORS if desc.key == "circuit_energy_net")
+    coordinator.dip_offset.side_effect = _offsets(
+        CircuitMeter("c1"), produced=produced_offset, consumed=consumed_offset
+    )
+    sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
 
-    sensor = SpanCircuitEnergySensor(coordinator, description, snapshot, "c1")
+    sensor._handle_online_state()
 
-    sensor._process_raw_value(20.0)
+    produced = raw_produced + produced_offset
+    consumed = raw_consumed + consumed_offset
+    expected = produced - consumed if device_type == "pv" else consumed - produced
+    assert sensor.native_value == pytest.approx(expected)
 
-    assert sensor.native_value == 23.0
+
+def test_a_circuit_retyped_to_pv_flips_its_value_and_its_adjustment_together() -> None:
+    load = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1", name="Inverter 2", produced_energy_wh=50.0, consumed_energy_wh=4.0
+    )
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": load})
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offsets(CircuitMeter("c1"), produced=950.0, consumed=36.0)
+    sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
+
+    sensor._handle_online_state()
+    assert sensor.native_value == pytest.approx(40.0 - 1000.0)
+
+    coordinator.data = SpanPanelSnapshotFactory.create(circuits={"c1": replace(load, device_type="pv")})
+    sensor._handle_online_state()
+    assert sensor.native_value == pytest.approx(1000.0 - 40.0)
+
+
+def test_net_stays_unknown_while_a_counter_is_unreported() -> None:
+    """Review Focus 2: an offset on one counter never stands in for the missing other."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1", name="Solar", produced_energy_wh=None, consumed_energy_wh=4.0, device_type="pv"
+    )
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offsets(CircuitMeter("c1"), produced=950.0, consumed=0.0)
+    sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
+
+    sensor._handle_online_state()
+
+    assert sensor.native_value is None
+
+
+def test_offline_grace_holds_the_compensated_net() -> None:
+    """Review Focus 3: the offline path neither re-reads nor re-applies the adjustment."""
+    circuit = SpanCircuitSnapshotFactory.create(
+        circuit_id="c1", name="Solar", produced_energy_wh=50.0, consumed_energy_wh=4.0, device_type="pv"
+    )
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offsets(CircuitMeter("c1"), produced=950.0, consumed=36.0)
+    sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
+    sensor._update_native_value()
+    assert sensor.native_value == pytest.approx(1000.0 - 40.0)
+    reads = coordinator.dip_offset.call_count
+
+    coordinator.panel_offline = True
+    sensor._update_native_value()
+
+    assert sensor.native_value == pytest.approx(1000.0 - 40.0)
+    assert coordinator.dip_offset.call_count == reads
+
+
+def test_a_net_sensor_never_registers_as_an_offset_source() -> None:
+    circuit = SpanCircuitSnapshotFactory.create(circuit_id="c1", name="Kitchen")
+    snapshot = SpanPanelSnapshotFactory.create(circuits={"c1": circuit})
+    coordinator = _make_coordinator(snapshot)
+    sensor = SpanCircuitEnergySensor(coordinator, _circuit_description("circuit_energy_net"), snapshot, "c1")
+
+    _added(sensor)
+
+    coordinator.register_energy_sensor.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("key", "meter", "counter"),
+    [
+        ("mainMeterEnergyProducedWh", PanelMeter.MAIN_METER, EnergyCounter.PRODUCED),
+        ("mainMeterEnergyConsumedWh", PanelMeter.MAIN_METER, EnergyCounter.CONSUMED),
+        ("feedthroughEnergyProducedWh", PanelMeter.FEEDTHROUGH, EnergyCounter.PRODUCED),
+        ("feedthroughEnergyConsumedWh", PanelMeter.FEEDTHROUGH, EnergyCounter.CONSUMED),
+    ],
+)
+def test_panel_counters_register_under_their_meter(key: str, meter: PanelMeter, counter: EnergyCounter) -> None:
+    snapshot = SpanPanelSnapshotFactory.create()
+    coordinator = _make_coordinator(snapshot)
+    sensor = SpanPanelEnergySensor(coordinator, _panel_description(key), snapshot)
+
+    _added(sensor)
+
+    coordinator.register_energy_sensor.assert_called_once_with(meter, counter, sensor)
+
+
+def test_main_meter_net_is_compensated_consumed_minus_compensated_produced() -> None:
+    snapshot = SpanPanelSnapshotFactory.create(
+        main_meter_energy_consumed_wh=100.0, main_meter_energy_produced_wh=10.0
+    )
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offsets(PanelMeter.MAIN_METER, produced=290.0, consumed=2400.0)
+    sensor = SpanPanelEnergySensor(coordinator, _panel_description("mainMeterNetEnergyWh"), snapshot)
+
+    sensor._handle_online_state()
+
+    assert sensor.native_value == pytest.approx((100.0 + 2400.0) - (10.0 + 290.0))
+
+
+def test_feed_through_net_reads_its_own_meter_and_equals_the_raw_difference() -> None:
+    snapshot = SpanPanelSnapshotFactory.create(
+        feedthrough_energy_consumed_wh=5.0, feedthrough_energy_produced_wh=1.0
+    )
+    coordinator = _make_coordinator(snapshot)
+    coordinator.dip_offset.side_effect = _offsets(PanelMeter.FEEDTHROUGH, produced=0.0, consumed=0.0)
+    sensor = SpanPanelEnergySensor(coordinator, _panel_description("feedthroughNetEnergyWh"), snapshot)
+
+    sensor._handle_online_state()
+
+    assert sensor.native_value == pytest.approx(4.0)
 
 
 def test_circuit_energy_sensor_missing_circuit_uses_fallback_names() -> None:

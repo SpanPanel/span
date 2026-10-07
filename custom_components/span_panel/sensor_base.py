@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import partial
 import logging
 from typing import Any
 
@@ -31,6 +32,7 @@ from .energy_dip import (
     build_dip_attributes,
     process_energy_dip,
 )
+from .energy_orientation import EnergyMeter, EnergyRole, NetEnergyOrientation
 from .entity import SpanPanelEntity
 from .grace_period import (  # noqa: F401
     SpanEnergyExtraStoredData,
@@ -415,7 +417,7 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
         try:
             data_source: D = self.get_data_source(self.coordinator.data)
             self._log_debug_info(data_source)
-            raw_value: float | int | str | None = value_function(data_source)
+            raw_value = self._read_raw_value(value_function, data_source)
             self._process_raw_value(raw_value)
         except (AttributeError, KeyError, IndexError) as err:
             _LOGGER.debug(
@@ -433,6 +435,19 @@ class SpanSensorBase[T: SensorEntityDescription, D](SpanPanelEntity, SensorEntit
                 err,
             )
             self._attr_native_value = self._unknown_value()
+
+    def _read_raw_value(
+        self,
+        value_function: Callable[[D], float | int | str | None],
+        data_source: D,
+    ) -> float | int | str | None:
+        """Read this sensor's raw value from the data source its update fetched.
+
+        A hook, so a sensor whose reading also depends on its siblings can add to it
+        before it is processed; see `SpanEnergySensorBase._read_raw_value`. The
+        data source is passed in rather than fetched again.
+        """
+        return value_function(data_source)
 
     def _log_debug_info(self, data_source: D) -> None:
         """Log debug information for circuit sensors."""
@@ -554,6 +569,45 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
     def energy_offset(self) -> float:
         """Return the cumulative dip compensation offset."""
         return self._energy_offset
+
+    @abstractmethod
+    def _energy_meter(self) -> EnergyMeter | None:
+        """Return the meter this sensor reads, or None for a sensor on no meter."""
+
+    @abstractmethod
+    def _energy_role(self) -> EnergyRole | None:
+        """Return the part this sensor plays on its meter, as its description declares."""
+
+    @abstractmethod
+    def _net_orientation(self, data_source: D) -> NetEnergyOrientation:
+        """Return which counter this meter's Net credits, read from the data its value is."""
+
+    def _read_raw_value(
+        self,
+        value_function: Callable[[D], float | int | str | None],
+        data_source: D,
+    ) -> float | int | str | None:
+        """Read the raw value; a Net also adds its siblings' dip offsets, oriented as its value is.
+
+        Produced and Consumed compensate their own dips. Net is a `TOTAL` sensor
+        and compensates nothing itself, so it reads their offsets through the
+        coordinator and stays equal to compensated credit minus compensated debit.
+        The orientation is the one its value function used, so the value and the
+        adjustment cannot disagree.
+        """
+        raw_value = super()._read_raw_value(value_function, data_source)
+        # Narrowed before the partial is built: a sensor on no meter has no
+        # siblings to read, so it gets no adjustment rather than a None meter.
+        meter = self._energy_meter()
+        if (
+            self._energy_role() is not EnergyRole.NET
+            or meter is None
+            or isinstance(raw_value, bool)
+            or not isinstance(raw_value, int | float)
+        ):
+            return raw_value
+        offset_of = partial(self.coordinator.dip_offset, meter)
+        return raw_value + self._net_orientation(data_source).adjustment(offset_of)
 
     def _process_raw_value(self, raw_value: float | str | None) -> None:
         """Process the raw value with energy dip compensation for TOTAL_INCREASING sensors."""
@@ -677,6 +731,14 @@ class SpanEnergySensorBase[T: SensorEntityDescription, D](SpanSensorBase[T, D], 
                 self._last_panel_reading,
                 self._last_dip_delta,
             )
+
+        # Offer this counter's offset to its meter's Net before the coordinator
+        # listener exists, so a Net added after it reads it from the first update.
+        role = self._energy_role()
+        meter = self._energy_meter()
+        counter = role.counter if role is not None else None
+        if meter is not None and counter is not None:
+            self.coordinator.register_energy_sensor(meter, counter, self)
 
         # Register the coordinator listener (and base RestoreSensor setup).
         await super().async_added_to_hass()
