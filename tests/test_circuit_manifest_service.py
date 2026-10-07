@@ -95,6 +95,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -174,12 +175,14 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot_a),
+            setup_snapshot=snapshot_a,
         )
         entry_b.runtime_data = SpanPanelRuntimeData(
             coordinator=_make_coordinator(snapshot_b),
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot_b),
+            setup_snapshot=snapshot_b,
         )
 
         _register_power_entity(
@@ -225,6 +228,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -271,6 +275,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         # Only register entity for one circuit
@@ -335,6 +340,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -384,6 +390,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -421,6 +428,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
         # No entities registered
 
@@ -455,6 +463,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(
@@ -490,6 +499,7 @@ class TestExportCircuitManifest:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         _register_power_entity(

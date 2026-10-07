@@ -1154,6 +1154,7 @@ async def test_a_vendor_format_nothing_can_read_leaves_the_curated_control_stand
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     coordinator.config_entry = entry
     added: list[object] = []

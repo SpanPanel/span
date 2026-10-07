@@ -104,6 +104,7 @@ async def test_config_entry_diagnostics_includes_redacted_runtime_data(
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -203,6 +204,7 @@ async def test_config_entry_diagnostics_omits_optional_sections_when_unavailable
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -276,6 +278,7 @@ async def test_diagnostics_reports_the_entity_registry(hass: HomeAssistant) -> N
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -320,6 +323,7 @@ async def test_diagnostics_reports_the_stored_curation(hass: HomeAssistant) -> N
         panel_device_id="panel-device-id",
         curation=await async_load_curation(hass, entry),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -355,6 +359,7 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=identity,
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -399,6 +404,7 @@ async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
@@ -422,6 +428,7 @@ async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnaps
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=binding,
+        setup_snapshot=snapshot,
     )
     result = await async_get_config_entry_diagnostics(hass, entry)
     block: dict[str, object] = result["pv"]

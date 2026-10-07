@@ -107,6 +107,7 @@ async def _set_up(
         panel_device_id=panel_device_id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     added: list[Entity] = []
     await setup(hass, entry, lambda entities, *_args, **_kwargs: added.extend(entities))

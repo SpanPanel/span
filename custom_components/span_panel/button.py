@@ -140,7 +140,7 @@ async def async_setup_entry(
 
     entities: list[SpanPanelGFEOverrideButton] = []
 
-    snapshot: SpanPanelSnapshot = coordinator.data
+    snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
     if has_bess(snapshot):
         entities.append(SpanPanelGFEOverrideButton(coordinator, GFE_OVERRIDE_DESCRIPTION, "GRID"))
 

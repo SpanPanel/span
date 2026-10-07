@@ -695,6 +695,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SpanPanelConfigEntry) ->
             ),
             curation=await async_load_curation(hass, entry),
             pv_binding=pv_binding,
+            setup_snapshot=snapshot,
         )
 
         # Before the forward, because a sub-device's `via_device_id` has to name a

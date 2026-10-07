@@ -576,6 +576,7 @@ def test_runtime_data_defaults_its_lock_to_the_default_policys_answer() -> None:
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
+        setup_snapshot=SpanPanelSnapshotFactory.create(),
     )
 
     assert runtime_data.control_lock.armed == ControlPolicy.default().lock_enabled
@@ -730,6 +731,18 @@ async def test_setup_reads_the_registry_for_cards_the_inverter_already_holds(
     stored = hass_storage["span_panel.pv_binding.entry-setup"]
     assert isinstance(stored, dict)
     assert stored["data"] == {"circuit_id": None}
+
+
+def test_runtime_data_refuses_to_be_built_without_a_setup_snapshot() -> None:
+    """Required like `pv_binding`: the platforms must build from the snapshot setup decided from."""
+    snapshot = SpanPanelSnapshotFactory.create()
+    with pytest.raises(TypeError, match="setup_snapshot"):
+        SpanPanelRuntimeData(
+            coordinator=MagicMock(),
+            panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(snapshot),
+        )
 
 
 def test_runtime_data_refuses_to_be_built_without_a_pv_binding() -> None:

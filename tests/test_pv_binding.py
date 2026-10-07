@@ -395,3 +395,22 @@ async def test_first_sight_writes_the_record_and_no_inverter_writes_none(
     assert isinstance(stored, dict)
     assert stored["version"] == 1
     assert stored["data"] == {"circuit_id": SOLAR_CIRCUIT}
+
+
+async def test_the_platforms_decide_from_the_snapshot_the_binding_was_resolved_from(hass: HomeAssistant) -> None:
+    """An inverter published while setup runs waits for the reload its capability token requests.
+
+    Setup resolved the binding before any inverter was seen. Had the platforms read
+    the coordinator's newer snapshot, the newcomer would get a card of its own while
+    the Solar card read it too, and that card would then hold it off the Solar card.
+    """
+    before = schema_one_snapshot(schema_one_tree(without=PV_DEVICE))
+    after = schema_one_snapshot()
+    entry = _entry(hass, "entry-drift", after.serial_number)
+
+    await _unload(await _setup(hass, entry, before, published=after))
+    assert inverter_cards(hass, entry) == set()
+
+    await _setup(hass, entry, after)
+    assert entry.runtime_data.pv_binding.bound_key == SOLAR_CIRCUIT
+    assert inverter_cards(hass, entry) == set()

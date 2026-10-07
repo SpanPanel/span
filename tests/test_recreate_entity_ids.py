@@ -170,6 +170,7 @@ class _Install[E: SpanPanelEntity]:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         self._platform = MockEntityPlatform(
@@ -939,6 +940,7 @@ async def test_an_unmapped_tab_sensor_keeps_its_prefix_on_a_no_prefix_install(
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     platform = MockEntityPlatform(hass, domain="sensor", platform_name=DOMAIN)

@@ -561,6 +561,7 @@ async def test_rotation_goes_over_the_pin_when_the_entry_has_one(
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
+        setup_snapshot=SpanPanelSnapshotFactory.create(),
     )
     _async_register_credential_services(hass)
 

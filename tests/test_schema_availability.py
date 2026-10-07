@@ -84,6 +84,7 @@ def _make_coordinator(hass: HomeAssistant) -> SpanPanelCoordinator:
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     return coordinator
 

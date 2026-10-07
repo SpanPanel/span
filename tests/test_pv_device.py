@@ -261,6 +261,7 @@ async def _install(
         panel_device_id=panel_device_id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     await _register(hass, entry, "sensor", sensor_setup_entry)
     await _register(hass, entry, "binary_sensor", binary_sensor_setup_entry)

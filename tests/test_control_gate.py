@@ -722,6 +722,7 @@ async def test_a_disabled_entry_creates_no_control_entities(hass: HomeAssistant)
     entry.data = {}
     entry.runtime_data = MagicMock(
         coordinator=coordinator,
+        setup_snapshot=coordinator.data,
         control_policy=ControlPolicy(
             mode=ControlMode.DISABLED,
             allow_contextless=True,
@@ -1131,6 +1132,7 @@ async def test_disabling_control_leaves_the_registry_entries_alone(
     entry.entry_id = config_entry.entry_id
     entry.runtime_data = MagicMock(
         coordinator=coordinator,
+        setup_snapshot=coordinator.data,
         control_policy=ControlPolicy(
             mode=ControlMode.DISABLED,
             allow_contextless=True,

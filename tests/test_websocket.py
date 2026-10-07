@@ -404,6 +404,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         panel_device = _register_panel_device(
@@ -494,6 +495,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-test-001")
@@ -564,6 +566,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         device = _register_panel_device(hass, "span_entry")
@@ -596,6 +599,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-sub-001")
@@ -677,6 +681,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-evse-001")
@@ -753,6 +758,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-prio-001")
@@ -807,6 +813,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-contract-001")
@@ -881,6 +888,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         device = _register_panel_device(hass, "span_entry", serial="sp3-backup-001")
@@ -919,6 +927,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")
@@ -961,6 +970,7 @@ class TestHandlePanelTopology:
             panel_device_id="panel-device-id",
             curation=CurationOverlay.empty(),
             pv_binding=pv_binding_for(snapshot),
+            setup_snapshot=snapshot,
         )
 
         panel_device = _register_panel_device(hass, "span_entry", serial="sp3-242424-001")

@@ -94,20 +94,27 @@ def _tree(*, second: bool = True, unfed: bool = False) -> dict[str, dict[str, st
 
 
 async def _setup(
-    hass: HomeAssistant, entry: MockConfigEntry, snapshot: SpanPanelSnapshot
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    snapshot: SpanPanelSnapshot,
+    *,
+    published: SpanPanelSnapshot | None = None,
 ) -> list[MockEntityPlatform]:
     """Run both platforms' setup through real `EntityPlatform`s, as a (re)load does.
 
     In `async_setup_entry`'s order: the PV identity, then the curation overlay, then the platforms.
+    `published` is what the coordinator holds by the time the platforms run, where
+    the panel published more after setup took `snapshot`.
     """
     identity = await async_resolve_pv_binding(hass, entry, snapshot)
-    coordinator = _coordinator(hass, entry, snapshot)
+    coordinator = _coordinator(hass, entry, published if published is not None else snapshot)
     panel_device_id = await ensure_device_registered(hass, entry, snapshot, PANEL_NAME)
     entry.runtime_data = SpanPanelRuntimeData(
         coordinator=coordinator,
         panel_device_id=panel_device_id,
         curation=await async_load_curation(hass, entry),
         pv_binding=identity,
+        setup_snapshot=snapshot,
     )
     platforms: list[MockEntityPlatform] = []
     for domain, setup in (

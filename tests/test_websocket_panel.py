@@ -147,6 +147,7 @@ async def _split_panel(
         panel_device_id=panel.id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     return panel
 

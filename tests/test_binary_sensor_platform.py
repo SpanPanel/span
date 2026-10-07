@@ -52,6 +52,7 @@ def _make_coordinator(snapshot) -> MagicMock:
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator
@@ -241,6 +242,7 @@ async def test_binary_sensor_async_setup_entry_adds_panel_bess_and_evse_entities
         control_policy=ControlPolicy.default(),
         coordinator=coordinator,
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     async_add_entities = MagicMock()
 

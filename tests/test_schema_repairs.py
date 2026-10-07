@@ -545,6 +545,7 @@ async def _entities_by_declared_path(hass):
         panel_device_id=await ensure_device_registered(hass, config_entry, snapshot, "SPAN Panel"),
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
 
     grouped: dict[str, dict[str, list[object]]] = {}

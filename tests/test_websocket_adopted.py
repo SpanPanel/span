@@ -186,6 +186,7 @@ def _setup(
         panel_device_id=panel.id,
         curation=overlay if overlay is not None else CurationOverlay.empty(),
         pv_binding=pv_binding if pv_binding is not None else pv_binding_for(published),
+        setup_snapshot=published,
     )
     if register_adopted:
         async_register_adopted_devices(
@@ -769,6 +770,7 @@ async def test_no_data(hass: HomeAssistant, hass_ws_client: WebSocketGenerator) 
         panel_device_id=panel.id,
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
+        setup_snapshot=SpanPanelSnapshotFactory.create(),
     )
 
     reply = await _list(hass, hass_ws_client, panel.id)

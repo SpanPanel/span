@@ -48,6 +48,7 @@ async def test_async_remove_config_entry_device_rejects_main_panel_device(
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     device = MagicMock()
     device.identifiers = {(DOMAIN, "sp3-main-001")}
@@ -68,6 +69,7 @@ async def test_async_remove_config_entry_device_allows_subdevice_removal(
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     device = MagicMock()
     device.identifiers = {(DOMAIN, "sp3-main-001_evse")}
@@ -194,6 +196,7 @@ async def test_async_unload_entry_shuts_down_runtime_data(
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(SpanPanelSnapshotFactory.create()),
+        setup_snapshot=SpanPanelSnapshotFactory.create(),
     )
 
     with patch.object(

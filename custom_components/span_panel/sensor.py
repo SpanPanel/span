@@ -124,7 +124,7 @@ async def async_setup_entry(
     """Set up sensor platform."""
     try:
         coordinator = config_entry.runtime_data.coordinator
-        snapshot: SpanPanelSnapshot = coordinator.data
+        snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
         # Create all native sensors (panel, circuit, and battery sensors)
         entities = create_native_sensors(coordinator, snapshot, config_entry)

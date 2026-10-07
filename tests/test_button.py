@@ -209,7 +209,9 @@ async def test_button_async_setup_entry_only_adds_button_when_the_panel_has_bess
     )
     coordinator = _make_button_coordinator(snapshot)
     config_entry = MockConfigEntry(domain=DOMAIN, data={}, title="SPAN Panel")
-    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator)
+    config_entry.runtime_data = MagicMock(
+        control_policy=ControlPolicy.default(), coordinator=coordinator, setup_snapshot=coordinator.data
+    )
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, config_entry, async_add_entities)
@@ -223,7 +225,11 @@ async def test_button_async_setup_entry_only_adds_button_when_the_panel_has_bess
             battery=SpanBatterySnapshotFactory.create(soe_percentage=None)
         )
     )
-    config_entry.runtime_data = MagicMock(control_policy=ControlPolicy.default(), coordinator=coordinator_no_bess)
+    config_entry.runtime_data = MagicMock(
+        control_policy=ControlPolicy.default(),
+        coordinator=coordinator_no_bess,
+        setup_snapshot=coordinator_no_bess.data,
+    )
     async_add_entities = MagicMock()
 
     await async_setup_entry(hass, config_entry, async_add_entities)

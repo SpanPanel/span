@@ -743,7 +743,7 @@ async def async_setup_entry(
         for description in BINARY_SENSORS
     ]
 
-    snapshot: SpanPanelSnapshot = coordinator.data
+    snapshot: SpanPanelSnapshot = config_entry.runtime_data.setup_snapshot
 
     # Created unconditionally, because on both generations the answer is knowable.
     #

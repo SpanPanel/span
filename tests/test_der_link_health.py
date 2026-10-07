@@ -179,6 +179,7 @@ def _coordinator(snapshot: SpanPanelSnapshot) -> MagicMock:
         panel_device_id="panel-device-id",
         curation=CurationOverlay.empty(),
         pv_binding=pv_binding_for(snapshot),
+        setup_snapshot=snapshot,
     )
     coordinator.async_request_refresh = AsyncMock()
     return coordinator
