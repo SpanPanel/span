@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 import pytest
 
 from custom_components.span_panel import SpanPanelRuntimeData
 from custom_components.span_panel.const import DOMAIN
+from custom_components.span_panel.control_gate import ControlMode, ControlPolicy
 from custom_components.span_panel.curation import CurationOverlay
 from custom_components.span_panel.websocket import (
     _build_circuit_entity_map,
     _classify_sensor_role,
     _classify_sub_device,
+    _offered_roles,
     async_register_commands,
     handle_panel_topology,
 )
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from span_panel_api import SpanCircuitSnapshot
 
 from .factories import (
     SpanBatterySnapshotFactory,
@@ -987,3 +991,100 @@ class TestHandlePanelTopology:
     async def test_registration(self, hass: HomeAssistant):
         """WebSocket commands can be registered without error."""
         async_register_commands(hass)
+
+
+# ---------------------------------------------------------------------------
+# Controls are offered only while the integration provides them (spec §4.3)
+# ---------------------------------------------------------------------------
+
+ROLES = {"power": "sensor.kitchen_power", "switch": "switch.kitchen_breaker", "select": "select.kitchen_priority"}
+
+
+class TestOfferedControls:
+    """`switch` and `select` appear only while the circuit qualifies and the mode is not Nobody."""
+
+    @pytest.mark.parametrize("mode", list(ControlMode))
+    @pytest.mark.parametrize(
+        ("circuit_kwargs", "switch", "select"),
+        [
+            ({"is_user_controllable": True}, True, True),
+            ({"is_user_controllable": True, "is_never_backup": True}, True, False),
+            ({"is_user_controllable": False, "is_never_backup": True, "priority": "NEVER"}, False, False),
+            ({"is_user_controllable": True, "device_type": "pv"}, False, False),
+        ],
+        ids=["controllable", "never-backup", "locked", "pv"],
+    )
+    def test_offered_roles(self, mode: ControlMode, circuit_kwargs: dict[str, object], switch: bool, select: bool) -> None:
+        circuit = SpanCircuitSnapshotFactory.create(**circuit_kwargs)
+
+        offered = _offered_roles(ROLES, circuit, mode)
+
+        expected = {"power": ROLES["power"]}
+        if mode is not ControlMode.DISABLED and switch:
+            expected["switch"] = ROLES["switch"]
+        if mode is not ControlMode.DISABLED and select:
+            expected["select"] = ROLES["select"]
+        assert offered == expected
+
+    async def _circuit_entities(
+        self,
+        hass: HomeAssistant,
+        *,
+        setup: SpanCircuitSnapshot,
+        live: SpanCircuitSnapshot,
+        mode: ControlMode = ControlMode.ALL_USERS,
+    ) -> dict[str, object]:
+        """The topology's record for one circuit with a registered power sensor, switch and select."""
+        serial = "sp3-offered-001"
+        setup_snapshot = SpanPanelSnapshotFactory.create(serial_number=serial, circuits={"uuid_kitchen": setup})
+        live_snapshot = SpanPanelSnapshotFactory.create(serial_number=serial, circuits={"uuid_kitchen": live})
+        entry = MockConfigEntry(domain=DOMAIN, data={}, entry_id="span_entry", unique_id=serial)
+        entry.add_to_hass(hass)
+        entry.mock_state(hass, ConfigEntryState.LOADED)
+        entry.runtime_data = SpanPanelRuntimeData(
+            coordinator=_make_coordinator(live_snapshot),
+            panel_device_id="panel-device-id",
+            curation=CurationOverlay.empty(),
+            pv_binding=pv_binding_for(setup_snapshot),
+            setup_snapshot=setup_snapshot,
+            control_policy=replace(ControlPolicy.default(), mode=mode),
+        )
+        device = _register_panel_device(hass, "span_entry", serial=serial)
+        for domain, unique_id, entity_id in (
+            ("sensor", f"span_{serial}_uuid_kitchen_power", "sensor.kitchen_power"),
+            ("switch", f"span_{serial}_relay_uuid_kitchen", "switch.kitchen_breaker"),
+            ("select", f"span_{serial}_select_uuid_kitchen", "select.kitchen_priority"),
+        ):
+            _register_entity(hass, "span_entry", device.id, domain, unique_id, entity_id)
+        connection = _make_mock_connection()
+        await _handle_panel_topology_inner(
+            hass, connection, {"id": 1, "type": "span_panel/panel_topology", "device_id": device.id}
+        )
+        connection.send_error.assert_not_called()
+        record = connection.send_result.call_args[0][1]["circuits"]["uuid_kitchen"]
+        assert isinstance(record, dict)
+        return record
+
+    async def test_a_qualifying_circuit_keeps_both_roles(self, hass: HomeAssistant) -> None:
+        kitchen = SpanCircuitSnapshotFactory.create(circuit_id="uuid_kitchen", name="Kitchen")
+        record = await self._circuit_entities(hass, setup=kitchen, live=kitchen)
+        assert set(record["entities"]) == {"power", "switch", "select"}
+
+    async def test_an_orphans_roles_are_absent(self, hass: HomeAssistant) -> None:
+        locked = SpanCircuitSnapshotFactory.create(
+            circuit_id="uuid_kitchen", name="Kitchen", is_user_controllable=False, is_never_backup=True, priority="NEVER"
+        )
+        record = await self._circuit_entities(hass, setup=locked, live=locked)
+        assert set(record["entities"]) == {"power"}
+
+    async def test_the_live_snapshot_withdraws_a_role_before_the_reload(self, hass: HomeAssistant) -> None:
+        kitchen = SpanCircuitSnapshotFactory.create(circuit_id="uuid_kitchen", name="Kitchen")
+        locked = replace(kitchen, is_user_controllable=False, is_never_backup=True, priority="NEVER")
+        record = await self._circuit_entities(hass, setup=kitchen, live=locked)
+        assert set(record["entities"]) == {"power"}
+
+    async def test_nobody_offers_no_control_and_keeps_the_panels_truth(self, hass: HomeAssistant) -> None:
+        kitchen = SpanCircuitSnapshotFactory.create(circuit_id="uuid_kitchen", name="Kitchen")
+        record = await self._circuit_entities(hass, setup=kitchen, live=kitchen, mode=ControlMode.DISABLED)
+        assert set(record["entities"]) == {"power"}
+        assert record["is_user_controllable"] is True
