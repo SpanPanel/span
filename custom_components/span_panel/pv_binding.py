@@ -90,6 +90,15 @@ class PvBinding:
     its reading, that decides; the reading is what the entity shows.
     """
 
+    inverter_links: frozenset[str]
+    """Keys whose own card has its link entity at this setup.
+
+    `solar_link`'s rule applied per key, among the keys with a card of their
+    own: the link is already registered, or the inverter's circuit publishes a
+    link record. A registered link never vanishes; it reads unknown while its
+    inverter reports nothing.
+    """
+
     def has_own_card(self, key: str) -> bool:
         """Whether inverter `key` gets a card and entities of its own at this setup."""
         return key != self.legacy_key and key not in self.withheld
@@ -105,7 +114,9 @@ class PvBinding:
         return snapshot.pv_inverters.get(self.bound_key, SpanPVSnapshot())
 
 
-UNDECIDED_PV_BINDING: Final = PvBinding("undecided", None, None, frozenset(), solar_link=False)
+UNDECIDED_PV_BINDING: Final = PvBinding(
+    "undecided", None, None, frozenset(), solar_link=False, inverter_links=frozenset()
+)
 """What setup resolves while no inverter has been seen: nothing bound, nothing withheld, nothing written.
 
 Its link is kept only where the entity is already registered; see `resolve`.
@@ -151,28 +162,54 @@ def _reads_link_records(snapshot: SpanPanelSnapshot, bound: str | None) -> bool:
     return bool(inverters) and all(pv.connected is not None for pv in inverters)
 
 
+def _inverter_links(
+    snapshot: SpanPanelSnapshot,
+    legacy: str | None,
+    withheld: frozenset[str],
+    inverter_links_held: frozenset[str],
+) -> frozenset[str]:
+    """Return the carded keys whose link exists: registered already, or recorded by their circuit."""
+    return frozenset(
+        key
+        for key, pv in snapshot.pv_inverters.items()
+        if key != legacy
+        and key not in withheld
+        and (key in inverter_links_held or pv.connected is not None)
+    )
+
+
 def resolve(
     snapshot: SpanPanelSnapshot,
     record: StoredPvBinding | None,
     held: frozenset[str],
     *,
     link_held: bool,
+    inverter_links_held: frozenset[str],
 ) -> tuple[PvBinding, StoredPvBinding | None]:
     """Decide this setup's identity, and the record to keep.
 
-    `held` is the inverter keys that already have a card of their own, and
-    `link_held` whether the Solar card's link entity is already registered. The
+    `held` is the inverter keys that already have a card of their own,
+    `link_held` whether the Solar card's link entity is already registered, and
+    `inverter_links_held` the keys whose own link entity is. The
     record is written at first sight, binding only a lone circuit-fed inverter
     that holds no card; its only rewrite is refining an unbound record the same
     way. A key in `held` always keeps its card, and a held link is always kept:
-    nothing here withdraws either.
+    nothing here withdraws any of them.
     """
     inverters = snapshot.pv_inverters
     lone_fed = _lone_fed_circuit(snapshot)
     bindable = lone_fed if lone_fed is not None and lone_fed not in held else None
     if record is None:
         if not inverters:
-            return PvBinding("undecided", None, None, frozenset(), solar_link=link_held), None
+            undecided = PvBinding(
+                "undecided",
+                None,
+                None,
+                frozenset(),
+                solar_link=link_held,
+                inverter_links=frozenset(),
+            )
+            return undecided, None
         record = StoredPvBinding(circuit_id=bindable)
     elif record["circuit_id"] is None and bindable is not None:
         record = StoredPvBinding(circuit_id=bindable)
@@ -187,11 +224,13 @@ def resolve(
         # A bound key that somehow holds a card (a store restored from an older backup) keeps it.
         legacy = None if bound in held else bound
         solar_link = link_held or _reads_link_records(snapshot, bound)
-        return PvBinding("inverter", bound, legacy, withheld, solar_link), record
+        links = _inverter_links(snapshot, legacy, withheld, inverter_links_held)
+        return PvBinding("inverter", bound, legacy, withheld, solar_link, links), record
     lone = next(iter(inverters)) if len(inverters) == 1 else None
     legacy = lone if lone is not None and lone not in held else None
     solar_link = link_held or _reads_link_records(snapshot, None)
-    return PvBinding("unbound", None, legacy, frozenset(), solar_link), record
+    links = _inverter_links(snapshot, legacy, frozenset(), inverter_links_held)
+    return PvBinding("unbound", None, legacy, frozenset(), solar_link, links), record
 
 
 def store_for(hass: HomeAssistant, entry: ConfigEntry) -> Store[StoredPvBinding]:
@@ -230,6 +269,25 @@ def keys_holding_cards(
     return frozenset(key for key in keys if holds(key))
 
 
+def inverter_links_held(
+    registry: er.EntityRegistry, entry_id: str, serial: str, keys: Iterable[str]
+) -> frozenset[str]:
+    """Return the keys among `keys` whose own link entity is already registered in this entry.
+
+    Built with `build_pv_inverter_unique_id`, as `SpanPVInverterBinarySensor` builds its id.
+    """
+    return frozenset(
+        key
+        for key in keys
+        if _registered_in(
+            registry,
+            entry_id,
+            "binary_sensor",
+            build_pv_inverter_unique_id(serial, key, PV_PANEL_LINK_KEY),
+        )
+    )
+
+
 def solar_link_held(registry: er.EntityRegistry, entry_id: str, serial: str) -> bool:
     """Return whether the Solar card's link entity is already registered in this entry.
 
@@ -255,7 +313,12 @@ async def async_resolve_pv_binding(
         registry, entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
     )
     link_held = solar_link_held(registry, entry.entry_id, snapshot.serial_number)
-    identity, kept = resolve(snapshot, record, held, link_held=link_held)
+    links_held = inverter_links_held(
+        registry, entry.entry_id, snapshot.serial_number, snapshot.pv_inverters
+    )
+    identity, kept = resolve(
+        snapshot, record, held, link_held=link_held, inverter_links_held=links_held
+    )
     if kept is not None and kept != record:
         await store.async_save(kept)
         _LOGGER.info("Solar card's PV entities: %s", identity.mode)

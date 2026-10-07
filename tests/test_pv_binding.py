@@ -12,7 +12,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, MockEn
 from span_panel_api import SpanPanelSnapshot
 
 from custom_components.span_panel import async_remove_entry
-from custom_components.span_panel.binary_sensor import SpanPVSolarLinkBinarySensor
+from custom_components.span_panel.binary_sensor import (
+    SpanPVInverterBinarySensor,
+    SpanPVSolarLinkBinarySensor,
+)
 from custom_components.span_panel.const import DOMAIN, PV_PANEL_LINK_KEY
 from custom_components.span_panel.id_builder import (
     build_panel_unique_id,
@@ -525,3 +528,26 @@ async def test_an_install_that_had_the_link_keeps_it_when_the_record_rule_fails(
     assert link is not None
     assert held[solar_unique_ids(snapshot.serial_number)[PV_PANEL_LINK_KEY]][0] == link.entity_id
     assert link.is_on is reading
+
+
+async def test_an_inverters_own_link_is_kept_when_its_record_goes(hass: HomeAssistant) -> None:
+    """The Solar link's rule per key: a link already registered is created whatever the record does, reading unknown."""
+    entry = _entry(hass, "entry-own-link", schema_one_snapshot().serial_number)
+    await _unload(await _setup(hass, entry, schema_one_snapshot(_tree())))
+    tree = _tree()
+    tree[SECOND_SOLAR_CIRCUIT].pop(STATUS_TOPIC)
+    silent = schema_one_snapshot(tree)
+
+    platforms = await _setup(hass, entry, silent)
+
+    own = [
+        entity
+        for platform in platforms
+        for entity in platform.entities.values()
+        if isinstance(entity, SpanPVInverterBinarySensor)
+        and entity.unique_id == build_pv_inverter_unique_id(silent.serial_number, SECOND_SOLAR_CIRCUIT, PV_PANEL_LINK_KEY)
+    ]
+    assert len(own) == 1
+    own[0]._handle_coordinator_update()
+    assert own[0].is_on is None and own[0].available
+    assert SECOND_SOLAR_CIRCUIT in entry.runtime_data.pv_binding.inverter_links

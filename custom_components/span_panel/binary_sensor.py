@@ -696,15 +696,16 @@ def _create_pv_link_sensors(
     entities, and exists where the binding's `solar_link` says: already
     registered, or every inverter the card reads publishes a link record -- never
     by what a link reads at setup. Every other inverter has its own on its own
-    card, gated on its circuit publishing the record: absence is the panel saying
-    it does not know.
+    card by the same rule, per key (`inverter_links`): already registered, or its
+    circuit publishes the record, whose absence is the panel saying it does not
+    know.
     """
     coordinator = config_entry.runtime_data.coordinator
     identity = config_entry.runtime_data.pv_binding
     entities: list[SpanPVSolarLinkBinarySensor | SpanPVInverterBinarySensor] = [
         SpanPVInverterBinarySensor(coordinator, PV_INVERTER_LINK_SENSOR, key)
-        for key, inverter in snapshot.pv_inverters.items()
-        if identity.has_own_card(key) and inverter.connected is not None
+        for key in snapshot.pv_inverters
+        if key in identity.inverter_links
     ]
     if identity.solar_link:
         source = identity.source(snapshot)

@@ -371,6 +371,7 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
         "bound_circuit_id": key,
         "legacy_key": key,
         "solar_card_reads": key,
+        "solar_link": True,
         "withheld": [],
         "inverters": {
             key: {
@@ -378,6 +379,7 @@ async def test_diagnostics_reports_which_inverter_the_solar_card_reads(hass: Hom
                 "relative_position": inverter.relative_position,
                 "connected": inverter.connected,
                 "own_card": False,
+                "own_link": False,
             }
         },
     }
@@ -412,6 +414,9 @@ async def test_diagnostics_says_an_unbound_card_reads_several_inverters_together
     assert result["pv"]["mode"] == "unbound"
     assert result["pv"]["solar_card_reads"] == "together"
     assert {row["own_card"] for row in result["pv"]["inverters"].values()} == {True}
+    # Neither inverter's circuit publishes a link record, so neither card, nor the Solar card, has a link.
+    assert {row["own_link"] for row in result["pv"]["inverters"].values()} == {False}
+    assert result["pv"]["solar_link"] is False
 
 
 async def _pv_block(hass: HomeAssistant, entry_id: str, snapshot: SpanPanelSnapshot, binding: PvBinding) -> dict[str, object]:
@@ -446,7 +451,7 @@ async def test_an_unfed_inverters_device_id_key_is_digested_where_the_card_reads
         SpanPanelSnapshotFactory.create(serial_number=SERIAL_PV),
         pv_inverters={DEVICE_ID_KEY: SpanPVSnapshot(device_id=DEVICE_ID_KEY, node_id=DEVICE_ID_KEY)},
     )
-    binding = resolve(snapshot, None, frozenset(), link_held=False)[0]
+    binding = resolve(snapshot, None, frozenset(), link_held=False, inverter_links_held=frozenset())[0]
     assert binding.legacy_key == DEVICE_ID_KEY
 
     block = await _pv_block(hass, "pv-diag-unfed", snapshot, binding)
@@ -456,7 +461,13 @@ async def test_an_unfed_inverters_device_id_key_is_digested_where_the_card_reads
     assert block["legacy_key"] == digest
     assert block["solar_card_reads"] == digest
     assert block["inverters"] == {
-        digest: {"feed_circuit_id": None, "relative_position": None, "connected": None, "own_card": False}
+        digest: {
+            "feed_circuit_id": None,
+            "relative_position": None,
+            "connected": None,
+            "own_card": False,
+            "own_link": False,
+        }
     }
     assert SERIAL_PV not in json.dumps(block)
 
@@ -469,7 +480,7 @@ async def test_a_withheld_inverters_device_id_key_is_digested(hass: HomeAssistan
         ),
         pv_inverters={DEVICE_ID_KEY: SpanPVSnapshot(device_id=DEVICE_ID_KEY, node_id=DEVICE_ID_KEY)},
     )
-    binding = resolve(snapshot, StoredPvBinding(circuit_id="c-bound"), frozenset(), link_held=False)[0]
+    binding = resolve(snapshot, StoredPvBinding(circuit_id="c-bound"), frozenset(), link_held=False, inverter_links_held=frozenset())[0]
     assert binding.withheld == frozenset({DEVICE_ID_KEY})
 
     block = await _pv_block(hass, "pv-diag-withheld", snapshot, binding)
@@ -480,6 +491,12 @@ async def test_a_withheld_inverters_device_id_key_is_digested(hass: HomeAssistan
     assert block["legacy_key"] == "c-bound"
     assert block["withheld"] == [digest]
     assert block["inverters"] == {
-        digest: {"feed_circuit_id": None, "relative_position": None, "connected": None, "own_card": False}
+        digest: {
+            "feed_circuit_id": None,
+            "relative_position": None,
+            "connected": None,
+            "own_card": False,
+            "own_link": False,
+        }
     }
     assert SERIAL_PV not in json.dumps(block)

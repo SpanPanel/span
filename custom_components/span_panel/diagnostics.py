@@ -246,12 +246,13 @@ def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
 
 
 class PvInverterRow(TypedDict):
-    """One inverter in the `pv` section: where it is fed from, and whether it has a card of its own."""
+    """One inverter in the `pv` section: where it is fed from, and whether it has a card and a link of its own."""
 
     feed_circuit_id: str | None
     relative_position: str | None
     connected: bool | None
     own_card: bool
+    own_link: bool
 
 
 class PvBlock(TypedDict):
@@ -265,6 +266,7 @@ class PvBlock(TypedDict):
     bound_circuit_id: str | None
     legacy_key: str | None
     solar_card_reads: str | None
+    solar_link: bool
     withheld: list[str]
     inverters: dict[str, PvInverterRow]
 
@@ -303,6 +305,7 @@ def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> PvBlock:
         "bound_circuit_id": identity.bound_key,
         "legacy_key": legacy,
         "solar_card_reads": reads,
+        "solar_link": identity.solar_link,
         "withheld": sorted(shown(key) for key in identity.withheld),
         "inverters": {
             shown(key): {
@@ -310,6 +313,7 @@ def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> PvBlock:
                 "relative_position": pv.relative_position,
                 "connected": pv.connected,
                 "own_card": identity.has_own_card(key),
+                "own_link": key in identity.inverter_links,
             }
             for key, pv in snapshot.pv_inverters.items()
         },

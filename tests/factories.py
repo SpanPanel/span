@@ -364,4 +364,4 @@ class SpanPanelSnapshotFactory:
 
 def pv_binding_for(snapshot: SpanPanelSnapshot) -> PvBinding:
     """The identity a first setup over `snapshot` resolves, for harnesses that build runtime data by hand."""
-    return resolve(snapshot, None, frozenset(), link_held=False)[0]
+    return resolve(snapshot, None, frozenset(), link_held=False, inverter_links_held=frozenset())[0]
