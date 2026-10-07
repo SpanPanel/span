@@ -24,7 +24,7 @@ from .runtime import SpanPanelConfigEntry
 from .schema_validation import SchemaFindings
 
 if TYPE_CHECKING:
-    from .pv_binding import PvBinding
+    from .pv_binding import PvBinding, PvBindingMode
 
 TO_REDACT = {
     CONF_ACCESS_TOKEN,
@@ -245,12 +245,38 @@ def _adoption(snapshot: SpanPanelSnapshot) -> AdoptionBlock:
     }
 
 
-def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> dict[str, object]:
+class PvInverterRow(TypedDict):
+    """One inverter in the `pv` section: where it is fed from, and whether it has a card of its own."""
+
+    feed_circuit_id: str | None
+    relative_position: str | None
+    connected: bool | None
+    own_card: bool
+
+
+class PvBlock(TypedDict):
+    """The `pv` section. Typed so the shape is checked, not described.
+
+    Every key that names an inverter goes through `_pv`'s `shown`, so a device-id
+    key cannot reach the payload undigested by a field added beside the others.
+    """
+
+    mode: PvBindingMode
+    bound_circuit_id: str | None
+    legacy_key: str | None
+    solar_card_reads: str | None
+    withheld: list[str]
+    inverters: dict[str, PvInverterRow]
+
+
+def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> PvBlock:
     """Which inverter the Solar card reads, and each inverter's place.
 
-    A device-id key embeds the panel serial (`<panel-serial>-<pv-identifier>`),
+    A device-id key can embed the panel serial (`<panel-serial>-<pv-identifier>`),
     so it is digested as the capability tokens are; a circuit id is shown as
-    the `circuits` block already shows it.
+    the `circuits` block already shows it. `legacy_key` is the inverter the Solar
+    card's PV entities describe at this setup, and `solar_card_reads` adds what
+    they read when no one inverter is it: the inverters together, or nothing yet.
     """
 
     def shown(key: str) -> str:
@@ -259,11 +285,12 @@ def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> dict[str, object]:
             return key
         return identity_digest(key)
 
+    legacy = None if identity.legacy_key is None else shown(identity.legacy_key)
     # What the Solar card's PV entities read: one inverter, the inverters
     # together (unbound with several), or nothing yet.
     reads: str | None
-    if identity.legacy_key is not None:
-        reads = shown(identity.legacy_key)
+    if legacy is not None:
+        reads = legacy
     elif identity.bound_key is not None:
         reads = identity.bound_key
     elif identity.mode == "unbound" and len(snapshot.pv_inverters) > 1:
@@ -274,8 +301,9 @@ def _pv(snapshot: SpanPanelSnapshot, identity: PvBinding) -> dict[str, object]:
     return {
         "mode": identity.mode,
         "bound_circuit_id": identity.bound_key,
+        "legacy_key": legacy,
         "solar_card_reads": reads,
-        "withheld": sorted(identity_digest(key) for key in identity.withheld),
+        "withheld": sorted(shown(key) for key in identity.withheld),
         "inverters": {
             shown(key): {
                 "feed_circuit_id": pv.feed_circuit_id,

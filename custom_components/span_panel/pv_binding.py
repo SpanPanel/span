@@ -56,6 +56,10 @@ _CARD_ENTITIES: Final[tuple[tuple[str, str], ...]] = (
 """`(domain, description key)` of the entities an inverter's own card carries."""
 
 
+type PvBindingMode = Literal["inverter", "unbound", "undecided"]
+"""How a setup reads its inverters: bound to a circuit, unbound, or not yet decided."""
+
+
 class StoredPvBinding(TypedDict):
     """The one shape this module writes: the bound circuit, or `None` for unbound."""
 
@@ -66,7 +70,7 @@ class StoredPvBinding(TypedDict):
 class PvBinding:
     """How this setup reads its inverters. Held in `runtime_data` and nowhere else."""
 
-    mode: Literal["inverter", "unbound", "undecided"]
+    mode: PvBindingMode
     bound_key: str | None
     """The circuit the Solar card's PV entities are bound to."""
 
